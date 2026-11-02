@@ -100,13 +100,14 @@ export type SearchIdentityReceivingBinding = Readonly<{
   scopeDigest: string;
   source: SearchIdentityReceivingSource;
 }>;
-export type SearchIdentityReceivingRecord = SearchIdentityReceivingBinding & Readonly<{
-  plan: IdentityNativeReceipt;
-  sourceHold: IdentityNativeReceipt;
-  receipt: IdentityNativeReceipt;
-  nativeHold: SearchIdentityReceivingHold;
-  applied: Readonly<{ receipt: IdentityNativeReceipt; frontier: IdentityFrontier }> | null;
-}>;
+export type SearchIdentityReceivingRecord = SearchIdentityReceivingBinding &
+  Readonly<{
+    plan: IdentityNativeReceipt;
+    sourceHold: IdentityNativeReceipt;
+    receipt: IdentityNativeReceipt;
+    nativeHold: SearchIdentityReceivingHold;
+    applied: Readonly<{ receipt: IdentityNativeReceipt; frontier: IdentityFrontier }> | null;
+  }>;
 export type NativeIdentityReceivingBinding = IdentityReceivingBinding | SearchIdentityReceivingBinding;
 export type NativeIdentityReceivingRecord = IdentityReceivingRecord | SearchIdentityReceivingRecord;
 export type NativeIdentityReceivingSelection = IdentityReceivingSelection | SearchIdentityReceivingSelection;

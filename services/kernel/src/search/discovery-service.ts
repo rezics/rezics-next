@@ -75,9 +75,11 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
     request = structuredClone(request);
     context = Object.freeze({
       ...context,
-      actor: Object.freeze(context.actor.kind === 'account'
-        ? { ...context.actor, scopes: Object.freeze([...context.actor.scopes]) }
-        : { kind: 'anonymous' as const }),
+      actor: Object.freeze(
+        context.actor.kind === 'account'
+          ? { ...context.actor, scopes: Object.freeze([...context.actor.scopes]) }
+          : { kind: 'anonymous' as const },
+      ),
     });
     let deliver!: (value: { page: DiscoveryPage; current: RetainedPrimaryReader }) => void;
     let refuse!: (error: unknown) => void;
@@ -87,7 +89,10 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
     });
     let finish!: () => void;
     let abandon!: (error: unknown) => void;
-    const publication = new Promise<void>((resolve, reject) => { finish = resolve; abandon = reject; });
+    const publication = new Promise<void>((resolve, reject) => {
+      finish = resolve;
+      abandon = reject;
+    });
     // Closing can precede projection. Retain the refusal without an unhandled rejection.
     void publication.catch(() => {});
     let state: 'open' | 'finishing' | 'finished' | 'closing' | 'closed' = 'open';
@@ -102,7 +107,11 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
       // Expiry removes publication authority immediately. The actual in-flight owner
       // operation still owns the original root until it settles, including on refusal.
       // Rejecting the rendezvous first would run disposal underneath that operation.
-      if (reading) void reading.then(() => abandon(ready()), () => abandon(ready()));
+      if (reading)
+        void reading.then(
+          () => abandon(ready()),
+          () => abandon(ready()),
+        );
       else abandon(ready());
     };
     const execution = executeDiscoverySearch(config, async (page, current) => {
@@ -115,15 +124,19 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
     // The native execution owns both finally blocks, including projection and finish failures.
     void execution.catch(refuse);
     let value: Awaited<typeof projected>;
-    try { value = await projected; }
-    catch (error) {
+    try {
+      value = await projected;
+    } catch (error) {
       abandon(error);
       await execution.catch(() => {});
       throw error;
     }
     const requireOpen = () => {
       if (state !== 'open') throw new TypeError('Retained discovery operation is no longer open');
-      if (expired || Date.now() >= context.deadline) { expire(); throw ready(); }
+      if (expired || Date.now() >= context.deadline) {
+        expire();
+        throw ready();
+      }
     };
     return Object.freeze({
       async search() {
@@ -139,10 +152,12 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
         primaryRead = true;
         // Snapshot full keys before an await; caller mutation cannot change the admitted batch.
         const saved = keys.map((key) => Object.freeze({ ...key }));
-        reading = Promise.resolve().then(() => value.current(saved)).then((result) => {
-          if (expired || Date.now() >= context.deadline) throw ready();
-          return result;
-        });
+        reading = Promise.resolve()
+          .then(() => value.current(saved))
+          .then((result) => {
+            if (expired || Date.now() >= context.deadline) throw ready();
+            return result;
+          });
         void reading.catch(() => {});
         return reading;
       },
@@ -155,7 +170,10 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
             if (reading) await reading;
             // A finish started before the deadline can be awaiting an owner callback
             // when the deadline passes. It must not publish that callback's late result.
-            if (expired || Date.now() >= context.deadline) { expire(); throw ready(); }
+            if (expired || Date.now() >= context.deadline) {
+              expire();
+              throw ready();
+            }
             finish();
             await execution;
             // The native final and its disposal can also outlive the deadline.
@@ -172,21 +190,29 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
         return terminal;
       },
       close() {
-        return closing ??= (async () => {
+        return (closing ??= (async () => {
           if (state === 'finishing') {
-            try { await terminal; } finally { state = 'closed'; }
+            try {
+              await terminal;
+            } finally {
+              state = 'closed';
+            }
             return;
           }
-          if (state === 'finished' || state === 'closed') { state = 'closed'; return; }
+          if (state === 'finished' || state === 'closed') {
+            state = 'closed';
+            return;
+          }
           state = 'closing';
           // Do not release the original while a caller's actual owner batch is in flight.
-          try { if (reading) await reading; }
-          finally {
+          try {
+            if (reading) await reading;
+          } finally {
             abandon(new Error('Retained discovery operation was abandoned'));
             await execution.catch(() => {});
             state = 'closed';
           }
-        })();
+        })());
       },
     });
   };
@@ -203,12 +229,16 @@ export function createDiscoverySearch(config: DiscoveryConfiguration): Discovery
       const page = await read.search();
       await read.finish();
       return page;
-    } finally { await read.close(); }
+    } finally {
+      await read.close();
+    }
   };
 }
 
-function executeDiscoverySearch(config: DiscoveryConfiguration,
-  retain: (page: DiscoveryPage, current: RetainedPrimaryReader) => Promise<void>): DiscoverySearch {
+function executeDiscoverySearch(
+  config: DiscoveryConfiguration,
+  retain: (page: DiscoveryPage, current: RetainedPrimaryReader) => Promise<void>,
+): DiscoverySearch {
   const execute: DiscoverySearch = async (principal, request, context) => {
     const { registry, release, digest } = await config.resolve(request);
     const admitted = admitDiscoveryRequest(request, registry, release);
@@ -408,8 +438,9 @@ function executeDiscoverySearch(config: DiscoveryConfiguration,
                   now,
                 );
           const projected = { hits, kinds: { values, next: kindsNext }, next, as_of: await config.asOf(queried) };
-          await retain(projected, (keys) => currentDiscoveryPrimaryCandidates(
-            registry, keys, admitted.filter, release, context));
+          await retain(projected, (keys) =>
+            currentDiscoveryPrimaryCandidates(registry, keys, admitted.filter, release, context),
+          );
           return projected;
         });
         retained = page.next !== null;

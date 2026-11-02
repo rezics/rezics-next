@@ -5,8 +5,12 @@ import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { createWorkClient } from '../work/client.ts';
 import { nativeDiscoveryRegistry } from './account-discovery.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
-import { createRetainedDiscoverySearch, type DiscoverySearch, type RetainedDiscoveryRead,
-  type RetainedDiscoverySearch } from './discovery-service.ts';
+import {
+  createRetainedDiscoverySearch,
+  type DiscoverySearch,
+  type RetainedDiscoveryRead,
+  type RetainedDiscoverySearch,
+} from './discovery-service.ts';
 import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntimeConfig } from './public-runtime.ts';
 import { createPublicPreparationStore } from './public-preparation-store.ts';
 import { discoveryConsumer } from './generations.ts';
@@ -127,8 +131,11 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
         currentPrimaryCandidates: (keys) => read.currentPrimaryCandidates(keys),
         finish: () => read.finish(),
         async close() {
-          try { await read.close(); }
-          finally { retained.delete(wrapped); }
+          try {
+            await read.close();
+          } finally {
+            retained.delete(wrapped);
+          }
         },
       });
       retained.add(wrapped);
@@ -149,7 +156,9 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
         const page = await read.search();
         await read.finish();
         return page;
-      } finally { await read.close(); }
+      } finally {
+        await read.close();
+      }
     })();
     pending.add(operation);
     void operation.finally(() => pending.delete(operation)).catch(() => {});

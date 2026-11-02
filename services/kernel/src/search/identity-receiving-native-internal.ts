@@ -62,25 +62,28 @@ export type StoredReceipt = Omit<IdentityNativeReceipt, 'position'> & Readonly<{
 export type StoredSource = Omit<
   SearchIdentityReceivingSource,
   'enrollmentGeneration' | 'fenceGeneration' | 'originalFence' | 'plan'
-> & Readonly<{
-  enrollmentGeneration: string;
-  fenceGeneration: string;
-  originalFence: StoredReceipt;
-  plan: StoredReceipt;
-}>;
+> &
+  Readonly<{
+    enrollmentGeneration: string;
+    fenceGeneration: string;
+    originalFence: StoredReceipt;
+    plan: StoredReceipt;
+  }>;
 export type StoredReferences = Omit<
   SearchNativeReceivingReferences,
   'originalSupport' | 'terminalSupport' | 'documentFence'
-> & Readonly<{
-  originalSupport: (Omit<PublicFilterProjectionFrontier, 'generation'> & { generation: string }) | null;
-  terminalSupport: (Omit<PublicFilterProjectionFrontier, 'generation'> & { generation: string }) | null;
-  documentFence: StoredReceipt;
-}>;
-export type StoredCopy = Omit<SearchNativeReceivingCopy, 'close' | 'enrollment' | 'visible'> & Readonly<{
-  close: StoredReceipt;
-  enrollment: StoredReceipt | null;
-  visible: StoredReceipt | null;
-}>;
+> &
+  Readonly<{
+    originalSupport: (Omit<PublicFilterProjectionFrontier, 'generation'> & { generation: string }) | null;
+    terminalSupport: (Omit<PublicFilterProjectionFrontier, 'generation'> & { generation: string }) | null;
+    documentFence: StoredReceipt;
+  }>;
+export type StoredCopy = Omit<SearchNativeReceivingCopy, 'close' | 'enrollment' | 'visible'> &
+  Readonly<{
+    close: StoredReceipt;
+    enrollment: StoredReceipt | null;
+    visible: StoredReceipt | null;
+  }>;
 export type PlanRow = {
   source: StoredSource;
   obligations: StoredReferences;

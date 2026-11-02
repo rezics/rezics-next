@@ -66,8 +66,14 @@ export async function currentDiscoveryPrimaryCandidates(
         for (const key of group) {
           const row = current.get(key.id);
           if (!row || row.type !== key.kind || byIdentity.has(identity(key))) continue;
-          const candidate = { key, index: '', sourcePosition: snapshot.position.toString(),
-            revision: String(row.securityRevision), matched: [], sort: [] };
+          const candidate = {
+            key,
+            index: '',
+            sourcePosition: snapshot.position.toString(),
+            revision: String(row.securityRevision),
+            matched: [],
+            sort: [],
+          };
           candidates.push(candidate);
           byIdentity.set(identity(key), candidate);
         }
@@ -77,9 +83,15 @@ export async function currentDiscoveryPrimaryCandidates(
         for (let offset = 0; offset < ids.length; offset += 100) {
           const chunk = ids.slice(offset, offset + 100);
           const snapshot = await entry.source.read(partition, chunk);
-          if (snapshot.partition !== partition || typeof snapshot.position !== 'bigint' || snapshot.position < 0n ||
-            !Array.isArray(snapshot.accounts) || snapshot.accounts.length > chunk.length ||
-            (position !== undefined && position !== snapshot.position)) unavailable();
+          if (
+            snapshot.partition !== partition ||
+            typeof snapshot.position !== 'bigint' ||
+            snapshot.position < 0n ||
+            !Array.isArray(snapshot.accounts) ||
+            snapshot.accounts.length > chunk.length ||
+            (position !== undefined && position !== snapshot.position)
+          )
+            unavailable();
           const seen = new Set<string>();
           for (const row of snapshot.accounts) {
             if (!chunk.includes(row.id) || seen.has(row.id) || typeof row.revision !== 'bigint' || row.revision < 0n)
@@ -94,36 +106,68 @@ export async function currentDiscoveryPrimaryCandidates(
         for (const key of group) {
           const row = rows.find((value) => value.id === key.id);
           if (!row || byIdentity.has(identity(key))) continue;
-          const candidate = { key, index: '', sourcePosition: snapshot.position.toString(),
-            revision: row.revision.toString(), matched: [], sort: [] };
+          const candidate = {
+            key,
+            index: '',
+            sourcePosition: snapshot.position.toString(),
+            revision: row.revision.toString(),
+            matched: [],
+            sort: [],
+          };
           candidates.push(candidate);
           byIdentity.set(identity(key), candidate);
         }
       }
     }
   }
-  const entries: DiscoveryRegistration[] = registry.entries.map((entry) => entry.owner === 'semantic'
-    ? { ...entry, source: { ...entry.source, count: entry.source.count.bind(entry.source),
-      ...(entry.source.matchRelationFacets
-        ? { matchRelationFacets: entry.source.matchRelationFacets.bind(entry.source) } : {}),
-      async read(partition, ids) {
-        const snapshot = subjects.get(partition);
-        if (!snapshot || ids.some((id) => !saved.some((key) => key.owner === 'semantic' && key.id === id))) unavailable();
-        return { ...snapshot, subjects: snapshot.subjects.filter((row) => ids.includes(row.id)) };
-      } } }
-    : { ...entry, source: { count: entry.source.count.bind(entry.source), page: entry.source.page.bind(entry.source),
-      async read(partition, ids) {
-        const snapshot = accounts.get(partition);
-        if (!snapshot || ids.some((id) => !saved.some((key) => key.owner === 'accounts' && key.id === id))) unavailable();
-        return { ...snapshot, accounts: snapshot.accounts.filter((row) => ids.includes(row.id)) };
-      } } });
-  const retained: DiscoveryRegistry = { entries, key: registry.key.bind(registry),
-    get(kind) { const entry = entries.find((value) => value.kind === kind); if (!entry) unavailable(); return entry; } };
+  const entries: DiscoveryRegistration[] = registry.entries.map((entry) =>
+    entry.owner === 'semantic'
+      ? {
+          ...entry,
+          source: {
+            ...entry.source,
+            count: entry.source.count.bind(entry.source),
+            ...(entry.source.matchRelationFacets
+              ? { matchRelationFacets: entry.source.matchRelationFacets.bind(entry.source) }
+              : {}),
+            async read(partition, ids) {
+              const snapshot = subjects.get(partition);
+              if (!snapshot || ids.some((id) => !saved.some((key) => key.owner === 'semantic' && key.id === id)))
+                unavailable();
+              return { ...snapshot, subjects: snapshot.subjects.filter((row) => ids.includes(row.id)) };
+            },
+          },
+        }
+      : {
+          ...entry,
+          source: {
+            count: entry.source.count.bind(entry.source),
+            page: entry.source.page.bind(entry.source),
+            async read(partition, ids) {
+              const snapshot = accounts.get(partition);
+              if (!snapshot || ids.some((id) => !saved.some((key) => key.owner === 'accounts' && key.id === id)))
+                unavailable();
+              return { ...snapshot, accounts: snapshot.accounts.filter((row) => ids.includes(row.id)) };
+            },
+          },
+        },
+  );
+  const retained: DiscoveryRegistry = {
+    entries,
+    key: registry.key.bind(registry),
+    get(kind) {
+      const entry = entries.find((value) => value.kind === kind);
+      if (!entry) unavailable();
+      return entry;
+    },
+  };
   const current = await currentDiscoveryCandidates(retained, candidates, filter, release, context);
-  return Object.freeze(saved.map((key) => {
-    const candidate = byIdentity.get(identity(key));
-    return candidate !== undefined && current.has(candidate);
-  }));
+  return Object.freeze(
+    saved.map((key) => {
+      const candidate = byIdentity.get(identity(key));
+      return candidate !== undefined && current.has(candidate);
+    }),
+  );
 }
 
 /** Membership/summary checking only. Whole-query exclusion/order safety must bracket this operation

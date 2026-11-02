@@ -176,31 +176,31 @@ or storage failure. Late callback SQL and the native insert are reserved before 
 in the method's returned work. No MVCC tuple count is used for metering; transaction provenance uses `xmin` only to
 reject separately committed records.
 
-| Named SQL | Rows | Points | Bytes |
-| --- | ---: | ---: | ---: |
-| owner | 1 | 1 | 256 |
-| plan | 3 | 3 | 20480 |
-| prepare | 2 | 4 | 20480 |
-| document / lock | 1 | 1 | 512 |
-| writer | 2 | 2 | 4096 |
-| action / receipt | 1 | 1 | 1064960 |
-| hold / peekHold | 1 | 1 | 1024 |
-| accept | 1 | 2 | 1024 |
-| accepted | 4 | 4 | 12288 |
-| bindAcceptance | 1 | 1 | 512 |
-| operation | 4 | 4 | 12288 |
-| dispatch | 1 | 2 | 10240 |
-| visible | 1 | 1 | 1024 |
-| apply | 1 | 1 | 4096 |
-| applied | 4 | 4 | 4096 |
-| copy | 3 | 3 | 4096 |
-| copyLast / pending | 1 | 1 | 256 |
-| copyOwner | 4 | 4 | 4096 |
-| reconcile | 1 | 1 | 4096 |
-| control | 5 | 5 | 4096 |
-| release | 2 | 2 | 1024 |
-| releaseProof | 2 | 2 | 1024 |
-| drain / drainGate | 1 | 1 | 512 |
+| Named SQL          | Rows | Points |   Bytes |
+| ------------------ | ---: | -----: | ------: |
+| owner              |    1 |      1 |     256 |
+| plan               |    3 |      3 |   20480 |
+| prepare            |    2 |      4 |   20480 |
+| document / lock    |    1 |      1 |     512 |
+| writer             |    2 |      2 |    4096 |
+| action / receipt   |    1 |      1 | 1064960 |
+| hold / peekHold    |    1 |      1 |    1024 |
+| accept             |    1 |      2 |    1024 |
+| accepted           |    4 |      4 |   12288 |
+| bindAcceptance     |    1 |      1 |     512 |
+| operation          |    4 |      4 |   12288 |
+| dispatch           |    1 |      2 |   10240 |
+| visible            |    1 |      1 |    1024 |
+| apply              |    1 |      1 |    4096 |
+| applied            |    4 |      4 |    4096 |
+| copy               |    3 |      3 |    4096 |
+| copyLast / pending |    1 |      1 |     256 |
+| copyOwner          |    4 |      4 |    4096 |
+| reconcile          |    1 |      1 |    4096 |
+| control            |    5 |      5 |    4096 |
+| release            |    2 |      2 |    1024 |
+| releaseProof       |    2 |      2 |    1024 |
+| drain / drainGate  |    1 |      1 |     512 |
 
 For an explicit page limit `n` (0 through 100), copy reads reserve `3*n` rows, `1+2*n` points and `256+2560*n`
 bytes; inserts reserve `n` rows, `n` points and the same bytes. Each is one statement. A real read transaction
@@ -279,26 +279,26 @@ narrowly authorized capture-oracle cases, remain unchanged.
 The per-operation cost is the sum of these named literals; all mutating calls additionally reserve rollback, and
 each externally owned read transaction reserves the four statements above:
 
-| Operation/path | Named charges, in dispatch order |
-| --- | --- |
-| prepare new | owner, writer, document, lock, prepare, insertCopies(n), native commit |
-| prepare replay | owner, writer, document, lock, prepare, plan, copies(n) |
-| register copy page | owner, plan, writer, lock, hold, copyLast, insertCopies(n), native commit |
-| register page replay | owner, plan, writer, lock, hold, copyLast, copies(n) |
-| read plan | read transaction, plan |
-| native drain | owner, drainGate, drain |
-| acquire new hold | owner, plan, peekHold, writer, lock, hold, accept, accepted, bindAcceptance |
-| acquire replay / revalidate | owner, plan, peekHold, accepted, writer, lock, hold |
-| dispatch | revalidate, operation, action, dispatch, native commit |
-| visibility | revalidate, operation, receipt, visible, native commit |
-| apply | revalidate, operation, apply, native commit, applied |
-| applied replay | revalidate, operation, applied |
-| copy page | read transaction, plan, copies(n) |
-| observe original | read transaction, plan, copy; released home; read transaction, copyOwner |
-| reconcile n originals | owner, plan, writer, lock, n*copy, at most n*reconcile, at most one native commit, pending |
-| observe release | read transaction, plan, operation, applied, peekHold, accepted, pending; released home; read transaction, control |
-| release | owner, plan, peekHold, accepted, writer, lock, hold, operation, applied, pending, release, native commit, releaseProof |
-| release replay | owner, plan, peekHold, accepted, writer, lock, hold, operation, applied, pending, releaseProof |
+| Operation/path              | Named charges, in dispatch order                                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| prepare new                 | owner, writer, document, lock, prepare, insertCopies(n), native commit                                                 |
+| prepare replay              | owner, writer, document, lock, prepare, plan, copies(n)                                                                |
+| register copy page          | owner, plan, writer, lock, hold, copyLast, insertCopies(n), native commit                                              |
+| register page replay        | owner, plan, writer, lock, hold, copyLast, copies(n)                                                                   |
+| read plan                   | read transaction, plan                                                                                                 |
+| native drain                | owner, drainGate, drain                                                                                                |
+| acquire new hold            | owner, plan, peekHold, writer, lock, hold, accept, accepted, bindAcceptance                                            |
+| acquire replay / revalidate | owner, plan, peekHold, accepted, writer, lock, hold                                                                    |
+| dispatch                    | revalidate, operation, action, dispatch, native commit                                                                 |
+| visibility                  | revalidate, operation, receipt, visible, native commit                                                                 |
+| apply                       | revalidate, operation, apply, native commit, applied                                                                   |
+| applied replay              | revalidate, operation, applied                                                                                         |
+| copy page                   | read transaction, plan, copies(n)                                                                                      |
+| observe original            | read transaction, plan, copy; released home; read transaction, copyOwner                                               |
+| reconcile n originals       | owner, plan, writer, lock, n*copy, at most n*reconcile, at most one native commit, pending                             |
+| observe release             | read transaction, plan, operation, applied, peekHold, accepted, pending; released home; read transaction, control      |
+| release                     | owner, plan, peekHold, accepted, writer, lock, hold, operation, applied, pending, release, native commit, releaseProof |
+| release replay              | owner, plan, peekHold, accepted, writer, lock, hold, operation, applied, pending, releaseProof                         |
 
 Visibility/dispatch replay stops after `revalidate, operation`. Empty registration stops before insertion/native
 commit. Every refusal retains all earlier dispatch/reservation charges in its error; no later SQL is sent. The

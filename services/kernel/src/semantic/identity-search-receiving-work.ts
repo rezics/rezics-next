@@ -4,16 +4,26 @@ import type { WorkDimensions, WorkReceipt } from '../library/collection-source.t
 import { NativeCollectionWork, instrumentNativeCollectionWork } from '../library/collection-source-work.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import type { NativeStepWork } from './identity-epoch-contract.ts';
-import { prepareSearchReceivingCaptures, searchReceivingCaptureStatements } from './identity-search-receiving-capture.ts';
 import {
-  identitySourceConsumerLibraryWork, identitySourceConsumerNativeWork,
+  prepareSearchReceivingCaptures,
+  searchReceivingCaptureStatements,
+} from './identity-search-receiving-capture.ts';
+import {
+  identitySourceConsumerLibraryWork,
+  identitySourceConsumerNativeWork,
   reserveIdentitySourceConsumerNativeWork,
   type IdentitySourceConsumerMaintenanceWork,
 } from './identity-source-consumer-maintenance.ts';
 
-export const searchReceivingOperations = ['resolvePlanned', 'readAndHold', 'revalidateHold', 'recordApplied',
-  'reconcileOriginal', 'releaseHold'] as const;
-export type SearchReceivingOperation = typeof searchReceivingOperations[number];
+export const searchReceivingOperations = [
+  'resolvePlanned',
+  'readAndHold',
+  'revalidateHold',
+  'recordApplied',
+  'reconcileOriginal',
+  'releaseHold',
+] as const;
+export type SearchReceivingOperation = (typeof searchReceivingOperations)[number];
 export type SearchReceivingWorkContext = Readonly<{
   deadline: number;
   identityConsumerWork: IdentitySourceConsumerMaintenanceWork;
@@ -26,22 +36,42 @@ export type SearchReceivingWorkContext = Readonly<{
  */
 export type SearchReceivingWorkDeclaration = Readonly<{
   statements: readonly Readonly<{ sql: string; work: WorkDimensions }>[];
-  native: Readonly<Partial<Record<SearchReceivingOperation, Readonly<{
-    allowance: NativeStepWork;
-    outsideSql: WorkDimensions;
-  }>>>>;
+  native: Readonly<
+    Partial<
+      Record<
+        SearchReceivingOperation,
+        Readonly<{
+          allowance: NativeStepWork;
+          outsideSql: WorkDimensions;
+        }>
+      >
+    >
+  >;
 }>;
-const axes = ['candidateKeys', 'identityMetadataRows', 'nativeRows', 'nativePoints', 'witnessKeys',
-  'statements', 'bytes', 'emptySeeks'] as const;
+const axes = [
+  'candidateKeys',
+  'identityMetadataRows',
+  'nativeRows',
+  'nativePoints',
+  'witnessKeys',
+  'statements',
+  'bytes',
+  'emptySeeks',
+] as const;
 const nativeAxes = ['rows', 'points', 'statements', 'bytes', 'engineRequests'] as const;
 const nativeSqlReservations = new AsyncLocalStorage<{
-  allowance: NativeStepWork; used: { -readonly [K in keyof NativeStepWork]: NativeStepWork[K] };
+  allowance: NativeStepWork;
+  used: { -readonly [K in keyof NativeStepWork]: NativeStepWork[K] };
 }>();
 const nativeCheckouts = new AsyncLocalStorage<(cost: NativeStepWork) => void>();
 const capturePlanning = new AsyncLocalStorage<true>();
 const observedPools = new WeakSet<Pool>();
-type QueryLifetime = { closed: boolean; pending: Set<Promise<unknown>>; work: NativeCollectionWork;
-  capture?: (cost: WorkDimensions) => void };
+type QueryLifetime = {
+  closed: boolean;
+  pending: Set<Promise<unknown>>;
+  work: NativeCollectionWork;
+  capture?: (cost: WorkDimensions) => void;
+};
 const queryLifetimes = new AsyncLocalStorage<QueryLifetime>();
 const queryPools = new WeakSet<Pool>();
 const queryClients = new WeakSet<PoolClient>();
@@ -49,10 +79,13 @@ const emptyNative = (): NativeStepWork => ({ rows: 0, points: 0, statements: 0, 
 
 function retainQuery(lifetime: QueryLifetime, query: Promise<unknown>) {
   lifetime.pending.add(query);
-  void query.then(() => lifetime.pending.delete(query), (error: unknown) => {
-    lifetime.pending.delete(query);
-    lifetime.work.failure = error instanceof Error ? error : refused('Search receiving SQL failed');
-  });
+  void query.then(
+    () => lifetime.pending.delete(query),
+    (error: unknown) => {
+      lifetime.pending.delete(query);
+      lifetime.work.failure = error instanceof Error ? error : refused('Search receiving SQL failed');
+    },
+  );
 }
 
 /** Install after the eight-axis observer so its settlement finishes before our tracked promise.
@@ -81,12 +114,14 @@ function observeQueryLifetimes(pool: Pool) {
         if (callbackIndex >= 0) throw refused('Search receiving write transaction controls require promises');
         const actualClient = this;
         const completed = (async () => {
-          if (committing) await capturePlanning.run(true, () => prepareSearchReceivingCaptures(actualClient, lifetime.capture!));
+          if (committing)
+            await capturePlanning.run(true, () => prepareSearchReceivingCaptures(actualClient, lifetime.capture!));
           const result = await Reflect.apply(query, actualClient, args);
           if (beginning) {
             writing = lifetime;
-            try { await actualClient.query(searchReceivingCaptureStatements.enable); }
-            catch (error) {
+            try {
+              await actualClient.query(searchReceivingCaptureStatements.enable);
+            } catch (error) {
               // runCommand establishes its body try/finally after BEGIN. Own this failed setup's
               // already-open transaction and use its original prepaid rollback before returning.
               await actualClient.query('ROLLBACK');
@@ -103,7 +138,10 @@ function observeQueryLifetimes(pool: Pool) {
         const callback = args[callbackIndex] as (...values: unknown[]) => unknown;
         let finish!: () => void;
         let fail!: (error: unknown) => void;
-        const completed = new Promise<void>((resolve, reject) => { finish = resolve; fail = reject; });
+        const completed = new Promise<void>((resolve, reject) => {
+          finish = resolve;
+          fail = reject;
+        });
         retainQuery(lifetime, completed);
         args[callbackIndex] = AsyncResource.bind((...values: unknown[]) => {
           // A driver may invoke its callback from a resource created before this frame. Restore
@@ -112,13 +150,20 @@ function observeQueryLifetimes(pool: Pool) {
           return queryLifetimes.run(lifetime, () => {
             try {
               const result = callback(...values);
-              void Promise.resolve(result).then(() => values[0] ? fail(values[0]) : finish(), fail);
+              void Promise.resolve(result).then(() => (values[0] ? fail(values[0]) : finish()), fail);
               return result;
-            } catch (error) { fail(error); throw error; }
+            } catch (error) {
+              fail(error);
+              throw error;
+            }
           });
         });
-        try { return Reflect.apply(query, this, args); }
-        catch (error) { fail(error); throw error; }
+        try {
+          return Reflect.apply(query, this, args);
+        } catch (error) {
+          fail(error);
+          throw error;
+        }
       }
       const result = Reflect.apply(query, this, args);
       // PoolClient's promise overload is used by production. Callback queries preserve the
@@ -146,15 +191,19 @@ function observeNativeCheckouts(pool: Pool) {
 }
 export const receivingSqlKey = (sql: string) => sql.trim().replace(/;$/, '').replace(/\s+/g, ' ');
 function valid(value: object, keys: readonly string[]) {
-  return keys.every((key) => Number.isSafeInteger((value as Record<string, number>)[key]) &&
-    (value as Record<string, number>)[key]! >= 0);
+  return keys.every(
+    (key) =>
+      Number.isSafeInteger((value as Record<string, number>)[key]) && (value as Record<string, number>)[key]! >= 0,
+  );
 }
 function refused(detail: string): Error {
   return Object.assign(new Error(detail), { code: 'identity_epoch_unavailable' });
 }
 /** Snapshot the literal inventory once at application construction. Mutation cannot grant later work. */
-export function receivingWorkDeclaration(declaration: SearchReceivingWorkDeclaration,
-  pageStatements: readonly Readonly<{ sql: string; kind: 'copies' | 'insertCopies' }>[] = []) {
+export function receivingWorkDeclaration(
+  declaration: SearchReceivingWorkDeclaration,
+  pageStatements: readonly Readonly<{ sql: string; kind: 'copies' | 'insertCopies' }>[] = [],
+) {
   const statements = new Map<string, WorkDimensions>();
   for (const { sql, work } of declaration.statements) {
     const key = receivingSqlKey(sql);
@@ -167,63 +216,93 @@ export function receivingWorkDeclaration(declaration: SearchReceivingWorkDeclara
   for (const { sql, kind } of pageStatements) {
     const key = receivingSqlKey(sql);
     const maximum = statements.get(key);
-    if (pages.has(key) || !maximum || !['copies', 'insertCopies'].includes(kind) ||
-        maximum.nativeRows < (kind === 'copies' ? 300 : 100) ||
-        maximum.nativePoints < (kind === 'copies' ? 201 : 100) || maximum.bytes < 256256)
+    if (
+      pages.has(key) ||
+      !maximum ||
+      !['copies', 'insertCopies'].includes(kind) ||
+      maximum.nativeRows < (kind === 'copies' ? 300 : 100) ||
+      maximum.nativePoints < (kind === 'copies' ? 201 : 100) ||
+      maximum.bytes < 256256
+    )
       throw new TypeError('Invalid receiving raw-page declaration');
     pages.set(key, kind);
   }
-  const native = Object.fromEntries(searchReceivingOperations.map((operation) => {
-    const bound = declaration.native[operation];
-    if (!bound) return [operation, undefined];
-    if (!valid(bound.allowance, nativeAxes) || !valid(bound.outsideSql, axes))
-      throw new TypeError('Invalid receiving native declaration');
-    return [operation, Object.freeze({ allowance: Object.freeze({ ...bound.allowance }),
-      outsideSql: Object.freeze({ ...bound.outsideSql }) })];
-  })) as Partial<Record<SearchReceivingOperation, { allowance: NativeStepWork; outsideSql: WorkDimensions }>>;
-  return Object.freeze({ footprint: (sql: string, values?: readonly unknown[]): WorkDimensions | undefined => {
-    // The executor's sole dynamic literal is a positive integral remaining timeout. This template
-    // is separately declared; arbitrary SET statements do not inherit its cost.
-    const key = /^SET LOCAL statement_timeout = '[1-9][0-9]*ms'$/.test(sql)
-      ? "SET LOCAL statement_timeout = '<remaining>ms'" : receivingSqlKey(sql);
-    const maximum = statements.get(key);
-    const page = pages.get(key);
-    if (!maximum || !page || !values) return maximum;
-    let count: unknown;
-    if (page === 'copies') count = values[3];
-    else {
-      const encoded = values[2];
-      if (typeof encoded !== 'string' || Buffer.byteLength(encoded, 'utf8') > 256256) return undefined;
-      try {
-        const items: unknown = JSON.parse(encoded);
-        if (!Array.isArray(items)) return undefined;
-        count = items.length;
-      } catch { return undefined; }
-    }
-    if (typeof count !== 'number' || !Number.isInteger(count) || count < 0 || count > 100) return undefined;
-    const unused = 100 - count;
-    // Preserve every configured transitive surcharge. Only the known, undispatched raw keys are
-    // removed from the literal maximum; failed and empty dispatched pages keep this entire bound.
-    return Object.freeze({ ...maximum, nativeRows: maximum.nativeRows - unused * (page === 'copies' ? 3 : 1),
-      nativePoints: maximum.nativePoints - unused * (page === 'copies' ? 2 : 1),
-      bytes: maximum.bytes - unused * 2560 });
-  }, native: Object.freeze(native) });
+  const native = Object.fromEntries(
+    searchReceivingOperations.map((operation) => {
+      const bound = declaration.native[operation];
+      if (!bound) return [operation, undefined];
+      if (!valid(bound.allowance, nativeAxes) || !valid(bound.outsideSql, axes))
+        throw new TypeError('Invalid receiving native declaration');
+      return [
+        operation,
+        Object.freeze({
+          allowance: Object.freeze({ ...bound.allowance }),
+          outsideSql: Object.freeze({ ...bound.outsideSql }),
+        }),
+      ];
+    }),
+  ) as Partial<Record<SearchReceivingOperation, { allowance: NativeStepWork; outsideSql: WorkDimensions }>>;
+  return Object.freeze({
+    footprint: (sql: string, values?: readonly unknown[]): WorkDimensions | undefined => {
+      // The executor's sole dynamic literal is a positive integral remaining timeout. This template
+      // is separately declared; arbitrary SET statements do not inherit its cost.
+      const key = /^SET LOCAL statement_timeout = '[1-9][0-9]*ms'$/.test(sql)
+        ? "SET LOCAL statement_timeout = '<remaining>ms'"
+        : receivingSqlKey(sql);
+      const maximum = statements.get(key);
+      const page = pages.get(key);
+      if (!maximum || !page || !values) return maximum;
+      let count: unknown;
+      if (page === 'copies') count = values[3];
+      else {
+        const encoded = values[2];
+        if (typeof encoded !== 'string' || Buffer.byteLength(encoded, 'utf8') > 256256) return undefined;
+        try {
+          const items: unknown = JSON.parse(encoded);
+          if (!Array.isArray(items)) return undefined;
+          count = items.length;
+        } catch {
+          return undefined;
+        }
+      }
+      if (typeof count !== 'number' || !Number.isInteger(count) || count < 0 || count > 100) return undefined;
+      const unused = 100 - count;
+      // Preserve every configured transitive surcharge. Only the known, undispatched raw keys are
+      // removed from the literal maximum; failed and empty dispatched pages keep this entire bound.
+      return Object.freeze({
+        ...maximum,
+        nativeRows: maximum.nativeRows - unused * (page === 'copies' ? 3 : 1),
+        nativePoints: maximum.nativePoints - unused * (page === 'copies' ? 2 : 1),
+        bytes: maximum.bytes - unused * 2560,
+      });
+    },
+    native: Object.freeze(native),
+  });
 }
 export type SearchReceivingWork = Readonly<{
   deadline: number;
   work: NativeCollectionWork;
-  invoke<T extends { work: NativeStepWork }>(operation: SearchReceivingOperation,
-    body: (context: Readonly<{ deadline: number; allowance: NativeStepWork }>) => Promise<T>): Promise<T>;
+  invoke<T extends { work: NativeStepWork }>(
+    operation: SearchReceivingOperation,
+    body: (context: Readonly<{ deadline: number; allowance: NativeStepWork }>) => Promise<T>,
+  ): Promise<T>;
 }>;
 
 /** Compose with the original caller's two ledgers. No new maintenance frame or aggregate allowance.
  * Catch inside compose so even a thrown child returns its actual eight-axis charges to the parent.
  */
-export async function withSearchReceivingWork<T>(pool: Pool, context: SearchReceivingWorkContext,
-  declaration: ReturnType<typeof receivingWorkDeclaration>, requiredSql: readonly string[],
-  body: (work: SearchReceivingWork) => Promise<T>): Promise<Readonly<{ value: T; work: WorkReceipt }>> {
-  context = Object.freeze({ ...context, allowance: Object.freeze({ ...context.allowance }),
-    ceiling: Object.freeze({ ...context.ceiling }) });
+export async function withSearchReceivingWork<T>(
+  pool: Pool,
+  context: SearchReceivingWorkContext,
+  declaration: ReturnType<typeof receivingWorkDeclaration>,
+  requiredSql: readonly string[],
+  body: (work: SearchReceivingWork) => Promise<T>,
+): Promise<Readonly<{ value: T; work: WorkReceipt }>> {
+  context = Object.freeze({
+    ...context,
+    allowance: Object.freeze({ ...context.allowance }),
+    ceiling: Object.freeze({ ...context.ceiling }),
+  });
   const parent = identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline);
   const balance = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, context.deadline);
   if (!parent || !balance) throw refused('Search receiving requires the original live caller work frame');
@@ -236,8 +315,10 @@ export async function withSearchReceivingWork<T>(pool: Pool, context: SearchRece
     try {
       if (!valid(remaining, nativeAxes) || nativeAxes.some((axis) => remaining[axis] > balance[axis]))
         throw refused('Search receiving native child exceeds original caller residual');
-      if (requiredSql.some((sql) => declaration.footprint(sql) === undefined) ||
-          searchReceivingOperations.some((operation) => !declaration.native[operation]))
+      if (
+        requiredSql.some((sql) => declaration.footprint(sql) === undefined) ||
+        searchReceivingOperations.some((operation) => !declaration.native[operation])
+      )
         throw refused('Search receiving exact native/common SQL cost composition is not installed');
       const chargeNative = (cost: NativeStepWork) => {
         if (lifetime.closed) throw refused('Search receiving work outlived its original child reservation');
@@ -246,9 +327,12 @@ export async function withSearchReceivingWork<T>(pool: Pool, context: SearchRece
           // The operation's complete native allowance was already taken from the original
           // frame. Include transitive and nested SQL in that SAME reservation, before dispatch.
           const axis = nativeAxes.find((axis) => operation.used[axis] + cost[axis] > operation.allowance[axis]);
-          if (axis) throw refused(capturePlanning.getStore()
-            ? `Search receiving capture unavailable funding: original native ${axis} requires ${cost[axis]}, remaining ${operation.allowance[axis] - operation.used[axis]}`
-            : 'Search receiving SQL exceeds its original native operation reservation');
+          if (axis)
+            throw refused(
+              capturePlanning.getStore()
+                ? `Search receiving capture unavailable funding: original native ${axis} requires ${cost[axis]}, remaining ${operation.allowance[axis] - operation.used[axis]}`
+                : 'Search receiving SQL exceeds its original native operation reservation',
+            );
           for (const axis of nativeAxes) operation.used[axis] += cost[axis];
         } else {
           // Common selection/control/executor SQL and callbacks outside an active native call
@@ -256,28 +340,43 @@ export async function withSearchReceivingWork<T>(pool: Pool, context: SearchRece
           // an expired call's reservation never supplies a new callback with free authority.
           const axis = nativeAxes.find((axis) => cost[axis] > remaining[axis]);
           if (axis || !reserveIdentitySourceConsumerNativeWork(pool, context.identityConsumerWork, cost))
-            throw refused(capturePlanning.getStore()
-              ? `Search receiving capture unavailable funding: original native ${axis ?? 'frame'} requires ${axis ? cost[axis] : 'live residual'}, remaining ${axis ? remaining[axis] : 'unavailable'}`
-              : 'Search receiving common SQL exceeds the original native frame');
+            throw refused(
+              capturePlanning.getStore()
+                ? `Search receiving capture unavailable funding: original native ${axis ?? 'frame'} requires ${axis ? cost[axis] : 'live residual'}, remaining ${axis ? remaining[axis] : 'unavailable'}`
+                : 'Search receiving common SQL exceeds the original native frame',
+            );
           for (const axis of nativeAxes) remaining[axis] -= cost[axis];
         }
       };
-      if (requiredSql.includes(searchReceivingCaptureStatements.enable)) lifetime.capture = (cost) => {
-        // The deferred body is reserved in the SAME child as its command and native operation.
-        // Even if COMMIT later refuses or throws, dispatched/uncertain charges stay consumed.
-        const axis = axes.find((axis) => cost[axis] > child.available(axis));
-        if (axis) throw refused(`Search receiving capture unavailable funding: original ${axis} requires ${cost[axis]}, remaining ${child.available(axis)}`);
-        const held = child.reserve(cost);
-        try {
-          chargeNative({ rows: cost.nativeRows, points: cost.nativePoints, statements: cost.statements,
-            bytes: cost.bytes, engineRequests: 0 });
-        } catch (error) { held.cancel(); throw error; }
-        held.dispatch();
-        held.settle();
-      };
+      if (requiredSql.includes(searchReceivingCaptureStatements.enable))
+        lifetime.capture = (cost) => {
+          // The deferred body is reserved in the SAME child as its command and native operation.
+          // Even if COMMIT later refuses or throws, dispatched/uncertain charges stay consumed.
+          const axis = axes.find((axis) => cost[axis] > child.available(axis));
+          if (axis)
+            throw refused(
+              `Search receiving capture unavailable funding: original ${axis} requires ${cost[axis]}, remaining ${child.available(axis)}`,
+            );
+          const held = child.reserve(cost);
+          try {
+            chargeNative({
+              rows: cost.nativeRows,
+              points: cost.nativePoints,
+              statements: cost.statements,
+              bytes: cost.bytes,
+              engineRequests: 0,
+            });
+          } catch (error) {
+            held.cancel();
+            throw error;
+          }
+          held.dispatch();
+          held.settle();
+        };
       observeNativeCheckouts(pool);
       const funded: SearchReceivingWork = {
-        deadline: context.deadline, work: child,
+        deadline: context.deadline,
+        work: child,
         invoke(operation, call) {
           const task = (async () => {
             if (!active) throw refused('Search receiving child reservation has ended');
@@ -293,9 +392,14 @@ export async function withSearchReceivingWork<T>(pool: Pool, context: SearchRece
             for (const axis of nativeAxes) remaining[axis] -= bound.allowance[axis];
             extra.dispatch();
             try {
-              const result = await nativeSqlReservations.run({ allowance: bound.allowance,
-                used: { ...emptyNative() } }, () => call({ deadline: context.deadline, allowance: { ...bound.allowance } }));
-              if (!valid(result.work, nativeAxes) || nativeAxes.some((axis) => result.work[axis] > bound.allowance[axis]))
+              const result = await nativeSqlReservations.run(
+                { allowance: bound.allowance, used: { ...emptyNative() } },
+                () => call({ deadline: context.deadline, allowance: { ...bound.allowance } }),
+              );
+              if (
+                !valid(result.work, nativeAxes) ||
+                nativeAxes.some((axis) => result.work[axis] > bound.allowance[axis])
+              )
                 throw refused(`Search receiving ${operation} exceeded declared native work`);
               return result;
             } catch (error) {
@@ -307,33 +411,55 @@ export async function withSearchReceivingWork<T>(pool: Pool, context: SearchRece
             }
           })();
           pending.add(task);
-          void task.then(() => pending.delete(task), () => pending.delete(task));
+          void task.then(
+            () => pending.delete(task),
+            () => pending.delete(task),
+          );
           return task;
         },
       };
-      const value = await nativeCheckouts.run(chargeNative, () => withRequestDeadline(context.deadline,
-        () => instrumentNativeCollectionWork(pool, child, (sql, values) => {
-          const footprint = declaration.footprint(sql, values);
-          if (footprint && capturePlanning.getStore()) {
-            const axis = axes.find((axis) => footprint[axis] > child.available(axis));
-            if (axis) throw refused(`Search receiving capture unavailable funding: original ${axis} requires ${footprint[axis]}, remaining ${child.available(axis)}`);
-          }
-          if (footprint) chargeNative({ rows: footprint.nativeRows, points: footprint.nativePoints,
-            statements: footprint.statements, bytes: footprint.bytes, engineRequests: 0 });
-          return footprint;
-        }, async () => queryLifetimes.run(lifetime, async () => {
-          observeQueryLifetimes(pool);
-          try { return await body(funded); }
-          finally {
-            active = false;
-            // Drain actual existing handles. A settled callback can dispatch another funded
-            // query; repeat until those handles settle too, then fence its inherited context.
-            while (pending.size || lifetime.pending.size)
-              await Promise.allSettled([...pending, ...lifetime.pending]);
-            lifetime.closed = true;
-            child.assertReady();
-          }
-        }))));
+      const value = await nativeCheckouts.run(chargeNative, () =>
+        withRequestDeadline(context.deadline, () =>
+          instrumentNativeCollectionWork(
+            pool,
+            child,
+            (sql, values) => {
+              const footprint = declaration.footprint(sql, values);
+              if (footprint && capturePlanning.getStore()) {
+                const axis = axes.find((axis) => footprint[axis] > child.available(axis));
+                if (axis)
+                  throw refused(
+                    `Search receiving capture unavailable funding: original ${axis} requires ${footprint[axis]}, remaining ${child.available(axis)}`,
+                  );
+              }
+              if (footprint)
+                chargeNative({
+                  rows: footprint.nativeRows,
+                  points: footprint.nativePoints,
+                  statements: footprint.statements,
+                  bytes: footprint.bytes,
+                  engineRequests: 0,
+                });
+              return footprint;
+            },
+            async () =>
+              queryLifetimes.run(lifetime, async () => {
+                observeQueryLifetimes(pool);
+                try {
+                  return await body(funded);
+                } finally {
+                  active = false;
+                  // Drain actual existing handles. A settled callback can dispatch another funded
+                  // query; repeat until those handles settle too, then fence its inherited context.
+                  while (pending.size || lifetime.pending.size)
+                    await Promise.allSettled([...pending, ...lifetime.pending]);
+                  lifetime.closed = true;
+                  child.assertReady();
+                }
+              }),
+          ),
+        ),
+      );
       return { ok: true as const, value, work: child.receipt() };
     } catch (error) {
       return { ok: false as const, error, work: child.receipt() };

@@ -22,14 +22,17 @@ const bigintMaximum = 9223372036854775807n;
  * extra keys, retain a nested caller object or accept coercible scalar objects.
  */
 function scalarFields<T extends object>(input: T, keys: readonly (keyof T)[]): T {
-  if (!input || typeof input !== 'object' || types.isProxy(input) ||
-    ![Object.prototype, null].includes(Object.getPrototypeOf(input)))
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    types.isProxy(input) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(input))
+  )
     throw new TypeError('Baseline input must be plain native data');
   const snapshot = Object.create(null);
   for (const key of keys) {
     const field = Object.getOwnPropertyDescriptor(input, key);
-    if (!field || !Object.hasOwn(field, 'value'))
-      throw new TypeError('Baseline input must have own data fields');
+    if (!field || !Object.hasOwn(field, 'value')) throw new TypeError('Baseline input must have own data fields');
     Object.defineProperty(snapshot, key, { value: field.value, enumerable: true });
   }
   return Object.freeze(snapshot) as T;
@@ -38,24 +41,49 @@ function scalarFields<T extends object>(input: T, keys: readonly (keyof T)[]): T
 function snapshotBinding(input: Binding): Binding {
   const binding = scalarFields(input, ['bootstrap', 'registration', 'definition', 'consumer', 'accounts']);
   const registration = scalarFields(binding.registration, ['partition', 'id']);
-  if (typeof binding.bootstrap !== 'string' || !uuid.test(binding.bootstrap) ||
-    typeof binding.definition !== 'string' || !uuid.test(binding.definition) ||
-    typeof binding.consumer !== 'string' || binding.consumer.length === 0 ||
-    typeof binding.accounts !== 'boolean' || !Number.isInteger(registration.partition) ||
-    registration.partition < 0 || registration.partition > 4095 ||
-    typeof registration.id !== 'string' || registration.id.length === 0)
+  if (
+    typeof binding.bootstrap !== 'string' ||
+    !uuid.test(binding.bootstrap) ||
+    typeof binding.definition !== 'string' ||
+    !uuid.test(binding.definition) ||
+    typeof binding.consumer !== 'string' ||
+    binding.consumer.length === 0 ||
+    typeof binding.accounts !== 'boolean' ||
+    !Number.isInteger(registration.partition) ||
+    registration.partition < 0 ||
+    registration.partition > 4095 ||
+    typeof registration.id !== 'string' ||
+    registration.id.length === 0
+  )
     throw new TypeError('Invalid native baseline binding');
   return Object.freeze({ ...binding, registration });
 }
 
 function snapshotEnrollment(input: AccountDiscoveryEnrollment): AccountDiscoveryEnrollment {
-  const receipt = scalarFields(input, ['partition', 'epoch', 'revision', 'claimRevision', 'sourcePosition',
-    'creationPosition', 'enqueueRevision', 'keyDigest', 'receipt', 'complete']);
-  if (!Number.isInteger(receipt.partition) || receipt.partition < 0 || receipt.partition > 4095 ||
-    !Number.isInteger(receipt.epoch) || receipt.epoch < 0 || receipt.epoch > 2147483647 ||
-    typeof receipt.keyDigest !== 'string' || !/^[0-9a-f]{64}$/.test(receipt.keyDigest) ||
+  const receipt = scalarFields(input, [
+    'partition',
+    'epoch',
+    'revision',
+    'claimRevision',
+    'sourcePosition',
+    'creationPosition',
+    'enqueueRevision',
+    'keyDigest',
+    'receipt',
+    'complete',
+  ]);
+  if (
+    !Number.isInteger(receipt.partition) ||
+    receipt.partition < 0 ||
+    receipt.partition > 4095 ||
+    !Number.isInteger(receipt.epoch) ||
+    receipt.epoch < 0 ||
+    receipt.epoch > 2147483647 ||
+    typeof receipt.keyDigest !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(receipt.keyDigest) ||
     !(receipt.receipt === null || (typeof receipt.receipt === 'string' && /^[0-9a-f]{64}$/.test(receipt.receipt))) ||
-    typeof receipt.complete !== 'boolean')
+    typeof receipt.complete !== 'boolean'
+  )
     throw new TypeError('Invalid native baseline enrollment');
   for (const key of ['revision', 'claimRevision', 'sourcePosition', 'creationPosition', 'enqueueRevision'] as const) {
     const value = receipt[key];

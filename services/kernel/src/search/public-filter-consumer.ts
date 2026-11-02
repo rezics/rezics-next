@@ -1667,8 +1667,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       // This installed factory is the finite registry family. A retained
       // catalogue consumer needs its actual root-bound native resolver; it
       // cannot borrow this request's finite selected Type registrations.
-      if (publicFilterCatalogue(q.consumer, mixed) !== null)
-        throw new ConsumerFailure('registration_missing');
+      if (publicFilterCatalogue(q.consumer, mixed) !== null) throw new ConsumerFailure('registration_missing');
       if (page?.use) use = page.use;
       else {
         const acquired = m.take(await custody.acquire(q, context));
@@ -2402,8 +2401,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   ) {
     const retained = capture === undefined ? undefined : captures.get(capture);
     if (capture !== undefined) {
-      if (!retained || retained.context.deadline !== incoming.deadline)
-        throw new ConsumerFailure('observation_lost');
+      if (!retained || retained.context.deadline !== incoming.deadline) throw new ConsumerFailure('observation_lost');
       captures.delete(capture);
     }
     const page = retained ?? newPage(Object.freeze({ deadline: incoming.deadline }));
@@ -2468,7 +2466,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             FOR UPDATE OF p)
           UPDATE search.public_filter_coverage_page p SET tail_consumed=$4,revision=p.revision+1,work=$5
           FROM locked l WHERE (p.partition_no,p.id)=(l.partition_no,l.id) RETURNING p.id`,
-            () => [locatorHome(page.queried!.snapshot.observation), page.id, execution, consumed, encodeState(page.m.cost)],
+            () => [
+              locatorHome(page.queried!.snapshot.observation),
+              page.id,
+              execution,
+              consumed,
+              encodeState(page.m.cost),
+            ],
           );
           if (result.rowCount !== 1) throw new ConsumerFailure('observation_lost');
         }),

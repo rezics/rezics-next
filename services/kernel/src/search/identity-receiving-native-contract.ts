@@ -72,7 +72,10 @@ export type SearchIdentityReceivingResult<T> =
   | Readonly<{ status: 'changed' | 'draining' | 'unavailable'; work: NativeStepWork }>;
 
 /** Library's public aliases stay Library-only. Select Search from the canonical native unions. */
-export type SearchIdentityReceivingBinding = Extract<NativeIdentityReceivingBinding, { step: 'search-canonical-index' }>;
+export type SearchIdentityReceivingBinding = Extract<
+  NativeIdentityReceivingBinding,
+  { step: 'search-canonical-index' }
+>;
 export type SearchIdentityReceivingRecord = Extract<NativeIdentityReceivingRecord, { step: 'search-canonical-index' }>;
 
 export const SEARCH_IDENTITY_RECEIVING_FRONTIER_MAX_BYTES = 1792;
@@ -81,26 +84,43 @@ export const SEARCH_IDENTITY_RECEIVING_FRONTIER_MAX_BYTES = 1792;
  */
 export function snapshotSearchIdentityReceivingFrontier(value: unknown): IdentityFrontier | null {
   try {
-    if (!value || typeof value !== 'object' || Array.isArray(value) ||
-      ![Object.prototype, null].includes(Object.getPrototypeOf(value)) || Reflect.ownKeys(value).length !== 2)
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(value)) ||
+      Reflect.ownKeys(value).length !== 2
+    )
       return null;
     const fields = Object.getOwnPropertyDescriptors(value);
     if (!fields.after || !('value' in fields.after) || !fields.segment || !('value' in fields.segment)) return null;
     const { value: after } = fields.after;
     const { value: segment } = fields.segment;
-    if (!Array.isArray(after) || Object.getPrototypeOf(after) !== Array.prototype || after.length > 8 ||
-      Reflect.ownKeys(after).length !== after.length + 1 || !Number.isSafeInteger(segment) || segment < 0) return null;
+    if (
+      !Array.isArray(after) ||
+      Object.getPrototypeOf(after) !== Array.prototype ||
+      after.length > 8 ||
+      Reflect.ownKeys(after).length !== after.length + 1 ||
+      !Number.isSafeInteger(segment) ||
+      segment < 0
+    )
+      return null;
     const keys: (string | number | null)[] = [];
     for (let i = 0; i < after.length; i++) {
       const field = Object.getOwnPropertyDescriptor(after, i);
       if (!field || !('value' in field)) return null;
       const item: unknown = field.value;
-      if (!(item === null || typeof item === 'string' || (typeof item === 'number' && Number.isFinite(item)))) return null;
+      if (!(item === null || typeof item === 'string' || (typeof item === 'number' && Number.isFinite(item))))
+        return null;
       keys.push(item);
     }
     const snapshot = Object.freeze({ after: Object.freeze(keys), segment });
-    return Buffer.byteLength(serializeIdentityValue(snapshot)) <= SEARCH_IDENTITY_RECEIVING_FRONTIER_MAX_BYTES ? snapshot : null;
-  } catch { return null; }
+    return Buffer.byteLength(serializeIdentityValue(snapshot)) <= SEARCH_IDENTITY_RECEIVING_FRONTIER_MAX_BYTES
+      ? snapshot
+      : null;
+  } catch {
+    return null;
+  }
 }
 /** Validate before serialization: JSON would silently turn nonfinite numbers into null. */
 export function validSearchIdentityReceivingFrontier(value: IdentityFrontier): boolean {
