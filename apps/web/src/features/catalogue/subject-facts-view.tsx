@@ -379,6 +379,7 @@ function SubjectFactsLive({
   profileIntro,
   profileRelations,
   embedded = false,
+  onReload,
 }: {
   initial: EditorRead;
   locale: string;
@@ -389,6 +390,8 @@ function SubjectFactsLive({
   profileIntro?: ReactNode;
   profileRelations?: ReactNode;
   embedded?: boolean;
+  /** A whole-profile owner refreshes identity and facts under the same read authority. */
+  onReload?: () => void;
 }) {
   const lifetime = useEditorLifetime();
   const visible = useCurrentReadingVisible();
@@ -635,7 +638,7 @@ function SubjectFactsLive({
         variant="outline"
         className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
         disabled={busy}
-        onClick={() => void reload()}
+        onClick={() => (onReload ? onReload() : void reload())}
       >
         {m.correction_reload({}, o)}
       </Button>

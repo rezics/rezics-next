@@ -1,6 +1,6 @@
-import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -500,10 +500,24 @@ function PeopleProfileEditorLive({
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const client = useQueryClient();
-  // Metadata may outlive its public/work reading only as private draft validation context.
+  // Retained metadata supports private holders; only an admitted query supplies public authority.
   const retained = useRef<Current | undefined>(undefined);
   function matching(next: PeopleRead): PeopleRead {
     const expectedWork = work ?? retained.current?.work?.subject.id;
+    if (id && next.ok) {
+      const subject = next.public?.subject;
+      const originalType = retained.current?.public?.subject.type;
+      if (
+        !subject ||
+        subject.id !== id ||
+        (originalType !== undefined && subject.type !== originalType) ||
+        !['schema:Person', 'schema:Organization'].includes(subject.type) ||
+        !next.release.types[subject.type] ||
+        !next.profiles.some((profile) => profile.id === subject.type) ||
+        ((work !== undefined || retained.current !== undefined) && next.work?.subject.id !== expectedWork)
+      )
+        return { ok: false, reason: 'stale' };
+    }
     const anchored = work !== undefined || retained.current !== undefined;
     if (!id && next.ok && (next.public || (anchored && next.work?.subject.id !== expectedWork)))
       return { ok: false, reason: 'stale' };
@@ -519,9 +533,86 @@ function PeopleProfileEditorLive({
     gcTime: 0,
   });
   const observed = query.data && matching(query.data);
-  const read = !id && query.isError ? undefined : observed;
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshingNow = useRef(false);
+  // Commit the pause before I/O so nested holders retire callbacks even for an immediate read.
+  useEffect(() => {
+    if (!refreshing) return;
+    void query.refetch({ cancelRefetch: false }).finally(() => {
+      if (!lifetime.active()) return;
+      refreshingNow.current = false;
+      setRefreshing(false);
+    });
+  }, [refreshing]);
+  function reloadCorrection() {
+    if (!lifetime.active() || refreshingNow.current || query.isFetching) return;
+    refreshingNow.current = true;
+    setRefreshing(true);
+  }
+  const read = query.isError || (id && (query.isFetching || refreshing)) ? undefined : observed;
   const current = !!read?.ok && !query.isFetching;
-  if (!id && current && read?.ok) retained.current = read;
+  if (current && read?.ok) retained.current = read;
+  if (id && session === 'signed-in' && retained.current?.public) {
+    const privateRead = retained.current;
+    const visible = current;
+    return (
+      <div className={peopleProfileSurface}>
+        {!visible && (
+          <article className="mx-auto w-full min-w-0 max-w-4xl space-y-4 p-4 sm:p-6">
+            <ViewHeadingActions label={m.people_profile_title({}, o)} headingClassName="font-sans" />
+            {query.isFetching || refreshing ? (
+              <p role="status">{m.catalogue_create_loading({}, o)}</p>
+            ) : (
+              <EditorFailure reason={observed && !observed.ok ? observed.reason : 'unavailable'} locale={locale} />
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              className={peopleActionTarget}
+              disabled={query.isFetching || refreshing}
+              onClick={reloadCorrection}
+            >
+              {m.correction_retry({}, o)}
+            </Button>
+          </article>
+        )}
+        <CatalogueCurrentReading
+          visible={visible}
+          ready={visible}
+          revision={`${query.dataUpdatedAt}:${query.errorUpdatedAt}`}
+        >
+          <SubjectFacts
+            locale={locale}
+            initial={{ ok: true, public: privateRead.public!, release: privateRead.release, source: null }}
+            profile={{
+              title: m.people_profile_title({}, o),
+              intro: m.facts_intro({}, o),
+              empty: m.facts_empty({}, o),
+              path: 'people',
+              properties: (current) =>
+                peopleProfiles(current.release, locale).find((profile) => profile.id === current.public.subject.type)
+                  ?.fields ?? [],
+            }}
+            profileIntro={<ProfileIntro read={privateRead} locale={locale} />}
+            transport={{
+              propose,
+              read: async () => {
+                const next = matching(await transport.load());
+                return next.ok && next.public
+                  ? { ok: true, public: next.public, release: next.release, source: null }
+                  : next.ok
+                    ? { ok: false, reason: 'unavailable' }
+                    : next;
+              },
+            }}
+            onReload={reloadCorrection}
+            review={review}
+          />
+          {relations && <div className={peopleRelationsSurface}>{relations}</div>}
+        </CatalogueCurrentReading>
+      </div>
+    );
+  }
   if (!id && retained.current)
     return (
       <PeopleCreate
@@ -601,37 +692,5 @@ function PeopleProfileEditorLive({
         )}
       </article>
     );
-  if (!read.public) return <EditorFailure reason="unavailable" locale={locale} />;
-  return (
-    <div className={peopleProfileSurface}>
-      <SubjectFacts
-        locale={locale}
-        initial={{ ok: true, public: read.public, release: read.release, source: null }}
-        profile={{
-          title: m.people_profile_title({}, o),
-          intro: m.facts_intro({}, o),
-          empty: m.facts_empty({}, o),
-          path: 'people',
-          properties: (current) =>
-            peopleProfiles(current.release, locale).find((profile) => profile.id === current.public.subject.type)
-              ?.fields ?? [],
-        }}
-        profileIntro={<ProfileIntro read={read} locale={locale} />}
-        profileRelations={relations ? <div className={peopleRelationsSurface}>{relations}</div> : undefined}
-        transport={{
-          propose,
-          read: async () => {
-            const next = await transport.load();
-            if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
-            return next.ok && next.public
-              ? { ok: true, public: next.public, release: next.release, source: null }
-              : next.ok
-                ? { ok: false, reason: 'unavailable' }
-                : next;
-          },
-        }}
-        review={review}
-      />
-    </div>
-  );
+  return <EditorFailure reason="unavailable" locale={locale} />;
 }
