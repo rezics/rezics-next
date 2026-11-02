@@ -518,6 +518,15 @@ test('Default composed member recovery admits only its live reader and preserves
     await press();
     expect(nativeCalls.at(-1)?.input.continuation).toBeUndefined();
     expect(button().textContent).toBe('Start again');
+    responses.push(page([recording.members[2]!], 'restarted-next'));
+    await press();
+    expect(nativeCalls.at(-1)?.input.continuation).toBeUndefined();
+    expect(list().textContent).toContain('The Little Prince');
+    responses.push(page([recording.members[1]!], 'restarted-next'));
+    await press();
+    expect(button().textContent).toBe('Start again');
+    expect(list().textContent).toContain('The Little Prince');
+    expect(list().textContent).not.toContain('The Tale of Genji');
     const retiredRestart = hold();
     await press();
     expect(nativeCalls.at(-1)?.input.continuation).toBeUndefined();
