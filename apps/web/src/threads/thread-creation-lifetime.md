@@ -13,7 +13,8 @@ ordered zero-to-128 reference contract and are admitted only while the route vis
 
 The departure owner decides before navigation to a different pathname or preset subject can commit. Stay preserves
 the caller and any immutable uncertain intent; Leave unmounts the old editor and creates a fresh usable visit for the
-selected board/subject with a fresh key even when loader data is reused. Display-title changes and refreshed loader
+selected board/subject with a fresh key even when loader data is reused. Confirming Leave retires the original caller
+before awaiting replacement route reads. Display-title changes and refreshed loader
 keys alone preserve the original visit and key.
 Other caller retirement leaves the composer mounted until its own account/session privacy rules clear it. Route
 submit and success callbacks use the original caller; an obsolete success cannot write the draft cookie or navigate.

@@ -9,6 +9,7 @@ their own draft and command state; the navigation owner keeps only live predicat
 New-thread navigation compares the pathname and validated preset subject, including browser Back/Forward. Stay keeps
 the mounted draft, references, media and focus; Leave retires it and mounts the selected board/subject context with
 a fresh command key, even if search navigation reuses the loader result.
+Confirming Leave retires the original caller immediately, before a replacement route read can complete.
 Subject titles are display hints: title-only, unrelated query and anchor changes keep the current editor without a
 prompt, as do refreshed loader command keys for the same context. Session observations still retire authority.
 

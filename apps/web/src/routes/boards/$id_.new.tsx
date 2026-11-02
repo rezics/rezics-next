@@ -183,7 +183,10 @@ function NewThreadEditor({
 
   return (
     <ThreadCreationLifetimeProvider lifetime={lifetime}>
-      <AuthoringDepartureProvider navigationContext={threadCreationNavigationContext}>
+      <AuthoringDepartureProvider
+        navigationContext={threadCreationNavigationContext}
+        onNavigationLeave={lifetime.depart}
+      >
         <article className="max-w-4xl space-y-8 text-foreground">
           <header className="space-y-3">
             {bound ? (

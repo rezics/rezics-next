@@ -47,6 +47,8 @@ export class AuthoringDepartureState {
   private focusTarget: HTMLElement | null = null;
   private leaving = false;
 
+  constructor(private readonly onNavigationLeave: () => void = () => {}) {}
+
   snapshot = () => this.revision;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -145,8 +147,10 @@ export class AuthoringDepartureState {
   leave = () => {
     const decision = this.decision;
     if (!decision) return;
-    if (decision.kind === 'navigation') this.settleNavigation(false);
-    else {
+    if (decision.kind === 'navigation') {
+      this.onNavigationLeave();
+      this.settleNavigation(false);
+    } else {
       this.decision = null;
       this.leaving = true;
       this.notify();
@@ -172,11 +176,15 @@ const DepartureContext = createContext<AuthoringDepartureState | null>(null);
 export function AuthoringDepartureProvider({
   children,
   navigationContext = pathnameContext,
+  onNavigationLeave,
 }: {
   children: ReactNode;
   navigationContext?: NavigationContext;
+  onNavigationLeave?: () => void;
 }) {
-  const [navigation] = useState(() => new AuthoringDepartureState());
+  const leave = useRef(onNavigationLeave);
+  leave.current = onNavigationLeave;
+  const [navigation] = useState(() => new AuthoringDepartureState(() => leave.current?.()));
   const revision = useSyncExternalStore(navigation.subscribe, navigation.snapshot, navigation.snapshot);
   const router = useRouter({ warn: false });
   const client = useContext(QueryClientContext);

@@ -261,6 +261,9 @@ export class ThreadCreationLifetime {
     return this.isCurrent(ticket) && !this.intentLocked;
   }
 
+  /** A deliberate departure retires callbacks before the replacement route's reads can finish. */
+  depart = () => this.retire(true);
+
   setIntentLocked(ticket: number, locked: boolean) {
     if (!this.isCurrent(ticket)) return false;
     if (this.intentLocked !== locked) {

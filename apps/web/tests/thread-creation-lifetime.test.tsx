@@ -138,10 +138,12 @@ async function mountPage(initial: PageConfig) {
     );
   }
   const rootRoute = createRootRoute({ component: Outlet });
+  let routeRead: ReturnType<typeof deferred<void>> | undefined;
   const composeRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/boards/$id/new',
     validateSearch: threadCreationPreset,
+    loader: () => routeRead?.promise,
     component: ComposePage,
   });
   const boardRoute = createRoute({
@@ -248,6 +250,7 @@ async function mountPage(initial: PageConfig) {
     submit,
     choose,
     go,
+    pauseRead: () => (routeRead = deferred<void>()),
     resolveWrite,
     updateConfig,
     poke,
@@ -439,14 +442,16 @@ test('preset navigation and Back/Forward preserve a draft on Stay and replace it
     await page.settle(() => page.writes.length === 1);
     expect(page.writes[0]!.data).toMatchObject({ subjectIds: [id(24)] });
     expect(page.writes[0]!.data.idempotencyKey).not.toBe(id(23));
+    const replacementRead = page.pauseRead();
     await page.go(`/boards/${id(25)}/new`);
     await page.choose('leave');
-    await page.settle(() => !!page.editor() && page.title()?.value === '');
     await page.resolveWrite(0, { ok: true, thread: { id: id(28), title: 'Late thread' } } as Awaited<
       ReturnType<typeof startThread>
     >);
     expect(page.navigation).toEqual([]);
     expect(page.window.document.cookie).not.toContain('rezics_draft_key=');
+    await act(async () => replacementRead.resolve());
+    await page.settle(() => !!page.editor() && page.title()?.value === '');
     expect(page.writes).toHaveLength(1);
   } finally {
     await page.dispose();
