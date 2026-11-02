@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, type ComponentProps } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { cn } from '../utils.ts';
 import {
   mediaImageIncarnation,
@@ -33,6 +33,9 @@ export interface MediaImageProps
   frame?: number;
 }
 
+type ImageCallbacks = Pick<MediaImageProps, 'onImageLoad' | 'onImageError'>;
+type ImageAttempt = { scope: object; element: HTMLImageElement; attached: boolean; completed: boolean };
+
 const positive = (value: number) => Number.isFinite(value) && value > 0;
 
 /**
@@ -61,35 +64,62 @@ export function MediaImage({
   style,
   ...rest
 }: MediaImageProps) {
-  const image = useRef<HTMLImageElement>(null);
+  const attempt = useRef<ImageAttempt | null>(null);
+  const callbacks = useRef<ImageCallbacks>({ onImageLoad, onImageError });
   const resolved = resolveMediaVariants({ media, variants }, src);
   const { sources, image: fallback } = mediaSourcesFromVariants(resolved);
   const incarnation = mediaImageIncarnation({ media, width, height, placeholder }, resolved);
   const lifetime = useIncarnationState(incarnation, () => false);
+  const scope = useMemo(() => ({}), [incarnation, lifetime.generation]);
   const failed = lifetime.value || fallback === undefined;
   const intrinsic = positive(width) && positive(height);
   const ratio = frame !== undefined && positive(frame) ? frame : intrinsic ? width / height : 1;
 
+  useLayoutEffect(() => {
+    callbacks.current = { onImageLoad, onImageError };
+  }, [onImageError, onImageLoad]);
+
+  const complete = useCallback(
+    (expected: object, element: HTMLImageElement, loaded: boolean, observedCallbacks?: ImageCallbacks) => {
+      const current = attempt.current;
+      if (
+        current?.scope !== expected ||
+        current.element !== element ||
+        !current.attached ||
+        !element.isConnected ||
+        current.completed
+      )
+        return;
+      current.completed = true;
+      lifetime.setValue(!loaded);
+      const notify = observedCallbacks ?? callbacks.current;
+      (loaded ? notify.onImageLoad : notify.onImageError)?.();
+    },
+    [lifetime.setValue],
+  );
+
   // A failure that happened before the handlers attached (server-rendered markup) fires no event.
   const track = useCallback(
     (element: HTMLImageElement | null) => {
-      image.current = element;
+      const current = attempt.current;
+      if (!element) {
+        if (current?.scope === scope) current.attached = false;
+        return;
+      }
+      if (current?.scope === scope && current.element === element) current.attached = true;
+      else attempt.current = { scope, element, attached: true, completed: false };
       if (element?.complete && element.currentSrc) {
-        const loaded = element.naturalWidth > 0;
-        lifetime.setValue(!loaded);
-        (loaded ? onImageLoad : onImageError)?.();
+        complete(scope, element, element.naturalWidth > 0, { onImageLoad, onImageError });
       }
     },
-    [incarnation, lifetime.setValue, onImageError, onImageLoad],
+    [complete, onImageError, onImageLoad, scope],
   );
   useEffect(() => {
-    const element = image.current;
-    if (element?.complete && element.currentSrc) {
-      const loaded = element.naturalWidth > 0;
-      lifetime.setValue(!loaded);
-      (loaded ? onImageLoad : onImageError)?.();
+    const current = attempt.current;
+    if (current?.scope === scope && current.element.complete && current.element.currentSrc) {
+      complete(scope, current.element, current.element.naturalWidth > 0);
     }
-  }, [incarnation, lifetime.setValue, onImageError, onImageLoad]);
+  }, [complete, scope]);
 
   return (
     <span
@@ -134,15 +164,8 @@ export function MediaImage({
             fetchPriority={priority ? 'high' : 'auto'}
             decoding="async"
             className="block size-full object-cover"
-            onLoad={(event) => {
-              const loaded = event.currentTarget.naturalWidth > 0;
-              lifetime.setValue(!loaded);
-              (loaded ? onImageLoad : onImageError)?.();
-            }}
-            onError={() => {
-              lifetime.setValue(true);
-              onImageError?.();
-            }}
+            onLoad={(event) => complete(scope, event.currentTarget, event.currentTarget.naturalWidth > 0)}
+            onError={(event) => complete(scope, event.currentTarget, false)}
           />
         </picture>
       )}
