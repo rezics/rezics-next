@@ -43,7 +43,10 @@ function useCharacterAdditionFocus() {
     cancel();
     if (!intent) return;
     const { origin, targetId, admitted } = intent;
-    if (!origin.isConnected || origin.ownerDocument.activeElement !== origin || !admitted()) return;
+    const document = origin.ownerDocument;
+    // Adding a fact clears its choice and disables Add during this commit.
+    const disabledBlur = origin.matches(':disabled') && document.activeElement === document.body;
+    if (!origin.isConnected || (document.activeElement !== origin && !disabledBlur) || !admitted()) return;
     const target = origin.ownerDocument.getElementById(targetId);
     if (target && origin.form?.contains(target) && !target.matches(':disabled')) target.focus();
   });
@@ -53,12 +56,22 @@ function useCharacterAdditionFocus() {
     const origin = event.currentTarget;
     if (event.detail !== 0 || origin.ownerDocument.activeElement !== origin) return;
     // Leaving and returning before the commit must still cancel this intent.
-    origin.addEventListener('focusout', cancel);
+    const leave = (event: FocusEvent) => {
+      if (!origin.matches(':disabled') || event.relatedTarget !== null) cancel();
+    };
+    const move = (event: FocusEvent) => {
+      if (event.target !== origin) cancel();
+    };
+    origin.addEventListener('focusout', leave);
+    origin.ownerDocument.addEventListener('focusin', move);
     pending.current = {
       origin,
       targetId,
       admitted,
-      dispose: () => origin.removeEventListener('focusout', cancel),
+      dispose: () => {
+        origin.removeEventListener('focusout', leave);
+        origin.ownerDocument.removeEventListener('focusin', move);
+      },
     };
   };
 }
