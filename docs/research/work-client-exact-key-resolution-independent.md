@@ -29,11 +29,11 @@ Repository source is pinned at `f084a1425deece3f5f28867dd4546a3a23d24674`.
 The three earlier reports are present locally; their named Git references were
 resolved without merging or cherry-picking:
 
-| Earlier evidence | Git reference |
-| --- | --- |
-| [Primary exact-key report](work-client-exact-reservation-key-primary.md) | `d7666822d6fa00edd90120d013e4beecbc8cebdc` |
+| Earlier evidence                                                                 | Git reference                              |
+| -------------------------------------------------------------------------------- | ------------------------------------------ |
+| [Primary exact-key report](work-client-exact-reservation-key-primary.md)         | `d7666822d6fa00edd90120d013e4beecbc8cebdc` |
 | [Independent exact-key report](work-client-exact-reservation-key-independent.md) | `e1b230d1397418ea9c538e3c840644ca1f02972b` |
-| [Complete private-heap review](work-client-private-heap-complete-design.md) | `0470a6f0e75bfe4472a087f7f0f692babb435c98` |
+| [Complete private-heap review](work-client-private-heap-complete-design.md)      | `0470a6f0e75bfe4472a087f7f0f692babb435c98` |
 
 The bounded-legacy contract, both exact-key receiving decisions, and private-heap
 receiving decision were read by exact path under the main checkout's
@@ -81,11 +81,11 @@ clones were reused, with reuse recorded in its `INDEX.md` on 2026-11-02. Commit
 identities were checked using Git; sparse PostgreSQL files were read from Git
 objects rather than assuming their presence in the working tree.
 
-| Project and local path | Inspected revision | Licence and primary source |
-| --- | --- | --- |
-| PostgreSQL, `library-shelf-maintenance/postgres` | `700b422af7e26cf310caf3fb76d78f4c8ca39c1f` | [PostgreSQL License, `COPYRIGHT`](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/COPYRIGHT) |
-| Rax, `work-client-exact-reservation-key/rax` | `1927550cb218ec3c3dda8b39d82d1d019bf0476d` | [BSD-2-Clause, `COPYING`](https://github.com/antirez/rax/blob/1927550cb218ec3c3dda8b39d82d1d019bf0476d/COPYING) |
-| DBOS Transact TypeScript, `native-scheduler-funded-design/dbos-transact-ts` | `627990fc59619d3584ce88511ab546bc7483f4b9` | [MIT, `LICENSE`](https://github.com/dbos-inc/dbos-transact-ts/blob/627990fc59619d3584ce88511ab546bc7483f4b9/LICENSE) |
+| Project and local path                                                      | Inspected revision                         | Licence and primary source                                                                                                      |
+| --------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL, `library-shelf-maintenance/postgres`                            | `700b422af7e26cf310caf3fb76d78f4c8ca39c1f` | [PostgreSQL License, `COPYRIGHT`](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/COPYRIGHT) |
+| Rax, `work-client-exact-reservation-key/rax`                                | `1927550cb218ec3c3dda8b39d82d1d019bf0476d` | [BSD-2-Clause, `COPYING`](https://github.com/antirez/rax/blob/1927550cb218ec3c3dda8b39d82d1d019bf0476d/COPYING)                 |
+| DBOS Transact TypeScript, `native-scheduler-funded-design/dbos-transact-ts` | `627990fc59619d3584ce88511ab546bc7483f4b9` | [MIT, `LICENSE`](https://github.com/dbos-inc/dbos-transact-ts/blob/627990fc59619d3584ce88511ab546bc7483f4b9/LICENSE)            |
 
 Additional primary evidence is PostgreSQL's current documentation, resolving to
 version 18 during this review, and Ferragina and Grossi's original String B-tree
@@ -150,15 +150,15 @@ it cannot silently normalize, force C equality or publish false coverage.
 
 The following is a disjoint obligation ledger, not a production price:
 
-| Work | Necessary bound for the retained target | Failure that must be excluded |
-| --- | --- | --- |
-| Compatible conversion/extraction | Linear in admitted changed input/output bytes | Comparison sorting common-prefix member names; repeated full-value conversion |
-| Exact equality navigation | Linear byte work plus a constant number of indexed entry operations per changed source | B-tree point probe per byte/chunk; digest-bucket residual scan |
-| Actual-ID and group order | A bounded number of logarithmic structural operations, without rescanning/copying unrelated survivor strings | Long key comparator at each tree level; rebuilding a head key from an unchanged winner |
-| Owner inventory | Indexed entry work per changed owner/source, linear direct copy work | Independently indexed inventory row per byte-node |
-| Publication/abort | Same original transaction, bounded reached work on every attempt | Detached repair/commit, retry inside a partly spent transaction, free losing speculative insertion |
-| Release/reuse | Old changed path plus bounded scalar metadata | Survivor recompression, scanning all allocated/free/history entries |
-| Restore/reconciliation | Explicit independent maintenance admission and complete inventory before bounded use | Treating invalid coverage as deletion or a broken link as absence |
+| Work                             | Necessary bound for the retained target                                                                      | Failure that must be excluded                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| Compatible conversion/extraction | Linear in admitted changed input/output bytes                                                                | Comparison sorting common-prefix member names; repeated full-value conversion                      |
+| Exact equality navigation        | Linear byte work plus a constant number of indexed entry operations per changed source                       | B-tree point probe per byte/chunk; digest-bucket residual scan                                     |
+| Actual-ID and group order        | A bounded number of logarithmic structural operations, without rescanning/copying unrelated survivor strings | Long key comparator at each tree level; rebuilding a head key from an unchanged winner             |
+| Owner inventory                  | Indexed entry work per changed owner/source, linear direct copy work                                         | Independently indexed inventory row per byte-node                                                  |
+| Publication/abort                | Same original transaction, bounded reached work on every attempt                                             | Detached repair/commit, retry inside a partly spent transaction, free losing speculative insertion |
+| Release/reuse                    | Old changed path plus bounded scalar metadata                                                                | Survivor recompression, scanning all allocated/free/history entries                                |
+| Restore/reconciliation           | Explicit independent maintenance admission and complete inventory before bounded use                         | Treating invalid coverage as deletion or a broken link as absence                                  |
 
 For example, let `q` be explicitly visited byte/chunk nodes. A representation can
 have `q = O(B*)`, fixed group-seek count and `O(B*)` final stored bytes, yet still
@@ -295,16 +295,16 @@ A writer must not swallow that refusal, traverse using stale assumptions or
 retry only a projection statement. Root publication, native mutation, terminal
 counts, allocation and inventory roll back together. Failed work remains spent.
 
-| Retained class | Independent custody/removal obligation |
-| --- | --- |
-| Equality and actual-ID bytes, implicit prefixes, node links and summaries | Locate all live copies; preserve shared live attribution; delete released changed paths |
-| Group parent/child structures and eligible ordering | Include losing candidates, head payloads and any prepositioned duplicate ordering entries |
-| Roots, terminals, refcounts and logical-to-physical metadata | Version/table/domain identity; checked reuse only after all live references are removed |
-| Source-half and orphan associations | Either surviving native half remains attributable even when no candidate exists |
-| Scratch and transient publication state | Remove on success; abort atomically; inventory any intentionally committed intermediate state |
-| Free intervals, allocation and pending work | Bounded reusable metadata, no immortal per-deleted-account or per-historical-allocation record |
-| Backfill, restore reconciliation and coverage state | Actual funded owner and completion/non-revival boundary, not cursor EOF or a Boolean |
-| Inventory and its own links/indices | Independently select/remove/probe these too, after removing the copies they identify |
+| Retained class                                                            | Independent custody/removal obligation                                                         |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Equality and actual-ID bytes, implicit prefixes, node links and summaries | Locate all live copies; preserve shared live attribution; delete released changed paths        |
+| Group parent/child structures and eligible ordering                       | Include losing candidates, head payloads and any prepositioned duplicate ordering entries      |
+| Roots, terminals, refcounts and logical-to-physical metadata              | Version/table/domain identity; checked reuse only after all live references are removed        |
+| Source-half and orphan associations                                       | Either surviving native half remains attributable even when no candidate exists                |
+| Scratch and transient publication state                                   | Remove on success; abort atomically; inventory any intentionally committed intermediate state  |
+| Free intervals, allocation and pending work                               | Bounded reusable metadata, no immortal per-deleted-account or per-historical-allocation record |
+| Backfill, restore reconciliation and coverage state                       | Actual funded owner and completion/non-revival boundary, not cursor EOF or a Boolean           |
+| Inventory and its own links/indices                                       | Independently select/remove/probe these too, after removing the copies they identify           |
 
 ### Restore-safe inventory need not be a B-tree per byte, but must exist
 
@@ -431,12 +431,12 @@ Its algorithm does not implement PostgreSQL MVCC, owner inventory, collation or
 compatible extraction. It refutes a universal string-index impossibility claim;
 it does not establish an available extension.
 
-| Explicit choice | What changes | What still must be proved |
-| --- | --- | --- |
-| Retain target and SQL-only deployment | No contract change; keep immutable heaps provisional while supplying the missing connected algorithm | Compatible linear extraction, head updates without survivor-byte work, direct independent inventory and whole-transaction capacity; no such complete SQL body is established here |
-| Retain target; add a native producer deployment | Package/support a prefix-aware exact string/ordered directory and directly addressed storage/inventory, plus compatible linear extraction | WAL/recovery, old snapshots, uniqueness, head-handle updates, all copies, restore, full native transaction integration and inclusive prices |
-| Retain SQL-only deployment; change the bound | Admit actual conversion cost plus byte-node indexed work, e.g. `P_PG + O((d+q) log N)`, with separate survivor/restore costs unless eliminated | Exact semantics, actual full-ID representation, prepaid literals, original owner composition and every original child allowance; this is an explicit contract relaxation |
-| Narrow a deployment precondition only | Require demonstrated deterministic equality and controlled private-heap maintenance with completed restore reconstruction | This closes specific collation/relocation obligations only; canonicalization and ordered/inventory costs remain, so it is not a positive answer alone |
+| Explicit choice                                 | What changes                                                                                                                                   | What still must be proved                                                                                                                                                         |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Retain target and SQL-only deployment           | No contract change; keep immutable heaps provisional while supplying the missing connected algorithm                                           | Compatible linear extraction, head updates without survivor-byte work, direct independent inventory and whole-transaction capacity; no such complete SQL body is established here |
+| Retain target; add a native producer deployment | Package/support a prefix-aware exact string/ordered directory and directly addressed storage/inventory, plus compatible linear extraction      | WAL/recovery, old snapshots, uniqueness, head-handle updates, all copies, restore, full native transaction integration and inclusive prices                                       |
+| Retain SQL-only deployment; change the bound    | Admit actual conversion cost plus byte-node indexed work, e.g. `P_PG + O((d+q) log N)`, with separate survivor/restore costs unless eliminated | Exact semantics, actual full-ID representation, prepaid literals, original owner composition and every original child allowance; this is an explicit contract relaxation          |
+| Narrow a deployment precondition only           | Require demonstrated deterministic equality and controlled private-heap maintenance with completed restore reconstruction                      | This closes specific collation/relocation obligations only; canonicalization and ordered/inventory costs remain, so it is not a positive answer alone                             |
 
 PostgreSQL permits new index types through
 [add-on access-method code](https://www.postgresql.org/docs/18/indexam.html).
