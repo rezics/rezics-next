@@ -827,6 +827,8 @@ other view. Sections a type does not support are left out; the rest keep this or
 10. **Sources.** Cover credits, source records for the facts shown with each source's licence and attribution,
     external identifiers, and a link to Details.
 
+Community pages decode only against their planned native request and its row limit; missing request metadata or malformed rows make that region unavailable. The DTO omits place, so native board placement remains authoritative.
+
 Every preview shows at most twelve items (fewer for reviews, threads and lists) and links to its full view when
 there are more. A subject with only a
 title still renders a complete page: the cover placeholder, the title, an empty-state invitation to add facts, and

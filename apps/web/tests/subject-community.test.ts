@@ -110,7 +110,7 @@ test('the complete assigned visible journey uses actual current native data and 
   expect(new URL(threadReads(requests)[0]!.url).searchParams.get('cursor')).toBe('community-next');
 });
 
-test('current hidden, unavailable and closed reads are distinct from empty, and filtered pages retain their native continuation', async () => {
+test('current hidden, unavailable and closed reads are distinct from empty, and empty pages retain their native continuation', async () => {
   for (const status of [404, 503, 403]) {
     const { client, requests } = fixture((request) =>
       isCommunity(request)
@@ -165,7 +165,7 @@ test('current hidden, unavailable and closed reads are distinct from empty, and 
 test('only public available summaries and one author batch leave the reader; cursor input remains bounded', async () => {
   const hidden = communityThread('review');
   const { client, requests } = fixture((request) =>
-    isCommunity(request)
+    isCommunity(request) && new URL(request.url).searchParams.get('kind') === 'review'
       ? Response.json({
           threads: [
             communityThread('review'),
@@ -181,12 +181,8 @@ test('only public available summaries and one author batch leave the reader; cur
         })
       : undefined,
   );
-  const data = await readSubjectCommunity(client, communitySubject.id, ['review', 'review']);
-  expect(data.regions.review).toMatchObject({
-    state: 'ready',
-    threads: [{ id: communityThread('review').id }],
-    next: 'native-next',
-  });
+  const data = await readSubjectCommunity(client, communitySubject.id, ['review', 'review', 'discussion']);
+  expect(data.regions.review).toMatchObject({ state: 'unavailable' });
   expect(JSON.stringify(data)).not.toMatch(/withheld body|hidden-review|private-decision|privateCount/);
   const identities = requests.filter((request) => new URL(request.url).pathname === '/v1/accounts');
   expect(identities).toHaveLength(1);
