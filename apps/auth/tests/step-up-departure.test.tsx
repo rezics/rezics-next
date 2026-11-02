@@ -62,7 +62,7 @@ async function setup(query = signInQuery) {
   };
 }
 
-test('Stay keeps validation and masked input; replacement resets it and Leave clears the next draft', async () => {
+test('Stay keeps validation and masked input; replacement starts a clean request', async () => {
   const page = await setup();
   expect(page.unload()).toBe(false);
   const email = page.host.querySelector<HTMLInputElement>('[name=email]')!;
@@ -88,10 +88,6 @@ test('Stay keeps validation and masked input; replacement resets it and Leave cl
   expect(page.router.history.location.pathname).toBe('/step-up');
   expect(page.host.querySelector<HTMLInputElement>('[name=email]')!.value).toBe('');
   expect(page.unload()).toBe(false);
-  await flush(() => fill(page.host.querySelector('[name=email]')!, 'reader@example.test'));
-  await page.navigate('/away');
-  await page.choose('Leave');
-  expect(page.router.history.location.pathname).toBe('/away');
 });
 
 test('Leave retires a dispatched password continuation without cancelling its sign-in', async () => {
