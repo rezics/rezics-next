@@ -257,6 +257,8 @@ test('Game and Addon complete fields family preserves independent labels, native
     await act(async () => user.selectOptions(select, 'schema:inLanguage'));
     expect((within(host).getByRole('button', { name: m.correction_add() }) as HTMLButtonElement).disabled).toBe(true);
     await act(async () => user.click(within(host).getAllByRole('button', { name: m.recipe_remove_field() })[0]!));
+    expect((within(host).getByRole('button', { name: m.correction_add() }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => user.click(within(host).getAllByRole('button', { name: m.recipe_remove_field() })[0]!));
     expect((within(host).getByRole('button', { name: m.correction_add() }) as HTMLButtonElement).disabled).toBe(false);
     const removed = structuredClone(release);
     delete removed.properties['schema:inLanguage'];

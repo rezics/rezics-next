@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { catalogueEditor, useEditorLifetime, useCurrentReadingVisible } from './editor-lifetime';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
@@ -128,6 +128,126 @@ export function GameStatementFields({
     />
   );
 }
+/** Confirm only whole unsent facts; keep their editors mounted so item summaries survive Cancel. */
+function GameInitialFactRemove({
+  row,
+  disabled,
+  locale,
+  onRemove,
+}: {
+  row: { key: string; statement: StatementInput };
+  disabled: boolean;
+  locale: string;
+  onRemove: () => void;
+}) {
+  const o = { locale: locale as never };
+  const holder = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  const [confirmingKey, setConfirmingKey] = useState<string>();
+  const confirming = confirmingKey === row.key;
+  const current = useRef({ disabled, key: row.key, onRemove });
+  current.current = { disabled, key: row.key, onRemove };
+  const editable = () =>
+    !current.current.disabled && current.current.key === row.key && !holder.current?.closest('fieldset:disabled');
+  useLayoutEffect(() => {
+    if (!editable()) return;
+    if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current) {
+      trigger.current?.focus();
+      restoreFocus.current = false;
+    }
+  }, [confirming, disabled]);
+  const cancelRemoval = () => {
+    restoreFocus.current = true;
+    setConfirmingKey(undefined);
+  };
+  const remove = () => {
+    const section = holder.current?.closest('section');
+    if (!editable() || !section?.isConnected) return;
+    const controls = [
+      ...((section.closest('form') ?? section.closest('fieldset'))?.querySelectorAll<HTMLElement>(
+        'button, input, select, textarea, [tabindex="0"], [contenteditable="true"]',
+      ) ?? []),
+    ];
+    const first = controls.findIndex((control) => section.contains(control));
+    const last = controls.findLastIndex((control) => section.contains(control));
+    [...controls.slice(last + 1), ...controls.slice(0, first).reverse()]
+      .find(
+        (control) =>
+          !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
+          !control.closest('[hidden], [inert]'),
+      )
+      ?.focus();
+    current.current.onRemove();
+  };
+  const hasContent = (value: unknown): boolean => {
+    if (typeof value === 'string') return !!value.trim();
+    if (value == null) return false;
+    if (typeof value === 'object') return Object.values(value).some(hasContent);
+    return true;
+  };
+  const populatedPart = (part: SnakInput) => part.value.type !== 'value' || hasContent(part.value.content);
+  const populated =
+    populatedPart(row.statement) ||
+    row.statement.qualifiers?.some(populatedPart) ||
+    row.statement.references.some((reference) => reference.parts.some(populatedPart));
+  return (
+    <div ref={holder}>
+      {confirming ? (
+        <div
+          role="group"
+          aria-label={m.candidate_confirm_title({ action: m.recipe_remove_field({}, o) }, o)}
+          className="space-y-2"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              cancelRemoval();
+            }
+          }}
+        >
+          <p>{m.candidate_confirm_title({ action: m.recipe_remove_field({}, o) }, o)}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              ref={cancel}
+              className={gameActionClass}
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={cancelRemoval}
+            >
+              {m.candidate_cancel({}, o)}
+            </Button>
+            <Button
+              className={gameActionClass}
+              type="button"
+              variant="destructive"
+              disabled={disabled}
+              onClick={remove}
+            >
+              {m.recipe_remove_field({}, o)}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          ref={trigger}
+          className={gameActionClass}
+          type="button"
+          variant="ghost"
+          disabled={disabled}
+          onClick={() => {
+            if (editable()) populated ? setConfirmingKey(row.key) : remove();
+          }}
+        >
+          {m.recipe_remove_field({}, o)}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function GameInitialFacts({
   type,
   release,
@@ -237,14 +357,12 @@ export function GameInitialFacts({
                   change(statements.map((item) => (item.key === row.key ? { ...item, statement } : item)))
                 }
               />
-              <Button
-                type="button"
-                className={gameActionClass}
-                variant="ghost"
-                onClick={() => change(statements.filter((item) => item.key !== row.key))}
-              >
-                {m.recipe_remove_field({}, o)}
-              </Button>
+              <GameInitialFactRemove
+                row={row}
+                disabled={disabled}
+                locale={locale}
+                onRemove={() => change(statements.filter((item) => item.key !== row.key))}
+              />
             </ContentItemFrame>
           </section>
         );
