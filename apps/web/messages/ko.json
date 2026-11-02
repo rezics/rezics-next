@@ -535,6 +535,7 @@
   "library_copy_less": "간단히 보기",
   "library_copy_location": "위치",
   "library_copy_more": "더 보기",
+  "library_copy_more_actions": "추가 작업",
   "library_copy_note": "메모",
   "library_copy_note_reader_expand_note": "메모 전체 읽기",
   "library_copy_note_reader_collapse_note": "메모 접기",
