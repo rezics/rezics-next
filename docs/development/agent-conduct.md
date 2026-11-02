@@ -75,8 +75,13 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
   tasks) and turns it into decisions and the next briefs. Workers do not read other workers' tasks; the manager reads
   them once for all.
 - Your outputs are ready briefs and decisions. Keep at least eight ready briefs in your Goal's backlog while your road
-  has unowned approved outcomes; when it has none, finish what you own and never pad. Scope additions go to the
-  supermanager as candidates naming the scope line they extend.
+  has unowned approved outcomes. Scope additions go to the supermanager as candidates naming the scope line they
+  extend.
+- When the road has no unowned outcome, the Goal is in its quality stage: prove each Done-when clause of its Goal brief
+  on current dev with that clause's acceptance evidence (outcome suites, growth checks, interface review). Brief every
+  failing, flaky, missing or unmeasured clause, each dev defect in your paths, and each gap between a page you own and
+  its design bar, naming the clause, defect or bar. Keep up to eight such briefs ready; a brief that names none of
+  them is padding.
 - Do not sleep or poll. End the turn; the controller wakes you on an inbox event.
 - Send only decisions, questions and handoffs: one message per decision, at most 60 words. Never send
   acknowledgements, receipts, status reports or lists of things you did not do.
