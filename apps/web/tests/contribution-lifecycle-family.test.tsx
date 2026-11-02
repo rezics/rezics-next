@@ -178,11 +178,15 @@ test('own-contribution family preserves independent panels, exact recovery and r
     await until(() => !!dialog());
     expect(dialog().textContent).toContain(m.contribution_confirm_delete());
     targetClasses(dialog());
-    expect(commands).toHaveLength(0);
-    expect(first.calls).toHaveLength(0);
+    const retiredConfirm = queued(button(dialog(), m.contribution_confirm()));
     await click(button(dialog(), m.candidate_cancel()));
-    await until(() => !dialog());
+    await act(async () => retiredConfirm());
     expect(first.calls).toHaveLength(0);
+    await click(button(panel('first'), m.contribution_withdraw()));
+    await until(() => !!dialog());
+    await act(async () => retiredConfirm());
+    expect(first.calls).toHaveLength(0);
+    expect(commands).toHaveLength(0);
     expect(second.calls).toHaveLength(0);
     await confirm(panel('first'));
     await until(() => panel('first').textContent!.includes(m.contribution_unavailable()));
@@ -334,7 +338,10 @@ test('own-contribution family preserves independent panels, exact recovery and r
         expect(panel('recovery').textContent).not.toContain(copy);
       expect(panel('recovery').querySelector('[data-private]')).toBeNull();
       observation = { subject: 'available', candidate: 'deleted', selected: false };
+      const oldWithdraw = queued(button(panel('recovery'), m.contribution_withdraw()));
       await click(button(panel('recovery'), m.contribution_refresh()));
+      await act(async () => oldWithdraw());
+      expect(dialog()).toBeNull();
       expect(panel('recovery').textContent).toContain(m.contribution_deleted());
       await confirm(panel('recovery'), m.contribution_restore());
       observation = { subject: 'available', candidate: 'unconfirmed', selected: false };
@@ -357,8 +364,12 @@ test('own-contribution family preserves independent panels, exact recovery and r
       expect(panel('recovery').textContent).not.toContain(m.contribution_refresh());
       await act(async () => oldRefresh());
       expect(rereads).toBe(5);
+      const oldRetry = queued(button(panel('recovery'), m.contribution_retry()));
       await click(button(panel('recovery'), m.contribution_retry()));
       expect(sent[3]).toBe(sent[2]);
+      await act(async () => oldRetry());
+      expect(dialog()).toBeNull();
+      expect(sent).toHaveLength(4);
       expect(sent.map((command) => command.operation)).toEqual([
         'delete',
         'restore',

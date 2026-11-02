@@ -56,7 +56,7 @@ function ContributionLifecycleLive({
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const [state, setState] = useState<'active' | 'deleted' | 'restored' | 'expired'>('active');
-  const [confirmation, setConfirmation] = useState<ContributionCommand['operation'] | null>(null);
+  const [confirmation, setConfirmation] = useState<{ operation: ContributionCommand['operation'] } | null>(null);
   const [failure, setFailure] = useState<ContributionFailure['reason']>();
   const [current, setCurrent] = useState<ContributionAvailability>();
   const [busy, setBusy] = useState(false);
@@ -89,15 +89,19 @@ function ContributionLifecycleLive({
     pending.current = null;
     departure.release();
   }
+  function clearConfirmation(expected?: { operation: ContributionCommand['operation'] }) {
+    if (expected && controls.current.confirmation !== expected) return;
+    controls.current.confirmation = null;
+    setConfirmation(null);
+  }
   const action = operation === 'delete' ? m.contribution_withdraw({}, o) : m.contribution_restore({}, o);
 
   function observe(next: ContributionAvailability, effect?: ContributionCommand['operation']) {
     session.current = next.session ?? session.current;
     setCurrent(next);
     const nextOperation = confirmedContributionOperation(next);
-    controls.current.confirmation = null;
     controls.current.operation = nextOperation;
-    setConfirmation(null);
+    clearConfirmation();
     if (!terminal.current) {
       if (nextOperation) setFailure(undefined);
       // A fresh read replaces old action assumptions. Only a confirmed command
@@ -114,23 +118,39 @@ function ContributionLifecycleLive({
     }
   }
 
-  async function change() {
+  async function change(admission:
+    | { kind: 'confirm'; confirmation: { operation: ContributionCommand['operation'] } }
+    | { kind: 'retry'; command: ContributionCommand },
+  ) {
     if (!lifetime.active()) return;
     const latest = controls.current;
-    if (running.current || !latest.operation || terminal.current || (!latest.confirmation && !pending.current)) return;
-    pending.current ??= {
-      ...address,
-      operation: latest.confirmation!,
-      key: crypto.randomUUID(),
-      ...(session.current ? { session: session.current } : {}),
-    };
+    if (running.current || terminal.current) return;
+    let command: ContributionCommand;
+    if (admission.kind === 'retry') {
+      if (pending.current !== admission.command) return;
+      command = admission.command;
+    } else {
+      if (
+        !latest.operation ||
+        latest.operation !== admission.confirmation.operation ||
+        latest.confirmation !== admission.confirmation ||
+        pending.current
+      )
+        return;
+      command = {
+        ...address,
+        operation: admission.confirmation.operation,
+        key: crypto.randomUUID(),
+        ...(session.current ? { session: session.current } : {}),
+      };
+      pending.current = command;
+      clearConfirmation(admission.confirmation);
+    }
     running.current = true;
     setBusy(true);
-    controls.current.confirmation = null;
-    setConfirmation(null);
     setFailure(undefined);
     try {
-      const result = await transport.change(pending.current);
+      const result = await transport.change(command);
       if (!lifetime.active()) return;
       if (!result.ok) {
         setFailure(result.reason);
@@ -260,12 +280,15 @@ function ContributionLifecycleLive({
                 variant={operation === 'delete' ? 'destructive' : 'default'}
                 disabled={busy}
                 onClick={() => {
-                  if (!lifetime.active() || running.current || !controls.current.operation || terminal.current) return;
-                  if (pending.current) void change();
-                  else {
-                    setFailure(undefined);
-                    controls.current.confirmation = controls.current.operation;
-                    setConfirmation(controls.current.operation);
+                  const expectedOperation = operation;
+                  const retryCommand = pending.current;
+                  if (!lifetime.active() || running.current || !expectedOperation || terminal.current) return;
+                  if (retryCommand) {
+                    if (pending.current === retryCommand) void change({ kind: 'retry', command: retryCommand });
+                  } else if (controls.current.operation === expectedOperation) {
+                    const admitted = { operation: expectedOperation };
+                    controls.current.confirmation = admitted;
+                    setConfirmation(admitted);
                   }
                 }}
               >
@@ -287,13 +310,13 @@ function ContributionLifecycleLive({
         </div>
         <AlertDialog
           open={confirmation !== null}
-          onOpenChange={(open) => lifetime.active() && !open && setConfirmation(null)}
+          onOpenChange={(open) => lifetime.active() && !open && clearConfirmation(confirmation ?? undefined)}
         >
           <AlertDialogContent initialFocus={() => lifetime.active()} finalFocus={() => lifetime.active()}>
             <AlertDialogHeader className="min-w-0 justify-items-stretch text-start sm:text-start">
               <AlertDialogTitle className="min-w-0 [overflow-wrap:anywhere]">{action}</AlertDialogTitle>
               <AlertDialogDescription className="min-w-0 [overflow-wrap:anywhere]">
-                {confirmation === 'delete'
+                {confirmation?.operation === 'delete'
                   ? m.contribution_confirm_delete({}, o)
                   : m.contribution_confirm_restore({}, o)}
               </AlertDialogDescription>
@@ -304,9 +327,9 @@ function ContributionLifecycleLive({
               </AlertDialogCancel>
               <AlertDialogAction
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2.5 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                variant={confirmation === 'delete' ? 'destructive' : 'default'}
+                variant={confirmation?.operation === 'delete' ? 'destructive' : 'default'}
                 disabled={busy}
-                onClick={() => void change()}
+                onClick={() => confirmation && void change({ kind: 'confirm', confirmation })}
               >
                 {m.contribution_confirm({}, o)}
               </AlertDialogAction>
