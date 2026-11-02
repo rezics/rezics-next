@@ -139,10 +139,9 @@ export function withObservedExhaustion(
         continue;
       }
       const observedTime = Date.parse(marker.observedAt);
-      const expires =
-        typeof marker.expiresAt === 'string'
-          ? Date.parse(marker.expiresAt)
-          : observedTime + pool.policy.maxAgeMs;
+      const expires = marker.expiresAt
+        ? Date.parse(String(marker.expiresAt))
+        : observedTime + pool.policy.maxAgeMs;
       if (!Number.isFinite(observedTime) || !Number.isFinite(expires)) continue;
       markers.push({ observedAt: marker.observedAt, observedTime, expires });
     } catch {
