@@ -50,7 +50,9 @@ test('retained definitions recover exact immutable meaning without granting Sour
     selected,
     { ...selected, sort: 'ordinal' },
   ]);
-  expect(await fixture.store.readRetainedDefinition({} as OperationalTransaction, reserved.episodes[0]!.locator)).toBeNull();
+  expect(
+    await fixture.store.readRetainedDefinition({} as OperationalTransaction, reserved.episodes[0]!.locator),
+  ).toBeNull();
   for (const episode of reserved.episodes) {
     const locator = episode.locator;
     let ended!: OperationalTransaction;
@@ -61,8 +63,12 @@ test('retained definitions recover exact immutable meaning without granting Sour
       await expect(fixture.store.readWorkDefinition(tx, locator)).rejects.toMatchObject({
         code: 'dependency_unavailable',
       });
-      expect(await fixture.store.readRetainedDefinition(tx, { ...locator, episodeId: newId(locator.route) })).toBeNull();
-      expect(await fixture.store.readRetainedDefinition(tx, { ...locator, collectionId: newId(locator.route) })).toBeNull();
+      expect(
+        await fixture.store.readRetainedDefinition(tx, { ...locator, episodeId: newId(locator.route) }),
+      ).toBeNull();
+      expect(
+        await fixture.store.readRetainedDefinition(tx, { ...locator, collectionId: newId(locator.route) }),
+      ).toBeNull();
       // A cached complete flag without final current Source authority cannot produce a ready result.
       await tx.query('UPDATE library.members_preparation SET complete=true WHERE episode_id=$1', [locator.episodeId]);
       await expect(fixture.store.readWorkDefinition(tx, locator)).rejects.toMatchObject({
@@ -91,23 +97,36 @@ test('retained recovery rejects digest, canonical, namespace and immutable-relea
     for (const [value, matchingDigest] of mutations) {
       const bytes = canonicalize(value)!;
       await tx.query('UPDATE library.members_preparation SET canonical_basis=$2,basis_digest=$3 WHERE episode_id=$1', [
-        locator.episodeId, bytes, matchingDigest ? createHash('sha256').update(bytes).digest() : Buffer.alloc(32),
+        locator.episodeId,
+        bytes,
+        matchingDigest ? createHash('sha256').update(bytes).digest() : Buffer.alloc(32),
       ]);
-      await expect(fixture.store.readRetainedDefinition(tx, locator)).rejects.toMatchObject({ code: 'unsupported_query' });
+      await expect(fixture.store.readRetainedDefinition(tx, locator)).rejects.toMatchObject({
+        code: 'unsupported_query',
+      });
     }
     const missingRelease = canonicalize([...basis.slice(0, 5), `sha256:${'0'.repeat(64)}`])!;
     await tx.query('UPDATE library.members_preparation SET canonical_basis=$2,basis_digest=$3 WHERE episode_id=$1', [
-      locator.episodeId, missingRelease, createHash('sha256').update(missingRelease).digest(),
+      locator.episodeId,
+      missingRelease,
+      createHash('sha256').update(missingRelease).digest(),
     ]);
-    await expect(fixture.store.readRetainedDefinition(tx, locator)).rejects.toMatchObject({ code: 'dependency_unavailable' });
+    await expect(fixture.store.readRetainedDefinition(tx, locator)).rejects.toMatchObject({
+      code: 'dependency_unavailable',
+    });
     const bytes = ` ${header.canonical_basis}`;
     await tx.query('UPDATE library.members_preparation SET canonical_basis=$2,basis_digest=$3 WHERE episode_id=$1', [
-      locator.episodeId, bytes, createHash('sha256').update(bytes).digest(),
+      locator.episodeId,
+      bytes,
+      createHash('sha256').update(bytes).digest(),
     ]);
-    await expect(fixture.store.readRetainedDefinition(tx, locator)).rejects.toMatchObject({ code: 'unsupported_query' });
-    await tx.query('UPDATE library.members_preparation SET canonical_basis=$2,basis_digest=$3,last_read_at=$4 WHERE episode_id=$1', [
-      locator.episodeId, header.canonical_basis, header.basis_digest, new Date(0),
-    ]);
+    await expect(fixture.store.readRetainedDefinition(tx, locator)).rejects.toMatchObject({
+      code: 'unsupported_query',
+    });
+    await tx.query(
+      'UPDATE library.members_preparation SET canonical_basis=$2,basis_digest=$3,last_read_at=$4 WHERE episode_id=$1',
+      [locator.episodeId, header.canonical_basis, header.basis_digest, new Date(0)],
+    );
     expect(await fixture.store.readRetainedDefinition(tx, locator)).toBeNull();
     expect(await fixture.store.readWorkDefinition(tx, locator)).toBeNull();
   });
