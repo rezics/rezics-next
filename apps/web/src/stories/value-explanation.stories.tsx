@@ -97,7 +97,7 @@ const longEvidenceTitle = '旅人の物語 — 読み継がれる長い名前と
 const longEvidenceValue = '選ばれた値 Édition originale العربية 한국어 '.repeat(8) + 'LongUnbrokenValue'.repeat(24);
 const longEvidenceReference = '出典の全文 Référence complète العربية '.repeat(12);
 const longEvidenceUrl = `https://catalogue.example.test/${'long-reference'.repeat(25)}?source=exact%2Bvalue#original`;
-const evidenceLabels = ['選ばれた書誌の値 — 第一の説明', '別の書誌の値 — 第二の説明'];
+const evidenceLabels = ['選ばれた書誌の値 — 第一の説明', '別の書誌の値 — 第二の説明'] as const;
 
 /** Additive contract-shaped supplied readings; the canonical fixtures and their request paths stay intact. */
 function EvidenceFamilyStory({ single = false }: { single?: boolean }) {
@@ -131,6 +131,7 @@ function EvidenceFamilyStory({ single = false }: { single?: boolean }) {
                 references: [
                   ...result.page.statement.references,
                   {
+                    hash: 'fixture-only-long-reference',
                     parts: [
                       {
                         property: { id: 'example:reference', data_type: 'monolingualtext' },
@@ -146,7 +147,7 @@ function EvidenceFamilyStory({ single = false }: { single?: boolean }) {
                       },
                     ],
                   },
-                  { parts: [] },
+                  { hash: 'fixture-only-empty-reference', parts: [] },
                 ],
               },
             },

@@ -72,7 +72,7 @@ test('selected-value evidence has independent family sections, complete supplied
     const qualifier = '補足された意味と原文のままの条件 '.repeat(12);
     const reference = '出典の全文 Référence complète العربية '.repeat(12);
     const url = `https://catalogue.example.test/${'long-reference'.repeat(25)}?source=exact%2Bvalue#original`;
-    const labels = ['選ばれた書誌の値 — 第一の説明', '別の書誌の値 — 第二の説明'];
+    const labels = ['選ばれた書誌の値 — 第一の説明', '別の書誌の値 — 第二の説明'] as const;
     const page: ValuePage = {
       ...supplied.page,
       title: { text: title, lang: 'ja' },
@@ -90,6 +90,7 @@ test('selected-value evidence has independent family sections, complete supplied
         references: [
           ...supplied.page.statement.references,
           {
+            hash: 'fixture-only-long-reference',
             parts: [
               {
                 property: { id: 'example:reference', data_type: 'monolingualtext' },
@@ -102,7 +103,7 @@ test('selected-value evidence has independent family sections, complete supplied
               },
             ],
           },
-          { parts: [] },
+          { hash: 'fixture-only-empty-reference', parts: [] },
         ],
       },
     };
