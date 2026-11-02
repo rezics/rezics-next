@@ -6,6 +6,7 @@ import { m } from '../paraglide/messages.js';
 import { localizedLabel } from './results';
 import { discoveryMessage } from './discovery-results';
 import type { DiscoveryKinds as Kinds, DiscoveryKindsState } from './discovery';
+import { KindContinuationLedger } from './kind-continuation';
 import type { SearchRecoveryState } from './search-recovery';
 import { searchRecoveryMessage } from './search-recovery-view';
 import { useSearchRetryWait } from './search-recovery-retry';
@@ -32,7 +33,7 @@ export function DiscoveryKinds({
   useEffect(() => () => pending.current?.abort(), []);
   const values = pages.flatMap((page) => page.values);
   const next = pages.at(-1)?.next;
-  const consumed = useRef(new Set<string>());
+  const continuations = useRef(new KindContinuationLedger());
   async function more() {
     if (!next || pending.current || waiting) return;
     const controller = new AbortController();
@@ -47,11 +48,11 @@ export function DiscoveryKinds({
         const seen = new Set(values.map((kind) => kind.id));
         if (
           result.kinds.values.some((kind) => seen.has(kind.id)) ||
-          (result.kinds.next && consumed.current.has(result.kinds.next))
+          continuations.current.repeats(next, result.kinds.next)
         )
           setStatus('unavailable');
         else {
-          consumed.current.add(next);
+          continuations.current.consume(next);
           setPages((pages) => [...pages, result.kinds]);
           setStatus(undefined);
         }

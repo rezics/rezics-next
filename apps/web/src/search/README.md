@@ -40,4 +40,6 @@ Filters edits result-language preferences as an ordered list of at most eight: a
 
 Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only explicit sort value.
 
+Result-kind traversal is keyed by the query, locale and initial discovery checkpoint (`as_of`); a changed checkpoint starts a fresh traversal.
+
 Global search accepts drafts up to 512 UTF-8 bytes; scoped inputs keep their existing 256 UTF-16-unit cap, and typeahead keeps its independent 64-code-point prefix bound.

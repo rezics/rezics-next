@@ -693,7 +693,7 @@ export function SearchPage({
         )}
       {data?.discovery?.status === 'ready' && data.queryState && (
         <DiscoveryKinds
-          key={JSON.stringify(data.queryState)}
+          key={JSON.stringify([data.queryState, locale, data.discovery.page.as_of])}
           initial={data.discovery.page.kinds}
           locale={locale}
           selected={data.queryState.kinds ?? []}
