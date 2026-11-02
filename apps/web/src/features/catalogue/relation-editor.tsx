@@ -110,6 +110,11 @@ function RelationEditorLive({
   const [closeConfirmation, setCloseConfirmation] = useState(false);
   const closeButton = useRef<HTMLButtonElement>(null);
   const restoreCloseFocus = useRef(false);
+  const candidatePageBoundary = useRef<HTMLElement>(null);
+  const candidatePageEmpty = useRef<HTMLParagraphElement>(null);
+  const candidateReadFailure = useRef<HTMLElement>(null);
+  const candidateReadFocus = useRef<'boundary' | 'failure'>();
+  const failedCandidateRead = useRef(false);
   const [result, setResult] = useState<Extract<RelationResult, { ok: true }>>();
   const [proposed, setProposed] = useState(false);
   const [proposedId, setProposedId] = useState<string>();
@@ -135,6 +140,8 @@ function RelationEditorLive({
       resumeRead.current = !!(read?.ok || reading.current);
       readGeneration.current++;
       running.current = false;
+      candidateReadFocus.current = undefined;
+      failedCandidateRead.current = false;
       setBusy(false);
       setRead(undefined);
       setCandidate(undefined);
@@ -216,10 +223,20 @@ function RelationEditorLive({
     setCloseConfirmation(false);
   }
   useLayoutEffect(() => {
-    if (!restoreCloseFocus.current) return;
-    restoreCloseFocus.current = false;
-    closeButton.current?.focus();
-  }, [closeConfirmation]);
+    if (restoreCloseFocus.current) {
+      restoreCloseFocus.current = false;
+      closeButton.current?.focus();
+      candidateReadFocus.current = undefined;
+      return;
+    }
+    const focus = candidateReadFocus.current;
+    if (!focus) return;
+    candidateReadFocus.current = undefined;
+    if (!visible || !mount.active()) return;
+    if (focus === 'failure') candidateReadFailure.current?.focus();
+    else if (read?.ok && read.page && !read.page.candidates.length) candidatePageEmpty.current?.focus();
+    else candidatePageBoundary.current?.focus();
+  }, [closeConfirmation, read, failure, visible]);
   const closeLocked = compositionCloseLocked();
 
   function editable() {
@@ -265,6 +282,8 @@ function RelationEditorLive({
     request.current = undefined;
     pageCursor.current = undefined;
     reading.current = undefined;
+    candidateReadFocus.current = undefined;
+    failedCandidateRead.current = false;
     readGeneration.current++;
   }
   function failed(next: CandidateFailure) {
@@ -280,7 +299,13 @@ function RelationEditorLive({
       proposedCandidate.current = undefined;
     }
   }
-  async function readPage(address?: RelationSlot, cursor?: string, session?: string, proposedId?: string) {
+  async function readPage(
+    address?: RelationSlot,
+    cursor?: string,
+    session?: string,
+    proposedId?: string,
+    focusCandidateRead = false,
+  ) {
     const generation = ++readGeneration.current;
     const destination = { slot: address && { ...address }, cursor, session };
     reading.current = destination;
@@ -295,19 +320,27 @@ function RelationEditorLive({
       const next = await transport.read(destination.slot, destination.cursor, destination.session);
       if (!active()) return;
       if (!next.ok) {
+        failedCandidateRead.current = !!destination.slot;
+        if (focusCandidateRead) candidateReadFocus.current = 'failure';
         failed(next);
         return;
       }
+      failedCandidateRead.current = false;
+      if (focusCandidateRead) candidateReadFocus.current = 'boundary';
       nativeSession.current = next.session ?? nativeSession.current;
       setRead(next);
       pageCursor.current = cursor;
       setSlot(destination.slot);
       if (proposedId) setCandidate(next.page?.candidates.find((item) => item.id === proposedId));
     } catch {
-      if (active()) failed({ ok: false, reason: 'unavailable' });
+      if (active()) {
+        failedCandidateRead.current = !!destination.slot;
+        if (focusCandidateRead) candidateReadFocus.current = 'failure';
+        failed({ ok: false, reason: 'unavailable' });
+      }
     }
   }
-  async function load(address = slot, cursor?: string, session = nativeSession.current) {
+  async function load(address = slot, cursor?: string, session = nativeSession.current, focusCandidateRead = false) {
     if (!lifetime.active() || running.current || uncertain) return;
     running.current = true;
     setBusy(true);
@@ -316,7 +349,7 @@ function RelationEditorLive({
     setConfirmation(undefined);
     request.current = undefined;
     try {
-      await readPage(address, cursor, session, proposedCandidate.current);
+      await readPage(address, cursor, session, proposedCandidate.current, focusCandidateRead);
     } finally {
       if (mount.active()) {
         setBusy(false);
@@ -326,7 +359,12 @@ function RelationEditorLive({
   }
   function reload() {
     const destination = reading.current;
-    void load(destination?.slot ?? slot, destination?.cursor, destination?.session ?? nativeSession.current);
+    void load(
+      destination?.slot ?? slot,
+      destination?.cursor,
+      destination?.session ?? nativeSession.current,
+      failedCandidateRead.current && !!destination?.slot,
+    );
   }
   async function confirm() {
     if (!lifetime.active()) return;
@@ -465,9 +503,16 @@ function RelationEditorLive({
       )}
       {busy && <p role="status">{m.candidate_loading({}, options)}</p>}
       {failureText && (
-        <ContentItemFrame as="div" role="alert" className="min-w-0 rounded-xl bg-muted/30 p-4">
-          <p>{failureText}</p>
-        </ContentItemFrame>
+        <div
+          ref={candidateReadFailure}
+          role="alert"
+          tabIndex={-1}
+          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <ContentItemFrame as="div" className="min-w-0 rounded-xl bg-muted/30 p-4">
+            <p>{failureText}</p>
+          </ContentItemFrame>
+        </div>
       )}
       {!current && !reading.current && !busy && <Button onClick={() => load()}>{m.relation_open({}, options)}</Button>}
       {current && current.public.subject.context !== candidateContext ? (
@@ -756,7 +801,12 @@ function RelationEditorLive({
                   </fieldset>
                 </ContentItemFrame>
                 {slot && field && current.page && (
-                  <section className="space-y-4" aria-label={m.relation_review_slot({}, options)}>
+                  <section
+                    ref={candidatePageBoundary}
+                    tabIndex={-1}
+                    className="space-y-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    aria-label={m.relation_review_slot({}, options)}
+                  >
                     <ContentItemHeading level={2} className="text-lg font-semibold">
                       {m.relation_review_slot({}, options)}
                     </ContentItemHeading>
@@ -767,7 +817,16 @@ function RelationEditorLive({
                     <p className="text-sm [overflow-wrap:anywhere]">
                       {id} · {slot.property} · {slot.target ?? slot.sameAs} {slot.key ?? ''}
                     </p>
-                    {!current.page.candidates.length && <p>{m.candidate_empty({}, options)}</p>}
+                    {!current.page.candidates.length && (
+                      <p
+                        ref={candidatePageEmpty}
+                        role="status"
+                        tabIndex={-1}
+                        className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      >
+                        {m.candidate_empty({}, options)}
+                      </p>
+                    )}
                     <ul className="space-y-3">
                       {current.page.candidates.map((item) => (
                         <li key={item.id}>
@@ -836,7 +895,11 @@ function RelationEditorLive({
                       ))}
                     </ul>
                     {current.page.next && (
-                      <Button variant="outline" disabled={frozen} onClick={() => load(slot, current.page!.next!)}>
+                      <Button
+                        variant="outline"
+                        disabled={frozen}
+                        onClick={() => load(slot, current.page!.next!, nativeSession.current, true)}
+                      >
                         {m.candidate_more({}, options)}
                       </Button>
                     )}

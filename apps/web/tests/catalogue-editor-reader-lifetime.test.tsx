@@ -8,7 +8,7 @@ import * as start from '../.storybook/react-start';
 import recorded from '../src/kernel/recorded/definitions-release.json';
 import type { ConsentAddress } from '../src/features/catalogue/statement-consent';
 import type { ContributionAddress } from '../src/features/catalogue/contribution-lifecycle';
-import type { RelationDraft } from '../src/subject/relation-candidates';
+import type { RelationDraft, RelationRead, RelationTransport } from '../src/subject/relation-candidates';
 
 // Authored UNRUN. One mounted campaign connects real editors, Session adapters, BFFs,
 // prepareSession and native-shaped HTTP seams. Neither this source nor typing is native proof.
@@ -202,10 +202,12 @@ const ComposedRelation = candidateSession(function ComposedRelation({
   fixture,
   locale,
   statement = fixture.draft,
+  read,
 }: {
   fixture: ReturnType<typeof relationFixture>;
   locale: string;
   statement?: RelationDraft;
+  read?: RelationTransport['read'];
 }) {
   const work = useCatalogueLifetime('relation');
   return createElement(RelationEditor, {
@@ -217,8 +219,10 @@ const ComposedRelation = candidateSession(function ComposedRelation({
       selected++;
     },
     transport: {
-      read: (slot, cursor, session) =>
-        readSubjectRelationEditor({ data: editorRequest({ id: fixture.id, slot, cursor, session }, work), headers }),
+      read:
+        read ??
+        ((slot, cursor, session) =>
+          readSubjectRelationEditor({ data: editorRequest({ id: fixture.id, slot, cursor, session }, work), headers })),
       propose: (command) => proposeSubjectRelation({ data: editorRequest(command, work), headers }),
       confirm: (command) => confirmSubjectRelation({ data: editorRequest(command, work), headers }),
     },
@@ -383,8 +387,8 @@ test('catalogue editors retain only their original live reader, exact address an
     await input(termsSelector('labels-mode'), 'set');
     await input(termsSelector('labels'), title);
   };
-  const relation = async (fixture: ReturnType<typeof relationFixture>) => {
-    await ui.render(createElement(ComposedRelation, { fixture, locale: 'en' }));
+  const relation = async (fixture: ReturnType<typeof relationFixture>, read?: RelationTransport['read']) => {
+    await ui.render(createElement(ComposedRelation, { fixture, locale: 'en', read }));
     await ui.click(m.relation_open());
     await ui.until(() => ui.buttons(m.relation_propose()).length > 0);
   };
@@ -740,14 +744,68 @@ test('catalogue editors retain only their original live reader, exact address an
     });
     expect(standalone.calls.some((call) => call.path.endsWith(standalone.id))).toBe(true);
 
+    // Continuation, exact retry and sparse result focus; a retired continuation stays silent.
+    const continued = relationFixture();
+    const pageReads: { slot?: unknown; cursor?: string; session?: string }[] = [];
+    const pendingPage = deferred<RelationRead>();
+    const pageStarted = deferred<void>();
+    let failSparseRead = true;
+    const continuationRead: RelationTransport['read'] = async (slot, cursor, session) => {
+      pageReads.push({ slot, cursor, session });
+      const result = await continued.transport.read(slot, cursor, session);
+      if (!result.ok || !slot) return result;
+      if (!cursor) return { ...result, page: { ...result.page!, next: 'middle' } };
+      if (cursor === 'middle') return { ...result, page: { ...result.page!, next: 'sparse' } };
+      if (cursor === 'sparse' && failSparseRead) {
+        failSparseRead = false;
+        return { ok: false, reason: 'unavailable' };
+      }
+      if (cursor === 'sparse') return { ...result, page: { ...result.page!, candidates: [], next: 'retired' } };
+      pageStarted.resolve();
+      return pendingPage.promise;
+    };
+    await activate(continued);
+    await relation(continued, continuationRead);
+    ui.outside.focus();
+    await ui.click(m.relation_review_slot());
+    await ui.until(() => ui.buttons(m.candidate_more()).length > 0);
+    const pageBoundary = () => ui.host.querySelector(`section[aria-label="${m.relation_review_slot()}"]`);
+    expect(ui.window.document.activeElement).not.toBe(pageBoundary());
+    await ui.click(m.candidate_more());
+    await ui.until(() => !!pageBoundary() && ui.buttons(m.candidate_more()).length > 0);
+    expect(ui.window.document.activeElement).toBe(pageBoundary());
+    await ui.click(m.candidate_more());
+    await ui.until(() => !!ui.host.querySelector('[role="alert"]'));
+    expect(ui.window.document.activeElement).toBe(ui.host.querySelector('[role="alert"]'));
+    await ui.click(m.statement_consent_retry_page());
+    await ui.until(() => ui.host.querySelector('[role="status"]')?.textContent === m.candidate_empty());
+    expect(pageReads.slice(-2)).toEqual([
+      { slot: continued.slot, cursor: 'sparse', session: 'relation-session' },
+      { slot: continued.slot, cursor: 'sparse', session: 'relation-session' },
+    ]);
+    expect(ui.window.document.activeElement).toBe(ui.host.querySelector('[role="status"]'));
+    expect(ui.buttons(m.candidate_more())).toHaveLength(1);
+    await ui.click(m.candidate_more());
+    await pageStarted.promise;
+    await ui.update(signedIn(replacement));
+    ui.outside.focus();
+    pendingPage.resolve(await continued.transport.read(continued.slot, 'retired', 'relation-session'));
+    await ui.settle();
+    expect(ui.window.document.activeElement).toBe(ui.outside);
+    expect(pageBoundary()).toBeNull();
+
     // The replacement starts its own live proposal, exact review and native adoption.
     const freshRelation = relationFixture();
     await activate(freshRelation);
     await ui.update(signedIn(replacement));
     const freshStart = envelopes.length;
     await relation(freshRelation);
+    ui.outside.focus();
     await propose();
     await ui.until(() => ui.host.textContent!.includes(m.relation_proposed()));
+    expect(ui.window.document.activeElement).not.toBe(
+      ui.host.querySelector(`section[aria-label="${m.relation_review_slot()}"]`),
+    );
     const freshProposal = freshRelation.calls.find(
       (call) => call.method === 'POST' && call.path.endsWith('/candidates'),
     )!;
