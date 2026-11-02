@@ -403,6 +403,22 @@ async function reference(
   );
 }
 
+test('collection fences refuse both first completion and completion receipt replay', async () => {
+  for (const completed of [false, true]) {
+    const media = await reserved();
+    const body = completion(media.request.idempotencyKey);
+    const request = context();
+    if (completed) await completeMedia(dependencies(), author, media.id, body, request);
+    await db.admin.query('UPDATE content.media SET collection_pending=true WHERE route=$1 AND media_id=$2', [
+      routeOf(media.id),
+      media.id,
+    ]);
+    const before = await row(media.id);
+    await unchanged(() => completeMedia(dependencies(), author, media.id, body, request));
+    expect(await row(media.id)).toEqual(before);
+  }
+});
+
 test('claims use the referencing transaction, actual container, verified author and shared T', async () => {
   const media = await available();
   const requestKey = Bun.randomUUIDv7();

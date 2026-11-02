@@ -3166,6 +3166,20 @@ CREATE UNIQUE INDEX agent_identity_reversal_terminal_receipt ON core.receipt USI
 
 
 --
+-- Name: commerce_live_copy_receipt_position; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE UNIQUE INDEX commerce_live_copy_receipt_position ON core.receipt USING btree (partition_no, "position") WHERE ((principal_kind = 'account'::text) AND (command_kind = ANY (ARRAY['commerce.checkout.record'::text, 'commerce.checkout.refresh'::text, 'commerce.checkout.apply'::text])));
+
+
+--
+-- Name: commerce_live_copy_receipt_transaction; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE UNIQUE INDEX commerce_live_copy_receipt_transaction ON core.receipt USING btree (partition_no, transaction_id) WHERE ((principal_kind = 'account'::text) AND (command_kind = ANY (ARRAY['commerce.checkout.record'::text, 'commerce.checkout.refresh'::text, 'commerce.checkout.apply'::text])));
+
+
+--
 -- Name: consumer_checkpoint_consumer_idx; Type: INDEX; Schema: core; Owner: -
 --
 
@@ -3683,6 +3697,13 @@ CREATE TRIGGER identity_history_allocation_guard BEFORE INSERT OR DELETE OR UPDA
 --
 
 CREATE TRIGGER identity_history_original_guard BEFORE DELETE OR UPDATE ON core.identity_history_original FOR EACH ROW EXECUTE FUNCTION core.guard_identity_original_control();
+
+
+--
+-- Name: partition live_copy_partition_activation_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER live_copy_partition_activation_guard BEFORE INSERT OR UPDATE ON core.partition FOR EACH ROW EXECUTE FUNCTION access.live_copy_partition_activation_guard();
 
 
 --

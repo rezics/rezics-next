@@ -1,7 +1,7 @@
 -- Source rows share their thread's partition. Containers are separate full-key
 -- batches: this statement never joins a thread to its board's partition.
 WITH RECURSIVE input AS NOT MATERIALIZED (
-  SELECT k.route, k.id FROM jsonb_to_recordset(:keys::jsonb) AS k(route integer, id uuid)
+  SELECT k.route, k.id, :kind::text AS kind FROM jsonb_to_recordset(:keys::jsonb) AS k(route integer, id uuid)
 ), source AS (
   SELECT i.route, i.id, t.thread_id, t.first_post_id AS post_id,
          NULL::uuid AS revision_id, NULL::uuid AS creator_id, NULL::uuid AS subject_id,
@@ -9,14 +9,14 @@ WITH RECURSIVE input AS NOT MATERIALIZED (
   FROM input i CROSS JOIN LATERAL (
     SELECT thread_id, first_post_id FROM content.thread
     WHERE route=i.route AND thread_id=i.id LIMIT 1
-  ) t WHERE :kind::text='thread'
+  ) t WHERE i.kind='thread'
   UNION ALL
   SELECT i.route, i.id, p.thread_id, p.post_id, NULL::uuid, NULL::uuid,
          NULL::uuid, NULL::bytea, NULL::text, NULL::text
   FROM input i CROSS JOIN LATERAL (
     SELECT thread_id, post_id FROM content.post
     WHERE route=i.route AND post_id=i.id LIMIT 1
-  ) p WHERE :kind::text='post'
+  ) p WHERE i.kind='post'
   UNION ALL
   SELECT i.route, i.id, e.thread_id, e.post_id, e.revision_id, e.creator_account_id,
          e.target_subject_id, e.body_sha256, e.licence, e.state
@@ -24,7 +24,7 @@ WITH RECURSIVE input AS NOT MATERIALIZED (
     SELECT thread_id, post_id, revision_id, creator_account_id, target_subject_id,
            body_sha256, licence, state
     FROM content.edition WHERE route=i.route AND edition_id=i.id LIMIT 1
-  ) e WHERE :kind::text='edition'
+  ) e WHERE i.kind='edition'
 ), roots AS (
   SELECT s.*, t.board_id, t.visibility AS thread_visibility
   FROM source s CROSS JOIN LATERAL (

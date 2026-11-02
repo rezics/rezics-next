@@ -430,6 +430,12 @@ board and subject thread candidates and reaction totals are retained, and curren
 at once.
 
 The durable hourly `content.collection.hourly` sweep visits the fixed 4096 partitions, at most eight concurrently.
+Media collection uses two limited index branches on each of the partition's 16 exact routes, selecting at most
+3,200 candidates for a batch of at most 100. `COLLECTION_BOUNDS` records the composed ceilings: at most 300
+buffered candidates, 200 sequential command phases and 100 sequential storage prefix deletions per step.
+Decision: retain only the oldest batch after each route merge; this lowers the host buffer bound while preserving
+selection order, expiry and claim fencing. A committed collection fence also denies first completion and receipt
+replay, so neither can revive the reservation while prefix deletion is interrupted.
 Each partition visits its 16 routes. `page-deleted-posts.sql` selects at most 100 expired posts per durable step through
 `post_deleted_page_idx(route,deleted_at,post_id)`. Each post gets an irreversible purge fence before its revision
 pages, so restore cannot race cleanup. `clearErasedPostRevisions` clears bodies, SHA-256 digests and search text together
