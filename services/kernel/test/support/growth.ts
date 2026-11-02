@@ -1058,9 +1058,7 @@ async function runGrowthCheck(db: GrowthDatabase, check: GrowthCheck): Promise<G
     requestBytes:
       check.byteBounds?.requestBytes === undefined ? undefined : classifyMetric(classifyFrom, check, 'requestBytes'),
     responseBytes:
-      check.byteBounds?.responseBytes === undefined
-        ? undefined
-        : classifyMetric(classifyFrom, check, 'responseBytes'),
+      check.byteBounds?.responseBytes === undefined ? undefined : classifyMetric(classifyFrom, check, 'responseBytes'),
   };
   const stepViolations = [
     ...growthViolations(classifyFrom, check.bounds, check.slack),
