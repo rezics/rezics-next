@@ -23,7 +23,16 @@ import {
 import { dirname, join } from 'node:path';
 import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
-import { processIdentity, sameProcess, waitForWorkerExit, workerExitPath, type WorkerExit } from './process.ts';
+import {
+  processIdentity,
+  sameProcess,
+  terminateProcessGroup,
+  waitForWorkerExit,
+  workerExitPath,
+  type ProcessIdentity,
+  type WorkerExit,
+} from './process.ts';
+import { fixtureOwnerForLaunch, recordFixtureOwnedProcess } from './fixture-process-ownership.ts';
 import type { AcceptancePlacement, Attempt, Brief, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
 import { recordFlow } from './flow.ts';
@@ -681,6 +690,7 @@ export async function launch(
   mkdirSync(dirname(attempt.logPath), { recursive: true });
   const exitPath = workerExitPath(attempt.logPath),
     pidPath = `${attempt.logPath}.pid`;
+  const fixtureOwner = fixtureOwnerForLaunch(attempt.logPath);
   for (const path of [exitPath, `${exitPath}.tmp`, pidPath]) rmSync(path, { force: true });
   const resuming = Boolean(resumeSession);
   const logStartOffset = resuming ? (statSync(attempt.logPath, { throwIfNoEntry: false })?.size ?? 0) : 0;
@@ -704,6 +714,7 @@ export async function launch(
     process.env,
     task.worktree,
   );
+  let unrecordedFixtureWorker: ProcessIdentity | null = null;
   try {
     // Publication and spawn share the fence's write lock. A retry cannot miss a just-started process.
     store.write(attempt, () => {
@@ -731,9 +742,14 @@ export async function launch(
         startOptions,
         () => existsSync(pidPath) || existsSync(exitPath),
       );
-      if (started.error) throw started.error;
       const pid = existsSync(pidPath) ? Number(readFileSync(pidPath, 'utf8')) : 0;
       const identity = processIdentity(pid);
+      if (identity && fixtureOwner) {
+        unrecordedFixtureWorker = identity;
+        recordFixtureOwnedProcess(attempt.logPath, 'worker', identity);
+        unrecordedFixtureWorker = null;
+      }
+      if (started.error) throw started.error;
       if (started.status !== 0 || !identity) throw new Error(`Worker wrapper failed to start (exit ${started.status})`);
       store.updateAttempt(attempt, (current) => {
         current.driver = driver;
@@ -744,6 +760,15 @@ export async function launch(
         current.state = 'running';
       });
     });
+  } catch (error) {
+    if (unrecordedFixtureWorker) {
+      try {
+        await terminateProcessGroup(unrecordedFixtureWorker, 250);
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], 'fixture ownership failed and its worker could not be reaped');
+      }
+    }
+    throw error;
   } finally {
     closeSync(out);
     closeSync(err);

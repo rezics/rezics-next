@@ -1,3 +1,4 @@
+import { trackFixtureWait } from './fixture-process-ownership.ts';
 import {
   ProofCapacityQueuedError,
   ProofUnavailableError,
@@ -710,11 +711,9 @@ export class WorkerJob implements GateOutcomeSink {
     }
   }
   async follow(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
-    try {
-      await this.followAttempt(worker);
-    } catch (error) {
-      await this.endAsEnvironment(worker.attempt, error);
-    }
+    const following = this.followAttempt(worker).catch((error) => this.endAsEnvironment(worker.attempt, error));
+    trackFixtureWait(worker.attempt.logPath, following);
+    await following;
   }
   private async followAttempt(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
     const ref = worker.attempt,
@@ -917,6 +916,23 @@ export class WorkerJob implements GateOutcomeSink {
           await stopProcessesUnder(task.worktree, this.tasks.settings.terminationGraceMs);
       } catch (cleanupError) {
         detail = `${detail}; process cleanup failed: ${String(cleanupError)}`.slice(0, 4000);
+        // Unknown custody is an operational condition, not an exit or a free worker slot.
+        store.updateAttempt(ref, (value) => {
+          value.driver = null;
+          value.blocker = detail;
+        });
+        if (!store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'process-cleanup-unconfirmed')) {
+          const event = {
+            managerId: task.brief.manager,
+            taskId: task.id,
+            kind: 'environment' as const,
+            summary: `environment: process cleanup unconfirmed: ${detail}`.slice(0, 1000),
+          };
+          store.event(ref, 'process-cleanup-unconfirmed', { detail });
+          store.event(ref, 'manager-event', event);
+          this.inbox.deliver(event);
+        }
+        return;
       }
       const endedAt = new Date().toISOString();
       const ended = { ...current, endedAt };
@@ -1352,7 +1368,7 @@ export class WorkerJob implements GateOutcomeSink {
               const exited = (attempt.process ? waitForProcessGroup(attempt.process) : Promise.resolve()).then(() =>
                 readWorkerExit(attempt.logPath),
               );
-              await this.followAttempt({ attempt, exited });
+              await this.follow({ attempt, exited });
             } catch (error) {
               await this.endAsEnvironment(ref, error);
             }

@@ -1815,6 +1815,7 @@ export class WorkerTasks {
   }
   async stop(taskId: string, cancelled = false): Promise<void> {
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
+    let settlementLease: ReturnType<typeof acquireDirectoryLease> | undefined;
     try {
       const task = this.store.task(taskId);
       const ref = { taskId, attempt: task.currentAttempt };
@@ -1827,6 +1828,11 @@ export class WorkerTasks {
         return;
       }
       const attempt = this.store.attempt(ref);
+      // A worker's exit may wake its follower while cancellation is still reaping descendants.
+      settlementLease = acquireDirectoryLeaseWaiting(`${attempt.logPath}.settle`);
+      await terminateProcessGroup(attempt.process, this.settings.terminationGraceMs);
+      for (const process of attempt.auxiliaryProcesses)
+        await terminateProcessGroup(process, this.settings.terminationGraceMs);
       if (attempt.state === 'stopped') {
         if (cancelled) this.store.cancelStopped(ref);
         return;
@@ -1852,10 +1858,8 @@ export class WorkerTasks {
           this.store.close(ref, cancelled ? 'cancelled' : 'stopped');
         }
       });
-      await terminateProcessGroup(attempt.process, this.settings.terminationGraceMs);
-      for (const process of attempt.auxiliaryProcesses)
-        await terminateProcessGroup(process, this.settings.terminationGraceMs);
     } finally {
+      settlementLease?.release();
       lease.release();
     }
   }

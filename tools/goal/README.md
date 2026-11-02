@@ -878,6 +878,25 @@ sorted conflict paths recur without progress; a newer target, changed paths or a
 
 Attempts persist the driver process identity alongside the worker identity. Orphan recovery waits for the worker group to exit, then settles its run log under the task lifecycle lease; unexpected driver exceptions are recorded as environment failures and delivered to the manager.
 
+Process cleanup verifies the leader's PID, start time, boot and detached group before sending signals. A reused
+leader PID may settle only when the original group has no live members and the kernel confirms it is absent with
+signal zero. The replacement incarnation receives no termination signal. A vanished leader with surviving original
+descendants is still followed and its identified members are reaped during terminal cleanup. Unreadable process state
+or denied group inspection is an explicit operational condition: recovery records `process-cleanup-unconfirmed`,
+notifies the manager once and retains the running attempt and its slot. A later sweep can settle it after visibility
+returns. Stop and cancellation publish terminal records only after cleanup succeeds. Each termination signal uses a
+pidfd and rechecks birth and group identity after opening it, so PID reuse between inspection and signalling cannot
+redirect a signal to a replacement process.
+
+Disposable Goal fixtures record each wrapper and pidfd waiter in an append-only ledger carrying their owner token.
+Cleanup uses those identities, including wrappers no longer present in attempt rows; it does not select processes by
+working directory. Tests that can leave children running must `await h.disposeAsync()`. It reaps the owned groups,
+awaits tracked exit/follow continuations and waiter cleanup, then closes SQLite and removes the fixture directory.
+Disposal seals the fixture against new workers before taking its child inventory; waiter registration remains available
+until existing work finishes. Ownership and pending work are checked again immediately before removal.
+Synchronous `h.dispose()` refuses live children or unfinished waits. A changed owner marker, unreadable state or failed
+cleanup retains fixture state for inspection. An unrelated child is spared even when it runs inside the fixture root.
+
 At settlement, Goal removes Docker containers carrying the exact `rezics.worker.attempt=<task>/<attempt>` label.
 Removal errors are logged and do not prevent attempt settlement; containers without that label are never selected.
 

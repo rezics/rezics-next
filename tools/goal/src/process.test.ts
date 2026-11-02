@@ -111,3 +111,70 @@ test('a failing pidfd waiter falls back to the identity and resolves only once t
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+import { spyOn } from 'bun:test';
+test('a reused leader PID with an empty recorded group permits recovery without signalling the unrelated process', async () => {
+  const child = spawn(process.execPath, ['-e', "console.log('ready'); setInterval(() => {}, 1000)"], {
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  await new Promise<void>((resolve, reject) => {
+    child.stdout!.once('data', () => resolve());
+    child.once('error', reject);
+  });
+  const unrelated = processIdentity(child.pid!)!;
+  const stale = { ...unrelated, start: '0', group: unrelated.pid };
+  try {
+    expect(stale.group).not.toBe(unrelated.group);
+    await expect(terminateProcessGroup(stale, 20)).resolves.toBeUndefined();
+    expect(sameProcess(unrelated)).toBe(true);
+  } finally {
+    child.kill('SIGKILL');
+    await waitForProcess(unrelated);
+  }
+});
+test('a reused leader with a surviving detached group is refused without signalling its member', async () => {
+  const child = spawn(
+    process.execPath,
+    ['-e', "process.on('SIGTERM', () => {}); console.log('ready'); setInterval(() => {}, 1000)"],
+    { detached: true, stdio: ['ignore', 'pipe', 'ignore'] },
+  );
+  await new Promise<void>((resolve, reject) => {
+    child.stdout!.once('data', () => resolve());
+    child.once('error', reject);
+  });
+  const identity = processIdentity(child.pid!)!;
+  try {
+    await expect(terminateProcessGroup({ ...identity, start: '0' }, 20)).rejects.toThrow(
+      'process identity changed; refusing to signal reused PID',
+    );
+    expect(sameProcess(identity)).toBe(true);
+  } finally {
+    await terminateProcessGroup(identity, 20);
+  }
+});
+test('a reused leader with an ambiguous group inspection is fenced without signalling the unrelated process', async () => {
+  const child = spawn(process.execPath, ['-e', "console.log('ready'); setInterval(() => {}, 1000)"], {
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  await new Promise<void>((resolve, reject) => {
+    child.stdout!.once('data', () => resolve());
+    child.once('error', reject);
+  });
+  const unrelated = processIdentity(child.pid!)!;
+  const stale = { ...unrelated, start: '0', group: unrelated.pid };
+  const kill = process.kill.bind(process);
+  const killSpy = spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    if (pid === -stale.group && signal === 0)
+      throw Object.assign(new Error('group inspection denied'), { code: 'EPERM' });
+    return kill(pid, signal);
+  });
+  try {
+    await expect(terminateProcessGroup(stale, 20)).rejects.toThrow('visibility unknown');
+    expect(killSpy).toHaveBeenCalledWith(-stale.group, 0);
+    expect(sameProcess(unrelated)).toBe(true);
+  } finally {
+    killSpy.mockRestore();
+    child.kill('SIGKILL');
+    await waitForProcess(unrelated);
+  }
+});
