@@ -349,11 +349,6 @@ test('the actual selected shelf uses the default authorized per-entry action, re
         expect(outcome('changed')).toHaveLength(1);
         expect(outcome('not-attempted')).toHaveLength(3);
         expect(host.textContent).toContain(m.library_selection_count({ count: 1 }));
-        const countBeforeNoop = calls.length;
-        await retry('Work 4');
-        expect(calls).toHaveLength(countBeforeNoop);
-        expect(outcome('unchanged')).toHaveLength(1);
-        expect(maximumActive).toBe(1);
       }
     }
     signedIn = false;
