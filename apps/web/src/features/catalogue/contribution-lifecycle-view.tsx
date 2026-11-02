@@ -45,35 +45,43 @@ function ContributionLifecycleLive({
   const [failure, setFailure] = useState<ContributionFailure['reason']>();
   const [current, setCurrent] = useState<ContributionAvailability>();
   const [busy, setBusy] = useState(false);
-  const [needsRead, setNeedsRead] = useState(false);
   const pending = useRef<ContributionCommand | null>(null);
   const running = useRef(false);
   const session = useRef(address.session);
   const terminal = useRef<'denied' | 'expired' | null>(null);
-  const operation =
-    (current && confirmedContributionOperation(current)) ?? (state === 'deleted' ? 'restore' : 'delete');
+  const operation = current ? confirmedContributionOperation(current) : 'delete';
   // Captured controls must consult the latest observation, including a retired confirmation.
-  const controls = useRef({ operation, needsRead, confirmation });
-  controls.current = { operation, needsRead, confirmation };
+  const controls = useRef({ operation, confirmation });
+  controls.current = { operation, confirmation };
   const action = operation === 'delete' ? m.contribution_withdraw({}, o) : m.contribution_restore({}, o);
 
-  function observe(next: ContributionAvailability) {
+  function observe(next: ContributionAvailability, effect?: ContributionCommand['operation']) {
     session.current = next.session ?? session.current;
     setCurrent(next);
     const nextOperation = confirmedContributionOperation(next);
-    controls.current.needsRead = nextOperation === null;
     controls.current.confirmation = null;
-    if (nextOperation) controls.current.operation = nextOperation;
-    setNeedsRead(nextOperation === null);
+    controls.current.operation = nextOperation;
     setConfirmation(null);
-    if (nextOperation && !terminal.current) setFailure(undefined);
-    return nextOperation;
+    if (!terminal.current) {
+      if (nextOperation) setFailure(undefined);
+      // A fresh read replaces old action assumptions. Only a confirmed command
+      // can report restoration; availability alone says nothing about selection.
+      setState(
+        nextOperation === 'restore'
+          ? 'deleted'
+          : effect === 'restore'
+            ? 'restored'
+            : effect === 'delete' && nextOperation === null
+              ? 'deleted'
+              : 'active',
+      );
+    }
   }
 
   async function change() {
     if (!lifetime.active()) return;
     const latest = controls.current;
-    if (running.current || latest.needsRead || terminal.current || (!latest.confirmation && !pending.current)) return;
+    if (running.current || !latest.operation || terminal.current || (!latest.confirmation && !pending.current)) return;
     pending.current ??= {
       ...address,
       operation: latest.confirmation!,
@@ -97,9 +105,7 @@ function ContributionLifecycleLive({
         if (result.reason === 'expired' || result.reason === 'denied') terminal.current = result.reason;
         if (result.reason === 'expired') setState('expired');
         if (result.reason === 'conflict') {
-          controls.current.needsRead = true;
-          setNeedsRead(true);
-          setCurrent({ subject: 'unavailable', candidate: 'unconfirmed', selected: null });
+          observe({ subject: 'unavailable', candidate: 'unconfirmed', selected: null });
         }
         if (result.reason === 'denied') {
           setCurrent(undefined);
@@ -111,16 +117,7 @@ function ContributionLifecycleLive({
       pending.current = null;
       setConfirmation(null);
       session.current = result.session ?? session.current;
-      const nextOperation = observe(result.current);
-      setState(
-        nextOperation === 'restore'
-          ? 'deleted'
-          : nextOperation === 'delete' && result.operation === 'delete'
-            ? 'active'
-            : result.operation === 'delete'
-              ? 'deleted'
-              : 'restored',
-      );
+      observe(result.current, result.operation);
       if (result.operation === 'delete') await onClear();
       if (!lifetime.active()) return;
     } catch {
@@ -144,12 +141,7 @@ function ContributionLifecycleLive({
     try {
       const next = await transport.read({ ...address, ...(session.current ? { session: session.current } : {}) });
       if (!lifetime.active()) return;
-      const nextOperation = observe(next);
-      if (nextOperation && !terminal.current)
-        // A reread confirms availability, not that this editor performed a restoration.
-        setState((previous) =>
-          nextOperation === 'restore' ? 'deleted' : previous === 'restored' ? 'restored' : 'active',
-        );
+      observe(next);
     } catch {
       if (!lifetime.active()) return;
       observe({ subject: 'unavailable', candidate: 'unconfirmed', selected: null });
@@ -225,14 +217,14 @@ function ContributionLifecycleLive({
             </p>
           )}
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap">
-            {state !== 'expired' && failure !== 'denied' && (
+            {operation && state !== 'expired' && failure !== 'denied' && (
               <Button
                 type="button"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2.5 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 variant={operation === 'delete' ? 'destructive' : 'default'}
-                disabled={busy || needsRead}
+                disabled={busy}
                 onClick={() => {
-                  if (!lifetime.active() || running.current || controls.current.needsRead || terminal.current) return;
+                  if (!lifetime.active() || running.current || !controls.current.operation || terminal.current) return;
                   if (pending.current) void change();
                   else {
                     setFailure(undefined);
@@ -244,7 +236,7 @@ function ContributionLifecycleLive({
                 {pending.current ? m.contribution_retry({}, o) : action}
               </Button>
             )}
-            {(current || needsRead) && !pending.current && (
+            {current && !pending.current && (
               <Button
                 type="button"
                 variant="outline"

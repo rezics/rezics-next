@@ -250,6 +250,7 @@ test('own-contribution family preserves independent panels, exact recovery and r
       ['GET', 'contribution-session'],
       ['GET', 'contribution-session'],
     ]);
+    expect(panel('first').textContent).not.toContain(m.contribution_restored());
     expect(second.calls).toHaveLength(0);
     await confirm(panel('second'));
     await until(() => panel('second').textContent!.includes(m.contribution_deleted()));
@@ -263,10 +264,10 @@ test('own-contribution family preserves independent panels, exact recovery and r
     expect(panel('second').textContent).not.toContain(m.contribution_candidate_available());
     expect(panel('second').querySelector('[data-private]')).toBeNull();
     expect(second.calls.map((call) => call.method)).toEqual(['DELETE', 'GET', 'GET', 'POST', 'GET', 'GET']);
-    expect(button(panel('second'), m.contribution_withdraw()).disabled).toBe(true);
+    expect(panel('second').textContent).not.toContain(m.contribution_withdraw());
     await click(button(panel('second'), m.contribution_refresh()));
-    expect(button(panel('second'), m.contribution_withdraw()).disabled).toBe(true);
-    expect(panel('second').textContent).toContain(m.contribution_restored());
+    expect(panel('second').textContent).not.toContain(m.contribution_withdraw());
+    expect(panel('second').textContent).not.toContain(m.contribution_restored());
     expect(second.calls.filter((call) => call.method !== 'GET')).toHaveLength(2);
     expect(first.calls).toHaveLength(9);
 
@@ -287,18 +288,19 @@ test('own-contribution family preserves independent panels, exact recovery and r
     await confirm(panel('conflict'));
     await until(() => panel('conflict').textContent!.includes(m.contribution_conflict()));
     expect(reads).toBe(0);
-    expect(button(panel('conflict'), m.contribution_withdraw()).disabled).toBe(true);
+    expect(panel('conflict').textContent).not.toContain(m.contribution_withdraw());
     await click(button(panel('conflict'), m.contribution_refresh()));
     await until(() => reads === 1 && panel('conflict').querySelector('section')?.getAttribute('aria-busy') === 'false');
     expect(panel('conflict').textContent).toContain(m.contribution_read_unavailable());
     expect(panel('conflict').textContent).toContain(m.contribution_candidate_unconfirmed());
     expect(panel('conflict').textContent).not.toContain(m.contribution_deleted());
-    expect(button(panel('conflict'), m.contribution_withdraw()).disabled).toBe(true);
+    expect(panel('conflict').textContent).not.toContain(m.contribution_withdraw());
     expect(changes).toBe(1);
 
     // A conflicting restore can discover an available candidate, not a completed restoration.
     for (const candidate of ['available', 'deleted'] as const) {
       const sent: ContributionCommand[] = [];
+      let rereads = 0;
       let observation: Awaited<ReturnType<ContributionTransport['read']>> = {
         subject: 'available',
         candidate: 'unconfirmed',
@@ -317,25 +319,44 @@ test('own-contribution family preserves independent panels, exact recovery and r
                   current: { subject: 'available', candidate: 'deleted', selected: false },
                 };
         },
-        read: async () => observation,
+        read: async () => {
+          rereads++;
+          return observation;
+        },
       };
       await render(<Panel key={candidate} name="recovery" address={first.address} transport={recovery} />);
       await confirm(panel('recovery'));
-      await confirm(panel('recovery'), m.contribution_restore());
+      // Another action restores, then withdraws; only the current reading chooses the next action.
+      observation = { subject: 'available', candidate: 'available', selected: null };
       await click(button(panel('recovery'), m.contribution_refresh()));
-      expect(button(panel('recovery'), m.contribution_restore()).disabled).toBe(true);
+      expect(button(panel('recovery'), m.contribution_withdraw()).disabled).toBe(false);
+      for (const copy of [m.contribution_deleted(), m.contribution_restored(), m.contribution_unselected()])
+        expect(panel('recovery').textContent).not.toContain(copy);
+      expect(panel('recovery').querySelector('[data-private]')).toBeNull();
+      observation = { subject: 'available', candidate: 'deleted', selected: false };
+      await click(button(panel('recovery'), m.contribution_refresh()));
+      expect(panel('recovery').textContent).toContain(m.contribution_deleted());
+      await confirm(panel('recovery'), m.contribution_restore());
+      observation = { subject: 'available', candidate: 'unconfirmed', selected: false };
+      await click(button(panel('recovery'), m.contribution_refresh()));
+      expect(panel('recovery').textContent).not.toContain(m.contribution_restore());
+      expect(panel('recovery').textContent).not.toContain(m.contribution_deleted());
+      expect(panel('recovery').textContent).not.toContain(m.contribution_window());
       observation = { subject: 'unavailable', candidate, selected: null };
       await click(button(panel('recovery'), m.contribution_refresh()));
-      expect(button(panel('recovery'), m.contribution_restore()).disabled).toBe(true);
+      expect(panel('recovery').textContent).not.toContain(m.contribution_restore());
       observation = { subject: 'available', candidate, selected: false };
       await click(button(panel('recovery'), m.contribution_refresh()));
       expect(panel('recovery').textContent).not.toContain(m.contribution_restored());
       expect(panel('recovery').textContent!.includes(m.contribution_deleted())).toBe(candidate === 'deleted');
+      const oldRefresh = queued(button(panel('recovery'), m.contribution_refresh()));
       await confirm(
         panel('recovery'),
         candidate === 'available' ? m.contribution_withdraw() : m.contribution_restore(),
       );
       expect(panel('recovery').textContent).not.toContain(m.contribution_refresh());
+      await act(async () => oldRefresh());
+      expect(rereads).toBe(5);
       await click(button(panel('recovery'), m.contribution_retry()));
       expect(sent[3]).toBe(sent[2]);
       expect(sent.map((command) => command.operation)).toEqual([

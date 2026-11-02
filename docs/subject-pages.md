@@ -417,6 +417,10 @@ native `POST …/{candidate}:restoreDeleted`, checking current native author aut
 It does not change acceptance or adoption, undo moderation/source fences or restore terminal consent/account state.
 An actual restore 409 ends restoration in this flow. Missing or concealed reads share the unavailable state.
 
+Explicit refresh replaces prior action assumptions: confirmed availability offers withdrawal, a visible tombstone
+offers restoration, and an unconfirmed reading offers refresh alone; only a confirmed restore command reports
+restoration.
+
 Uncertain retries keep the exact operation, subject/candidate, consistency token and idempotency key. The original
 server thirty-day window applies; the interface creates no local deadline. Until the producer publishes a deadline
 DTO, it displays no invented date or countdown. The temporary typed port uses the generated client's existing runtime
