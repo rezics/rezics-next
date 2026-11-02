@@ -109,7 +109,8 @@ test('My Realms keeps final empty and sparse empty pages distinct by their opaqu
 
   const cursor = 'opaque-empty-page.cursor?next=2&keep=%2F';
   const sparseMarkup = await render({ signedIn: true, realms: [], next: cursor });
-  expect(sparseMarkup).toContain(m.realms_empty({}, { locale: 'en' }));
+  expect(sparseMarkup).toContain(m.realm_list_details_sparse_page_empty({}, { locale: 'en' }));
+  expect(sparseMarkup).not.toContain(m.realms_empty({}, { locale: 'en' }));
   expect(rowsIn(sparseMarkup)).toHaveLength(0);
   cursorFromContinuation(sparseMarkup, 'en', cursor);
 });

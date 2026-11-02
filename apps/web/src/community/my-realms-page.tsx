@@ -10,7 +10,7 @@ export function MyRealmsPageView({ page }: { page: MyRealmsPage }) {
   const locale = getLocale();
 
   return (
-    <article className="max-w-3xl space-y-8 text-foreground">
+    <article className="min-w-0 max-w-3xl space-y-8 text-foreground [overflow-wrap:anywhere]">
       <header>
         <PageHeading>{m.realms_heading()}</PageHeading>
       </header>
@@ -32,14 +32,16 @@ export function MyRealmsPageView({ page }: { page: MyRealmsPage }) {
           ))}
         </ul>
       ) : (
-        <p className="text-muted-foreground">{m.realms_empty()}</p>
+        <p className="text-muted-foreground">
+          {page.next ? m.realm_list_details_sparse_page_empty() : m.realms_empty()}
+        </p>
       )}
       {page.next ? (
         <nav aria-label={m.realms_heading()}>
           <Link
             to="/realms"
             search={{ cursor: page.next }}
-            className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+            className="inline-flex min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal rounded-lg border border-border px-4 py-2 text-start text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {m.realms_more()}
           </Link>
