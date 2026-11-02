@@ -103,9 +103,12 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   const listing = subjectListingSource(config.pool);
   const owned = new Set<{ close(): Promise<void> }>();
   const pending = new Set<Promise<unknown>>();
-  // Consumer factories retain PIT ownership until exhaustion or runtime shutdown. Reusing the
+  // Mixed factories retain PIT ownership until exhaustion or runtime shutdown. Reusing the
   // active factory avoids closing signed continuations at the end of their HTTP request.
   const mixed = new Map<string, Promise<PublicDiscoveryConsumerOperations>>();
+  // Subject factories use the same native close contract. The runtime retains one current
+  // factory so request cleanup cannot drain a continuation or a bounded repair.
+  const subjects = new Map<string, Promise<PublicDiscoveryConsumerOperations>>();
   let closed = false;
   let closing: Promise<void> | undefined;
   const track = <T>(operation: () => Promise<T>): Promise<T> => {
@@ -200,7 +203,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       meaning: { digest: meaning.digest, release: meaning.release, type: 'schema:Thing' },
       ...(registry === undefined ? {} : { registry }),
     });
-    // Request-owned close also deregisters the factory; shutdown waits for admitted work first.
+    // Native factory close drains owned observations; shutdown and replacement use this wrapper.
     owned.add(operations);
     let draining: Promise<void> | undefined;
     const wrapper: PublicDiscoveryConsumerOperations = {
@@ -215,6 +218,39 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     };
     forwardPublicFilterCoveragePage(operations, wrapper);
     return wrapper;
+  }
+  function requestHandle(operations: PublicDiscoveryConsumerOperations): PublicDiscoveryConsumerOperations {
+    return {
+      capture: operations.capture.bind(operations),
+      captureDiscovery: operations.captureDiscovery.bind(operations),
+      queryDiscovery: operations.queryDiscovery.bind(operations),
+      query: operations.query.bind(operations),
+      repairStep: operations.repairStep.bind(operations),
+      readStatus: operations.readStatus.bind(operations),
+      closeObservation: operations.closeObservation.bind(operations),
+      close: async () => {},
+    };
+  }
+  async function subjectOperations(
+    physicalTarget: string,
+    meaning: Pick<NonNullable<Awaited<ReturnType<typeof activeRelease>>>, 'digest' | 'release'>,
+    context: PublicFilterConsumerContext,
+  ): Promise<PublicDiscoveryConsumerOperations> {
+    const key = JSON.stringify([physicalTarget, meaning.digest]);
+    let operations = subjects.get(key);
+    if (!operations) {
+      operations = create(physicalTarget, meaning, context);
+      subjects.set(key, operations);
+      void operations.catch(() => {
+        if (subjects.get(key) === operations) subjects.delete(key);
+      });
+    }
+    const retired = [...subjects].filter(([candidate]) => candidate !== key);
+    for (const [candidate, old] of retired) {
+      subjects.delete(candidate);
+      await (await old).close();
+    }
+    return operations;
   }
   return {
     openDiscovery(registry, digest, context, queried) {
@@ -306,15 +342,12 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         if (state.active === null) notReady();
         if (request.plan.generation !== undefined && request.plan.generation !== state.active)
           throw new ProblemError('search_restart_required');
-        const operations = await create(subjectIndexName(config.prefix, state.active), release, context);
-        try {
-          const capture = await operations.capture(structuredClone(request), context);
-          checkDeadline(context);
-          return { operations, capture };
-        } catch (error) {
-          await operations.close();
-          throw error;
-        }
+        const operations = requestHandle(
+          await subjectOperations(subjectIndexName(config.prefix, state.active), release, context),
+        );
+        const capture = await operations.capture(structuredClone(request), context);
+        checkDeadline(context);
+        return { operations, capture };
       });
     },
     resumeRequest(queried, context) {
@@ -330,7 +363,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         )
           throw new ProblemError('search_restart_required');
         // Native query resolves incarnation, Source registration and the exact retained execution.
-        return create(queried.consumer.physicalTarget, release, context);
+        return requestHandle(await subjectOperations(queried.consumer.physicalTarget, release, context));
       });
     },
     bindSuggestion(request, context) {
@@ -378,12 +411,18 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         const registry = job.consumer.physicalTarget.startsWith(`${config.prefix}discovery-g`)
           ? await nativeDiscoveryRegistry(config.pool, config.routeKey, nativeSource, { release })
           : undefined;
-        const operations = await create(job.consumer.physicalTarget, { digest, release }, context, registry);
-        try {
-          return await operations.repairStep(job, context);
-        } finally {
-          await operations.close();
+        if (registry) {
+          const operations = await create(job.consumer.physicalTarget, { digest, release }, context, registry);
+          try {
+            return await operations.repairStep(job, context);
+          } finally {
+            await operations.close();
+          }
         }
+        return (await subjectOperations(job.consumer.physicalTarget, { digest, release }, context)).repairStep(
+          job,
+          context,
+        );
       });
     },
     close() {
@@ -393,6 +432,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         await Promise.allSettled([...pending]);
         const results = await Promise.allSettled([...owned].map((operations) => operations.close()));
         mixed.clear();
+        subjects.clear();
         owned.clear();
         await publication.close();
         const failed = results.find((result) => result.status === 'rejected');

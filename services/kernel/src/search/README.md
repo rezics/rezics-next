@@ -1472,9 +1472,9 @@ Native end evidence never authorizes disclosure. Exhausted observations close on
 status; filled observations remain with the native owner for continuation and expiry.
 
 Default server construction uses the existing registered runtime composition. Retained
-continuations reopen a request factory without recapturing the observation or resetting its
-allowance. Closing that factory drains request resources; filled observations remain with the
-producer. The current producer module is explicitly provisional and returns unavailable until
+continuations resume the current Subject factory without recapturing the observation or resetting its
+allowance. Request close releases only the request handle; filled observations remain with that
+factory until exhaustion, replacement or shutdown. The current producer module is explicitly provisional and returns unavailable until
 native mechanics land. Historical isolated services omitting the runtime retain their existing
 query fixtures and collector. Those fixtures and the pure orchestration cases supply no
 native/default-worker preparation or privacy evidence. No Source mirror, matcher or storage
@@ -1608,7 +1608,9 @@ only on explicit conflict reload, never upload anonymous history, omit persisted
 has produced its actual native Access. The worker obtains that same binding through a headless Kernel composition,
 with the installed domain clock, canonical route key and existing WorkClient. The default service sends admitted,
 expanded filter/text/order/keyset inputs to the consumer factory, completes generic facts, figures and HTTP summaries
-before the execution-joined final observation, and drains its request factory in `finally`. Exhausted
+before the execution-joined final observation, and closes its request handle in `finally`. The runtime retains one
+Subject factory for the current physical target and meaning digest so a continuation or bounded repair keeps native
+observations; replacement and shutdown still drain that factory. Exhausted
 observations close after final status; filled observations retain their execution/consumed locator. Sparse
 unexhausted pages yield readiness and the producer's retained prepared job rather than an advancing empty response.
 Confidential continuations retain actual observation, execution/consumed and root-work locators within the
