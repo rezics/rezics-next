@@ -2,8 +2,12 @@ import canonicalize from 'canonicalize';
 import { Value } from 'typebox/value';
 import type { Pool } from 'pg';
 import {
-  currentCommand, currentCommandResources, noEffect,
-  runCommand, withSingleCommandAttempt, type CommandTransaction,
+  currentCommand,
+  currentCommandResources,
+  noEffect,
+  runCommand,
+  withSingleCommandAttempt,
+  type CommandTransaction,
 } from '../command/command.ts';
 import { ACCESS_EVENTS } from '../access/events.ts';
 import type { AgentVerificationReversal } from '../access/agent-verification.ts';
@@ -13,8 +17,12 @@ import type { WorkClient } from '../work/client.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { encodeLocator, validateScope, type AccountReference } from './locator.ts';
 import {
-  IdentityOriginalUnavailable, originalControlWork, originalWorkVector,
-  ORIGINAL_NATIVE_CONTROL, sumOriginalControl, IDENTITY_ORIGINAL_DEADLINE_MS,
+  IdentityOriginalUnavailable,
+  originalControlWork,
+  originalWorkVector,
+  ORIGINAL_NATIVE_CONTROL,
+  sumOriginalControl,
+  IDENTITY_ORIGINAL_DEADLINE_MS,
 } from '../access/identity-original-admission.ts';
 
 export const IDENTITY_FX_EFFECT = 'agent_verification_reversal';
@@ -40,24 +48,39 @@ export const IDENTITY_FX_RECEIVING_CONTROL = Object.freeze({
   insert: originalControlWork(1, 1, 1, 32768),
 });
 export const IDENTITY_FX_RECEIVING_ADMISSION = sumOriginalControl(...Object.values(IDENTITY_FX_RECEIVING_CONTROL));
-export const IDENTITY_FX_REPLAY_CONTROL = sumOriginalControl(ORIGINAL_NATIVE_CONTROL,
-  originalControlWork(1, 1, 1, 32768, 1), originalControlWork(1, 1, 1, 0));
+export const IDENTITY_FX_REPLAY_CONTROL = sumOriginalControl(
+  ORIGINAL_NATIVE_CONTROL,
+  originalControlWork(1, 1, 1, 32768, 1),
+  originalControlWork(1, 1, 1, 0),
+);
 // Projection columns outside the bounded JSON: source/replay UUID(36)+deadline(16)
 // twice; receiving UUID(36)+epoch(10)+generation(19)+deadline(16); replay RETURNING UUID(36).
 export const IDENTITY_FX_ENCODED_COLUMNS = originalControlWork(0, 0, 0, 2 * 52 + 81 + 36);
 // This is a local admission cap, not a change to DBOS retries or a whole-wrapper price.
 const FX_LOCAL_ATTEMPTS = 10;
-export const IDENTITY_FX_LOCAL_ATTEMPT = sumOriginalControl(IDENTITY_FX_SOURCE_ADMISSION,
-  IDENTITY_FX_RECEIVING_ADMISSION, IDENTITY_FX_REPLAY_CONTROL, IDENTITY_FX_ENCODED_COLUMNS);
-export const IDENTITY_FX_LOCAL_ALLOWANCE = sumOriginalControl(...Array.from({ length: FX_LOCAL_ATTEMPTS },
-  () => IDENTITY_FX_LOCAL_ATTEMPT));
+export const IDENTITY_FX_LOCAL_ATTEMPT = sumOriginalControl(
+  IDENTITY_FX_SOURCE_ADMISSION,
+  IDENTITY_FX_RECEIVING_ADMISSION,
+  IDENTITY_FX_REPLAY_CONTROL,
+  IDENTITY_FX_ENCODED_COLUMNS,
+);
+export const IDENTITY_FX_LOCAL_ALLOWANCE = sumOriginalControl(
+  ...Array.from({ length: FX_LOCAL_ATTEMPTS }, () => IDENTITY_FX_LOCAL_ATTEMPT),
+);
 
 type Route = Readonly<{ pool: Pool; client: WorkClient }>;
 const routes = new WeakMap<Effect, Route>();
 /** Bound by actual Work composition; public Effect and registration signatures stay unchanged. */
 export function bindIdentityOriginalEffect(effect: Effect, deps: Route): Effect {
-  if (effect.name !== IDENTITY_FX_EFFECT || effect.types.length !== 1 || effect.types[0] !== IDENTITY_FX_EVENT ||
-    !deps.pool || !deps.client || routes.has(effect)) throw new TypeError('Invalid identity original effect binding');
+  if (
+    effect.name !== IDENTITY_FX_EFFECT ||
+    effect.types.length !== 1 ||
+    effect.types[0] !== IDENTITY_FX_EVENT ||
+    !deps.pool ||
+    !deps.client ||
+    routes.has(effect)
+  )
+    throw new TypeError('Invalid identity original effect binding');
   routes.set(effect, Object.freeze({ pool: deps.pool, client: deps.client }));
   return effect;
 }
@@ -74,14 +97,26 @@ function route(effect: Effect, pool: Pool): Route {
 
 export function validateIdentityOriginalEvent(envelope: Envelope, eventSeq: number): AgentVerificationReversal {
   const event = envelope.events[eventSeq];
-  if (!event || event.type !== IDENTITY_FX_EVENT || !Value.Check(ACCESS_EVENTS[IDENTITY_FX_EVENT], event.data) ||
-    !Number.isSafeInteger(envelope.partition) || envelope.partition < 0 || envelope.partition > 4095 ||
-    !Number.isSafeInteger(envelope.epoch) || envelope.epoch < 1 || envelope.epoch > 2147483647 ||
-    typeof envelope.position !== 'bigint' || envelope.position <= 0n || envelope.position > 9223372036854775807n ||
-    !Number.isSafeInteger(eventSeq) || eventSeq < 0 || eventSeq > 999 ||
+  if (
+    !event ||
+    event.type !== IDENTITY_FX_EVENT ||
+    !Value.Check(ACCESS_EVENTS[IDENTITY_FX_EVENT], event.data) ||
+    !Number.isSafeInteger(envelope.partition) ||
+    envelope.partition < 0 ||
+    envelope.partition > 4095 ||
+    !Number.isSafeInteger(envelope.epoch) ||
+    envelope.epoch < 1 ||
+    envelope.epoch > 2147483647 ||
+    typeof envelope.position !== 'bigint' ||
+    envelope.position <= 0n ||
+    envelope.position > 9223372036854775807n ||
+    !Number.isSafeInteger(eventSeq) ||
+    eventSeq < 0 ||
+    eventSeq > 999 ||
     event.source !== `urn:rezics:log:${envelope.partition}.${envelope.epoch}` ||
     event.sequence !== envelope.position.toString().padStart(19, '0') ||
-    Buffer.byteLength(JSON.stringify(event)) > 8192)
+    Buffer.byteLength(JSON.stringify(event)) > 8192
+  )
     throw new IdentityOriginalUnavailable('identity-fx-original-envelope-invalid');
   const decision = event.data as AgentVerificationReversal;
   const accountRoute = routeOf(decision.accountId);
@@ -106,17 +141,28 @@ type SourceRow = {
 /** Data validation only. Original authority still requires the native producer and physical
  * joins below. Keep PostgreSQL bigint generations exact rather than converting to Number. */
 export function identityFxSourceIncarnation(source: SourceRow): Readonly<SourceRow> {
-  const generation = (value: string) => typeof value === 'string' && /^[1-9][0-9]{0,18}$/.test(value) &&
-    BigInt(value) <= 9223372036854775807n;
-  if (!generation(source.domain_generation) || !generation(source.inventory_generation) ||
-    !generation(source.obligation_generation) || source.inventory_generation !== source.obligation_generation ||
-    !Number.isSafeInteger(source.receiver_epoch) || source.receiver_epoch < 1 || source.receiver_epoch > 2147483647)
+  const generation = (value: string) =>
+    typeof value === 'string' && /^[1-9][0-9]{0,18}$/.test(value) && BigInt(value) <= 9223372036854775807n;
+  if (
+    !generation(source.domain_generation) ||
+    !generation(source.inventory_generation) ||
+    !generation(source.obligation_generation) ||
+    source.inventory_generation !== source.obligation_generation ||
+    !Number.isSafeInteger(source.receiver_epoch) ||
+    source.receiver_epoch < 1 ||
+    source.receiver_epoch > 2147483647
+  )
     throw new IdentityOriginalUnavailable('identity-fx-original-source-incarnation-unavailable');
   return Object.freeze({ ...source });
 }
 type Binding = Readonly<{
-  partition: number; epoch: number; position: string; eventSeq: number; effect: string;
-  event: CloudEvent; workflowId: string;
+  partition: number;
+  epoch: number;
+  position: string;
+  eventSeq: number;
+  effect: string;
+  event: CloudEvent;
+  workflowId: string;
   source: SourceRow;
   accounts: readonly AccountReference[];
   barriers: readonly Readonly<{ accountId: string; version: number | null; at: string | null }>[];
@@ -125,22 +171,35 @@ type Original = Readonly<{ originalId: string; deadline: number; binding: Bindin
 const originals = new WeakMap<Original, Route>();
 
 function native<T>(deps: Route, partition: number, deadline: number, body: (tx: CommandTransaction) => Promise<T>) {
-  return withSingleCommandAttempt(async () => (await runCommand(deps.pool, { partition, deadline }, async (tx) => {
-    if (currentCommandResources(tx).pool !== deps.pool) throw new TypeError('Foreign identity original command');
-    return noEffect(await body(tx));
-  })).value);
+  return withSingleCommandAttempt(
+    async () =>
+      (
+        await runCommand(deps.pool, { partition, deadline }, async (tx) => {
+          if (currentCommandResources(tx).pool !== deps.pool) throw new TypeError('Foreign identity original command');
+          return noEffect(await body(tx));
+        })
+      ).value,
+  );
 }
 
 /** Called before the identity route's consumer admission or SDK enqueue. This is an independent
  * source-home native command, and its checkout is released before home-zero receiving. */
-export async function associateIdentityFxOriginal(effect: Effect, pool: Pool, envelope: Envelope,
-  eventSeq: number, workflowId: string): Promise<void> {
+export async function associateIdentityFxOriginal(
+  effect: Effect,
+  pool: Pool,
+  envelope: Envelope,
+  eventSeq: number,
+  workflowId: string,
+): Promise<void> {
   const deps = route(effect, pool);
   const decision = validateIdentityOriginalEvent(envelope, eventSeq);
   const event = envelope.events[eventSeq]!;
   // The actual caller supplies the real wrapper ID; it is compared as data, never parsed as authority.
-  if (workflowId !== `fx:${envelope.epoch}:${envelope.partition}:${envelope.position}:${eventSeq}:${effect.name}` ||
-    Buffer.byteLength(workflowId) > 256) throw new IdentityOriginalUnavailable('identity-fx-original-workflow-mismatch');
+  if (
+    workflowId !== `fx:${envelope.epoch}:${envelope.partition}:${envelope.position}:${eventSeq}:${effect.name}` ||
+    Buffer.byteLength(workflowId) > 256
+  )
+    throw new IdentityOriginalUnavailable('identity-fx-original-workflow-mismatch');
   // Receiving spends the original's prepaid local prefix, not another Source frame.
   const sourceBudget = originalWorkVector(IDENTITY_FX_LOCAL_ALLOWANCE);
   const attemptBudget = originalWorkVector(IDENTITY_FX_LOCAL_ATTEMPT);
@@ -149,10 +208,13 @@ export async function associateIdentityFxOriginal(effect: Effect, pool: Pool, en
   // A replay debits its complete repeated source/receiving/control path in a separate
   // committed command. Failure of any later native transaction cannot refund it.
   const prepaid = await native(deps, envelope.partition, deadline, async (tx) => {
-    const previous = (await tx.query<{ original_id: string; deadline: string; binding: Binding }>(
-      `SELECT original_id,deadline::text,binding FROM core.identity_fx_original
+    const previous = (
+      await tx.query<{ original_id: string; deadline: string; binding: Binding }>(
+        `SELECT original_id,deadline::text,binding FROM core.identity_fx_original
        WHERE partition_no=$1 AND epoch=$2 AND position=$3 AND event_seq=$4 AND effect=$5 FOR UPDATE`,
-      [envelope.partition, envelope.epoch, envelope.position.toString(), eventSeq, effect.name])).rows[0];
+        [envelope.partition, envelope.epoch, envelope.position.toString(), eventSeq, effect.name],
+      )
+    ).rows[0];
     if (!previous) return null;
     if (previous.binding.workflowId !== workflowId || canonicalize(previous.binding.event) !== canonicalize(event))
       throw new IdentityOriginalUnavailable('identity-fx-original-replay-mismatch');
@@ -166,15 +228,22 @@ export async function associateIdentityFxOriginal(effect: Effect, pool: Pool, en
          AND spent[3]+$4<=allowance[3] AND spent[4]+$5<=allowance[4]
          AND spent[5]+$6<=allowance[5] AND spent[6]+$7<=allowance[6]
          AND spent[7]+$8<=allowance[7] AND spent[8]+$9<=allowance[8] RETURNING original_id`,
-      [previous.original_id, ...attemptBudget]);
-    if (updated.rows.length !== 1) throw new IdentityOriginalUnavailable('identity-fx-original-local-control-exhausted');
+      [previous.original_id, ...attemptBudget],
+    );
+    if (updated.rows.length !== 1)
+      throw new IdentityOriginalUnavailable('identity-fx-original-local-control-exhausted');
     return { originalId: previous.original_id, deadline: Number(previous.deadline) };
   });
-  const original = await native(deps, envelope.partition, prepaid?.deadline ?? deadline, async (tx): Promise<Original> => {
-    // All joined native rows have the same source partition and full point keys. The real
-    // physical receipt and outbox data, not caller payload or workflow naming, authenticate it.
-    const observedSource = (await tx.query<SourceRow>(
-      `SELECT i.intent_digest,i.source_transaction_id,i.workflow_id,i.delivery_key,i.undo_job_id,
+  const original = await native(
+    deps,
+    envelope.partition,
+    prepaid?.deadline ?? deadline,
+    async (tx): Promise<Original> => {
+      // All joined native rows have the same source partition and full point keys. The real
+      // physical receipt and outbox data, not caller payload or workflow naming, authenticate it.
+      const observedSource = (
+        await tx.query<SourceRow>(
+          `SELECT i.intent_digest,i.source_transaction_id,i.workflow_id,i.delivery_key,i.undo_job_id,
          i.undo_job_epoch::text,n.receiver_epoch,n.domain_generation::text,
          n.generation::text AS inventory_generation,s.generation::text AS obligation_generation
        FROM access.agent_identity_intent i
@@ -202,91 +271,181 @@ export async function associateIdentityFxOriginal(effect: Effect, pool: Pool, en
          AND s.handoff_partition=$4 AND s.handoff_epoch=$5 AND s.handoff_position=$7
          AND s.handoff_transaction_id=i.source_transaction_id AND s.handoff_event_type=$9
        FOR SHARE OF i,n,s,r,o,p,d`,
-      [routeOf(decision.accountId), decision.accountId, decision.receiptId, envelope.partition, envelope.epoch,
-        eventSeq, envelope.position.toString(), JSON.stringify(decision), IDENTITY_FX_EVENT, event.id])).rows[0];
-    if (!observedSource) throw new IdentityOriginalUnavailable('identity-fx-original-source-receipt-job-unavailable');
-    const source = identityFxSourceIncarnation(observedSource);
-    const locator = Buffer.from(encodeLocator({ artifactType: 'outbox-event/v1', partitionNo: envelope.partition,
-      position: envelope.position, eventSeq }));
-    const roles = await tx.query<{ account_route: number; account_id: string; roles: number }>(
-      `SELECT account_route,account_id,roles FROM core.history_locator
+          [
+            routeOf(decision.accountId),
+            decision.accountId,
+            decision.receiptId,
+            envelope.partition,
+            envelope.epoch,
+            eventSeq,
+            envelope.position.toString(),
+            JSON.stringify(decision),
+            IDENTITY_FX_EVENT,
+            event.id,
+          ],
+        )
+      ).rows[0];
+      if (!observedSource) throw new IdentityOriginalUnavailable('identity-fx-original-source-receipt-job-unavailable');
+      const source = identityFxSourceIncarnation(observedSource);
+      const locator = Buffer.from(
+        encodeLocator({
+          artifactType: 'outbox-event/v1',
+          partitionNo: envelope.partition,
+          position: envelope.position,
+          eventSeq,
+        }),
+      );
+      const roles = await tx.query<{ account_route: number; account_id: string; roles: number }>(
+        `SELECT account_route,account_id,roles FROM core.history_locator
        WHERE partition_no=$1 AND artifact_type='outbox-event/v1' AND locator=$2
-       ORDER BY account_route,account_id LIMIT 65 FOR SHARE`, [envelope.partition, locator]);
-    const accounts = roles.rows.map((r) => ({ accountRoute: r.account_route, accountId: r.account_id, roles: r.roles }));
-    validateScope('outbox-event/v1', { artifactType: 'outbox-event/v1', accounts });
-    if (accounts.length < 1 || accounts.length > 64 || Buffer.byteLength(JSON.stringify(accounts)) > 8192)
-      throw new IdentityOriginalUnavailable('identity-fx-original-role-union-unavailable');
-    // Roles live at the event home; erasure rows live at their own account homes. Read
-    // their bounded full keys separately in this snapshot, never join across partitions.
-    // validateScope and the overflow check precede construction: at most 64 keys/128 parameters.
-    const barrierKeys = accounts.map((_, index) => `($${index * 2 + 1}::integer,$${index * 2 + 2}::uuid)`).join(',');
-    const barrierRows = await tx.query<{ route: number; account_id: string; version: number; at: string }>(
-      `SELECT route,account_id,version,at::text FROM access.erasure
+       ORDER BY account_route,account_id LIMIT 65 FOR SHARE`,
+        [envelope.partition, locator],
+      );
+      const accounts = roles.rows.map((r) => ({
+        accountRoute: r.account_route,
+        accountId: r.account_id,
+        roles: r.roles,
+      }));
+      validateScope('outbox-event/v1', { artifactType: 'outbox-event/v1', accounts });
+      if (accounts.length < 1 || accounts.length > 64 || Buffer.byteLength(JSON.stringify(accounts)) > 8192)
+        throw new IdentityOriginalUnavailable('identity-fx-original-role-union-unavailable');
+      // Roles live at the event home; erasure rows live at their own account homes. Read
+      // their bounded full keys separately in this snapshot, never join across partitions.
+      // validateScope and the overflow check precede construction: at most 64 keys/128 parameters.
+      const barrierKeys = accounts.map((_, index) => `($${index * 2 + 1}::integer,$${index * 2 + 2}::uuid)`).join(',');
+      const barrierRows = await tx.query<{ route: number; account_id: string; version: number; at: string }>(
+        `SELECT route,account_id,version,at::text FROM access.erasure
        WHERE (route,account_id) IN (${barrierKeys}) ORDER BY route,account_id FOR SHARE`,
-      accounts.flatMap((account) => [account.accountRoute, account.accountId]));
-    const byAccount = new Map(barrierRows.rows.map((row) => [row.account_id, row]));
-    const barriers = accounts.map((account) => {
-      const row = byAccount.get(account.accountId);
-      if (row && (row.route !== account.accountRoute || !Number.isSafeInteger(row.version) || row.version < 1 ||
-        typeof row.at !== 'string' || Buffer.byteLength(row.at) > 128))
-        throw new IdentityOriginalUnavailable('identity-fx-original-barrier-unavailable');
-      return Object.freeze({ accountId: account.accountId, version: row?.version ?? null, at: row?.at ?? null });
-    });
-    const binding: Binding = Object.freeze({ partition: envelope.partition, epoch: envelope.epoch,
-      position: envelope.position.toString(), eventSeq, effect: effect.name, event: structuredClone(event),
-      workflowId, source, accounts, barriers });
-    if (Buffer.byteLength(JSON.stringify(binding)) > 32768)
-      throw new IdentityOriginalUnavailable('identity-fx-original-binding-too-large');
-    const previous = (await tx.query<{ original_id: string; deadline: string; binding: Binding }>(
-      `SELECT original_id,deadline::text,binding FROM core.identity_fx_original
+        accounts.flatMap((account) => [account.accountRoute, account.accountId]),
+      );
+      const byAccount = new Map(barrierRows.rows.map((row) => [row.account_id, row]));
+      const barriers = accounts.map((account) => {
+        const row = byAccount.get(account.accountId);
+        if (
+          row &&
+          (row.route !== account.accountRoute ||
+            !Number.isSafeInteger(row.version) ||
+            row.version < 1 ||
+            typeof row.at !== 'string' ||
+            Buffer.byteLength(row.at) > 128)
+        )
+          throw new IdentityOriginalUnavailable('identity-fx-original-barrier-unavailable');
+        return Object.freeze({ accountId: account.accountId, version: row?.version ?? null, at: row?.at ?? null });
+      });
+      const binding: Binding = Object.freeze({
+        partition: envelope.partition,
+        epoch: envelope.epoch,
+        position: envelope.position.toString(),
+        eventSeq,
+        effect: effect.name,
+        event: structuredClone(event),
+        workflowId,
+        source,
+        accounts,
+        barriers,
+      });
+      if (Buffer.byteLength(JSON.stringify(binding)) > 32768)
+        throw new IdentityOriginalUnavailable('identity-fx-original-binding-too-large');
+      const previous = (
+        await tx.query<{ original_id: string; deadline: string; binding: Binding }>(
+          `SELECT original_id,deadline::text,binding FROM core.identity_fx_original
        WHERE partition_no=$1 AND epoch=$2 AND position=$3 AND event_seq=$4 AND effect=$5 FOR UPDATE`,
-      [envelope.partition, envelope.epoch, envelope.position.toString(), eventSeq, effect.name])).rows[0];
-    if (previous) {
-      if (!prepaid || prepaid.originalId !== previous.original_id)
-        throw new IdentityOriginalUnavailable('identity-fx-original-precharge-required');
-      if (canonicalize(previous.binding) !== canonicalize(binding))
-        throw new IdentityOriginalUnavailable('identity-fx-original-replay-mismatch');
-      if (Number(previous.deadline) <= Date.now()) throw new IdentityOriginalUnavailable('identity-fx-original-expired');
-      return Object.freeze({ originalId: previous.original_id, deadline: Number(previous.deadline), binding: previous.binding });
-    }
-    const originalId = currentCommand(tx).transactionId;
-    await tx.query(
-      `INSERT INTO core.identity_fx_original(original_id,partition_no,epoch,position,event_seq,effect,workflow_id,
+          [envelope.partition, envelope.epoch, envelope.position.toString(), eventSeq, effect.name],
+        )
+      ).rows[0];
+      if (previous) {
+        if (!prepaid || prepaid.originalId !== previous.original_id)
+          throw new IdentityOriginalUnavailable('identity-fx-original-precharge-required');
+        if (canonicalize(previous.binding) !== canonicalize(binding))
+          throw new IdentityOriginalUnavailable('identity-fx-original-replay-mismatch');
+        if (Number(previous.deadline) <= Date.now())
+          throw new IdentityOriginalUnavailable('identity-fx-original-expired');
+        return Object.freeze({
+          originalId: previous.original_id,
+          deadline: Number(previous.deadline),
+          binding: previous.binding,
+        });
+      }
+      const originalId = currentCommand(tx).transactionId;
+      await tx.query(
+        `INSERT INTO core.identity_fx_original(original_id,partition_no,epoch,position,event_seq,effect,workflow_id,
         binding,deadline,allowance,spent) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [originalId, envelope.partition, envelope.epoch, envelope.position.toString(), eventSeq, effect.name,
-        workflowId, JSON.stringify(binding), deadline, sourceBudget, attemptBudget]);
-    return Object.freeze({ originalId, deadline, binding });
-  });
+        [
+          originalId,
+          envelope.partition,
+          envelope.epoch,
+          envelope.position.toString(),
+          eventSeq,
+          effect.name,
+          workflowId,
+          JSON.stringify(binding),
+          deadline,
+          sourceBudget,
+          attemptBudget,
+        ],
+      );
+      return Object.freeze({ originalId, deadline, binding });
+    },
+  );
   originals.set(original, deps);
   try {
     await native(deps, 0, original.deadline, async (tx) => {
       if (originals.get(original) !== deps || Date.now() >= original.deadline)
         throw new IdentityOriginalUnavailable('identity-fx-original-transfer-unavailable');
-      const home = (await tx.query<{ epoch: number }>(
-        "SELECT epoch FROM core.partition WHERE partition_no=0 AND write_state='active' FOR SHARE")).rows[0];
-      const domain = (await tx.query<{ generation: string }>(
-        'SELECT generation::text FROM core.history_family_domain WHERE singleton FOR SHARE')).rows[0];
+      const home = (
+        await tx.query<{ epoch: number }>(
+          "SELECT epoch FROM core.partition WHERE partition_no=0 AND write_state='active' FOR SHARE",
+        )
+      ).rows[0];
+      const domain = (
+        await tx.query<{ generation: string }>(
+          'SELECT generation::text FROM core.history_family_domain WHERE singleton FOR SHARE',
+        )
+      ).rows[0];
       if (!home || !domain) throw new IdentityOriginalUnavailable('identity-fx-original-receiving-home-unavailable');
       if (domain.generation !== original.binding.source.domain_generation)
         throw new IdentityOriginalUnavailable('identity-fx-original-receiving-incarnation-changed');
-      const previous = (await tx.query<{ original_id: string; binding: Binding; receiver_epoch: number;
-        receiver_generation: string; deadline: string }>(
-        `SELECT original_id,binding,receiver_epoch,receiver_generation::text,deadline::text
-         FROM core.identity_fx_receiving WHERE workflow_id=$1 FOR UPDATE`, [workflowId])).rows[0];
+      const previous = (
+        await tx.query<{
+          original_id: string;
+          binding: Binding;
+          receiver_epoch: number;
+          receiver_generation: string;
+          deadline: string;
+        }>(
+          `SELECT original_id,binding,receiver_epoch,receiver_generation::text,deadline::text
+         FROM core.identity_fx_receiving WHERE workflow_id=$1 FOR UPDATE`,
+          [workflowId],
+        )
+      ).rows[0];
       if (previous) {
-        if (previous.original_id !== original.originalId || canonicalize(previous.binding) !== canonicalize(original.binding) ||
-          previous.receiver_epoch !== home.epoch || previous.receiver_generation !== domain.generation ||
-          Number(previous.deadline) !== original.deadline)
+        if (
+          previous.original_id !== original.originalId ||
+          canonicalize(previous.binding) !== canonicalize(original.binding) ||
+          previous.receiver_epoch !== home.epoch ||
+          previous.receiver_generation !== domain.generation ||
+          Number(previous.deadline) !== original.deadline
+        )
           throw new IdentityOriginalUnavailable('identity-fx-original-receiving-incarnation-changed');
         return;
       }
       await tx.query(
         `INSERT INTO core.identity_fx_receiving(workflow_id,original_id,binding,receiver_epoch,receiver_generation,
           deadline,allowance,spent) VALUES($1,$2,$3,$4,$5,$6,$7,$7)`,
-        [workflowId, original.originalId, JSON.stringify(original.binding), home.epoch, domain.generation,
-          original.deadline, receivingBudget]);
+        [
+          workflowId,
+          original.originalId,
+          JSON.stringify(original.binding),
+          home.epoch,
+          domain.generation,
+          original.deadline,
+          receivingBudget,
+        ],
+      );
     });
-  } finally { originals.delete(original); }
+  } finally {
+    originals.delete(original);
+  }
 }
 
 /** The installed child/SDK interfaces do not declare a complete wrapper allocation or physical

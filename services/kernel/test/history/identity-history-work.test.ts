@@ -20,14 +20,25 @@ import { HistoryRegistry, type HistoryBarrier } from '../../src/history/registry
 import { newId, routeOf } from '../../src/route/route.ts';
 import type { WorkClient } from '../../src/work/client.ts';
 import {
-  ORIGINAL_AXES, HISTORY_ORIGINAL_SELECTION, HISTORY_ORIGINAL_VALIDATION,
-  HISTORY_ORIGINAL_SETTLEMENT, originalWorkVector, sumOriginalControl,
-  historyOriginalPosition, consumeSelectedHistoryOriginal, identityOriginalRemainder,
-  IdentityOriginalUnavailable, type IdentityOriginalTransfer, type SelectedHistoryPosition,
+  ORIGINAL_AXES,
+  HISTORY_ORIGINAL_SELECTION,
+  HISTORY_ORIGINAL_VALIDATION,
+  HISTORY_ORIGINAL_SETTLEMENT,
+  originalWorkVector,
+  sumOriginalControl,
+  historyOriginalPosition,
+  consumeSelectedHistoryOriginal,
+  identityOriginalRemainder,
+  IdentityOriginalUnavailable,
+  type IdentityOriginalTransfer,
+  type SelectedHistoryPosition,
 } from '../../src/access/identity-original-admission.ts';
 import {
-  bindIdentityOriginalEffect, associateIdentityFxOriginal, validateIdentityOriginalEvent,
-  requireIdentityFxOriginalDispatch, IDENTITY_FX_CHILD_DECLARATION_MISSING,
+  bindIdentityOriginalEffect,
+  associateIdentityFxOriginal,
+  validateIdentityOriginalEvent,
+  requireIdentityFxOriginalDispatch,
+  IDENTITY_FX_CHILD_DECLARATION_MISSING,
   identityFxSourceIncarnation,
 } from '../../src/history/identity-original-association.ts';
 import type { CloudEvent, Envelope } from '../../src/events/log.ts';
@@ -259,34 +270,62 @@ test('Durable History mapping failures and repeated invocations keep their origi
 });
 
 test('Original control declarations validate every safe integer axis and reject missing or additional dimensions', () => {
-  const allowance = sumOriginalControl(HISTORY_ORIGINAL_SELECTION, HISTORY_ORIGINAL_VALIDATION,
-    HISTORY_ORIGINAL_SETTLEMENT);
+  const allowance = sumOriginalControl(
+    HISTORY_ORIGINAL_SELECTION,
+    HISTORY_ORIGINAL_VALIDATION,
+    HISTORY_ORIGINAL_SETTLEMENT,
+  );
   expect(originalWorkVector(allowance)).toHaveLength(8);
-  for (const axis of ORIGINAL_AXES) for (const value of [-1, 0.5, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1]) {
-    expect(() => originalWorkVector({ ...allowance, [axis]: value })).toThrow(RangeError);
-  }
+  for (const axis of ORIGINAL_AXES)
+    for (const value of [-1, 0.5, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => originalWorkVector({ ...allowance, [axis]: value })).toThrow(RangeError);
+    }
   expect(() => originalWorkVector({ ...allowance, unpriced: 1 } as typeof allowance)).toThrow(RangeError);
   expect(() => sumOriginalControl({ ...allowance, bytes: Number.MAX_SAFE_INTEGER }, allowance)).toThrow(RangeError);
 });
 
 function originalPosition(): SelectedHistoryPosition {
   const accountId = newId(0x9d10);
-  return { job_id: randomUUID(), partition_no: 0x9d1, account_route: 0x9d10, account_id: accountId,
-    barrier_id: accountId, barrier_version: 1, barrier_at: new Date().toISOString(), phase: 'scan',
-    scan_partition: 0, verify_partition: 0, scan_type: 'durable-work/v1', scan_locator: Buffer.from([1, 3]),
-    registry_digest: '1'.repeat(64), registry_generation: '1' };
+  return {
+    job_id: randomUUID(),
+    partition_no: 0x9d1,
+    account_route: 0x9d10,
+    account_id: accountId,
+    barrier_id: accountId,
+    barrier_version: 1,
+    barrier_at: new Date().toISOString(),
+    phase: 'scan',
+    scan_partition: 0,
+    verify_partition: 0,
+    scan_type: 'durable-work/v1',
+    scan_locator: Buffer.from([1, 3]),
+    registry_digest: '1'.repeat(64),
+    registry_generation: '1',
+  };
 }
 
 test('Original position includes the exact native home, account barrier, registry and both cursors', () => {
   const position = originalPosition();
   const bound = historyOriginalPosition(position);
   expect(bound.scan_locator).toBe('0103');
-  for (const change of [{ scan_partition: 1 }, { verify_partition: 1 }, { phase: 'verify' as const },
-    { scan_locator: Buffer.from([1, 3, 0]) }, { registry_generation: '2' }, { registry_digest: '2'.repeat(64) }]) {
+  for (const change of [
+    { scan_partition: 1 },
+    { verify_partition: 1 },
+    { phase: 'verify' as const },
+    { scan_locator: Buffer.from([1, 3, 0]) },
+    { registry_generation: '2' },
+    { registry_digest: '2'.repeat(64) },
+  ]) {
     expect(historyOriginalPosition({ ...position, ...change })).not.toEqual(bound);
   }
-  for (const change of [{ partition_no: 0 }, { barrier_id: randomUUID() }, { scan_partition: 4097 },
-    { scan_locator: Buffer.alloc(257) }, { scan_locator: null }, { registry_generation: '9007199254740992' }]) {
+  for (const change of [
+    { partition_no: 0 },
+    { barrier_id: randomUUID() },
+    { scan_partition: 4097 },
+    { scan_locator: Buffer.alloc(257) },
+    { scan_locator: null },
+    { registry_generation: '9007199254740992' },
+  ]) {
     expect(() => historyOriginalPosition({ ...position, ...change })).toThrow(IdentityOriginalUnavailable);
   }
   position.scan_locator!.fill(0);
@@ -299,7 +338,9 @@ test('Copied original handles and wrong Pool/client/position refuse before any a
   const token = Object.freeze({}) as IdentityOriginalTransfer;
   const deps = { pool: home.pool, client: {} as WorkClient, registry: new HistoryRegistry() };
   for (const altered of [deps, { ...deps, pool: foreign.pool }, { ...deps, client: {} as WorkClient }]) {
-    await expect(consumeSelectedHistoryOriginal(altered, token, randomUUID())).rejects.toBeInstanceOf(IdentityOriginalUnavailable);
+    await expect(consumeSelectedHistoryOriginal(altered, token, randomUUID())).rejects.toBeInstanceOf(
+      IdentityOriginalUnavailable,
+    );
     expect(() => identityOriginalRemainder(altered, { ...token }, randomUUID())).toThrow(IdentityOriginalUnavailable);
   }
   expect(home.checkouts()).toBe(0);
@@ -308,19 +349,37 @@ test('Copied original handles and wrong Pool/client/position refuse before any a
 
 function originalEnvelope(): Envelope {
   const accountId = newId(0x9d10);
-  const event: CloudEvent = { specversion: '1.0', id: randomUUID(), source: 'urn:rezics:log:2513.1',
-    type: 'com.rezics.access.agent-verification.reversing.v1', subject: accountId,
-    time: new Date().toISOString(), datacontenttype: 'application/json', sequence: '0000000000000000001',
-    data: { accountId, catalogueSubjectId: newId(0x9d10), verificationReceiptId: randomUUID(),
-      receiptId: randomUUID(), requestedBy: accountId, kind: 'released', reason: null } };
+  const event: CloudEvent = {
+    specversion: '1.0',
+    id: randomUUID(),
+    source: 'urn:rezics:log:2513.1',
+    type: 'com.rezics.access.agent-verification.reversing.v1',
+    subject: accountId,
+    time: new Date().toISOString(),
+    datacontenttype: 'application/json',
+    sequence: '0000000000000000001',
+    data: {
+      accountId,
+      catalogueSubjectId: newId(0x9d10),
+      verificationReceiptId: randomUUID(),
+      receiptId: randomUUID(),
+      requestedBy: accountId,
+      kind: 'released',
+      reason: null,
+    },
+  };
   return { partition: 2513, epoch: 1, position: 1n, events: [event] };
 }
 
 test('Identity fx wrapper rejects wrong native position/epoch/partition before association IO', () => {
   const envelope = originalEnvelope();
   expect<unknown>(validateIdentityOriginalEvent(envelope, 0)).toEqual(envelope.events[0]!.data);
-  for (const altered of [{ ...envelope, position: 2n }, { ...envelope, epoch: 2 },
-    { ...envelope, partition: 2514 }, { ...envelope, epoch: Number.MAX_SAFE_INTEGER + 1 }]) {
+  for (const altered of [
+    { ...envelope, position: 2n },
+    { ...envelope, epoch: 2 },
+    { ...envelope, partition: 2514 },
+    { ...envelope, epoch: Number.MAX_SAFE_INTEGER + 1 },
+  ]) {
     expect(() => validateIdentityOriginalEvent(altered, 0)).toThrow(IdentityOriginalUnavailable);
   }
   expect(() => validateIdentityOriginalEvent(envelope, 1)).toThrow(IdentityOriginalUnavailable);
@@ -330,15 +389,24 @@ test('Identity fx keeps a precise missing child declaration and authentic produc
   const home = checkoutSentinel('missing child must not dispatch');
   const foreign = checkoutSentinel('wrong Pool must not dispatch');
   let ran = false;
-  const effect: Effect = bindIdentityOriginalEffect({ name: 'agent_verification_reversal',
-    types: ['com.rezics.access.agent-verification.reversing.v1'], async run() { ran = true; } },
-  { pool: home.pool, client: {} as WorkClient });
+  const effect: Effect = bindIdentityOriginalEffect(
+    {
+      name: 'agent_verification_reversal',
+      types: ['com.rezics.access.agent-verification.reversing.v1'],
+      async run() {
+        ran = true;
+      },
+    },
+    { pool: home.pool, client: {} as WorkClient },
+  );
   expect(() => requireIdentityFxOriginalDispatch(effect, home.pool)).toThrow(IDENTITY_FX_CHILD_DECLARATION_MISSING);
   const envelope = originalEnvelope();
-  await expect(associateIdentityFxOriginal({ ...effect }, home.pool, envelope, 0, 'copied'))
-    .rejects.toThrow('identity-fx-original-producer-unavailable');
-  await expect(associateIdentityFxOriginal(effect, foreign.pool, envelope, 0, 'wrong-pool'))
-    .rejects.toThrow('identity-fx-original-producer-unavailable');
+  await expect(associateIdentityFxOriginal({ ...effect }, home.pool, envelope, 0, 'copied')).rejects.toThrow(
+    'identity-fx-original-producer-unavailable',
+  );
+  await expect(associateIdentityFxOriginal(effect, foreign.pool, envelope, 0, 'wrong-pool')).rejects.toThrow(
+    'identity-fx-original-producer-unavailable',
+  );
   expect(home.checkouts()).toBe(0);
   expect(foreign.checkouts()).toBe(0);
   expect(ran).toBe(false);
@@ -346,9 +414,16 @@ test('Identity fx keeps a precise missing child declaration and authentic produc
 
 test('Identity fx source binding pins both native enrollment generations without rounding or adopting later state', () => {
   const source = {
-    intent_digest: '1'.repeat(64), source_transaction_id: randomUUID(), workflow_id: 'native-original',
-    delivery_key: 'original-delivery', undo_job_id: randomUUID(), undo_job_epoch: '1', receiver_epoch: 1,
-    domain_generation: '1', inventory_generation: '1', obligation_generation: '1',
+    intent_digest: '1'.repeat(64),
+    source_transaction_id: randomUUID(),
+    workflow_id: 'native-original',
+    delivery_key: 'original-delivery',
+    undo_job_id: randomUUID(),
+    undo_job_epoch: '1',
+    receiver_epoch: 1,
+    domain_generation: '1',
+    inventory_generation: '1',
+    obligation_generation: '1',
   };
   const pinned = identityFxSourceIncarnation(source);
   expect(Object.isFrozen(pinned)).toBe(true);
@@ -357,26 +432,36 @@ test('Identity fx source binding pins both native enrollment generations without
   expect(identityFxSourceIncarnation(source)).not.toEqual(pinned);
   expect(pinned.inventory_generation).toBe('1');
   expect(pinned.obligation_generation).toBe('1');
-  expect(() => identityFxSourceIncarnation({ ...source, obligation_generation: '1' }))
-    .toThrow('source-incarnation-unavailable');
+  expect(() => identityFxSourceIncarnation({ ...source, obligation_generation: '1' })).toThrow(
+    'source-incarnation-unavailable',
+  );
 
   const exact = '9007199254740993';
-  const large = identityFxSourceIncarnation({ ...source, domain_generation: exact,
-    inventory_generation: exact, obligation_generation: exact });
+  const large = identityFxSourceIncarnation({
+    ...source,
+    domain_generation: exact,
+    inventory_generation: exact,
+    obligation_generation: exact,
+  });
   expect(large.inventory_generation).toBe(exact);
   expect(large.obligation_generation).toBe(exact);
   expect(large.domain_generation).toBe(exact);
   for (const value of ['', '0', '-1', '1.5', '01', '9223372036854775808', 'Infinity']) {
-    expect(() => identityFxSourceIncarnation({ ...source, domain_generation: value }))
-      .toThrow('source-incarnation-unavailable');
-    expect(() => identityFxSourceIncarnation({ ...source, inventory_generation: value, obligation_generation: value }))
-      .toThrow('source-incarnation-unavailable');
+    expect(() => identityFxSourceIncarnation({ ...source, domain_generation: value })).toThrow(
+      'source-incarnation-unavailable',
+    );
+    expect(() =>
+      identityFxSourceIncarnation({ ...source, inventory_generation: value, obligation_generation: value }),
+    ).toThrow('source-incarnation-unavailable');
   }
 });
 
 test('Original work vectors require all eight own axes and reject hidden additional dimensions', () => {
   const allowance = HISTORY_ORIGINAL_SELECTION;
-  const inherited = Object.assign(Object.create({ candidateKeys: allowance.candidateKeys }), allowance) as Record<string, unknown>;
+  const inherited = Object.assign(Object.create({ candidateKeys: allowance.candidateKeys }), allowance) as Record<
+    string,
+    unknown
+  >;
   delete inherited.candidateKeys;
   inherited.unpriced = 0;
   expect(() => originalWorkVector(inherited as unknown as typeof allowance)).toThrow(RangeError);
@@ -391,7 +476,7 @@ test('Original work encoding preserves the same safe snapshot that was validated
   let reads = 0;
   const declaration = Object.defineProperty({ ...HISTORY_ORIGINAL_SELECTION }, 'bytes', {
     enumerable: true,
-    get: () => ++reads === 1 ? 8192 : Number.MAX_SAFE_INTEGER + 1,
+    get: () => (++reads === 1 ? 8192 : Number.MAX_SAFE_INTEGER + 1),
   });
   const vector = originalWorkVector(declaration);
   expect(reads).toBe(1);
@@ -407,13 +492,21 @@ test('Private original transfer cannot be reconstructed from a structural grant 
   const job = randomUUID();
   const token = {} as import('../../src/access/identity-original-admission.ts').IdentityOriginalSourceGrant;
   let dispatched = false;
-  await withIdentitySourceConsumerMaintenance({ pool: selected.pool, env: {} }, { deadline: Date.now() + 5000 }, async () => {
-    await expect(withIdentityOriginalSourceTransfer(deps, {} as IdentityOriginalTransfer, job, async () => { dispatched = true; }))
-      .rejects.toThrow('handle-unavailable');
-    expect(() => reserveIdentityOriginalSourceWork(deps, token, job, HISTORY_ORIGINAL_SELECTION))
-      .toThrow('private-grant-unavailable');
-    expect(() => identityOriginalLibraryWork(deps, token, job)).toThrow('private-grant-unavailable');
-  });
+  await withIdentitySourceConsumerMaintenance(
+    { pool: selected.pool, env: {} },
+    { deadline: Date.now() + 5000 },
+    async () => {
+      await expect(
+        withIdentityOriginalSourceTransfer(deps, {} as IdentityOriginalTransfer, job, async () => {
+          dispatched = true;
+        }),
+      ).rejects.toThrow('handle-unavailable');
+      expect(() => reserveIdentityOriginalSourceWork(deps, token, job, HISTORY_ORIGINAL_SELECTION)).toThrow(
+        'private-grant-unavailable',
+      );
+      expect(() => identityOriginalLibraryWork(deps, token, job)).toThrow('private-grant-unavailable');
+    },
+  );
   expect(dispatched).toBe(false);
   expect(selected.checkouts()).toBe(0);
 });

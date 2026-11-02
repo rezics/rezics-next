@@ -24,9 +24,15 @@ export const sharedHistoryWorkModule: WorkModule = {
 export { sharedHistoryWorkModule as preferenceHistoryWorkModule };
 
 /** The default worker's actual selected caller, independently of Source callback allocation. */
-export function advanceSelectedHistoryOriginal(deps: Readonly<{ pool: Pool; client: WorkClient;
-  registry: HistoryRegistry; env: Readonly<Record<string, string | undefined>>; clock: () => Date;
-}>): Promise<SharedHistoryResult | null> {
+export function advanceSelectedHistoryOriginal(
+  deps: Readonly<{
+    pool: Pool;
+    client: WorkClient;
+    registry: HistoryRegistry;
+    env: Readonly<Record<string, string | undefined>>;
+    clock: () => Date;
+  }>,
+): Promise<SharedHistoryResult | null> {
   return withSelectedHistoryOriginal(deps, (jobId) => advanceSharedHistory(deps, jobId));
 }
 

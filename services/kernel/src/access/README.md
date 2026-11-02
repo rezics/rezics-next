@@ -4330,7 +4330,6 @@ History engine and all receiving copies before default native minimization. It c
 surviving decider attribution, retained technical undo and retry. Original acceptance/native/browser proof and full
 Goal completion remain deferred; workspace typing establishes none of those outcomes.
 
-
 ### Selected History original and private transfer
 
 The default History worker calls `history/work.ts:advanceSelectedHistoryOriginal`. Its native producer is

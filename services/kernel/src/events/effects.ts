@@ -9,7 +9,9 @@ import type { Relay } from './relays.ts';
 import { lookupEventType } from './catalogue.ts';
 import { projectBatch, type CloudEvent, type Envelope } from './log.ts';
 import {
-  associateIdentityFxOriginal, isIdentityOriginalEffect, requireIdentityFxOriginalDispatch,
+  associateIdentityFxOriginal,
+  isIdentityOriginalEffect,
+  requireIdentityFxOriginalDispatch,
 } from '../history/identity-original-association.ts';
 
 export { DBOS_SCHEMA } from '../work/client.ts';
@@ -36,7 +38,8 @@ type RegisteredEffects = {
   admit?: (client: PoolClient, envelopes: readonly Envelope[]) => Promise<void>;
 };
 const identityOriginalPreparations = new WeakMap<
-  RegisteredEffects, (envelopes: readonly Envelope[]) => Promise<void>
+  RegisteredEffects,
+  (envelopes: readonly Envelope[]) => Promise<void>
 >();
 
 type WorkOptions = { databaseUrl: string; executorId?: string; systemDatabasePool?: Pool };
@@ -146,12 +149,19 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
   // Independent native source and receiving commands finish before the generic consumer
   // transaction opens. Neither a consumer state nor a child receipt issues this association.
   const prepareIdentityOriginals = async (envelopes: readonly Envelope[]) => {
-    for (const envelope of envelopes) for (const [eventSeq, event] of envelope.events.entries()) {
-      for (const effect of effects) if (effect.delivery !== 'native' && isIdentityOriginalEffect(effect, event)) {
-        await associateIdentityFxOriginal(effect, locatorPool(), envelope, eventSeq,
-          effectWorkflowId(envelope, eventSeq, effect.name));
+    for (const envelope of envelopes)
+      for (const [eventSeq, event] of envelope.events.entries()) {
+        for (const effect of effects)
+          if (effect.delivery !== 'native' && isIdentityOriginalEffect(effect, event)) {
+            await associateIdentityFxOriginal(
+              effect,
+              locatorPool(),
+              envelope,
+              eventSeq,
+              effectWorkflowId(envelope, eventSeq, effect.name),
+            );
+          }
       }
-    }
   };
 
   const registered: RegisteredEffects = {
@@ -202,7 +212,8 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
                 : 1,
           );
           for (const { envelope, eventSeq, event, effect } of jobs) {
-            if (isIdentityOriginalEffect(effect, event)) requireIdentityFxOriginalDispatch(effect as Effect, locatorPool());
+            if (isIdentityOriginalEffect(effect, event))
+              requireIdentityFxOriginalDispatch(effect as Effect, locatorPool());
             await DBOS.startWorkflow(workflow, {
               workflowID: effectWorkflowId(envelope, eventSeq, effect.name),
               workflowIDReusePolicy: 'return-existing',

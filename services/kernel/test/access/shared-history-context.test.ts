@@ -13,8 +13,14 @@ import { createDeletionFixture } from '../semantic/support/deletion-fixture.ts';
 import { HistoryRegistry } from '../../src/history/registry.ts';
 import { admitSharedHistory } from '../../src/access/shared-history.ts';
 import {
-  withSelectedHistoryOriginal, consumeSelectedHistoryOriginal, identityOriginalRemainder,
-  HISTORY_ORIGINAL_LOCAL_ALLOWANCE, ADDITIONAL_ORIGINAL_TRANSFER_CONTROL, sumOriginalControl, originalWorkVector, type IdentityOriginalTransfer,
+  withSelectedHistoryOriginal,
+  consumeSelectedHistoryOriginal,
+  identityOriginalRemainder,
+  HISTORY_ORIGINAL_LOCAL_ALLOWANCE,
+  ADDITIONAL_ORIGINAL_TRANSFER_CONTROL,
+  sumOriginalControl,
+  originalWorkVector,
+  type IdentityOriginalTransfer,
 } from '../../src/access/identity-original-admission.ts';
 import type { WorkClient } from '../../src/work/client.ts';
 
@@ -57,47 +63,77 @@ test('Actual selected native History original survives failed dispatch without a
   const home = partitionOf(routeOf(account)!);
   const job = randomUUID();
   const registry = new HistoryRegistry();
-  await f.admin.query("INSERT INTO core.partition(partition_no,node) VALUES($1,'local') ON CONFLICT DO NOTHING", [home]);
-  await f.admin.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now())',
-    [routeOf(account), account]);
-  const generation = (await f.admin.query(`INSERT INTO core.history_registry(singleton,digest,gaps) VALUES(true,$1,'[]')
+  await f.admin.query("INSERT INTO core.partition(partition_no,node) VALUES($1,'local') ON CONFLICT DO NOTHING", [
+    home,
+  ]);
+  await f.admin.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now())', [
+    routeOf(account),
+    account,
+  ]);
+  const generation = (
+    await f.admin.query(
+      `INSERT INTO core.history_registry(singleton,digest,gaps) VALUES(true,$1,'[]')
     ON CONFLICT(singleton) DO UPDATE SET digest=EXCLUDED.digest,generation=core.history_registry.generation+1
-    RETURNING generation::text`, [registry.digest()])).rows[0]!.generation;
+    RETURNING generation::text`,
+      [registry.digest()],
+    )
+  ).rows[0]!.generation;
   await runCommand(f.pool, { partition: home }, async (tx) => noEffect(await admitSharedHistory(tx, account, job)));
-  await f.admin.query(`UPDATE core.preference_history_job SET registry_digest=$2,registry_generation=$3,
-    next_run='-infinity' WHERE job_id=$1`, [job, registry.digest(), generation]);
+  await f.admin.query(
+    `UPDATE core.preference_history_job SET registry_digest=$2,registry_generation=$3,
+    next_run='-infinity' WHERE job_id=$1`,
+    [job, registry.digest(), generation],
+  );
   const deps = { pool: f.pool, client, registry };
   let ended: IdentityOriginalTransfer | undefined;
   const failure = new Error('affected dispatch failed');
-  await expect(withSelectedHistoryOriginal(deps, async (selected, transfer) => {
-    expect(selected).toBe(job);
-    ended = transfer;
-    for (const foreign of [{ ...deps, pool: f.admin }, { ...deps, client: { ...client } as WorkClient },
-      { ...deps, registry: new HistoryRegistry() }])
-      expect(() => identityOriginalRemainder(foreign, transfer, selected)).toThrow('handle-unavailable');
-    expect(() => identityOriginalRemainder(deps, { ...transfer }, selected)).toThrow('handle-unavailable');
-    expect(() => identityOriginalRemainder(deps, transfer, randomUUID())).toThrow('handle-unavailable');
-    const now = Date.now;
-    const expires = identityOriginalRemainder(deps, transfer, selected).deadline;
-    try {
-      Date.now = () => expires;
-      expect(() => identityOriginalRemainder(deps, transfer, selected)).toThrow('handle-unavailable');
-    } finally { Date.now = now; }
-    await consumeSelectedHistoryOriginal(deps, transfer, selected);
-    await expect(consumeSelectedHistoryOriginal(deps, transfer, selected)).rejects.toThrow('consumed-or-changed');
-    throw failure;
-  })).rejects.toBe(failure);
-  const snapshot = async () => (await f.admin.query(`SELECT original_id,deadline::text,spent,dispatched,advanced
-    FROM core.identity_history_original WHERE job_id=$1 ORDER BY ordinal`, [job])).rows;
+  await expect(
+    withSelectedHistoryOriginal(deps, async (selected, transfer) => {
+      expect(selected).toBe(job);
+      ended = transfer;
+      for (const foreign of [
+        { ...deps, pool: f.admin },
+        { ...deps, client: { ...client } as WorkClient },
+        { ...deps, registry: new HistoryRegistry() },
+      ])
+        expect(() => identityOriginalRemainder(foreign, transfer, selected)).toThrow('handle-unavailable');
+      expect(() => identityOriginalRemainder(deps, { ...transfer }, selected)).toThrow('handle-unavailable');
+      expect(() => identityOriginalRemainder(deps, transfer, randomUUID())).toThrow('handle-unavailable');
+      const now = Date.now;
+      const expires = identityOriginalRemainder(deps, transfer, selected).deadline;
+      try {
+        Date.now = () => expires;
+        expect(() => identityOriginalRemainder(deps, transfer, selected)).toThrow('handle-unavailable');
+      } finally {
+        Date.now = now;
+      }
+      await consumeSelectedHistoryOriginal(deps, transfer, selected);
+      await expect(consumeSelectedHistoryOriginal(deps, transfer, selected)).rejects.toThrow('consumed-or-changed');
+      throw failure;
+    }),
+  ).rejects.toBe(failure);
+  const snapshot = async () =>
+    (
+      await f.admin.query(
+        `SELECT original_id,deadline::text,spent,dispatched,advanced
+    FROM core.identity_history_original WHERE job_id=$1 ORDER BY ordinal`,
+        [job],
+      )
+    ).rows;
   const before = await snapshot();
   expect(before).toHaveLength(1);
-  expect(before[0]!.spent.map(Number)).toEqual(originalWorkVector(sumOriginalControl(HISTORY_ORIGINAL_LOCAL_ALLOWANCE, ADDITIONAL_ORIGINAL_TRANSFER_CONTROL)));
+  expect(before[0]!.spent.map(Number)).toEqual(
+    originalWorkVector(sumOriginalControl(HISTORY_ORIGINAL_LOCAL_ALLOWANCE, ADDITIONAL_ORIGINAL_TRANSFER_CONTROL)),
+  );
   expect(before[0]!.dispatched).toBe(true);
   expect(before[0]!.advanced).toBe(false);
   expect(() => identityOriginalRemainder(deps, ended!, job)).toThrow('handle-unavailable');
   await f.admin.query("UPDATE core.preference_history_job SET next_run='-infinity' WHERE job_id=$1", [job]);
-  await expect(withSelectedHistoryOriginal(deps, async () => { throw new Error('replay reached dispatch'); }))
-    .rejects.toThrow('already-dispatched');
+  await expect(
+    withSelectedHistoryOriginal(deps, async () => {
+      throw new Error('replay reached dispatch');
+    }),
+  ).rejects.toThrow('already-dispatched');
   expect(await snapshot()).toEqual(before);
   await f.admin.query("UPDATE core.preference_history_job SET next_run='infinity' WHERE job_id=$1", [job]);
 });
@@ -378,23 +414,43 @@ test('Complete owned default product journey without invented authority', async 
   const home = partitionOf(routeOf(account)!);
   const job = randomUUID();
   const registry = new HistoryRegistry();
-  await f.admin.query("INSERT INTO core.partition(partition_no,node) VALUES($1,'local') ON CONFLICT DO NOTHING", [home]);
-  await f.admin.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now())', [routeOf(account), account]);
-  const generation = (await f.admin.query(`INSERT INTO core.history_registry(singleton,digest,gaps) VALUES(true,$1,'[]')
+  await f.admin.query("INSERT INTO core.partition(partition_no,node) VALUES($1,'local') ON CONFLICT DO NOTHING", [
+    home,
+  ]);
+  await f.admin.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now())', [
+    routeOf(account),
+    account,
+  ]);
+  const generation = (
+    await f.admin.query(
+      `INSERT INTO core.history_registry(singleton,digest,gaps) VALUES(true,$1,'[]')
     ON CONFLICT(singleton) DO UPDATE SET digest=EXCLUDED.digest,generation=core.history_registry.generation+1
-    RETURNING generation::text`, [registry.digest()])).rows[0]!.generation;
+    RETURNING generation::text`,
+      [registry.digest()],
+    )
+  ).rows[0]!.generation;
   await runCommand(f.pool, { partition: home }, async (tx) => noEffect(await admitSharedHistory(tx, account, job)));
-  await f.admin.query(`UPDATE core.preference_history_job SET registry_digest=$2,registry_generation=$3,
-    scan_partition=4096,next_run='-infinity' WHERE job_id=$1`, [job, registry.digest(), generation]);
+  await f.admin.query(
+    `UPDATE core.preference_history_job SET registry_digest=$2,registry_generation=$3,
+    scan_partition=4096,next_run='-infinity' WHERE job_id=$1`,
+    [job, registry.digest(), generation],
+  );
   const deps = { pool: f.pool, client, registry, env: {}, clock: f.clock };
   const started = Date.now();
   expect(await advanceSelectedHistoryOriginal(deps)).toEqual({ state: 'more', gap: null });
-  const first = (await f.admin.query(`SELECT original_id,dispatched,advanced,deadline::text
-    FROM core.identity_history_original WHERE job_id=$1 ORDER BY ordinal`, [job])).rows[0]!;
+  const first = (
+    await f.admin.query(
+      `SELECT original_id,dispatched,advanced,deadline::text
+    FROM core.identity_history_original WHERE job_id=$1 ORDER BY ordinal`,
+      [job],
+    )
+  ).rows[0]!;
   expect(first.dispatched).toBe(true);
   expect(first.advanced).toBe(true);
   expect(Number(first.deadline)).toBeGreaterThanOrEqual(started + 5000);
-  const progressed = (await f.admin.query('SELECT phase,verify_partition FROM core.preference_history_job WHERE job_id=$1', [job])).rows[0];
+  const progressed = (
+    await f.admin.query('SELECT phase,verify_partition FROM core.preference_history_job WHERE job_id=$1', [job])
+  ).rows[0];
   expect(progressed).toEqual({ phase: 'verify', verify_partition: 0 });
   // A later actual position is independently admissible. Missing child producers still
   // cannot reinterpret the spent local allocation as a private Source/Library grant.
@@ -409,8 +465,11 @@ test('Complete owned default product journey without invented authority', async 
     expect(parent.library).toBeNull();
     const { withIdentityOriginalSourceTransfer } = await import('../../src/access/identity-original-admission.ts');
     let child = false;
-    await expect(withIdentityOriginalSourceTransfer(deps, transfer, selected, async () => { child = true; }))
-      .rejects.toThrow('source-transfer-unavailable');
+    await expect(
+      withIdentityOriginalSourceTransfer(deps, transfer, selected, async () => {
+        child = true;
+      }),
+    ).rejects.toThrow('source-transfer-unavailable');
     expect(child).toBe(false);
   });
   await f.admin.query("UPDATE core.preference_history_job SET next_run='infinity' WHERE job_id=$1", [job]);

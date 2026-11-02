@@ -13,8 +13,12 @@ import { createDeletionFixture } from '../semantic/support/deletion-fixture.ts';
 import { HistoryRegistry } from '../../src/history/registry.ts';
 import { admitSharedHistory } from '../../src/access/shared-history.ts';
 import {
-  withSelectedHistoryOriginal, consumeSelectedHistoryOriginal,
-  HISTORY_ORIGINAL_LOCAL_ALLOWANCE, ADDITIONAL_ORIGINAL_TRANSFER_CONTROL, sumOriginalControl, originalWorkVector,
+  withSelectedHistoryOriginal,
+  consumeSelectedHistoryOriginal,
+  HISTORY_ORIGINAL_LOCAL_ALLOWANCE,
+  ADDITIONAL_ORIGINAL_TRANSFER_CONTROL,
+  sumOriginalControl,
+  originalWorkVector,
 } from '../../src/access/identity-original-admission.ts';
 
 const f = await createDeletionFixture();
@@ -53,35 +57,62 @@ test('Changed selected native cursor refuses before affected dispatch and failed
   const home = partitionOf(routeOf(account)!);
   const job = randomUUID();
   const registry = new HistoryRegistry();
-  await f.admin.query("INSERT INTO core.partition(partition_no,node) VALUES($1,'local') ON CONFLICT DO NOTHING", [home]);
-  await f.admin.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now())',
-    [routeOf(account), account]);
-  const generation = (await f.admin.query(`INSERT INTO core.history_registry(singleton,digest,gaps) VALUES(true,$1,'[]')
+  await f.admin.query("INSERT INTO core.partition(partition_no,node) VALUES($1,'local') ON CONFLICT DO NOTHING", [
+    home,
+  ]);
+  await f.admin.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now())', [
+    routeOf(account),
+    account,
+  ]);
+  const generation = (
+    await f.admin.query(
+      `INSERT INTO core.history_registry(singleton,digest,gaps) VALUES(true,$1,'[]')
     ON CONFLICT(singleton) DO UPDATE SET digest=EXCLUDED.digest,generation=core.history_registry.generation+1
-    RETURNING generation::text`, [registry.digest()])).rows[0]!.generation;
+    RETURNING generation::text`,
+      [registry.digest()],
+    )
+  ).rows[0]!.generation;
   await runCommand(f.pool, { partition: home }, async (tx) => noEffect(await admitSharedHistory(tx, account, job)));
-  await f.admin.query(`UPDATE core.preference_history_job SET registry_digest=$2,registry_generation=$3,
-    next_run='-infinity' WHERE job_id=$1`, [job, registry.digest(), generation]);
+  await f.admin.query(
+    `UPDATE core.preference_history_job SET registry_digest=$2,registry_generation=$3,
+    next_run='-infinity' WHERE job_id=$1`,
+    [job, registry.digest(), generation],
+  );
   const deps = { pool: f.pool, client, registry };
   let affected = false;
-  await expect(withSelectedHistoryOriginal(deps, async (selected, transfer) => {
-    expect(selected).toBe(job);
-    await f.admin.query('UPDATE core.preference_history_job SET scan_partition=1 WHERE job_id=$1', [job]);
-    await expect(consumeSelectedHistoryOriginal(deps, transfer, selected)).rejects.toThrow('selected-position-changed');
-    // The same live token is one-shot even when the native validation transaction rolled back.
-    await consumeSelectedHistoryOriginal(deps, transfer, selected);
-    affected = true;
-  })).rejects.toThrow('consumed-or-changed');
+  await expect(
+    withSelectedHistoryOriginal(deps, async (selected, transfer) => {
+      expect(selected).toBe(job);
+      await f.admin.query('UPDATE core.preference_history_job SET scan_partition=1 WHERE job_id=$1', [job]);
+      await expect(consumeSelectedHistoryOriginal(deps, transfer, selected)).rejects.toThrow(
+        'selected-position-changed',
+      );
+      // The same live token is one-shot even when the native validation transaction rolled back.
+      await consumeSelectedHistoryOriginal(deps, transfer, selected);
+      affected = true;
+    }),
+  ).rejects.toThrow('consumed-or-changed');
   expect(affected).toBe(false);
-  const snapshot = async () => (await f.admin.query(`SELECT original_id,deadline::text,spent,dispatched,advanced
-    FROM core.identity_history_original WHERE job_id=$1 ORDER BY ordinal`, [job])).rows;
+  const snapshot = async () =>
+    (
+      await f.admin.query(
+        `SELECT original_id,deadline::text,spent,dispatched,advanced
+    FROM core.identity_history_original WHERE job_id=$1 ORDER BY ordinal`,
+        [job],
+      )
+    ).rows;
   const before = await snapshot();
   expect(before).toHaveLength(1);
-  expect(before[0]!.spent.map(Number)).toEqual(originalWorkVector(sumOriginalControl(HISTORY_ORIGINAL_LOCAL_ALLOWANCE, ADDITIONAL_ORIGINAL_TRANSFER_CONTROL)));
+  expect(before[0]!.spent.map(Number)).toEqual(
+    originalWorkVector(sumOriginalControl(HISTORY_ORIGINAL_LOCAL_ALLOWANCE, ADDITIONAL_ORIGINAL_TRANSFER_CONTROL)),
+  );
   expect(before[0]!.dispatched).toBe(true);
   await f.admin.query("UPDATE core.preference_history_job SET next_run='-infinity' WHERE job_id=$1", [job]);
-  await expect(withSelectedHistoryOriginal(deps, async () => { affected = true; }))
-    .rejects.toThrow('unfinished-position-changed');
+  await expect(
+    withSelectedHistoryOriginal(deps, async () => {
+      affected = true;
+    }),
+  ).rejects.toThrow('unfinished-position-changed');
   expect(await snapshot()).toEqual(before);
   expect(affected).toBe(false);
   await f.admin.query("UPDATE core.preference_history_job SET next_run='infinity' WHERE job_id=$1", [job]);

@@ -28,9 +28,15 @@ import { deadlineFor } from '../request/deadline.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { systemClock } from '../clock.ts';
 import {
-  consumeSelectedHistoryOriginal, currentIdentityOriginalTransfer, identityOriginalRemainder,
-  IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING, lockSelectedHistoryOriginalPosition, type SelectedHistoryPosition,
-  recordSelectedHistoryOriginalProgress, withSelectedHistoryOriginalChild, guardSelectedHistoryOriginalTransaction,
+  consumeSelectedHistoryOriginal,
+  currentIdentityOriginalTransfer,
+  identityOriginalRemainder,
+  IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING,
+  lockSelectedHistoryOriginalPosition,
+  type SelectedHistoryPosition,
+  recordSelectedHistoryOriginalProgress,
+  withSelectedHistoryOriginalChild,
+  guardSelectedHistoryOriginalTransaction,
 } from './identity-original-admission.ts';
 
 type Job = {
@@ -109,9 +115,15 @@ export async function advanceSharedHistory(
     await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
     try {
       await tx.query("SET LOCAL lock_timeout='200ms'");
-      await tx.query(`SET LOCAL statement_timeout='${originalDeadline === null ? 2000 : Math.max(1, Math.min(2000, originalDeadline - Date.now()))}ms'`);
-      const job = (await tx.query<Job & SelectedHistoryPosition>('SELECT * FROM core.preference_history_job WHERE job_id=$1 FOR UPDATE', [jobId]))
-        .rows[0];
+      await tx.query(
+        `SET LOCAL statement_timeout='${originalDeadline === null ? 2000 : Math.max(1, Math.min(2000, originalDeadline - Date.now()))}ms'`,
+      );
+      const job = (
+        await tx.query<Job & SelectedHistoryPosition>(
+          'SELECT * FROM core.preference_history_job WHERE job_id=$1 FOR UPDATE',
+          [jobId],
+        )
+      ).rows[0];
       if (!job) throw new TypeError('Shared history job unavailable');
       if (original) await lockSelectedHistoryOriginalPosition(deps, original, job, tx);
       const proof = await barrier(tx, job);
@@ -273,69 +285,68 @@ export async function advanceSharedHistory(
       const unitDeps = { pool: deps.pool, client: deps.client, env: deps.env, clock, registry: deps.registry };
       const enter = original
         ? <T>(body: (funded: HistoryReceivingContext) => Promise<T>) =>
-          withSelectedHistoryOriginalChild(unitDeps, original, jobId, body)
+            withSelectedHistoryOriginalChild(unitDeps, original, jobId, body)
         : <T>(body: (funded: HistoryReceivingContext) => Promise<T>) =>
-          withAgentIdentityHistoryUnit(unitDeps, { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) }, body);
+            withAgentIdentityHistoryUnit(unitDeps, { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) }, body);
       return await enter(async (funded) => {
-          const gap = await minimizeHistoryWork(
-            deps.pool,
-            deps.client,
-            { partition_no: job.scan_partition, account_route: job.account_route, account_id: job.account_id },
-            work,
-            deps.registry,
-            proof,
-            { env: deps.env!, clock },
-          );
-          if (gap) {
-            await identityHistoryCommand(deps.pool, funded, async (tx) => {
-              await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 0));
-              await tx.query(
-                "UPDATE core.preference_history_job SET next_run=now()+interval '10 seconds' WHERE job_id=$1",
-                [jobId],
-              );
-            });
-            return result('more', gap);
-          }
-          const unit = currentAgentIdentityHistoryUnit();
-          if (!unit?.stage) return result('more', 'identity-history-current-unit-unavailable');
-          return identityHistoryCommand(deps.pool, funded, async (tx) => {
-            await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 4096));
-            const current = (
-              await tx.query<Job>(`SELECT * FROM core.preference_history_job WHERE job_id=$1 FOR UPDATE`, [jobId])
-            ).rows[0];
-            if (
-              !current ||
-              current.phase !== job.phase ||
-              current.scan_partition !== job.scan_partition ||
-              current.scan_type !== job.scan_type ||
-              !sameLocator(current.scan_locator, job.scan_locator) ||
-              current.account_id !== job.account_id ||
-              current.account_route !== job.account_route ||
-              current.barrier_id !== job.barrier_id ||
-              current.barrier_version !== job.barrier_version ||
-              current.barrier_at !== job.barrier_at
-            )
-              return result('more', 'identity-history-selected-cursor-changed');
-            await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 128));
-            await barrier(tx, current);
-            const held = await lockRecordedAgentIdentityHistory(tx, deps.client, unit.stage!, funded);
-            if (held.state === 'pending') return result('more', held.gap);
-            const receivingGap = await recordHistoryReceivingProof(
-              tx,
-              proof,
-              job.scan_partition,
-              decodeLocator('durable-work/v1', work),
-              deps.pool,
-            );
-            if (receivingGap) return result('more', receivingGap);
+        const gap = await minimizeHistoryWork(
+          deps.pool,
+          deps.client,
+          { partition_no: job.scan_partition, account_route: job.account_route, account_id: job.account_id },
+          work,
+          deps.registry,
+          proof,
+          { env: deps.env!, clock },
+        );
+        if (gap) {
+          await identityHistoryCommand(deps.pool, funded, async (tx) => {
             await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 0));
-            await scannedArtifact(tx, current, 'durable-work/v1', work, null);
-            if (original) await recordSelectedHistoryOriginalProgress(deps, original, jobId, tx);
-            // The real Source/domain/fence and receiving locks survive this command's COMMIT.
-            return result('more');
+            await tx.query(
+              "UPDATE core.preference_history_job SET next_run=now()+interval '10 seconds' WHERE job_id=$1",
+              [jobId],
+            );
           });
-        },
-      );
+          return result('more', gap);
+        }
+        const unit = currentAgentIdentityHistoryUnit();
+        if (!unit?.stage) return result('more', 'identity-history-current-unit-unavailable');
+        return identityHistoryCommand(deps.pool, funded, async (tx) => {
+          await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 4096));
+          const current = (
+            await tx.query<Job>(`SELECT * FROM core.preference_history_job WHERE job_id=$1 FOR UPDATE`, [jobId])
+          ).rows[0];
+          if (
+            !current ||
+            current.phase !== job.phase ||
+            current.scan_partition !== job.scan_partition ||
+            current.scan_type !== job.scan_type ||
+            !sameLocator(current.scan_locator, job.scan_locator) ||
+            current.account_id !== job.account_id ||
+            current.account_route !== job.account_route ||
+            current.barrier_id !== job.barrier_id ||
+            current.barrier_version !== job.barrier_version ||
+            current.barrier_at !== job.barrier_at
+          )
+            return result('more', 'identity-history-selected-cursor-changed');
+          await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 128));
+          await barrier(tx, current);
+          const held = await lockRecordedAgentIdentityHistory(tx, deps.client, unit.stage!, funded);
+          if (held.state === 'pending') return result('more', held.gap);
+          const receivingGap = await recordHistoryReceivingProof(
+            tx,
+            proof,
+            job.scan_partition,
+            decodeLocator('durable-work/v1', work),
+            deps.pool,
+          );
+          if (receivingGap) return result('more', receivingGap);
+          await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 0));
+          await scannedArtifact(tx, current, 'durable-work/v1', work, null);
+          if (original) await recordSelectedHistoryOriginalProgress(deps, original, jobId, tx);
+          // The real Source/domain/fence and receiving locks survive this command's COMMIT.
+          return result('more');
+        });
+      });
     } catch (error) {
       if (error instanceof IdentityHistoryWorkUnavailable) return result('more', error.message);
       throw error;

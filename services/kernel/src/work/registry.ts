@@ -96,8 +96,13 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     },
     addEffects(effects) {
       if (!accepting) throw new Error('Cannot add effects after work composition');
-      collectedEffects.push(...effects.map((effect) => effect.name === IDENTITY_FX_EFFECT
-        ? bindIdentityOriginalEffect(effect, { pool: options.pool, client: options.client }) : effect));
+      collectedEffects.push(
+        ...effects.map((effect) =>
+          effect.name === IDENTITY_FX_EFFECT
+            ? bindIdentityOriginalEffect(effect, { pool: options.pool, client: options.client })
+            : effect,
+        ),
+      );
     },
     addNativeEffects(effects) {
       if (!accepting) throw new Error('Cannot add native effects after work composition');

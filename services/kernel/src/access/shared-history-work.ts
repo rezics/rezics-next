@@ -122,8 +122,13 @@ export const sharedHistoryWorkModule: WorkModule = {
                  FOR UPDATE SKIP LOCKED)`,
               [digest, generation],
             );
-            await advanceSelectedHistoryOriginal({ pool: context.pool, client: context.client,
-              registry: history, env: context.env, clock: context.clock });
+            await advanceSelectedHistoryOriginal({
+              pool: context.pool,
+              client: context.client,
+              registry: history,
+              env: context.env,
+              clock: context.clock,
+            });
           } catch {
             // Private source/SDK exceptions stay out of diagnostic and durable history.
             console.error('shared_history_retry');
