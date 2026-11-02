@@ -8,6 +8,8 @@ import { reserveIdentityTerminalClosure } from './identity-epoch-mapping.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import { bindSemanticProducerRoles } from './erasure-producer.ts';
 import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
+import { IDENTITY_EPOCH_BOOTSTRAP } from './events.ts';
+import bootstrapHome from './identity-epoch-bootstrap-insert-bootstrap-home.sql';
 
 export type TerminalClosureSource = Readonly<{
   route: number;
@@ -31,12 +33,15 @@ const key = (id: string) => routeOf(id)!;
 /** Each command is one executor attempt. A lost result is recovered through the
  * exact native phase fields; an SDK response is never used as custody evidence.
  */
-async function native<T>(pool: Pool, partition: number, body: (tx: CommandTransaction) => Promise<T>) {
+async function native<T>(pool: Pool, partition: number, body: (tx: CommandTransaction) => Promise<T>, schedule = false) {
   return withSingleCommandAttempt(() => runCommand(pool, { partition }, async (tx) => {
     bindSemanticProducerRoles(tx, []);
     const value = await body(tx);
     recordIdentityEpochNativeCommit(tx, 'bootstrap');
-    return { value, events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition, generation: '0' } }] };
+    const owner = await readPartition(tx, partition);
+    if (!owner || owner.writeState !== 'active') throw unavailable();
+    return { value, events: [{ type: schedule ? IDENTITY_EPOCH_BOOTSTRAP : IDENTITY_EPOCH_PROGRESS,
+      data: { partition, generation: (owner.position + 1n).toString() } }] };
   }));
 }
 
@@ -82,21 +87,23 @@ async function directory(pool: Pool, terminal: string, original: string, enrollm
 async function exportSource(pool: Pool, exported: IdentityNativeReceipt, row: TerminalClosureSource): Promise<Source | null> {
   const result = await native(pool, exported.partition, async (tx) => {
     const retained = (await tx.query(
-      `SELECT b.closure_enrollment,b.closure_complete FROM semantic.identity_epoch_bootstrap_row b
+      `SELECT b.closure_enrollment,b.closure_complete,p.generation FROM semantic.identity_epoch_bootstrap_row b
        JOIN semantic.identity_epoch_native_commit n ON n.partition_no=b.partition_no AND n.transaction_id=b.transaction_id
+       JOIN semantic.identity_epoch_bootstrap_page p ON p.partition_no=b.partition_no AND p.transaction_id=b.transaction_id
        WHERE b.partition_no=$1 AND b.transaction_id=$2 AND b.original=$3 AND b.route=$4
          AND n.epoch=$5 AND n.position=$6 AND b.source_revision=$7`,
       [exported.partition, exported.transactionId, row.original, row.route, exported.epoch, exported.position.toString(), row.source_revision],
     )).rows[0];
-    const recovered = !retained ? (await tx.query(`SELECT closure_enrollment,false AS closure_complete
+    const recovered = !retained ? (await tx.query(`SELECT closure_enrollment,false AS closure_complete,p.generation
       FROM semantic.identity_epoch_mapping m JOIN semantic.identity_epoch_native_commit n
         ON n.partition_no=m.route/16 AND n.transaction_id=m.closure_hold_transaction AND n.xmin::text=m.closure_hold_xid
+      JOIN semantic.identity_epoch_bootstrap_page p ON p.partition_no=m.route/16 AND p.transaction_id=m.closure_export_transaction
       WHERE m.route=$1 AND m.original=$2 AND m.closure_export_transaction=$3 AND m.source_revision=$4
         AND m.closure_state IN ('exporting','installed','active')`,
     [row.route, row.original, exported.transactionId, row.source_revision])).rows[0] : retained;
     if (!recovered) throw unavailable();
     const current = await source(tx, row.original);
-    if (!current) throw unavailable();
+    if (!current || current.actual_epoch !== exported.epoch) throw unavailable();
     if (!current.present || current.revision !== row.source_revision || (current.immediate ?? row.original) !== row.terminal) {
       await tx.query(`UPDATE semantic.identity_epoch_bootstrap_row SET closure_complete=true
         WHERE partition_no=$1 AND transaction_id=$2 AND route=$3 AND original=$4`,
@@ -104,27 +111,28 @@ async function exportSource(pool: Pool, exported: IdentityNativeReceipt, row: Te
       return null; // Only h is acknowledged by the caller; h+1 remains dirty.
     }
     if (current.original && current.closure_state === 'active' && current.source_revision === row.source_revision &&
-        current.owner_epoch === exported.epoch && current.closure_immediate === (current.immediate ?? row.original)) return current;
+        current.owner_epoch === exported.epoch && current.closure_immediate === (current.immediate ?? row.original))
+      return { ...current, closure_export_generation: recovered.generation };
     if (current.closure_successor_ticket) return null;
     if (current.closure_state === 'withdrawn' && current.closure_claim && current.revision === current.source_revision) return null;
     if (current.closure_state === 'exporting' || current.closure_state === 'installed') {
       if (current.closure_enrollment !== recovered.closure_enrollment) return null;
-      return current;
+      return { ...current, closure_export_generation: recovered.generation };
     }
     const allocation = await reserveIdentityTerminalClosure(tx, exported.transactionId, row.terminal, 1);
     const { transactionId } = currentCommand(tx);
     await tx.query(
       `INSERT INTO semantic.identity_epoch_mapping(route,original,terminal,epoch,origin,recorded_transaction_id,
         owner_epoch,source_revision,closure_state,closure_enrollment,closure_immediate,closure_export_transaction,closure_source_reservation,closure_hold_transaction,closure_hold_xid)
-       VALUES($1,$2,$3,0,'published',$4,$5,$6,'exporting',$7,$3,$8,$9,$4,pg_current_xact_id()::text)
+       VALUES($1,$2,$3,0,'published',$4,$5,$6,'exporting',$7,$3,$8,$9,$4,pg_current_xact_id()::xid::text)
        ON CONFLICT(route,original) DO UPDATE SET closure_state='exporting',closure_enrollment=$7,
-         closure_immediate=$3,closure_export_transaction=$8,closure_source_reservation=$9,closure_hold_transaction=$4,closure_hold_xid=pg_current_xact_id()::text,source_revision=$6,owner_epoch=$5,
+         closure_immediate=$3,closure_export_transaction=$8,closure_source_reservation=$9,closure_hold_transaction=$4,closure_hold_xid=pg_current_xact_id()::xid::text,source_revision=$6,owner_epoch=$5,
          closure_generation=NULL,closure_incarnation=NULL,closure_registration_transaction=NULL,
          closure_install_transaction=NULL,closure_ack_transaction=NULL,closure_claim=NULL,closure_mutation_xid=NULL,
-         control_partition=NULL,control_group=NULL,recorded_transaction_id=$4`,
+         control_partition=NULL,control_group=NULL,recorded_transaction_id=$4,origin='published'`,
       [row.route, row.original, row.terminal, transactionId, exported.epoch, row.source_revision, recovered.closure_enrollment, exported.transactionId, allocation],
     );
-    return source(tx, row.original);
+    return { ...await source(tx, row.original), closure_export_generation: recovered.generation };
   });
   return result.value;
 }
@@ -185,14 +193,14 @@ async function register(pool: Pool, exported: IdentityNativeReceipt, original: S
         source_partition,source_generation,present,closure_state,closure_enrollment,closure_incarnation,
         closure_source_revision,closure_source_epoch,closure_export_transaction,closure_registration_transaction,
         closure_registration_xid,closure_reservation)
-      VALUES($1,$2,$3,$4,$5,0,true,'preparing',$6,$7,$8,$9,$10,$11,pg_current_xact_id()::text,$12)
+      VALUES($1,$2,$3,$4,$5,$13,true,'preparing',$6,$7,$8,$9,$10,$11,pg_current_xact_id()::xid::text,$12)
       ON CONFLICT(partition_no,generation,original) DO UPDATE SET
-        closure_state='preparing',closure_enrollment=$6,closure_incarnation=$7,closure_source_revision=$8,
+        closure_state='preparing',closure_enrollment=$6,closure_incarnation=$7,closure_source_revision=$8,source_generation=$13,
         closure_source_epoch=$9,closure_export_transaction=$10,closure_registration_transaction=$11,
-        closure_registration_xid=pg_current_xact_id()::text,closure_install_transaction=NULL,
+        closure_registration_xid=pg_current_xact_id()::xid::text,closure_install_transaction=NULL,
         closure_disposition_transaction=NULL,closure_release_transaction=NULL,closure_claim=NULL,closure_reservation=$12,present=true`,
     [home(terminal), group.generation, original.original, terminal, home(original.original), original.closure_enrollment,
-      group.closure_incarnation, original.source_revision, exported.epoch, exported.transactionId, transactionId, allocation]);
+      group.closure_incarnation, original.source_revision, exported.epoch, exported.transactionId, transactionId, allocation, original.closure_export_generation]);
     if (original.original === terminal) await tx.query(`UPDATE semantic.identity_epoch_mapping
       SET terminal=$3,control_partition=$4,control_group=$3,closure_generation=$5,closure_incarnation=$6
       WHERE route=$1 AND original=$2 AND closure_enrollment=$7 AND closure_state='exporting'`,
@@ -215,7 +223,7 @@ async function install(pool: Pool, original: Source, entry: Directory): Promise<
     const { transactionId } = currentCommand(tx);
     await tx.query(`UPDATE semantic.identity_epoch_mapping SET closure_state='installed',terminal=$3,
       control_partition=$4,control_group=$3,closure_generation=$5,closure_incarnation=$6,
-      closure_registration_transaction=$7,closure_install_transaction=$8,closure_install_xid=pg_current_xact_id()::text,
+      closure_registration_transaction=$7,closure_install_transaction=$8,closure_install_xid=pg_current_xact_id()::xid::text,
       epoch=$9,recorded_transaction_id=$8 WHERE route=$1 AND original=$2`,
     [current.route, current.original, entry.terminal, entry.partition_no, entry.generation, entry.closure_incarnation,
       entry.closure_registration_transaction, transactionId, entry.published_epoch]);
@@ -224,14 +232,18 @@ async function install(pool: Pool, original: Source, entry: Directory): Promise<
 }
 
 async function committedInstall(pool: Pool, original: string, enrollment: string): Promise<Source | null> {
-  return withReadTransaction(pool, async (tx) => (await tx.query(
+  return withReadTransaction(pool, async (tx) => {
+    const owner = await readPartition(tx, home(original));
+    if (!owner || owner.writeState !== 'active') return null;
+    return (await tx.query(
     `SELECT m.*,n.epoch AS install_epoch,n.position AS install_position
      FROM semantic.identity_epoch_mapping m JOIN semantic.identity_epoch_native_commit n
        ON n.partition_no=m.route/16 AND n.transaction_id=m.closure_install_transaction AND n.xmin::text=m.closure_install_xid
      JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch AND p.position>=n.position AND p.write_state='active'
      WHERE m.route=$1 AND m.original=$2 AND m.closure_enrollment=$3 AND m.closure_state IN ('installed','active')`,
     [key(original), original, enrollment],
-  )).rows[0] ?? null);
+    )).rows[0] ?? null;
+  });
 }
 
 async function promote(pool: Pool, installed: Source, entry: Directory): Promise<Directory | null> {
@@ -259,7 +271,7 @@ async function acknowledge(pool: Pool, original: Source, entry: Directory): Prom
         current.closure_generation !== entry.generation || current.closure_incarnation !== entry.closure_incarnation ||
         current.closure_registration_transaction !== entry.closure_registration_transaction) return false;
     const { transactionId } = currentCommand(tx);
-    await tx.query(`UPDATE semantic.identity_epoch_mapping SET closure_state='active',closure_ack_transaction=$3,closure_ack_xid=pg_current_xact_id()::text,closure_source_reservation=NULL
+    await tx.query(`UPDATE semantic.identity_epoch_mapping SET closure_state='active',closure_ack_transaction=$3,closure_ack_xid=pg_current_xact_id()::xid::text,closure_source_reservation=NULL
       WHERE route=$1 AND original=$2`, [current.route, current.original, transactionId]);
     if (current.closure_source_reservation) await releaseCopies(tx, current.closure_source_reservation, 1);
     // ACK exactly h. A later independent dirty head is never consumed here.
@@ -364,12 +376,16 @@ async function finishSourceRow(pool: Pool, exported: IdentityNativeReceipt, orig
   });
 }
 async function finalizeDirectory(pool: Pool, entry: Directory) {
-  const actual = await withReadTransaction(pool, async (tx) => (await tx.query(
+  const actual = await withReadTransaction(pool, async (tx) => {
+    const owner = await readPartition(tx, home(entry.original));
+    if (!owner || owner.writeState !== 'active') return null;
+    return (await tx.query(
     `SELECT m.* FROM semantic.identity_epoch_mapping m JOIN semantic.identity_epoch_native_commit n
        ON n.partition_no=m.route/16 AND n.transaction_id=m.closure_ack_transaction AND n.xmin::text=m.closure_ack_xid
      WHERE m.route=$1 AND m.original=$2 AND m.closure_enrollment=$3 AND m.closure_state='active'`,
     [key(entry.original), entry.original, entry.closure_enrollment],
-  )).rows[0]);
+    )).rows[0];
+  });
   if (!actual || actual.closure_install_transaction !== entry.closure_install_transaction) return;
   await native(pool, entry.partition_no, async (tx) => {
     await tx.query(`SELECT 1 FROM semantic.identity_epoch_group WHERE partition_no=$1 AND terminal=$2 FOR UPDATE`,
@@ -413,11 +429,14 @@ export async function drainIdentityTerminalClosure(pool: Pool, terminal: string,
     if (group.closure_state === 'open') {
       await reserveIdentityTerminalClosure(tx, claim, terminal, Number(group.observed_count), false);
       await tx.query(`UPDATE semantic.identity_epoch_group
-      SET closure_state='closing',closure_claim=$3,closure_after=NULL,ready=false,version=version+1
-      WHERE partition_no=$1 AND terminal=$2`, [home(terminal), terminal, claim]);
+      SET closure_state='closing',closure_claim=$3,closure_after=NULL,closure_close_transaction=$4,ready=false,version=version+1
+      WHERE partition_no=$1 AND terminal=$2`, [home(terminal), terminal, claim, currentCommand(tx).transactionId]);
+      await tx.query(bootstrapHome.sql, [home(terminal), home(terminal) * 16 - 1, '00000000-0000-0000-0000-000000000000']);
+      await tx.query(`UPDATE semantic.identity_epoch_bootstrap_home SET needs_work=true,sealed_generation=NULL,
+        sealed_transaction_id=NULL,sealed_epoch=NULL,sealed_position=NULL WHERE partition_no=$1`, [home(terminal)]);
     }
     return group;
-  });
+  }, true);
   if (!closed.value) return null;
   const group = closed.value;
   const page = await withReadTransaction(pool, async (tx) => (await tx.query(
@@ -432,18 +451,26 @@ export async function drainIdentityTerminalClosure(pool: Pool, terminal: string,
       if (!current) throw unavailable();
       // A legacy directory row cannot certify an installed closure. Its native
       // mapping must still be withdrawn; absence is acknowledged at this home.
-      if (current.original && member.closure_enrollment && current.closure_enrollment === member.closure_enrollment) {
-        if (current.owner_epoch !== current.actual_epoch || current.owner_epoch !== member.closure_source_epoch) throw unavailable();
+      const exact = member.closure_enrollment && current.closure_enrollment === member.closure_enrollment;
+      const legacy = !member.closure_enrollment && current.control_group === terminal &&
+        (current.closure_state === 'legacy' || (current.closure_state === 'withdrawn' && current.closure_claim === claim));
+      if (current.original && (exact || legacy)) {
+        if (current.owner_epoch !== current.actual_epoch || (member.closure_source_epoch !== null &&
+            member.closure_source_epoch !== undefined && current.owner_epoch !== member.closure_source_epoch)) throw unavailable();
         const { transactionId } = currentCommand(tx);
         const revision = current.closure_state === 'withdrawn' && current.closure_claim === claim ? current.source_revision :
           (await tx.query(`INSERT INTO semantic.identity_epoch_dirty(route,original) VALUES($1,$2)
             ON CONFLICT(route,original) DO UPDATE SET revision=identity_epoch_dirty.revision+1 RETURNING revision`,
           [key(member.original), member.original])).rows[0]!.revision;
         await tx.query(`UPDATE semantic.identity_epoch_mapping SET source_revision=$5,closure_state='withdrawn' ,closure_claim=$3,
-          closure_successor_ticket=NULL,closure_successor_original=NULL,closure_ticket_reservation=NULL,closure_source_reservation=NULL,closure_withdraw_transaction=$4,closure_withdraw_xid=pg_current_xact_id()::text,
-          closure_mutation_xid=NULL WHERE route=$1 AND original=$2`, [key(member.original), member.original, claim, transactionId, revision]);
+          closure_successor_ticket=NULL,closure_successor_original=NULL,closure_ticket_reservation=NULL,closure_source_reservation=NULL,closure_withdraw_transaction=$4,closure_withdraw_xid=pg_current_xact_id()::xid::text,
+          closure_generation=$6,closure_incarnation=$7,closure_immediate=coalesce(closure_immediate,$8::uuid),
+          closure_mutation_xid=NULL WHERE route=$1 AND original=$2`,
+        [key(member.original), member.original, claim, transactionId, revision, group.generation, group.closure_incarnation, current.immediate ?? member.original]);
         if (current.closure_source_reservation) await releaseCopies(tx, current.closure_source_reservation, 1);
         if (current.closure_ticket_reservation) await releaseCopies(tx, current.closure_ticket_reservation, 1);
+        await tx.query(`UPDATE semantic.identity_epoch_bootstrap_home SET needs_work=true,sealed_generation=NULL,
+          sealed_transaction_id=NULL,sealed_epoch=NULL,sealed_position=NULL WHERE partition_no=$1`, [member.source_partition]);
       } else if (current.original && current.control_group === terminal && current.closure_state !== 'withdrawn') {
         // An unclassified installed route is not a guessed removal receipt.
         throw unavailable();
@@ -534,7 +561,7 @@ async function cancelUnpublished(tx: CommandTransaction, current: Source, claim:
   const command = currentCommand(tx);
   await tx.query(`UPDATE semantic.identity_epoch_mapping SET closure_state='withdrawn',closure_claim=$3,
     closure_source_reservation=NULL,closure_mutation_xid=pg_current_xact_id()::text,
-    closure_withdraw_transaction=$4,closure_withdraw_xid=pg_current_xact_id()::text
+    closure_withdraw_transaction=$4,closure_withdraw_xid=pg_current_xact_id()::xid::text
     WHERE route=$1 AND original=$2`, [current.route, current.original, claim, command.transactionId]);
   if (current.closure_source_reservation) await releaseCopies(tx, current.closure_source_reservation, 1);
 }
@@ -610,13 +637,15 @@ export async function cleanIdentityTerminalClosure(pool: Pool, terminal: string)
     if ((await tx.query(`SELECT 1 FROM semantic.identity_epoch_original
       WHERE partition_no=$1 AND terminal=$2 AND generation=$3 LIMIT 1`, [home(terminal), terminal, group.generation])).rowCount) return false;
     if ((await tx.query(`SELECT 1 FROM semantic.redirect WHERE route=$1 AND subject_id=$2 LIMIT 1`, [key(terminal), terminal])).rowCount) {
-      await tx.query(`UPDATE semantic.identity_epoch_group SET closure_cleanup_complete=true
+      await tx.query(`UPDATE semantic.identity_epoch_group SET closure_cleanup_complete=true,closure_claim=NULL
         WHERE partition_no=$1 AND terminal=$2`, [home(terminal), terminal]);
+      if (group.closure_claim) await releaseCopies(tx, group.closure_claim, 0);
       return true;
     }
     await tx.query(`UPDATE semantic.identity_epoch_group SET generation=gen_random_uuid(),closure_incarnation=gen_random_uuid(),
-      closure_state='open',closure_claim=NULL,closure_after=NULL,closure_seal_transaction=NULL,closure_cleanup_complete=false,
+      closure_state='open',closure_claim=NULL,closure_after=NULL,closure_close_transaction=NULL,closure_seal_transaction=NULL,closure_cleanup_complete=false,
       observed_count=0,ready=false,version=version+1 WHERE partition_no=$1 AND terminal=$2`, [home(terminal), terminal]);
+    if (group.closure_claim) await releaseCopies(tx, group.closure_claim, 0);
     return true;
   })).value;
 }
@@ -662,11 +691,16 @@ export async function recoverIdentityTerminalClosure(pool: Pool, partition: numb
   await recoverSuccessorTickets(pool, partition);
   const row = await withReadTransaction(pool, async (tx) => (await tx.query(
     `SELECT g.*,n.epoch AS native_epoch,n.position AS native_position FROM semantic.identity_epoch_group g
-     JOIN semantic.identity_epoch_native_commit n ON n.partition_no=g.partition_no AND n.transaction_id=g.closure_seal_transaction
+     JOIN semantic.identity_epoch_native_commit n ON n.partition_no=g.partition_no
+       AND n.transaction_id=coalesce(g.closure_seal_transaction,g.closure_close_transaction)
      JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch AND p.position>=n.position AND p.write_state='active'
-     WHERE g.partition_no=$1 AND g.closure_state='drained' AND NOT g.closure_cleanup_complete ORDER BY g.terminal LIMIT 1`, [partition],
+     WHERE g.partition_no=$1 AND g.closure_state IN ('closing','drained') AND NOT g.closure_cleanup_complete ORDER BY g.terminal LIMIT 1`, [partition],
   )).rows[0]);
   if (!row) return;
+  if (row.closure_state === 'closing') {
+    await drainIdentityTerminalClosure(pool, row.terminal, row.closure_claim);
+    return;
+  }
   const drained: DrainClaim = { terminal: row.terminal, generation: row.generation, incarnation: row.closure_incarnation,
     claim: row.closure_claim, native: { partition, transactionId: row.closure_seal_transaction, epoch: row.native_epoch, position: BigInt(row.native_position) } };
   await releaseIdentityTerminalClaim(pool, drained);
@@ -679,6 +713,10 @@ export async function recoverIdentityTerminalClosure(pool: Pool, partition: numb
  * ACK, and this bounded keyset revisits those headers without a path vector.
  */
 export async function advanceIdentityTerminalClosures(pool: Pool, partition: number): Promise<void> {
+  const pending = await withReadTransaction(pool, async (tx) => (await tx.query(`SELECT 1
+    FROM semantic.identity_epoch_mapping WHERE route BETWEEN $1*16 AND $1*16+15
+      AND closure_state IN ('exporting','installed') LIMIT 1`, [partition])).rowCount);
+  if (!pending) return;
   const selected = await native(pool, partition, async (tx) => {
     const cursor = (await tx.query(`SELECT closure_after_route,closure_after_original
       FROM semantic.identity_epoch_bootstrap_home WHERE partition_no=$1 FOR UPDATE`, [partition])).rows[0];

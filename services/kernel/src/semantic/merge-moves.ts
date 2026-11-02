@@ -371,6 +371,7 @@ export async function moveMergePage(
     });
   }
   const applied = await runIdentityTerminalCommand(pool, { partition: partitionOf(route) }, async (tx, { transactionId }) => {
+    await admitIdentityTerminalCapture(tx, [survivor]);
     const redirect = await redirectOf(tx, survivor);
     if (redirect) return { value: redirect, events: [projected(survivor)] };
     const current = (await readMember.run(tx, { route, subject_id: survivor, member_id: id })) as Move;

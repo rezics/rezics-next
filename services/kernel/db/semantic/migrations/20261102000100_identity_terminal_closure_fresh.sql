@@ -7,6 +7,7 @@ ALTER TABLE semantic.identity_epoch_group
  ADD COLUMN closure_state text NOT NULL DEFAULT 'open' CHECK (closure_state IN ('open','closing','drained')),
  ADD COLUMN closure_claim uuid,
  ADD COLUMN closure_after uuid,
+ ADD COLUMN closure_close_transaction uuid,
  ADD COLUMN closure_seal_transaction uuid,
  ADD COLUMN closure_cleanup_complete boolean NOT NULL DEFAULT false;
 ALTER TABLE semantic.identity_epoch_original
@@ -30,7 +31,7 @@ CREATE INDEX identity_terminal_closure_directory ON semantic.identity_epoch_orig
 CREATE INDEX identity_terminal_closure_unreleased ON semantic.identity_epoch_original
  (partition_no,terminal,generation,original) WHERE closure_state='withdrawn' AND closure_release_transaction IS NULL;
 CREATE INDEX identity_terminal_closure_cleanup ON semantic.identity_epoch_group(partition_no,terminal)
- WHERE closure_state='drained' AND NOT closure_cleanup_complete;
+ WHERE closure_state IN ('closing','drained') AND NOT closure_cleanup_complete;
 ALTER TABLE semantic.identity_epoch_mapping
  ADD COLUMN closure_state text NOT NULL DEFAULT 'legacy' CHECK (closure_state IN ('legacy','exporting','installed','active','withdrawn')),
  ADD COLUMN closure_enrollment uuid,
@@ -117,6 +118,7 @@ BEGIN
    IS NOT DISTINCT FROM (OLD.node,OLD.epoch,OLD.write_state,OLD.moved_to) THEN RETURN NEW; END IF;
  IF EXISTS(SELECT 1 FROM semantic.identity_epoch_control WHERE partition_no=OLD.partition_no AND prepare_job IS NOT NULL)
  OR EXISTS(SELECT 1 FROM semantic.identity_epoch_admission_source_hold WHERE partition_no=OLD.partition_no AND NOT closed)
+ OR EXISTS(SELECT 1 FROM semantic.identity_epoch_bootstrap_row WHERE partition_no=OLD.partition_no)
  OR EXISTS(SELECT 1 FROM semantic.identity_epoch_mapping WHERE route BETWEEN OLD.partition_no*16 AND OLD.partition_no*16+15
    AND (closure_state<>'legacy' OR closure_successor_ticket IS NOT NULL))
  OR EXISTS(SELECT 1 FROM semantic.identity_epoch_group WHERE partition_no=OLD.partition_no AND closure_claim IS NOT NULL)
