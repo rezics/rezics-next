@@ -1862,10 +1862,10 @@ stay constant for both pages; indexed blocks grow logarithmically with the selec
 independent of other subjects' histories. Statement disclosure measures one candidate mutation with fixed fanout;
 rows and statements stay constant and indexed blocks grow logarithmically with unrelated candidate history.
 
-| Operation                    | Bound                                                                                          | Growth check                                                                                                                         |
-| ---------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Revision-history pages       | Constant rows/statements for two fixed-size pages; logarithmic blocks in subject history.      | `test/semantic/revision-history-growth.test.ts`: first and deep cursor pages at scales `[1, 8, 64]`.                                 |
-| Statement disclosure change | Constant rows/statements for one affected candidate; logarithmic blocks in unrelated candidates. | `test/semantic/revision-history-growth.test.ts`: one-candidate disclosure change at scales `[1, 8, 64]`.                            |
+| Operation                   | Bound                                                                                            | Growth check                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Revision-history pages      | Constant rows/statements for two fixed-size pages; logarithmic blocks in subject history.        | `test/semantic/revision-history-growth.test.ts`: first and deep cursor pages at scales `[1, 8, 64]`.     |
+| Statement disclosure change | Constant rows/statements for one affected candidate; logarithmic blocks in unrelated candidates. | `test/semantic/revision-history-growth.test.ts`: one-candidate disclosure change at scales `[1, 8, 64]`. |
 
 ## Native subject page publication
 

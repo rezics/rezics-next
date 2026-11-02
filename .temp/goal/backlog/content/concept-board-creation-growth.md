@@ -1,27 +1,30 @@
 ---
 {
-  "goal": "performance",
-  "manager": "performance",
-  "kind": "implementation",
-  "paths": [
-    "services/kernel/src/semantic/read-subject.sql",
-    "services/kernel/src/content/routes.ts",
-    "services/kernel/test/content/board-read-growth.test.ts",
-    "services/kernel/src/content/README.md"
-  ],
-  "riskAreas": ["services/kernel/src/semantic/read-subject.sql"],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "acceptance": {
-    "command": ["bun", "run", "--cwd", "services/kernel", "check", "test/content/board-read-growth.test.ts"],
-    "placement": "default",
-    "tests": [
-      "Concept board creation through the route wrapper has constant rows and statements and logarithmic blocks as unrelated board, Realm and subject history grows at scales [1, 4, 16]"
+  'goal': 'performance',
+  'manager': 'performance',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/semantic/read-subject.sql',
+      'services/kernel/src/content/routes.ts',
+      'services/kernel/test/content/board-read-growth.test.ts',
+      'services/kernel/src/content/README.md',
     ],
-    "failing": false
-  },
-  "estimate": {"lines": 100, "files": 3}
+  'riskAreas': ['services/kernel/src/semantic/read-subject.sql'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    {
+      'command': ['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/content/board-read-growth.test.ts'],
+      'placement': 'default',
+      'tests':
+        [
+          'Concept board creation through the route wrapper has constant rows and statements and logarithmic blocks as unrelated board, Realm and subject history grows at scales [1, 4, 16]',
+        ],
+      'failing': false,
+    },
+  'estimate': { 'lines': 100, 'files': 3 },
 }
 ---
 
