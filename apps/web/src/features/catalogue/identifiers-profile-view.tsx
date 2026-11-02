@@ -38,11 +38,7 @@ function IdentifiersProfileLive({ id, locale, session, transport, review, initia
   const [retained, setRetained] = useState<Extract<EditorRead, { ok: true }> | undefined>();
   const current = query.data?.ok && query.data.public.subject.id === id ? query.data : undefined;
   if (current && retained !== current) setRetained(current);
-  const readable =
-    session === 'signed-in' &&
-    !query.isError &&
-    !query.isFetching &&
-    !!current;
+  const readable = session === 'signed-in' && !query.isError && !query.isFetching && !!current;
   return (
     <section className="flex flex-col gap-4" data-slot="identifiers-profile">
       {!readable && (
