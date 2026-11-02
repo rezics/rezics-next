@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, type ContextType, type ReactNode } from 'react';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
@@ -381,9 +382,17 @@ function RatingComparisons({ data, id, locale }: { data: Ratings; id: string; lo
   };
   const rows = (items: Comparison[]) =>
     items.map(({ realm, figure: item }) => (
-      <li key={realm.id} data-slot="rating-comparison" className="min-w-0 space-y-1 break-words">
-        <h3 className="font-medium">{realm.name}</h3>
-        {figure(item, realm.name)}
+      <li key={realm.id} data-slot="rating-comparison" className="min-w-0">
+        <ContentItemFrame
+          as="div"
+          data-slot="content-item-frame"
+          className="min-w-0 space-y-2 wrap-anywhere py-3 sm:py-4"
+        >
+          <ContentItemHeading level={3} className="text-[17px] leading-snug font-semibold sm:text-lg md:text-xl">
+            {realm.name}
+          </ContentItemHeading>
+          <div data-content-item-slot="preview">{figure(item, realm.name)}</div>
+        </ContentItemFrame>
       </li>
     ));
   return (

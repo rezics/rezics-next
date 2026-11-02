@@ -1,5 +1,7 @@
 import { useQuery, useQueryClient, type QueryClient, type QueryCacheNotifyEvent } from '@tanstack/react-query';
 import { useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { ListRowControl } from '@rezics/ui/list-row';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldDescription, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { m } from '../../paraglide/messages.js';
@@ -489,21 +491,36 @@ function PopulationVisit({
           {comparisons?.incomplete && <p role="status">{m.rating_population_concealed({}, options)}</p>}
           <ul className="grid gap-4 sm:grid-cols-2">
             {comparisons?.items.map((item) => (
-              <li key={item.id} data-slot="rating-comparison" className="min-w-0 space-y-2 break-words">
-                <h4 className="font-medium">{item.name}</h4>
-                <PopulationFigure {...{ item, question, locale }} />
-                <Button
-                  className={actionClass}
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    if (!guard()) return;
-                    region.current?.querySelector<HTMLElement>('legend')?.focus();
-                    changeSelection(selected.filter((id) => id !== item.id));
-                  }}
+              <li key={item.id} data-slot="rating-comparison" className="min-w-0">
+                <ContentItemFrame
+                  as="div"
+                  data-slot="content-item-frame"
+                  className="min-w-0 space-y-2 wrap-anywhere py-3 sm:py-4"
                 >
-                  {m.rating_population_remove({ name: item.name }, options)}
-                </Button>
+                  <ContentItemHeading
+                    level={4}
+                    className="text-[17px] leading-snug font-semibold sm:text-lg md:text-xl"
+                  >
+                    {item.name}
+                  </ContentItemHeading>
+                  <div data-content-item-slot="preview">
+                    <PopulationFigure {...{ item, question, locale }} />
+                  </div>
+                  <ListRowControl data-content-item-slot="actions" className="flex flex-wrap gap-2">
+                    <Button
+                      className={actionClass}
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        if (!guard()) return;
+                        region.current?.querySelector<HTMLElement>('legend')?.focus();
+                        changeSelection(selected.filter((id) => id !== item.id));
+                      }}
+                    >
+                      {m.rating_population_remove({ name: item.name }, options)}
+                    </Button>
+                  </ListRowControl>
+                </ContentItemFrame>
               </li>
             ))}
           </ul>
