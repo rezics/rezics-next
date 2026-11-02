@@ -2,16 +2,12 @@ import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import { act, createRef, type ComponentProps } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { LocaleProvider } from '@rezics/ui/locale';
 import accounts from '../src/kernel/recorded/accounts.json';
 import recorded from '../src/kernel/recorded/thread-posts.json';
 import type { PageAuthors } from '../src/identity/read';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
-import { RemovedPost } from '../src/threads/post-removed';
 import type { ThreadPost } from '../src/threads/reads';
-import { ExistingReviewNotice, SignInPrompt } from '../src/threads/write-prompts';
 
 // Component-boundary acceptance: native authority and browser layout remain separate obligations.
 const source = recorded.posts[0]!;
@@ -21,7 +17,7 @@ const decisionId = '0192f3a0-6c1e-7b2a-9d4e-000000000062/reference?appeal=read';
 const privateBody = 'Private removed body must never escape into text or attributes.';
 const privateTitle = 'Private deleted opening title must never escape.';
 const authors = Object.fromEntries(accounts.accounts.map((account) => [account.id, account])) as PageAuthors;
-type Props = ComponentProps<typeof RemovedPost>;
+type Props = ComponentProps<typeof import('../src/threads/post-removed').RemovedPost>;
 
 function erased(index: number, restorableUntil?: string): ThreadPost {
   const post = recorded.posts[index]!;
@@ -59,8 +55,44 @@ async function domWindow(width = 390) {
   return new Window({ url: 'https://site.test/en/threads/recovery', width, height: 844 });
 }
 
+function installDomGlobals(window: Awaited<ReturnType<typeof domWindow>>) {
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    location: window.location,
+    HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    matchMedia: window.matchMedia.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  return () => {
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  };
+}
+
 test('Complete usable removed post recovery and write prompts: native admission and private text/attribute absence', async () => {
   const window = await domWindow();
+  // Load the actual menu after DOM setup so its portal can also be exercised by the next test.
+  const restoreGlobals = installDomGlobals(window);
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { LocaleProvider } = await import('@rezics/ui/locale');
+  const { RemovedPost } = await import('../src/threads/post-removed');
   const previousLocale = getLocale();
   setLocale('en', { reload: false });
   const root = window.document.createElement('div');
@@ -130,36 +162,19 @@ test('Complete usable removed post recovery and write prompts: native admission 
     }
   } finally {
     setLocale(previousLocale, { reload: false });
+    restoreGlobals();
     await window.happyDOM.close();
   }
 });
 
 test('Complete usable removed post recovery and write prompts: independent callbacks, pending, failure, refresh and focus', async () => {
   const window = await domWindow(1280);
-  const globals = {
-    window,
-    document: window.document,
-    navigator: window.navigator,
-    location: window.location,
-    HTMLElement: window.HTMLElement,
-    HTMLButtonElement: window.HTMLButtonElement,
-    Element: window.Element,
-    Node: window.Node,
-    Document: window.Document,
-    DocumentFragment: window.DocumentFragment,
-    MutationObserver: window.MutationObserver,
-    ResizeObserver: window.ResizeObserver,
-    getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: window.requestAnimationFrame.bind(window),
-    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-    matchMedia: window.matchMedia.bind(window),
-    IS_REACT_ACT_ENVIRONMENT: true,
-  };
-  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals))
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const restoreGlobals = installDomGlobals(window);
   const previousLocale = getLocale();
   setLocale('en', { reload: false });
+  const { LocaleProvider } = await import('@rezics/ui/locale');
+  const { RemovedPost } = await import('../src/threads/post-removed');
+  const { ExistingReviewNotice, SignInPrompt } = await import('../src/threads/write-prompts');
   const { createRoot } = await import('react-dom/client');
   const storybookRequire = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
   const { default: userEvent } = await import(storybookRequire.resolve('@testing-library/user-event'));
@@ -308,10 +323,7 @@ test('Complete usable removed post recovery and write prompts: independent callb
   } finally {
     await act(async () => { root.unmount(); });
     setLocale(previousLocale, { reload: false });
-    for (const [key, descriptor] of previous) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
-    }
+    restoreGlobals();
     await window.happyDOM.close();
   }
 });
