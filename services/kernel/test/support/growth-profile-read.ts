@@ -6,11 +6,7 @@ import {
   relationIdentityKey,
   type RelationIdentity,
 } from './growth-relation-identity.ts';
-import {
-  admitGrowthProfileInput,
-  GROWTH_PROFILE_EXPANSION,
-  growthProfileLines,
-} from './growth-profile-input.ts';
+import { admitGrowthProfileInput, GROWTH_PROFILE_EXPANSION, growthProfileLines } from './growth-profile-input.ts';
 
 /** Omitted-check × source-run pairs admitted before missing-run lists, matching calibration's 256×32 capacities. */
 export const GROWTH_PROFILE_DIAGNOSTIC_EXPANSION = 256 * 32;

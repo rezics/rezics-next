@@ -110,7 +110,11 @@ test('unsupported repetition dimensions fail before mapping, including later-omi
     repetitions: [heavy, heavy, heavy],
     relationSizes: [{}, {}, {}],
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
-    shadow: { rows: { outcome: 'compatible' }, blocks: { outcome: 'compatible' }, statements: { outcome: 'compatible' } },
+    shadow: {
+      rows: { outcome: 'compatible' },
+      blocks: { outcome: 'compatible' },
+      statements: { outcome: 'compatible' },
+    },
   });
   expect(() =>
     readGrowthProfiles([
