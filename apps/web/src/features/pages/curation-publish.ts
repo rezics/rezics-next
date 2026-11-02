@@ -17,7 +17,7 @@ export type PublicationState = {
   active: ActiveCuration | null;
   readFailure: Exclude<PublicationRead, { ok: true }> | null;
   busy: boolean;
-  retryAt?: number;
+  retryAt?: number | undefined;
 };
 
 export type CurationPublicationVisit = {
