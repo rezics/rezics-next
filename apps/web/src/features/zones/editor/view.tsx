@@ -45,9 +45,7 @@ function ZoneNavigationGuard({
   busy: boolean;
 }) {
   const router = useRouter({ warn: false });
-  return router ? (
-    <RouterDepartureGuard session={session} generation={generation} dirty={dirty} busy={busy} />
-  ) : null;
+  return router ? <RouterDepartureGuard session={session} generation={generation} dirty={dirty} busy={busy} /> : null;
 }
 
 function RouterDepartureGuard({

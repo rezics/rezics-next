@@ -108,7 +108,9 @@ test('Zone draft navigation stays with the exact edits, allows a deliberate leav
     edited.configuration.pages.push({ route: 'guide', document: { root: { props: {} }, content: [] } });
     edited.configuration.scope = ['books/fiction'];
     edited.mounts = [
-      fixture.initial.options.collections.kind === 'ready' ? fixture.initial.options.collections.value.items[0]!.id : '',
+      fixture.initial.options.collections.kind === 'ready'
+        ? fixture.initial.options.collections.value.items[0]!.id
+        : '',
     ];
     await act(async () => session.edit(edited));
     const retained = session.snapshot().draft;
