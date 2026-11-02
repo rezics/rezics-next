@@ -8,7 +8,9 @@ import { fixturePool, harness } from './test-support.ts';
 test('the Codex tier comes from settings: a profile kept from a Fast attempt launches on the configured tier', () => {
   const pool = fixturePool();
   // Built from the package defaults so the test needs no Git checkout (promotion runs it in a plain copy).
-  const codex = { ...(defaults.codex as object), serviceTier: 'default' } as NonNullable<Parameters<typeof launchCommand>[0]['codex']>;
+  const codex = { ...(defaults.codex as object), serviceTier: 'default' } as NonNullable<
+    Parameters<typeof launchCommand>[0]['codex']
+  >;
   const [, args] = launchCommand({
     profile: { cli: 'codex', model: 'gpt-6.1-sol', effort: 'high', poolClass: 'codex', serviceTier: 'fast' },
     pool: { ...pool, cli: 'codex', command: 'codex' },

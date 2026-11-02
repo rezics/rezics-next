@@ -1,3 +1,4 @@
+import { trackFixtureWait } from './fixture-process-ownership.ts';
 import {
   ProofCapacityQueuedError,
   ProofUnavailableError,
@@ -15,7 +16,6 @@ import {
   openSync,
   readFileSync,
   readSync,
-  readdirSync,
   statSync,
 } from 'node:fs';
 import { hostname } from 'node:os';
@@ -35,8 +35,10 @@ import {
 import { assessUsageLimitRefusal, markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
-import { classifyFailure } from './failures.ts';
-import { matchesPath } from './briefs.ts';
+import { classifyFailure, estimateOverrun } from './failures.ts';
+import { devProductBrief, matchesPath } from './briefs.ts';
+import { blockerFingerprint, noProgressTwice, toolRetryDelay } from './attempt-progress.ts';
+import { checkHostsInOutage } from './watchdog.ts';
 import { evidenceBundle } from './evidence.ts';
 import { consult } from './consult.ts';
 import { makeRecord, readMeasurement, readLogTail, reportedApproaches, CHECK_HOST_TRANSPORT } from './records.ts';
@@ -47,6 +49,7 @@ import {
   canonicalConflictPaths,
   completeRebaseConflictContext,
   repeatedNoProgressConflict,
+  sameRebaseConflict,
   REBASE_CONFLICT_HISTORY_LIMIT,
 } from './conflict-progress.ts';
 import {
@@ -205,50 +208,21 @@ function terminalCheckFailureEvidence(task: Task, id: string, value: Record<stri
   }
 }
 
-function checkStarted(task: Task, attempt: Attempt): boolean {
-  const start = Date.parse(attempt.startedAt);
-  const end = Date.parse(attempt.endedAt ?? new Date().toISOString());
-  try {
-    const waited = readFileSync(attempt.logPath.replace(/\.jsonl$/, '.check-wait'), 'utf8');
-    if (waited.split(/\r?\n/).some((value) => Number(value) > 0)) return true;
-  } catch {
-    // No recorded check-slot wait.
-  }
-  try {
-    const directory = join(task.worktree, '.temp/goal/checks');
-    return readdirSync(directory).some((name) => {
-      const path = join(directory, name);
-      const stat = statSync(path, { throwIfNoEntry: false });
-      if (!stat?.isFile()) return false;
-      if (stat.mtimeMs >= start && stat.mtimeMs <= end) return true;
-      // Some check runners write a durable run record with its start time, even when the file is copied later.
-      try {
-        const record = JSON.parse(readFileSync(path, 'utf8')) as { startedAt?: string; started_at?: string };
-        const at = Date.parse(record.startedAt ?? record.started_at ?? '');
-        return Number.isFinite(at) && at >= start && at <= end;
-      } catch {
-        return false;
-      }
-    });
-  } catch {
-    return false;
-  }
-}
-
 function reranFailingCommand(task: Task, attempt: Attempt, previous: Attempt): boolean {
   const commands = loggedCommands(attempt).join('\n');
   const expected = previous.failureCommand?.join(' ') || task.brief.acceptance.command.join(' ');
   return Boolean(expected && commands.includes(expected));
 }
 
-function isStaleToolBlocker(task: Task, attempt: Attempt, previous: Attempt): boolean {
-  // A stale manifest restatement is a worker-authored blocker. Inferred launch, silence and CLI failures have no
-  // blocker field; treating repeated transport text in their result as a restatement would add an unintended retry.
-  if (!attempt.blocker || !previous.blocker) return false;
-  const errorLine = attempt.blocker.split(/\r?\n/, 1)[0]?.trim();
-  const previousError = previous.blocker.split(/\r?\n/, 1)[0]?.trim();
-  if (!errorLine || errorLine !== previousError || checkStarted(task, attempt)) return false;
-  return !reranFailingCommand(task, attempt, previous);
+/** The one event a task stopped for lack of progress sends its manager. */
+function stopEvent(task: Task, summary: string, evidencePath: string) {
+  return {
+    managerId: task.brief.manager,
+    taskId: task.id,
+    kind: 'stalled' as const,
+    summary: summary.replace(/[\r\n]+/g, ' ').slice(0, 1000),
+    evidencePath,
+  };
 }
 
 /** How long a capacity refusal waits before the attempt continues. */
@@ -347,6 +321,18 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (task.currentAttempt !== ref.attempt) return;
       if (task.state === 'held') return;
+      // A backed-off retry waits for its time, and a check-host transport failure until the watchdog's probes see
+      // every check host answer again: relaunching into a broken host repeats the failure. The intent stays pending,
+      // and the host's recovery sweep tries it again every minute.
+      if (intent.options.notBefore && Date.parse(intent.options.notBefore) - Date.now() > 1_000) return;
+      if (intent.options.awaitCheckHosts) {
+        const hosts = checkHostsInOutage(this.tasks.settings.stateDirectory);
+        if (hosts.length) {
+          if (!store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'retry-awaits-check-hosts'))
+            store.event(ref, 'retry-awaits-check-hosts', { hosts });
+          return;
+        }
+      }
       // Ordinary recovery publishes its retry generation without waiting on proof-only preparation.
       if (task.brief.kind === 'verification') {
         this.tasks.assertProofStart(task);
@@ -710,11 +696,9 @@ export class WorkerJob implements GateOutcomeSink {
     }
   }
   async follow(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
-    try {
-      await this.followAttempt(worker);
-    } catch (error) {
-      await this.endAsEnvironment(worker.attempt, error);
-    }
+    const following = this.followAttempt(worker).catch((error) => this.endAsEnvironment(worker.attempt, error));
+    trackFixtureWait(worker.attempt.logPath, following);
+    await following;
   }
   private async followAttempt(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
     const ref = worker.attempt,
@@ -917,6 +901,23 @@ export class WorkerJob implements GateOutcomeSink {
           await stopProcessesUnder(task.worktree, this.tasks.settings.terminationGraceMs);
       } catch (cleanupError) {
         detail = `${detail}; process cleanup failed: ${String(cleanupError)}`.slice(0, 4000);
+        // Unknown custody is an operational condition, not an exit or a free worker slot.
+        store.updateAttempt(ref, (value) => {
+          value.driver = null;
+          value.blocker = detail;
+        });
+        if (!store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'process-cleanup-unconfirmed')) {
+          const event = {
+            managerId: task.brief.manager,
+            taskId: task.id,
+            kind: 'environment' as const,
+            summary: `environment: process cleanup unconfirmed: ${detail}`.slice(0, 1000),
+          };
+          store.event(ref, 'process-cleanup-unconfirmed', { detail });
+          store.event(ref, 'manager-event', event);
+          this.inbox.deliver(event);
+        }
+        return;
       }
       const endedAt = new Date().toISOString();
       const ended = { ...current, endedAt };
@@ -1352,7 +1353,7 @@ export class WorkerJob implements GateOutcomeSink {
               const exited = (attempt.process ? waitForProcessGroup(attempt.process) : Promise.resolve()).then(() =>
                 readWorkerExit(attempt.logPath),
               );
-              await this.followAttempt({ attempt, exited });
+              await this.follow({ attempt, exited });
             } catch (error) {
               await this.endAsEnvironment(ref, error);
             }
@@ -1472,17 +1473,6 @@ export class WorkerJob implements GateOutcomeSink {
         return;
       }
       const previous = ref.attempt > 1 ? store.attempt({ taskId: ref.taskId, attempt: ref.attempt - 1 }) : null;
-      const previousWasStaleRetry =
-        ref.attempt > 1 &&
-        store.events(task.id, ref.attempt - 1).some((event) => event.kind === 'stale-tool-blocker-retry');
-      if (kind === 'tool' && previous && !previousWasStaleRetry && isStaleToolBlocker(task, attempt, previous)) {
-        store.event(ref, 'stale-tool-blocker-retry', {
-          error: (attempt.blocker ?? attempt.result).split(/\r?\n/, 1)[0],
-          previousAttempt: previous.attempt,
-        });
-        queueRetry(this.exitRetryOptions(attempt, evidenceBundle(task, attempt)));
-        return;
-      }
       let usageLimitRefusal = false;
       let usageLimitExhausted = false;
       if (kind === 'pool-exhausted') {
@@ -1575,44 +1565,67 @@ export class WorkerJob implements GateOutcomeSink {
       } else {
         // A provider capacity refusal is not the task's failure: continue after a pause, however often it repeats.
         const detail = `${attempt.result ?? ''}\n${attempt.blocker ?? ''}`;
-        capacity =
-          kind === 'tool' &&
-          (agentAdapter(attempt.profile.cli).signals?.(detail).capacity || CHECK_HOST_TRANSPORT.test(detail));
-        if (
-          kind === 'tool' &&
-          previous?.failureKind === 'tool' &&
-          !capacity &&
-          !reranFailingCommand(task, attempt, previous)
-        ) {
-          const firstLine = (
-            attempt.result.startsWith('stalled: no output for ')
-              ? attempt.result
-              : attempt.blocker || attempt.result || 'Worker reported a tool failure without details'
-          ).split(/\r?\n/, 1)[0]!;
-          store.event(ref, 'repeated-tool-failure', {
-            current: { attempt: attempt.attempt, detail: attempt.blocker ?? attempt.result },
-            previous: { attempt: previous.attempt, detail: previous.blocker ?? previous.result },
-          });
-          store.updateTask(ref, (t) => {
-            t.state = 'stopped';
-          });
-          store.updateAttempt(ref, (a) => {
-            a.escalation = 'stalled';
-          });
-          record.escalation = 'stalled';
-          store.putRecord(record);
-          const event = {
-            managerId: task.brief.manager,
-            taskId: task.id,
-            kind: 'stalled' as const,
-            summary: firstLine.startsWith('stalled: no output for ')
-              ? firstLine.replace(/[\r\n]+/g, ' ')
-              : `Repeated tool failure: ${firstLine}`.replace(/[\r\n]+/g, ' '),
-            evidencePath,
-          };
-          store.event(ref, 'manager-event', event);
-          this.inbox.deliver(event);
-          return;
+        capacity = kind === 'tool' && Boolean(agentAdapter(attempt.profile.cli).signals?.(detail).capacity);
+        const retryOptions = this.exitRetryOptions(attempt, evidencePath);
+        if (kind === 'tool' && !capacity) {
+          // A tool blocker resumes the same session after a backoff by its fingerprint. The same blocker twice in a
+          // row parks the task with one environment event, whether or not the worker reran the failing command.
+          // Product work on dev also stops after two consecutive attempts without a new commit; other work keeps
+          // stopping when the worker did not rerun the failing command.
+          const silence = attempt.result.startsWith('stalled: no output for ');
+          const fingerprint = blockerFingerprint(attempt);
+          const repeated = previous?.failureKind === 'tool' && blockerFingerprint(previous) === fingerprint;
+          const unrerun =
+            !devProductBrief(task.brief) &&
+            previous?.failureKind === 'tool' &&
+            !reranFailingCommand(task, attempt, previous);
+          const idle = !repeated && !unrerun && devProductBrief(task.brief) && noProgressTwice(store, task, ref);
+          if (repeated || unrerun || idle) {
+            const firstLine = (
+              silence
+                ? attempt.result
+                : attempt.blocker || attempt.result || 'Worker reported a tool failure without details'
+            ).split(/\r?\n/, 1)[0]!;
+            store.event(ref, 'repeated-tool-failure', {
+              current: { attempt: attempt.attempt, detail: attempt.blocker ?? attempt.result },
+              previous: previous ? { attempt: previous.attempt, detail: previous.blocker ?? previous.result } : null,
+              fingerprint,
+              cause: repeated ? 'same-blocker' : idle ? 'no-new-commit' : 'not-rerun',
+            });
+            store.updateTask(ref, (t) => {
+              t.state = 'stopped';
+            });
+            store.updateAttempt(ref, (a) => {
+              a.escalation = 'stalled';
+            });
+            record.escalation = 'stalled';
+            store.putRecord(record);
+            const event =
+              repeated && !silence
+                ? {
+                    ...stopEvent(
+                      task,
+                      `environment: the same tool blocker twice; task parked: ${firstLine}`,
+                      evidencePath,
+                    ),
+                    kind: 'environment' as const,
+                  }
+                : stopEvent(
+                    task,
+                    silence
+                      ? firstLine
+                      : idle
+                        ? `No new commit in two consecutive attempts: ${firstLine}`
+                        : `Repeated tool failure: ${firstLine}`,
+                    evidencePath,
+                  );
+            store.event(ref, 'manager-event', event);
+            this.inbox.deliver(event);
+            return;
+          }
+          retryDelayMs = toolRetryDelay(store, this.tasks.settings, ref, fingerprint);
+          if (retryDelayMs) retryOptions.notBefore = new Date(Date.now() + retryDelayMs).toISOString();
+          if (CHECK_HOST_TRANSPORT.test(detail)) retryOptions.awaitCheckHosts = true;
         }
         if (kind === 'pool-exhausted' && !usageLimitRefusal) {
           const key = this.tasks.settings.pools.find((pool) => pool.name === attempt.pool)?.allowanceKey;
@@ -1626,7 +1639,7 @@ export class WorkerJob implements GateOutcomeSink {
           record.escalation = retrySamePool ? 'environment' : 'pool-exhausted';
           store.putRecord(record);
         }
-        queueRetry(this.exitRetryOptions(attempt, evidencePath));
+        queueRetry(retryOptions);
       }
     });
     // The recovery sweep calls this while it holds the task's lease, which the retry takes: start after it is released.
@@ -1686,6 +1699,14 @@ export class WorkerJob implements GateOutcomeSink {
       store.event(outcome, 'gate-outcome', outcome);
       record.diffLines = outcome.diffLines;
       record.changedFiles = [...outcome.changedFiles];
+      // Declared paths say where the work is expected, not a fence: the record keeps every file changed outside them.
+      const outsidePaths = outcome.changedFiles.filter((path) => !matchesPath(path, task.brief.paths));
+      if (outsidePaths.length) record.outsidePaths = outsidePaths;
+      else delete record.outsidePaths;
+      // Product work on dev may outgrow its estimate; the record keeps the overrun instead of a scope stop.
+      const overrun = devProductBrief(task.brief) ? estimateOverrun(outcome, task) : undefined;
+      if (overrun) record.estimateOverrun = overrun;
+      else delete record.estimateOverrun;
       record.hostMs = (record.hostMs ?? 0) + outcome.hostMs;
       record.firstFailure = outcome.firstFailure?.fingerprint ?? null;
       record.outcome = outcome.passed ? 'passed' : 'gate-failed';
@@ -1820,8 +1841,31 @@ export class WorkerJob implements GateOutcomeSink {
               return undefined;
             }
           });
-        const repeatedConflict = repeatedNoProgressConflict(outcome.rebaseConflict, priorConflictContexts);
-        if (repeatedConflict) {
+        // Product work on dev resumes its session after every conflict while it makes progress: the same conflict as
+        // the previous attempt, or two consecutive attempts without a new commit, stop it. Other work stops after the
+        // third identical conflict.
+        const devProduct = devProductBrief(task.brief);
+        const repeatedConflict = devProduct
+          ? sameRebaseConflict(outcome.rebaseConflict, priorConflictContexts.at(-1))
+            ? completeRebaseConflictContext(outcome.rebaseConflict)
+            : undefined
+          : repeatedNoProgressConflict(outcome.rebaseConflict, priorConflictContexts);
+        if (!repeatedConflict && devProduct && noProgressTwice(store, task, outcome)) {
+          record.escalation = 'stalled';
+          store.updateAttempt(outcome, (a) => {
+            a.escalation = 'stalled';
+          });
+          store.updateTask(outcome, (t) => {
+            t.state = 'stopped';
+          });
+          const event = stopEvent(
+            task,
+            `No new commit in two consecutive attempts: rebase conflict in ${files.join(', ') || 'unknown files'}`,
+            evidencePath,
+          );
+          store.event(outcome, 'manager-event', event);
+          this.inbox.deliver(event);
+        } else if (repeatedConflict) {
           record.escalation = 'spec-conflict';
           store.updateAttempt(outcome, (a) => {
             a.escalation = 'spec-conflict';
@@ -1939,6 +1983,32 @@ export class WorkerJob implements GateOutcomeSink {
           store.event(outcome, 'manager-event', event);
           this.inbox.deliver(event);
           return;
+        }
+        // A landing failure of product work on dev resumes the same session with the error while the attempts make
+        // progress. The same failure twice, or two consecutive attempts without a new commit, stop it instead.
+        if (devProductBrief(task.brief)) {
+          const repeated = failureClass === 'repeated-assertion';
+          if (repeated || noProgressTwice(store, task, outcome)) {
+            record.escalation = 'stalled';
+            store.putRecord(record);
+            store.updateTask(outcome, (t) => {
+              t.state = 'stopped';
+            });
+            store.updateAttempt(outcome, (a) => {
+              a.escalation = 'stalled';
+            });
+            const failure = outcome.firstFailure?.assertion ?? `failed at ${outcome.stage}`;
+            const event = stopEvent(
+              task,
+              repeated
+                ? `Repeated landing failure: ${failure}`
+                : `No new commit in two consecutive attempts: ${failure}`,
+              evidencePath,
+            );
+            store.event(outcome, 'manager-event', event);
+            this.inbox.deliver(event);
+            return;
+          }
         }
         const options: RetryOptions = {
           evidence: evidencePath,

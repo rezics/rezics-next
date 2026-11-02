@@ -6,7 +6,7 @@ import { withAgentAdapter } from './agents.ts';
 import { WorkerJob } from './job.ts';
 import { workerPrompt } from './launch.ts';
 import { settle } from './settle.ts';
-import { harness } from './test-support.ts';
+import { harness, markdown } from './test-support.ts';
 import { git } from './tasks.ts';
 
 const checkId = '6a938d41-a3c8-4fc3-bf49-7d1b207fa85e';
@@ -93,9 +93,9 @@ function expectCurrentCheckProtocol(prompt: string): void {
   expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
   expect(prompt).toContain('Do not return another waiting result for those same check ids');
   expect(prompt).toContain('A terminal success result must use `"checks":[]`');
-  expect(prompt).toContain('Do not run the root typecheck, affected checks or other regression checks yourself');
+  expect(prompt).toContain('Do not run the root typecheck or other regression suites yourself');
   expect(prompt).toContain(
-    'The landing batch runs the root typecheck, affected checks for every changed path, and matching sibling tests',
+    'The landing runs the root typecheck and verification runs affected checks and sibling tests after integration',
   );
   const pollingInstructions = prompt
     .split(/(?<=[.!?])\s+/)
@@ -293,7 +293,7 @@ test('a contract-named existing runner outside the worktree enables detached che
   }
 });
 
-test('different repeated tool blockers report the current committed attempt without claiming a failed CLI launch', async () => {
+test('different repeated control-plane tool blockers report the current committed attempt without claiming a failed CLI launch', async () => {
   const oldCause = 'EACCES: old disposable fixture cleanup';
   const currentCause = 'Cannot execute shell command: current session exposes no callable shell tool.';
   const h = harness(`#!/usr/bin/env bun
@@ -313,6 +313,13 @@ console.log(JSON.stringify({type:'item.completed',item:{id:'answer',type:'agent_
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
 `);
   try {
+    // Product work on dev retries a different tool blocker while it commits; other work stops without a rerun.
+    writeFileSync(
+      h.briefFile,
+      markdown
+        .replace('goal: fixture', 'goal: control-plane')
+        .replace('paths: [result.txt]', 'paths: [tools/goal/src/a.ts]'),
+    );
     const { task, worker } = await startAttempt(h);
     expect(h.store.attempt(worker.attempt).blocker).toBe(oldCause);
     const current = await h.tasks.retry(task.id);
@@ -339,9 +346,10 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     const context = h.store
       .events(task.id, current.attempt.attempt)
       .find((event) => event.kind === 'repeated-tool-failure');
-    expect(JSON.parse(context!.body)).toEqual({
+    expect(JSON.parse(context!.body)).toMatchObject({
       current: { attempt: 2, detail: currentCause },
       previous: { attempt: 1, detail: oldCause },
+      cause: 'not-rerun',
     });
   } finally {
     h.dispose();

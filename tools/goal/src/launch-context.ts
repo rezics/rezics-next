@@ -322,53 +322,35 @@ export function captureLaunchContext(
   };
 }
 
-/** Render the receipt without log text, provider output, configuration, secrets or unbounded dependency lists. */
+/** One factual line per declared dependency: whether its integrated commit is in this task's base. */
+export function dependencyLine(receipt: DependencyReceipt): string {
+  return receipt.sourcePresence === 'present' && receipt.precondition === 'satisfied' && receipt.commit
+    ? `- \`${receipt.id}\`: integrated in your base at \`${receipt.commit}\`.`
+    : `- \`${receipt.id}\`: not in your base; build against its contract.`;
+}
+
+/** Render the launch facts without log text, provider output, configuration, secrets or unbounded dependency lists. */
 export function renderLaunchContext(context: LaunchContext | undefined): string {
   if (!context)
     return [
       '## Current controller launch context',
-      'No current controller receipt was supplied. Current task, attempt, contract, dependency readiness and installed code are unknown.',
-      'Do not infer readiness or installed dependency code from saved prompts, manifests, worker results, branch names or a requested launch.',
+      'No controller launch context was supplied. Dependency status is unknown: build against each dependency contract.',
     ].join('\n');
 
-  const receipts = [...context.dependencies.receipts];
-  const payload = () => ({
-    version: context.version,
-    boundary: context.boundary,
-    origin: context.origin,
-    task: context.task,
-    dependencies: {
-      required: context.dependencies.required,
-      included: receipts.length,
-      omitted: Math.max(
-        context.dependencies.omitted,
-        (context.dependencies.required ?? receipts.length) - receipts.length,
-      ),
-      completeness:
-        context.dependencies.completeness === 'unknown'
-          ? 'unknown'
-          : receipts.length === context.dependencies.required
-            ? 'complete'
-            : 'truncated',
-      receipts,
-    },
-  });
-  let json = JSON.stringify(payload(), null, 2);
-  while (Buffer.byteLength(json) > MAX_RENDERED_BYTES && receipts.length) {
-    receipts.pop();
-    json = JSON.stringify(payload(), null, 2);
-  }
-  const incomplete = context.dependencies.completeness !== 'complete';
+  const json = JSON.stringify(
+    { version: context.version, boundary: context.boundary, origin: context.origin, task: context.task },
+    null,
+    2,
+  );
+  const lines = context.dependencies.receipts.map(dependencyLine);
+  while (lines.length && Buffer.byteLength(lines.join('\n')) + Buffer.byteLength(json) > MAX_RENDERED_BYTES)
+    lines.pop();
+  const omitted = (context.dependencies.required ?? context.dependencies.receipts.length) - lines.length;
   return [
     '## Current controller launch context',
     `This is a fresh bounded snapshot for the current ${context.boundary} boundary. It supersedes future-tense or stale instructions in saved prompts, old retry manifests and earlier attempt results.`,
-    'Lifecycle completion and source-code presence are separate facts. Treat code as installed only when a dependency receipt says `sourcePresence: "present"` and `precondition: "satisfied"`. Unknown, absent, cancelled, missing or truncated receipts are not completed installed code.',
-    'If a current dependency precondition is unmet or unknown, preserve that exact cause in your result; the controller retains its existing safe hold or quarantine behavior. Do not wait for the same dependency because older prose says it is still pending.',
-    ...(incomplete
-      ? [
-          'The dependency list is incomplete or absent in this historical record; omitted or undeclared receipts remain unknown and must not be treated as satisfied.',
-        ]
-      : []),
+    ...(lines.length || omitted > 0 ? ['Dependencies:', ...lines] : []),
+    ...(omitted > 0 ? [`- ${omitted} more: not listed; build against their contracts.`] : []),
     '```json',
     json,
     '```',

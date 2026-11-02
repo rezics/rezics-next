@@ -30,7 +30,7 @@ test('a launch failure is rerun once without a gate, then goes to the manager', 
     expect(h.store.task(task.id).currentAttempt).toBe(2);
     for (const attempt of [1, 2]) expect(h.store.attempt({ taskId: task.id, attempt }).failureKind).toBe('tool');
     expect(h.store.record({ taskId: task.id, attempt: 2 })!.escalation).toBe('stalled');
-    expect(inbox.map((event) => event.kind)).toEqual(['stalled']);
+    expect(inbox.map((event) => event.kind)).toEqual(['environment']);
     expect(inbox[0]!.summary).toContain('invalid transport');
   } finally {
     h.dispose();
@@ -203,7 +203,7 @@ test('a worker that writes nothing within the start window is stopped and retrie
     await job.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(2);
     for (const attempt of [1, 2]) expect(h.store.attempt({ taskId: task.id, attempt }).failureKind).toBe('tool');
-    expect(inbox.map((event) => event.kind)).toEqual(['stalled']);
+    expect(inbox.map((event) => event.kind)).toEqual(['environment']);
   } finally {
     h.dispose();
   }

@@ -17,7 +17,10 @@ export function parseNotes(value: unknown, label = 'notes'): Note[] {
     for (const key of Object.keys(note))
       if (!['text', 'remindAt', 'everyHours'].includes(key)) throw new Error(`unknown ${label}[${index}].${key}`);
     if (typeof note.text !== 'string' || !note.text.trim()) throw new Error(`${label}[${index}].text is required`);
-    if (note.remindAt !== undefined && (typeof note.remindAt !== 'string' || !Number.isFinite(Date.parse(note.remindAt))))
+    if (
+      note.remindAt !== undefined &&
+      (typeof note.remindAt !== 'string' || !Number.isFinite(Date.parse(note.remindAt)))
+    )
       throw new Error(`${label}[${index}].remindAt must be an ISO time`);
     if (note.everyHours !== undefined && (typeof note.everyHours !== 'number' || !(note.everyHours > 0)))
       throw new Error(`${label}[${index}].everyHours must be a positive number`);

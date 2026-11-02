@@ -697,13 +697,7 @@ test('fresh and normal retry argv carry current contract identity and supersede 
       sourceBranch: task.branch,
       sourceProof: 'verified',
     });
-    expect(fresh.dependencies.receipts[0]).toMatchObject({
-      id: dependency.id,
-      state: 'integrated',
-      commit: dependency.commit,
-      sourcePresence: 'present',
-      precondition: 'satisfied',
-    });
+    expect(first.prompt).toContain(`- \`${dependency.id}\`: integrated in your base at \`${dependency.commit}\`.`);
 
     const evidence = join(h.settings.stateDirectory, 'evidence', 'historical-retry');
     mkdirSync(evidence, { recursive: true });
@@ -725,12 +719,7 @@ test('fresh and normal retry argv carry current contract identity and supersede 
       contractSha256: hash(readFileSync(amendmentOne, 'utf8')),
       contractProof: 'verified',
     });
-    expect(retry.dependencies.receipts[0]).toMatchObject({
-      id: dependency.id,
-      commit: dependency.commit,
-      sourcePresence: 'present',
-      precondition: 'satisfied',
-    });
+    expect(second.prompt).toContain(`- \`${dependency.id}\`: integrated in your base at \`${dependency.commit}\`.`);
     expect(second.prompt.indexOf('Historical future-tense retry manifest')).toBeLessThan(
       second.prompt.indexOf('## Current controller launch context'),
     );
@@ -752,12 +741,7 @@ test('fresh and normal retry argv carry current contract identity and supersede 
       sourceHead: git(task.worktree, ['rev-parse', 'HEAD^']),
       sourceProof: 'verified',
     });
-    expect(latest.dependencies.receipts[0]).toMatchObject({
-      id: dependency.id,
-      commit: dependency.commit,
-      sourcePresence: 'present',
-      precondition: 'satisfied',
-    });
+    expect(third.prompt).toContain(`- \`${dependency.id}\`: integrated in your base at \`${dependency.commit}\`.`);
     expect(JSON.stringify(latest)).not.toContain(staleResult);
     expect(third.prompt.indexOf('Historical future-tense retry manifest')).toBeLessThan(
       third.prompt.indexOf('This is a fresh bounded snapshot for the current retry boundary'),
@@ -840,15 +824,7 @@ test('held release resumes old sessions once with actual dependency source recei
         sourceProof: 'verified',
         contractProof: 'verified',
       });
-      expect(context.dependencies).toMatchObject({ required: 1, included: 1, omitted: 0, completeness: 'complete' });
-      expect(context.dependencies.receipts[0]).toMatchObject({
-        id: dependency.id,
-        state: 'integrated',
-        completion: 'integrated',
-        commit: dependencyCommit,
-        sourcePresence: 'present',
-        precondition: 'satisfied',
-      });
+      expect(resumed.prompt).toContain(`- \`${dependency.id}\`: integrated in your base at \`${dependencyCommit}\`.`);
       expect(resumed.prompt).toContain('supersedes future-tense or stale instructions');
       expect(resumed.prompt).not.toContain('Historical future-tense instruction: wait for cleanup to merge');
       expect(h.store.attempts(task.id).filter((attempt) => attempt.attempt === 2)).toHaveLength(1);
@@ -905,13 +881,7 @@ test('a same-session check wake carries the current receipt in the actual provid
       base: dependency.commit,
       sourceProof: 'verified',
     });
-    expect(context.dependencies.receipts[0]).toMatchObject({
-      id: dependency.id,
-      state: 'integrated',
-      commit: dependency.commit,
-      sourcePresence: 'present',
-      precondition: 'satisfied',
-    });
+    expect(resumed.prompt).toContain(`- \`${dependency.id}\`: integrated in your base at \`${dependency.commit}\`.`);
     expect(resumed.prompt).toContain(`check ${id}: exit status 0; passed;`);
   } finally {
     if (task) releaseOutstandingChecks(task);
@@ -1095,12 +1065,7 @@ test('a wake without a resumable session uses a full prompt with the current dep
     expect(relaunched.args).not.toContain('resume');
     expect(relaunched.prompt).toContain(h.store.task(task.id).brief.markdown);
     expect(context).toMatchObject({ boundary: 'wake', origin: 'managed' });
-    expect(context.dependencies.receipts[0]).toMatchObject({
-      id: dependency.id,
-      commit: dependency.commit,
-      sourcePresence: 'present',
-      precondition: 'satisfied',
-    });
+    expect(relaunched.prompt).toContain(`- \`${dependency.id}\`: integrated in your base at \`${dependency.commit}\`.`);
   } finally {
     if (task) releaseOutstandingChecks(task);
     h.dispose();

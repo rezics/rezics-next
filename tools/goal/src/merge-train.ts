@@ -1,3 +1,5 @@
+import { closeSync, constants, fchmodSync, fstatSync, lstatSync, openSync, readdirSync, realpathSync } from 'node:fs';
+import { basename } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { TrainResolver, TrainResolverInfrastructureError, type TrainConflict } from './train-resolver.ts';
 import { groupMembers, processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
@@ -5,7 +7,7 @@ import { authenticatedManager } from './priority-authority.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
 import { matchesPath, parseBrief, readRiskOwnership } from './briefs.ts';
@@ -91,6 +93,34 @@ export function integrationChecksForFiles(
   return checks.filter((check) => changed.some((path) => matchesPath(path, check.paths)));
 }
 
+export function rootTypecheckCommand(changed: readonly string[]): string[] {
+  return ['env', `TYPECHECK_CHANGED=${changed.join('\n')}`, 'bun', 'scripts/typecheck.ts'];
+}
+
+function compilerInfrastructureFailure(output: string, timedOut: boolean): boolean {
+  return (
+    timedOut ||
+    checkTransportFailed(output) ||
+    /(?:docker|database).*(?:failed|unavailable|timed out)|ETIMEDOUT|out of memory|spawn .*?(?:ENOENT|EACCES)/i.test(
+      output,
+    )
+  );
+}
+
+function compilerOutputMatchesPath(output: string, root: string, file: string): boolean {
+  if (output.includes(file) || output.includes(join(root, file))) return true;
+  const absolute = resolve(root, file);
+  let directory = dirname(absolute);
+  while (directory.startsWith(`${root}/`) && directory !== root) {
+    if (existsSync(join(directory, 'package.json'))) {
+      const workspacePath = relative(directory, absolute).replace(/\\/g, '/');
+      return output.includes(workspacePath);
+    }
+    directory = dirname(directory);
+  }
+  return false;
+}
+
 /** Keep control-plane train fixtures hermetic even if package defaults name real workspace checks. */
 export function landingAffectedChecks(
   changed: readonly string[],
@@ -103,6 +133,58 @@ export function landingAffectedChecks(
 }
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
 export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
+
+/** Capture only a newly added disposable train tree, before any check can leave immutable fixture directories. */
+export function captureTrainWorktreeRemoval(tree: string): () => void {
+  const path = resolve(tree);
+  const parentPath = dirname(path);
+  const parent = realpathSync(parentPath);
+  const rootIdentity = lstatSync(path);
+  const parentIdentity = lstatSync(parent);
+  const sameInode = (left: ReturnType<typeof fstatSync>, right: ReturnType<typeof fstatSync>) =>
+    left.dev === right.dev && left.ino === right.ino;
+  const refuse = () => new Error(`Refusing cleanup of replaced train worktree: ${path}`);
+  if (!rootIdentity.isDirectory() || !parentIdentity.isDirectory()) throw refuse();
+  const flags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+  const descriptorPath = (fd: number) => `/proc/self/fd/${fd}`;
+  const prepare = (fd: number) => {
+    const stat = fstatSync(fd);
+    if (stat.dev !== rootIdentity.dev) throw new Error(`Refusing cleanup across train filesystem boundary: ${path}`);
+    if ((stat.mode & 0o700) !== 0o700) fchmodSync(fd, (stat.mode & 0o7777) | 0o700);
+    for (const name of readdirSync(descriptorPath(fd))) {
+      const child = join(descriptorPath(fd), name);
+      const before = lstatSync(child);
+      // Directory permissions govern deletion. Never chmod package files (which can be hardlinks), or follow links
+      // to shared dependency stores, another worktree, or any other outside directory.
+      if (!before.isDirectory()) continue;
+      const childFd = openSync(child, flags);
+      try {
+        if (!sameInode(before, fstatSync(childFd))) throw refuse();
+        prepare(childFd);
+        if (!sameInode(before, lstatSync(child))) throw refuse();
+      } finally {
+        closeSync(childFd);
+      }
+    }
+  };
+  return () => {
+    if (realpathSync(parentPath) !== parent) throw refuse();
+    const parentFd = openSync(parent, flags);
+    try {
+      if (!sameInode(parentIdentity, fstatSync(parentFd))) throw refuse();
+      const rootFd = openSync(join(descriptorPath(parentFd), basename(path)), flags);
+      try {
+        if (!sameInode(rootIdentity, fstatSync(rootFd))) throw refuse();
+        prepare(rootFd);
+        if (!sameInode(rootIdentity, lstatSync(path))) throw refuse();
+      } finally {
+        closeSync(rootFd);
+      }
+    } finally {
+      closeSync(parentFd);
+    }
+  };
+}
 
 /** Kernel's lane runner prints failed-file summaries; passing file headings and stack frames are not failures. */
 export function failingTestFiles(output: string): string[] {
@@ -1151,10 +1233,17 @@ export type TrainOptions = {
   formatCommand?: string[];
   riskAreasFile?: string;
   affectedTests?: import('./types.ts').AffectedTestCheck[];
+  /** The mandatory direct root typecheck used before a dev ref advance. */
+  runTypecheck?: GateRunner;
   /** Checks for landings into dev; a function is called for every landing, so a configuration change applies at once. */
   integrationChecks?: IntegrationCheck[] | (() => IntegrationCheck[]);
   /** Batched dev landings; absent integration settings retain one-at-a-time behavior. */
-  integration?: { batchSize?: number; batchAcceptanceConcurrency?: number; devLandingChecks?: boolean };
+  integration?: {
+    batchSize?: number;
+    batchAcceptanceConcurrency?: number;
+    devLandingChecks?: boolean;
+    gateTimeoutMs?: number;
+  };
   queue: SqliteLandingQueue;
   fence: AttemptFence;
   sink: GateOutcomeSink;
@@ -1234,6 +1323,36 @@ type SpawnText = (command: string, args: string[], options: { cwd: string; encod
 export class MergeTrain {
   private readonly workspaceFailures = new Map<number, GateOutcome[]>();
   constructor(private readonly options: TrainOptions) {}
+
+  private async checkDevCandidate(
+    tree: string,
+    base: string,
+    candidate: string,
+    logPath: string,
+  ): Promise<{ command: string[]; result: GateResult }> {
+    const command = rootTypecheckCommand(changedFiles(tree, base));
+    const run =
+      this.options.runTypecheck ??
+      this.options.runGate ??
+      processGroupRunner(this.options.integration?.gateTimeoutMs, this.options.stateDirectory, process.env);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      appendFileSync(logPath, `$ ${command.join(' ')} (required root typecheck on ${candidate}, dev ${base})\n`);
+      let result: GateResult;
+      try {
+        result = await run(command, tree, logPath);
+      } catch (error) {
+        result = {
+          passed: false,
+          output: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+          timedOut: false,
+        };
+      }
+      assertCandidateIntegrity(tree, candidate, 'dev root typecheck', logPath, this.options.runCandidateGit);
+      if (!compilerInfrastructureFailure(result.output, result.timedOut) || attempt === 1) return { command, result };
+      appendFileSync(logPath, 'Root typecheck infrastructure failure; retrying once on the same candidate\n');
+    }
+    throw new Error('Unreachable root typecheck retry state');
+  }
 
   async run(): Promise<void> {
     await this.drainBoth(true);
@@ -1497,7 +1616,6 @@ export class MergeTrain {
         const outcome = outcomes.get(entry.id);
         return outcome ? [{ entry, outcome }] : [];
       });
-    const passedAcceptance = new Map<string, { output: string; command: readonly string[] }>();
     const discardIntegratedMembers = (): boolean => {
       const store = o.fence;
       if (!(store instanceof WorkerStore)) return false;
@@ -1523,6 +1641,7 @@ export class MergeTrain {
       let base = '';
       let previous = '';
       let added = false;
+      let prepareRemoval: (() => void) | undefined;
       let retry = false;
       let committed = false;
       let stale: LandingEntry | undefined;
@@ -1540,6 +1659,7 @@ export class MergeTrain {
         mkdirSync(resolve(o.worktreeRoot), { recursive: true });
         git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, base);
         added = true;
+        prepareRemoval = captureTrainWorktreeRemoval(trainTree);
 
         for (const entry of pending) {
           const request = entry.request;
@@ -1766,251 +1886,86 @@ export class MergeTrain {
           };
         }
 
-        const configuredChecks =
-          typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
-        const changed = [...new Set(prepared.flatMap((member) => member.result.changedFiles))].sort();
-        const integrationChecks = integrationChecksForFiles(changed, configuredChecks);
-        const batchAffectedChecks = (o.affectedTests ?? defaults.affectedTests).filter((check) =>
-          changed.some((path) => matchesPath(path, check.paths)),
-        );
-        const batchSibling = siblingTestCommand(siblingTestFiles(changed, trainTree), defaults.siblingTests.command);
-        const batchChecks = [
-          ...integrationChecks,
-          ...(batchSibling ? [{ paths: [], command: batchSibling }] : []),
-        ].filter(
-          (check, index, checks) =>
-            checks.findIndex((candidate) => JSON.stringify(candidate.command) === JSON.stringify(check.command)) ===
-            index,
-        );
-        if (
-          batchAffectedChecks.length &&
-          !batchChecks.some((check) => check.command[0] === 'bun' && check.command[1] === 'install')
-        )
-          batchChecks.unshift({ paths: [], command: ['bun', 'install', '--frozen-lockfile'] });
-        let failedBatch:
-          | { kind: 'acceptance' | 'integration'; output: string; timedOut: boolean; failedCommand?: readonly string[] }
-          | undefined;
-        let batchBaselineOutput = '';
-        // Every member validates the exact same final batch tree in its own detached worktree. Keep successful
-        // results across a dev-move restart when the batch still produces that tree.
+        // The final rebased tree includes conflict resolution and formatting. It receives the one mandatory
+        // prelanding typecheck; other verification runs after integration in the independent verifier.
         const finalCandidate = prepared[prepared.length - 1]!.candidate;
-        const finalTree = git(trainTree, 'rev-parse', `${finalCandidate}^{tree}`);
-        // With devLandingChecks off, a dev landing is mechanical: dev is verified after the merge, not before it.
-        const devChecks = o.integration?.devLandingChecks !== false;
-        if (!devChecks)
-          for (const member of prepared)
-            appendFileSync(
-              member.result.logPath,
-              `\nChecks are not run at dev landing; dev is verified after the merge\n`,
-            );
-        const acceptanceJobs = (devChecks ? prepared : []).map((member) => ({
-          member,
-          command: member.entry.request.gate,
-          key: `${JSON.stringify(member.entry.request.gate)}:${finalTree}`,
-        }));
-        const concurrency = Math.max(1, o.integration?.batchAcceptanceConcurrency ?? 8);
-        let nextAcceptance = 0;
-        const runAcceptance = async () => {
-          while (nextAcceptance < acceptanceJobs.length && !failedBatch && !retry) {
-            const job = acceptanceJobs[nextAcceptance++]!;
-            const { member, command, key } = job;
-            const cached = passedAcceptance.get(key);
-            const memberTree = resolve(o.worktreeRoot, `train-batch-acceptance-${randomUUID()}`);
-            let memberTreeAdded = false;
-            try {
-              git(o.mainCheckout, 'worktree', 'add', '--detach', memberTree, finalCandidate);
-              memberTreeAdded = true;
-              installShared(memberTree);
-              appendFileSync(
-                member.result.logPath,
-                `\nAcceptance ${cached ? 'reused' : 'on'} ${finalCandidate}, dev ${base}: ${command.join(' ')}\n`,
-              );
-              let accepted = cached
-                ? { passed: true, output: cached.output, timedOut: false }
-                : await (o.runGate ?? gateRunner())(command, memberTree, member.result.logPath);
-              const changed =
-                git(memberTree, 'rev-parse', 'HEAD') !== finalCandidate || changedWorkingFiles(memberTree).length > 0;
-              if (changed)
-                accepted = {
-                  ...accepted,
-                  passed: false,
-                  output: accepted.output || 'Acceptance command changed its worktree',
-                };
-              if (accepted.passed && !cached) passedAcceptance.set(key, { output: accepted.output, command });
-              for (const entry of pending) o.fence.assertCurrent(entry.request);
-              if (target() !== base) {
-                retry = true;
-                continue;
-              }
-              if (!accepted.passed) {
-                failedBatch = {
-                  kind: 'acceptance',
-                  output: accepted.output || 'Acceptance command failed',
-                  timedOut: accepted.timedOut,
-                  failedCommand: command,
-                };
-              }
-            } catch (error) {
-              if (error instanceof StaleAttemptError) throw error;
-              failedBatch = {
-                kind: 'acceptance',
-                output: String(error),
-                timedOut: false,
-                failedCommand: command,
-              };
-            } finally {
-              if (memberTreeAdded) git(o.mainCheckout, 'worktree', 'remove', '--force', memberTree);
-            }
-          }
-        };
-        await Promise.all(Array.from({ length: Math.min(concurrency, acceptanceJobs.length) }, runAcceptance));
-        if (retry) continue;
         git(trainTree, 'reset', '--hard', prepared[prepared.length - 1]!.candidate);
-        if (devChecks && batchChecks.length) {
-          const commands = batchChecks.map((check) =>
-            check.command.join(' ').includes('scripts/typecheck.ts')
-              ? ['env', `TYPECHECK_CHANGED=${changed.join('\n')}`, ...check.command]
-              : check.command,
+        if (
+          !existsSync(join(trainTree, 'node_modules')) &&
+          existsSync(join(trainTree, 'bun.lock')) &&
+          existsSync(join(trainTree, 'package.json'))
+        )
+          installShared(trainTree);
+        const batchLog = logPaths.get(prepared[0]!.entry.id)!;
+        const { command, result: checked } = await this.checkDevCandidate(trainTree, base, finalCandidate, batchLog);
+        for (const member of prepared)
+          appendFileSync(
+            member.result.logPath,
+            `Root typecheck ${checked.passed ? 'passed' : 'failed'}${checked.timedOut ? ' (timed out)' : ''}\n${checked.output}`,
           );
-          const candidate = prepared[prepared.length - 1]!.candidate;
-          // The combined train worktree is fresh. Give affected and sibling checks the same installed workspace tools
-          // that workers and acceptance worktrees have; integration checks may already have installed them above.
-          if (!existsSync(join(trainTree, 'node_modules'))) installShared(trainTree);
-          for (const member of prepared)
-            appendFileSync(member.result.logPath, `\nBatch integration check on ${candidate}, dev ${base}\n`);
-          const batchLog = logPaths.get(prepared[0]!.entry.id)!;
-          let checked = await runIntegrationChecks(commands, trainTree, batchLog);
-          if (checked.timedOut) {
-            appendFileSync(batchLog, 'Batch check infrastructure timeout; retrying the same batch checks once\n');
-            checked = await runIntegrationChecks(commands, trainTree, batchLog);
+        let staleAfterGate: LandingEntry | undefined;
+        for (const member of pending) {
+          try {
+            o.fence.assertCurrent(member.request);
+          } catch (error) {
+            if (!(error instanceof StaleAttemptError)) throw error;
+            staleAfterGate = member;
+            break;
           }
-          for (const member of prepared)
-            appendFileSync(
-              member.result.logPath,
-              `Batch integration check ${checked.passed ? 'passed' : 'failed'}${checked.timedOut ? ' (timed out)' : ''}\n${checked.output}`,
-            );
-          let staleAfterGate: LandingEntry | undefined;
-          for (const member of pending) {
-            try {
-              o.fence.assertCurrent(member.request);
-            } catch (error) {
-              if (!(error instanceof StaleAttemptError)) throw error;
-              staleAfterGate = member;
-              break;
-            }
-          }
-          if (staleAfterGate) {
-            skipped.add(staleAfterGate.id);
-            pending = pending.filter((entry) => entry.id !== staleAfterGate!.id);
-            retry = true;
-            continue;
-          }
-          if (target() !== base) {
-            retry = true;
-            continue;
-          }
-          if (!checked.passed) {
-            const scoped = commands.some((command) => command[0] === 'env');
-            const key = `integration-check:${JSON.stringify(batchChecks)}${scoped ? `:${Bun.hash(changed.join('\n')).toString(16)}` : ''}`;
-            let baseline = o.queue.baseline(base, key);
-            o.queue.saveBaseline(candidate, key, checked);
-            if (!baseline) {
-              resetTo(trainTree, base);
-              const baselineLog = logPaths.get(prepared[0]!.entry.id)!;
-              appendFileSync(baselineLog, `\nIntegration check baseline on dev ${base}\n`);
-              baseline = await runIntegrationChecks(commands, trainTree, baselineLog);
-              o.queue.saveBaseline(base, key, baseline);
-              batchBaselineOutput = baseline.output;
-            }
-            for (const member of pending) {
-              try {
-                o.fence.assertCurrent(member.request);
-              } catch (error) {
-                if (!(error instanceof StaleAttemptError)) throw error;
-                staleAfterGate = member;
-                break;
+        }
+        if (staleAfterGate) {
+          skipped.add(staleAfterGate.id);
+          pending = pending.filter((entry) => entry.id !== staleAfterGate!.id);
+          retry = true;
+          continue;
+        }
+        if (target() !== base) {
+          retry = true;
+          continue;
+        }
+        if (!checked.passed) {
+          const output = checked.output || 'Root typecheck failed without compiler output';
+          const namedOwners = prepared.filter((member) =>
+            member.result.changedFiles.some((path) => compilerOutputMatchesPath(output, trainTree, path)),
+          );
+          const workspaceOwners = prepared.filter((member) =>
+            member.result.changedFiles.some((file) => {
+              let directory = join(trainTree, file);
+              while (directory.startsWith(`${trainTree}/`) && directory !== trainTree) {
+                directory = dirname(directory);
+                const manifest = join(directory, 'package.json');
+                if (!existsSync(manifest)) continue;
+                try {
+                  const name = (JSON.parse(readFileSync(manifest, 'utf8')) as { name?: unknown }).name;
+                  if (typeof name === 'string' && output.includes(`Workspace ${name} finished`)) return true;
+                } catch {
+                  return false;
+                }
               }
-            }
-            if (staleAfterGate) {
-              skipped.add(staleAfterGate.id);
-              pending = pending.filter((entry) => entry.id !== staleAfterGate!.id);
-              retry = true;
-              continue;
-            }
-            if (target() !== base) {
-              retry = true;
-              continue;
-            }
-            const addedErrors = baseline.passed
-              ? ['candidate failed while dev passed']
-              : newErrorLines(checked.output, baseline.output);
-            if (addedErrors.length) failedBatch ??= { ...checked, kind: 'integration' };
-            else
-              for (const member of prepared)
-                appendFileSync(
-                  member.result.logPath,
-                  'dev already fails the integration check, with the same errors\n',
-                );
-          }
-        }
-
-        if (!failedBatch && batchAffectedChecks.length) {
-          const batchLog = logPaths.get(prepared[0]!.entry.id)!;
-          const results = await Promise.all(
-            batchAffectedChecks.map((check) =>
-              runAffectedTest(check.command, trainTree, batchLog, {
-                ...gateEnvironment(process.env, o.stateDirectory),
-                KERNEL_CHECK_AFFECTED: base,
-              }),
-            ),
+              return false;
+            }),
           );
-          for (const checked of results) {
-            if (checked.status === 'unverified') {
-              appendFileSync(
-                batchLog,
-                `Batch affected check unverified (landing allowed): ${checked.command.join(' ')}\n`,
-              );
+          const owners = namedOwners.length ? namedOwners : workspaceOwners.length ? workspaceOwners : prepared;
+          const ownerIds = new Set(owners.map((member) => member.entry.id));
+          for (const member of prepared) {
+            if (!ownerIds.has(member.entry.id)) {
+              deferred.add(member.entry.id);
               continue;
             }
-            if (checked.status === 'failed') {
-              failedBatch = {
-                kind: 'integration',
-                output: checked.output,
-                timedOut: false,
-                failedCommand: checked.command,
-              };
-              break;
-            }
+            member.result.stage = 'gate';
+            member.result.firstFailure = firstFailure(output);
+            member.result.failedCommand = [...command];
+            member.result.timedOut = checked.timedOut;
+            appendFileSync(member.result.logPath, `\nRequired root typecheck failed:\n${output}\n`);
+            outcomes.set(member.entry.id, member.result);
           }
-        }
-
-        if (failedBatch) {
-          const note =
-            `Batch ${failedBatch.kind} failed${failedBatch.failedCommand ? ` (${failedBatch.failedCommand.join(' ')})` : ''}; ` +
-            `falling back to single landings.\n${failedBatch.output}\n`;
-          let savedBaseline = false;
-          for (const entry of pending) {
-            if (deferred.has(entry.id)) continue;
-            try {
-              const outcome = await this.integrate(entry);
-              appendFileSync(
-                outcome.logPath,
-                `${note}${!savedBaseline && batchBaselineOutput ? `Batch baseline on dev ${base}:\n${batchBaselineOutput}\n` : ''}`,
-              );
-              savedBaseline ||= Boolean(batchBaselineOutput);
-              outcomes.set(entry.id, outcome);
-            } catch (error) {
-              if (!(error instanceof StaleAttemptError)) throw error;
-              skipped.add(entry.id);
-            }
-          }
+          for (const [id, outcome] of localOutcomes) outcomes.set(id, outcome);
           return {
             outcomes: orderedOutcomes(),
             deferredIds: [...deferred],
             skippedIds: [...skipped],
           };
         }
-
         for (const member of prepared) {
           planner.planIntegration?.(member.entry.request, member.base, member.candidate, member.commits);
           o.queue.candidate(member.entry.id, member.candidate);
@@ -2032,6 +1987,13 @@ export class MergeTrain {
             if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
               throw new Error('Main checkout HEAD changed');
             o.beforeIntegrationAdvance?.();
+            assertCandidateIntegrity(
+              trainTree,
+              head,
+              'dev root typecheck before batch ref advance',
+              logPaths.get(prepared[0]!.entry.id)!,
+              o.runCandidateGit,
+            );
             try {
               git(o.mainCheckout, 'update-ref', targetRef, head, base);
             } catch (error) {
@@ -2109,7 +2071,13 @@ export class MergeTrain {
           try {
             git(trainTree, 'merge', '--abort');
           } catch {}
-          git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
+          try {
+            prepareRemoval?.();
+            git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
+          } catch (error) {
+            for (const logPath of logPaths.values())
+              appendFileSync(logPath, `Train tree cleanup deferred: ${trainTree}: ${error}\n`);
+          }
         }
       }
       if (retry) continue;
@@ -2419,6 +2387,7 @@ export class MergeTrain {
     let stage: GateStage = 'setup';
     const trainTree = resolve(o.worktreeRoot, `train-${randomUUID()}`);
     let added = false;
+    let prepareRemoval: (() => void) | undefined;
     let workerCommit: string | undefined;
     let activeTargetHead: string | undefined;
     const runOwnedAffected = (command: readonly string[], cwd: string, log: string, env: NodeJS.ProcessEnv) =>
@@ -2479,19 +2448,14 @@ export class MergeTrain {
       result.stage = 'merge';
       result.mergedCommit = entry.candidate;
       if (workspace) workspace.integrated(recorded.workspace!.module, target());
-      if (controlPlane) this.propagateControlPlaneCommit(entry.candidate, request.taskId, recorded.manager, logPath);
+      if (controlPlane)
+        await this.propagateControlPlaneCommit(entry.candidate, request.taskId, recorded.manager, logPath);
       else if (stabilize) {
         mkdirSync(resolve(o.worktreeRoot), { recursive: true });
         git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, entry.candidate);
         added = true;
-        await this.mergeStabilizedCommitIntoDev(
-          entry.candidate,
-          trainTree,
-          request.taskId,
-          recorded.manager,
-          logPath,
-          runGate,
-        );
+        prepareRemoval = captureTrainWorktreeRemoval(trainTree);
+        await this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
       }
       return true;
     };
@@ -2554,6 +2518,7 @@ export class MergeTrain {
       mkdirSync(resolve(o.worktreeRoot), { recursive: true });
       git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, tip);
       added = true;
+      prepareRemoval = captureTrainWorktreeRemoval(trainTree);
       for (;;) {
         o.fence.assertCurrent(request);
         delete result.firstFailure;
@@ -2723,17 +2688,49 @@ export class MergeTrain {
           return finish();
         }
         const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
-        // With devLandingChecks off, a dev landing is mechanical: dev is verified after the merge, not before it.
-        const skipDevChecks =
-          o.integration?.devLandingChecks === false && integratesIntoDev && !controlPlane && !stabilize;
-        if (skipDevChecks)
-          appendFileSync(logPath, `\nChecks are not run at dev landing; dev is verified after the merge\n`);
+        const directDevLanding = integratesIntoDev && !controlPlane && !stabilize;
+        // The root compiler guard is mandatory even when the optional landing-check setting is disabled.
+        const skipDevChecks = directDevLanding;
+        if (directDevLanding) {
+          stage = 'gate';
+          if (
+            !existsSync(join(trainTree, 'node_modules')) &&
+            existsSync(join(trainTree, 'bun.lock')) &&
+            existsSync(join(trainTree, 'package.json'))
+          )
+            installShared(trainTree);
+          const { command, result: checked } = await this.checkDevCandidate(trainTree, base, candidate, logPath);
+          o.fence.assertCurrent(request);
+          if (target() !== base) continue;
+          if (!checked.passed) {
+            const output = checked.output || 'Root typecheck failed without compiler output';
+            result.stage = 'gate';
+            result.timedOut = checked.timedOut;
+            result.firstFailure = firstFailure(output);
+            result.failedCommand = command;
+            appendFileSync(logPath, `\nRequired root typecheck failed:\n${output}\n`);
+            if (workspace) {
+              const owners = sharedTasks.filter((task) =>
+                taskChangedPaths(task, tip).some((path) => compilerOutputMatchesPath(output, trainTree, path)),
+              );
+              attributeFailure(result, owners.length ? owners : undefined);
+            }
+            return finish();
+          }
+        }
         const configuredIntegrationChecks =
           typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
         const matchingIntegrationChecks = integrationChecksForFiles(result.changedFiles, configuredIntegrationChecks);
         // `clean -fdx` above removed node_modules; remote checks resolve the pinned Bun from it, so every stabilize
         // landing's first check failed before running (2026-10-29). Control-plane landings install their own.
-        if (!skipDevChecks && !controlPlane && !existsSync(join(trainTree, 'node_modules'))) installShared(trainTree);
+        if (
+          !skipDevChecks &&
+          !controlPlane &&
+          !existsSync(join(trainTree, 'node_modules')) &&
+          existsSync(join(trainTree, 'bun.lock')) &&
+          existsSync(join(trainTree, 'package.json'))
+        )
+          installShared(trainTree);
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
         const affectedChecks = skipDevChecks
@@ -2967,7 +2964,7 @@ export class MergeTrain {
           git(trainTree, 'reset', '--hard', candidate);
           git(trainTree, 'clean', '-fdx');
         }
-        if (workspace) {
+        if (workspace && !skipDevChecks) {
           stage = 'gate';
           let failed = false;
           for (const task of sharedTasks) {
@@ -3150,6 +3147,7 @@ export class MergeTrain {
               throw new Error('Control-plane release refs changed before the landing outcome was recorded');
           } else if (integratesIntoDev) {
             o.beforeIntegrationAdvance?.();
+            assertCandidate(trainTree, candidate, 'dev root typecheck before ref advance', logPath);
             try {
               git(o.mainCheckout, 'update-ref', targetRef, candidate, base);
             } catch (error) {
@@ -3195,16 +3193,9 @@ export class MergeTrain {
           targetBranch,
           logPath,
         );
-        if (controlPlane) this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
+        if (controlPlane) await this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
         else if (stabilize)
-          await this.mergeStabilizedCommitIntoDev(
-            candidate,
-            trainTree,
-            request.taskId,
-            recorded.manager,
-            logPath,
-            runGate,
-          );
+          await this.mergeStabilizedCommitIntoDev(candidate, trainTree, request.taskId, recorded.manager, logPath);
         return finish();
       }
     } catch (error) {
@@ -3232,6 +3223,7 @@ export class MergeTrain {
           git(trainTree, 'merge', '--abort');
         } catch {}
         try {
+          prepareRemoval?.();
           git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
         } catch (error) {
           // Retain the tree and exact cleanup failure without replacing a failed proof or a committed outcome.
@@ -3241,13 +3233,46 @@ export class MergeTrain {
     }
   }
 
+  private notifyDevTypecheckFailure(
+    taskId: string,
+    managerId: string | undefined,
+    command: readonly string[],
+    output: string,
+    candidate: string,
+    logPath: string,
+  ): void {
+    const summary =
+      `Task ${taskId} could not advance dev candidate ${candidate}: root typecheck command ${command.join(' ')} failed. ` +
+      `Compiler output: ${output.slice(-6000)}. Full log: ${logPath}`.replace(/[\r\n]+/g, ' ');
+    const supermanager =
+      this.options.supermanager ??
+      localBranchSettings(this.options.mainCheckout).supermanager ??
+      defaults.integration.supermanager;
+    const managers = [...new Set([managerId, supermanager].filter((id): id is string => Boolean(id)))];
+    const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
+    const path = join(this.options.stateDirectory, 'goal.sqlite');
+    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const db = shared ?? owned;
+    if (!db) return;
+    try {
+      const inbox = new SqliteManagerInbox(
+        db,
+        this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
+      );
+      for (const manager of managers)
+        inbox.deliver({ managerId: manager, taskId, kind: 'instruction', evidencePath: logPath, summary });
+    } finally {
+      owned?.close();
+    }
+  }
+
   /** Publish a checked control-plane commit through the candidate branches without moving a ref past its current head. */
-  private propagateControlPlaneCommit(
+  private async propagateControlPlaneCommit(
     mainCommit: string,
     taskId: string,
     managerId: string | undefined,
     logPath: string,
-  ): void {
+  ): Promise<void> {
     const mainBranch = this.options.mainBranch ?? 'main';
     const stabilizeBranch =
       this.options.stabilizeBranch ?? localBranchSettings(this.options.mainCheckout).stabilizeBranch ?? 'stabilize';
@@ -3268,7 +3293,7 @@ export class MergeTrain {
     let devSource = mainCommit;
     let sourceBranch = mainBranch;
     if (stableHead.status === 0) {
-      const merged = this.mergeCommitIntoBranch(mainCommit, mainBranch, stabilizeBranch, logPath);
+      const merged = await this.mergeCommitIntoBranch(mainCommit, mainBranch, stabilizeBranch, logPath);
       if (merged.conflicts) {
         this.notifyControlPlaneConflict(taskId, managerId, mainBranch, mainCommit, stabilizeBranch, merged.conflicts);
         return;
@@ -3286,7 +3311,10 @@ export class MergeTrain {
         `No ${stabilizeBranch} branch exists; merging ${mainBranch} directly into ${devBranch}.\n`,
       );
 
-    const merged = this.mergeCommitIntoBranch(devSource, sourceBranch, devBranch, logPath);
+    const merged = await this.mergeCommitIntoBranch(devSource, sourceBranch, devBranch, logPath, spawnSync, {
+      taskId,
+      ...(managerId === undefined ? {} : { managerId }),
+    });
     if (merged.conflicts) {
       this.notifyControlPlaneConflict(taskId, managerId, sourceBranch, devSource, devBranch, merged.conflicts);
       return;
@@ -3295,13 +3323,14 @@ export class MergeTrain {
   }
 
   /** Build a non-fast-forward merge away from the checkout, then compare-and-swap the target ref. */
-  private mergeCommitIntoBranch(
+  private async mergeCommitIntoBranch(
     sourceCommit: string,
     sourceBranch: string,
     targetBranch: string,
     logPath: string,
     runSync: SpawnText = spawnSync,
-  ): { commit?: string; conflicts?: string[]; error?: string } {
+    owner?: { taskId: string; managerId?: string },
+  ): Promise<{ commit?: string; conflicts?: string[]; error?: string }> {
     const checkout = this.options.mainCheckout;
     const targetRef = `refs/heads/${targetBranch}`;
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -3341,8 +3370,31 @@ export class MergeTrain {
         }
 
         const commit = git(tree, 'rev-parse', 'HEAD');
+        if (targetBranch === (this.options.integrationBranch ?? 'dev')) {
+          if (
+            !existsSync(join(tree, 'node_modules')) &&
+            existsSync(join(tree, 'bun.lock')) &&
+            existsSync(join(tree, 'package.json'))
+          )
+            installShared(tree);
+          const { command, result } = await this.checkDevCandidate(tree, targetHead, commit, logPath);
+          if (!result.passed) {
+            const output = result.output || 'Root typecheck failed without compiler output';
+            appendFileSync(logPath, `Required root typecheck failed before advancing ${targetBranch}:\n${output}\n`);
+            if (owner) this.notifyDevTypecheckFailure(owner.taskId, owner.managerId, command, output, commit, logPath);
+            return { error: `Root typecheck failed before advancing ${targetBranch}: ${output}` };
+          }
+        }
         this.options.beforePromotionAdvance?.();
         try {
+          if (targetBranch === (this.options.integrationBranch ?? 'dev'))
+            assertCandidateIntegrity(
+              tree,
+              commit,
+              'dev root typecheck before ref advance',
+              logPath,
+              this.options.runCandidateGit,
+            );
           git(checkout, 'update-ref', targetRef, commit, targetHead);
           return { commit };
         } catch (error) {
@@ -3448,7 +3500,6 @@ export class MergeTrain {
     taskId: string,
     managerId: string | undefined,
     logPath: string,
-    runGate: GateRunner,
   ): Promise<void> {
     const devBranch = this.options.integrationBranch ?? 'dev';
     const devRef = `refs/heads/${devBranch}`;
@@ -3496,36 +3547,34 @@ export class MergeTrain {
           }
         }
         const merged = git(trainTree, 'rev-parse', 'HEAD');
-        // `clean -fdx` above removed node_modules; remote checks need the pinned Bun from it, so every stabilize
-        // acceptance on the merge failed before its tests and stabilize never reached dev (2026-10-29).
-        if (!existsSync(join(trainTree, 'node_modules'))) installShared(trainTree);
-        const introduced = new Set(git(this.options.mainCheckout, 'rev-list', `${expected}..${candidate}`).split('\n'));
-        const store = this.options.fence as AttemptFence & { tasks?: () => Task[] };
-        const tasks =
-          store
-            .tasks?.()
-            .filter(
-              (task) =>
-                task.brief.target === 'stabilize' &&
-                task.state === 'integrated' &&
-                task.integratedCommit !== undefined &&
-                introduced.has(task.integratedCommit),
-            ) ?? [];
-        for (const task of tasks) {
-          const command = task.brief.acceptance.command;
-          appendFileSync(
-            logPath,
-            `Stabilize acceptance for ${task.id} on merged ${devBranch} candidate ${merged}: ${command.join(' ')}\n`,
-          );
-          const checked = await runGate(command, trainTree, logPath);
-          if (!checked.passed) {
-            const failure = firstFailure(checked.output);
-            appendFileSync(logPath, `Stabilize acceptance failed for ${task.id}: ${failure.assertion}\n`);
-            this.notifyStabilizeAcceptanceFailure(task, command, failure, merged);
+        if (merged === expected) return;
+        if (
+          !existsSync(join(trainTree, 'node_modules')) &&
+          existsSync(join(trainTree, 'bun.lock')) &&
+          existsSync(join(trainTree, 'package.json'))
+        )
+          installShared(trainTree);
+        try {
+          const { command, result } = await this.checkDevCandidate(trainTree, expected, merged, logPath);
+          if (!result.passed) {
+            const output = result.output || 'Root typecheck failed without compiler output';
+            appendFileSync(logPath, `Required root typecheck failed before advancing ${devBranch}:\n${output}\n`);
+            this.notifyDevTypecheckFailure(taskId, managerId, command, output, merged, logPath);
             return;
           }
+        } catch (error) {
+          const output = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+          this.notifyDevTypecheckFailure(
+            taskId,
+            managerId,
+            rootTypecheckCommand(changedFiles(trainTree, expected)),
+            output,
+            merged,
+            logPath,
+          );
+          appendFileSync(logPath, `Required root typecheck could not validate ${merged}: ${output}\n`);
+          return;
         }
-        if (merged === expected) return;
         try {
           git(this.options.mainCheckout, 'update-ref', devRef, merged, expected);
           rmSync(join(this.options.stateDirectory, 'stabilize-conflict.json'), { force: true });
@@ -3538,39 +3587,6 @@ export class MergeTrain {
     } catch (error) {
       appendFileSync(logPath, `${error}\n`);
       this.notifyStabilizeConflict(taskId, managerId, candidate, []);
-    }
-  }
-
-  private notifyStabilizeAcceptanceFailure(
-    task: Task,
-    command: readonly string[],
-    failure: ReturnType<typeof firstFailure>,
-    candidate: string,
-  ): void {
-    const summary =
-      `Task ${task.id} acceptance command ${command.join(' ')} failed on merged dev candidate ${candidate}: first failure: ${failure.assertion}; ${failure.excerpt}`.replace(
-        /[\r\n]+/g,
-        ' ',
-      );
-    const supermanager =
-      this.options.supermanager ??
-      localBranchSettings(this.options.mainCheckout).supermanager ??
-      defaults.integration.supermanager;
-    const managers = [...new Set([task.brief.manager, supermanager].filter((id): id is string => Boolean(id)))];
-    const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
-    const path = join(this.options.stateDirectory, 'goal.sqlite');
-    const owned = shared || !existsSync(path) ? undefined : openDb(path);
-    const db = shared ?? owned;
-    if (!db) return;
-    try {
-      const inbox = new SqliteManagerInbox(
-        db,
-        this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
-      );
-      for (const manager of managers)
-        inbox.deliver({ managerId: manager, taskId: task.id, kind: 'instruction', summary });
-    } finally {
-      owned?.close();
     }
   }
 

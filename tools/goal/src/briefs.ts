@@ -244,6 +244,14 @@ export function validateLocalAcceptanceCommand(command: readonly string[]): void
     'acceptance.placement local supports only Web typechecking, explicit unit/component tests, or the audited focused Web runner with its supported environment prefix',
   );
 }
+/**
+ * Product work integrating into the integration branch. Its retries are unlimited and need no approval, and changes
+ * outside its declared paths are recorded rather than stopping it. Control-plane, stabilize and proof work keep their
+ * own lifecycle limits.
+ */
+export function devProductBrief(brief: Pick<Brief, 'goal' | 'kind' | 'target'>): boolean {
+  return brief.goal !== 'control-plane' && brief.target !== 'stabilize' && brief.kind !== 'verification';
+}
 /** Point an existing brief at the stabilize branch without changing its other front matter. */
 export function withStabilizeTarget(markdown: string): string {
   const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(markdown);

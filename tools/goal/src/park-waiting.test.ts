@@ -133,7 +133,7 @@ test('the worker protocol starts checks asynchronously and suspends until the ho
     const bare = workerPrompt(task, undefined, undefined, [], h.root);
     expect(bare).toContain('has no scripts/worker-check.ts');
     expect(bare).toContain('run your acceptance command once after your last relevant edit');
-    expect(bare).toContain('Do not run the root typecheck, affected checks or other regression checks yourself');
+    expect(bare).toContain('Do not run the root typecheck or other regression suites yourself');
     expect(bare).not.toContain('bun scripts/worker-check.ts -- <command...>');
     mkdirSync(join(h.root, 'scripts'), { recursive: true });
     writeFileSync(join(h.root, 'scripts/worker-check.ts'), '');

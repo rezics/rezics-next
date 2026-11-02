@@ -487,3 +487,191 @@ test('pruning stores reads only each worktree top-level dependency link, not the
     h.close();
   }
 });
+
+import { linkSync, renameSync } from 'node:fs';
+import { captureTrainWorktreeRemoval, MergeTrain } from './merge-train.ts';
+import { openDb } from './db.ts';
+import { SqliteLandingQueue } from './land.ts';
+import type { AttemptFence, GateOutcome } from './contracts.ts';
+
+/** Only Git and owned local directories; no dependency installer, database, compiler or check process. */
+function ownedTrainFixture() {
+  const h = fixture();
+  const git = (...args: string[]) => {
+    const result = Bun.spawnSync(
+      [
+        'git',
+        '-c',
+        'user.name=Fixture',
+        '-c',
+        'user.email=fixture@example.invalid',
+        '-c',
+        'core.hooksPath=/dev/null',
+        ...args,
+      ],
+      {
+        cwd: h.root,
+        env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' },
+        stdin: 'ignore',
+      },
+    );
+    if (result.exitCode !== 0) throw new Error(new TextDecoder().decode(result.stderr));
+    return new TextDecoder().decode(result.stdout);
+  };
+  git('init', '-b', 'main');
+  writeFileSync(join(h.root, 'source'), 'retained source\n');
+  git('add', 'source');
+  git('commit', '-qm', 'Fixture source');
+  const tree = join(h.root, 'trees', 'train');
+  mkdirSync(join(h.root, 'trees'));
+  git('worktree', 'add', '--detach', tree, 'HEAD');
+  return { ...h, tree, git };
+}
+
+test('owned train cleanup removes immutable local fixture directories without changing linked peer stores', () => {
+  const h = ownedTrainFixture();
+  try {
+    const prepareRemoval = captureTrainWorktreeRemoval(h.tree);
+    const outside = join(h.root, 'live-peer-store');
+    mkdirSync(outside);
+    const sentinel = join(outside, 'package-file');
+    writeFileSync(sentinel, 'peer bytes');
+    chmodSync(sentinel, 0o444);
+    chmodSync(outside, 0o555);
+    const store = join(h.tree, '.temp/owned-store');
+    const sealed = join(store, 'package');
+    mkdirSync(sealed, { recursive: true });
+    linkSync(sentinel, join(sealed, 'hardlink'));
+    symlinkSync(outside, join(h.tree, 'shared-store'), 'dir');
+    symlinkSync(sentinel, join(sealed, 'linked-file'));
+    chmodSync(sealed, 0o555);
+    chmodSync(store, 0o555);
+    const beforeFile = lstatSync(sentinel);
+    const beforeDirectory = lstatSync(outside);
+    prepareRemoval();
+    expect(lstatSync(sealed).mode & 0o700).toBe(0o700);
+    expect(lstatSync(sentinel).mode).toBe(beforeFile.mode);
+    expect(lstatSync(sentinel).ino).toBe(beforeFile.ino);
+    expect(lstatSync(outside).mode).toBe(beforeDirectory.mode);
+    expect(lstatSync(outside).ino).toBe(beforeDirectory.ino);
+    h.git('worktree', 'remove', '--force', h.tree);
+    expect(existsSync(h.tree)).toBe(false);
+    expect(h.git('worktree', 'list', '--porcelain')).not.toContain(h.tree);
+    expect(readFileSync(sentinel, 'utf8')).toBe('peer bytes');
+    expect(lstatSync(sentinel).mode).toBe(beforeFile.mode);
+    expect(lstatSync(outside).mode).toBe(beforeDirectory.mode);
+  } finally {
+    h.close();
+  }
+});
+
+test('owned train cleanup refuses replaced roots and parent links before changing their permissions', () => {
+  for (const replacement of ['root-directory', 'root-symlink', 'parent-symlink']) {
+    const h = ownedTrainFixture();
+    try {
+      const prepareRemoval = captureTrainWorktreeRemoval(h.tree);
+      const outside = join(h.root, 'other-worktree');
+      mkdirSync(outside);
+      writeFileSync(join(outside, 'sentinel'), 'keep');
+      let target: string;
+      if (replacement === 'parent-symlink') {
+        renameSync(join(h.root, 'trees'), join(h.root, 'original-parent'));
+        symlinkSync(outside, join(h.root, 'trees'), 'dir');
+        target = outside;
+      } else {
+        renameSync(h.tree, join(h.root, 'original-tree'));
+        if (replacement === 'root-symlink') {
+          symlinkSync(outside, h.tree, 'dir');
+          target = outside;
+        } else {
+          renameSync(outside, h.tree);
+          target = h.tree;
+        }
+      }
+      chmodSync(target, 0o555);
+      const before = lstatSync(target);
+      expect(() => prepareRemoval()).toThrow();
+      expect(lstatSync(target).mode).toBe(before.mode);
+      expect(lstatSync(target).ino).toBe(before.ino);
+      expect(readFileSync(join(target, 'sentinel'), 'utf8')).toBe('keep');
+    } finally {
+      h.close();
+    }
+  }
+});
+
+
+test('owned cleanup preserves mandatory final-candidate typing, bounded retries and paid source', async () => {
+  for (const failure of ['none', 'compiler', 'infrastructure'] as const) {
+    const h = ownedTrainFixture();
+    mkdirSync(join(h.root, '.temp'), { recursive: true });
+    const db = openDb(join(h.root, '.temp/queue.sqlite'));
+    try {
+      writeFileSync(join(h.root, '.gitignore'), '.temp/\n');
+      h.git('add', '.gitignore');
+      h.git('commit', '-qm', 'Ignore fixture state');
+      h.git('branch', 'dev');
+      h.git('-C', h.tree, 'checkout', '-b', 'fixture-worker', 'main');
+      writeFileSync(join(h.tree, 'feature.ts'), 'export const feature = true;\n');
+      h.git('-C', h.tree, 'add', 'feature.ts');
+      h.git('-C', h.tree, 'commit', '-qm', 'Paid source');
+      const source = h.git('rev-parse', 'fixture-worker').trim();
+      const base = h.git('rev-parse', 'dev').trim();
+      const fence: AttemptFence = {
+        assertCurrent() {},
+        commitMerge(_ref, merge) {
+          return db.transaction(merge).immediate();
+        },
+      };
+      const queue = new SqliteLandingQueue(db, fence);
+      queue.enqueue({
+        taskId: 'fixture', attempt: 1, branch: 'fixture-worker', worktree: h.tree,
+        declaredPaths: ['feature.ts'], gate: ['fixture-acceptance'],
+      });
+      const outcomes: GateOutcome[] = [];
+      let calls = 0;
+      let checkedTree = '';
+      await new MergeTrain({
+        mainCheckout: h.root,
+        stateDirectory: join(h.root, '.temp/state'),
+        worktreeRoot: join(h.root, 'trees'),
+        integrationBranch: 'dev',
+        integration: { devLandingChecks: false },
+        queue, fence,
+        sink: { onGateOutcome(outcome) { outcomes.push(outcome); } },
+        runGate: async () => { throw new Error('Optional acceptance must not replace mandatory typing'); },
+        runTypecheck: async (command, cwd) => {
+          calls++;
+          checkedTree = cwd;
+          expect(command).toEqual(['env', 'TYPECHECK_CHANGED=feature.ts', 'bun', 'scripts/typecheck.ts']);
+          expect(h.git('rev-parse', 'dev').trim()).toBe(base);
+          expect(h.git('-C', cwd, 'rev-parse', 'HEAD').trim()).toBe(source);
+          const sealed = join(cwd, '.temp/sealed-fixture');
+          mkdirSync(sealed, { recursive: true });
+          writeFileSync(join(sealed, 'receipt'), 'owned fixture');
+          chmodSync(sealed, 0o555);
+          await Promise.resolve();
+          return {
+            passed: failure === 'none', timedOut: false,
+            output: failure === 'compiler' ? 'feature.ts(1,1): error TS2322: fixture mismatch'
+              : failure === 'infrastructure' ? 'ETIMEDOUT: fixture compiler transport' : '',
+          };
+        },
+      }).run();
+      expect(calls).toBe(failure === 'infrastructure' ? 2 : 1);
+      expect(outcomes).toHaveLength(1);
+      expect(outcomes[0]!.passed).toBe(failure === 'none');
+      expect(h.git('rev-parse', 'dev').trim()).toBe(failure === 'none' ? source : base);
+      expect(h.git('rev-parse', 'fixture-worker').trim()).toBe(source);
+      expect(existsSync(checkedTree)).toBe(false);
+      expect(existsSync(h.tree)).toBe(true);
+      if (failure !== 'none') {
+        expect(outcomes[0]!.stage).toBe('gate');
+        expect(outcomes[0]!.firstFailure!.excerpt).toContain(failure === 'compiler' ? 'TS2322' : 'ETIMEDOUT');
+      }
+    } finally {
+      db.close();
+      h.close();
+    }
+  }
+});

@@ -260,8 +260,10 @@ test('a stabilize commit whose only conflict with dev is two added imports merge
     git(h.root, 'branch', 'stabilize', h.head());
     h.advanceDev('shared.ts', body('', "import { d } from './d.ts';\n", 'd();', 'four;'));
     const task = dispatch(h, 'shared.ts', true, 'kernel');
-    writeFileSync(join(task.worktree, '.temp/worker-plan.json'),
-      JSON.stringify({ file: 'shared.ts', content: body('', "import { s } from './s.ts';\n", 'two;', 's();') }));
+    writeFileSync(
+      join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({ file: 'shared.ts', content: body('', "import { s } from './s.ts';\n", 'two;', 's();') }),
+    );
     await h.start(task);
     await h.train();
 

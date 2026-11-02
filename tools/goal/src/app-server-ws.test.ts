@@ -27,17 +27,28 @@ console.error('  readyz: http://127.0.0.1:' + server.port + '/readyz');
 test('a pool app-server listens on a loopback WebSocket owned by the caller and serves JSON-RPC', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'goal-ws-'));
   const executable = join(directory, 'codex');
-  writeFileSync(executable, fake); chmodSync(executable, 0o755);
+  writeFileSync(executable, fake);
+  chmodSync(executable, 0o755);
   const server = await connectPool({ id: 'pool', codexHome: join(directory, 'home'), executable });
   const endpoint = server.endpoint;
   try {
     expect(endpoint).toMatch(/^ws:\/\/127\.0\.0\.1:\d+$/);
     const notifications: string[] = [];
-    server.onNotification(notification => notifications.push(notification.method));
-    expect(await server.request('thread/start', { cwd: directory })).toEqual({ echo: 'thread/start', params: { cwd: directory } });
+    server.onNotification((notification) => notifications.push(notification.method));
+    expect(await server.request('thread/start', { cwd: directory })).toEqual({
+      echo: 'thread/start',
+      params: { cwd: directory },
+    });
     await Bun.sleep(50);
     expect(notifications).toContain('thread/started');
-  } finally { server.close(); }
+  } finally {
+    server.close();
+  }
   await Bun.sleep(300);
-  expect(await fetch(`${endpoint.replace('ws://', 'http://')}/readyz`).then(() => 'up', () => 'down')).toBe('down');
+  expect(
+    await fetch(`${endpoint.replace('ws://', 'http://')}/readyz`).then(
+      () => 'up',
+      () => 'down',
+    ),
+  ).toBe('down');
 });

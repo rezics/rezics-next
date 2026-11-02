@@ -25,6 +25,7 @@ import {
 import { checkPinnedBunInstallation } from './check-compatibility.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { InboxDocumentReference, ManagerEvent } from './contracts.ts';
+import { PublicationLegacyReconciliation } from './publication-legacy.ts';
 
 const HOUR_MS = 60 * 60 * 1000;
 const WORKFLOW_DEADLINE_SECONDS = 1800;
@@ -587,6 +588,7 @@ export class PublicationController {
   readonly options: PublicationControllerOptions;
   readonly db: Database;
   readonly process: PublicationProcessObservation;
+  readonly legacy: PublicationLegacyReconciliation;
   private readonly now: () => number;
   private readonly inbox: SqliteManagerInbox;
 
@@ -597,6 +599,12 @@ export class PublicationController {
     this.now = options.now ?? Date.now;
     this.inbox = options.inbox ?? new SqliteManagerInbox(options.db, options.stateDirectory);
     migrate(this.db, publicationMigrations);
+    this.legacy = new PublicationLegacyReconciliation({ ...options, process: this.process }, (path, body) => {
+      if (body.toolExit === undefined) return null;
+      if (path.replaceAll('\\', '/') !== CANCELLATION_EVIDENCE_PATH)
+        throw new Error('unsupported cancellation identity evidence path');
+      return validateCancelledDuplicate(body);
+    });
   }
 
   private lease(): DirectoryLease {
@@ -696,6 +704,7 @@ export class PublicationController {
       throw new Error('only the configured operations manager may bootstrap publication custody');
     const lease = this.lease();
     try {
+      this.legacy.assertClear();
       const file = readRegularFile(this.options.stateDirectory, manifestRelativePath);
       const value = parseJson(file.text, 'publication custody bootstrap');
       if (!isRecord(value)) throw new Error('publication custody bootstrap must be a JSON object');
@@ -1363,6 +1372,7 @@ export class PublicationController {
   }
 
   private requireBootstrappedInventory(): void {
+    this.legacy.assertClear();
     const inventory = this.db
       .query('SELECT digest, body, observed_at FROM publication_inventory WHERE singleton=1')
       .get() as { digest: string; body: string; observed_at: string } | null;
@@ -1773,6 +1783,25 @@ export class PublicationController {
     signal: NodeJS.Signals | null,
   ): Promise<void> {
     const invocation = this.invocation(invocationId);
+    const retainedMembers: unknown = JSON.parse(invocation.process_members);
+    if (!processMembersValid(retainedMembers)) {
+      this.markVisibilityUnknown(invocationId, 'original observed process membership is unavailable at terminal');
+      return;
+    }
+    members = [...new Map([...retainedMembers, ...members].map((member) => [identityKey(member), member])).values()];
+    for (const original of [identity, ...members]) {
+      const group = this.observeGroup(original.group);
+      const current = this.process.identity(original.pid);
+      if (
+        !group.complete ||
+        group.members.length ||
+        this.process.same(original) ||
+        (current && !sameIdentity(current, original))
+      ) {
+        this.markVisibilityUnknown(invocationId, 'recorded member or group did not settle with the original workflow');
+        return;
+      }
+    }
     const at = new Date(this.now()).toISOString();
     let live: { status: 'match' | 'mismatch' | 'unavailable'; commit?: string; reason?: string };
     try {
@@ -1803,6 +1832,12 @@ export class PublicationController {
       sourceRef: invocation.source_ref,
       process: normalizedIdentity(identity),
       processMembers: members,
+      physicalSettlement: {
+        kind: 'native-managed-workflow-close',
+        leaderClosed: true,
+        controllerLogDescriptorClosed: true,
+        knownMembers: members,
+      },
       argv: JSON.parse(invocation.argv!) as string[],
       cwd: invocation.cwd,
       deadlineSeconds: invocation.deadline_seconds,
@@ -1987,6 +2022,7 @@ export class PublicationController {
         .query('SELECT digest, observed_at, observed_by, observed_session FROM publication_inventory WHERE singleton=1')
         .get();
       return {
+        legacy: this.legacy.status(),
         inventory: inventory ?? { status: 'unknown', reason: 'bootstrap required' },
         authority: authority ?? null,
         invocation: null,
@@ -2004,7 +2040,7 @@ export class PublicationController {
     if (authority) {
       const retained = authority as { invocation_id?: string | null };
       if (retained.invocation_id) return this.status(retained.invocation_id);
-      return { authority, invocation: null };
+      return { authority, invocation: null, legacy: this.legacy.status() };
     }
     throw new Error(`unknown publication authority or invocation: ${id}`);
   }
@@ -2030,6 +2066,7 @@ export class PublicationController {
       handle = { state: 'unknown', identity: null, reason: 'spawn may have happened before its identity was recorded' };
     const terminal = row.receipt ? parseJson(row.receipt, 'terminal publication receipt') : null;
     return {
+      legacy: this.legacy.status(),
       authorityId: row.authority_id,
       invocationId: row.id,
       state: row.state,

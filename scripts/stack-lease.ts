@@ -16,13 +16,23 @@
  * waiting (held/capacity and tickets ahead), repeats it every 60 seconds, and records every take with elapsed ms.
  * The CLI holds its slot for the command's life, forwards signals, and returns the command's exit code.
  */
-import { mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, watch, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  unlinkSync,
+  watch,
+  writeFileSync,
+} from 'node:fs';
 import { cpus, totalmem } from 'node:os';
 import { basename, join } from 'node:path';
 
 export interface StackSlot {
   readonly index: number | null;
   readonly capacity: number;
+  readonly weight: number;
   readonly waitedMs: number;
   readonly env: Record<string, string>;
   release(): Promise<void>;
@@ -41,6 +51,58 @@ export function stackCapacity(env: Record<string, string | undefined> = process.
 
 type Lock = { release(): Promise<void> };
 const BUSY = 75;
+const MAX_WAIT_RECORD_MS = 60_000;
+
+export class StackLeaseAborted extends Error {
+  constructor() {
+    super('stack-lease: admission was cancelled');
+    this.name = 'StackLeaseAborted';
+  }
+}
+
+/** Records elapsed wait time in full-line appends, without allowing a reporting error to fail the check. */
+function waitRecorder(file?: string): { begin(): void; record(): void; stop(): void } {
+  if (!file) return { begin() {}, record() {}, stop() {} };
+  let started: number | undefined;
+  let recordedThrough = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const flush = () => {
+    if (started === undefined) return;
+    const elapsed = Math.max(0, Math.floor(performance.now() - started) - recordedThrough);
+    let remaining = elapsed;
+    while (remaining > 0) {
+      const increment = Math.min(remaining, MAX_WAIT_RECORD_MS);
+      try {
+        appendFileSync(file, `${increment}\n`);
+      } catch {
+        // The control-plane hint is best-effort and must never fail a check.
+      }
+      recordedThrough += increment;
+      remaining -= increment;
+    }
+  };
+  const schedule = (delay = MAX_WAIT_RECORD_MS) => {
+    timer = setTimeout(() => {
+      flush();
+      schedule();
+    }, delay);
+    timer.unref?.();
+  };
+  return {
+    begin() {
+      if (started !== undefined) return;
+      started = performance.now();
+      schedule(100);
+    },
+    record: flush,
+    stop() {
+      if (started === undefined) return;
+      clearTimeout(timer);
+      timer = undefined;
+      flush();
+    },
+  };
+}
 
 /** The pipe is owned only by this process: even SIGKILL releases every lock it owns. */
 async function lock(file: string, blocking = false): Promise<Lock | null> {
@@ -91,12 +153,20 @@ function busy(file: string): boolean {
 export async function acquireStackSlot(
   label: string,
   env: Record<string, string | undefined> = process.env,
+  weight = 1,
+  onWaiting?: (line: string) => void,
+  repeatMs = 60_000,
+  signal?: AbortSignal,
 ): Promise<StackSlot> {
   const capacity = stackCapacity(env);
+  if (!Number.isSafeInteger(weight) || weight < 1 || weight > capacity)
+    throw new Error(`Lease weight must be between 1 and capacity (${capacity}), received ${weight}`);
+  if (signal?.aborted) throw new StackLeaseAborted();
   if (env.REZICS_STACK_LEASE === 'off' || env.REZICS_STACK_SLOT !== undefined) {
     return {
       index: null,
       capacity,
+      weight,
       waitedMs: 0,
       env: env.REZICS_STACK_SLOT === undefined ? {} : { REZICS_STACK_SLOT: env.REZICS_STACK_SLOT },
       async release() {},
@@ -104,6 +174,7 @@ export async function acquireStackSlot(
   }
   const started = performance.now();
   const directory = env.REZICS_STACK_LEASE_DIR ?? '/tmp/rezics-stack-lease';
+  const wait = waitRecorder(env.GOAL_CHECK_WAIT_FILE);
   mkdirSync(directory, { recursive: true });
   let wake: (() => void) | undefined;
   let generation = 0;
@@ -113,14 +184,18 @@ export async function acquireStackSlot(
   });
   const changed = (observed: number) =>
     new Promise<void>((done) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
       if (generation !== observed) return done();
-      const timer = setTimeout(finish, 2000);
       function finish() {
-        clearTimeout(timer);
-        wake = undefined;
+        if (timer) clearTimeout(timer);
+        signal?.removeEventListener('abort', finish);
+        if (wake === finish) wake = undefined;
         done();
       }
+      timer = setTimeout(finish, Math.min(2000, repeatMs));
       wake = finish;
+      signal?.addEventListener('abort', finish, { once: true });
+      if (signal?.aborted) finish();
     });
   const mutexFile = join(directory, 'queue.lock');
   let ticket: string | undefined;
@@ -146,9 +221,11 @@ export async function acquireStackSlot(
 
     let lastLog = -Infinity;
     while (true) {
+      if (signal?.aborted) throw new StackLeaseAborted();
       const observed = generation;
       const mutex = (await lock(mutexFile, true))!;
       try {
+        if (signal?.aborted) throw new StackLeaseAborted();
         // Only the queue mutex may delete dead tickets, so their lock inode cannot be replaced under an enqueuer.
         const tickets = readdirSync(directory).filter((name) => /^ticket-\d+$/.test(name));
         const live = tickets
@@ -160,44 +237,66 @@ export async function acquireStackSlot(
           })
           .sort((a, b) => (BigInt(a.slice(7)) < BigInt(b.slice(7)) ? -1 : 1));
         const ahead = live.indexOf(basename(ticket));
-        let held = 0;
+        const heldSlots: number[] = [];
         for (let index = 1; index <= capacity; index++) {
-          const file = join(directory, `slot-${index}.lock`);
-          if (ahead === 0) {
-            const slotLock = await lock(file);
-            if (slotLock) {
-              await ticketLock.release();
-              ticketLock = undefined;
-              unlinkSync(ticket);
-              const waitedMs = Math.floor(performance.now() - started);
-              console.error(`stack-lease: ${label} slot ${index}/${capacity} after ${waitedMs} ms`);
-              let released: Promise<void> | undefined;
-              return {
-                index,
-                capacity,
-                waitedMs,
-                env: { REZICS_STACK_SLOT: `${index}/${capacity}` },
-                release() {
-                  return (released ??= (async () => {
-                    await slotLock.release();
-                    writeFileSync(join(directory, 'wake'), '');
-                  })());
-                },
-              };
-            }
-            held++;
-          } else if (busy(file)) held++;
+          if (busy(join(directory, `slot-${index}.lock`))) heldSlots.push(index);
         }
-        if (performance.now() - lastLog >= 60_000) {
-          console.error(`stack-lease: ${label} waiting (${held}/${capacity} held, ${ahead} ahead)`);
+        if (ahead === 0 && capacity - heldSlots.length >= weight) {
+          const acquired: { index: number; lock: Lock }[] = [];
+          for (let index = 1; index <= capacity && acquired.length < weight; index++) {
+            if (heldSlots.includes(index)) continue;
+            const slotLock = await lock(join(directory, `slot-${index}.lock`));
+            if (slotLock) acquired.push({ index, lock: slotLock });
+          }
+          if (acquired.length === weight) {
+            if (signal?.aborted) {
+              await Promise.all(acquired.map((entry) => entry.lock.release()));
+              throw new StackLeaseAborted();
+            }
+            await ticketLock.release();
+            ticketLock = undefined;
+            unlinkSync(ticket);
+            const waitedMs = Math.floor(performance.now() - started);
+            const indexes = acquired.map((entry) => entry.index);
+            console.error(
+              weight === 1
+                ? `stack-lease: ${label} slot ${indexes[0]}/${capacity} after ${waitedMs} ms`
+                : `stack-lease: ${label} slots ${indexes.join(',')} (${weight}/${capacity}) after ${waitedMs} ms`,
+            );
+            let released: Promise<void> | undefined;
+            return {
+              index: indexes[0]!,
+              capacity,
+              weight,
+              waitedMs,
+              env: { REZICS_STACK_SLOT: `${indexes[0]}/${capacity}` },
+              release() {
+                return (released ??= (async () => {
+                  await Promise.all(acquired.map((entry) => entry.lock.release()));
+                  writeFileSync(join(directory, 'wake'), '');
+                })());
+              },
+            };
+          }
+          await Promise.all(acquired.map((entry) => entry.lock.release()));
+        }
+        if (signal?.aborted) throw new StackLeaseAborted();
+        const held = heldSlots.length;
+        if (performance.now() - lastLog >= repeatMs) {
+          const line = `stack-lease: ${label} waiting (${held}/${capacity} held, ${ahead} ahead)`;
+          console.error(line);
+          onWaiting?.(line);
           lastLog = performance.now();
         }
+        wait.begin();
+        wait.record();
       } finally {
         await mutex.release();
       }
       await changed(observed);
     }
   } finally {
+    wait.stop();
     watcher.close();
     await ticketLock?.release();
     // Dead tickets are left for the next mutex owner, just as they are after SIGKILL.

@@ -14,26 +14,43 @@ async function fixture(options: { failing?: string } = {}) {
     { directory: 'services/gamma', name: '@fixture/gamma', delay: options.failing === '@fixture/gamma' ? 1800 : 2000 },
   ];
 
-  writeFileSync(join(root, 'package.json'), JSON.stringify({
-    name: 'root-gate-fixture',
-    private: true,
-    workspaces: ['apps/*', 'services/*', 'packages/*'],
-  }, null, 2));
+  writeFileSync(
+    join(root, 'package.json'),
+    JSON.stringify(
+      {
+        name: 'root-gate-fixture',
+        private: true,
+        workspaces: ['apps/*', 'services/*', 'packages/*'],
+      },
+      null,
+      2,
+    ),
+  );
 
   for (const workspace of workspaces) {
     const directory = join(root, workspace.directory);
     mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, 'package.json'), JSON.stringify({
-      name: workspace.name,
-      scripts: { check: 'bun check.ts' },
-    }, null, 2));
-    writeFileSync(join(directory, 'check.ts'), `
+    writeFileSync(
+      join(directory, 'package.json'),
+      JSON.stringify(
+        {
+          name: workspace.name,
+          scripts: { check: 'bun check.ts' },
+        },
+        null,
+        2,
+      ),
+    );
+    writeFileSync(
+      join(directory, 'check.ts'),
+      `
       import { writeFileSync } from 'node:fs';
       await Bun.sleep(${workspace.delay});
       console.log('check-output-${workspace.name}');
       writeFileSync(new URL('./finished', import.meta.url), 'finished');
-      ${options.failing === workspace.name ? "process.exit(1);" : ''}
-    `);
+      ${options.failing === workspace.name ? 'process.exit(1);' : ''}
+    `,
+    );
   }
 
   const install = Bun.spawn([process.execPath, 'install'], {
@@ -111,9 +128,11 @@ test('a failing workspace fails after all workspaces finish and prints its outpu
       expect(result.output).toContain(`check-output-${workspace.name}`);
     }
     expect(result.output.indexOf(`check-output-${failingWorkspace}`)).toBeGreaterThan(
-      Math.max(...h.workspaces
-        .filter(workspace => workspace.name !== failingWorkspace)
-        .map(workspace => result.output.indexOf(`check-output-${workspace.name}`))),
+      Math.max(
+        ...h.workspaces
+          .filter((workspace) => workspace.name !== failingWorkspace)
+          .map((workspace) => result.output.indexOf(`check-output-${workspace.name}`)),
+      ),
     );
   } finally {
     h.close();
