@@ -184,10 +184,20 @@ Module schema dumps are derived by the controller through the normal supported p
 
 ## Home dimensions
 
-Native kind selection is delivered. Space selection depends on Search's actual retained
+Native kind selection is delivered. Space candidate membership depends on Search's actual retained
 Source and scoped journey; a declared task or point read alone does not establish candidate
-membership. Kind, Space and question selection apply as a literal conjunction to the same
+membership. The adopted kind, Space and question selections apply as a literal conjunction to the same
 primary candidate in the existing mixed stream.
+
+Home accepts exact `spaceId` and `ratingQuestionId` request selections, but returns
+`dependency_unavailable` until their original native membership producers are composed;
+accepting parameters, point witnesses or metadata supplies no population coverage and
+never broadens the stream to unselected candidates.
+
+The available default sources remain catalogue/Account discovery, recent Following and
+Continue. Public Board/Realm/discussion/Collection discovery and Space/Context membership
+are omitted, pending their original producers. Failed source lanes remain omitted; only
+a ready lane with a native frontier enables Next, while Retry may retry a failed lane.
 
 Home Space choice reads retain the resolved Space identity on point-read failure so a failed
 revalidation disables that selection; platform closure remains distinct from access denial.
@@ -211,8 +221,8 @@ Space witness and question-review witness may be different threads; membership d
 claim that the cited review was posted in the selected Space.
 
 Private votes, aggregates, question applicability/grain, editorial Contexts and Realm
-populations are not membership witnesses. The chosen future request-only ratingQuestion.id
-shape is not an installed API, stored-reference predicate, permission or rating threshold.
+populations are not membership witnesses. The separate future request-only `ratingQuestion.id`
+predicate shape remains uninstalled; it is not a stored-reference predicate, permission or rating threshold.
 Before exposing a Context selector, finish current native witnesses and lifecycle/Source
 coverage, definitions:read before enumeration, bounded real question choices with signed
 keysets and current metadata, signed selection/revision binding and the default feed
@@ -220,11 +230,3 @@ composition. Preserve native candidate/frontier bounds and unavailable responses
 browser filter, downloaded-first-page directory or selectable placeholder supplies these
 dependencies. Kind and actual Space delivery need not wait for Context. The full dimensions
 outcome remains incomplete.
-
-Home accepts exact `spaceId` and `ratingQuestionId` request selections, but returns
-`dependency_unavailable` until their original native membership producers are composed;
-metadata alone never broadens the stream to unselected candidates. Failed source lanes
-remain omitted; only a ready lane with a native frontier enables Next, while Retry may
-retry a failed lane. The available default sources remain catalogue/Account discovery,
-recent Following and Continue. Public Board/Realm/discussion/Collection discovery and
-Space/Context membership are omitted, pending their original producers.
