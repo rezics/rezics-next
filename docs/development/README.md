@@ -17,6 +17,8 @@ Use this workflow:
 [Goal definitions](../goals/README.md) describe what must be completed.
 [Goal tooling](../../tools/goal/README.md) owns dispatch, task state, routing, integration, promotion and recovery.
 
+[Database restore](database-restore.md) owns isolated recovery, proof-key rotation and erasure replay before traffic.
+
 The coordinating role resolves cross-scope decisions and workflow defects. A manager owns its Goal's scope,
 contracts, briefs and acceptance. Workers implement briefed changes. Managers delegate implementation, including
 tooling changes, except an explicitly authorized emergency correction.
