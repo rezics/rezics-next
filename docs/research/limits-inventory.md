@@ -4,126 +4,126 @@ Source: the launch's current development snapshot, [a4faadd62b29a4b42cda4472c480
 
 The table groups limits that share an enforcement path. Every number in a row is a separate bound. **C** means a coordinated constant/configuration change for a modest increase; **D** means a design change for very large or unbounded use; **N** means removing the bound is not advisable. The detailed entries give the qualifications, sources and user effects.
 
-| Area | Limit | Value | Change needed |
-| --- | --- | --- | --- |
-| Shared G01 | Request deadline and command lock wait | 2,000 ms; lock 200 ms; receipt recovery 200 ms; contention jitter100 ms | C; D for long work |
-| Shared G02 | Admission and body memory | 8 ordinary + 2 reserved running; 32 waiting; aggregate formula below | C/D |
-| Shared G03 | HTTP bodies | default 1 MiB; route maximum 4 MiB + 64 KiB | C/D |
-| Shared G04 | Command identity and effects | key 1–255 UTF-16 units; anonymous UUIDv4 36; 1,000 events/command; event read batch64; receipt key versions1–4 | C/D |
-| Shared G05 | Routing and numeric representations | 65,536 routes; 4,096 partitions; 16 routes/partition; int32, safe integer and int64 ceilings below | D |
-| Shared G06 | Ordinary list cursors | 8 keys; 256 B/key; 2,048 B after; 3,038 B plaintext; 4,096 characters token | C/D |
-| Shared G07 | Search list cursors | 8 keys; 2,560 B/key; 3,072 B after; 3,584 B plaintext; 4,864 characters token | C/D |
-| Shared G08 | Cursor binding and time | route 256 B; query 2,048 B; 15 min lifetime; 60 s future tolerance | C; N unlimited lifetime |
-| Shared G09 | Legacy cursors and causal sessions | 8 after keys; 4,096-character decode; 32 session components | D |
-| Shared G10 | Write/search/abuse rates | full five-tier, seven-family matrix below | C; N unlimited |
-| Shared G11 | Rate overrides and counter retention | maximum 1–1,000,000; window 1–86,400 s; 48 h retention; 1,000 removals/tick | C/D |
-| Shared G12 | Job scheduling | concurrency 2/8/8/8/4/2/2 by queue; effects/import one per partition | C/D |
-| Shared G13 | Durable command retries | 8 attempts; initial 1 s; backoff ×2 | C; N infinite |
-| Shared G14 | Terminal workflow retention | default 30 d, configurable 7–365 d; 1,000/batch ×60; every 10 min | C/D |
-| Accounts A01 | Membership neighbourhood | 1,000 role-bearing organization and Realm memberships combined/account | D |
-| Accounts A02 | Handles | new 3–64 ASCII characters; existing lookup 1–64 | C/D |
-| Accounts A03 | Handle/lifecycle windows | 5 changes/30 d; redirects 30 d; pending registration 30 min; orphan claim 30 d | C/D |
-| Accounts A04 | Profile and links | profile text 4,096 UTF-16 units; 5 links; labels 64 code points; URLs 2,048 characters | C/D |
-| Accounts A05 | Preferences | 32 shelf layouts; scope key 256 units; notifications JSON 2 KiB; shelf JSON 16 KiB; spoiler 0–2 | C/D |
-| Accounts A06 | Verification and reasons | statement 2,000; links 5; reason 500; problem type 128/detail 512 characters | C/D |
-| Accounts A07 | Access batches | viewer references 100; actions/type 64; bindings/type 256; creation resources 16 | D |
-| Accounts A08 | Read preparation and approvals | evidence 1 s; authenticated observation 180 s; operator receipt 60 s; approval ≤5 min, credential ≤1 min | N; D for longer workflow |
-| Accounts A09 | Committed continuations | 5 min validity; 10 s resume; operation key 128, completion key 240, receipt 256, target 128 characters | C/D |
-| Auth A10 | Sessions and passkeys | 64 retained sessions; 32 passkeys/person; passkey name native 128/UI 64 units | D |
-| Auth A11 | Credential input | password 8–128 units; email 254 units; credential IDs 1,024; challenge 16–256; clientDataJSON 12,000 units | C/D; N unbounded |
-| Auth A12 | Credential freshness and token lifetimes | step-up 600 s; account assertion 60 s; website assertion/code 120 s; access/ID token 300 s; session 7 d/update age 1 d | N/D |
-| Auth A13 | Recovery | 1 email/account/60 s; proof 5 min; delivery callback 5 s | C; N unlimited |
-| Auth A14 | Attempt rates | reset-password 3/60 s; verify-password 5/300 s; two-factor paths 5/300 s | C; N unlimited |
-| Auth A15 | Scopes and claims | generic catalogue-size bound, fallback 1,000; consent/Kernel 512; scope 128 ASCII; joined 66,047 B; amr 100×128 | D |
-| Auth A16 | JWKS and website registration | 3 keys; ordinary JWKS 8 KiB, 2 fetches, 2 s, cache 300 s; website 8 redirects per list, kid 128 | C/D; N unbounded |
-| Auth A17 | Protocol and security pages | body 16 KiB; form value 8,192 units; recent logout session 10 min; list 20/100; cursor 40–8,192 characters, after 1,024, 15 min | C/D |
-| Auth A18 | Kind-consent enrollment | 80,000 B input; 90,000 request; 80,000 response; 3 s; detailed I/O and work below | D |
-| Auth A19 | Maintenance and erasure pages | expiry 1,000; owner upgrade 100; native erasure/recovery 48; coverage 4; metadata 2; consent 1; client reduction 8 | C/D |
-| Definitions D01 | Release envelope | 1,024 types; 4,096 properties; 64 properties/type; 16 facets/type; 256 contexts; 64 defaults/context; 4 MiB | C/D |
-| Definitions D02 | Compiler inputs and saved filters | 256 files; 256 KiB/file; 1,024 filters; 64/group; 64 diagnostics | C/D |
-| Definitions D03 | Definition construction | bases 4,096; mappings 256; qualifiers 4,096; target types 1,024; relation filter 2; key facts 4 | C/D |
-| Definitions D04 | Extensions and kinds | extension 64 terms/16 domain/8 mappings/512 KiB; kind 64 KiB/256 vocabulary; catalogue node 256 KiB/256 entries | C/D |
-| Definitions D05 | Text and statement structure | labels/descriptions 250 units; aliases 32/language; common value text 1,500 code points; qualifiers 16; references 16×16 parts | C/D |
-| Definitions D06 | Validation and exact numbers | 16 diagnostics/subject; decimal spelling 127 units; time year 16 digits; pattern budgets below | N/D |
-| Definitions D07 | Library profiles in releases | 64 states; 3 modes×32 units; 16 copy kinds×64 statuses; 32 import sources×16 record kinds; identifiers 64 | C/D |
-| Semantic D08 | Subject facts and selections | 512 descriptive facts; 32 selected candidates/property/context; read 12 +1 lookahead/property | D |
-| Semantic D09 | Batched subjects and graph | summaries 256; graph 8 properties, depth 2, outputs 25, default 12, edges 500 | D |
-| Semantic D10 | Relations and auxiliary lists | relations default 25/max100; type-count candidates 1,000; outbound L+1 or 4L+1; definition IDs 100, query 512; contexts query 256 | C/D |
-| Semantic D11 | Bulk ordinary writes | 100 commands; concurrency 8; key 255; references16; field groups4; summary32 KiB | D |
-| Semantic D12 | Import provenance and media intent | source32; external255; revisions64; source name255/URL2,048/licence128/attribution500; cover reference128/credit8 KiB/provenance64 KiB | C/D |
-| Semantic D13 | Canonical identity | 4,096 originals/resulting group; 4 generation slots; 2 outputs per mapping operation; local capacity formula below | D |
-| Semantic D14 | Source maintenance frames | native 577 rows/577 points/173 statements/630,784 B/0 engine calls; independent Library frame below | D |
-| Semantic D15 | Source directory and retained envelopes | directory100 rows/200 points/36 SQL/229,376 B; each child half; retained frontier8 keys/2 KiB; payload/result4 KiB | D |
-| Search Q01 | Filter grammar | 32 leaves; depth4; OR16; IN64; qualifiers4; scalar256 B; CURIE128 B; saved name96 units | D; N unlimited |
-| Search Q02 | Full-text grammar | 512 UTF-8 B; depth4; 64 leaves; 32 tokens/phrase | C/D; N unlimited |
-| Search Q03 | Search and facets request | result100; languages8; fact properties4; kind metadata8; facets8×20 buckets | C/D |
-| Search Q04 | Direct plan | candidates min(600,6s+3); 3 refill rounds; 6 engine calls or3 owner seeks; complete vector below | D |
-| Search Q05 | Ready and composed plans | ready2s+2 candidates/2 index reads; page16 reads/128 slots; 816 candidates/6,784 points/14,080 rows/72 SQL/96 engine | D |
-| Search Q06 | Preparation and retained results | step1,000 inputs/1,000 writes/1 frontier; owner32 live LRU, idle24 h; public1 current+1 building | D |
-| Search Q07 | Freshness and waits | target60 s; >5 min lag unavailable; link wait2 s/poll100 ms; query context10/30 s | D; N hide lag |
-| Search Q08 | Relation proof and scope frames | sample128 values/property,256 probes; request keys256; legacy scope vector below | D |
-| Search Q09 | Suggestions | 1–64 code points and ≤128 UTF-16 units; default8/max10; 2×limit candidates | C/D |
-| Search Q10 | Totals and generations | total tracking10,000; 3 subject index generations; prefix48; sort name512 code points | D |
-| Search Q11 | Result cards and live facets | description200; aliases3; facts3/property×4; facet candidates/labels200; sample option10,000 | C/D |
-| Search Q12 | Recent/trending | recent90 d/server100 retained/list20; local32; query256 characters/literal256 B; trending7 d/threshold10/10 candidates/16 contributors/cleanup10 | C/D; N remove privacy threshold |
-| Search Q13 | Engine transport and projection | timeout10 s; response4 MiB; analyze concurrency16; generation page50; rating source256×3 attempts | C/D |
-| Composition Z01 | Document and profile | document65,536 B/256 nodes/depth8; profile1 MiB/128 templates; 64 diagnostics; route256 units; cache4 entries/4 MiB | C/D |
-| Composition Z02 | Page execution | 16 logical reads; 128 slots; 4 workers; 1 dependent round; 15 body-document reads | D |
-| Composition Z03 | Component text and identifiers | heading200/levels1–4; text2,000; title120; link label60; placeholder80; IDs64/CURIE128/URL2,048; localized16 | C/D |
-| Composition Z04 | Component neighbourhoods | properties32; subjects/relations/types24; CollectionList6; threads/posts20; reviews6; Realms5; LinkGrid12; filter8 KiB; selector types8 | D |
-| Zones Z05 | Zone envelope | 16 pages;16 saved scopes;16 Collection mounts;8 locales×35; label80 code points; lists20/100 | D |
-| Zones Z06 | Zone preparation | structural256 raw; ordered min(600,6s+3), page816; position1 MiB; slots0–31; takedown pointers16 | D |
-| Library L01 | Curated Collection occurrences | current code2,147,483,647; migration removes5,000; dump/owner document still5,000 | D; reconcile authority first |
-| Library L02 | Collection text | title200; description2,000; occurrence note1,000 code points | C/D |
-| Library L03 | Collection pins | 100 distinct Collection IDs/account | D |
-| Library L04 | Personal labels | name100 code points; 32 effective assignments/owner/stored subject | D |
-| Library L05 | Pagination and explicit operations | default20/max100; explicit selected IDs100; source raw100; preview3 | C/D |
-| Library L06 | Ordinal allocation | stored48/generated32 ASCII; repair window128; batch100; local allocator228; count int32 | D |
-| Library L07 | Progress | completed units20,000/session; add/remove100; unitID128; locator256; decimal12 integer+6 fraction digits; percent100 | D |
-| Library L08 | Copies and logs | location/source200; copy note1,000; published note1,000 code points | C/D |
-| Library L09 | Bulk lifecycle | page100; segment100 pages; execution24 h; results48 h; command5 s; admission16 KiB | C/D |
-| Library L10 | Shelf and type maintenance | page100; segment100;5 s; cursor8 scalars/2 KiB; workflow4 KiB; edge256 B; stage25,600 B; response8 MiB | D |
-| Library L11 | Summary and kind observations | 100 original IDs; 4 properties×3 facts; kind100 raw/4,096 B; subject anchor concurrency4 | D |
-| Library L12 | Retention and source housekeeping | restore30 d; sweeps10 min;100 keys/page; segments2/8/100; fragments4; source keys100 | C/D |
-| Library L13 | Source work and discovery | top Collection work16 MiB; source child8,192 rows/128 points/128 SQL/1 MiB/2 empty seeks; sitemap4,000; follow lag5 min | D |
-| Content P01 | Authored document and envelope | canonical2 MiB; whole Content JSON2 MiB (self-parsing exception); IDs/language256, headings1–6 | D; separate envelope |
-| Content P02 | Thread references and text | title1,024; subject IDs128; media IDs32; licence128; mentions10 recipients; report source32/external1,024; board query4,096 | C/D |
-| Content P03 | Public lists | ordinary100; author/subject threads20; scan4L(+lookahead); sitemap1,000/scan4L+1 | D |
-| Content P04 | Reports/moderation | intake64 KiB; evidence4,096; bot token2,048; moderation1,024; appeal2,000; outcome page100 | C/D |
-| Content P05 | Media |20 MiB; batch32; variants12; width2,560; variant name32; requestID255; ThumbHash32 B/base64 up to44; focal point0–1 | C/D |
-| Content P06 | Image and object transport | source15 s/20 MiB/100 headers/16 KiB; hosts100; storage30 s; list2 MiB/error64 KiB/1,000 keys per page/100,000 keys/10,000 pages; challenge bounds below | D |
-| Content P07 | Notices |180 d; write100; hourly retention1,000; inbox50; unread count100; work100×8 partitions,11 attempts,1 s×2 backoff,120 s | C/D |
-| Content P08 | Feed history and fanout |30 d or2,000 references; trim examines2,048; activity/fanout/purge128; identity100 originals | D |
-| Content P09 | Feed read and cursor | limit1–20/default20; Continue6; kinds8; aggregate raw160; cursor32,768 B/12 parts×1,800 input characters/15 min | D |
-| Community P10 | Realm/Space fields and pages | title1,024; summary4,096; reason1,024; address64; party100; discovery20 candidates/API100; own Realms20/scan80; publication20/100 | C/D |
-| Community P11 | Address and membership time | pending30 min; reserved30 d; authorization30 s; operation grace1 h | C/D |
-| Community P12 | Discovery and maintenance | popular30 completed days/trending1; description160 code points; epoch256; board buckets31; expiry/member counts50; sitemap1,000/4L+1 | C/D |
-| Ratings R01 | Votes and aggregate publication | native0–20 units =0–10 by0.5; mean threshold5/10; prior activation50, weight5/10; mean4 decimals; roll-up≥50% coverage | N/D |
-| Ratings R02 | Population fanout and shards |100 voter Realms +Global=101;16 shards/aggregate | D |
-| Ratings R03 | Figure requests and jobs | question/figure/population page20; source/read256; concurrency16; segment/merge100; drain500; prior check100; event200 deltas/100 deliveries | C/D |
-| Ratings R04 | Imported statistics | scale0–4,096; count2,147,483,647; ID/licence1,024; attribution2,000; label200 | C/D |
-| Commerce M01 | Money and offer |1–99,999,999 minor units; up to2 currencies; royalty0–10,000 bps/default9,000; quantity1; title200 DB vs1,024 HTTP | D |
-| Commerce M02 | Provider observations |256 transactions/order; JSON4,096 containers/depth16;256 KiB body/16 KiB headers;8 concurrent; retries0–2/default2 | D |
-| Commerce M03 | Webhook admission |256 KiB body;8,192 B signature;4 secrets;300 s signature tolerance | N/C |
-| Commerce M04 | Checkout time |20 s provider budget;23 h safe-create window; session nominal1 h; stop30 min before expiry; work5 s | D |
-| Commerce M05 | Benefit and checkout records | captured edition4,096 B; benefitJSON1,024 B; URLs8,192 B; request32 KiB; licence/terms/paid reference256 | D |
-| Commerce M06 | Commerce pages and keys | offers10/20; ordinary20/100; idempotency HTTP3–1,024 vs command255; tax code256; API version64 | C/D |
-| Imports I01 | HTTP client | HTTP body2 MiB/public transport64 KiB;response1 MiB;wait30 s/total60 s;deadline120 s;default3/max5 attempts;poll5×1 s,total4 s | C/D |
-| Imports I02 | Streaming dump |default256 KiB/max1 MiB per chunk and record; snapshot depth32 client/64 store | D |
-| Imports I03 | VNDB archive and staging |default16 GiB/max64 GiB;512/2,048 entries;2M/10M rows;500k/1M sources;row64 KiB;batch32 | C/D |
-| Imports I04 | Converter source envelopes |common2 MiB; prose1 MiB; summary32 KiB; Bangumi64 KiB/arrays64; Wikidata128 KiB/64 statements/64 terms/15 refs/16 snaks/100 commands | D |
-| Imports I05 | VNDB/Open Library conversion |VNDB64 titles/64 candidates/32 links/4,096 B string/64 KiB record/98 commands; Open Library arrays64/100 commands | D |
-| Imports I06 | Run store and CLI |100 commands;65,536 B/command;page100;CLI64 args×4,096 units,total16,384 B; diagnostics10,000; concurrency16/64;write invocations8 | C/D |
-| Imports I07 | Media and credentials |asset deadline default10 min (no finite configured maximum);65,536 B resolver;16 KiB key;disappearance default20%,range0–100% | D |
-| Web W01 | UI batches/previews |thread subjects4; import/moderation selection20; rating populations20/initial5; Space board20/cover12 | C/D |
-| Web W02 | Subject excerpts/cards |420 UTF-16 units/2 paragraphs; creators4; properties8; values3; keywords6 each side; search suggestions8 | C/D |
-| Web W03 | Client cursor/storage/input bounds |some cursors2,048 vs native4,096; editor8,192; recent storage256 KiB; chooser query100 | C/D; align first |
-| Web W04 | Social image |1,200×630; title240 code points after1,024-unit input; font16 MiB;PNG4 MiB;one raster | D |
-| Web W05 | SEO and cache |description≈160; sitemap3,000 pages/24,000 URLs/40,000,000 B;8 locales; internal HTML cache60 s; sidebar cookie7 d | C/D |
-| Lifecycle H01 | History/source records |locator256 B;scope accounts64;payload64 KiB;history kind96 units/uint32 ID;16 command sources;512 set members;8 agent identity keys;18 role bits | D |
-| Lifecycle H02 | Workflow artifact envelopes |64 operations;8 event keys;64 history rows;64 KiB payload;4 KiB metadata;139 rows/10 MiB execution;IDs1,024 B | D |
-| Lifecycle H03 | Erasure and custody |native100 keys/64 KiB/locator1 KiB;Auth48;Content50;consent310 s after deletion;History source pages100 | D; N shorten safety delay |
-| Lifecycle H04 | Retained technical fields |per-role key/identity/frontier/payload bounds in the technical envelope table below | D |
+| Area            | Limit                                    | Value                                                                                                                                                    | Change needed                   |
+| --------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| Shared G01      | Request deadline and command lock wait   | 2,000 ms; lock 200 ms; receipt recovery 200 ms; contention jitter100 ms                                                                                  | C; D for long work              |
+| Shared G02      | Admission and body memory                | 8 ordinary + 2 reserved running; 32 waiting; aggregate formula below                                                                                     | C/D                             |
+| Shared G03      | HTTP bodies                              | default 1 MiB; route maximum 4 MiB + 64 KiB                                                                                                              | C/D                             |
+| Shared G04      | Command identity and effects             | key 1–255 UTF-16 units; anonymous UUIDv4 36; 1,000 events/command; event read batch64; receipt key versions1–4                                           | C/D                             |
+| Shared G05      | Routing and numeric representations      | 65,536 routes; 4,096 partitions; 16 routes/partition; int32, safe integer and int64 ceilings below                                                       | D                               |
+| Shared G06      | Ordinary list cursors                    | 8 keys; 256 B/key; 2,048 B after; 3,038 B plaintext; 4,096 characters token                                                                              | C/D                             |
+| Shared G07      | Search list cursors                      | 8 keys; 2,560 B/key; 3,072 B after; 3,584 B plaintext; 4,864 characters token                                                                            | C/D                             |
+| Shared G08      | Cursor binding and time                  | route 256 B; query 2,048 B; 15 min lifetime; 60 s future tolerance                                                                                       | C; N unlimited lifetime         |
+| Shared G09      | Legacy cursors and causal sessions       | 8 after keys; 4,096-character decode; 32 session components                                                                                              | D                               |
+| Shared G10      | Write/search/abuse rates                 | full five-tier, seven-family matrix below                                                                                                                | C; N unlimited                  |
+| Shared G11      | Rate overrides and counter retention     | maximum 1–1,000,000; window 1–86,400 s; 48 h retention; 1,000 removals/tick                                                                              | C/D                             |
+| Shared G12      | Job scheduling                           | concurrency 2/8/8/8/4/2/2 by queue; effects/import one per partition                                                                                     | C/D                             |
+| Shared G13      | Durable command retries                  | 8 attempts; initial 1 s; backoff ×2                                                                                                                      | C; N infinite                   |
+| Shared G14      | Terminal workflow retention              | default 30 d, configurable 7–365 d; 1,000/batch ×60; every 10 min                                                                                        | C/D                             |
+| Accounts A01    | Membership neighbourhood                 | 1,000 role-bearing organization and Realm memberships combined/account                                                                                   | D                               |
+| Accounts A02    | Handles                                  | new 3–64 ASCII characters; existing lookup 1–64                                                                                                          | C/D                             |
+| Accounts A03    | Handle/lifecycle windows                 | 5 changes/30 d; redirects 30 d; pending registration 30 min; orphan claim 30 d                                                                           | C/D                             |
+| Accounts A04    | Profile and links                        | profile text 4,096 UTF-16 units; 5 links; labels 64 code points; URLs 2,048 characters                                                                   | C/D                             |
+| Accounts A05    | Preferences                              | 32 shelf layouts; scope key 256 units; notifications JSON 2 KiB; shelf JSON 16 KiB; spoiler 0–2                                                          | C/D                             |
+| Accounts A06    | Verification and reasons                 | statement 2,000; links 5; reason 500; problem type 128/detail 512 characters                                                                             | C/D                             |
+| Accounts A07    | Access batches                           | viewer references 100; actions/type 64; bindings/type 256; creation resources 16                                                                         | D                               |
+| Accounts A08    | Read preparation and approvals           | evidence 1 s; authenticated observation 180 s; operator receipt 60 s; approval ≤5 min, credential ≤1 min                                                 | N; D for longer workflow        |
+| Accounts A09    | Committed continuations                  | 5 min validity; 10 s resume; operation key 128, completion key 240, receipt 256, target 128 characters                                                   | C/D                             |
+| Auth A10        | Sessions and passkeys                    | 64 retained sessions; 32 passkeys/person; passkey name native 128/UI 64 units                                                                            | D                               |
+| Auth A11        | Credential input                         | password 8–128 units; email 254 units; credential IDs 1,024; challenge 16–256; clientDataJSON 12,000 units                                               | C/D; N unbounded                |
+| Auth A12        | Credential freshness and token lifetimes | step-up 600 s; account assertion 60 s; website assertion/code 120 s; access/ID token 300 s; session 7 d/update age 1 d                                   | N/D                             |
+| Auth A13        | Recovery                                 | 1 email/account/60 s; proof 5 min; delivery callback 5 s                                                                                                 | C; N unlimited                  |
+| Auth A14        | Attempt rates                            | reset-password 3/60 s; verify-password 5/300 s; two-factor paths 5/300 s                                                                                 | C; N unlimited                  |
+| Auth A15        | Scopes and claims                        | generic catalogue-size bound, fallback 1,000; consent/Kernel 512; scope 128 ASCII; joined 66,047 B; amr 100×128                                          | D                               |
+| Auth A16        | JWKS and website registration            | 3 keys; ordinary JWKS 8 KiB, 2 fetches, 2 s, cache 300 s; website 8 redirects per list, kid 128                                                          | C/D; N unbounded                |
+| Auth A17        | Protocol and security pages              | body 16 KiB; form value 8,192 units; recent logout session 10 min; list 20/100; cursor 40–8,192 characters, after 1,024, 15 min                          | C/D                             |
+| Auth A18        | Kind-consent enrollment                  | 80,000 B input; 90,000 request; 80,000 response; 3 s; detailed I/O and work below                                                                        | D                               |
+| Auth A19        | Maintenance and erasure pages            | expiry 1,000; owner upgrade 100; native erasure/recovery 48; coverage 4; metadata 2; consent 1; client reduction 8                                       | C/D                             |
+| Definitions D01 | Release envelope                         | 1,024 types; 4,096 properties; 64 properties/type; 16 facets/type; 256 contexts; 64 defaults/context; 4 MiB                                              | C/D                             |
+| Definitions D02 | Compiler inputs and saved filters        | 256 files; 256 KiB/file; 1,024 filters; 64/group; 64 diagnostics                                                                                         | C/D                             |
+| Definitions D03 | Definition construction                  | bases 4,096; mappings 256; qualifiers 4,096; target types 1,024; relation filter 2; key facts 4                                                          | C/D                             |
+| Definitions D04 | Extensions and kinds                     | extension 64 terms/16 domain/8 mappings/512 KiB; kind 64 KiB/256 vocabulary; catalogue node 256 KiB/256 entries                                          | C/D                             |
+| Definitions D05 | Text and statement structure             | labels/descriptions 250 units; aliases 32/language; common value text 1,500 code points; qualifiers 16; references 16×16 parts                           | C/D                             |
+| Definitions D06 | Validation and exact numbers             | 16 diagnostics/subject; decimal spelling 127 units; time year 16 digits; pattern budgets below                                                           | N/D                             |
+| Definitions D07 | Library profiles in releases             | 64 states; 3 modes×32 units; 16 copy kinds×64 statuses; 32 import sources×16 record kinds; identifiers 64                                                | C/D                             |
+| Semantic D08    | Subject facts and selections             | 512 descriptive facts; 32 selected candidates/property/context; read 12 +1 lookahead/property                                                            | D                               |
+| Semantic D09    | Batched subjects and graph               | summaries 256; graph 8 properties, depth 2, outputs 25, default 12, edges 500                                                                            | D                               |
+| Semantic D10    | Relations and auxiliary lists            | relations default 25/max100; type-count candidates 1,000; outbound L+1 or 4L+1; definition IDs 100, query 512; contexts query 256                        | C/D                             |
+| Semantic D11    | Bulk ordinary writes                     | 100 commands; concurrency 8; key 255; references16; field groups4; summary32 KiB                                                                         | D                               |
+| Semantic D12    | Import provenance and media intent       | source32; external255; revisions64; source name255/URL2,048/licence128/attribution500; cover reference128/credit8 KiB/provenance64 KiB                   | C/D                             |
+| Semantic D13    | Canonical identity                       | 4,096 originals/resulting group; 4 generation slots; 2 outputs per mapping operation; local capacity formula below                                       | D                               |
+| Semantic D14    | Source maintenance frames                | native 577 rows/577 points/173 statements/630,784 B/0 engine calls; independent Library frame below                                                      | D                               |
+| Semantic D15    | Source directory and retained envelopes  | directory100 rows/200 points/36 SQL/229,376 B; each child half; retained frontier8 keys/2 KiB; payload/result4 KiB                                       | D                               |
+| Search Q01      | Filter grammar                           | 32 leaves; depth4; OR16; IN64; qualifiers4; scalar256 B; CURIE128 B; saved name96 units                                                                  | D; N unlimited                  |
+| Search Q02      | Full-text grammar                        | 512 UTF-8 B; depth4; 64 leaves; 32 tokens/phrase                                                                                                         | C/D; N unlimited                |
+| Search Q03      | Search and facets request                | result100; languages8; fact properties4; kind metadata8; facets8×20 buckets                                                                              | C/D                             |
+| Search Q04      | Direct plan                              | candidates min(600,6s+3); 3 refill rounds; 6 engine calls or3 owner seeks; complete vector below                                                         | D                               |
+| Search Q05      | Ready and composed plans                 | ready2s+2 candidates/2 index reads; page16 reads/128 slots; 816 candidates/6,784 points/14,080 rows/72 SQL/96 engine                                     | D                               |
+| Search Q06      | Preparation and retained results         | step1,000 inputs/1,000 writes/1 frontier; owner32 live LRU, idle24 h; public1 current+1 building                                                         | D                               |
+| Search Q07      | Freshness and waits                      | target60 s; >5 min lag unavailable; link wait2 s/poll100 ms; query context10/30 s                                                                        | D; N hide lag                   |
+| Search Q08      | Relation proof and scope frames          | sample128 values/property,256 probes; request keys256; legacy scope vector below                                                                         | D                               |
+| Search Q09      | Suggestions                              | 1–64 code points and ≤128 UTF-16 units; default8/max10; 2×limit candidates                                                                               | C/D                             |
+| Search Q10      | Totals and generations                   | total tracking10,000; 3 subject index generations; prefix48; sort name512 code points                                                                    | D                               |
+| Search Q11      | Result cards and live facets             | description200; aliases3; facts3/property×4; facet candidates/labels200; sample option10,000                                                             | C/D                             |
+| Search Q12      | Recent/trending                          | recent90 d/server100 retained/list20; local32; query256 characters/literal256 B; trending7 d/threshold10/10 candidates/16 contributors/cleanup10         | C/D; N remove privacy threshold |
+| Search Q13      | Engine transport and projection          | timeout10 s; response4 MiB; analyze concurrency16; generation page50; rating source256×3 attempts                                                        | C/D                             |
+| Composition Z01 | Document and profile                     | document65,536 B/256 nodes/depth8; profile1 MiB/128 templates; 64 diagnostics; route256 units; cache4 entries/4 MiB                                      | C/D                             |
+| Composition Z02 | Page execution                           | 16 logical reads; 128 slots; 4 workers; 1 dependent round; 15 body-document reads                                                                        | D                               |
+| Composition Z03 | Component text and identifiers           | heading200/levels1–4; text2,000; title120; link label60; placeholder80; IDs64/CURIE128/URL2,048; localized16                                             | C/D                             |
+| Composition Z04 | Component neighbourhoods                 | properties32; subjects/relations/types24; CollectionList6; threads/posts20; reviews6; Realms5; LinkGrid12; filter8 KiB; selector types8                  | D                               |
+| Zones Z05       | Zone envelope                            | 16 pages;16 saved scopes;16 Collection mounts;8 locales×35; label80 code points; lists20/100                                                             | D                               |
+| Zones Z06       | Zone preparation                         | structural256 raw; ordered min(600,6s+3), page816; position1 MiB; slots0–31; takedown pointers16                                                         | D                               |
+| Library L01     | Curated Collection occurrences           | current code2,147,483,647; migration removes5,000; dump/owner document still5,000                                                                        | D; reconcile authority first    |
+| Library L02     | Collection text                          | title200; description2,000; occurrence note1,000 code points                                                                                             | C/D                             |
+| Library L03     | Collection pins                          | 100 distinct Collection IDs/account                                                                                                                      | D                               |
+| Library L04     | Personal labels                          | name100 code points; 32 effective assignments/owner/stored subject                                                                                       | D                               |
+| Library L05     | Pagination and explicit operations       | default20/max100; explicit selected IDs100; source raw100; preview3                                                                                      | C/D                             |
+| Library L06     | Ordinal allocation                       | stored48/generated32 ASCII; repair window128; batch100; local allocator228; count int32                                                                  | D                               |
+| Library L07     | Progress                                 | completed units20,000/session; add/remove100; unitID128; locator256; decimal12 integer+6 fraction digits; percent100                                     | D                               |
+| Library L08     | Copies and logs                          | location/source200; copy note1,000; published note1,000 code points                                                                                      | C/D                             |
+| Library L09     | Bulk lifecycle                           | page100; segment100 pages; execution24 h; results48 h; command5 s; admission16 KiB                                                                       | C/D                             |
+| Library L10     | Shelf and type maintenance               | page100; segment100;5 s; cursor8 scalars/2 KiB; workflow4 KiB; edge256 B; stage25,600 B; response8 MiB                                                   | D                               |
+| Library L11     | Summary and kind observations            | 100 original IDs; 4 properties×3 facts; kind100 raw/4,096 B; subject anchor concurrency4                                                                 | D                               |
+| Library L12     | Retention and source housekeeping        | restore30 d; sweeps10 min;100 keys/page; segments2/8/100; fragments4; source keys100                                                                     | C/D                             |
+| Library L13     | Source work and discovery                | top Collection work16 MiB; source child8,192 rows/128 points/128 SQL/1 MiB/2 empty seeks; sitemap4,000; follow lag5 min                                  | D                               |
+| Content P01     | Authored document and envelope           | canonical2 MiB; whole Content JSON2 MiB (self-parsing exception); IDs/language256, headings1–6                                                           | D; separate envelope            |
+| Content P02     | Thread references and text               | title1,024; subject IDs128; media IDs32; licence128; mentions10 recipients; report source32/external1,024; board query4,096                              | C/D                             |
+| Content P03     | Public lists                             | ordinary100; author/subject threads20; scan4L(+lookahead); sitemap1,000/scan4L+1                                                                         | D                               |
+| Content P04     | Reports/moderation                       | intake64 KiB; evidence4,096; bot token2,048; moderation1,024; appeal2,000; outcome page100                                                               | C/D                             |
+| Content P05     | Media                                    | 20 MiB; batch32; variants12; width2,560; variant name32; requestID255; ThumbHash32 B/base64 up to44; focal point0–1                                      | C/D                             |
+| Content P06     | Image and object transport               | source15 s/20 MiB/100 headers/16 KiB; hosts100; storage30 s; list2 MiB/error64 KiB/1,000 keys per page/100,000 keys/10,000 pages; challenge bounds below | D                               |
+| Content P07     | Notices                                  | 180 d; write100; hourly retention1,000; inbox50; unread count100; work100×8 partitions,11 attempts,1 s×2 backoff,120 s                                   | C/D                             |
+| Content P08     | Feed history and fanout                  | 30 d or2,000 references; trim examines2,048; activity/fanout/purge128; identity100 originals                                                             | D                               |
+| Content P09     | Feed read and cursor                     | limit1–20/default20; Continue6; kinds8; aggregate raw160; cursor32,768 B/12 parts×1,800 input characters/15 min                                          | D                               |
+| Community P10   | Realm/Space fields and pages             | title1,024; summary4,096; reason1,024; address64; party100; discovery20 candidates/API100; own Realms20/scan80; publication20/100                        | C/D                             |
+| Community P11   | Address and membership time              | pending30 min; reserved30 d; authorization30 s; operation grace1 h                                                                                       | C/D                             |
+| Community P12   | Discovery and maintenance                | popular30 completed days/trending1; description160 code points; epoch256; board buckets31; expiry/member counts50; sitemap1,000/4L+1                     | C/D                             |
+| Ratings R01     | Votes and aggregate publication          | native0–20 units =0–10 by0.5; mean threshold5/10; prior activation50, weight5/10; mean4 decimals; roll-up≥50% coverage                                   | N/D                             |
+| Ratings R02     | Population fanout and shards             | 100 voter Realms +Global=101;16 shards/aggregate                                                                                                         | D                               |
+| Ratings R03     | Figure requests and jobs                 | question/figure/population page20; source/read256; concurrency16; segment/merge100; drain500; prior check100; event200 deltas/100 deliveries             | C/D                             |
+| Ratings R04     | Imported statistics                      | scale0–4,096; count2,147,483,647; ID/licence1,024; attribution2,000; label200                                                                            | C/D                             |
+| Commerce M01    | Money and offer                          | 1–99,999,999 minor units; up to2 currencies; royalty0–10,000 bps/default9,000; quantity1; title200 DB vs1,024 HTTP                                       | D                               |
+| Commerce M02    | Provider observations                    | 256 transactions/order; JSON4,096 containers/depth16;256 KiB body/16 KiB headers;8 concurrent; retries0–2/default2                                       | D                               |
+| Commerce M03    | Webhook admission                        | 256 KiB body;8,192 B signature;4 secrets;300 s signature tolerance                                                                                       | N/C                             |
+| Commerce M04    | Checkout time                            | 20 s provider budget;23 h safe-create window; session nominal1 h; stop30 min before expiry; work5 s                                                      | D                               |
+| Commerce M05    | Benefit and checkout records             | captured edition4,096 B; benefitJSON1,024 B; URLs8,192 B; request32 KiB; licence/terms/paid reference256                                                 | D                               |
+| Commerce M06    | Commerce pages and keys                  | offers10/20; ordinary20/100; idempotency HTTP3–1,024 vs command255; tax code256; API version64                                                           | C/D                             |
+| Imports I01     | HTTP client                              | HTTP body2 MiB/public transport64 KiB;response1 MiB;wait30 s/total60 s;deadline120 s;default3/max5 attempts;poll5×1 s,total4 s                           | C/D                             |
+| Imports I02     | Streaming dump                           | default256 KiB/max1 MiB per chunk and record; snapshot depth32 client/64 store                                                                           | D                               |
+| Imports I03     | VNDB archive and staging                 | default16 GiB/max64 GiB;512/2,048 entries;2M/10M rows;500k/1M sources;row64 KiB;batch32                                                                  | C/D                             |
+| Imports I04     | Converter source envelopes               | common2 MiB; prose1 MiB; summary32 KiB; Bangumi64 KiB/arrays64; Wikidata128 KiB/64 statements/64 terms/15 refs/16 snaks/100 commands                     | D                               |
+| Imports I05     | VNDB/Open Library conversion             | VNDB64 titles/64 candidates/32 links/4,096 B string/64 KiB record/98 commands; Open Library arrays64/100 commands                                        | D                               |
+| Imports I06     | Run store and CLI                        | 100 commands;65,536 B/command;page100;CLI64 args×4,096 units,total16,384 B; diagnostics10,000; concurrency16/64;write invocations8                       | C/D                             |
+| Imports I07     | Media and credentials                    | asset deadline default10 min (no finite configured maximum);65,536 B resolver;16 KiB key;disappearance default20%,range0–100%                            | D                               |
+| Web W01         | UI batches/previews                      | thread subjects4; import/moderation selection20; rating populations20/initial5; Space board20/cover12                                                    | C/D                             |
+| Web W02         | Subject excerpts/cards                   | 420 UTF-16 units/2 paragraphs; creators4; properties8; values3; keywords6 each side; search suggestions8                                                 | C/D                             |
+| Web W03         | Client cursor/storage/input bounds       | some cursors2,048 vs native4,096; editor8,192; recent storage256 KiB; chooser query100                                                                   | C/D; align first                |
+| Web W04         | Social image                             | 1,200×630; title240 code points after1,024-unit input; font16 MiB;PNG4 MiB;one raster                                                                    | D                               |
+| Web W05         | SEO and cache                            | description≈160; sitemap3,000 pages/24,000 URLs/40,000,000 B;8 locales; internal HTML cache60 s; sidebar cookie7 d                                       | C/D                             |
+| Lifecycle H01   | History/source records                   | locator256 B;scope accounts64;payload64 KiB;history kind96 units/uint32 ID;16 command sources;512 set members;8 agent identity keys;18 role bits         | D                               |
+| Lifecycle H02   | Workflow artifact envelopes              | 64 operations;8 event keys;64 history rows;64 KiB payload;4 KiB metadata;139 rows/10 MiB execution;IDs1,024 B                                            | D                               |
+| Lifecycle H03   | Erasure and custody                      | native100 keys/64 KiB/locator1 KiB;Auth48;Content50;consent310 s after deletion;History source pages100                                                  | D; N shorten safety delay       |
+| Lifecycle H04   | Retained technical fields                | per-role key/identity/frontier/payload bounds in the technical envelope table below                                                                      | D                               |
 
 ## Reading the evidence and evaluating a larger limit
 
@@ -155,15 +155,15 @@ The following expansion recipes apply to **every** detailed entry that cites the
 
 **G10.** `services/kernel/src/access/write-rate-budgets.ts:22` is the versioned matrix; admission and counter writes are in `services/kernel/src/access/write-rate.ts` and HTTP rate middleware. Columns are principal classes in declaration order:
 
-| Family | Window | Anonymous | New account | Member | Trusted | Service |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| write | 60 s | 10 | 30 | 120 | 600 | 6,000 |
-| upload | 86,400 s | 1 | 5 | 30 | 100 | 10,000 |
-| report | 86,400 s | 10 | 20 | 50 | 100 | 100 |
-| correspondence | 86,400 s | 20 | 40 | 100 | 300 | 300 |
-| provider | 60 s | 1,000 | 1,000 | 1,000 | 1,000 | 1,000 |
-| search | 60 s | 30 | 60 | 120 | 600 | 6,000 |
-| address | 60 s | 30 | 60 | 120 | 600 | 6,000 |
+| Family         | Window   | Anonymous | New account | Member | Trusted | Service |
+| -------------- | -------- | --------: | ----------: | -----: | ------: | ------: |
+| write          | 60 s     |        10 |          30 |    120 |     600 |   6,000 |
+| upload         | 86,400 s |         1 |           5 |     30 |     100 |  10,000 |
+| report         | 86,400 s |        10 |          20 |     50 |     100 |     100 |
+| correspondence | 86,400 s |        20 |          40 |    100 |     300 |     300 |
+| provider       | 60 s     |     1,000 |       1,000 |  1,000 |   1,000 |   1,000 |
+| search         | 60 s     |        30 |          60 |    120 |     600 |   6,000 |
+| address        | 60 s     |        30 |          60 |    120 |     600 |   6,000 |
 
 An exhausted counter returns 429 and Retry-After; unavailable rate authority is 503. Safety intake has independent counters. A configured tier is not proof that all operations in that family are publicly enabled. Reason: versioned abuse/cost policy, NR for each exact allocation; T/B. Unlimited writes/uploads/search are N without another admission mechanism, because individual bounded requests can still create unlimited aggregate load.
 
@@ -229,19 +229,19 @@ Retained identity frontier/payload/result limits are enforced by semantic native
 
 **Q04–Q06.** The adopted [ordered-list budget](https://github.com/rezics/rezics-next/blob/a4faadd62b29a4b42cda4472c48071b83b87051f/docs/filtered-lists.md#budgets) is `docs/filtered-lists.md:313–407`. It is a documented admission/check contract; individual compatibility ledgers are not proof every route has met it. Let s be output slots1–100, c actual candidates including rejects/duplicates/lookahead/rereads, R≤16 reads and sum(s)≤128:
 
-| Work | Direct read | Ready-result read | Whole common page / preparation |
-| --- | --- | --- | --- |
-| Candidates | min(600,6s+3) | 2s+2 | ≤816/page; ≤1,000 input/step |
-| Engine / owner index reads | ≤6 engine (≤2/round) or≤3 owner seeks (≤1/round) | ≤2 index reads | ≤96 engine/page; ≤4/step |
-| Refill | ≤3 rounds, each request≤2×remaining+1 | no unlimited repair refill | budgets never reset |
-| Access+dependency points | 16+8c | same formula | ≤6,784/page; ≤8/input in preparation |
-| PostgreSQL examined rows, removed included | 64+16c | same formula | ≤14,080/page; ≤64+16×input/step |
-| Shared blocks | ≤6 per budgeted row | same | same measured allowance |
-| Response bytes | 16 KiB+4 KiB×c | same | preparation≤4 MiB |
-| Request bytes | 64 KiB+1 KiB×c | same | charge every dispatch |
-| Statements/backend | ≤12 standalone | same | ≤8+4R, maximum72/page; ≤16/step |
-| Connections/backend | 1 | 1 | 1 shared/page or step |
-| Result writes / frontier writes | — | — | ≤1,000 /1 per preparation step |
+| Work                                       | Direct read                                      | Ready-result read          | Whole common page / preparation      |
+| ------------------------------------------ | ------------------------------------------------ | -------------------------- | ------------------------------------ |
+| Candidates                                 | min(600,6s+3)                                    | 2s+2                       | ≤816/page; ≤1,000 input/step         |
+| Engine / owner index reads                 | ≤6 engine (≤2/round) or≤3 owner seeks (≤1/round) | ≤2 index reads             | ≤96 engine/page; ≤4/step             |
+| Refill                                     | ≤3 rounds, each request≤2×remaining+1            | no unlimited repair refill | budgets never reset                  |
+| Access+dependency points                   | 16+8c                                            | same formula               | ≤6,784/page; ≤8/input in preparation |
+| PostgreSQL examined rows, removed included | 64+16c                                           | same formula               | ≤14,080/page; ≤64+16×input/step      |
+| Shared blocks                              | ≤6 per budgeted row                              | same                       | same measured allowance              |
+| Response bytes                             | 16 KiB+4 KiB×c                                   | same                       | preparation≤4 MiB                    |
+| Request bytes                              | 64 KiB+1 KiB×c                                   | same                       | charge every dispatch                |
+| Statements/backend                         | ≤12 standalone                                   | same                       | ≤8+4R, maximum72/page; ≤16/step      |
+| Connections/backend                        | 1                                                | 1                          | 1 shared/page or step                |
+| Result writes / frontier writes            | —                                                | —                          | ≤1,000 /1 per preparation step       |
 
 An unsupported page is422 before enumeration, or it is prepared; reaching a work ceiling without proving exhaustion returns preparing, never a misleading short successful page. Privacy observation is shared once/page:2 statements and≤64+2×(unacknowledged-reduction homes+heads changed since start) examined rows across the full4,096-home domain; a full8,192-row head sweep is explicitly forbidden. Engine work must remain constant/logarithmic in population and matches at fixed s/leaves, not just return few hits. Preparation reads each relevant input once/build, replay≤one step, and indexed invalidation finds affected definitions. Per owner≤32 live prepared results, LRU eviction, idle expiry24 h; each public definition keeps1 current+1 building generation. These are retained-result quotas, not32 saved Collections. Reason: adopted bounded-neighbourhood budget and controlled derived-state storage; B/Q/T. Unlimited queries need more bounded pages/steps, not larger per-request allowances; migrate result/invalidation indexes and test sparse matches, aliases, privacy changes, deep pages, replay and total linear build work.
 
@@ -359,37 +359,37 @@ Subject excerpts stop at420 UTF-16 units/2 paragraphs (`apps/web/src/features/pa
 
 **H04.** The following SQL CHECKs cap retained technical objects that real product operations create. They are included because large IDs, authority sets, copies, repairs or jobs can hit them. They are not extra public account quotas. SQL character length, octet length and JS UTF-16 are different units; preserve the unit of each cited constraint.
 
-| Retained role / primary enforcement source | Limit | At the boundary; expansion |
-| --- | --- | --- |
-| Auth barrier proof, `services/auth/db/schema.sql:1332–1336` | account ID1,024 characters; operation key128; evidence JSON65,536 B; expiry≤5 min | CHECK rejection/expired proof; F/T/B, keep authority freshness |
-| Auth workflow copy artifacts, `:1487–1488,1515,1540–1549` | artifact65,536 B; key384 B; role account128 B; whole copy10,485,760 B/139 rows; scopes16; source key/workflow ID256 B | copy admission refuses or remains pending; F/Q/B, version copy and retirement contracts together |
-| Auth client reduction, `:1440`; erasure checkpoint, `:1630–1642`; proof/receipt, `:1698,1719`; provisioning, `:1765–1773` | reduction/source workflow IDs256 B; erasure after/client/original ID1,024 B, kernel_at64 B; proof/terminal receipt key1,024 B; creation approval reference4,096 B; erasure all-role IDs1,024 B | invalid retained state refuses; F/P/B; preserve old resumable state and receipt identity |
-| Access identity reversal, `services/kernel/db/access/schema.sql:2351–2357` | receipt key255 B;exactly2 receivers/1,024 B JSON; verified/reversed JSON8,192 B | native CHECK; F/Q/B, receiver growth is disclosure/erasure fanout |
-| Access technical intent/ack, `:2372,2409–2416,2794–2796` | role mask262,143; intent JSON2,048 B; workflow ID256 B; ack participant64 characters; retained participant array16 | native CHECK; F/Q/B; indexed participants and custody if very large |
-| Access continuation, `:2632–2680`; consent, `:3597` | operation key128; completion key240; receipt256; target128 characters; step64 ASCII; consent512 scopes/66,047 joined B | native CHECK; F/Q/B; bind every public/protocol layer to one contract |
-| Library retained source/capture, `services/kernel/db/library/schema.sql:990,1012,1057,1192–1197` | basis digest256 B; generation/frontier/identity/capture4,096 B; Collection-kind audience256 B | native CHECK; F/B; addressed bounded state if frontier cannot fit; the separate512-byte partial-index predicate is **not** a global rejection cap |
-| Search retained erase/fence/frontier, `services/kernel/db/search/schema.sql:161–167,189` | erasure barrier4,096 B; consumer8,192 B; fence/key/basis4,096 B; frontier2,048 B | native CHECK; F/B; maintain cursor/index cost and erasure witnesses |
-| Semantic retained identity/public repair, `services/kernel/db/semantic/schema.sql:5981,6023,6260`; identity store | identity frontier8/2,048 B; payload/result4,096 B; public filter capture1 MiB; repair input1–256; locator digests≤8,192 B/≤input count; repair state16,384 B; retention selected keys100; identity generation slots0–3 | CHECK/admission rejection or pending repair; F/P/B; bounded indexed generation retirement, not unlimited retained generations |
-| Community party/authority, `services/kernel/db/community/schema.sql:862,1204,1215` | party locator100 characters; original delegation issued-valid256; scopes512 | CHECK rejection; F/Q/B, preserve full-key authority bindings |
-| Content retained actor/authority, `services/kernel/db/content/schema.sql:1254,1271–1272` | actor client ID1,024; scopes512; requestedBy128; original delegation256 characters | CHECK rejection; F/Q/B; migrate retained authority readers and copy/erasure contracts |
-| Content media provenance, `services/kernel/db/content/schema.sql:1047` | credit8,192 B; provenance65,536 B; source URL2,048; name/via/URL1,024 and licence128 characters;≤128 cover-intent references | CHECK rejection; F/Q/B; move long source evidence to addressed blobs with indexed reverse custody |
-| Zones retained preparation, `services/kernel/db/zones/schema.sql:74,78` | position1 MiB; read slots0–31 | CHECK rejection/preparing; F/B, preserve whole-page allocation rather than accepting unlimited slots |
+| Retained role / primary enforcement source                                                                                | Limit                                                                                                                                                                                                                  | At the boundary; expansion                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth barrier proof, `services/auth/db/schema.sql:1332–1336`                                                               | account ID1,024 characters; operation key128; evidence JSON65,536 B; expiry≤5 min                                                                                                                                      | CHECK rejection/expired proof; F/T/B, keep authority freshness                                                                                    |
+| Auth workflow copy artifacts, `:1487–1488,1515,1540–1549`                                                                 | artifact65,536 B; key384 B; role account128 B; whole copy10,485,760 B/139 rows; scopes16; source key/workflow ID256 B                                                                                                  | copy admission refuses or remains pending; F/Q/B, version copy and retirement contracts together                                                  |
+| Auth client reduction, `:1440`; erasure checkpoint, `:1630–1642`; proof/receipt, `:1698,1719`; provisioning, `:1765–1773` | reduction/source workflow IDs256 B; erasure after/client/original ID1,024 B, kernel_at64 B; proof/terminal receipt key1,024 B; creation approval reference4,096 B; erasure all-role IDs1,024 B                         | invalid retained state refuses; F/P/B; preserve old resumable state and receipt identity                                                          |
+| Access identity reversal, `services/kernel/db/access/schema.sql:2351–2357`                                                | receipt key255 B;exactly2 receivers/1,024 B JSON; verified/reversed JSON8,192 B                                                                                                                                        | native CHECK; F/Q/B, receiver growth is disclosure/erasure fanout                                                                                 |
+| Access technical intent/ack, `:2372,2409–2416,2794–2796`                                                                  | role mask262,143; intent JSON2,048 B; workflow ID256 B; ack participant64 characters; retained participant array16                                                                                                     | native CHECK; F/Q/B; indexed participants and custody if very large                                                                               |
+| Access continuation, `:2632–2680`; consent, `:3597`                                                                       | operation key128; completion key240; receipt256; target128 characters; step64 ASCII; consent512 scopes/66,047 joined B                                                                                                 | native CHECK; F/Q/B; bind every public/protocol layer to one contract                                                                             |
+| Library retained source/capture, `services/kernel/db/library/schema.sql:990,1012,1057,1192–1197`                          | basis digest256 B; generation/frontier/identity/capture4,096 B; Collection-kind audience256 B                                                                                                                          | native CHECK; F/B; addressed bounded state if frontier cannot fit; the separate512-byte partial-index predicate is **not** a global rejection cap |
+| Search retained erase/fence/frontier, `services/kernel/db/search/schema.sql:161–167,189`                                  | erasure barrier4,096 B; consumer8,192 B; fence/key/basis4,096 B; frontier2,048 B                                                                                                                                       | native CHECK; F/B; maintain cursor/index cost and erasure witnesses                                                                               |
+| Semantic retained identity/public repair, `services/kernel/db/semantic/schema.sql:5981,6023,6260`; identity store         | identity frontier8/2,048 B; payload/result4,096 B; public filter capture1 MiB; repair input1–256; locator digests≤8,192 B/≤input count; repair state16,384 B; retention selected keys100; identity generation slots0–3 | CHECK/admission rejection or pending repair; F/P/B; bounded indexed generation retirement, not unlimited retained generations                     |
+| Community party/authority, `services/kernel/db/community/schema.sql:862,1204,1215`                                        | party locator100 characters; original delegation issued-valid256; scopes512                                                                                                                                            | CHECK rejection; F/Q/B, preserve full-key authority bindings                                                                                      |
+| Content retained actor/authority, `services/kernel/db/content/schema.sql:1254,1271–1272`                                  | actor client ID1,024; scopes512; requestedBy128; original delegation256 characters                                                                                                                                     | CHECK rejection; F/Q/B; migrate retained authority readers and copy/erasure contracts                                                             |
+| Content media provenance, `services/kernel/db/content/schema.sql:1047`                                                    | credit8,192 B; provenance65,536 B; source URL2,048; name/via/URL1,024 and licence128 characters;≤128 cover-intent references                                                                                           | CHECK rejection; F/Q/B; move long source evidence to addressed blobs with indexed reverse custody                                                 |
+| Zones retained preparation, `services/kernel/db/zones/schema.sql:74,78`                                                   | position1 MiB; read slots0–31                                                                                                                                                                                          | CHECK rejection/preparing; F/B, preserve whole-page allocation rather than accepting unlimited slots                                              |
 
 All H04 values have **no recorded reason for the exact number** unless the governing producer/authority contract above derives it. A database CHECK supplies real enforcement, not a justification. Very large technical state changes require constraint migrations plus compatible decoders, checkpoint versioning, bounded old/new coexistence, source custody and interrupted-run tests. No new whole-account materialization is justified merely because it happens in a background job.
 
 ## Disagreements, missing ceilings and recommendations
 
-| Topic | Source disagreement or important distinction | Recommended owning action |
-| --- | --- | --- |
-| Collection occurrences | owner prose/saved dump5,000; code int32; migration removes5,000 | reconcile owner and canonical schema with the adopted ordered-repair design; verify actual installed constraints separately |
-| Command keys | some HTTP3–1,024; executor255; importer UTF-8-byte ceiling | one serialized-key contract including Unicode, structured header escaping and historical digest compatibility |
-| Content document | canonical2 MiB and whole JSON2 MiB; custom routes bypass common1 MiB | separate document bytes from envelope bytes if the full canonical capacity is promised |
-| Scope transport | Auth catalogue-sized/fallback1,000; standalone consent100; bearer/consent512 and66,047 B; stale Kernel prose | adopt one end-to-end scoped protocol with distinct operation-specific admission profiles |
-| Passkey labels | Auth native128; Auth UI64 | document the UI choice or align limits; do not mislabel64 as native capacity |
-| Commerce offer | HTTP title1,024/positive safe integer; storage200/99,999,999 | validate money/title before native write and reconcile schema/API contract |
-| Web cursors | some consumers2,048; native ordinary4,096, search4,864, feed32,768 | test producer-to-consumer continuation and use route-specific cursor contracts |
-| Source work | adopted direct/composed budgets versus compatibility ledgers/config baselines | keep baseline numbers visibly provisional; require complete producer/caller allocation and native growth evidence before claiming boundedness |
-| Proposed Library bulk ports | constants exist; header explicitly says proposed | record runtime wiring/acceptance separately from source presence |
+| Topic                       | Source disagreement or important distinction                                                                 | Recommended owning action                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Collection occurrences      | owner prose/saved dump5,000; code int32; migration removes5,000                                              | reconcile owner and canonical schema with the adopted ordered-repair design; verify actual installed constraints separately                   |
+| Command keys                | some HTTP3–1,024; executor255; importer UTF-8-byte ceiling                                                   | one serialized-key contract including Unicode, structured header escaping and historical digest compatibility                                 |
+| Content document            | canonical2 MiB and whole JSON2 MiB; custom routes bypass common1 MiB                                         | separate document bytes from envelope bytes if the full canonical capacity is promised                                                        |
+| Scope transport             | Auth catalogue-sized/fallback1,000; standalone consent100; bearer/consent512 and66,047 B; stale Kernel prose | adopt one end-to-end scoped protocol with distinct operation-specific admission profiles                                                      |
+| Passkey labels              | Auth native128; Auth UI64                                                                                    | document the UI choice or align limits; do not mislabel64 as native capacity                                                                  |
+| Commerce offer              | HTTP title1,024/positive safe integer; storage200/99,999,999                                                 | validate money/title before native write and reconcile schema/API contract                                                                    |
+| Web cursors                 | some consumers2,048; native ordinary4,096, search4,864, feed32,768                                           | test producer-to-consumer continuation and use route-specific cursor contracts                                                                |
+| Source work                 | adopted direct/composed budgets versus compatibility ledgers/config baselines                                | keep baseline numbers visibly provisional; require complete producer/caller allocation and native growth evidence before claiming boundedness |
+| Proposed Library bulk ports | constants exist; header explicitly says proposed                                                             | record runtime wiring/acceptance separately from source presence                                                                              |
 
 No fixed total quota was found for the number of Library entries, copies, progress sessions, owned Collections, owned labels, follows, owned Realms/Spaces/Zones, ordinary subjects, public keys or all retained releases. This is an **absence of an identified product quota**, not a promise of unlimited storage or proof every growth path is already bounded. Count types, route topology, per-object quotas, native fields, index limitations, admission and deletion still apply. In particular1,000 combined account memberships,100 pins,32 effective labels/subject and20,000 completed units/session are real set ceilings;20/100 list pages,20 rating questions/page and100 source keys/page are not whole-owner quotas. Enum cardinality and cryptographic sizes were excluded unless they bound a real extensible product/authority set or user-controlled envelope. Pure fixture numbers and build/test runner timeouts were excluded.
 
