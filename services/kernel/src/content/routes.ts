@@ -785,7 +785,13 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const post = await exactPost(await containingThread(id, context), id, context);
             session.record(sessionComponent(post.anchor));
             if (!isErasedPlaceholder(post.value)) set.headers.etag = JSON.stringify(post.value.revisionId);
-            return { post: post.value };
+            const [personal] = await withViewerReactions(dependencies, actor, [post.value], job.deadline);
+            if (!personal) throw new ProblemError('not_found');
+            const counted = await withReactionCounts(dependencies, [personal], job.deadline);
+            const shown = counted.items[0];
+            if (!shown) throw new ProblemError('not_found');
+            if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
+            return { post: shown };
           }),
         ),
     )

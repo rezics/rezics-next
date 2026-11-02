@@ -496,6 +496,10 @@ account. A grant on an individual subject does not authorize reactions. Unknown 
 found. A merged subject id resolves to its survivor, and the slot is written on that survivor. Subjects have no board, Realm
 participation or board Access step.
 
+Exact post GETs include the current viewer slot and projected per-kind counts through the same readers as thread
+GETs, enabling a bounded point reconciliation after an uncertain reaction. This adds one actor-home slot seek and
+one target-home count read (at most seven kinds) without changing native commands, the relay or ranking.
+
 Subject reaction changes use `com.rezics.content.reaction.changed.v1` with `targetKind: subject`. The relay maintains
 the existing per-kind counts and total in the subject's partition. It also maintains one `content.subject_reactor` row
 per reacting account in that same partition and transaction. Clearing a reaction or erasing an account removes the

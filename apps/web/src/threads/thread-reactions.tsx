@@ -14,8 +14,9 @@ import { flushSync } from 'react-dom';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { csrfHeaders } from './composer';
-import { changeReaction } from './reactions';
-import { subjectReactionKinds, type ReactionFailure } from './reaction-request';
+import { changeReaction, readReaction } from './reactions';
+import { subjectReactionKinds, type ReactionFailure, type ReactionSnapshot } from './reaction-request';
+import { Button } from '@rezics/ui/shadcn/button';
 import type { useSession } from '../session/query';
 
 function reactionLabels(failed: string | null) {
@@ -212,6 +213,20 @@ function ReactionCaller({
   isDesired(): boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
+  type Intent = { kind: ReactionKind | null; commandId: string; phase: 'write' | 'read' };
+  const unresolved = useRef<Intent | null>(null);
+  const [recovery, setRecovery] = useState<Intent | null>(null);
+  const [recovering, setRecovering] = useState(false);
+  const retrying = useRef(false);
+  const epoch = useRef(0);
+  const generation = epoch.current;
+  const [resolved, setResolved] = useState<{
+    snapshot: ReactionSnapshot;
+    sourceCounts: typeof counts;
+    sourceValue: typeof value;
+  } | null>(null);
+  // A later controlled page read replaces the point read; ordinary rerenders retain it.
+  if (resolved && (resolved.sourceCounts !== counts || resolved.sourceValue !== value)) setResolved(null);
   const live = useRef(false);
   const [headers] = useState(() => (csrfToken === null ? csrfHeaders() : { 'X-CSRF-Token': csrfToken }));
   useLayoutEffect(() => {
@@ -227,49 +242,131 @@ function ReactionCaller({
     observation.snapshot() === revision &&
     (reactionOrigin?.isCurrent() ?? true);
 
-  async function onChange(kind: ReactionKind | null) {
+  function retain(intent: Intent, message: string) {
     if (!current()) return;
+    unresolved.current = intent;
+    epoch.current++;
+    flushSync(() => {
+      setFailed(message);
+      setRecovery(intent);
+    });
+  }
+
+  async function submit(intent: Intent, replay: boolean) {
+    const data = {
+      target: target.kind,
+      id: target.id,
+      kind: intent.kind,
+      ...(expectedReader ? { expectedReader } : {}),
+    };
     let result: { ok: true } | ReactionFailure;
     try {
-      result = await changeReaction({
-        data: {
-          target: target.kind,
-          id: target.id,
-          kind,
-          ...(expectedReader ? { expectedReader } : {}),
-        },
-        headers,
-      });
+      result =
+        intent.phase === 'read'
+          ? { ok: true }
+          : await changeReaction({
+              data,
+              headers: { ...headers, 'Idempotency-Key': intent.commandId },
+            });
     } catch {
       if (!current()) return;
       const message = m.reaction_unavailable();
-      flushSync(() => setFailed(message));
+      retain(intent, message);
       throw new Error(message);
     }
     if (!current()) return;
     if (!result.ok) {
-      const message = refusalText(result);
-      flushSync(() => setFailed(message));
-      throw new Error(message);
+      if (result.reason === 'conflict') intent.phase = 'read';
+      else {
+        const message = refusalText(result);
+        if (replay || result.reason === 'unavailable') retain(intent, message);
+        else flushSync(() => setFailed(message));
+        throw new Error(message);
+      }
+    }
+    if (replay || intent.phase === 'read') {
+      // A replay's receipt may describe an older slot. Only a current point read settles it.
+      intent.phase = 'read';
+      let snapshot: ReactionSnapshot | ReactionFailure;
+      try {
+        snapshot = await readReaction({ data, headers });
+      } catch {
+        snapshot = { ok: false, reason: 'unavailable' };
+      }
+      if (!current()) return;
+      if (!snapshot.ok) {
+        const message = refusalText(snapshot);
+        retain(intent, message);
+        throw new Error(message);
+      }
+      unresolved.current = null;
+      epoch.current++;
+      flushSync(() => {
+        setRecovery(null);
+        setFailed(null);
+        setResolved({ snapshot, sourceCounts: counts, sourceValue: value });
+      });
+      await onMutation?.(snapshot.value);
+      return;
     }
     try {
-      await onMutation?.(kind);
+      await onMutation?.(intent.kind);
     } catch (error) {
-      if (current()) throw error;
+      if (current()) {
+        intent.phase = 'read';
+        retain(intent, m.reaction_unavailable());
+        throw error;
+      }
     }
     if (!current()) return;
   }
 
+  async function onChange(kind: ReactionKind | null) {
+    if (!current() || generation !== epoch.current || unresolved.current) return;
+    await submit({ kind, commandId: crypto.randomUUID(), phase: 'write' }, false);
+  }
+
+  async function retry(intent: Intent) {
+    if (!current() || unresolved.current !== intent || retrying.current) return;
+    retrying.current = true;
+    setRecovering(true);
+    try {
+      await submit(intent, true);
+    } catch {
+      // The retained command and failure remain available for explicit recovery.
+    } finally {
+      retrying.current = false;
+      if (current()) setRecovering(false);
+    }
+  }
+
   return (
-    <Reactions
-      counts={counts}
-      disabled={disabled}
-      {...(target.kind === 'subject' ? { kinds: subjectReactionKinds, collapse: 2 } : {})}
-      labels={reactionLabels(failed)}
-      locale={getLocale()}
-      onChange={onChange}
-      value={value}
-      {...(signedIn ? {} : { signInHref: `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}` })}
-    />
+    <div className="flex min-w-0 flex-wrap items-center gap-2" aria-busy={recovering}>
+      <Reactions
+        key={generation}
+        counts={resolved?.snapshot.counts ?? counts}
+        disabled={disabled || recovery !== null}
+        {...(target.kind === 'subject' ? { kinds: subjectReactionKinds, collapse: 2 } : {})}
+        labels={reactionLabels(failed)}
+        locale={getLocale()}
+        onChange={onChange}
+        value={resolved ? resolved.snapshot.value : value}
+        {...(signedIn ? {} : { signInHref: `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}` })}
+      />
+      {recovery ? (
+        <>
+          <span role="status">{failed}</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={disabled || recovering}
+            onClick={() => void retry(recovery)}
+          >
+            {m.editorial_retry()}
+          </Button>
+        </>
+      ) : null}
+    </div>
   );
 }

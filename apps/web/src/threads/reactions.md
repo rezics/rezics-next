@@ -14,7 +14,10 @@ Each queued transport checks its original live visit before starting and after e
 captured CSRF token, never a replacement token. A retired completion cannot start another queued write, invoke a
 refresh callback, or publish a failure into the current view. A refresh already invoked while current cannot be
 undone, but its late completion cannot advance the retired queue. Leaving does not cancel or undo a native command
-already accepted. A lost response is not replayed; this caller creates no recovery or idempotency contract.
+already accepted. A lost response keeps its immutable intent and Idempotency-Key for an explicit retry in this visit.
+Other choices are disabled until recovery reads the current server slot and projected totals. Replay receipts and
+conflicts cannot finalize counts or selection; a failed current read retries only that read. Recovery does not survive
+session/target replacement, unmount or reload. The browser key is forwarded unchanged after the existing reader fence.
 
 Session observation reads only the existing QueryClient session entry and subscribes to its cache events. It makes
 no session/native request and retains no session history. A cache without a known signed-in account and CSRF token
@@ -37,8 +40,10 @@ Zone result from its admitted intent, so it does not add another own-reaction re
 counts request remains independent of reaction count, and server rendering performs no private own-reaction read.
 
 Cost is one constant-size identity/revision observer per mounted caller and constant work per relevant cache event
-or queued choice. Only this caller's existing choices are retained, with the existing serialized writes and refresh
-callbacks; there is no polling, cache enumeration, background replay or additional request.
+or queued choice. Recovery retains one intent. Ordinary writes keep their one-request bound; each explicit recovery
+makes at most one write and one thread/post point read, or two Subject point reads. There is no polling, cache
+enumeration or background replay. Single-post reads now carry the same viewer slot and projected counts as thread
+reads, using the existing native readers; this is the minimal seam needed for exact post recovery.
 
 `tests/thread-reactions-lifetime.test.tsx` and `tests/subject-reaction-reader.test.tsx` author mounted regressions
 using real `ThreadReactions`, shared `Reactions`, the QueryClient cache and the ordinary Subject adapter, gating only

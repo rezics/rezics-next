@@ -1206,8 +1206,12 @@ language through the client's `accept-language`.
 ### Reaction
 
 - **Touches:** One `PUT` or `DELETE` `/v1/{threads|posts}/<id>/reaction`/K after the session read. `PUT` sends
-  `{ kind }` and every change sends a new `Idempotency-Key`
-- **Bound:** ≤1 K, ≤1 D; constant
+  `{ kind }` and each new intent sends a new `Idempotency-Key`; uncertain retries retain the original actor, target,
+  desired kind and key. Recovery locks other choices until a current point read reconciles the slot and projected
+  counts, including after a conflict or an older replay receipt. Session/target replacement retires recovery.
+- **Decision:** Recovery is explicit and local to the mounted visit; a failed reconciliation retries only the read.
+- **Bound:** Ordinary change ≤1 K, ≤1 D; recovery ≤3 K and ≤2 D (one write plus at most two point reads),
+  independent of reaction count. `REACTION_RECOVERY_READS` records the producer bounds: thread/post 1, Subject 2.
 - **Growth check:** `tests/reactions-cost.test.ts`: `setting or clearing a reaction stays within its bound as s grows`
 
 ### Collection page
