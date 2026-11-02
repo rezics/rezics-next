@@ -106,7 +106,10 @@ test('Subject collection summaries use the shared family while retaining admissi
     props: Record<string, unknown> = { limit: 6 },
     result: { status: number; body: unknown } | null = response(),
   ) => {
-    const node = { type: 'CollectionList', props: { id: 'lists', title: { en: 'Lists', fr: 'Collections' }, ...props } };
+    const node = {
+      type: 'CollectionList',
+      props: { id: 'lists', title: { en: 'Lists', fr: 'Collections' }, ...props },
+    };
     const document = { root: { props: {} }, content: [node] } satisfies CompositionDocument;
     const plan = planReads(platformRegistry, document, { subject });
     const key = plan.nodes.lists!;
@@ -159,7 +162,9 @@ test('Subject collection summaries use the shared family while retaining admissi
       const heading = row.querySelector('h3')!;
       const primary = heading.querySelector<HTMLAnchorElement>('a')!;
       expect(heading.getAttribute('data-content-item-slot')).toBe('title');
-      expect(heading.hidden || heading.hasAttribute('aria-hidden') || heading.classList.contains('sr-only')).toBe(false);
+      expect(heading.hidden || heading.hasAttribute('aria-hidden') || heading.classList.contains('sr-only')).toBe(
+        false,
+      );
       expect(primary.textContent).toBe(expectedTitles[index]!);
       expect(primary.getAttribute('href')).toBe(`/fr/collections/${encodeURIComponent(supplied[index]!.id)}`);
       expect(primary.hasAttribute('data-original-page-link')).toBe(true);
