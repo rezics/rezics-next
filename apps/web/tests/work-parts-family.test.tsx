@@ -269,12 +269,15 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
       });
       const opener = button(m.work_parts_more());
       opener.focus();
-      await act(async () => opener.dispatchEvent(new window.MouseEvent('click', {
-        bubbles: true, detail: interaction === 'pointer activation' ? 1 : 0,
-      })));
+      await act(async () => {
+        opener.dispatchEvent(new window.MouseEvent('click', {
+          bubbles: true, detail: interaction === 'pointer activation' ? 1 : 0,
+        }));
+        // Move away and back before React disables the requesting control.
+        if (interaction === 'away/back') { host.querySelector<HTMLAnchorElement>('a')!.focus(); opener.focus(); }
+      });
       const document = host.ownerDocument;
       await act(async () => {
-        if (interaction === 'away/back') { button(m.candidate_reload()).focus(); opener.focus(); }
         if (interaction === 'pointer') document.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
         if (interaction === 'Tab') document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
         if (interaction === 'blur') window.dispatchEvent(new window.Event('blur'));
