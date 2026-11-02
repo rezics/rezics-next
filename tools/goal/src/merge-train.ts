@@ -2574,6 +2574,10 @@ export class MergeTrain {
           }
           return finish();
         }
+        const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
+        const worked = git(trainTree, 'diff', '--name-only', '-z', originalBase, tip)
+          .split('\0')
+          .some((path) => path && !frozenPaths.has(path));
         const unchangedClaimProblem = (): string | undefined => {
           const task = o.fence instanceof WorkerStore ? o.fence.task(request.taskId) : undefined;
           if (
@@ -2590,7 +2594,7 @@ export class MergeTrain {
             !request.workerCommit ||
             workerCommit !== request.workerCommit ||
             tip !== workerCommit ||
-            tip !== originalBase
+            worked
           )
             return 'Unchanged claim source changed after settlement';
           if (
@@ -2611,9 +2615,9 @@ export class MergeTrain {
           if (git(o.mainCheckout, 'rev-parse', `${request.branch}^{commit}`) !== workerCommit)
             return 'Unchanged claim source ref changed after settlement';
           try {
-            git(o.mainCheckout, 'merge-base', '--is-ancestor', workerCommit, target());
+            git(o.mainCheckout, 'merge-base', '--is-ancestor', originalBase, target());
           } catch {
-            return 'Unchanged claim source is no longer on the landing target';
+            return 'Unchanged claim source is no longer represented on the landing target';
           }
           return undefined;
         };
@@ -2666,7 +2670,9 @@ export class MergeTrain {
             }
             result.passed = true;
             result.stage = 'merge';
-            result.mergedCommit = workerCommit!;
+            // Historical empty commits and controller-frozen tests need not advance the target. Acceptance still
+            // identifies the exact retained head; ordinary completion points at its already represented ancestor.
+            result.mergedCommit = originalBase;
             result.hostMs = Date.now() - started;
             return finish();
           } catch (error) {
@@ -2678,10 +2684,6 @@ export class MergeTrain {
             return finish();
           }
         }
-        const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
-        const worked = git(trainTree, 'diff', '--name-only', originalBase, 'HEAD')
-          .split('\n')
-          .some((path) => path && !frozenPaths.has(path));
         if (!worked)
           throw new Error(
             'No committed changes beyond the base and the frozen acceptance files: commit the work before finishing',
