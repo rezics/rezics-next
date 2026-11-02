@@ -221,27 +221,45 @@ test('sparse Next preserves an empty-string cursor distinctly from terminal null
   expect(host.textContent).not.toContain(m.setup_context_next());
 });
 
-for (const reason of ['denied', 'unavailable'] as const) {
-  test(`${reason} and pending reads stay distinct from empty, with explicit retry and known-reference recovery`, async () => {
+for (const scenario of ['denied', 'unavailable', 'denied continuation', 'unavailable continuation']) {
+  const continuation = scenario.endsWith('continuation');
+  const reason = scenario.startsWith('denied') ? 'denied' : 'unavailable';
+  test(`${scenario} keeps explicit recovery distinct from empty`, async () => {
     const page = deferred<{ contexts: readonly SetupChoice[]; next: string | null }>();
-    let attempts = 0;
+    const requests: (string | undefined)[] = [];
     await mount(
       source({
-        search: async () => {
-          if (++attempts === 1) throw new ContextChoiceError(reason);
+        search: async ({ cursor }) => {
+          requests.push(cursor);
+          if (continuation && requests.length === 1) return { contexts: [], next: '' };
+          if (requests.length === (continuation ? 2 : 1)) throw new ContextChoiceError(reason);
           return page.promise;
         },
       }),
       chosen.id,
     );
     await browse();
+    if (continuation) await click(button(m.setup_context_next()));
     expect(host.querySelector('[role="alert"]')!.textContent).toBe(
       reason === 'denied' ? m.setup_context_denied() : m.setup_context_unavailable(),
     );
     expect(host.textContent).not.toContain(m.setup_context_empty());
     expect(host.textContent).not.toContain(directory.label);
+    const restart = continuation && reason === 'unavailable';
+    expect(host.textContent!.includes(m.setup_context_restart())).toBe(restart);
     expect(host.querySelector('details')!.open).toBe(true);
-    await click(button(m.space_setup_retry()));
+    if (restart) {
+      await act(async () => {
+        root!.render(<SetupContextPickerField picker={picker} disabled />);
+      });
+      expect(button(m.setup_context_restart()).disabled).toBe(true);
+      await act(async () => {
+        root!.render(<SetupContextPickerField picker={picker} disabled={false} />);
+      });
+    }
+    await click(button(restart ? m.setup_context_restart() : m.space_setup_retry()));
+    expect(requests.at(-1)).toBe(continuation && !restart ? '' : undefined);
+    if (restart) expect(window.document.activeElement).toBe(host.querySelector('input[type="search"]'));
     expect(host.querySelector('[role="status"]')!.textContent).toBe(m.setup_context_searching());
     expect(host.textContent).not.toContain(m.setup_context_empty());
     expect(referenceInput().value).toBe(chosen.id);

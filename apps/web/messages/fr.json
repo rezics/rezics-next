@@ -2482,6 +2482,7 @@
   "setup_context_results_label": "Résultats de recherche de Context",
   "setup_context_empty": "Aucun Context lisible sur cette page. Essayez une autre recherche ou continuez si une page suivante est disponible.",
   "setup_context_next": "Page de Context suivante",
+  "setup_context_restart": "Recommencer la recherche de Context depuis le début",
   "setup_context_denied": "Ce Context ou cette recherche ne vous est plus accessible. Choisissez un autre Context ou réessayez lorsque votre accès aura changé.",
   "setup_context_unavailable": "La recherche de Context est indisponible. Conservez votre brouillon et réessayez, ou chargez ci-dessous une référence connue.",
   "setup_context_keep_draft": "Vos saisies et les étapes enregistrées restent ici pendant la nouvelle tentative. Le choix est vérifié à nouveau lors de l’enregistrement des paramètres du Realm.",

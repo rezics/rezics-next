@@ -238,6 +238,20 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
       )
         search(state.query, state.page.cursor);
     },
+    /** Explicit recovery belongs to this rendered failed continuation, including an empty cursor. */
+    restartSearch(expected: { query: string; cursor: string; version: number }) {
+      if (
+        !active() ||
+        state.page.phase !== 'unavailable' ||
+        state.page.cursor === undefined ||
+        state.query !== expected.query ||
+        state.page.cursor !== expected.cursor ||
+        searchGeneration !== expected.version
+      )
+        return false;
+      search(state.query);
+      return true;
+    },
     choose,
     choosePage(id: string, expected?: { query: string; cursor?: string; version?: number }) {
       if (

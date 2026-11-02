@@ -2482,6 +2482,7 @@
   "setup_context_results_label": "Context 搜尋結果",
   "setup_context_empty": "此頁面沒有可讀取的 Context。請嘗試其他搜尋，或在有下一頁時繼續。",
   "setup_context_next": "下一頁 Context",
+  "setup_context_restart": "從頭重新搜尋 Context",
   "setup_context_denied": "此 Context 或搜尋已無法供你使用。請選擇其他 Context，或在存取權限變更後重試。",
   "setup_context_unavailable": "Context 查詢目前無法使用。請保留草稿並重試，或在下方載入已知參照。",
   "setup_context_keep_draft": "重試期間，你輸入的內容和已儲存步驟都會保留。儲存領域設定時會重新檢查所選的 Context。",

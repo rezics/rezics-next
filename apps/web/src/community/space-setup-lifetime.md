@@ -47,6 +47,22 @@ its private cache, and keys each generation by the observed source revision. No 
 inferred from Context directory or Board display data. No additional native read, polling or per-row hydration is
 performed.
 
+## Context search recovery
+
+An unavailable continuation offers **Restart Context search from the beginning** alongside exact retry. Restart
+retains the query, draft fields, saved/current Context, successful selection and entered reference under their
+existing admission rules; only the search cursor is dropped. First-page failures and denied results retain retry
+without restart. Unavailability does not establish cursor expiry, and recovery never starts automatically.
+Decision: an admitted restart focuses the existing search field while its single bounded first-page read loads.
+The rendered query, cursor and search generation must still match; existing picker and caller retirement fences
+continue to discard queued actions and late pages without changing the stored pointer or submitting a command.
+
+### Context search restart
+
+- Touches: one existing Context directory search per explicit restart; no per-choice resolution.
+- Bound: the existing twenty-entry page and producer limits; no accumulated scan or automatic fallback loop.
+- Growth check: existing producer search bounds remain unchanged.
+
 ## Board choice recovery
 
 An invalid or unavailable continuation offers **Restart options from the beginning** alongside same-request retry;

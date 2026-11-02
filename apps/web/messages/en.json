@@ -2474,6 +2474,7 @@
   "setup_context_results_label": "Context search results",
   "setup_context_empty": "No readable Contexts on this page. Try another search or continue if a next page is available.",
   "setup_context_next": "Next Context page",
+  "setup_context_restart": "Restart Context search from the beginning",
   "setup_context_denied": "This Context or search is no longer available to you. Choose another Context or retry after access changes.",
   "setup_context_unavailable": "Context lookup is unavailable. Keep your draft and retry, or load a known reference below.",
   "setup_context_keep_draft": "Your entries and saved steps stay here while you retry. A choice is checked again when the Realm is saved.",

@@ -2482,6 +2482,7 @@
   "setup_context_results_label": "Contextの検索結果",
   "setup_context_empty": "このページに閲覧できるContextはありません。別の語句で検索するか、次のページがあれば続けてください。",
   "setup_context_next": "次のContextページ",
+  "setup_context_restart": "Contextの検索を最初からやり直す",
   "setup_context_denied": "このContextまたは検索は、現在あなたには利用できません。別のContextを選ぶか、アクセス状況が変わった後に再試行してください。",
   "setup_context_unavailable": "Contextの検索を利用できません。下書きを保持して再試行するか、下にある既知の参照を読み込んでください。",
   "setup_context_keep_draft": "再試行中も入力内容と保存済みの手順はここに保持されます。Realm設定の保存時に、選択内容を再検証します。",

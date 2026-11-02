@@ -1,4 +1,4 @@
-import { useId, useSyncExternalStore } from 'react';
+import { useId, useRef, useSyncExternalStore } from 'react';
 import { Check, Search } from 'lucide-react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -34,6 +34,7 @@ function Resolution({ value, saved = false }: { value: ContextResolution; saved?
 export function SetupContextPickerField({ picker, disabled }: { picker: SetupContextPicker; disabled: boolean }) {
   const state = useSyncExternalStore(picker.subscribe, picker.getSnapshot, picker.getSnapshot);
   const id = useId();
+  const queryInput = useRef<HTMLInputElement>(null);
   const { current, selected, page, reference } = state;
   const currentVersion = picker.currentVersion();
   const searchVersion = picker.searchVersion();
@@ -119,6 +120,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           aria-hidden="true"
         />
         <Input
+          ref={queryInput}
           id={`${id}-query`}
           type="search"
           value={state.query}
@@ -202,21 +204,37 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           <p role="alert" className="text-sm">
             {page.phase === 'denied' ? m.setup_context_denied() : m.setup_context_unavailable()}
           </p>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
-            disabled={disabled}
-            onClick={() =>
-              picker.retrySearch({
-                query: state.query,
-                ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
-                version: searchVersion,
-              })
-            }
-          >
-            {m.space_setup_retry()}
-          </Button>
+          <div className="flex min-w-0 flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              disabled={disabled}
+              onClick={() =>
+                picker.retrySearch({
+                  query: state.query,
+                  ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
+                  version: searchVersion,
+                })
+              }
+            >
+              {m.space_setup_retry()}
+            </Button>
+            {page.phase === 'unavailable' && page.cursor !== undefined ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                disabled={disabled}
+                onClick={() => {
+                  if (picker.restartSearch({ query: state.query, cursor: page.cursor!, version: searchVersion }))
+                    queryInput.current?.focus();
+                }}
+              >
+                {m.setup_context_restart()}
+              </Button>
+            ) : null}
+          </div>
         </div>
       ) : null}
       <details className="min-w-0 max-w-full rounded-xl border border-border p-3" open={selected?.phase !== 'ready'}>

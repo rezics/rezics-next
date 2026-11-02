@@ -178,6 +178,55 @@ test('search debounces, aborts and isolates old pages; Next requests exactly one
   }
 });
 
+test('continuation restart preserves admitted choices and rejects retired restart intent', async () => {
+  const late = deferred<Awaited<ReturnType<ContextChoiceSource['search']>>>();
+  const calls: Parameters<ContextChoiceSource['search']>[0][] = [];
+  const resolve = mock(async (id: string) => ({ id, label }));
+  const picker = createSetupContextPicker(
+    {
+      search: async (input) => {
+        calls.push(input);
+        if (input.cursor !== undefined) throw new ContextChoiceError('unavailable');
+        return calls.length === 1 ? { contexts: [], next: '' } : late.promise;
+      },
+      resolve,
+    },
+    contextId,
+  );
+  await picker.current(contextId, 'saved-head');
+  await picker.choose(contextId);
+  const selectionVersion = picker.selectionVersion();
+  picker.search(' Reading ');
+  await new Promise((done) => setTimeout(done, 270));
+  picker.next();
+  await tick();
+  const expected = { query: ' Reading ', cursor: '', version: picker.searchVersion() };
+  expect(picker.restartSearch({ ...expected, query: 'other' })).toBe(false);
+  expect(picker.restartSearch({ ...expected, cursor: 'other' })).toBe(false);
+  picker.retrySearch(expected);
+  await tick();
+  expect(calls.map((call) => call.cursor)).toEqual([undefined, '', '']);
+  expect(picker.restartSearch(expected)).toBe(false);
+  const before = picker.getSnapshot();
+  const restart = { ...expected, version: picker.searchVersion() };
+  expect(picker.restartSearch(restart)).toBe(true);
+  expect(picker.restartSearch(restart)).toBe(false);
+  await tick();
+  expect(calls).toHaveLength(4);
+  expect(calls[3]!.cursor).toBeUndefined();
+  expect(calls.every((call) => call.query === 'Reading')).toBe(true);
+  expect({ ...picker.getSnapshot(), page: before.page }).toEqual(before);
+  expect(picker.selection(contextId, selectionVersion)?.id).toBe(contextId);
+  expect(resolve).toHaveBeenCalledTimes(2);
+  await picker.choose(otherId);
+  expect(picker.restartSearch(restart)).toBe(false);
+  late.resolve({ contexts: [{ id: contextId, label: 'Retired page' }], next: 'retired' });
+  await tick();
+  expect(picker.getSnapshot().page.phase).toBe('idle');
+  expect(picker.getSnapshot().selected?.id).toBe(otherId);
+  picker.dispose();
+});
+
 test('disconnected and disposed Context callbacks cannot start fresh search, exact, current, retry or label work', async () => {
   const late = deferred<{ id: string; label: string } | null>();
   const calls: string[] = [];
@@ -203,6 +252,7 @@ test('disconnected and disposed Context callbacks cannot start fresh search, exa
   picker.search('hidden');
   picker.next();
   picker.retrySearch();
+  picker.restartSearch({ query: 'replacement', cursor: '', version: picker.searchVersion() });
   await picker.choose(contextId);
   await picker.choosePage(contextId);
   await picker.chooseCurrent(contextId);

@@ -2482,6 +2482,7 @@
   "setup_context_results_label": "Context-Suchergebnisse",
   "setup_context_empty": "Auf dieser Seite gibt es keine lesbaren Contexts. Versuche eine andere Suche oder fahre fort, falls eine nächste Seite verfügbar ist.",
   "setup_context_next": "Nächste Context-Seite",
+  "setup_context_restart": "Context-Suche von vorne beginnen",
   "setup_context_denied": "Dieser Context oder diese Suche ist für dich nicht mehr verfügbar. Wähle einen anderen Context oder versuche es erneut, sobald sich dein Zugriff geändert hat.",
   "setup_context_unavailable": "Die Context-Suche ist nicht verfügbar. Behalte deinen Entwurf bei und versuche es erneut oder lade unten eine bekannte Referenz.",
   "setup_context_keep_draft": "Deine Einträge und gespeicherten Schritte bleiben hier, während du es erneut versuchst. Eine Auswahl wird beim Speichern der Realm-Einstellungen erneut geprüft.",

@@ -2482,6 +2482,7 @@
   "setup_context_results_label": "Context 搜索结果",
   "setup_context_empty": "此页面没有可读取的 Context。请尝试其他搜索，或在有下一页时继续查看。",
   "setup_context_next": "下一页 Context",
+  "setup_context_restart": "从头重新搜索 Context",
   "setup_context_denied": "此 Context 或搜索已无法供你使用。请选择其他 Context，或在访问权限变更后重试。",
   "setup_context_unavailable": "Context 查询当前不可用。请保留草稿并重试，或在下方加载已知引用。",
   "setup_context_keep_draft": "重试时，你填写的内容和已保存步骤都会保留。保存领域设置时会重新检查所选 Context。",
