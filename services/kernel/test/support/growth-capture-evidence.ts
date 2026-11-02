@@ -37,10 +37,7 @@ function requireOwners(
   }
 }
 
-function requireErrorValues(
-  values: readonly (string | null)[] | undefined,
-  name: string,
-): void {
+function requireErrorValues(values: readonly (string | null)[] | undefined, name: string): void {
   if (values === undefined) return;
   for (let index = 0; index < values.length; index += 1)
     if (values[index] !== null && typeof values[index] !== 'string')
@@ -90,7 +87,9 @@ function requireErrorMessages(
   if (errors === undefined) throw new TypeError(`Capture ${messageName} requires ${errorName}`);
   for (let index = 0; index < messages.length; index += 1)
     if (messages[index] !== null && errors[index] === null)
-      throw new TypeError(`Capture ${messageName}[${index}] has a message without an error code in ${errorName}[${index}]`);
+      throw new TypeError(
+        `Capture ${messageName}[${index}] has a message without an error code in ${errorName}[${index}]`,
+      );
 }
 
 /** Rejects malformed present capture metadata while retaining optional legacy fields and unowned plans. */
@@ -124,12 +123,7 @@ export function validateCaptureEvidence(capture: Capture): void {
     'backgroundStatements',
     backgroundStatementCount,
   );
-  requireParallel(
-    capture.backgroundPlanStatements,
-    'backgroundPlanStatements',
-    'backgroundPlans',
-    backgroundPlanCount,
-  );
+  requireParallel(capture.backgroundPlanStatements, 'backgroundPlanStatements', 'backgroundPlans', backgroundPlanCount);
   requireParallel(
     capture.backgroundStatementErrors,
     'backgroundStatementErrors',
@@ -148,12 +142,7 @@ export function validateCaptureEvidence(capture: Capture): void {
     'backgroundStatements',
     backgroundStatementCount,
   );
-  requireParallel(
-    capture.backgroundPlanBackends,
-    'backgroundPlanBackends',
-    'backgroundPlans',
-    backgroundPlanCount,
-  );
+  requireParallel(capture.backgroundPlanBackends, 'backgroundPlanBackends', 'backgroundPlans', backgroundPlanCount);
 
   requireOwners(capture.planStatements, 'planStatements', capture.statements.length);
   requireOwners(capture.backgroundPlanStatements, 'backgroundPlanStatements', backgroundStatementCount);
