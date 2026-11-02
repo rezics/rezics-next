@@ -264,7 +264,10 @@ describe('bounded suggestion boundary', () => {
     let calls = 0;
     const oversized = {
       ...result,
-      subjects: Array.from({ length: 40 }, (_, index) => ({ ...result.subjects[0]!, id: `subject-${index}` })),
+      subjects: Array.from({ length: 10 }, (_, index) => ({
+        ...result.subjects[0]!,
+        id: `00000000-0000-7000-8000-${String(index).padStart(12, '0')}`,
+      })),
     };
     const limited = await readHeaderSuggestions(
       async (query, locale, signal) => {
@@ -280,7 +283,7 @@ describe('bounded suggestion boundary', () => {
     );
     expect(limited.subjects).toHaveLength(HEADER_SUGGESTION_LIMIT);
     expect(calls).toBe(1);
-    expect(oversized.subjects).toHaveLength(40);
+    expect(oversized.subjects).toHaveLength(10);
     let state = reduceHeaderSearchState(initialHeaderSearchState(), {
       type: 'suggestions',
       state: 'ready',

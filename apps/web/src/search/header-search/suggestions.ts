@@ -23,7 +23,8 @@ export async function readHeaderSuggestions(
   signal.throwIfAborted();
   const result = await load(query, locale, signal, scope);
   signal.throwIfAborted();
-  return { ...result, subjects: result.subjects.slice(0, HEADER_SUGGESTION_LIMIT) };
+  const page = parseSuggestionPage(result);
+  return { ...page, subjects: page.subjects.slice(0, HEADER_SUGGESTION_LIMIT) };
 }
 
 export const loadGlobalHeaderSuggestions: HeaderSuggestionLoader = async (query, locale, signal, scope) => {

@@ -181,7 +181,16 @@ function Connected({ state, loadRealms = emptyRealms }: { state: State; loadReal
           locale={getLocale()}
           history={history}
           loadRealmDiscovery={loadRealms}
-          loadSuggestions={async () => ({ as_of: recording.as_of, subjects: recording.subjects, types: {} })}
+          loadSuggestions={async () => ({
+            as_of: recording.as_of,
+            subjects: recording.subjects.map(({ id, type, labels, summary }) => ({
+              id,
+              type,
+              labels,
+              summary: summary ?? null,
+            })),
+            types: {},
+          })}
         />
       }
     >

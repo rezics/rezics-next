@@ -106,7 +106,8 @@ session replacement, Header unmount and a superseded retry drop the request. Hea
 even if sync is pending; clearing failure during pending is the existing hide path.
 
 The [canonical stories](../stories/header-search/README.md) cover resting, focused discovery, suggestions,
-filter entry and phone interaction. `tests/header-search-composition.test.tsx` exercises the existing routed
+filter entry and phone interaction. Header story suggestion loaders project recorded search subjects onto the
+admitted suggestion page (identity, type, labels and a nullable summary). `tests/header-search-composition.test.tsx` exercises the existing routed
 Search page and default shell across desktop/phone, English/Simplified Chinese and light/dark. It protects actual
 geometry, surface paint, focused controls, registered filter entry and retained phone drafts. Execution of that
 acceptance and native/browser evidence is deferred under the current delivery policy; workspace typing alone

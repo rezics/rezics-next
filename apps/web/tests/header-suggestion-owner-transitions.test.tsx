@@ -24,6 +24,7 @@ const result = (label: string): SuggestionResult => ({
       summary: null,
     },
   ],
+  types: {},
 });
 
 type Props = {

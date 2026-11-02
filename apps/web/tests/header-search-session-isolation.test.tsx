@@ -26,6 +26,7 @@ const result = (label: string): SuggestionResult => ({
       summary: null,
     },
   ],
+  types: {},
 });
 
 for (const transition of [

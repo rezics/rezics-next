@@ -33,7 +33,12 @@ const closedRealms: SearchRealmDiscoveryLoader = async () => ({ kind: 'closed' }
 
 const suggestions = {
   as_of: recording.as_of,
-  subjects: recording.subjects,
+  subjects: recording.subjects.map(({ id, type, labels, summary }) => ({
+    id,
+    type,
+    labels,
+    summary: summary ?? null,
+  })),
   types: { 'schema:Book': { en: 'Book', 'zh-Hans': '图书' } },
 };
 const ready: HeaderSuggestionLoader = async () => suggestions;
