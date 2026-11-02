@@ -109,6 +109,18 @@ test('publication fact confirmation preserves drafts, property targets and the o
     }
     throw new Error(`Missing mounted ${name}`);
   };
+  const retainedClick = (element: HTMLElement) => {
+    type Fiber = { memoizedProps: Record<string, unknown>; return?: Fiber };
+    const key = Object.keys(element).find((key) => key.startsWith('__reactFiber$'))!;
+    let fiber = Reflect.get(element, key) as Fiber | undefined;
+    while (fiber) {
+      const props = fiber.memoizedProps;
+      if (props.type === 'button' && typeof props.onClick === 'function')
+        return props.onClick as (event: { detail: number; currentTarget: HTMLElement }) => void;
+      fiber = fiber.return;
+    }
+    throw new Error('Missing mounted add click');
+  };
   const isbn = { type: 'value', content: '978-0-140-44430-8' } as const;
   try {
     await act(async () =>
@@ -119,6 +131,33 @@ test('publication fact confirmation preserves drafts, property targets and the o
       ),
     );
     await canvas.findByRole('textbox', { name: m.catalogue_create_label() });
+    expect(window.document.activeElement).toBe(window.document.body);
+    const fieldSelect = canvas.getByRole('combobox', { name: m.publication_field() }) as HTMLSelectElement;
+    await act(async () => user.selectOptions(fieldSelect, 'schema:datePublished'));
+    const retiredAdd = retainedClick(button(m.correction_add()));
+    await act(async () => {
+      await user.selectOptions(fieldSelect, 'schema:isbn');
+      button(m.correction_add()).focus();
+      retiredAdd({ detail: 0, currentTarget: button(m.correction_add()) });
+    });
+    expect(fieldSelect.value).toBe('schema:isbn');
+    expect(region('schema:datePublished')).toBeNull();
+    expect(window.document.activeElement).toBe(button(m.correction_add()));
+    await act(async () => {
+      await user.selectOptions(fieldSelect, 'schema:datePublished');
+      await user.click(button(m.correction_add()));
+    });
+    expect(window.document.activeElement).toBe(button(m.correction_add()));
+    await click(remove('schema:datePublished'));
+    await act(async () => {
+      await user.selectOptions(fieldSelect, 'schema:datePublished');
+      const trigger = button(m.correction_add());
+      trigger.focus();
+      await user.keyboard('{Enter}');
+    });
+    const precision = canvas.getByRole('combobox', { name: m.correction_precision() });
+    expect(window.document.activeElement).toBe(precision);
+    await click(remove('schema:datePublished'));
     await type(input(m.catalogue_create_label()), 'Independent edition');
     await click(canvas.getByRole('checkbox', { name: m.publication_independent() }));
     await type(input(m.relation_citation()), 'https://example.org/source');

@@ -250,6 +250,12 @@ function PublicationEditorLive({
   const [facts, setFacts] = useState<Record<string, SnakInput['value']>>({});
   // One identity per added row; removing and readding a property retires its old controls.
   const factHolders = useRef(new Map<string, object>());
+  const pendingFactFocus = useRef<{
+    property: string;
+    holder: object;
+    trigger: HTMLButtonElement;
+    readingGeneration: number;
+  } | null>(null);
   const [publisher, setPublisher] = useState<EntityPickerSubject[]>([]);
   const [field, setField] = useState('');
   const [citation, setCitation] = useState('');
@@ -271,6 +277,39 @@ function PublicationEditorLive({
     !running.current &&
     !admission.current.disabled &&
     !admission.current.created;
+  useLayoutEffect(() => {
+    const intent = pendingFactFocus.current;
+    if (!intent) return;
+    pendingFactFocus.current = null;
+    if (
+      !intent.trigger.isConnected ||
+      document.activeElement !== intent.trigger ||
+      !lifetime.active() ||
+      intent.readingGeneration !== readingGeneration.current ||
+      !editable() ||
+      factHolders.current.get(intent.property) !== intent.holder ||
+      !currentProfile?.fields.includes(intent.property)
+    )
+      return;
+    const section = document.getElementById(`${id}-fact-${encodeURIComponent(intent.property)}`);
+    if (!section) return;
+    const datatype = read?.release.properties[intent.property]?.datatype;
+    const targetField =
+      datatype === 'quantity'
+        ? 'amount'
+        : datatype === 'time'
+          ? 'precision'
+          : datatype === 'monolingualtext'
+            ? 'text'
+            : 'value';
+    const target =
+      intent.property === 'schema:publisher'
+        ? section.querySelector<HTMLElement>('input:not([type="hidden"]), [role="combobox"], select, textarea')
+        : document.getElementById(
+            controlId(`${id}-scalar-${encodeURIComponent(intent.property)}`, 'fact', targetField),
+          );
+    (target && section.contains(target) ? target : section).focus();
+  });
   const name = (id: string) =>
     pickText(displayRelease?.properties[id]?.labels ?? {}, locale).text || draftNames[id] || '';
   const title = read ? pickText(read.public.subject.labels, locale).text : '';
@@ -1063,12 +1102,26 @@ function PublicationEditorLive({
                     disabled={
                       disabled || !field || !currentProfile?.fields.includes(field) || Object.hasOwn(facts, field)
                     }
-                    onClick={() =>
+                    onBlur={(event) => {
+                      if (pendingFactFocus.current?.trigger === event.currentTarget) pendingFactFocus.current = null;
+                    }}
+                    onClick={(event) => {
+                      const keyboardActivation = event.detail === 0;
+                      const trigger = event.currentTarget;
+                      pendingFactFocus.current = null;
                       edit(
                         () => {
                           const datatype = read?.release.properties[field]?.datatype;
                           if (!datatype) return;
-                          factHolders.current.set(field, {});
+                          const holder = {};
+                          factHolders.current.set(field, holder);
+                          if (keyboardActivation)
+                            pendingFactFocus.current = {
+                              property: field,
+                              holder,
+                              trigger,
+                              readingGeneration: renderedReadingGeneration,
+                            };
                           setFacts((facts) => ({
                             ...facts,
                             [field]: {
@@ -1083,7 +1136,7 @@ function PublicationEditorLive({
                           !factHolders.current.has(field) &&
                           !!currentProfile?.fields.includes(field),
                       )
-                    }
+                    }}
                   >
                     {m.correction_add({}, o)}
                   </Button>

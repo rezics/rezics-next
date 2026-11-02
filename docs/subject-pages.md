@@ -61,6 +61,8 @@ keeps its exact ID and offers an ordinary read retry without creating again. Thi
 Independent Publication recovery keeps local values visible but disables editing and creation while the current work
 reading is unavailable. Refresh start hides the previous work title and links; only a fresh read for the same work
 restores admission, and an unresolved command retries only after an explicit action with its original body and key.
+After a current keyboard addition, focus moves to that admitted field's first value control (quantity amount, time
+precision, otherwise its first edit control); rejected, stale and pointer additions do not redirect focus.
 
 Character creation keeps multilingual terms and optional initial facts in semantic field groups using the shared
 content frame; terms use one column on phones and two on desktop. Confirmed creation leads with its status and
