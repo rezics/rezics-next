@@ -266,6 +266,8 @@ while retaining its direct view URL. A slug that equals a view name still identi
 it matches the current localized slug; otherwise that id/view shorthand redirects to the full view address.
 Current tabs, frame and list traversal remain with their existing readers, and
 [public metadata](../apps/web/src/features/pages/subject-head.ts) continues to own head and JSON-LD.
+Subject title years use native astronomical numbering, with a localized era for year zero and earlier,
+while positive-year labels retain their current presentation.
 
 ### Public data and failure states
 

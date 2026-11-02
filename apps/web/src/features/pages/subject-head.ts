@@ -65,12 +65,17 @@ function releaseYear(
         content.precision < 9
       )
         continue;
-      const match = /^\+?(\d{4,})-/.exec(content.time);
+      const match = /^([+-]?)(\d{4,})-/.exec(content.time);
       if (!match) continue;
+      const year = Number(`${match[1]}${match[2]}`);
       const date = new Date(0);
-      date.setUTCFullYear(Number(match[1]), 0, 1);
-      if (Number.isFinite(date.getTime()))
-        return new Intl.DateTimeFormat(locale, { year: 'numeric', timeZone: 'UTC' }).format(date);
+      date.setUTCFullYear(year, 0, 1);
+      if (!Number.isFinite(date.getTime())) continue;
+      return new Intl.DateTimeFormat(locale, {
+        year: 'numeric',
+        ...(year <= 0 ? { era: 'short' } : {}),
+        timeZone: 'UTC',
+      }).format(date);
     }
   }
 }
