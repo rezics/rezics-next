@@ -1,7 +1,14 @@
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
-import { GLOBAL, preparedRatingReader, ratingFailure, type Figure, type RatingOutcome } from './subject-ratings';
+import {
+  GLOBAL,
+  preparedRatingReader,
+  ratingFailure,
+  ratingResponseHeaders,
+  type Figure,
+  type RatingOutcome,
+} from './subject-ratings';
 import { admitRatingAggregate, admitRatingPopulationPage } from './rating-population-value';
 
 export const POPULATION_LIMIT = 20;
@@ -20,6 +27,8 @@ export type PopulationResult = {
   next: string | null;
   /** Refused identities and their counts are omitted, even if the aggregate returned a masked zero. */
   incomplete: boolean;
+  retryAfter?: string;
+  retryAt?: number;
 };
 export type PopulationEnvelope = {
   reader: string | null;
@@ -99,11 +108,19 @@ export async function readRatingPopulations(
             })
           : null;
       if (response?.status === 200 && !body) return envelope({ kind: 'failed' });
+      const wait = response
+        ? response.status === 200
+          ? undefined
+          : ratingFailure(response.status, ratingResponseHeaders(response))
+        : { kind: 'failed' as const };
       const items: PopulationItem[] = [];
       for (const label of currentLabels) {
         if (!label) continue;
         const value = body?.figures.find((figure) => figure.population === label.id);
-        items.push({ ...label, figure: value ? { kind: 'ready', value } : ratingFailure(response?.status ?? 503) });
+        items.push({
+          ...label,
+          figure: value ? { kind: 'ready', value } : wait && wait.kind !== 'failed' ? wait : { kind: 'failed' },
+        });
       }
       return envelope({
         kind: 'ready',
@@ -111,6 +128,9 @@ export async function readRatingPopulations(
           items,
           next: null,
           incomplete: currentLabels.some((label) => label === null),
+          ...(wait?.kind === 'failed' && wait.retryAfter !== undefined
+            ? { retryAfter: wait.retryAfter, retryAt: wait.retryAt }
+            : {}),
         },
       });
     }
@@ -120,7 +140,7 @@ export async function readRatingPopulations(
       query: { question: input.question, ...(input.cursor !== undefined ? { cursor: input.cursor } : {}) },
       headers,
     });
-    if (result.status !== 200) return envelope(ratingFailure(result.status));
+    if (result.status !== 200) return envelope(ratingFailure(result.status, ratingResponseHeaders(result)));
     const page = admitRatingPopulationPage(result.data);
     if (!page) return envelope({ kind: 'failed' });
     const ids = page.populations.map((item) => item.population).filter((id) => id !== GLOBAL);

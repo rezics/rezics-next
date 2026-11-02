@@ -48,6 +48,8 @@ test('admits bounded sparse pages and only exact selected, concealed identities'
 
   const delayed = envelope({ kind: 'failed', retryAfter: '15' });
   expect(admitPopulationEnvelope(delayed, input)).toEqual(delayed);
+  const captured = envelope({ kind: 'failed', retryAfter: '15', retryAt: 16_000 });
+  expect(admitPopulationEnvelope(captured, input)).toEqual(captured);
 });
 
 test('rejects malformed envelopes and any invalid directory or selected page as a whole', () => {

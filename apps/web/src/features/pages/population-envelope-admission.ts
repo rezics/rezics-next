@@ -4,7 +4,7 @@ import { GLOBAL, type Figure, type RatingOutcome } from './subject-ratings';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const failureKinds = ['absent', 'unavailable', 'terminal', 'failed'] as const;
-type WaitMetadata = { retryAfter?: string | number };
+type WaitMetadata = { retryAfter?: string | number; retryAt?: number };
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -20,12 +20,24 @@ function exactKeys(value: Record<string, unknown>, required: readonly string[], 
 }
 
 function waitMetadata(value: Record<string, unknown>): WaitMetadata | null {
-  if (!Object.prototype.hasOwnProperty.call(value, 'retryAfter')) return {};
-  const retryAfter = value.retryAfter;
-  return (typeof retryAfter === 'string' && retryAfter.length > 0) ||
-    (typeof retryAfter === 'number' && Number.isFinite(retryAfter) && retryAfter >= 0)
-    ? { retryAfter }
-    : null;
+  const wait: WaitMetadata = {};
+  if (Object.prototype.hasOwnProperty.call(value, 'retryAfter')) {
+    const retryAfter = value.retryAfter;
+    if (
+      !(
+        (typeof retryAfter === 'string' && retryAfter.length > 0) ||
+        (typeof retryAfter === 'number' && Number.isFinite(retryAfter) && retryAfter >= 0)
+      )
+    )
+      return null;
+    wait.retryAfter = retryAfter;
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'retryAt')) {
+    const retryAt = value.retryAt;
+    if (typeof retryAt !== 'number' || !Number.isFinite(retryAt)) return null;
+    wait.retryAt = retryAt;
+  }
+  return wait;
 }
 
 function validRequest(input: PopulationInput): boolean {
@@ -44,7 +56,7 @@ function validRequest(input: PopulationInput): boolean {
 
 function admitFailure(value: unknown): (Exclude<RatingOutcome<never>, { kind: 'ready' }> & WaitMetadata) | null {
   if (!record(value) || !failureKinds.includes(value.kind as (typeof failureKinds)[number])) return null;
-  if (!exactKeys(value, ['kind'], ['retryAfter'])) return null;
+  if (!exactKeys(value, ['kind'], ['retryAfter', 'retryAt'])) return null;
   const wait = waitMetadata(value);
   return wait
     ? ({ kind: value.kind, ...wait } as Exclude<RatingOutcome<never>, { kind: 'ready' }> & WaitMetadata)
@@ -99,13 +111,15 @@ function admitPopulationResult(value: unknown, input: PopulationInput): Populati
 
   const page = value.value;
   if (
-    !exactKeys(page, ['items', 'next', 'incomplete']) ||
+    !exactKeys(page, ['items', 'next', 'incomplete'], ['retryAfter', 'retryAt']) ||
     !Array.isArray(page.items) ||
     page.items.length > 20 ||
     (page.next !== null && typeof page.next !== 'string') ||
     typeof page.incomplete !== 'boolean'
   )
     return null;
+  const pageWait = waitMetadata(page);
+  if (!pageWait || (pageWait.retryAfter !== undefined && typeof pageWait.retryAfter !== 'string')) return null;
 
   const selected = input.selected;
   if (selected !== undefined && page.next !== null) return null;
@@ -122,7 +136,13 @@ function admitPopulationResult(value: unknown, input: PopulationInput): Populati
   if (requested && page.incomplete !== seen.size < requested.size) return null;
   return {
     kind: 'ready',
-    value: { items, next: page.next, incomplete: page.incomplete },
+    value: {
+      items,
+      next: page.next,
+      incomplete: page.incomplete,
+      ...(typeof pageWait.retryAfter === 'string' ? { retryAfter: pageWait.retryAfter } : {}),
+      ...(pageWait.retryAt === undefined ? {} : { retryAt: pageWait.retryAt }),
+    },
   };
 }
 

@@ -4,6 +4,7 @@ import { MetaLine } from '@rezics/ui/meta-line';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
+import { useSearchRetryWait } from '../../search/search-recovery-retry';
 import { SubjectRatingControl } from './rating-control';
 import type { SubjectOwnRating } from './subject-ratings';
 import type { SubjectPersonalLease } from './subject-personal-reader';
@@ -18,6 +19,7 @@ import {
   type RatingSource,
   type RatingOutcome,
 } from './subject-ratings';
+import { admitRatingRetry } from './rating-retry-admission';
 import { PublicRatingFigure } from './public-rating-figure';
 import { RatingDistribution } from './rating-distribution';
 import { OverviewContext, viewHref } from './overview';
@@ -77,6 +79,9 @@ export function RatingSourceStatus({
     },
     outcome.kind,
   );
+  const retryAfter = outcome.kind === 'failed' ? outcome.retryAfter : undefined;
+  const retryAt = outcome.kind === 'failed' ? outcome.retryAt : undefined;
+  const waiting = useSearchRetryWait(retryAt);
   if (outcome.kind === 'ready' && children == null) return null;
   return (
     <div
@@ -87,6 +92,7 @@ export function RatingSourceStatus({
       data-slot="rating-source-status"
       data-source={source}
       data-state={outcome.kind}
+      data-retry-after={retryAfter}
       className="space-y-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       {outcome.kind === 'ready' ? (
@@ -105,14 +111,17 @@ export function RatingSourceStatus({
                     ? m.rating_population_unavailable({}, options)
                     : m.rating_population_failed({}, options)}
           </p>
+          {waiting && <p role="status">{m.search_recovery_wait({}, options)}</p>}
           {retry && outcome.kind !== 'terminal' && outcome.kind !== 'idle' && (
             <Button
               ref={focus.retryRef}
               type="button"
               variant="outline"
+              aria-disabled={waiting || undefined}
               className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               onClick={(event) => {
                 focus.noteActivation(event.currentTarget);
+                if (waiting || !admitRatingRetry(retryAt)) return;
                 retry();
               }}
             >

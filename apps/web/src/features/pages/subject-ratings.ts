@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
+import { admitRatingRetryAfter, ratingRetryAt } from './rating-retry-admission';
 import { decodeOwnRatingValue } from './subject-own-rating-value';
 import { admitRatingAggregate } from './rating-population-value';
 
@@ -93,9 +94,11 @@ export async function preparedRatingReader(request: Request, authorization: stri
 }
 
 /** Public sources have independent, serializable outcomes. Absence is never a successful zero. */
+export type FailedRatingOutcome = { kind: 'failed'; retryAfter?: string; retryAt?: number };
 export type RatingOutcome<T> =
   | { kind: 'ready'; value: T }
-  | { kind: 'idle' | 'absent' | 'unavailable' | 'terminal' | 'failed' };
+  | { kind: 'idle' | 'absent' | 'unavailable' | 'terminal' }
+  | FailedRatingOutcome;
 export type RatingSources = {
   question: RatingOutcome<RatingQuestion>;
   figure: RatingOutcome<PublicFigure>;
@@ -117,11 +120,27 @@ export function failedRatingSources(only?: RatingSource): RatingSources {
   };
 }
 
-export function ratingFailure(status: number): Exclude<RatingOutcome<never>, { kind: 'ready' }> {
+export function ratingResponseHeaders(result: { headers?: unknown } | undefined): unknown {
+  return result && 'headers' in result ? result.headers : undefined;
+}
+
+export function failedRatingOutcome(headers?: unknown, now = Date.now()): FailedRatingOutcome {
+  const retryAfter = admitRatingRetryAfter(headers, now);
+  const retryAt = ratingRetryAt(retryAfter, now);
+  return retryAfter === undefined || retryAt === undefined
+    ? { kind: 'failed' }
+    : { kind: 'failed', retryAfter, retryAt };
+}
+
+export function ratingFailure(
+  status: number,
+  headers?: unknown,
+  now = Date.now(),
+): Exclude<RatingOutcome<never>, { kind: 'ready' }> {
   if (status === 404) return { kind: 'absent' };
   if (status === 410) return { kind: 'terminal' };
   if (status === 401 || status === 403) return { kind: 'unavailable' };
-  return { kind: 'failed' };
+  return failedRatingOutcome(headers, now);
 }
 
 type RatingRecord = Record<string, unknown>;
@@ -238,17 +257,17 @@ export async function readRatings(client: KernelClient, id: string, only?: Ratin
       const result = await client['rating-questions']({ questionId: QUESTION }).get();
       return result.status === 200 && isRatingQuestion(result.data)
         ? { kind: 'ready', value: result.data }
-        : ratingFailure(result.status);
+        : ratingFailure(result.status, ratingResponseHeaders(result));
     }),
     settle('figure', async () => {
       const result = await subject.figure.get();
       return result.status === 200 && isPublicFigure(result.data?.figure)
         ? { kind: 'ready', value: result.data.figure }
-        : ratingFailure(result.status);
+        : ratingFailure(result.status, ratingResponseHeaders(result));
     }),
     settle('global', async () => {
       const result = await subject.ratings.get({ query: { question: QUESTION, population: [GLOBAL] } });
-      if (result.status !== 200) return ratingFailure(result.status);
+      if (result.status !== 200) return ratingFailure(result.status, ratingResponseHeaders(result));
       const aggregate = admitRatingAggregate(result.data, { subject: id, question: QUESTION, populations: [GLOBAL] });
       const value = aggregate?.figures[0];
       return value ? { kind: 'ready', value } : { kind: 'failed' };
@@ -257,7 +276,7 @@ export async function readRatings(client: KernelClient, id: string, only?: Ratin
       const result = await subject['source-statistics'].get();
       return result.status === 200 && isStatistics(result.data)
         ? { kind: 'ready', value: result.data }
-        : ratingFailure(result.status);
+        : ratingFailure(result.status, ratingResponseHeaders(result));
     }),
   ]);
   return { question, figure, global, statistics };

@@ -15,6 +15,8 @@ import {
   type PopulationItem,
 } from './subject-rating-populations';
 import { displayRating, PUBLIC_RATING_SCALE, type RatingQuestion } from './subject-ratings';
+import { admitRatingRetry } from './rating-retry-admission';
+import { useSearchRetryWait } from '../../search/search-recovery-retry';
 import { RatingSourceStatus } from './subject-ratings-view';
 import { usePopulationPageFocus } from './population-page-focus';
 import {
@@ -423,11 +425,25 @@ function PopulationVisit({
     }
   }
   const choices = page?.items.filter((item) => !visibility.current.hidden.has(item.id)) ?? [];
+  const selectedRetryAt =
+    selectedOutcome.kind === 'ready'
+      ? selectedOutcome.value.retryAt
+      : selectedOutcome.kind === 'failed' && 'retryAt' in selectedOutcome
+        ? selectedOutcome.retryAt
+        : undefined;
+  const selectedRetryAfter =
+    selectedOutcome.kind === 'ready'
+      ? selectedOutcome.value.retryAfter
+      : selectedOutcome.kind === 'failed' && 'retryAfter' in selectedOutcome
+        ? selectedOutcome.retryAfter
+        : undefined;
+  const selectedWaiting = useSearchRetryWait(selectedRetryAt);
   const canRetrySelection =
     selected.length > 0 &&
     (selectedOutcome.kind !== 'ready' ||
       comparisons?.incomplete ||
-      comparisons?.items.some((item) => item.figure.kind !== 'ready'));
+      comparisons?.items.some((item) => item.figure.kind !== 'ready') ||
+      selectedRetryAfter !== undefined);
   const pageFocus = usePopulationPageFocus({
     owner: {
       subject: subjectId,
@@ -460,6 +476,14 @@ function PopulationVisit({
   };
   const retry = (kind: 'directory' | 'selected') => {
     if (kind === 'directory' ? !directoryGuard() || busy || !!pageState.stopped : !selectionGuard()) return;
+    if (
+      kind === 'directory' &&
+      !admitRatingRetry(
+        directoryOutcome.kind === 'failed' && 'retryAt' in directoryOutcome ? directoryOutcome.retryAt : undefined,
+      )
+    )
+      return;
+    if (kind === 'selected' && !admitRatingRetry(selectedRetryAt)) return;
     // No mutation/invalidation of siblings, own votes, or drafts. Query finally is owned by TanStack.
     if (kind === 'directory') {
       const source = region.current?.ownerDocument.activeElement;
@@ -570,7 +594,12 @@ function PopulationVisit({
         )}
       </FieldSet>
       {selected.length > 0 && (
-        <div data-slot="rating-selected" className="space-y-3" aria-busy={comparison.isFetching}>
+        <div
+          data-slot="rating-selected"
+          data-retry-after={selectedRetryAfter}
+          className="space-y-3"
+          aria-busy={comparison.isFetching}
+        >
           <h3 className="font-medium">{m.subject_ratings_comparisons({}, options)}</h3>
           <RatingSourceStatus
             outcome={selectedOutcome}
@@ -583,6 +612,9 @@ function PopulationVisit({
               isCurrent: current,
             }}
           />
+          {selectedWaiting && selectedOutcome.kind === 'ready' && (
+            <p role="status">{m.search_recovery_wait({}, options)}</p>
+          )}
           {comparisons?.incomplete && <p role="status">{m.rating_population_concealed({}, options)}</p>}
           <ul className="grid gap-4 sm:grid-cols-2">
             {comparisons?.items.map((item) => (
@@ -620,7 +652,13 @@ function PopulationVisit({
             ))}
           </ul>
           {canRetrySelection && selectedOutcome.kind === 'ready' && (
-            <Button className={actionClass} type="button" variant="outline" onClick={() => retry('selected')}>
+            <Button
+              className={actionClass}
+              type="button"
+              variant="outline"
+              aria-disabled={selectedWaiting || undefined}
+              onClick={() => retry('selected')}
+            >
               {m.subject_section_retry({}, options)}
             </Button>
           )}
