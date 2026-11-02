@@ -121,7 +121,10 @@ test('Unset presentation Type uses mixed member hints while explicit Type select
     expect((await p.activate(pin, typeof before.body?.head === 'number' ? before.body?.head : null)).status).toBe(200);
     const collection = await f.collection({ visibility: 'public' });
     for (const type of ['schema:Book', 'schema:Movie']) await f.add(collection.id, await f.subject(type));
-    expect((await f.read(collection.id)).presentationKind).toBeNull();
+    expect(await f.read(collection.id)).toMatchObject({
+      presentationKind: null,
+      presentationKindSource: 'mixed',
+    });
     const descriptors = await p.call(`/v1/definitions/catalogues/${pin.rootDigest}/kinds:resolve`, {
       ids: ['schema:Book', 'schema:Movie'],
     });
@@ -137,7 +140,10 @@ test('Unset presentation Type uses mixed member hints while explicit Type select
       presentationKind: 'schema:Book',
       presentationKindSource: 'owner',
     });
-    expect((await f.patch(collection.id, null)).presentationKind).toBeNull();
+    expect(await f.patch(collection.id, null)).toMatchObject({
+      presentationKind: null,
+      presentationKindSource: 'mixed',
+    });
     // Mixed presentation has no catalogue enrollment or automatic preparation dependency.
     expect(
       (
