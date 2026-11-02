@@ -10,6 +10,8 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
 import { PatternStory } from './page';
+import { PublicationControls, usePublicationControls } from '../community/publication-controls-view';
+import { pickText } from '@rezics/composition';
 
 const meta = {
   title: 'Patterns/Community/Realm Publications',
@@ -207,4 +209,61 @@ export const CurrentAuthorityDenied: Story = {
       view.getByRole('link', { name: subjects[0]!.labels[getLocale()] ?? subjects[0]!.label ?? '' }),
     ).toBeVisible();
   },
+};
+
+// Constructed text stress from the recorded subject; it supplies no new publication receipt or permission.
+function LongSelection() {
+  const subject = subjects[0]!;
+  const title = Array(12).fill(pickText(subject.labels, getLocale()).text).join(' · ');
+  const control = usePublicationControls(
+    realmRecording.realm.realmId,
+    async () => ({ kind: 'unavailable' }),
+    () => {},
+    subjects,
+  );
+  return (
+    <section className="min-w-0 space-y-4">
+      <h2 className="text-xl font-semibold">{m.realm_published_heading()}</h2>
+      <PublicationControls
+        control={control}
+        refresh={async () => {}}
+        search={async () => [
+          { id: subject.id, title, types: subject.types, typeLabel: subject.typeName ?? '', cover: subject.cover },
+        ]}
+      />
+    </section>
+  );
+}
+
+async function chooseLongSelection({ canvasElement }: { canvasElement: HTMLElement }) {
+  const view = within(canvasElement);
+  await userEvent.click(view.getByRole('button', { name: m.realm_publication_curate() }));
+  await userEvent.type(view.getByRole('combobox', { name: m.realm_publication_choose() }), 'Kokoro');
+  await userEvent.click(await within(document.body).findByRole('option'));
+  const selected = view.getByRole('group', { name: m.realm_publication_selected() });
+  await expect(within(selected).getByRole('heading', { level: 4 })).toHaveTextContent(
+    Array(12).fill(pickText(subjects[0]!.labels, getLocale()).text).join(' · '),
+  );
+  await expect(view.getByRole('button', { name: m.realm_publication_clear() })).toBeEnabled();
+  await expect(view.getByRole('button', { name: m.realm_publication_publish() })).toBeEnabled();
+  await expect(view.queryByText(m.realm_publication_saved())).toBeNull();
+}
+
+export const LongSelectedSubject: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In">
+      <LongSelection />
+    </PatternStory>
+  ),
+  play: chooseLongSelection,
+};
+export const LongSelectedSubjectRtl: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In">
+      <div dir="rtl">
+        <LongSelection />
+      </div>
+    </PatternStory>
+  ),
+  play: chooseLongSelection,
 };

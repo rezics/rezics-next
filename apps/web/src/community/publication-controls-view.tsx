@@ -2,6 +2,8 @@ import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Cover } from '@rezics/ui/cover';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { ListRowControl } from '@rezics/ui/list-row';
 import { Button } from '@rezics/ui/shadcn/button';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
@@ -185,32 +187,61 @@ export function PublicationControls({
   const searchSubjects = useMemo(() => search ?? publicationSubjectSearch(locale), [search, locale]);
   const selected = control.target;
   return (
-    <div className="space-y-3">
-      <Button variant="outline" aria-expanded={open} onClick={() => setOpen(!open)}>
+    <div className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
+      <Button
+        className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+        variant="outline"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
         {m.realm_publication_curate()}
       </Button>
       {open ? (
-        <div className="max-w-xl space-y-3 rounded-xl bg-muted/40 p-4">
+        <div className="min-w-0 max-w-xl space-y-3">
+          <ContentItemHeading level={3} className="text-lg font-semibold">
+            {m.realm_publication_curate()}
+          </ContentItemHeading>
           <p className="text-sm text-muted-foreground">{m.realm_publication_scope()}</p>
-          <fieldset disabled={control.locked} className="space-y-3">
+          <fieldset disabled={control.locked} className="min-w-0 space-y-3">
             {selected ? (
-              <div role="group" className="flex min-w-0 items-start gap-3" aria-label={m.realm_publication_selected()}>
-                <Cover
-                  subject={{ id: selected.id, title: selected.title, types: selected.types }}
-                  cover={selected.cover}
-                  src={coverSrc}
-                  size="xs"
-                  decorative
-                />
-                <div className="min-w-0 flex-1 space-y-1">
-                  <p className="font-medium [overflow-wrap:anywhere]">{selected.title}</p>
-                  {selected.typeName ? <p className="text-xs text-muted-foreground">{selected.typeName}</p> : null}
-                  <p className="text-sm text-muted-foreground">{m.realm_publication_confirm()}</p>
+              <ContentItemFrame
+                as="div"
+                role="group"
+                className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 py-3"
+                aria-label={m.realm_publication_selected()}
+              >
+                <div data-content-item-slot="visual">
+                  <Cover
+                    subject={{ id: selected.id, title: selected.title, types: selected.types }}
+                    cover={selected.cover}
+                    src={coverSrc}
+                    size="xs"
+                    decorative
+                  />
                 </div>
-                <Button variant="ghost" onClick={() => control.choose(null)}>
-                  {m.realm_publication_clear()}
-                </Button>
-              </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <ContentItemHeading level={4} className="text-[17px] leading-snug font-semibold sm:text-lg">
+                    {selected.title}
+                  </ContentItemHeading>
+                  {selected.typeName ? (
+                    <p data-content-item-slot="metadata" className="text-sm text-muted-foreground">
+                      {selected.typeName}
+                    </p>
+                  ) : null}
+                  <p data-content-item-slot="preview" className="text-sm text-muted-foreground">
+                    {m.realm_publication_confirm()}
+                  </p>
+                </div>
+                <ListRowControl data-content-item-slot="actions" className="col-start-2 min-w-0">
+                  <Button
+                    className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                    variant="ghost"
+                    onClick={() => control.choose(null)}
+                  >
+                    {m.realm_publication_clear()}
+                  </Button>
+                </ListRowControl>
+              </ContentItemFrame>
             ) : (
               <EntityPicker
                 key={control.scope}
@@ -237,15 +268,25 @@ export function PublicationControls({
                 }}
               />
             )}
-            <Button disabled={!selected || control.locked} onClick={() => void control.change('publish')}>
-              {m.realm_publication_publish()}
-            </Button>
+            <ListRowControl data-content-item-slot="actions">
+              <Button
+                className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                disabled={!selected || control.locked}
+                onClick={() => void control.change('publish')}
+              >
+                {m.realm_publication_publish()}
+              </Button>
+            </ListRowControl>
           </fieldset>
         </div>
       ) : null}
-      {control.busy ? <p role="status">{m.realm_publication_saving()}</p> : null}
+      {control.busy ? (
+        <ContentItemFrame as="div" role="status" className="py-3 text-sm">
+          {m.realm_publication_saving()}
+        </ContentItemFrame>
+      ) : null}
       {!control.busy && control.outcome ? (
-        <div role="status" className="space-y-2 text-sm">
+        <ContentItemFrame as="div" role="status" className="min-w-0 space-y-2 py-3 text-sm">
           {control.outcome.kind === 'saved' ? (
             <p>
               {control.action === 'publish'
@@ -260,31 +301,49 @@ export function PublicationControls({
           {control.outcome.kind === 'unavailable' ? (
             <>
               <p>{m.realm_publication_uncertain()}</p>
-              <Button variant="outline" onClick={() => void control.retry()}>
-                {m.realm_publication_retry()}
-              </Button>
+              <ListRowControl data-content-item-slot="actions">
+                <Button
+                  className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                  variant="outline"
+                  onClick={() => void control.retry()}
+                >
+                  {m.realm_publication_retry()}
+                </Button>
+              </ListRowControl>
             </>
           ) : null}
           {control.outcome.kind === 'conflict' ? (
             <>
               <p>{m.realm_publication_conflict()}</p>
               {control.outcome.currentHead ? (
-                <Button variant="outline" onClick={() => void control.review()}>
-                  {control.action === 'withdraw'
-                    ? m.realm_publication_review_withdraw()
-                    : control.action === 'reject'
-                      ? m.realm_publication_review_reject()
-                      : m.realm_publication_review()}
-                </Button>
+                <ListRowControl data-content-item-slot="actions">
+                  <Button
+                    className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                    variant="outline"
+                    onClick={() => void control.review()}
+                  >
+                    {control.action === 'withdraw'
+                      ? m.realm_publication_review_withdraw()
+                      : control.action === 'reject'
+                        ? m.realm_publication_review_reject()
+                        : m.realm_publication_review()}
+                  </Button>
+                </ListRowControl>
               ) : (
                 <p>{m.realm_publication_head_unavailable()}</p>
               )}
-              <Button variant="outline" onClick={() => void refresh()}>
-                {m.realm_shelf_restart()}
-              </Button>
+              <ListRowControl data-content-item-slot="actions">
+                <Button
+                  className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                  variant="outline"
+                  onClick={() => void refresh()}
+                >
+                  {m.realm_shelf_restart()}
+                </Button>
+              </ListRowControl>
             </>
           ) : null}
-        </div>
+        </ContentItemFrame>
       ) : null}
     </div>
   );
@@ -304,7 +363,7 @@ export function ShelfContinuation({
   label: string;
 }) {
   return (
-    <div className="space-y-2" aria-busy={busy}>
+    <ContentItemFrame as="div" className="min-w-0 space-y-2 [overflow-wrap:anywhere]" aria-busy={busy}>
       {failure ? (
         <p role="status" className="text-sm text-muted-foreground">
           {failure === 'denied'
@@ -314,15 +373,27 @@ export function ShelfContinuation({
               : m.realm_shelf_unavailable()}
         </p>
       ) : null}
-      {failure === 'stale' || failure === 'denied' ? (
-        <Button variant="outline" disabled={busy} onClick={() => void load(true)}>
-          {m.realm_shelf_restart()}
-        </Button>
-      ) : next ? (
-        <Button variant="outline" disabled={busy} onClick={() => void load()}>
-          {busy ? m.realm_shelf_loading() : label}
-        </Button>
-      ) : null}
-    </div>
+      <ListRowControl data-content-item-slot="actions">
+        {failure === 'stale' || failure === 'denied' ? (
+          <Button
+            className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void load(true)}
+          >
+            {m.realm_shelf_restart()}
+          </Button>
+        ) : next ? (
+          <Button
+            className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void load()}
+          >
+            {busy ? m.realm_shelf_loading() : label}
+          </Button>
+        ) : null}
+      </ListRowControl>
+    </ContentItemFrame>
   );
 }

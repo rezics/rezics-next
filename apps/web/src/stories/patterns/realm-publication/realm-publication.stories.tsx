@@ -67,3 +67,25 @@ export const Frozen: Story = {
     await expect(view.queryByRole('combobox', { name: m.realm_publication_choose() })).toBeNull();
   },
 };
+
+export const SelectionHierarchy: Story = {
+  play: async (context) => {
+    await chooseSubject(context);
+    const view = within(context.canvasElement);
+    await expect(view.getByRole('heading', { level: 2, name: m.realm_published_heading() })).toBeVisible();
+    await expect(view.getByRole('heading', { level: 3, name: m.realm_publication_curate() })).toBeVisible();
+    const selected = view.getByRole('group', { name: m.realm_publication_selected() });
+    await expect(within(selected).getByRole('heading', { level: 4 })).toHaveTextContent(
+      pickText(search.subjects[0]!.labels, getLocale()).text,
+    );
+    await expect(view.getByText(m.realm_publication_scope())).toBeVisible();
+    await expect(view.getByText(m.realm_publication_confirm())).toBeVisible();
+    await expect(selected.querySelector('a')).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.realm_publication_curate() }));
+    await expect(view.queryByRole('group', { name: m.realm_publication_selected() })).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.realm_publication_curate() }));
+    await expect(view.getByRole('group', { name: m.realm_publication_selected() })).toHaveTextContent(
+      pickText(search.subjects[0]!.labels, getLocale()).text,
+    );
+  },
+};
