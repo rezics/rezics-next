@@ -48,10 +48,14 @@ test('later rejection or denial after uncertainty preserves the original command
     };
     await attempt.submit(reference, original, () => true);
     const captured = attempt.request!;
-    await attempt.submit('different reference', async (input) => {
-      sent.push(input);
-      return later;
-    }, () => true);
+    await attempt.submit(
+      'different reference',
+      async (input) => {
+        sent.push(input);
+        return later;
+      },
+      () => true,
+    );
 
     expect(sent).toEqual([captured, captured]);
     expect(attempt.request).toBe(captured);
@@ -61,28 +65,37 @@ test('later rejection or denial after uncertainty preserves the original command
 });
 
 test('saved and conflicted attempts stay immutable, and retired rejection completions stay hidden', async () => {
-  for (const result of [
-    { kind: 'saved', statement: evidence },
-    { kind: 'conflict' },
-  ] as const) {
+  for (const result of [{ kind: 'saved', statement: evidence }, { kind: 'conflict' }] as const) {
     const attempt = new CreatorPaymentAttempt(statement.id, subject);
     let calls = 0;
-    await attempt.submit(reference, async () => {
-      calls++;
-      return result;
-    }, () => true);
+    await attempt.submit(
+      reference,
+      async () => {
+        calls++;
+        return result;
+      },
+      () => true,
+    );
     const captured = attempt.request;
-    await attempt.submit(corrected, async () => {
-      calls++;
-      return { kind: 'rejected' };
-    }, () => true);
+    await attempt.submit(
+      corrected,
+      async () => {
+        calls++;
+        return { kind: 'rejected' };
+      },
+      () => true,
+    );
     expect(calls).toBe(1);
     expect(attempt.request).toBe(captured);
     expect(attempt.beginCorrection()).toBe(false);
   }
 
   const retired = new CreatorPaymentAttempt(statement.id, subject);
-  await retired.submit(reference, async () => ({ kind: 'rejected' }), () => false);
+  await retired.submit(
+    reference,
+    async () => ({ kind: 'rejected' }),
+    () => false,
+  );
   expect(retired.result?.kind).toBe('uncertain');
   expect(retired.beginCorrection()).toBe(false);
 });

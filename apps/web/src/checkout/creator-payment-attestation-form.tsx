@@ -80,7 +80,8 @@ export function CreatorPaymentAttestation({
     if (!current() || !csrfToken || (!attempt.request && statement.state !== 'open')) return;
     const startsFreshRequest = !attempt.request || attempt.correctionEditing;
     if (startsFreshRequest) {
-      if (!validPaymentReference(reference) || (attempt.correctionEditing && !attempt.canSubmitCorrection(reference))) return;
+      if (!validPaymentReference(reference) || (attempt.correctionEditing && !attempt.canSubmitCorrection(reference)))
+        return;
       const execute = attestCreatorPayment;
       sender.value = (data) => execute({ data, headers: { 'X-CSRF-Token': csrfToken } });
     }
@@ -197,14 +198,16 @@ export function CreatorPaymentAttestation({
             >
               {m.payment_attestation_correction_submit()}
             </Button>
-          ) : (!locked || canRetry) && (
-            <Button
-              type="submit"
-              className="min-h-11"
-              disabled={!admitted || attempt.busy || (!locked && !validPaymentReference(reference))}
-            >
-              {locked ? m.payment_attestation_retry() : m.payment_attestation_submit()}
-            </Button>
+          ) : (
+            (!locked || canRetry) && (
+              <Button
+                type="submit"
+                className="min-h-11"
+                disabled={!admitted || attempt.busy || (!locked && !validPaymentReference(reference))}
+              >
+                {locked ? m.payment_attestation_retry() : m.payment_attestation_submit()}
+              </Button>
+            )
           )}
           {result && !attempt.busy && (
             <Button
