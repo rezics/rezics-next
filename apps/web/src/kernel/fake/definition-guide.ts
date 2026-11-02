@@ -4,9 +4,7 @@ import historical from '../../../../../packages/definitions/test/fixtures/bundle
 import definitions from '../recorded/definitions-release.json';
 import {
   definitionText,
-  fetchGuideDirectory,
   fetchGuideRelease,
-  fetchGuideType,
   readGuideDirectory,
   readGuideType,
   readGuide,
@@ -15,6 +13,8 @@ import {
   type GuideTransport,
 } from '../../features/catalogue/definition-guide';
 import type { FakeRoute } from '../fake-modules';
+
+const activeRelease = definitions.release as Release;
 
 // Digest of the existing immutable historical fixture, not a fabricated historical label for the active bundle.
 export const historicalGuideDigest = 'sha256:eb8bc8b685e4f8e12897e0e9ac0ab978a8eff60102053081bd95ef4af0688702';
@@ -53,7 +53,7 @@ export function definitionGuideFixture(scenario: GuideScenario = 'active') {
         const search = new URL(request.url).searchParams;
         const prefix = search.get('query') ?? '';
         const offset = Number(search.get('cursor') ?? 0);
-        const all = Object.entries(scenario === 'empty' ? {} : definitions.release.types)
+        const all = Object.entries(scenario === 'empty' ? {} : activeRelease.types)
           .map(([typeId, definition]) => {
             const label = definitionText(definition.labels, locale);
             const description = definitionText(definition.descriptions, locale);
@@ -85,7 +85,7 @@ export function definitionGuideFixture(scenario: GuideScenario = 'active') {
       }
       if (path.startsWith('/v1/definitionTypes/')) {
         const typeId = path.slice('/v1/definitionTypes/'.length);
-        const definition = definitions.release.types[typeId];
+        const definition = activeRelease.types[typeId];
         if (!definition) return Response.json({ code: 'not_found' }, { status: 404 });
         const locale = (new URL(request.url).searchParams.get('locale') ?? 'en') as GuideLocale;
         const label = definitionText(definition.labels, locale);
@@ -100,7 +100,7 @@ export function definitionGuideFixture(scenario: GuideScenario = 'active') {
           descriptionLanguage: description.lang,
           definition,
           properties: Object.fromEntries(
-            definition.properties.map((id) => [id, definitions.release.properties[id]]),
+            definition.properties.map((id) => [id, activeRelease.properties[id]]),
           ),
         });
       }
@@ -121,8 +121,8 @@ export function definitionGuideFixture(scenario: GuideScenario = 'active') {
         () => readGuideDirectory(client, selectedLocale),
         (typeId) => readGuideType(client, typeId, selectedLocale),
       ),
-    directory: (locale, query, cursor) => fetchGuideDirectory(client, locale, query, cursor),
-    exact: (locale, typeId) => fetchGuideType(client, typeId, locale),
+    directory: (locale, query, cursor) => readGuideDirectory(client, locale, query, cursor),
+    exact: (locale, typeId) => readGuideType(client, typeId, locale),
   };
   return { client, transport, address, calls };
 }

@@ -274,7 +274,7 @@ function ActiveGuide({
 }: {
   address: GuideAddress;
   locale: string;
-  initial?: GuideRead;
+  initial?: GuideRead | undefined;
   transport: GuideTransport;
 }) {
   const o = { locale: locale as never };

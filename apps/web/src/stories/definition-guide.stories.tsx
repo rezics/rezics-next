@@ -211,6 +211,21 @@ function LongGuideStory() {
     }
     return copy;
   }, [locale]);
+  const type = release.types['schema:Book']!;
+  const summary = definitionText(type.labels, locale);
+  const description = definitionText(type.descriptions, locale);
+  const descriptor = {
+    typeId: 'schema:Book',
+    releaseDigest: release.digest,
+    label: summary.text,
+    language: summary.lang,
+    parents: [],
+    description: description.text || null,
+    descriptionLanguage: description.lang,
+    definition: type,
+    properties: Object.fromEntries(type.properties.map((id) => [id, release.properties[id]!])),
+  };
+  const read = { ok: true as const, pin: 'active' as const, descriptor };
   return (
     <PatternStory path="/catalogue/definitions" visitor="Signed Out">
       <AppShell>
@@ -218,13 +233,13 @@ function LongGuideStory() {
           <DefinitionGuideContent
             locale={locale}
             address={{ type: 'schema:Book' }}
-            read={{ ok: true, pin: 'active', release }}
+            read={read}
             retry={() => {}}
           />
           <DefinitionGuideContent
             locale={locale}
             address={{ type: 'schema:Book', property: 'schema:author' }}
-            read={{ ok: true, pin: 'active', release }}
+            read={read}
             retry={() => {}}
           />
         </div>

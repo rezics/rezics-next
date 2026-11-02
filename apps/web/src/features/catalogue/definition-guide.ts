@@ -138,12 +138,15 @@ function directoryPage(value: unknown): value is GuideDirectoryPage {
 }
 
 function typeDescriptor(value: unknown): value is GuideTypeDescriptor {
-  if (!typeSummary(value) || !record(value) || !record(value.definition) || !record(value.properties)) return false;
-  if (!releasedMetadata({ types: { [value.typeId]: value.definition }, properties: value.properties })) return false;
-  const properties = value.properties as Record<string, unknown>;
+  if (!typeSummary(value) || !record(value)) return false;
+  const definition = value.definition;
+  const properties = value.properties;
+  if (!record(definition) || !record(properties)) return false;
+  if (!releasedMetadata({ types: { [value.typeId]: definition }, properties })) return false;
+  const typedDefinition = definition as Release['types'][string];
   return (
-    strings(value.definition.properties) &&
-    value.definition.properties.every((id) => Object.hasOwn(properties, id))
+    strings(typedDefinition.properties) &&
+    typedDefinition.properties.every((id) => Object.hasOwn(properties, id))
   );
 }
 
