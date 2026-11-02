@@ -272,27 +272,28 @@ export function readClaudeUsage(pool: Pool, now: number): PoolReading {
   if (typeof token === 'string' && token) {
     try {
       response = spawnSync(
-          'curl',
-          [
-            '-sf',
-            '-m',
-            '10',
-            '-H',
-            '@-',
-            '-H',
-            'anthropic-beta: oauth-2025-04-20',
-            'https://api.anthropic.com/api/oauth/usage',
-          ],
-          { input: `Authorization: Bearer ${token}\n`, encoding: 'utf8' },
+        'curl',
+        [
+          '-sf',
+          '-m',
+          '10',
+          '-H',
+          '@-',
+          '-H',
+          'anthropic-beta: oauth-2025-04-20',
+          'https://api.anthropic.com/api/oauth/usage',
+        ],
+        { input: `Authorization: Bearer ${token}\n`, encoding: 'utf8' },
       );
     } catch {
       /* Report a failed optional observation below. */
     }
     observationError = 'Claude OAuth usage request failed';
   }
-  const reading = response?.status === 0 && typeof response.stdout === 'string'
-    ? parseClaudeUsage(response.stdout, pool, now)
-    : undefined;
+  const reading =
+    response?.status === 0 && typeof response.stdout === 'string'
+      ? parseClaudeUsage(response.stdout, pool, now)
+      : undefined;
   if (reading?.observedAt) {
     rememberClaudeReading(pool, reading);
     return reading;
