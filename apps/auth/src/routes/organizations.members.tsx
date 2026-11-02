@@ -157,7 +157,15 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   function discard() {
     renewActivity();
     // Dispatch persists unresolved=true before execute. Only unsent work is discarded.
-    if (command && (!command.unresolved || observed)) clearMembershipCommand();
+    const saved = readMembershipCommand();
+    if (
+      command &&
+      saved &&
+      saved !== 'invalid' &&
+      saved.operationKey === command.operationKey &&
+      (!saved.unresolved || observed)
+    )
+      clearMembershipCommand();
     setMember('');
     setRole('member');
     setConfirmed(false);
@@ -246,7 +254,6 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
           return;
         }
         initiatingAccount = session.accountId;
-        setAccountId(initiatingAccount);
         setNeedsProfile(!membershipSessionMatches(session, initiatingAccount));
       }
       const saved = readMembershipCommand();
@@ -254,9 +261,12 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         saved === 'invalid' ||
         (saved && (saved.accountId !== initiatingAccount || saved.operation.organizationId !== organizationId))
       ) {
+        discard();
+        setRevoked(true);
         setPage({ kind: 'unavailable' });
         return;
       }
+      setAccountId(initiatingAccount);
       if (saved) {
         setCommand(saved);
         setNotice(saved.unresolved ? 'unknown' : 'step-up');
