@@ -617,6 +617,8 @@
   "library_member_move_to_top": "An den Anfang",
   "library_member_move_up": "Nach oben",
   "library_member_occurrence": "{title} (Eintrag {position} auf dieser Seite)",
+  "library_collection_note_reader_expand": "Vollständige Notiz lesen",
+  "library_collection_note_reader_collapse": "Notiz einklappen",
   "library_member_note": "Notiz",
   "library_member_note_save": "Notiz speichern",
   "library_member_remove": "Eintrag entfernen",

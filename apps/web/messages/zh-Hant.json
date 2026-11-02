@@ -617,6 +617,8 @@
   "library_member_move_to_top": "移到頂端",
   "library_member_move_up": "上移",
   "library_member_occurrence": "{title}（本頁第 {position} 項）",
+  "library_collection_note_reader_expand": "閱讀完整備註",
+  "library_collection_note_reader_collapse": "收起備註",
   "library_member_note": "備註",
   "library_member_note_save": "儲存備註",
   "library_member_remove": "移除成員",

@@ -2,6 +2,7 @@ import { batchRemoveCollectionMembers, transferCollectionMembers } from './colle
 import { readCollectionDestination, type CollectionDestination } from './collection-read';
 import { CollectionAddMembers } from './collection-add-members';
 import { CollectionMemberDetails } from './collection-member-row';
+import { CollectionNoteReader } from './collection-note-reader';
 import { ResourceAccessLink } from '../accounts/resource-access/link';
 import { Cover } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
@@ -1628,12 +1629,12 @@ export function CollectionReadMembers<Member extends ReadMember>({
               <div className="space-y-1">
                 <CollectionMemberDetails member={member} listPresentations={listPresentations} />
                 {member.note ? (
-                  <p
-                    data-slot="collection-member-note"
-                    className="line-clamp-4 whitespace-pre-wrap text-sm text-muted-foreground"
-                  >
-                    {member.note}
-                  </p>
+                  <CollectionNoteReader
+                    key={member.id ?? member.note}
+                    note={member.note}
+                    previewLines={4}
+                    occurrence={m.library_member_occurrence({ title: title.text, position: index + 1 })}
+                  />
                 ) : null}
               </div>
             }
@@ -1656,9 +1657,11 @@ export function CollectionReadMembers<Member extends ReadMember>({
       >
         <CollectionMemberDetails member={member} listPresentations={listPresentations} />
         {member.note ? (
-          <p data-slot="collection-member-note" className="whitespace-pre-wrap text-sm text-muted-foreground">
-            {member.note}
-          </p>
+          <CollectionNoteReader
+            key={member.id ?? member.note}
+            note={member.note}
+            occurrence={m.library_member_occurrence({ title: title.text, position: index + 1 })}
+          />
         ) : null}
       </MemberListRow>
     );

@@ -13,6 +13,7 @@ import { subjectHref } from '../subject/subject-href';
 import { pageText } from '../features/pages/shared';
 import { libraryTitleValue } from './title';
 import { CollectionMemberDetails } from './collection-member-row';
+import { CollectionNoteReader } from './collection-note-reader';
 import { SubjectCover } from './subject-row';
 import { collectionMemberRatio } from './collection-presentation';
 import type { CollectionListPresentations, CollectionTypeOption } from './collection-presentation';
@@ -319,13 +320,7 @@ export function CollectionMemberList({
                 ) : null}
               </ListRowControl>
             ) : member.subject && member.note ? (
-              <p
-                data-slot="collection-member-note"
-                data-content-item-slot="preview"
-                className="col-start-2 line-clamp-2 text-sm text-muted-foreground"
-              >
-                {member.note}
-              </p>
+              <CollectionNoteReader note={member.note} occurrence={actionContext} className="col-start-2" />
             ) : null}
             <ListRowControl
               data-content-item-slot="actions"
