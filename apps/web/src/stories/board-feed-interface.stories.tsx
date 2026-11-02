@@ -45,7 +45,7 @@ async function loadExample(): Promise<CommunityBoardPage> {
   return {
     ...loaded,
     now,
-    authors: author
+    authors: author?.state === 'active'
       ? { [source.authorId]: { ...author, displayName, handle: 'supplied_long_author_handle'.repeat(6) } }
       : loaded.authors,
     threads: { ...loaded.threads, threads: [supplied], next: continuationCursor, rankRefreshedAt },

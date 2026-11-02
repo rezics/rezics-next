@@ -104,7 +104,7 @@ test('native order, exact large counts and exact date operands survive long supp
   const first = { ...original, title, createdAt, reactions: { like: 1234567890123, insightful: 2 }, replyCount: 987654321012, lastActivityAt };
   const second = { ...original, id: '01a17a3b-09b4-77bf-a24b-1234ebeab5b3', title: 'Second native row' };
   const author = page.authors?.[original.authorId];
-  if (!author) throw new Error('The recorded page must supply its author.');
+  if (!author || author.state !== 'active') throw new Error('The recorded page must supply its active author.');
   const supplied: CommunityBoardPage = {
     ...page,
     authors: { [original.authorId]: { ...author, displayName } },
