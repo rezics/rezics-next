@@ -347,6 +347,13 @@ test('add-on initial creation preserves explicit bases, independent corrections,
       expect(rows(form)).toHaveLength(1);
     }
     expect(pair.calls.filter((call) => call.method === 'POST')).toHaveLength(0);
+    const beforeRecovery = created.length;
+    for (const form of forms()) {
+      await click(m.catalogue_create_submit(), form);
+      await until(() => !form.isConnected);
+    }
+    expect(created.length - beforeRecovery).toBe(2);
+    expect(pair.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
 
     // Released multiplicity and target admission come from the real controls, not fixture-only commands.
     await render(direct(read, pair.transport));
