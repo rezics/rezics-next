@@ -29,6 +29,11 @@ import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { bulkAdmissionSchema } from './bulk-schemas.ts';
 import { BULK_ADMISSION_BODY_BYTES, BULK_MAX_SELECTION_IDS } from './bulk-limits.ts';
+import {
+  captureLibraryRemovalTargets,
+  explicitLibraryRemoval,
+  resolveLibraryRemovalSubjects,
+} from './collection-bulk-entry-admission.ts';
 import type { BulkAdmission, BulkCounters, OperationResult, OutcomeQuery } from './bulk-contract.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
 import {
@@ -301,22 +306,31 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
   }
   return {
     async preview(actor: Actor, input: BulkAdmission, requestKey: string) {
-      const owner = bulkOwner(actor, 'library_entry:update'),
-        parsed = explicitBulkStatus(input);
+      const parsed = input.action === 'remove_from_library' ? explicitLibraryRemoval(input) : explicitBulkStatus(input);
+      const action = parsed.action === 'remove_from_library' ? 'library_entry:delete' : 'library_entry:update';
+      const owner = bulkOwner(actor, action);
       const route = requireRoute(owner.accountId),
         operationId = newId(route);
       const requestDigest = bulkHash([principalCommandIdentity(owner), BULK_PREVIEW_COMMAND, input]);
       return runner.ownAccountPrepared(
         owner,
         {
-          action: 'library_entry:update',
+          action,
           kind: BULK_PREVIEW_COMMAND,
           requestKey,
           input,
           async prepare(attempt) {
             const context = commandAccessContext({ pool, deadline: deadlineFor(5000) }, attempt);
-            await admitEntryAttempt(deps, owner, 'library_entry:update', attempt, context.deadline);
+            await admitEntryAttempt(deps, owner, action, attempt, context.deadline);
             const capture = await captureDurableInitiator(context, owner);
+            if (parsed.action === 'remove_from_library') {
+              try {
+                const resolved = await resolveLibraryRemovalSubjects(deps, owner, parsed, attempt.time, context);
+                return { capture, resolved, action: parsed.action };
+              } catch (error) {
+                return { capture, resolved: [] as { subjectId: string; requestedSubjectId: string | null }[], action: parsed.action, error };
+              }
+            }
             const resolved: { subjectId: string; requestedSubjectId: string | null }[] = [];
             const seen = new Set<string>();
             try {
@@ -329,30 +343,40 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
                 }
               }
             } catch (error) {
-              return { capture, resolved, error };
+              return { capture, resolved, action: parsed.action, error };
             }
-            return { capture, resolved };
+            return { capture, resolved, action: parsed.action };
           },
         },
         async (tx, command, prepared) => {
           if ('error' in prepared) throw prepared.error;
-          const rows = await tx.query<{ subjectId: string; incarnation: string | null; revision: number }>(
-            `SELECT subject_id AS "subjectId",incarnation_id AS incarnation,revision FROM library.entry
-              WHERE route=$1 AND account_id=$2 AND subject_id=ANY($3::uuid[]) ORDER BY subject_id`,
-            [route, owner.accountId, prepared.resolved.map((subject) => subject.subjectId)],
-          );
-          const entries = new Map(rows.rows.map((entry) => [entry.subjectId, entry]));
-          const targets: CollectionBulkTarget[] = prepared.resolved.map((subject) => {
-            const entry = entries.get(subject.subjectId);
-            if (entry && !entry.incarnation) throw new ProblemError('dependency_unavailable');
-            return {
-              kind: 'subject',
-              ...subject,
-              expected: entry
-                ? { kind: 'present', incarnation: entry.incarnation!, admissionSequence: '0', revision: entry.revision }
-                : { kind: 'absent', slotGeneration: '0' },
-            };
-          });
+          const targets: CollectionBulkTarget[] =
+            prepared.action === 'remove_from_library'
+              ? await captureLibraryRemovalTargets(tx, owner, prepared.resolved)
+              : await (async () => {
+                  const rows = await tx.query<{ subjectId: string; incarnation: string | null; revision: number }>(
+                    `SELECT subject_id AS "subjectId",incarnation_id AS incarnation,revision FROM library.entry
+                      WHERE route=$1 AND account_id=$2 AND subject_id=ANY($3::uuid[]) ORDER BY subject_id`,
+                    [route, owner.accountId, prepared.resolved.map((subject) => subject.subjectId)],
+                  );
+                  const entries = new Map(rows.rows.map((entry) => [entry.subjectId, entry]));
+                  return prepared.resolved.map((subject): CollectionBulkTarget => {
+                    const entry = entries.get(subject.subjectId);
+                    if (entry && !entry.incarnation) throw new ProblemError('dependency_unavailable');
+                    return {
+                      kind: 'subject',
+                      ...subject,
+                      expected: entry
+                        ? {
+                            kind: 'present',
+                            incarnation: entry.incarnation!,
+                            admissionSequence: '0',
+                            revision: entry.revision,
+                          }
+                        : { kind: 'absent', slotGeneration: '0' },
+                    };
+                  });
+                })();
           const request = { ...parsed, selection: { kind: 'explicit' as const } };
           const operation = { route, id: operationId, kind: BULK_PREVIEW_COMMAND, sourceId: operationId };
           const record: DurableInitiatorRecord = {
