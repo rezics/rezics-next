@@ -120,8 +120,13 @@ test('manager startup follows installed protocol and two managers share one app-
       model: 'gpt-6.1-sol',
       config: { model_reasoning_effort: 'high', model_auto_compact_token_limit: 300000 },
     });
-    expect(requests[1].params.tokenBudget).toBe(40000);
-    expect(requests[1].params.status).toBe('active');
+    expect(requests[1].params).toEqual({
+      threadId: 'thread-1',
+      origin: 'user',
+      objective: s.spec.objective,
+      status: 'active',
+      tokenBudget: 40000,
+    });
     expect(first.threadId).toBe('thread-1');
     expect(first.activeTurnId).toBe('turn-1');
     expect(s.managers.get(s.spec.id).turns).toBe(1);
@@ -433,13 +438,93 @@ test('JSON-RPC errors propagate and an exiting app-server rejects pending reques
   }
 });
 
-test('host recovery rejoins an existing thread and dispatches committed events without starting a second thread', async () => {
+test('An active resident manager waits without provider-generated idle turns while autonomous controller work continues.', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
+    await s.notify({
+      method: 'thread/tokenUsage/updated',
+      params: { threadId: manager.threadId, tokenUsage: { total: { totalTokens: 500 } } },
+    });
+    expect(s.managers.get(manager.id)).toMatchObject({
+      status: 'running',
+      activeTurnId: null,
+      usage: { total: { totalTokens: 500 } },
+      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
+    });
+    expect(s.requests().find((r) => r.method === 'thread/goal/set')?.params).toEqual({
+      threadId: manager.threadId,
+      origin: 'user',
+      objective: s.spec.objective,
+      status: 'active',
+      tokenBudget: s.spec.budget,
+    });
+    await s.managers.start({ ...s.spec, id: 'second' });
+    expect(s.managers.get('second')).toMatchObject({ status: 'running', threadId: 'thread-2' });
+    expect(
+      s.requests().filter((r) => r.method === 'turn/start' && r.params.threadId === manager.threadId),
+    ).toHaveLength(1);
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
+    expect(
+      s
+        .requests()
+        .some((r) =>
+          ['thread/fork', 'thread/goal/clear', 'thread/settings/update', 'turn/interrupt'].includes(r.method),
+        ),
+    ).toBe(false);
+    expect(s.requests().some((r) => r.method === 'thread/goal/set' && r.params.status === 'paused')).toBe(false);
+    s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Choose the next brief' });
+    await s.managers.wake(manager.id);
+    const wakes = s.requests().filter((r) => r.method === 'turn/start' && r.params.threadId === manager.threadId);
+    expect(wakes).toHaveLength(2);
+    expect(wakes[1].params.input).toEqual([{ type: 'text', text: 'Choose the next brief', text_elements: [] }]);
+    expect(s.managers.get(manager.id)).toMatchObject({
+      threadId: manager.threadId,
+      status: 'running',
+      usage: { total: { totalTokens: 500 } },
+      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
+    });
+  } finally {
+    await s.close();
+  }
+});
+
+test('Inbox decisions wake the existing thread once before and after host recovery, preserving Goal objective, budget, usage and worker sessions.', async () => {
   const s = await setup();
   let recovered: ManagerSessions | undefined;
   const closeTransport = s.client.close.bind(s.client);
   try {
     const state = await s.managers.start(s.spec);
     await s.managers.flush();
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: state.threadId, turn: { id: state.activeTurnId, status: 'completed' } },
+    });
+    await s.notify({
+      method: 'thread/tokenUsage/updated',
+      params: { threadId: state.threadId, tokenUsage: { total: { totalTokens: 900 } } },
+    });
+    expect(s.managers.get(state.id)).toMatchObject({
+      status: 'running',
+      activeTurnId: null,
+      usage: { total: { totalTokens: 900 } },
+      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
+    });
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(1);
+    s.inbox.deliver({ managerId: state.id, kind: 'instruction', summary: 'Decide before the host stops' });
+    await s.managers.wake(state.id);
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: state.threadId, turn: { id: 'turn-2', status: 'completed' } },
+    });
+    s.inbox.record(state.id, { kind: 'merged' });
+    await s.managers.wake(state.id);
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
     // The managed daemon survives a host disconnect; retain that fake transport across the handoff.
     s.client.close = () => {};
     await s.managers.close();
@@ -447,8 +532,23 @@ test('host recovery rejoins an existing thread and dispatches committed events w
     recovered = new ManagerSessions(s.db, s.inbox, s.services);
     await recovered.recover();
     await recovered.flush();
-    expect(recovered.get(state.id).threadId).toBe(state.threadId);
-    expect(recovered.get(state.id).activeTurnId).toBe(state.activeTurnId);
+    expect(recovered.get(state.id)).toMatchObject({
+      threadId: state.threadId,
+      status: 'running',
+      activeTurnId: 'turn-3',
+      usage: { total: { totalTokens: 900 } },
+      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
+    });
+    const wakeTurns = s.requests().filter((r) => r.method === 'turn/start');
+    expect(wakeTurns).toHaveLength(3);
+    expect(wakeTurns[1].params).toMatchObject({
+      threadId: state.threadId,
+      input: [{ text: 'Decide before the host stops' }],
+    });
+    expect(wakeTurns[2].params).toMatchObject({
+      threadId: state.threadId,
+      input: [{ text: 'Committed while the host was down' }],
+    });
     expect(s.requests().filter((r) => r.method === 'thread/start')).toHaveLength(1);
     expect(s.requests().find((r) => r.method === 'thread/resume')?.params).toMatchObject({
       approvalPolicy: 'never',
@@ -456,6 +556,15 @@ test('host recovery rejoins an existing thread and dispatches committed events w
     });
     expect(s.requests().some((r) => r.method === 'thread/goal/get')).toBe(true);
     expect(s.inbox.notifications(state.id)).toHaveLength(0);
+    await recovered.recover();
+    await recovered.flush();
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(3);
+    expect(s.requests().filter((r) => r.method === 'turn/steer')).toHaveLength(0);
+    expect(s.requests().filter((r) => r.method === 'thread/goal/set')).toHaveLength(1);
+    expect(s.requests().some((r) => ['thread/fork', 'thread/goal/clear', 'turn/interrupt'].includes(r.method))).toBe(
+      false,
+    );
+    expect(recovered.get(state.id).usage).toEqual({ total: { totalTokens: 900 } });
   } finally {
     await recovered?.close();
     closeTransport();

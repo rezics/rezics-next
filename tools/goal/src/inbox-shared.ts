@@ -60,6 +60,11 @@ const inboxMigrations = [
       CREATE INDEX manager_inbox_dedupe ON manager_inbox(dedupe_key, created_at) WHERE dedupe_key IS NOT NULL;
       CREATE INDEX manager_inbox_sender_created ON manager_inbox(sender, created_at);`,
   },
+  {
+    module: 'inbox',
+    version: 4,
+    sql: `ALTER TABLE manager_inbox ADD COLUMN continuation_handshake INTEGER NOT NULL DEFAULT 0;`,
+  },
 ] as const;
 
 /** The writer and all read-only consumers use this one schema contract. Historical arrival times stay unknown. */

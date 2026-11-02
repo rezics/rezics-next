@@ -44,6 +44,7 @@ import { devProductBrief } from './briefs.ts';
 import { workerTestCommands } from './affected-tests.ts';
 import { branchHead } from './attempt-progress.ts';
 import { CONTINUATION_DIRECTORY, continuesItself } from './continuation.ts';
+import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
 
 export type LaunchOptions = {
   profile: Profile;
@@ -174,10 +175,16 @@ export function workerCheckProtocol(
       'Success requires the actual declared command to finish with exit zero and unchanged captured source. Missing, unknown and nonzero results stay non-green; return the exact failed assertion or setup error and log reference to the original owner.',
     ].join(' ');
   }
+  const workerOwnedAcceptance = typeof briefOrContract !== 'string' && briefOrContract.acceptance.workerOwned === true;
   if (minimalVerification(stateDirectory))
     return [
       'Verification is minimal: do not run acceptance, native or browser checks, a root check, worker-check or remote-check; they run after integration.',
       'Before finishing, type-check each workspace you changed from the worktree root (`bun run --cwd <workspace> typecheck`, or `bun scripts/typecheck.ts` for several) and fix every error; services/kernel and services/auth may use the compiler database or a check host: do not force `env -u KERNEL_CHECK_REMOTE` or local placement.',
+      ...(workerOwnedAcceptance
+        ? [
+            'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome, run them with the landing command below, and report the exact command and actual result; a missing acceptance command is not a pass. Broader acceptance remains deferred under this policy.',
+          ]
+        : []),
       LONG_WAIT,
       OWN_TESTS,
       'Then commit and return success (blocker null, `"checks":[]`), naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started.',
@@ -187,7 +194,9 @@ export function workerCheckProtocol(
   const placement: AcceptancePlacement =
     typeof briefOrContract === 'string' ? 'default' : (briefOrContract.acceptance?.placement ?? 'default');
   const command = typeof briefOrContract === 'string' ? undefined : briefOrContract.acceptance?.command;
-  const once = 'Check slots are scarce: run your acceptance command once after your last relevant edit.';
+  const once = workerOwnedAcceptance
+    ? 'This brief leaves acceptance to the worker. Choose or add a focused, meaningful check that exercises the stated outcome; no pass is presumed. Run the chosen command once after your last relevant edit and report its exact command and observed result.'
+    : 'Check slots are scarce: run your acceptance command once after your last relevant edit.';
   const localRunner = join(worktree, 'scripts/worker-check.ts');
   const namedRunner = namedWorkerCheck(contractText);
   const runner = existsSync(localRunner)
@@ -217,7 +226,10 @@ export function workerCheckProtocol(
   if (!runner)
     return [
       once,
-      'This base has no scripts/worker-check.ts; do not add one. Run the acceptance command in the foreground from the worktree root and let it finish, then report its actual exit status; it gives no check id and no waiting result.',
+      workerOwnedAcceptance
+        ? 'This base has no scripts/worker-check.ts; do not add one. Run your focused validation command in the foreground from the worktree root and let it finish; it gives no check id and no waiting result.'
+        : 'This base has no scripts/worker-check.ts; do not add one. Run the acceptance command in the foreground from the worktree root and let it finish, then report its actual exit status; it gives no check id and no waiting result.',
+      ...(workerOwnedAcceptance ? ['Do not report success unless the chosen validation actually exits zero.'] : []),
       LONG_WAIT,
       REGRESSION,
     ].join(' ');
@@ -290,6 +302,7 @@ export function workerPrompt(
         ? 'Do not rebase; merge or cherry-pick only what the contract names.'
         : 'Do not rebase or merge.'
     }${devProduct && !research ? " Check the contract's premises against your base first." : ''}`,
+    'If the requested behaviour already exists on the clean retained source, do not make an empty or unrelated commit. Report success without source changes; the controller runs the exact frozen acceptance on that bound source. Dirty source, changed contract, or failed or unavailable acceptance stays non-green.',
     research
       ? ''
       : `Write missing acceptance tests the contract names${devProduct ? ' or implies' : ''}; never edit a frozen file. If the contract changes a behaviour an existing test asserts, update that test and list it; keep assertions of unchanged behaviour. Write the fewest tests that pin user-visible behaviour and edge cases (as a rule fewer test lines than product lines) and only stories for states the contract names.`,
@@ -440,10 +453,10 @@ export type RunningWorker = {
   resuming?: boolean;
 };
 /**
- * A manager's tool sandbox kills the whole process tree of the command that launched a worker, and a new process
- * group does not leave that tree. The wrapper forks twice, so the worker is reparented away from its launcher, and
- * becomes a session leader. The intermediate process publishes the wrapper's pid before it exits. When the CLI ends,
- * the wrapper records its exit code or signal beside the run log.
+ * A user systemd scope is the worker's lifecycle boundary; detaching the worker from this process alone is not enough
+ * to survive a manager-host restart. Inside that scope, the wrapper forks twice, so the worker is reparented away from
+ * its launcher and becomes a session leader. The intermediate process publishes its pid before it exits. When the
+ * CLI ends, the wrapper records its exit code or signal beside the run log.
  */
 const WRAPPER = `import os,sys,json,signal,subprocess
 exit_path,pid_path=sys.argv[1:3]
@@ -729,6 +742,7 @@ export async function launch(
   const resuming = Boolean(resumeSession);
   // The branch head at this prompt; the first prompt's head tells whether the attempt made a new commit.
   const startHead = branchHead(task);
+  const ownerDecisionPrompt = prepareOwnerDecisionPrompt(store, task, attempt, prompt);
   const logStartOffset = resuming ? (statSync(attempt.logPath, { throwIfNoEntry: false })?.size ?? 0) : 0;
   const out = openSync(attempt.logPath, resumeSession ? 'a' : 'w'),
     err = openSync(`${attempt.logPath}.err`, 'w');
@@ -736,7 +750,7 @@ export async function launch(
     profile: attempt.profile,
     pool,
     worktree: task.worktree,
-    prompt,
+    prompt: ownerDecisionPrompt.prompt,
     mcpServers: storybookServers(task.worktree, task.brief),
     ...(resumeSession ? { resumeSession } : {}),
     logPath: attempt.logPath,
@@ -782,13 +796,18 @@ export async function launch(
       );
       const pid = existsSync(pidPath) ? Number(readFileSync(pidPath, 'utf8')) : 0;
       const identity = processIdentity(pid);
+      // A systemd-run client may fail after the wrapper published its identity. Adopt that process instead of
+      // treating it as a pre-start failure and risking a second launch during recovery.
+      const wrapperStarted = Boolean(identity || existsSync(exitPath));
       if (identity && fixtureOwner) {
         unrecordedFixtureWorker = identity;
         recordFixtureOwnedProcess(attempt.logPath, 'worker', identity);
         unrecordedFixtureWorker = null;
       }
-      if (started.error) throw started.error;
-      if (started.status !== 0 || !identity) throw new Error(`Worker wrapper failed to start (exit ${started.status})`);
+      if (!wrapperStarted) {
+        if (started.error) throw started.error;
+        throw new Error(`Worker wrapper failed to start (exit ${started.status})`);
+      }
       store.updateAttempt(attempt, (current) => {
         current.driver = driver;
         current.process = identity;
@@ -797,6 +816,7 @@ export async function launch(
       store.updateTask(attempt, (current) => {
         current.state = 'running';
       });
+      if (ownerDecisionPrompt.delivery) store.recordOwnerDecisionDelivery(attempt, ownerDecisionPrompt.delivery);
     });
   } catch (error) {
     if (unrecordedFixtureWorker) {

@@ -50,7 +50,7 @@ import {
   writeSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { stageCheckGit } from './check-git.ts';
+import type { CheckGitPublication } from './check-git.ts';
 import {
   CHECK_ARTIFACTS_MAX_BYTES,
   CHECK_ARTIFACTS_MAX_FILES,
@@ -5090,6 +5090,44 @@ type PreparedRun = {
   expectedSourceSha256?: string;
 };
 
+type CheckGitTransfer = { stage?: { directory: string; manifest: string } };
+
+/** One publication survives host retries and is deleted only after the logical check finishes. */
+async function withCheckGitTransfer<T>(
+  workspace: string,
+  operation: (transfer: CheckGitTransfer) => Promise<T>,
+): Promise<T> {
+  const transfer: CheckGitTransfer = {};
+  try {
+    return await operation(transfer);
+  } finally {
+    if (transfer.stage) {
+      try {
+        const { releaseCheckGit } = await import('./check-git.ts');
+        releaseCheckGit(workspace, transfer.stage.manifest);
+      } finally {
+        rmSync(transfer.stage.directory, { recursive: true, force: true });
+      }
+    }
+  }
+}
+
+/** Git supplies the staged tree; retain working edits, untracked inputs, and tracked deletions. */
+export function gitWorkspaceOverlay(workspace: string, files: string[]): { files: string[]; removed: string[] } {
+  const list = (args: string[]) => {
+    const result = Bun.spawnSync(['git', ...args], { cwd: workspace, stdout: 'pipe', stderr: 'pipe' });
+    if (result.exitCode !== 0) throw new Error('remote-check: cannot list Git workspace overlay');
+    return result.stdout.toString().split('\0').filter(Boolean);
+  };
+  const tracked = new Set(list(['ls-files', '-z']));
+  const modified = new Set(list(['diff', '--name-only', '-z']));
+  const wanted = new Set(files);
+  return {
+    files: files.filter((file) => !tracked.has(file) || modified.has(file)),
+    removed: [...tracked].filter((file) => !wanted.has(file)),
+  };
+}
+
 /** Transfers the workspace before admission so upload work never owns execution capacity. */
 async function uploadRun(
   host: Host,
@@ -5098,6 +5136,7 @@ async function uploadRun(
   options: RemoteCheck,
   files: string[],
   signal: AbortSignal,
+  transfer: CheckGitTransfer,
 ): Promise<PreparedRun> {
   const directory = `${ROOT}/runs/${id}`;
   const transferLimit = transferTimeout(options);
@@ -5120,7 +5159,8 @@ async function uploadRun(
   let gitManifestRelativePath: string | undefined;
   let gitManifestSha256: string | undefined;
   try {
-    const uploadFiles = [...files];
+    let uploadFiles = [...files];
+    let fetchedGit = false;
     if (options.expectedSourceManifest) {
       const manifestBytes = Buffer.from(`${JSON.stringify(options.expectedSourceManifest)}\n`);
       const temporaryRoot = join(resolve(options.workspace), '.temp', 'check-host');
@@ -5137,16 +5177,72 @@ async function uploadRun(
       mkdirSync(localTemp, { recursive: true, mode: 0o700 });
       if (!lstatSync(localTemp).isDirectory())
         throw new Error('remote-check: local Git staging directory is unavailable');
-      localGitStage = mkdtempSync(join(localTemp, `remote-check-git-${id}-`));
       const gitStageStarted = performance.now();
-      const { stageCheckGit } = await import('./check-git.ts');
-      const manifestPath = await stageCheckGit(options.workspace, localGitStage);
-      const packPath = join(localGitStage, 'snapshot.pack');
-      gitManifestRelativePath = relative(resolve(options.workspace), manifestPath);
-      gitManifestSha256 = createHash('sha256').update(readFileSync(manifestPath)).digest('hex');
-      uploadFiles.push(gitManifestRelativePath, relative(resolve(options.workspace), packPath));
-      const artifactBytes = statSync(manifestPath).size + statSync(packPath).size;
-      console.error(`remote-check: staged native Git snapshot ${artifactBytes} bytes on ${host.name}`);
+      const { stageCheckGit, fetchCheckGitScript } = await import('./check-git.ts');
+      if (!transfer.stage) {
+        const directory = mkdtempSync(join(localTemp, `remote-check-git-${id}-`));
+        try {
+          const manifest = await stageCheckGit(options.workspace, directory, { ref: `refs/checks/${randomUUID()}` });
+          transfer.stage = { directory, manifest };
+        } catch (error) {
+          rmSync(directory, { recursive: true, force: true });
+          throw error;
+        }
+      }
+      let manifestPath = transfer.stage.manifest;
+      const publication = JSON.parse(readFileSync(manifestPath, 'utf8')) as Partial<CheckGitPublication>;
+      if (publication.remote) {
+        try {
+          const result = await boundedSsh(
+            host,
+            connectionId,
+            fetchCheckGitScript(publication as CheckGitPublication, directory, `${ROOT}/check-git.git`),
+            'GitHub fetch',
+            transferLimit,
+          );
+          if (result.code !== 0) throw new Error('check-git: host fetch failed');
+          const overlay = gitWorkspaceOverlay(options.workspace, files);
+          if (overlay.removed.length) {
+            const deleted = await boundedSsh(
+              host,
+              connectionId,
+              `rm -f -- ${overlay.removed.map((file) => quote(`${directory}/${file}`)).join(' ')}`,
+              'Git workspace deletions',
+              transferLimit,
+            );
+            if (deleted.code !== 0) throw new Error('check-git: host workspace deletion failed');
+          }
+          const originals = new Set(files);
+          uploadFiles = [...overlay.files, ...uploadFiles.filter((file) => !originals.has(file))];
+          fetchedGit = true;
+          console.error(`remote-check: fetched native Git snapshot on ${host.name}`);
+        } catch (error) {
+          if (signal.aborted) throw new Aborted();
+          console.error(`remote-check: GitHub fetch unavailable on ${host.name}; using full snapshot upload`);
+          // A successful fetch followed by failed preparation must not leave Git metadata for pack restoration.
+          const cleared = await boundedSsh(
+            host,
+            connectionId,
+            `rm -rf -- ${quote(directory)}`,
+            'Git fallback cleanup',
+            transferLimit,
+          );
+          if (cleared.code !== 0) throw new RemoteTransportError(host.name, 'Git fallback cleanup', cleared.code);
+        }
+      }
+      if (!fetchedGit) {
+        if (publication.remote) {
+          localGitStage = mkdtempSync(join(localTemp, `remote-check-git-${id}-fallback-`));
+          manifestPath = await stageCheckGit(options.workspace, localGitStage);
+        } else localGitStage = undefined;
+        const artifactDirectory = dirname(manifestPath);
+        const packPath = join(artifactDirectory, 'snapshot.pack');
+        gitManifestRelativePath = relative(resolve(options.workspace), manifestPath);
+        gitManifestSha256 = createHash('sha256').update(readFileSync(manifestPath)).digest('hex');
+        uploadFiles.push(gitManifestRelativePath, relative(resolve(options.workspace), packPath));
+        const artifactBytes = statSync(manifestPath).size + statSync(packPath).size;
+        console.error(`remote-check: staged native Git snapshot ${artifactBytes} bytes on ${host.name}`);
+      }
       reportDuration('Git snapshot staging', gitStageStarted, host.name);
     }
     const useZstd = base.zstd && localRsyncSupportsZstd();
@@ -5163,7 +5259,7 @@ async function uploadRun(
         '--stats',
         '--info=progress2',
         '--rsync-path=flock -s /srv/rezics-check/bases/.lock rsync',
-        ...(base.base ? ['--checksum', `--copy-dest=${ROOT}/bases/current`] : []),
+        ...(fetchedGit ? ['--ignore-times'] : base.base ? ['--checksum', `--copy-dest=${ROOT}/bases/current`] : []),
         '--mkpath',
         '--from0',
         '--files-from=-',
@@ -5881,7 +5977,9 @@ export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Pr
   getPinnedBun(); // Local runtime verification precedes placement/upload/admission, never a held host slot.
   const files = workspaceFiles(options.workspace);
   const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
-    runWithTransportRetries(options, options.hosts, files, ownedSignal, false),
+    withCheckGitTransfer(options.workspace, (transfer) =>
+      runWithTransportRetries(options, options.hosts, files, ownedSignal, false, undefined, transfer),
+    ),
   );
   if (result === null) throw new Error('remote-check: no check host answered');
   return result;
@@ -5912,7 +6010,8 @@ async function runWithTransportRetries(
   files: string[],
   signal: AbortSignal,
   giveUpIfUnanswered: boolean,
-  onAnswered?: () => void,
+  onAnswered: (() => void) | undefined,
+  transfer: CheckGitTransfer,
 ): Promise<number | null> {
   validateMemoryGiB(options.memoryGiB);
   const maxAttempts = fixedLifecycleExecution(options.command) ? 1 : (options.maxTransportAttempts ?? 3);
@@ -5967,7 +6066,7 @@ async function runWithTransportRetries(
       await options.allocated?.({ host: host.name, run: id });
       assertExecutionAllowed(options, signal);
       prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
-      Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal));
+      Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal, transfer));
       assertExecutionAllowed(options, signal);
       const slotWaitStarted = performance.now();
       const lease = await acquire(
@@ -6024,7 +6123,9 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
   getPinnedBun();
   const files = workspaceFiles(options.workspace);
   const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
-    runWithTransportRetries(options, options.hosts, files, ownedSignal, true, options.answered),
+    withCheckGitTransfer(options.workspace, (transfer) =>
+      runWithTransportRetries(options, options.hosts, files, ownedSignal, true, options.answered, transfer),
+    ),
   );
   if (result === null) throw new Error('remote-check: no check host answered');
   return result;
@@ -6032,10 +6133,16 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
 
 /** Tries each available host once without waiting for a slot. */
 export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
-  return withExecutionCancellation(options, signal, (ownedSignal) => tryRemoteCheckOwned(options, ownedSignal));
+  return withExecutionCancellation(options, signal, (ownedSignal) =>
+    withCheckGitTransfer(options.workspace, (transfer) => tryRemoteCheckOwned(options, ownedSignal, transfer)),
+  );
 }
 
-async function tryRemoteCheckOwned(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
+async function tryRemoteCheckOwned(
+  options: RemoteCheck,
+  signal: AbortSignal,
+  transfer: CheckGitTransfer,
+): Promise<TryOnce> {
   options = await withOutputTreeSource(options);
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
@@ -6079,7 +6186,7 @@ async function tryRemoteCheckOwned(options: RemoteCheck, signal: AbortSignal): P
   };
   try {
     prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
-    Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal));
+    Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal, transfer));
     assertExecutionAllowed(options, signal);
     const current = hostsForRound().find(
       ({ name, address, identity }) => name === host.name && address === host.address && identity === host.identity,

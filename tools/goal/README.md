@@ -13,7 +13,9 @@ Each worker attempt runs its detached process tree in its own transient `rezics-
 systemd manager. The slice uses CPUWeight 50 and IOWeight 50 so workers yield processor time and disk to checks,
 managers and the control plane when the host is busy, without a hard quota on worker width. IOWeight affects only
 devices whose scheduler honours weights, such as the BFQ-scheduled SATA member on host c. When a user systemd manager
-is unavailable, workers start in the existing detached process group and the launch logs the fallback reason.
+cannot apply the slice's resource settings, Goal still attempts the protected scope with host defaults and logs the
+reason. If the manager cannot create that scope before the worker starts, launch fails with recovery guidance; Goal
+does not start an unprotected worker.
 
 ```sh
 bun install --cwd tools/goal --frozen-lockfile
@@ -21,12 +23,28 @@ bun run --cwd tools/goal check
 bun tools/goal/src/cli.ts dispatch .temp/goal/brief.md
 bun tools/goal/src/cli.ts status
 bun tools/goal/src/cli.ts attempts --json
+bun tools/goal/src/cli.ts attempts --all --json
+bun tools/goal/src/cli.ts attempts --task <task> --json --limit 25
 ```
 
+`attempts --json` remains the complete record export; `--all --json` makes that choice explicit for scripts. To inspect
+one task, `attempts --task <task> [--after <attempt>] [--limit <count>] [--json]` returns at most 25 attempts by default
+(up to 100). Pages are ordered by attempt number. JSON pages keep each record's existing fields inside `records` and
+include `hasMore`; when more records remain, `nextAfter` is the attempt number to pass to the next `--after` request.
+The text form also prints whether more attempts remain and the continuation attempt number.
+Attempt inspection only retrieves the requested data; the manager host handles orphan recovery.
+
 Run dispatch from a checkout of this repository after configuring local pools and writing a brief. The main checkout
-must have main checked out. Workers commit on their assigned branches, do not rebase and never edit frozen acceptance
-files; when a contract changes a behaviour an existing test asserts, the worker updates that test. They do not merge either, except that a product worker integrating into dev in its own worktree merges or
+must have main checked out. Workers commit source changes on their assigned branches, do not rebase and never edit frozen
+acceptance files. A clean unchanged claim must not add an empty or unrelated commit; the controller runs the unchanged
+acceptance on its retained source, while dirty or changed source or contract and failed or unavailable acceptance stay
+non-green. When a contract changes a behaviour an existing test asserts, the worker updates that test.
+Historical empty commits and controller-frozen acceptance files alone count as unchanged: acceptance records the retained
+head, and completion uses its existing target ancestor without advancing dev.
+Workers do not merge, except that a product worker integrating into dev in its own worktree merges or
 cherry-picks a branch or commit its contract names explicitly.
+If initial dispatch preparation fails before a task is registered, Goal removes the worktree and branch it created when
+Git confirms ownership, preserves the original error, and names any artifact retained for recovery.
 The controller rebases detached candidates onto the integration branch (by default `dev`), checks scope and
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
@@ -46,7 +64,9 @@ does not add a wrapper. Workers do not run the root typecheck or other regressio
 run the tests in the test files they created or changed once, with the command the landing's verification uses for
 them: `bun test <files>`, the kernel check for kernel tests and the focused Web runner for Web tests. The prompt names
 these commands for the files the branch already changes, including the sibling tests of changed sources. Waits use one
-call with a yield of at least 300 seconds. The task's acceptance command defines when its work is done.
+call with a yield of at least 300 seconds. A supplied acceptance command defines the worker's check. For an ordinary
+dev product brief without one, the worker chooses focused validation and reports its exact command and actual result;
+the missing command never counts as a pass.
 
 A task whose paths touch `apps/web` or `packages/ui`, or an interface task without either, works against Storybook
 served from its own worktree (`storybook.ts`). Each catalogue gets a loopback port derived from the worktree path, so
@@ -125,6 +145,9 @@ A stale manager host restarts after finishing its active request and recovers pe
 one per ten minutes. Requests retry transient socket absence during handoff, and long recovery sweeps yield between
 small batches so manager requests continue to be serviced. Watchdog and settlement scans read at most the last 256 KiB
 of an attempt log, beginning at a complete line boundary; the recent commands and final failure events remain visible.
+Startup failures identify the exited code or signal and the manager-host log path. Diagnostics read at most the final
+4,000 bytes appended by that launch, report whether that launch's output was truncated or unavailable, and exclude prior log
+history from the failure evidence.
 
 Check slots remain shared across workers and the landing train. A detached check's terminal result stays controller
 owned: a worker returns while it is running, and Goal wakes that session after reading its result record. The wrapper's
@@ -540,26 +563,30 @@ manager: example
 kind: implementation
 paths: [tools/goal/src/example.ts]
 riskAreas: []
-acceptance:
-  command: [bun, test, tools/goal/src/example.test.ts]
-  tests: [rejects invalid input]
-  failing: true
-estimate:
-  lines: 100
-  files: 2
 criticalPath: false
 waiting: []
 ---
 
-Implement the behavior described by the failing acceptance test.
+Operators can see why an example input was refused. Follow the diagnostic conventions in
+[the CLI owner documentation](tools/goal/README.md#briefs-and-routing), and include the field and a repair hint.
+Done means invalid input names the field to fix while valid input keeps its current result.
+Choose the implementation and focused validation.
 ```
 
-Use the actual declared files and machine acceptance tests for the task. `manager` defaults to `goal`. Additional
-observable features are `inseparable`, `citesSources` and `hostileInput`. Kinds are `implementation`, `interface`,
-`bulk-text`, `claim`, `specification`, `research` and `mechanical`. A specified implementation must declare failing
-acceptance tests and fit within 1,500 lines and 24 files: one complete user-visible slice, never padded. Mechanical work is refused by model dispatch. Risk paths,
-source citations and hostile input take precedence over cheaper classes. Critical-path classification additionally
-requires waiting tasks and `inseparable`.
+Use the actual declared files. `manager` defaults to `goal`. Additional observable features are `inseparable`,
+`citesSources` and `hostileInput`. Kinds are `implementation`, `interface`, `bulk-text`, `claim`, `specification`,
+`research` and `mechanical`. An ordinary dev product brief (including untargeted control-plane work, excluding
+main/stabilize releases and verification work, and without frozen acceptance files) may omit `estimate` and `acceptance.command`. An omitted estimate uses the existing
+routing ceiling of 1,500 lines and 24 files. With no command, acceptance is worker-owned: the worker chooses or adds a
+focused check, runs it under the normal check protocol, and reports the exact command and observed result. The parser
+does not insert a passing command. Under minimal verification, the worker supplies outcome tests and runs them with
+the landing's command; broader acceptance stays deferred. The dev verifier keeps its affected and sibling checks and
+executes only supplied acceptance commands; omission earns no task acceptance pass. Any supplied `acceptance` fields keep their existing behavior; a supplied command
+still requires non-empty `tests`, and an implementation with supplied acceptance keeps the existing failing-test
+requirement. Main/stabilize releases, verification, and frozen acceptance briefs continue to require an explicit
+command and tests. `acceptance.placement` requires an explicit command. Mechanical work is refused
+by model dispatch. Risk paths, source citations and hostile input take precedence over cheaper classes. Critical-path
+classification additionally requires waiting tasks and `inseparable`.
 
 ### Acceptance placement
 
@@ -865,8 +892,10 @@ New tasks and retries branch from the integration branch, except control-plane b
 `target: stabilize`, which branch from `main`. The landing train routes such releases under `tools/goal/` to `main` and
 measures their change set from their fork from `main`. If the integration branch does not exist, the controller creates
 it from `main`.
-Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
-promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
+Held tasks become ready when each `after:` dependency is integrated or merged. A dependency with the same target
+satisfies the edge at integration; a dependency with a different target satisfies it when its integration commit is
+already on the dependent's base branch, or when no integration commit was recorded. Integrated tasks remain in flight
+until promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
 Task worktrees exist while an attempt can use them. A background control-plane sweep removes integrated, merged and
 cancelled worktrees one at a time, under idle I/O priority, after waiting up to 30 seconds for `/proc/pressure/io` to
 report `some avg10` at or below 20 (hosts without that file do not wait); sustained pressure defers the pass and lets a
@@ -929,7 +958,9 @@ retry again every minute. When three distinct tasks end on the same normalized l
 environment incident, holds retries for those tasks and new tasks that hit the line, and sends one `blocker` to the
 supermanager with the line, count, example tasks and the first tracked source match from `git grep`. Goal retries one
 affected task every 10 minutes; a rerun that passes the blocker closes the incident and releases the other pending
-retries. `status` lists open incidents and identifies affected pending retries. Without a shared incident, the same
+retries. Incident notices are one line; an undelivered notice is retried during the existing recovery sweep without
+reopening the incident or moving its probe cadence. `status` lists open incidents and identifies affected pending
+retries. Without a shared incident, the same
 tool blocker in two consecutive attempts parks the task and sends its manager one `environment` event, whether or not
 the worker reran the failing command; two silence stalls in a row are reported as `stalled`. Work other than product
 work on dev also stops as stalled when a tool failure follows another without a rerun of the failing command. A
@@ -1029,6 +1060,11 @@ the train.
 
 ## Commands and managers
 
+The CLI validates worker command arguments before runtime recovery or command recording. Invalid arguments return usage
+feedback without settling unrelated workers.
+The CLI and direct worker callers share the parsed argument contract; direct callers retain rejected usage errors.
+Task attempt selection and page bounds use that same parser before runtime creation.
+
 ### Roles and delegation
 
 The supermanager sets direction and the managers own the work. This applies to every supermanager and every Goal.
@@ -1065,7 +1101,8 @@ The supermanager sets direction and the managers own the work. This applies to e
   options and a recommendation.
 - **Operations belong to the delivery-system Goal.** Manager-host liveness, stuck or stale checks, hung remote runs,
   worktree cleanup, recovery of tasks stopped by environment or tooling failures in any Goal and promotion
-  are owned by the manager of the Goal that owns `tools/goal`; check-host health is owned by the Goal
+  are owned by the manager of the Goal that owns `tools/goal`; damaged host retry journals are replaced with the
+  persisted maximum configured backoff before recovery. Check-host health is owned by the Goal
   that owns the check scripts. System alerts go to those owners.
 - **Efficiency is measured by scripts.** The hourly report, operational alarms and the supermanager watchdog run without
   model tokens ([delivery ownership](../../docs/development/delivery.md#delivery-ownership)). The supermanager acts on
@@ -1084,7 +1121,10 @@ Any authenticated manager, including the registered supermanager, can inspect ev
 queries use the persisted provider session identity (`CODEX_THREAD_ID` or `CLAUDE_CODE_SESSION_ID`); `GOAL_MANAGER`
 alone and worker task identity do not authorize them. Log, thread and digest queries are read-only: they do not mark a
 recipient's message read or acknowledged, set notification state, wake a manager, or deliver a message. Existing
-`inbox wait`, `inbox read` and `inbox ack` retain their per-recipient behavior.
+`inbox wait` and `inbox ack` retain their per-recipient behavior. `inbox read` returns one bounded page of that
+recipient's unacknowledged wakeable events, oldest id first, and marks only those rows read. Pages use the same size as
+shared queries (default 50, maximum 100) and include `hasMore` and `nextCursor`. Remaining unread events stay pending.
+`inbox wait` returns one unread page, so a later wait continues from the remaining work.
 
 ```sh
 bun tools/goal/src/cli.ts inbox log [--from <manager>] [--to <manager>] [--goal <goal>] [--task <task>] \
@@ -1111,8 +1151,10 @@ tasks stays two events. Records and completion results (`goal-met`, `goal-unmet`
 returned by the manager's next `inbox read`, but it sends no wakeup, starts no turn and does not end an `inbox wait`.
 Worker questions, blockers and handoffs still wake. A Goal manager's `inbox send` is refused above six sends in the last
 hour or 600 characters, with an error that says which limit was reached; the configured supermanager, workers and
-system events are not capped, and the `continuation written` handshake neither counts nor is refused by the hourly
-limit.
+system events are not capped. Only an authenticated pending Codex continuation-renewal handshake (asked, not yet
+renewed, no in-flight renewal, sent to the configured supermanager) neither counts nor is refused by the hourly limit;
+an ordinary decision, question or status that contains those words counts normally, regardless of recipient or letter
+case.
 
 Inbox kinds are explicit. `question` starts an open question. Only a direct linked `info` or `decision` reply answers
 it; another `question` is a clarification and remains open. A `blocker`, `handoff`, `instruction`, system event, read,
@@ -1136,6 +1178,33 @@ and old blockers are considered even when their arrival predates `--since`. Hist
 migration where those values were already present, but their missing arrival timestamp stays `null`/unknown. Time
 filters and age thresholds cannot classify a row whose creation time is unknown, and missing Goal/document metadata
 stays unknown rather than being inferred from summary text, read time or row id.
+
+#### Owner decisions at worker prompt boundaries
+
+From the owning manager's live persisted provider session, submit:
+
+```sh
+bun tools/goal/src/cli.ts event <task> <current-attempt> owner-contract-decision \
+  '{"decisionId":"composition-rule","summary":"Use the clarified composition rule.","documentRefs":[{"path":"docs/composition.md","change":"Clarified contributor ownership."}]}'
+```
+
+The JSON schema requires a nonempty `decisionId` (at most 128 characters) and `summary` (within the manager message
+limit); `documentRefs` is optional, with repository-relative `path` and optional `change` per reference. No other
+top-level fields are accepted. The command authenticates the persisted manager session using `CODEX_THREAD_ID` or
+`CLAUDE_CODE_SESSION_ID`; `GOAL_MANAGER` alone grants no authority. Owner and current attempt are checked in the same
+transaction as persistence. Authentication, task identity and decision time come from the controller, never the body.
+Decision: accepted decisions use a reserved controller event; old unverified events remain pending until the owner resubmits through this command.
+
+The controller reads `owner-contract-decision-accepted` events for the task's current attempt when it builds a normal worker
+prompt. It carries the newest authenticated decision from the task's manager and its repository-relative document
+references into that same worker session. A successful launch records `owner-contract-decision-delivery`; a referenced
+document unavailable in the worker worktree remains pending and is named in the prompt. Replayed decision identities
+and decisions from earlier attempts cannot supersede a later current-attempt decision. Recording a decision does not
+start or replace an attempt; delivery waits for the next normal prompt boundary.
+The event command does not sweep or resume workers. Acceptance and delivery events cannot be submitted directly.
+The decision shares the existing 20,000-character total prompt limit and process input byte limit with the ordinary
+prompt. References that do not fit remain pending; if the summary itself cannot fit, launch refuses the oversized
+prompt without recording delivery. Only a successful launch records delivery against the accepted event sequence.
 
 #### Native Storybook publication
 
@@ -1371,14 +1440,39 @@ host's socket. The host skips the minute while the previous child is still runni
   the `goal dispatch` path to create the task and records its first start as a durable start request, which the host's
   next orphan sweep runs and follows; the run itself never waits for host capacity or a worker. The brief moves to
   `dispatched/<task-id>-<name>.md`. Research briefs dispatch the same way. A refused brief moves to `failed/<name>.md`
-  beside `failed/<name>.reason`, and the Goal's manager receives one event per run naming the refused briefs. A brief left in `.dispatching/` by a host that stopped mid-dispatch goes to `failed/` with
-  that reason, since its task may already exist.
+  beside `failed/<name>.reason`, and the event names the archived brief. Decision: keep the first failed name and use
+  the next numeric suffix for later collisions; write the reason first and resume it only when its brief fingerprint
+  matches.
+  A brief
+  left in `.dispatching/` by a host that stopped after creating the task is archived once as
+  `dispatched/<task-id>-<name>.md` when exactly one unarchived task in that Goal has the same brief text; with no such
+  task the claim returns to the ready backlog and ordinary dispatch continues; several matches move the brief to
+  `failed/` with a reason that names those tasks. Decision: match interrupted new-task claims by exact Goal and brief
+  markdown among tasks that have no `dispatched/<task-id>-*` file yet.
+- **Continuation.** To resume an existing stopped task, put its rewritten brief in the same Goal backlog with
+  a `continuation` object in the YAML front matter containing the task ID and current attempt number. For example:
+
+  ```yaml
+  continuation:
+    taskId: 550e8400-e29b-41d4-a716-446655440000
+    expectedAttempt: 3
+  ```
+
+  Decision: require the exact expected attempt and make interruption replay reuse only that owner's pending retry.
+  The controller authenticates the current owner session, checks the exact Goal, manager and attempt, then records a
+  normal pending retry under the task lease. It keeps the task's branch, worktree and provider session; the host starts the retry
+  through its existing recovery path. The consumed brief moves to `continued/<task-id>-<attempt>-<name>.md`. A valid
+  claimed continuation returns to the ready backlog after a controller interruption so the pending retry can be
+  recognized idempotently. Stale, foreign, cancelled, live or otherwise ineligible tasks move to `failed/` with a
+  reason. Briefs without this marker continue to create new tasks.
+
 - **Stopped tasks.** A product task that has been `stopped` for more than 60 minutes since its last event, with no
   pending retry, is cancelled through the `goal cancel` path, at most 20 per Goal per run, longest stopped first. Its
   brief is written to `failed/<task-id>.md` and its blocker and branch to `failed/<task-id>.reason`; each owner
   receives one event per run listing those tasks. Control-plane, stabilize and verification tasks are exempt.
-- **Low backlog.** A running Goal manager whose backlog holds fewer than four ready briefs receives at most one
-  event an hour asking for more.
+- **Low backlog.** A running, active Goal manager whose backlog holds fewer than eight ready briefs receives at most
+  one event an hour asking it to keep at least eight. Only non-hidden `*.md` files directly in the Goal's backlog
+  directory count as ready; at eight or more, no low-backlog event is sent.
 
 `goal backlog status [--json]` prints ready, dispatched and failed brief counts per Goal. It reads only the
 directories. The run's one-line JSON results are appended to `<state>/backlog-runner.log`.
@@ -1422,12 +1516,21 @@ bun tools/goal/src/cli.ts manager renew <manager>
 bun tools/goal/src/cli.ts manager stop <manager>
 bun tools/goal/src/cli.ts manager complete <manager>
 bun tools/goal/src/cli.ts inbox wait <manager>
-bun tools/goal/src/cli.ts inbox read <manager>
-bun tools/goal/src/cli.ts inbox ack <manager>
+bun tools/goal/src/cli.ts inbox read <manager> [--limit <1..100>] [--cursor <id>]
+bun tools/goal/src/cli.ts inbox ack <manager> [id ...]
 bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] [--evidence <path>]
 ```
 
+`status`, `attempts` and `report` are read-only: they do not recover orphans, record manager commands or drain queued
+work. For held tasks, `status` keeps `waitingFor` as the blocking dependency IDs and adds `dependencies` entries with
+their state and readiness. Missing or malformed dependencies have state `unknown`; readiness follows the same target
+and integration-commit policy used to release held work.
+
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
+
+For an attempt that has started, `stop` and `cancel` persist the requested disposition before signaling its recorded process groups. `status <task>` shows `terminationRequest` as requested, unknown or complete; missing process identity stays unknown and is never reported as physical termination. Host recovery resumes that same request and records its terminal result once. A stop abandons any retry already queued for that attempt; a later explicit retry queues a new one.
+The request fences worker settlement and replacement until its disposition is committed (`settledAt`). Physical
+confirmation alone does not authorize a retry. Recovery leaves a later explicit retry of a settled stop queued.
 
 A retry resumes the previous attempt's provider session while the pool, CLI and model stay the same. `--fresh-session`
 starts the next attempt in a new session instead, keeping the branch, worktree, commits and uncommitted work; the
@@ -1443,11 +1546,19 @@ after it remain held because cancellation does not satisfy `after`; each manager
 instruction naming the held tasks and cancelled dependency. During host recovery, a held task with a cancelled
 dependency that predates this notification is reported once to its manager. The manager decides whether to revise the
 dependency.
+Cancellation notices use the committed cancelled generation without reopening ordinary worker writes; genuinely stale command generations still refuse.
 A held amendment keeps its old live attempt's ownership until settlement, even if its dependencies integrate first.
 The next host sweep can then release it under the task lease and start the amended contract from the updated base.
+An unstarted held task can use `retry --brief` on the same task id to replace the brief and dependency edges while keeping attempt 0, its branch, worktree and uncommitted files. The host creates its first attempt once the new dependencies are merged.
 An amended held contract starts a fresh provider session after its old worker settles. A check waiter with saved checks
 and no terminal attempt record can continue its original session with the current contract; retained check IDs on a
 terminal attempt do not make it a check continuation. An unchanged held retry retains its supported session resume.
+
+`inbox read` prints a JSON page (`entries`, `limit`, `hasMore`, `nextCursor`) in existing oldest-first event order.
+Continue from `nextCursor`. Only returned events become read. `inbox ack <manager>` acknowledges every already-read
+event for that recipient; passing ids acknowledges only those rows. Unread later-page events stay pending. `inbox wait`
+returns one unread page so a later wait continues from remaining work. Decision: reuse the shared-inbox page size rather
+than a second wake scheduler.
 
 `inbox send` delivers a one-line decision event to another manager and records the sending manager as its source.
 
@@ -1524,15 +1635,31 @@ prompt names it; the supermanager receives one environment event with the old to
 `manager renew` also accepts Codex Goals in `budgetLimited` or `blocked` status without a separate stop.
 
 Manager events are committed to SQLite and signaled through filesystem notifications. Inbox waiting has no sleep loop.
-Codex managers are event-driven: the opening tells a manager to end the turn when no decision is pending. When an
-event is delivered, the host steers it into the manager's active turn or starts a new turn on the persisted thread; if
-the app-server has not loaded that thread, the host resumes it once and starts the turn there. The opening also states
-the manager's outputs (ready briefs in its backlog and decisions), the stopped-task hour, the message limits, and that
-the brief and continuation are read once per session. The host counts `clock.sleep` items per manager and UTC hour;
+The control plane's manager wakeup path is event-driven: the opening tells a manager to end the turn when no decision
+is pending. When an event is delivered, the host steers it into the manager's active turn or starts a new turn on the
+persisted thread; if the app-server has not loaded that thread, the host resumes it once and starts the turn there. The
+opening also states the manager's outputs (ready briefs in its backlog and decisions), the stopped-task hour, the
+message limits, and that the brief and continuation are read once per session. The host counts `clock.sleep` items per manager and UTC hour;
 the eleventh in an hour sends the supermanager one `environment` alarm and the manager one correction. For the
 turns-without-decision limit, a turn in which a ready brief in the Goal's backlog was written or moved back (by
 modification or status time), or a brief the backlog run dispatched was written, counts as a decision, as any
 control-plane command already does.
+This controller behavior does not disable native Goal continuation. The installed `codex-cli 0.164.0` experimental
+bindings, generated with `codex app-server generate-ts --experimental`, expose no persistent idle-continuation setting
+in `ThreadGoalSetParams` or `ThreadSettingsUpdateParams`. `ThreadForkParams.deferGoalContinuation`
+only delays the fork's first continuation; automatic continuation resumes after the next explicit turn. Regenerating
+those bindings from this installed CLI still yields only `threadId`, `origin`, `objective`, `status` and `tokenBudget`
+on `ThreadGoalSetParams`, and no continuation field on `ThreadSettingsUpdateParams`. The provider
+must add a persistent policy that keeps an active Goal and its budget tracked while waiting for an explicit controller
+turn. That policy must survive thread resume and explicit inbox turns without changing the objective, budget, usage,
+thread or worker sessions; it must leave autonomous controller work running. Integration requires a provider API that
+acknowledges the policy and restores it after host recovery. Until that prerequisite is available, retain active Goals
+and the supported inbox wakeup path; do not send an invented configuration key or treat the opening prompt as scheduler
+control. Resident startup and recovery send only those five `thread/goal/set` fields, keep the existing thread through
+resume, and parse 0.164.0's ANSI-colored `readyz:` line (`NO_COLOR=1` and CSI stripping) so the host can connect.
+The recovery test covers controller dispatch, not suppression of native provider turns. See the
+[official OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex)
+for the independent native continuation behavior.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is
 a proposal: `manager complete <goal>` records the request and returns immediately while the host checks that all scoped
 tasks are merged and the main gate passes in an isolated checkout. The gate checks the main commit captured when it
@@ -1572,8 +1699,15 @@ bun tools/goal/scripts/cp-sync.ts --rollback
 Run it from any checkout; it finds the main checkout by its checked-out `main`, and requires `main` to be inside
 `dev`. It adds a temporary worktree of the current `main` head in `../worktrees` beside the main checkout, replaces
 its `tools/goal` with dev's (`git checkout --no-overlay`, so dev's deletions apply) and checks it there: root and
-`tools/goal` installs, the `tools/goal` type check, and a CLI smoke, `bun tools/goal/src/cli.ts status`, with
-`GOAL_MAIN_CHECKOUT` and `GOAL_LOCAL_CONFIG` naming the live checkout and its settings. The smoke's state directory
+`tools/goal` installs, the `tools/goal` type check, a config smoke, and a CLI smoke. The config smoke runs
+`bun tools/goal/scripts/cp-config-smoke.ts` with `GOAL_MAIN_CHECKOUT` and `GOAL_LOCAL_CONFIG` naming the live checkout
+and its settings, and invokes the candidate's `checkSettings` and `readRouting` against those live files (the local
+settings and the routing table they name). `checkSettings` is strict and writes nothing, so the gate cannot create
+last-valid snapshots, launch workers, signal processes or touch live controller state. Numbered routing versions
+parse as their labels. A mismatch names the file and field, with secrets redacted, and refuses before any ref or
+checkout move. `goal status` loads settings but not the routing table, so it cannot catch this class by itself.
+
+The CLI smoke is `bun tools/goal/src/cli.ts status` with the same live checkout and settings. Its state directory
 holds a copy of the live `goal.sqlite` made by `VACUUM INTO` over a read-only connection, so the candidate's
 migrations and orphan recovery act on the copy; `GOAL_MANAGER` keeps that recovery from handing a train to a
 detached process that would act on live refs. cp-sync never writes the live database. Each step runs in its own

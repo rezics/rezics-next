@@ -2,8 +2,9 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GateOutcome } from './contracts.ts';
-import { harvestContinuations } from './continuation.ts';
+import { completeContinuation, harvestContinuations } from './continuation.ts';
 import { WorkerJob } from './job.ts';
+import { readRiskOwnership } from './briefs.ts';
 import { harness, markdown } from './test-support.ts';
 
 test("a gate failure's automatic retry survives the process that recorded it exiting before it ran", async () => {
@@ -89,6 +90,61 @@ test("a command leaves another task's pending retry to the host instead of runni
   }
 });
 
+test("a retried attempt's continuation is dropped once an earlier attempt queued one", () => {
+  const h = harness();
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const source = join(task.worktree, '.temp/continuation');
+    const rest = markdown.replace('Write the requested result and commit it.', 'Finish the shelf.');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(join(source, 'rest of shelf.md'), rest);
+    const earlier = { taskId: task.id, attempt: task.currentAttempt };
+    const first = harvestContinuations(h.store, h.settings, task, earlier);
+    expect(first.queued).toHaveLength(1);
+    expect(readFileSync(first.queued[0]!, 'utf8')).toContain(`after:\n  - ${task.id}\n`);
+    writeFileSync(join(source, 'rest of shelf.md'), rest);
+    writeFileSync(join(source, 'renamed rest.md'), rest);
+    const later = h.store.nextAttempt(earlier, (attempt) => ({
+      taskId: task.id,
+      attempt,
+      state: 'pending',
+      profile: { cli: 'codex', model: 'fixture', effort: 'medium', poolClass: 'codex' },
+      pool: 'fixture',
+      tableVersion: 'fixture',
+      experiment: null,
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      process: null,
+      driver: null,
+      logPath: join(h.settings.stateDirectory, 'runs', task.id, `${attempt}.jsonl`),
+      evidencePath: join(h.settings.stateDirectory, 'evidence', task.id, String(attempt)),
+      auxiliaryProcesses: [],
+      session: null,
+      fixRound: 0,
+      consulted: false,
+      previousFailure: null,
+      failure: null,
+      escalation: null,
+      before: null,
+      after: null,
+      exitCode: null,
+      result: '',
+      blocker: null,
+      approaches: [],
+    }));
+    const second = harvestContinuations(h.store, h.settings, task, { taskId: task.id, attempt: later.attempt });
+    expect(second.queued).toEqual([]);
+    expect(second.dropped.map((drop) => drop.reason)).toEqual([
+      `attempt ${earlier.attempt} of this task already queued its continuation`,
+      `attempt ${earlier.attempt} of this task already queued its continuation`,
+    ]);
+    expect(readdirSync(source)).toEqual([]);
+    expect(readdirSync(join(h.settings.stateDirectory, 'backlog', 'fixture'))).toHaveLength(1);
+  } finally {
+    h.dispose();
+  }
+});
+
 test('Keep distinct worker continuations when filenames normalize alike', () => {
   const h = harness();
   try {
@@ -96,7 +152,10 @@ test('Keep distinct worker continuations when filenames normalize alike', () => 
     const ref = { taskId: task.id, attempt: task.currentAttempt };
     const source = join(task.worktree, '.temp/continuation');
     mkdirSync(source, { recursive: true });
-    const brief = (sentence: string) => markdown.replace('Write the requested result and commit it.', sentence);
+    const ownership = readRiskOwnership(h.settings.riskAreasFile);
+    // Published briefs are the completed ones, which wait for the task they continue.
+    const brief = (sentence: string) =>
+      completeContinuation(markdown.replace('Write the requested result and commit it.', sentence), task, ownership);
     const normalized = brief('Finish the shelf from the spaced name.');
     const hyphenated = brief('Finish the shelf from the hyphenated name.');
     const longA = brief('Finish the shelf from the first long name.');

@@ -114,9 +114,9 @@ test('Launch a worker truthfully when host memory discovery is unavailable.', ()
   expect(launch().status).toBe(0);
   expect(launch().status).toBe(0);
   expect(reads).toBe(1);
-  expect(calls).toEqual(['true', 'true']);
+  expect(calls).toEqual(['systemd-run', 'systemd-run']);
   expect(reports).toHaveLength(2);
-  expect(reports[0]).toContain('starting without a scope');
+  expect(reports[0]).toContain('attempting a protected scope');
   expect(reports[0]).toContain("open '/proc/meminfo'");
 });
 
@@ -130,7 +130,10 @@ test('REZICS_WORKER_MEMORY_HIGH_GIB overrides the derived value, and a value tha
   for (const value of ['', '0', '-1', '1.5', 'NaN', 'infinity', ' 31 ', '1G', '9007199254740992']) {
     const invalid = memoryPolicy(62 * 1024 ** 2);
     expect(invalid.launch({ REZICS_WORKER_MEMORY_HIGH_GIB: value }).status).toBe(0);
-    expect(invalid.calls).toEqual([{ command: 'true', args: [] }]);
+    expect(invalid.calls).toHaveLength(1);
+    expect(invalid.calls[0]!.command).toBe('systemd-run');
+    expect(invalid.calls[0]!.args).toContain('--scope');
+    expect(invalid.calls[0]!.args.at(-1)).toBe('true');
     expect(invalid.reads()).toBe(0);
     expect(invalid.reports).toHaveLength(1);
     expect(invalid.reports[0]).toContain('REZICS_WORKER_MEMORY_HIGH_GIB must be a positive integer');
@@ -273,7 +276,7 @@ describe('worker systemd slice', () => {
     expect(reports.join(' ')).toContain('REZICS_WORKER_MEMORY_HIGH_GIB');
   });
 
-  test('falls back when there is no user manager and reports the reason', () => {
+  test('keeps worker isolation when slice tuning fails and reports the reason', () => {
     const fake = fakeSystemd({
       systemctl: 'if [ "$2" = set-property ]; then echo "No medium found" >&2; exit 1; fi; echo 0',
     });
@@ -299,8 +302,10 @@ describe('worker systemd slice', () => {
       `IOWeight=${WORKER_IO_WEIGHT}`,
       'MemoryHigh=48G',
     ]);
-    expect(() => readFileSync(fake.systemdRunCalls, 'utf8')).toThrow();
+    expect(fake.read(fake.systemdRunCalls)).toContain('--scope');
+    expect(fake.read(fake.systemdRunCalls)).toContain(`--slice=${WORKER_SLICE}`);
     expect(reports).toHaveLength(1);
+    expect(reports[0]).toContain('attempting a protected scope');
     expect(reports[0]).toContain('No medium found');
   });
 
@@ -317,29 +322,34 @@ describe('worker systemd slice', () => {
       (line) => reports.push(line),
     );
     expect(result.status).toBe(1);
-    expect(reports).toEqual([]);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toContain('retaining the published worker start');
   });
 
-  test('falls back when systemd-run fails before the wrapper starts', () => {
+  test('refuses to launch an unprotected worker when systemd-run fails before the wrapper starts', () => {
     const fake = fakeSystemd({ systemdRun: 'echo "scope creation failed" >&2; exit 1' });
+    const workerPath = join(fake.directory, 'worker');
+    const workerStarted = join(fake.directory, 'worker.started');
+    writeFileSync(workerPath, `#!/bin/sh\ntouch '${workerStarted}'\n`);
+    chmodSync(workerPath, 0o755);
     const worker = new WorkerSlice();
     const reports: string[] = [];
-    const result = worker.launch(
-      'task',
-      2,
-      'true',
-      ['worker-args'],
-      { env: fake.env },
-      () => false,
-      (line) => reports.push(line),
-    );
+    expect(() =>
+      worker.launch(
+        'task',
+        2,
+        workerPath,
+        ['worker-args'],
+        { env: fake.env },
+        () => false,
+        (line) => reports.push(line),
+      ),
+    ).toThrow(/restart-safe user systemd scope.*no unprotected worker was started/);
 
-    expect(result.status).toBe(0);
-    expect(
-      fake.read(fake.systemdRunCalls).some((line) => /^--unit=rezics-worker-task-2-[a-z0-9]+\.scope$/.test(line)),
-    ).toBe(true);
+    expect(existsSync(workerStarted)).toBe(false);
     expect(reports).toHaveLength(1);
     expect(reports[0]).toContain('systemd-run exited with status 1');
+    expect(reports[0]).toContain('no unprotected worker was started');
   });
 
   test('a relaunch of the same attempt gets a new unit name, since systemd refuses one still loaded', () => {
@@ -353,25 +363,27 @@ describe('worker systemd slice', () => {
     expect(units[0]).not.toBe(units[1]);
   });
 
-  test('a failed scope with inherited stdio falls back instead of throwing', () => {
+  test('a failed scope with inherited stdio refuses an unprotected launch', () => {
     const fake = fakeSystemd({ systemdRun: 'exit 1' });
     const worker = new WorkerSlice();
     const reports: string[] = [];
-    const result = worker.launch(
-      'task',
-      5,
-      'true',
-      [],
-      { env: fake.env, stdio: 'inherit' },
-      () => false,
-      (line) => reports.push(line),
-    );
+    expect(() =>
+      worker.launch(
+        'task',
+        5,
+        'true',
+        [],
+        { env: fake.env, stdio: 'inherit' },
+        () => false,
+        (line) => reports.push(line),
+      ),
+    ).toThrow(/restart-safe user systemd scope/);
 
-    expect(result.status).toBe(0);
     expect(reports[0]).toContain('systemd-run exited with status 1');
+    expect(reports[0]).toContain('no unprotected worker was started');
   });
 
-  test('A stalled systemctl configuration operation finishes within the selected preparation bound and invokes the existing fallback once; a started worker is never duplicated or subjected to the configuration timeout.', () => {
+  test('A stalled systemctl configuration operation finishes within the selected preparation bound and still attempts a protected scope; a started worker is never duplicated or subjected to the configuration timeout.', () => {
     const bound = 250;
     const fake = fakeSystemd({
       systemctl: `if [ "$1" = show ]; then printf '0\\n'; else exec sleep 8; fi`,
@@ -390,8 +402,8 @@ describe('worker systemd slice', () => {
     expect(Date.now() - startedAt).toBeLessThan(3_000);
     expect(result.status).toBe(0);
     expect(reports).toHaveLength(1);
-    expect(reports[0]).toContain('starting without a scope');
-    expect(() => readFileSync(fake.systemdRunCalls, 'utf8')).toThrow();
+    expect(reports[0]).toContain('attempting a protected scope');
+    expect(fake.read(fake.systemdRunCalls)).toContain('--scope');
 
     const calls: { command: string; timeout: number | undefined }[] = [];
     const empty = Buffer.alloc(0);
@@ -414,7 +426,8 @@ describe('worker systemd slice', () => {
       (line) => startedReports.push(line),
     );
     expect(started.status).toBe(1);
-    expect(startedReports).toEqual([]);
+    expect(startedReports).toHaveLength(1);
+    expect(startedReports[0]).toContain('retaining the published worker start');
     expect(calls).toEqual([
       { command: 'systemctl', timeout: bound },
       { command: 'systemctl', timeout: bound },

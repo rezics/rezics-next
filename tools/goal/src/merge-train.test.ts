@@ -6,7 +6,7 @@ import { openDb } from './db.ts';
 import type { AttemptFence, GateOutcome } from './contracts.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { SqliteLandingQueue } from './land.ts';
-import { MergeTrain } from './merge-train.ts';
+import { failingTestFiles, MergeTrain, devPushScript } from './merge-train.ts';
 import { firstFailure, gateRunner, git } from './merge.ts';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
 import { WorkerStore } from './store.ts';
@@ -58,6 +58,41 @@ function setup() {
     },
   };
 }
+
+test('dev origin pushes are shared across train instances, throttled for a minute, and nonfatal on failure', () => {
+  const repo = repository();
+  try {
+    const origin = join(repo.path, 'origin.git');
+    git(repo.main, 'init', '--bare', '-q', origin);
+    git(repo.main, 'remote', 'add', 'origin', origin);
+    git(repo.main, 'branch', 'dev');
+    const state = join(repo.path, 'state');
+    const push = () =>
+      Bun.spawnSync(['sh', '-c', `sleep() { printf 'cooldown:%s\\n' "$1"; exit 0; }\n${devPushScript(state, 'dev')}`], {
+        cwd: repo.main,
+        stdout: 'pipe',
+        stderr: 'pipe',
+        timeout: 10000,
+      });
+    const original = git(repo.main, 'rev-parse', 'dev');
+    expect(push().exitCode).toBe(0);
+    expect(git(repo.main, '--git-dir', origin, 'rev-parse', 'dev')).toBe(original);
+    repo.commit('next');
+    git(repo.main, 'branch', '-f', 'dev', 'HEAD');
+    const throttled = push();
+    expect(throttled.exitCode).toBe(0);
+    expect(throttled.stdout.toString()).toMatch(/^cooldown:\d+/);
+    expect(git(repo.main, '--git-dir', origin, 'rev-parse', 'dev')).toBe(original);
+    git(repo.main, 'remote', 'set-url', 'origin', join(repo.path, 'unreachable.git'));
+    writeFileSync(join(state, 'dev-origin-push.timestamp'), '0');
+    const failed = push();
+    expect(failed.exitCode).toBe(0);
+    expect(failed.stderr.toString()).toContain('background dev push failed; landing continues');
+    expect(Number(readFileSync(join(state, 'dev-origin-push.timestamp'), 'utf8'))).toBeGreaterThan(0);
+  } finally {
+    repo.close();
+  }
+});
 
 describe('sequential integration', () => {
   test('rebases two queued branches onto moving main and leaves worker branches untouched', async () => {
@@ -271,6 +306,22 @@ describe('sequential integration', () => {
       s.close();
     }
   });
+});
+
+test('a repeated Bun failure summary after a passing file heading cannot attribute an earlier failure to that passing file', () => {
+  expect(
+    failingTestFiles(`tools/goal/src/config.test.ts:
+(fail) legacy affected and integration checks migrate to post-integration verifier settings [102.06ms]
+(pass) an explicit verifierChecks setting is strict and replaces legacy validation selections [93.84ms]
+
+tools/goal/src/efficiency-report.test.ts:
+(pass) hourly report uses timestamped outcomes and leaves missing lifecycle evidence unknown [78.48ms]
+(pass) hourly delivery stores one timestamped outcome and discards notifier output [93.80ms]
+
+1 tests failed:
+(fail) legacy affected and integration checks migrate to post-integration verifier settings [102.06ms]
+`),
+  ).toEqual(['tools/goal/src/config.test.ts']);
 });
 
 test('failure fingerprint ignores paths, line numbers, durations, stack frames and assertion order', () => {

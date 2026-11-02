@@ -42,6 +42,7 @@ import { webModule, WorkspaceController } from './workspace.ts';
 import { captureLaunchContext } from './launch-context.ts';
 import { toolIncidentRetryAllowed } from './tool-incidents.ts';
 import { dependencyInstallationMatches, installShared } from './shared-dependencies.ts';
+import { prepareInitialDispatch } from './dispatch-preparation.ts';
 import {
   authenticatedManager,
   applyPriorityTransition,
@@ -460,6 +461,8 @@ export class WorkerTasks {
   }
   dispatch(briefFile: string, actor?: AuthenticatedManager | null): Task {
     const { brief: submittedBrief, taskClass } = this.validateBrief(briefFile, undefined, actor);
+    if (submittedBrief.continuation)
+      throw new Error('continuation briefs must go through the backlog controller, not new-task dispatch');
     const authorization =
       submittedBrief.kind === 'verification'
         ? authorizeProof(
@@ -507,10 +510,17 @@ export class WorkerTasks {
       const files = parseFrozenFiles(brief.markdown, brief.paths);
       mkdirSync(dirname(worktree), { recursive: true });
       mkdirSync(dirname(briefPath), { recursive: true });
-      writeFileSync(briefPath, brief.markdown, { flag: 'wx' });
-      git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base]);
-      if (brief.kind !== 'verification') installWorktreeDependencies(worktree);
-      const frozen = commitFrozenFiles(worktree, files, this.settings.formatCommand);
+      const frozen = prepareInitialDispatch({
+        briefPath,
+        briefText: brief.markdown,
+        branch,
+        worktree,
+        createWorktree: () => git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base]),
+        ...(brief.kind !== 'verification' ? { installDependencies: () => installWorktreeDependencies(worktree) } : {}),
+        freezeFiles: () => commitFrozenFiles(worktree, files, this.settings.formatCommand),
+        removeWorktree: () => git(this.settings.mainCheckout, ['worktree', 'remove', '--force', worktree]),
+        deleteBranch: () => git(this.settings.mainCheckout, ['branch', '-D', branch]),
+      });
       const created = this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
       const held = created.state === 'ready' && brief.after.length > 0 && !this.dependenciesMet(created);
       this.store.updateTask({ taskId: id, attempt: 0 }, (current) => {
@@ -912,6 +922,56 @@ export class WorkerTasks {
       lease.release();
     }
   }
+  /** Queue one owner-authenticated backlog continuation under the same lease used by ordinary retries. */
+  queueBacklogContinuation(
+    taskId: string,
+    goal: string,
+    expectedAttempt: number,
+    briefFile: string,
+    actor: AuthenticatedManager,
+  ): void {
+    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    try {
+      const task = this.store.task(taskId);
+      if (task.currentAttempt !== expectedAttempt)
+        throw new StaleAttemptError({ taskId, attempt: expectedAttempt }, task.currentAttempt);
+      if (task.brief.goal !== goal) throw new Error(`task ${taskId} belongs to Goal ${task.brief.goal}, not ${goal}`);
+      if (actor.id !== task.brief.manager)
+        throw new Error(`only task manager ${task.brief.manager} may continue ${taskId}`);
+      if (task.state === 'cancelled') throw new Error(`task ${taskId} is cancelled; dispatch a new brief instead`);
+      if (task.currentAttempt < 1) throw new Error(`task ${taskId} has no existing attempt to continue`);
+      if (task.state === 'running' || task.state === 'landing')
+        throw new Error(`task ${taskId} is already live; wait for attempt ${expectedAttempt} to stop`);
+
+      const { brief: nextBrief } = this.validateBrief(briefFile, taskId, actor);
+      if (nextBrief.goal !== goal || nextBrief.manager !== task.brief.manager)
+        throw new Error(`continuation must keep Goal ${goal} and manager ${task.brief.manager}`);
+      const ref = { taskId, attempt: expectedAttempt };
+      const attempt = this.store.attempt(ref);
+      if (attempt.state === 'cancelled') throw new Error(`attempt ${expectedAttempt} for ${taskId} is cancelled`);
+      if (
+        ['pending', 'running', 'waiting'].includes(attempt.state) ||
+        [attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some(
+          (identity) => identity && sameProcess(identity),
+        )
+      )
+        throw new Error(`attempt ${expectedAttempt} for ${taskId} is still live; wait for it to stop`);
+
+      const pending = this.store.retryIntent(ref);
+      if (pending?.status === 'pending') {
+        if (['ready', 'held', 'stopped'].includes(task.state) && task.brief.markdown === nextBrief.markdown) return;
+        throw new Error(`a different retry is already pending for ${taskId}; wait for it to start or settle`);
+      }
+      if (task.state === 'held' && task.pendingBriefChange?.newBriefHash === briefHash(nextBrief.markdown)) return;
+      if (!['stopped', 'held'].includes(task.state))
+        throw new Error(`task ${taskId} is ${task.state}; continue it after its current work stops`);
+      if (!['exited', 'stopped'].includes(attempt.state))
+        throw new Error(`attempt ${expectedAttempt} for ${taskId} is ${attempt.state}; wait for it to stop`);
+      this.queueRetryLeased(taskId, { expectedAttempt, brief: briefFile }, actor);
+    } finally {
+      lease.release();
+    }
+  }
   private queueRetryLeased(taskId: string, options: RetryOptions, actor?: AuthenticatedManager | null): void {
     const task = this.store.task(taskId);
     if (task.currentAttempt !== options.expectedAttempt)
@@ -947,12 +1007,7 @@ export class WorkerTasks {
     // tasks and lose their branches. The pending retry then starts the amended brief.
     // A product retry still waiting to start takes an amended brief; the pending retry then starts that brief.
     const amendPending = devProduct && options.brief !== undefined;
-    if (
-      task.state !== 'held' &&
-      !amendPending &&
-      !incidentHeld &&
-      this.store.retryIntent(ref)?.status === 'pending'
-    )
+    if (task.state !== 'held' && !amendPending && !incidentHeld && this.store.retryIntent(ref)?.status === 'pending')
       throw new Error('a retry is already pending');
     if (task.state === 'held') {
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId, actor);
@@ -1358,6 +1413,7 @@ export class WorkerTasks {
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
         throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
+      this.store.assertRetryAllowed({ taskId, attempt: task.currentAttempt });
       if (!task.branch || !task.base) throw new Error('Imported attempts need a dispatchable contract before retry');
       if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
         throw new Error(`cannot retry ${task.state} task`);
@@ -1390,7 +1446,7 @@ export class WorkerTasks {
       }
       this.assertLocalAcceptanceCustody(task, nextBrief);
       const nextTaskClass = reshaped?.taskClass ?? task.taskClass;
-      if (!nextBrief.acceptance.command.length)
+      if (!nextBrief.acceptance.command.length && !nextBrief.acceptance.workerOwned)
         throw new Error('Imported attempts need a dispatchable contract before retry');
       const heldAmendment = task.state === 'held' && reshaped !== undefined;
       if (heldAmendment) {
@@ -1850,7 +1906,7 @@ export class WorkerTasks {
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     let settlementLease: ReturnType<typeof acquireDirectoryLease> | undefined;
     try {
-      const task = this.store.task(taskId);
+      let task = this.store.task(taskId);
       const ref = { taskId, attempt: task.currentAttempt };
       if (task.state === 'integrated' || task.state === 'merged' || task.state === 'cancelled')
         throw new Error(`cannot stop ${task.state} task`);
@@ -1860,41 +1916,49 @@ export class WorkerTasks {
         });
         return;
       }
-      const attempt = this.store.attempt(ref);
+      const settleLogPath = this.store.attempt(ref).logPath;
       // A worker's exit may wake its follower while cancellation is still reaping descendants.
-      settlementLease = acquireDirectoryLeaseWaiting(`${attempt.logPath}.settle`);
-      await terminateProcessGroup(attempt.process, this.settings.terminationGraceMs);
-      for (const process of attempt.auxiliaryProcesses)
-        await terminateProcessGroup(process, this.settings.terminationGraceMs);
-      if (attempt.state === 'stopped') {
-        if (cancelled) this.store.cancelStopped(ref);
-        return;
-      }
-      this.store.write(ref, () => {
-        if (['integrated', 'merged'].includes(this.store.task(taskId).state))
-          throw new Error('cannot stop integrated task');
-        if (attempt.state !== 'stopped' && attempt.state !== 'cancelled') {
-          const pool = this.settings.pools.find((p) => p.name === attempt.pool);
-          const ended = this.store.updateAttempt(ref, (a) => {
-            a.endedAt = new Date().toISOString();
-            a.after = pool ? this.reader(pool) : null;
-          });
-          this.store.putRecord(
-            makeRecord(
-              task,
-              ended,
-              readMeasurement(ended, { configDirectory: pool?.configDirectory }),
-              cancelled ? 'cancelled' : 'stopped',
-            ),
+      settlementLease = acquireDirectoryLeaseWaiting(`${settleLogPath}.settle`);
+      task = this.store.task(taskId);
+      if (task.currentAttempt !== ref.attempt || ['integrated', 'merged'].includes(task.state))
+        throw new StaleAttemptError(ref, task.currentAttempt);
+      const attempt = this.store.attempt(ref);
+      const intent = this.store.beginTermination(ref, cancelled ? 'cancel' : 'stop');
+      if (intent.state !== 'complete') {
+        if (intent.processIdentity === 'unknown')
+          throw new Error(
+            `${intent.operation} request retained with unknown process identity for task ${taskId} attempt ${ref.attempt}`,
           );
-          this.store.event(ref, cancelled ? 'cancelled' : 'stopped', {});
-          this.store.close(ref, cancelled ? 'cancelled' : 'stopped');
+        try {
+          const owned = new Map(
+            [intent.process, ...intent.auxiliaryProcesses]
+              .filter((identity): identity is NonNullable<typeof identity> => identity !== null)
+              .map((identity) => [`${identity.pid}:${identity.start}:${identity.boot}:${identity.group}`, identity]),
+          );
+          for (const process of owned.values()) await terminateProcessGroup(process, this.settings.terminationGraceMs);
+          this.store.finishTermination(ref);
+        } catch (error) {
+          this.store.finishTermination(ref, String(error));
+          throw error;
         }
-      });
+      }
+      const pool = this.settings.pools.find((p) => p.name === attempt.pool);
+      this.store.closeTerminated(ref, pool ? this.reader(pool) : null, pool?.configDirectory);
     } finally {
       settlementLease?.release();
       lease.release();
     }
+  }
+  /** Resume the saved stop through the same command path after a controller restart. */
+  async resumeTermination(taskId: string): Promise<void> {
+    const task = this.store.task(taskId);
+    if (!task.currentAttempt) return;
+    const ref = { taskId, attempt: task.currentAttempt };
+    const intent = this.store.attempt(ref).terminationIntent;
+    if (!intent || intent.processIdentity === 'unknown') return;
+    if (intent.settledAt) return;
+    if (intent.operation === 'cancel') await this.cancel(taskId);
+    else await this.stop(taskId);
   }
   async cancel(taskId: string): Promise<void> {
     await this.stop(taskId, true);
@@ -1914,8 +1978,9 @@ export class WorkerTasks {
         kind: 'instruction' as const,
         summary: `Cancelled dependency ${taskId} is holding tasks ${heldTasks.join(', ')}; decide whether the dependency is still needed.`,
       };
-      this.store.event({ taskId, attempt: dependency.currentAttempt }, 'cancelled-dependency-notice', event);
-      inbox.deliver(event);
+      this.store.notifyCancelledDependency({ taskId, attempt: dependency.currentAttempt }, event, (notice) =>
+        inbox.deliver(notice),
+      );
     }
   }
   /** Later integration follows the stabilize branch. A running attempt is left alone. */

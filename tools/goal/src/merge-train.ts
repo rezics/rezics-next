@@ -5,7 +5,7 @@ import { TrainResolver, TrainResolverInfrastructureError, type TrainConflict } f
 import { groupMembers, processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
@@ -186,7 +186,7 @@ export function captureTrainWorktreeRemoval(tree: string): () => void {
   };
 }
 
-/** Kernel's lane runner prints failed-file summaries; passing file headings and stack frames are not failures. */
+/** Kernel summaries, FAIL lines and heading-scoped (fail) name files; passing headings, Bun's repeated summary and stack frames do not. */
 export function failingTestFiles(output: string): string[] {
   const clean = output.replace(/\x1b\[[0-9;]*m/g, '');
   const files = new Set<string>();
@@ -209,6 +209,7 @@ export function failingTestFiles(output: string): string[] {
   for (const line of clean.split(/\r?\n/)) {
     const heading = line.match(/^([^\s]+\.(?:test|spec)\.[cm]?[jt]sx?):\s*$/);
     if (heading) currentFile = heading[1];
+    else if (/^\d+ tests? failed:/.test(line.trim())) currentFile = undefined;
     else if (currentFile && /^\s*\(fail\)/.test(line)) add(currentFile);
   }
   return [...files].sort();
@@ -1321,6 +1322,51 @@ type SpawnTextResult = {
 };
 type SpawnText = (command: string, args: string[], options: { cwd: string; encoding: 'utf8' }) => SpawnTextResult;
 
+/** A shared lock and timestamp bound origin traffic across train instances, even when a push fails. */
+export function devPushScript(stateDirectory: string, branch: string): string {
+  const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+  return `set -eu
+mkdir -p ${quote(stateDirectory)}
+(
+  flock -n 9 || exit 0
+  stamp=${quote(join(stateDirectory, 'dev-origin-push.timestamp'))}
+  now=$(date +%s)
+  last=$(cat "$stamp" 2>/dev/null || echo 0)
+  # Hold the shared lock during the cooldown so one trailing push picks up every subsequent landing.
+  if [ "$((now - last))" -lt 60 ]; then sleep "$((60 - now + last))"; fi
+  now=$(date +%s)
+  printf '%s\\n' "$now" > "$stamp"
+  if ! GIT_TERMINAL_PROMPT=0 git push --no-follow-tags origin ${quote(`refs/heads/${branch}:refs/heads/${branch}`)}; then
+    echo 'merge-train: background dev push failed; landing continues' >&2
+  fi
+) 9>${quote(join(stateDirectory, 'dev-origin-push.lock'))}`;
+}
+
+function pushDevInBackground(checkout: string, stateDirectory: string, branch: string, logPath: string): void {
+  let descriptor: number | undefined;
+  try {
+    git(checkout, 'remote', 'get-url', '--push', 'origin');
+    descriptor = openSync(logPath, 'a');
+    const child = spawn('sh', ['-c', devPushScript(stateDirectory, branch)], {
+      cwd: checkout,
+      detached: true,
+      stdio: ['ignore', descriptor, descriptor],
+    });
+    child.on('error', (error) => {
+      try {
+        appendFileSync(logPath, `merge-train: background dev push failed: ${error.message}\n`);
+      } catch {}
+    });
+    child.unref();
+  } catch (error) {
+    try {
+      appendFileSync(logPath, `merge-train: background dev push failed: ${error}\n`);
+    } catch {}
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
 export class MergeTrain {
   private readonly workspaceFailures = new Map<number, GateOutcome[]>();
   constructor(private readonly options: TrainOptions) {}
@@ -1582,6 +1628,7 @@ export class MergeTrain {
 
   private canBatch(entry: LandingEntry): boolean {
     const o = this.options;
+    if (entry.request.unchangedClaim) return false;
     if (entry.request.managerLanding) return false;
     if (!o.integrationBranch || !o.fence.commitBatchMerge) return false;
     if ((entry.request.affectedTests ?? []).some((test) => test.status === 'failed')) return false;
@@ -2017,6 +2064,7 @@ export class MergeTrain {
           continue;
         }
         committed = true;
+        pushDevInBackground(o.mainCheckout, o.stateDirectory, branch, logPaths.get(prepared[0]!.entry.id)!);
         for (const [id, outcome] of localOutcomes) {
           outcome.hostMs = Date.now() - memberStarted.get(id)!;
           outcomes.set(id, outcome);
@@ -2573,9 +2621,106 @@ export class MergeTrain {
           return finish();
         }
         const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
-        const worked = git(trainTree, 'diff', '--name-only', originalBase, 'HEAD')
-          .split('\n')
+        const worked = git(trainTree, 'diff', '--name-only', '-z', originalBase, tip)
+          .split('\0')
           .some((path) => path && !frozenPaths.has(path));
+        const unchangedClaimProblem = (): string | undefined => {
+          const task = o.fence instanceof WorkerStore ? o.fence.task(request.taskId) : undefined;
+          if (
+            !task ||
+            task.currentAttempt !== request.attempt ||
+            task.branch !== request.branch ||
+            task.worktree !== request.worktree ||
+            task.workspace ||
+            request.managerLanding
+          )
+            return 'Unchanged claim no longer matches its task and current attempt';
+          if (request.sourceDirtyAtSettlement) return 'Unchanged claim source was dirty at settlement';
+          if (!request.workerCommit || workerCommit !== request.workerCommit || tip !== workerCommit || worked)
+            return 'Unchanged claim source changed after settlement';
+          if (
+            !request.contractHash ||
+            createHash('sha256').update(task.brief.markdown).digest('hex') !== request.contractHash
+          )
+            return 'Unchanged claim contract changed after settlement';
+          if (
+            readFileSync(task.briefPath, 'utf8') !== task.brief.markdown ||
+            JSON.stringify(task.brief.acceptance.command) !== JSON.stringify(request.gate)
+          )
+            return 'Unchanged claim acceptance contract changed after settlement';
+          if (
+            git(request.worktree, 'rev-parse', 'HEAD') !== workerCommit ||
+            git(request.worktree, 'status', '--porcelain', '--untracked-files=all')
+          )
+            return 'Unchanged claim source worktree is dirty or changed';
+          if (git(o.mainCheckout, 'rev-parse', `${request.branch}^{commit}`) !== workerCommit)
+            return 'Unchanged claim source ref changed after settlement';
+          try {
+            git(o.mainCheckout, 'merge-base', '--is-ancestor', originalBase, target());
+          } catch {
+            return 'Unchanged claim source is no longer represented on the landing target';
+          }
+          return undefined;
+        };
+        if (request.unchangedClaim) {
+          const refuse = (message: string): GateOutcome => {
+            result.stage = 'rebase';
+            result.firstFailure = firstFailure(message);
+            appendFileSync(logPath, `${message}\n`);
+            result.hostMs = Date.now() - started;
+            return finish();
+          };
+          const problem = unchangedClaimProblem();
+          if (problem) return refuse(problem);
+          const retainedSourceAcceptance: NonNullable<GateOutcome['retainedSourceAcceptance']> = {
+            sourceCommit: workerCommit!,
+            command: [...request.gate],
+            status: 'unavailable',
+          };
+          result.retainedSourceAcceptance = retainedSourceAcceptance;
+          appendFileSync(
+            logPath,
+            `Retained-source acceptance task=${request.taskId} attempt=${request.attempt} source=${workerCommit}: ${request.gate.join(' ')}\n`,
+          );
+          try {
+            if (
+              !existsSync(join(trainTree, 'node_modules')) &&
+              existsSync(join(trainTree, 'bun.lock')) &&
+              existsSync(join(trainTree, 'package.json'))
+            )
+              installShared(trainTree);
+            const checked = await runGate(request.gate, trainTree, logPath);
+            retainedSourceAcceptance.status = checked.passed ? 'passed' : checked.timedOut ? 'unavailable' : 'failed';
+            assertCandidate(trainTree, workerCommit!, 'retained-source acceptance', logPath);
+            if (git(trainTree, 'status', '--porcelain', '--untracked-files=all'))
+              throw new Error('Retained-source acceptance left a dirty source worktree');
+            o.fence.assertCurrent(request);
+            const afterProblem = unchangedClaimProblem();
+            if (afterProblem) return refuse(afterProblem);
+            if (!checked.passed) {
+              result.stage = 'gate';
+              result.firstFailure = firstFailure(checked.output || 'Retained-source acceptance did not pass');
+              result.failedCommand = [...request.gate];
+              result.timedOut = checked.timedOut;
+              result.hostMs = Date.now() - started;
+              return finish();
+            }
+            result.passed = true;
+            result.stage = 'merge';
+            // Historical empty commits and controller-frozen tests need not advance the target. Acceptance still
+            // identifies the exact retained head; ordinary completion points at its already represented ancestor.
+            result.mergedCommit = originalBase;
+            result.hostMs = Date.now() - started;
+            return finish();
+          } catch (error) {
+            if (error instanceof StaleAttemptError) throw error;
+            result.stage = 'gate';
+            result.firstFailure = firstFailure(String(error));
+            result.failedCommand = [...request.gate];
+            result.hostMs = Date.now() - started;
+            return finish();
+          }
+        }
         if (!worked)
           throw new Error(
             'No committed changes beyond the base and the frozen acceptance files: commit the work before finishing',
@@ -3171,6 +3316,8 @@ export class MergeTrain {
           if (controlPlane) retryMovedControlPlaneRefs();
           continue;
         }
+        if (targetBranch === (o.integrationBranch ?? 'dev'))
+          pushDevInBackground(o.mainCheckout, o.stateDirectory, targetBranch, logPath);
         if (workspace) {
           workspace.integrated(recorded.workspace!.module, candidate);
           try {
@@ -3405,6 +3552,8 @@ export class MergeTrain {
               this.options.runCandidateGit,
             );
           git(checkout, 'update-ref', targetRef, commit, targetHead);
+          if (targetBranch === (this.options.integrationBranch ?? 'dev'))
+            pushDevInBackground(checkout, this.options.stateDirectory, targetBranch, logPath);
           return { commit };
         } catch (error) {
           const current = spawnSync('git', ['rev-parse', '--verify', targetRef], {
@@ -3586,6 +3735,7 @@ export class MergeTrain {
         }
         try {
           git(this.options.mainCheckout, 'update-ref', devRef, merged, expected);
+          pushDevInBackground(this.options.mainCheckout, this.options.stateDirectory, devBranch, logPath);
           rmSync(join(this.options.stateDirectory, 'stabilize-conflict.json'), { force: true });
           return;
         } catch (error) {
@@ -5872,6 +6022,13 @@ export class MergeTrain {
       input: `${lines.join('\n')}\n`,
     });
     if (transaction.status === 0) {
+      if (snapshot.devHead !== record.devCommit)
+        pushDevInBackground(
+          this.options.mainCheckout,
+          this.options.stateDirectory,
+          snapshot.devBranch,
+          join(this.options.stateDirectory, 'dev-origin-push.log'),
+        );
       rmSync(join(this.options.stateDirectory, 'control-plane-conflict.json'), { force: true });
       rmSync(this.controlPlaneConflictPath(record.taskId), { force: true });
       return true;

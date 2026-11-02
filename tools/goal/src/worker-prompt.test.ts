@@ -3,11 +3,16 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchCommand, workerCheckProtocol, workerPrompt } from './launch.ts';
-import type { Task } from './types.ts';
+import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
+import type { Attempt, Task } from './types.ts';
 import type { LaunchContext } from './launch-context.ts';
 import { brief, fixturePool, temporaryDirectory } from './test-support.ts';
 import type { ProofReservation } from './verification.ts';
 import { storybookServers } from './storybook.ts';
+import { openDb } from './db.ts';
+import { WorkerStore } from './store.ts';
+import { runWorkerCommand } from './worker-commands.ts';
+import { loadSettings } from './config.ts';
 
 test('the worker prompt names the main checkout as read-only and asks for paths inside the worktree', () => {
   const task = {
@@ -225,7 +230,11 @@ test('a resumed prompt supersedes a saved legacy check wait and states the bare 
     const task = {
       worktree,
       branch: 'worker/protocol',
-      brief: { markdown: 'Do the thing.', kind: 'implementation' },
+      brief: {
+        markdown: 'Do the thing.',
+        kind: 'implementation',
+        acceptance: { command: ['bun', 'test'], tests: ['x'] },
+      },
     } as unknown as Task;
     const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
     expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
@@ -662,6 +671,7 @@ test('the configured minimal policy permits compiler placement and awaits the ex
       brief: {
         markdown: 'Complete the current implementation, then report its actual source status.',
         kind: 'implementation',
+        acceptance: { command: ['bun', 'test'], tests: ['x'] },
       },
     } as unknown as Task;
     const prompt = workerPrompt(task, evidence, undefined, [], directory.path, undefined, state);
@@ -676,6 +686,84 @@ test('the configured minimal policy permits compiler placement and awaits the ex
     expect(normal).not.toContain('Verification is minimal');
     expect(normal).toContain('run your acceptance command once');
   } finally {
+    directory.close();
+  }
+});
+
+test('a normal prompt boundary includes a persisted owner decision on the same worker attempt', async () => {
+  const directory = temporaryDirectory();
+  const db = openDb(join(directory.path, 'goal.sqlite'));
+  let store = new WorkerStore(db);
+  try {
+    const ownerBrief = { ...brief(), goal: 'accounts', manager: 'accounts' };
+    const task = store.createTask(
+      ownerBrief,
+      { briefPath: join(directory.path, 'brief.md'), worktree: directory.path, branch: 'worker/task-a', base: 'base' },
+      'implementation',
+      'task-a',
+    );
+    db.query("UPDATE worker_tasks SET current_attempt=1, body=json_set(body, '$.currentAttempt', 1) WHERE id=?").run(
+      task.id,
+    );
+    const attempt = {
+      taskId: task.id,
+      attempt: 1,
+      state: 'waiting',
+      session: 'existing-worker-session',
+      checks: ['existing-check-identity'],
+    } as Attempt;
+    db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, ?, ?)').run(
+      task.id,
+      1,
+      JSON.stringify(attempt),
+    );
+    store = new WorkerStore(db);
+    db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+    db.query('INSERT INTO manager_sessions VALUES (?, ?)').run(
+      'accounts',
+      JSON.stringify({
+        status: 'running',
+        threadId: 'authenticated-owner-session',
+      }),
+    );
+    await runWorkerCommand(
+      'event',
+      [
+        task.id,
+        '1',
+        'owner-contract-decision',
+        JSON.stringify({
+          decisionId: 'clarification-1',
+          summary: 'Use the existing contributor-to-work composition rule.',
+          documentRefs: [{ path: 'docs/composition.md', change: 'Clarified contributor ownership.' }],
+        }),
+      ],
+      {
+        settings: loadSettings({ cwd: directory.path, env: { GOAL_MAIN_CHECKOUT: directory.path } }),
+        store,
+        env: { CODEX_THREAD_ID: 'authenticated-owner-session' },
+      },
+    );
+    store = new WorkerStore(db);
+    mkdirSync(join(directory.path, 'docs'), { recursive: true });
+    writeFileSync(join(directory.path, 'docs/composition.md'), 'Composition rules.');
+
+    const currentTask = store.task(task.id);
+    const prompt = workerPrompt(currentTask, undefined, undefined, [], directory.path);
+    const prepared = prepareOwnerDecisionPrompt(store, currentTask, attempt, prompt);
+    expect(prepared.prompt).toContain('Use the existing contributor-to-work composition rule.');
+    expect(prepared.prompt).toContain('docs/composition.md');
+    expect(prepared.prompt).toContain('Document reference delivered and available');
+    expect(store.task(task.id).currentAttempt).toBe(1);
+    expect(store.attempts(task.id)).toMatchObject([
+      { attempt: 1, session: 'existing-worker-session', checks: ['existing-check-identity'] },
+    ]);
+    expect(store.attempts(task.id)).toHaveLength(1);
+
+    store.recordOwnerDecisionDelivery({ taskId: task.id, attempt: 1 }, prepared.delivery!);
+    expect(prepareOwnerDecisionPrompt(store, currentTask, attempt, prompt).prompt).toBe(prompt);
+  } finally {
+    db.close();
     directory.close();
   }
 });

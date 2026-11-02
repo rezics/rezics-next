@@ -96,9 +96,14 @@ export function continuesItself(task: Pick<Task, 'brief'> & Partial<Pick<Task, '
 /**
  * Fill the front matter a continuation leaves out from the brief it continues, and read a lone string as a one-item
  * list: on 2026-11-02, 36 of 55 continuations were dropped, most for a missing risk-area list. Declared values stay;
- * risk areas the declared paths touch are added, and the ordinary parser still judges the result.
+ * risk areas the declared paths touch are added, and the ordinary parser still judges the result. A continuation is
+ * the rest of its task, so it waits for the task: started earlier, it rebuilt the unlanded slice beside the task.
  */
-export function completeContinuation(markdown: string, task: Pick<Task, 'brief'>, ownership: RiskOwnership): string {
+export function completeContinuation(
+  markdown: string,
+  task: Pick<Task, 'brief' | 'id'>,
+  ownership: RiskOwnership,
+): string {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   if (!match) return markdown;
   let raw: unknown;
@@ -125,7 +130,8 @@ export function completeContinuation(markdown: string, task: Pick<Task, 'brief'>
   front.estimate ??= task.brief.estimate;
   front.criticalPath = flag(front.criticalPath);
   front.waiting = list(front.waiting, []);
-  if (front.after !== undefined) front.after = list(front.after, []);
+  front.after = list(front.after, []);
+  if (Array.isArray(front.after) && !front.after.includes(task.id)) front.after = [...front.after, task.id];
   const areas = list(front.riskAreas, []);
   const paths = front.paths;
   if (Array.isArray(areas) && Array.isArray(paths) && paths.every((path) => typeof path === 'string'))
@@ -190,6 +196,11 @@ export function harvestContinuations(
   } catch {
     // Without the table nothing is completed; the parser reports the same failure for each brief.
   }
+  // A retried attempt restates the remainder its predecessor already queued: on 2026-11-02 one task's attempts queued
+  // eight copies, and the copies' own retries fanned one outcome out to 28 workers. The first queued remainder stands.
+  const queuedBy = store
+    .events(task.id)
+    .find((event) => event.kind === 'continuation-queued' && event.attempt < ref.attempt)?.attempt;
   const target = backlogDirectory(settings.stateDirectory, task.brief.goal);
   for (const name of names) {
     const path = join(source, name);
@@ -203,6 +214,10 @@ export function harvestContinuations(
     if (!stat) continue;
     if (!stat.isFile() || !name.endsWith('.md')) {
       drop('a continuation must be a regular Markdown file');
+      continue;
+    }
+    if (queuedBy !== undefined) {
+      drop(`attempt ${queuedBy} of this task already queued its continuation`);
       continue;
     }
     const written = readFileSync(path, 'utf8');

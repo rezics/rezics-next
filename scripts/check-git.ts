@@ -18,7 +18,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 const MANIFEST_FILE = 'manifest.json';
 const PACK_FILE = 'snapshot.pack';
@@ -37,6 +37,106 @@ type Manifest = {
   shallow: string;
   pack: { file: typeof PACK_FILE; bytes: number; sha256: string };
 };
+
+export type CheckGitPublication = Omit<Manifest, 'pack'> & { remote: { ref: string; commit: string } };
+const CHECK_GIT_ORIGIN = 'https://github.com/rezics/rezics-next.git';
+
+function shell(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+/** The store lock covers fetch, checkout and age pruning, including live runs' alternate objects. */
+export function fetchCheckGitScript(
+  publication: CheckGitPublication,
+  checkout: string,
+  store: string,
+  origin = CHECK_GIT_ORIGIN,
+): string {
+  const { head, indexTree, dev, shallow, objectFormat, remote } = publication;
+  if (
+    !(OBJECT_FORMATS as readonly string[]).includes(objectFormat) ||
+    !/^refs\/checks\/[a-zA-Z0-9-]+$/.test(remote.ref) ||
+    ![head, indexTree, shallow, remote.commit, ...(dev ? [dev] : [])].every((id) => validObjectId(id, objectFormat))
+  )
+    throw new Error('check-git: invalid published snapshot');
+  const run = basename(checkout);
+  if (!/^[a-zA-Z0-9-]+$/.test(run)) throw new Error('check-git: invalid run identity');
+  const body = `set -eu
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0
+store=${shell(resolve(store))}
+root=${shell(resolve(checkout))}
+if [ ! -d "$store" ]; then git init --bare --quiet --template= --object-format=${objectFormat} "$store"; fi
+git --git-dir="$store" -c gc.auto=0 fetch --no-tags --no-write-fetch-head ${shell(origin)} ${shell(`+${remote.ref}:refs/check-runs/${run}`)}
+test "$(git --git-dir="$store" rev-parse ${shell(`refs/check-runs/${run}`)})" = ${shell(remote.commit)}
+test "$(git --git-dir="$store" rev-parse ${shell(`${remote.commit}^{tree}`)})" = ${shell(indexTree)}
+git --git-dir="$store" cat-file -e ${shell(`${head}^{commit}`)}
+${dev ? `git --git-dir="$store" cat-file -e ${shell(`${dev}^{commit}`)}` : ''}
+mkdir -p "$(dirname "$root")"
+stage=$(mktemp -d "$root.fetch-XXXXXX")
+trap 'rm -rf -- "$stage"' EXIT
+git init --quiet --template= --object-format=${objectFormat} "$stage"
+printf '%s\\n' "$store/objects" > "$stage/.git/objects/info/alternates"
+printf '%s\\n' ${shell(shallow)} > "$stage/.git/shallow"
+git -C "$stage" config core.logAllRefUpdates false
+git -C "$stage" update-ref refs/heads/check-snapshot ${shell(head)}
+${dev ? `git -C "$stage" update-ref refs/heads/dev ${shell(dev)}` : ''}
+git -C "$stage" update-ref refs/rezics-check/staged-index ${shell(indexTree)}
+git -C "$stage" symbolic-ref HEAD refs/heads/check-snapshot
+git -C "$stage" read-tree ${shell(indexTree)}
+git -C "$stage" checkout-index --all --force
+test "$(git -C "$stage" rev-parse HEAD)" = ${shell(head)}
+test "$(git -C "$stage" write-tree)" = ${shell(indexTree)}
+${dev ? `test "$(git -C "$stage" merge-base HEAD dev)" = ${shell(shallow)}` : ''}
+mkdir -p "$stage/.git/info"
+printf '%s\\n' '/.alive' '/.bun-install-complete' '/.remote-check-slot-count' '/bun-runtime-transpiler-cache/' '/command-phases.tsv' '/command-started' '/exit-status' >> "$stage/.git/info/exclude"
+mv -T -- "$stage" "$root"
+# Completed runs lose their pins; a seven-day grace period retains reusable objects between runs.
+if [ ! -f "$store/gc.timestamp" ] || [ "$(date +%s)" -gt "$(($(stat -c %Y "$store/gc.timestamp" 2>/dev/null || echo 0) + 86400))" ]; then
+ (
+  git --git-dir="$store" for-each-ref --format='%(refname)' refs/check-runs/ | while read -r ref; do
+    if [ ! -d "$(dirname "$root")/\${ref##*/}" ]; then git --git-dir="$store" update-ref -d "$ref"; fi
+  done
+  git --git-dir="$store" gc --quiet --prune=7.days.ago
+  touch "$store/gc.timestamp"
+ ) || echo 'check-git: store age pruning deferred' >&2
+fi
+`;
+  return `# REMOTE_CHECK_GITHUB_FETCH\nmkdir -p ${shell(dirname(resolve(store)))}\nflock -x ${shell(`${resolve(store)}.lock`)} sh -c ${shell(body)}`;
+}
+
+/** Removing a check-only ref is best effort, including after a transport failure. */
+export function releaseCheckGit(workspace: string, manifestPath: string): void {
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Partial<CheckGitPublication>;
+  if (!manifest.remote || !/^refs\/checks\/[a-zA-Z0-9-]+$/.test(manifest.remote.ref)) return;
+  try {
+    pushCheckGit(workspace, [`:${manifest.remote.ref}`]);
+  } catch {
+    console.error(`check-git: could not delete ${manifest.remote.ref}`);
+  }
+}
+
+function pushCheckGit(workspace: string, refspecs: string[], overrides: Record<string, string> = {}): void {
+  const env = environment(overrides);
+  // Authentication remains local; it is never part of the published manifest or host repository.
+  for (const key of ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM']) {
+    if (process.env[key] === undefined) delete env[key];
+    else env[key] = process.env[key]!;
+  }
+  const pushed = Bun.spawnSync(['git', 'push', '--no-follow-tags', '--progress', 'origin', ...refspecs], {
+    cwd: workspace,
+    env,
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: GIT_OPERATION_TIMEOUT_MS,
+  });
+  if (pushed.exitCode !== 0) throw new Error('check-git: check ref push failed');
+  const bytes = pushed.stderr
+    .toString()
+    .match(/Writing objects: 100%[^\r\n]*/g)
+    ?.at(-1);
+  if (bytes) console.error(`check-git: ${bytes}`);
+}
 
 function environment(overrides: Record<string, string> = {}): Record<string, string> {
   const clean = { ...process.env } as Record<string, string>;
@@ -253,7 +353,11 @@ async function publishReusableSnapshot(
 }
 
 /** Stages the source HEAD and staged index tree into an independent, self-contained native Git pack. */
-export async function stageCheckGit(workspace: string, artifactDirectory: string): Promise<string> {
+export async function stageCheckGit(
+  workspace: string,
+  artifactDirectory: string,
+  publication?: { ref: string },
+): Promise<string> {
   const source = resolve(workspace);
   const artifacts = resolve(artifactDirectory);
   if (!isDirectory(source)) throw new Error('check-git: source checkout is unavailable');
@@ -317,6 +421,57 @@ export async function stageCheckGit(workspace: string, artifactDirectory: string
       dev: devCommit,
       shallow,
     };
+    if (publication !== undefined) {
+      if (!/^refs\/checks\/[a-zA-Z0-9-]+$/.test(publication.ref))
+        throw new Error('check-git: publication must use a check-only ref');
+      // Scan the actual staged tree as well as check-run's working inputs, before any Git object is pushed.
+      const scanned = Bun.spawnSync(
+        ['git', 'grep', '-I', '-l', '-E', '--', '-----BEGIN ([A-Z0-9 ]+ )?PRIVATE KEY-----', indexTree],
+        {
+          cwd: source,
+          env: environment(isolatedObjects),
+          stdout: 'pipe',
+          stderr: 'pipe',
+          timeout: GIT_OPERATION_TIMEOUT_MS,
+        },
+      );
+      if (scanned.exitCode !== 0 && scanned.exitCode !== 1) throw new Error('check-git: private key scan failed');
+      if (
+        scanned.stdout
+          .toString()
+          .split('\n')
+          .filter(Boolean)
+          .some((path) => path !== `${indexTree}:scripts/check-run.test.ts`)
+      )
+        throw new Error('check-git: candidate contains private key material');
+      const commit = git(
+        source,
+        [
+          'commit-tree',
+          indexTree,
+          '-p',
+          head,
+          ...(devCommit && devCommit !== head ? ['-p', devCommit] : []),
+          '-m',
+          'Remote check candidate',
+        ],
+        {
+          ...isolatedObjects,
+          GIT_AUTHOR_NAME: 'Remote check',
+          GIT_AUTHOR_EMAIL: 'check@rezics.invalid',
+          GIT_COMMITTER_NAME: 'Remote check',
+          GIT_COMMITTER_EMAIL: 'check@rezics.invalid',
+        },
+      );
+      try {
+        pushCheckGit(source, [`${commit}:${publication.ref}`], isolatedObjects);
+        const manifest: CheckGitPublication = { format: FORMAT, ...identity, remote: { ref: publication.ref, commit } };
+        writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`, { mode: 0o600, flag: 'wx' });
+        return manifestPath;
+      } catch {
+        console.error('check-git: GitHub publication unavailable; using full snapshot upload');
+      }
+    }
     const cacheRoot = reusableCacheRoot(source);
     if (cacheRoot !== undefined) {
       mkdirSync(cacheRoot, { recursive: true, mode: 0o700 });

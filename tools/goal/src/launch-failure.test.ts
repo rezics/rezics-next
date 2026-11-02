@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { git } from './merge.ts';
 import type { GateOutcome, LandingRequest, ManagerEvent } from './contracts.ts';
@@ -12,6 +12,44 @@ const brokenCli = `#!/usr/bin/env bun
 console.error('Error loading config.toml: invalid transport in mcp_servers."browser"');
 process.exit(1);
 `;
+
+test('a missing restart-safe scope is reported before an unprotected worker starts', async () => {
+  const h = harness(`#!/usr/bin/env bun
+import { writeFileSync } from 'node:fs';
+writeFileSync('.temp/unprotected-start', 'started');
+console.log(JSON.stringify({type:'thread.started',thread_id:'should-not-start'}));
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
+`);
+  const task = h.tasks.dispatch(h.briefFile);
+  const bin = join(h.root, '.temp/no-systemd/bin');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, 'systemctl'), '#!/bin/sh\nexit 1\n');
+  writeFileSync(join(bin, 'systemd-run'), '#!/bin/sh\necho "user systemd scope unavailable" >&2\nexit 1\n');
+  chmodSync(join(bin, 'systemctl'), 0o755);
+  chmodSync(join(bin, 'systemd-run'), 0o755);
+  const originalPath = process.env.PATH;
+  try {
+    process.env.PATH = `${bin}:${originalPath ?? ''}`;
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const failure = await job.start(task.id).then(
+      () => '',
+      (error) => String(error),
+    );
+    await job.drain();
+
+    const attempt = h.store.attempt({ taskId: task.id, attempt: 1 });
+    expect(failure).toContain('restart-safe user systemd scope');
+    expect(attempt.result).toContain('no unprotected worker was started');
+    expect(attempt.process).toBeNull();
+    expect(existsSync(join(task.worktree, '.temp/unprotected-start'))).toBe(false);
+    expect(h.store.task(task.id).state).toBe('stopped');
+  } finally {
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+    await h.disposeAsync();
+  }
+}, 15_000);
 
 test('a launch failure is rerun once without a gate, then goes to the manager', async () => {
   const h = harness(brokenCli),

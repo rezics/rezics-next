@@ -51,6 +51,23 @@ export type Check = {
 export const SMOKE_STATE = '.temp/cp-sync-state';
 
 /**
+ * The candidate loaders parse the live local settings and the routing table they name. `checkSettings` is strict and
+ * writes nothing; this check does not copy state, launch workers or signal processes.
+ */
+export function configSmoke(checkout: string): Check {
+  return {
+    name: 'config smoke',
+    argv: ['bun', 'tools/goal/scripts/cp-config-smoke.ts'],
+    timeoutMs: MINUTE,
+    kind: 'smoke',
+    env: () => ({
+      GOAL_MAIN_CHECKOUT: checkout,
+      GOAL_LOCAL_CONFIG: join(checkout, '.temp/goal/local.json'),
+    }),
+  };
+}
+
+/**
  * The candidate CLI loads the live settings and a copy of the live database, applying its migrations to the copy.
  * GOAL_MANAGER keeps orphan recovery from handing a train to a detached process, which would act on live refs.
  */
@@ -94,10 +111,15 @@ export const PROOF_CHECKS: readonly Check[] = [
   },
 ];
 
-/** Installs, the type check and the CLI smoke; `full` adds the suite. */
+/** Installs, the type check, live config/routing parse and the CLI smoke; `full` adds the suite. */
 export function syncChecks(checkout: string, full = false): Check[] {
   const suite = PROOF_CHECKS.filter((check) => check.kind === 'suite');
-  return [...PROOF_CHECKS.filter((check) => check.kind !== 'suite'), cliSmoke(checkout), ...(full ? suite : [])];
+  return [
+    ...PROOF_CHECKS.filter((check) => check.kind !== 'suite'),
+    configSmoke(checkout),
+    cliSmoke(checkout),
+    ...(full ? suite : []),
+  ];
 }
 
 /** Copies the live Goal database for a smoke check without writing it: a read-only connection's VACUUM INTO. */
@@ -1191,11 +1213,12 @@ export async function rollback(options: Options = {}): Promise<number> {
 const USAGE = `Usage: bun tools/goal/scripts/cp-sync.ts [--dry-run] [--rollback] [--include <path>]... [--keep-worktree]
        [--full [--fresh-baseline]]
 
-Checks dev's tools/goal on a temporary worktree of main (installs, type check, a CLI smoke against a copy of the live
-Goal state), then publishes it to main, stabilize and dev with one compare-and-swap and updates the main checkout's
-files. --full also runs the suite, which may only fail where unmodified main fails too; --fresh-baseline reruns
-main's suite instead of reusing its cached failures. --rollback restores the tools/goal of the main commit before the
-newest sync. --include also syncs a root path from dev.`;
+Checks dev's tools/goal on a temporary worktree of main (installs, type check, the candidate loaders against the live
+local settings and configured routing table, a CLI smoke against a copy of the live Goal state), then publishes it to
+main, stabilize and dev with one compare-and-swap and updates the main checkout's files. --full also runs the suite,
+which may only fail where unmodified main fails too; --fresh-baseline reruns main's suite instead of reusing its
+cached failures. --rollback restores the tools/goal of the main commit before the newest sync. --include also syncs a
+root path from dev.`;
 
 export function parseArguments(args: readonly string[]): Options | undefined {
   const options: Options & { includes: string[] } = { includes: [] };

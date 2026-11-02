@@ -34,6 +34,7 @@ import { acquireDirectoryLease } from './lease.ts';
 import { ensureHostRunning, startHostSupervisor, recordHostLiveness } from './host-liveness.ts';
 import { sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager, type AuthenticatedManager } from './priority-authority.ts';
+import { isPendingContinuationHandshake } from './manager-continuation.ts';
 import { completedUtcHour } from './efficiency-report.ts';
 
 /** Composition belongs to the caller; this module never reads worker configuration or tables. */
@@ -737,6 +738,8 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     const usage = 'usage: backlog status [--json] | backlog dispatch';
     if (subcommand === 'dispatch') {
       if (id !== undefined || flags.length) throw new Error(usage);
+      if (process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT)
+        throw new Error('Workers cannot use the manager-owned backlog command');
       if (!runtime.backlog) throw new Error('The backlog run is unavailable in this runtime');
       console.log(JSON.stringify({ at: new Date().toISOString(), ...((await runtime.backlog()) as object) }));
       return 0;
@@ -896,7 +899,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         if (manager.managerId !== runtime.supermanager && !isResidentSupermanagerRecord(runtime, manager.managerId))
           runtime.db
             .transaction(() => {
-              inbox.assertManagerSend(manager.from, summary);
+              inbox.assertManagerSend(manager.from, summary, id);
               deliver(manager);
             })
             .immediate();
@@ -910,20 +913,13 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         const source = runtime.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(sender.managerId) as {
           state: string;
         } | null;
-        const state = source
-          ? (JSON.parse(source.state) as {
-              engine?: string;
-              supermanager?: string;
-              continuationAsked?: boolean;
-              continuationRenewed?: boolean;
-            })
-          : null;
-        if (
-          state?.engine === 'codex' &&
-          state.supermanager === id &&
-          state.continuationAsked &&
-          !state.continuationRenewed
-        ) {
+        let state: unknown = null;
+        try {
+          state = source ? JSON.parse(source.state) : null;
+        } catch {
+          state = null;
+        }
+        if (isPendingContinuationHandshake(summary, id, state)) {
           await ensureHost(runtime);
           // The durable local decision is authoritative. Keep the host's legacy audit view in sync with a short,
           // isolated delivery attempt; its failure must not change the inbox-send or continuation result.
@@ -979,7 +975,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         const settle = at < 0 ? 0 : Number(flags[at + 1]);
         if (!Number.isFinite(settle) || settle < 0) throw new Error('usage: inbox wait <manager> [--settle <seconds>]');
         console.log(JSON.stringify(await inbox.wait(id, undefined, settle * 1000)));
-      } else if (subcommand === 'read') console.log(JSON.stringify(inbox.read(id)));
+      } else if (subcommand === 'read') console.log(JSON.stringify(inbox.readPage(id, parseInboxReadOptions(flags))));
       else if (subcommand === 'ack') inbox.acknowledge(id, flags.length ? flags.map(Number) : undefined);
       else throw new Error(`unknown inbox command: ${subcommand ?? '(missing)'}`);
     }
@@ -1058,6 +1054,26 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     return 0;
   }
   throw new Error(`invalid command arguments: ${argv.join(' ')}`);
+}
+
+function parseInboxReadOptions(args: string[]): { limit?: number; cursor?: number } {
+  const options: { limit?: number; cursor?: number } = {};
+  for (let index = 0; index < args.length; index++) {
+    const option = args[index]!;
+    const value = args[++index];
+    if ((option !== '--limit' && option !== '--cursor') || !value || value.startsWith('--'))
+      throw new Error('usage: inbox read <manager> [--limit <n>] [--cursor <id>]');
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error(`inbox ${option} must be a positive integer`);
+    if (option === '--limit') {
+      if (options.limit !== undefined) throw new Error('duplicate inbox option: --limit');
+      options.limit = parsed;
+    } else {
+      if (options.cursor !== undefined) throw new Error('duplicate inbox option: --cursor');
+      options.cursor = parsed;
+    }
+  }
+  return options;
 }
 
 /** Public control-plane command modules use this to attribute a manager's command to its turn. */
