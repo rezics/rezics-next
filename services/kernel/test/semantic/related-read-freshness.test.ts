@@ -46,7 +46,7 @@ test('a failed related-read episode does not poison the next read', async () => 
   const client = await db.pool.connect();
   const flaky = Object.create(client) as PoolClient;
   let failNext = true;
-  const query = client.query.bind(client);
+  const query = client.query.bind(client) as (...args: any[]) => Promise<any>;
   flaky.query = ((...args: any[]) => {
     if (failNext) {
       failNext = false;
