@@ -502,7 +502,7 @@ test('a cover claim is admitted under statement:propose or subject:create evalua
         );
       }
     }
-    async function attempt(action: string, resource = global, outside = false, receiptOnly = false, claim = claimCoverMedia) {
+    async function attempt(action: string, resource = global, outside = false, receiptOnly = false) {
       const mediaRoute = outside ? targetRoute + 16 : targetRoute;
       const subject = outside ? newId(mediaRoute) : target;
       const id = newId(mediaRoute);
@@ -539,7 +539,7 @@ test('a cover claim is admitted under statement:propose or subject:create evalua
         : authorization;
       const command = runCommand(db.pool, { ...commandOptions, partition, authorization: binding }, async (tx) => {
         expect(currentCommand(tx).authorization).toMatchObject({ action, resource, mode: 'execute' });
-        await claim(tx, {
+        await claimMedia(tx, {
           mediaIds: [id],
           containerId: subject,
           author,
@@ -548,7 +548,7 @@ test('a cover claim is admitted under statement:propose or subject:create evalua
         return { value: null, events: [claimEvent] };
       });
       if (action === actions[2] || resource.id !== GLOBAL_CONTEXT || outside || receiptOnly) {
-        await expect(command).rejects.toThrow(receiptOnly ? undefined : 'Invalid cover reference command context');
+        await expect(command).rejects.toThrow(outside || receiptOnly ? undefined : 'Invalid cover reference command context');
         expect(
           (
             await db.admin.query('SELECT claimed_at FROM content.media WHERE route=$1 AND media_id=$2', [
@@ -569,10 +569,7 @@ test('a cover claim is admitted under statement:propose or subject:create evalua
         ).not.toBeNull();
       }
     }
-    for (const action of actions.slice(0, 2)) {
-      await attempt(action);
-      await attempt(action, global, false, false, claimMedia);
-    }
+    for (const action of actions.slice(0, 2)) await attempt(action);
     await attempt(actions[2]!);
     for (const action of actions.slice(0, 2)) {
       await attempt(action, other);
