@@ -40,7 +40,10 @@ const { flushSync } = await import('react-dom');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { sessionQuery, exposureQuery } = await import('../src/session/query');
 const exposure = await import('../src/kernel/viewer-exposure');
-spyOn(exposure, 'readViewerExposure').mockImplementation(async ({ data }) => ({ subject: data, admitted: ['personal_library'] }));
+spyOn(exposure, 'readViewerExposure').mockImplementation(async ({ data }) => ({
+  subject: data,
+  admitted: ['personal_library'],
+}));
 const { loadPrivateFollowCounts, privateFollowCountsQuery } = await import('../src/library/private-follow-counts');
 const { PrivateFollowCountsPage } = await import('../src/library/private-follow-counts-page');
 const { m } = await import('../src/paraglide/messages.js');
@@ -83,7 +86,9 @@ let client: InstanceType<typeof QueryClient>;
 let context: FollowCountsSearch;
 const exposureKey = () => {
   const snapshot = exposure.viewerExposureLifetime(client).getSnapshot();
-  return snapshot.state === 'signed-in' ? exposure.viewerExposureQuery(snapshot.observation).queryKey : exposureQuery.queryKey;
+  return snapshot.state === 'signed-in'
+    ? exposure.viewerExposureQuery(snapshot.observation).queryKey
+    : exposureQuery.queryKey;
 };
 const setExposure = (admitted: string[]) => client.setQueryData(exposureKey(), { subject: 'alice', admitted });
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));

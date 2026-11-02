@@ -131,8 +131,7 @@ export async function loadPrivateFollowCounts(
     const authorization = viewerCredential(request);
     const subject = sessionSubject(request);
     const csrfToken = requestCsrfToken(request);
-    if (!authorization || !subject)
-      return { locale, viewer, context, outgoing: { state: 'signed-out' }, target: null };
+    if (!authorization || !subject) return { locale, viewer, context, outgoing: { state: 'signed-out' }, target: null };
     viewer = { subject, csrfToken };
     if (client) return { locale, viewer, ...(await readFollowCounts(client, authorization, context)) };
   } catch (error) {

@@ -239,7 +239,8 @@ test('the mounted default Following composition retires viewer, cursor and row l
   const { sessionQuery, exposureQuery } = await import('../src/session/query');
   const exposure = await import('../src/kernel/viewer-exposure');
   const exposureRead = spyOn(exposure, 'readViewerExposure').mockImplementation(async ({ data }) => ({
-    subject: data, admitted: client.getQueryData<string[]>(exposureQuery.queryKey) ?? [],
+    subject: data,
+    admitted: client.getQueryData<string[]>(exposureQuery.queryKey) ?? [],
   }));
   const { mineFollowingQuery } = await import('../src/library/mine-following-page');
   const { Route } = await import('../src/routes/library/following');
@@ -264,7 +265,11 @@ test('the mounted default Following composition retires viewer, cursor and row l
     return call.promise;
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const viewer = (subject: string, token: string | null = 'csrf-one') => ({ state: 'signed-in', subject, csrfToken: token });
+  const viewer = (subject: string, token: string | null = 'csrf-one') => ({
+    state: 'signed-in',
+    subject,
+    csrfToken: token,
+  });
   client.setQueryData(sessionQuery.queryKey, viewer('A', null));
   client.setQueryData(exposureQuery.queryKey, ['personal_library']);
   const initial = loaded('A', null, 'A private title');
@@ -400,7 +405,10 @@ test('the mounted default Following composition retires viewer, cursor and row l
     await act(async () => {
       const snapshot = exposure.viewerExposureLifetime(client).getSnapshot();
       if (snapshot.state !== 'signed-in') throw new Error('No current viewer');
-      client.setQueryData(exposure.viewerExposureQuery(snapshot.observation).queryKey, { subject: 'B', admitted: ['personal_library'] });
+      client.setQueryData(exposure.viewerExposureQuery(snapshot.observation).queryKey, {
+        subject: 'B',
+        admitted: ['personal_library'],
+      });
       client.setQueryData(exposureQuery.queryKey, ['personal_library']);
       await tick();
     });
@@ -519,7 +527,8 @@ test('Following recovery stays page-local through terminal pages, last-row remov
   const { sessionQuery, exposureQuery } = await import('../src/session/query');
   const exposure = await import('../src/kernel/viewer-exposure');
   const exposureRead = spyOn(exposure, 'readViewerExposure').mockImplementation(async ({ data }) => ({
-    subject: data, admitted: client.getQueryData<string[]>(exposureQuery.queryKey) ?? [],
+    subject: data,
+    admitted: client.getQueryData<string[]>(exposureQuery.queryKey) ?? [],
   }));
   const { mineFollowingQuery } = await import('../src/library/mine-following-page');
   const { Route } = await import('../src/routes/library/following');
