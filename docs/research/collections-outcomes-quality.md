@@ -22,8 +22,8 @@ measurement, not an infrastructure failure, a passing check, or a reason to star
   [Design status](design-status-commerce.md), especially “Curated Collections” and “Built-in dynamic membership,”
   is historical inventory, not current native output. Some missing-source descriptions are stale, as detailed below.
   Neither document supplies an exact current-dev runner exit or complete persona/case recording.
-- Local `.temp/goal` contained no matching retained quality-run evidence. An attempted supported historical inbox
-  lookup, `bun tools/goal/src/cli.ts inbox log --to commerce --grep bd18969f --limit 8 --json`, exited **1**:
+- Local `.temp/goal` contained no matching retained quality-run evidence. A supported historical inbox
+  lookup for the named Members owner exited **1**:
   `Error: workers cannot read the shared manager inbox`. This is an inspection permission boundary, not a kernel
   acceptance result. No repeated inbox lookup or bypass was attempted. Manager-held evidence remains uninspected.
 - No test process/check UUID, raw test log, native capture, database fixture, browser recording or promotion proof
