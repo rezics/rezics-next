@@ -2,7 +2,10 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createContext, createElement, type ReactNode } from 'react';
 import { queryOptions } from '@tanstack/react-query';
-import { createConfiguredListRetryController, type ConfiguredListRetryOwner } from '../src/features/pages/configured-list-retry';
+import {
+  createConfiguredListRetryController,
+  type ConfiguredListRetryOwner,
+} from '../src/features/pages/configured-list-retry';
 import type { TypeListQueryResult } from '../src/features/pages/type-list-query';
 
 type Admission = { state: string; expectedReader?: string | null; incarnation: string; mode: string };
@@ -21,13 +24,7 @@ mock.module('../src/session/query', () => ({
   useSession: () => ({ state: 'unknown' as const, csrfToken: null }),
 }));
 mock.module('../src/features/pages/type-list-query', () => ({
-  typeListQuery: (
-    locale: string,
-    node: string,
-    page: string,
-    cursor: string | undefined,
-    admission: Admission,
-  ) =>
+  typeListQuery: (locale: string, node: string, page: string, cursor: string | undefined, admission: Admission) =>
     queryOptions({
       queryKey: ['configured-list-retry-test', locale, node, page, cursor ?? null, admission.incarnation],
       queryFn: async () => {
@@ -118,7 +115,10 @@ test('Manual Retry of a failed selected-Realm configured list performs a current
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const page = JSON.stringify({ subject: '0192f3a0-6c1e-7b2a-9d4e-000000000101', realm: '0192f3a0-6c1e-7b2a-9d4e-000000000201' });
+  const page = JSON.stringify({
+    subject: '0192f3a0-6c1e-7b2a-9d4e-000000000101',
+    realm: '0192f3a0-6c1e-7b2a-9d4e-000000000201',
+  });
 
   async function until(predicate: () => boolean) {
     for (let turn = 0; turn < 100 && !predicate(); turn++)
@@ -147,7 +147,14 @@ test('Manual Retry of a failed selected-Realm configured list performs a current
     });
     await until(() => reads.length === 2 && !!host.querySelector('button'));
     expect(reads).toHaveLength(2);
-    expect(reads[1]).toMatchObject({ locale: 'en', node: 'books', page, cursor: 'cursor:next', state: 'signed-in', mode: 'current' });
+    expect(reads[1]).toMatchObject({
+      locale: 'en',
+      node: 'books',
+      page,
+      cursor: 'cursor:next',
+      state: 'signed-in',
+      mode: 'current',
+    });
     expect(reads[1]?.expectedReader).toBe('reader-a');
     expect(reads[1]?.incarnation).not.toBe(initialIncarnation);
     expect(host.textContent).not.toContain('PRIVATE ROWS');

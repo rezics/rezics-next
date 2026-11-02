@@ -206,12 +206,7 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
           return;
 
         const currentOwner = await retryController.waitForCurrentOwner(attempt);
-        if (
-          !currentOwner ||
-          !retryController.markRead(attempt, currentOwner) ||
-          !currentOwner.isCurrent()
-        )
-          return;
+        if (!currentOwner || !retryController.markRead(attempt, currentOwner) || !currentOwner.isCurrent()) return;
         await currentOwner.read();
       } else await query.refetch();
     } catch {

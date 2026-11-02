@@ -60,7 +60,10 @@ export function createConfiguredListRetryController() {
     },
     select(next: ConfiguredListRetryOwner | null) {
       owner = next;
-      if (intent && (!next || next.routeKey !== intent.routeKey || (next.sessionKey && next.sessionKey !== intent.sessionKey)))
+      if (
+        intent &&
+        (!next || next.routeKey !== intent.routeKey || (next.sessionKey && next.sessionKey !== intent.sessionKey))
+      )
         retireIntent();
       resolveWaiters();
     },
