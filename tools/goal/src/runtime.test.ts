@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { spawn } from 'node:child_process';
@@ -411,3 +411,31 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:5}}));
     h.dispose();
   }
 });
+
+test('the host width sweep dispatches a backlog brief through the dispatch path and starts its worker', async () => {
+  const h = harness();
+  h.settings.gate = ['true'];
+  const backlog = join(h.settings.stateDirectory, 'backlog', 'fixture');
+  mkdirSync(backlog, { recursive: true });
+  const queued = join(backlog, 'result.md');
+  simpleBrief(queued);
+  const settled = (Date.now() - 60_000) / 1000;
+  utimesSync(queued, settled, settled);
+  try {
+    const runtime = createRuntime({ tasks: h.tasks });
+    await runtime.sweepWidth!();
+    const [dispatched] = readdirSync(join(backlog, 'dispatched'));
+    expect(dispatched).toMatch(/^[0-9a-f-]{36}-result\.md$/);
+    const taskId = dispatched!.slice(0, 36);
+    expect(existsSync(queued)).toBe(false);
+    // The sweep starts the worker without waiting for it, as `goal dispatch` does; wait for the attempt to settle.
+    const deadline = Date.now() + 30_000;
+    while (['ready', 'running'].includes(h.store.task(taskId).state) && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    await runtime.drain();
+    expect(['integrated', 'merged']).toContain(h.store.task(taskId).state);
+    expect(h.store.task(taskId).brief.markdown).toBe(readFileSync(join(backlog, 'dispatched', dispatched!), 'utf8'));
+  } finally {
+    h.dispose();
+  }
+}, 60_000);

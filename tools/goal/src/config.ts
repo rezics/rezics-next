@@ -41,6 +41,7 @@ import {
 } from './flow.ts';
 import { emitHourlyLifecycleMetrics, lifecycleMetricsAsync } from './lifecycle-metrics.ts';
 import { sweepWidthGovernor } from './width-governor.ts';
+import { backlogDirectory, sweepBacklog } from './backlog.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
 export type ConfiguredSettings = Settings & { integrationChecks: IntegrationCheck[] };
@@ -598,6 +599,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   ];
   const managerServices: ManagerServices = {
     command,
+    backlogDirectory: backlogDirectory(settings.stateDirectory),
     checkCompletion,
     windows: new TermspacesWindows({
       socket: settings.integration.tmuxSocket,
@@ -685,7 +687,32 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       );
     },
     sweepWidth: async () => {
-      await sweepWidthGovernor(db, inbox);
+      try {
+        await sweepWidthGovernor(db, inbox);
+      } finally {
+        // The same dispatch and cancel paths as `goal dispatch` and `goal cancel`, run in this process.
+        await sweepBacklog({
+          db,
+          stateDirectory: settings.stateDirectory,
+          inbox,
+          async dispatch(brief) {
+            const task = tasks.dispatch(brief, null);
+            if (task.state !== 'held')
+              void job.start(task.id, { expectedAttempt: 0 }).catch((error) =>
+                inbox.deliver({
+                  managerId: settings.integration.supermanager,
+                  kind: 'environment',
+                  taskId: task.id,
+                  summary: `Backlog start of task ${task.id} failed: ${String(error)}`
+                    .replace(/[\r\n]+/g, ' ')
+                    .slice(0, 1000),
+                }),
+              );
+            return task.id;
+          },
+          cancel: (taskId) => tasks.cancel(taskId),
+        });
+      }
     },
     promote: () => promoteNow(),
     verify: () => verifyDev({ settings, store, inbox, runGate: verifierGate }),

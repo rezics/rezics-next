@@ -81,6 +81,8 @@ export type ManagerServices = {
   checkCompletion(goal: string): Promise<CompletionEvidence>;
   /** The CLI prefix includes its runtime composition module, if any. */
   command: string[];
+  /** Root of the per-Goal ready-brief directories the controller dispatches from. */
+  backlogDirectory?: string;
   now?: () => number;
   onAppServerStart?(identity: ProcessIdentity): void;
   onError?: (error: unknown) => void;
@@ -139,6 +141,21 @@ export function recordManagerDecision(db: Database, id: string, at = Date.now())
   }).immediate();
 }
 
+/** More `clock.sleep` calls than this in one UTC hour raise one alarm for that manager. */
+export const MANAGER_SLEEP_ALARM_PER_HOUR = 10;
+const HOUR_MS = 3_600_000;
+const managerSleepMigration = {
+  module: 'manager-sleep',
+  version: 1,
+  sql: `CREATE TABLE manager_sleep_calls (
+    manager TEXT NOT NULL,
+    hour INTEGER NOT NULL,
+    calls INTEGER NOT NULL,
+    alarmed INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(manager, hour)
+  );`,
+} as const;
+
 function managerHasDecision(db: Database, id: string, threadId: string, turnId: string): boolean {
   return Boolean(
     db
@@ -166,7 +183,7 @@ export class ManagerSessions {
         sql: 'CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL);',
       },
     ]);
-    migrate(db, [managerDecisionMigration]);
+    migrate(db, [managerDecisionMigration, managerSleepMigration]);
     this.watcher = watchOrPoll(
       inbox.signalDirectory,
       () => {
@@ -362,7 +379,10 @@ export class ManagerSessions {
     } else if (method === 'thread/goal/cleared') {
       state.goalState = null;
     } else if (method === 'thread/tokenUsage/updated') state.usage = params.tokenUsage;
-    else return;
+    else if (method === 'item/started' && params?.item?.type === 'sleep') {
+      this.countSleep(state);
+      return;
+    } else return;
     this.save(state);
     if (state.status === 'running') {
       if (method === 'thread/goal/updated' && (await this.handleGoalUpdate(state))) return;
@@ -370,19 +390,55 @@ export class ManagerSessions {
       if (state.goalState?.status === 'complete') await this.completeInternal(state.id);
     }
   }
+  /** Event-driven managers sleep only by ending the turn: a `clock.sleep` loop re-reads the whole context each call. */
+  private countSleep(state: ManagedManagerState): void {
+    const now = this.now();
+    const hour = Math.floor(now / HOUR_MS);
+    this.db
+      .transaction(() => {
+        this.db.query('DELETE FROM manager_sleep_calls WHERE manager = ? AND hour < ?').run(state.id, hour - 24);
+        const row = this.db
+          .query(
+            `INSERT INTO manager_sleep_calls(manager, hour, calls) VALUES (?, ?, 1)
+            ON CONFLICT(manager, hour) DO UPDATE SET calls = calls + 1
+            RETURNING calls, alarmed`,
+          )
+          .get(state.id, hour) as { calls: number; alarmed: number };
+        if (row.calls <= MANAGER_SLEEP_ALARM_PER_HOUR || row.alarmed) return;
+        this.db.query('UPDATE manager_sleep_calls SET alarmed = 1 WHERE manager = ? AND hour = ?').run(state.id, hour);
+        this.inbox.deliver({
+          managerId: state.supermanager,
+          kind: 'environment',
+          goalId: state.goal,
+          summary: `Manager ${state.id} called clock.sleep ${row.calls} times in the UTC hour from ${new Date(hour * HOUR_MS).toISOString()}; managers end the turn and are resumed by inbox events.`,
+        });
+        this.inbox.deliver({
+          managerId: state.id,
+          kind: 'instruction',
+          summary:
+            'Do not call clock.sleep. When no decision is pending, end the turn; the controller starts a new turn on this thread when an inbox event arrives.',
+        });
+      })
+      .immediate();
+  }
   private continuationPath(spec: ManagerSpec): string {
     return join(spec.cwd, '.temp', 'goal', spec.id, 'CONTINUATION.md');
+  }
+  private backlogPath(spec: ManagerSpec): string {
+    return join(this.services.backlogDirectory ?? join(spec.cwd, '.temp', 'goal', 'backlog'), spec.goal);
   }
   private opening(spec: ManagerSpec, continuationFile?: string): string {
     return (
       `${spec.brief}\n\nYou manage Goal ${spec.goal}. Make decisions through the control plane. ` +
       `Export GOAL_MANAGER=${spec.id} for control-plane commands. Completion is a proposal: run ` +
       `${this.services.command.join(' ')} manager complete ${spec.id}; the control plane verifies every scoped task is merged and the main gate passes. ` +
-      (continuationFile
-        ? `Read the continuation file at ${continuationFile} completely, then continue from it. `
-        : '') +
+      `Your outputs are ready briefs in ${this.backlogPath(spec)} and decisions. The controller dispatches the oldest brief whenever worker slots are free; keep at least eight there. ` +
+      'Act on each stopped task within an hour: retry it with a rewritten brief, split it or cancel it; after an hour the controller cancels it and returns its brief to the failed directory. ' +
+      'Send only decisions, blocking questions and handoffs, at most 60 words each. Do not write receipts, status snapshots or lists of actions not taken. ' +
+      (continuationFile ? `Read the continuation file at ${continuationFile} once, then continue from it. ` : '') +
+      'Read your brief and continuation once per session. ' +
       (spec.engine === 'codex'
-        ? 'When no decision is pending, use clock.sleep inside the active turn; do not poll or end an empty turn. '
+        ? 'When no decision is pending, end the turn; do not use clock.sleep or poll. The controller resumes this thread with a new turn when an inbox event arrives. '
         : `When no decision is pending, run ${this.services.command.join(' ')} inbox wait ${spec.id} as a background command and end the turn. `) +
       'Read and acknowledge inbox events. Do not perform mechanical gates, retries or merges yourself.'
     );
@@ -675,7 +731,7 @@ export class ManagerSessions {
         this.inbox.deliver({
           managerId: current.id,
           kind: 'instruction',
-          summary: `This Goal has used at least 90% of its token budget. Write .temp/goal/${current.id}/CONTINUATION.md with live task IDs and states, decisions in force, pending cross-owner agreements, and next actions. Then send ${current.supermanager} a message containing “continuation written”.`,
+          summary: `This Goal has used at least 90% of its token budget. Replace .temp/goal/${current.id}/CONTINUATION.md with at most 8,000 characters: live task IDs, decisions in force as links to owner documents, and next actions. Do not append to the old file. Then send ${current.supermanager} a message containing “continuation written”.`,
         });
       })
       .immediate();
@@ -943,12 +999,38 @@ export class ManagerSessions {
       this.inbox.notified(event.id);
     }
   }
+  /** An idle manager has ended its turn; the delivered event starts a new turn on its persisted thread. */
   private async startWakeTurn(client: AppServer, state: ManagedManagerState, summary: string): Promise<void> {
-    const turn = await client.request('turn/start', {
-      threadId: state.threadId,
-      ...codexTurnSettings(state),
-      input: textInput(summary),
-    });
+    const start = () =>
+      client.request('turn/start', {
+        threadId: state.threadId,
+        ...codexTurnSettings(state),
+        input: textInput(summary),
+      });
+    let turn;
+    try {
+      turn = await start();
+    } catch {
+      // A replaced app-server has not loaded the thread, or a turn began meanwhile: rejoin it, then start or steer.
+      const resumed = await client.request('thread/resume', {
+        ...FULL_ACCESS,
+        threadId: state.threadId,
+        model: CODEX_MANAGER_MODEL,
+        config: codexThreadConfig(state),
+      });
+      const active = resumed.thread.turns?.findLast((item: any) => item.status === 'inProgress');
+      if (active) {
+        state.activeTurnId = active.id;
+        this.save(state);
+        await client.request('turn/steer', {
+          threadId: state.threadId,
+          expectedTurnId: active.id,
+          input: textInput(summary),
+        });
+        return;
+      }
+      turn = await start();
+    }
     this.turnStarted(state, turn.turn.id);
     this.save(state);
   }

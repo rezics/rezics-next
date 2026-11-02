@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { StdioAppServer, type Notification } from './app-server.ts';
@@ -12,9 +12,11 @@ async function setup() {
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'state.sqlite'));
   const log = join(temporary.path, 'rpc.jsonl');
+  const failFile = join(temporary.path, 'rpc-fail.json');
   const client = new StdioAppServer([process.execPath, join(import.meta.dir, 'fixtures/fake-app-server.ts')], {
     ...process.env,
     FAKE_RPC_LOG: log,
+    FAKE_RPC_FAIL_FILE: failFile,
   });
   await client.initialize();
   const inbox = new SqliteManagerInbox(db, temporary.path);
@@ -44,6 +46,7 @@ async function setup() {
       summary: 'Some tasks remain unmerged',
     }),
     command: ['goal'],
+    backlogDirectory: join(temporary.path, 'state', 'backlog'),
     now: () => now,
     onError: (error: unknown) => {
       errors.push(error);
@@ -75,6 +78,7 @@ async function setup() {
   return {
     ...temporary,
     db,
+    failFile,
     client,
     inbox,
     managers,
@@ -487,6 +491,86 @@ test('a manager whose start failed before its session existed can start again', 
     expect(s.managers.get(s.spec.id).threadId ?? null).toBeNull();
     fail = false;
     expect((await s.managers.start(s.spec)).status).toBe('running');
+  } finally {
+    await s.close();
+  }
+});
+
+test('a Codex manager opening ends idle turns instead of sleeping and names its backlog and message limits', async () => {
+  const s = await setup();
+  try {
+    await s.managers.start(s.spec);
+    const opening = s.requests().find((r) => r.method === 'turn/start')?.params.input[0]?.text as string;
+    expect(opening).not.toContain('use clock.sleep inside the active turn');
+    expect(opening).toContain('When no decision is pending, end the turn; do not use clock.sleep or poll.');
+    expect(opening).toContain('resumes this thread with a new turn when an inbox event arrives');
+    expect(opening).toContain(`ready briefs in ${join(s.path, 'state', 'backlog', 'refactor')}`);
+    expect(opening).toContain('at most 60 words each');
+    expect(opening).toContain('Do not write receipts, status snapshots or lists of actions not taken.');
+    expect(opening).toContain('Read your brief and continuation once per session.');
+    expect(opening).toContain('Act on each stopped task within an hour');
+  } finally {
+    await s.close();
+  }
+});
+
+test('an event for an idle manager whose thread is not loaded rejoins the thread and starts a new turn', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
+    writeFileSync(s.failFile, JSON.stringify({ method: 'turn/start' }));
+    s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Wake on a replaced app-server' });
+    await s.managers.wake(manager.id);
+    const methods = s
+      .requests()
+      .filter((r) => r.id && r.method !== 'initialize')
+      .map((r) => r.method)
+      .slice(-3);
+    expect(methods).toEqual(['turn/start', 'thread/resume', 'turn/start']);
+    expect(s.managers.get(manager.id).activeTurnId).toBe('turn-2');
+    expect(s.inbox.notifications(manager.id)).toHaveLength(0);
+  } finally {
+    await s.close();
+  }
+});
+
+test('more than ten clock.sleep calls in an hour raise one alarm and one correction', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    await s.managers.flush();
+    const sleep = (index: number) =>
+      s.notify({
+        method: 'item/started',
+        params: {
+          threadId: manager.threadId,
+          turnId: manager.activeTurnId,
+          item: { type: 'sleep', id: `sleep-${index}`, durationMs: 60_000 },
+        },
+      });
+    for (let index = 1; index <= 10; index++) await sleep(index);
+    expect(s.inbox.pending('supervisor')).toHaveLength(0);
+    await sleep(11);
+    await sleep(12);
+    const alarms = s.inbox.pending('supervisor');
+    expect(alarms).toHaveLength(1);
+    expect(alarms[0]!.event).toMatchObject({ kind: 'environment' });
+    expect(alarms[0]!.event.summary).toContain('Manager manager called clock.sleep 11 times');
+    expect(s.inbox.pending(manager.id).map((entry) => entry.event.summary)).toContain(
+      'Do not call clock.sleep. When no decision is pending, end the turn; the controller starts a new turn on this thread when an inbox event arrives.',
+    );
+    // Other tool items are not sleeps, and a new hour starts a new count.
+    await s.notify({
+      method: 'item/started',
+      params: { threadId: manager.threadId, item: { type: 'commandExecution', id: 'command' } },
+    });
+    s.advance(3_600_000);
+    for (let index = 13; index <= 22; index++) await sleep(index);
+    expect(s.inbox.pending('supervisor')).toHaveLength(1);
   } finally {
     await s.close();
   }

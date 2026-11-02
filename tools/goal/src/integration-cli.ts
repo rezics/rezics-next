@@ -28,6 +28,7 @@ import { SqliteLandingQueue } from './land.ts';
 import { MergeTrain } from './merge-train.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SharedInboxQueries, type SharedInboxFilter } from './inbox-shared.ts';
+import { backlogStatus, formatBacklogStatus } from './backlog.ts';
 import { ManagerSessions, recordManagerDecision, type ManagerServices, type ManagerSpec } from './managers.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { ensureHostRunning, startHostSupervisor, recordHostLiveness } from './host-liveness.ts';
@@ -617,6 +618,14 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     await runtime.verify?.();
     return 0;
   }
+  if (command === 'backlog') {
+    const json = flags.length === 0 && id === '--json';
+    if (subcommand !== 'status' || flags.length || (id !== undefined && !json))
+      throw new Error('usage: backlog status [--json]');
+    const rows = backlogStatus(runtime.stateDirectory);
+    console.log(json ? JSON.stringify(rows) : formatBacklogStatus(rows));
+    return 0;
+  }
   if (command === 'train') {
     await recordManagerCommand(runtime);
     if (runtime.train) {
@@ -759,9 +768,18 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         // Keep the attempt fence valid through insert so a concurrent retry cannot race source attribution.
         sender = runtime.db.transaction(() => deliver(resolveInboxSender(runtime))).immediate();
       } else {
-        sender = resolveInboxSender(runtime);
+        const manager = resolveInboxSender(runtime);
+        sender = manager;
         await recordManagerCommand(runtime);
-        deliver(sender);
+        // Goal managers send decisions, questions and handoffs only; the supermanager directs every Goal.
+        if (manager.managerId !== runtime.supermanager && !isResidentSupermanagerRecord(runtime, manager.managerId))
+          runtime.db
+            .transaction(() => {
+              inbox.assertManagerSend(manager.from, summary);
+              deliver(manager);
+            })
+            .immediate();
+        else deliver(manager);
       }
       if (
         !sender.worker &&

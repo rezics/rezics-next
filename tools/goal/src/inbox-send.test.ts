@@ -305,3 +305,29 @@ test('a stale worker source attempt cannot fall back to its inherited manager id
     t.close();
   }
 });
+
+test('a Goal manager may send six messages an hour of at most 600 characters; the supermanager is not capped', async () => {
+  const t = temporaryDirectory();
+  const db = openDb(join(t.path, 'state.sqlite'));
+  const inbox = new SqliteManagerInbox(db, t.path);
+  managerSession(db, 'kernel', 'kernel-thread');
+  managerSession(db, 'supermanager', 'super-thread');
+  const base = { ...process.env, FAKE_GOAL_STATE: t.path, FAKE_GOAL_MAIN: t.path };
+  const kernel = { ...base, GOAL_MANAGER: 'kernel', CODEX_THREAD_ID: 'kernel-thread' };
+  const supermanager = { ...base, GOAL_MANAGER: 'supermanager', CODEX_THREAD_ID: 'super-thread' };
+  try {
+    expect(await goal(kernel, 'inbox', 'send', 'accounts', 'decision', 'x'.repeat(601))).not.toBe(0);
+    for (let index = 1; index <= 6; index++)
+      expect(await goal(kernel, 'inbox', 'send', 'accounts', 'decision', `Decision ${index}`)).toBe(0);
+    expect(await goal(kernel, 'inbox', 'send', 'accounts', 'decision', 'Decision 7')).not.toBe(0);
+    expect(inbox.read('accounts').map((entry) => entry.event.summary)).toEqual(
+      [1, 2, 3, 4, 5, 6].map((index) => `Decision ${index}`),
+    );
+    for (let index = 1; index <= 7; index++)
+      expect(await goal(supermanager, 'inbox', 'send', 'kernel', 'instruction', `Direction ${index}`)).toBe(0);
+    expect(inbox.read('kernel')).toHaveLength(7);
+  } finally {
+    db.close();
+    t.close();
+  }
+});

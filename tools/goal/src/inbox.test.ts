@@ -142,3 +142,67 @@ test('width is a durable wakeable system event that is delivered only to its man
     s.close();
   }
 });
+
+test('identical deliveries to one recipient within an hour fold into one row with a count and wake once', () => {
+  const t = temporaryDirectory();
+  const db = openDb(join(t.path, 'state.sqlite'));
+  let now = Date.UTC(2026, 10, 2, 12);
+  const inbox = new SqliteManagerInbox(db, t.path, () => now);
+  try {
+    const alarm = { managerId: 'control-plane', kind: 'environment' as const, summary: 'x is not a working tree' };
+    inbox.deliver(alarm);
+    for (const entry of inbox.notifications('control-plane')) inbox.notified(entry.id);
+    for (let minute = 1; minute <= 59; minute++) {
+      now += 60_000 - 1;
+      inbox.deliver(alarm);
+    }
+    expect(inbox.notifications('control-plane')).toHaveLength(0);
+    expect(inbox.pending('control-plane')).toMatchObject([{ event: alarm, deliveries: 60 }]);
+    // Another recipient, another task or another first line is a different delivery.
+    inbox.deliver({ ...alarm, managerId: 'supermanager' });
+    inbox.deliver({ ...alarm, taskId: 'task-1' });
+    inbox.deliver({ ...alarm, summary: 'y is not a working tree' });
+    expect(inbox.pending('control-plane')).toHaveLength(3);
+    expect(inbox.pending('supermanager')).toHaveLength(1);
+    // A record is never folded; after the hour the same line is delivered again.
+    inbox.record('control-plane', { kind: 'merged' });
+    inbox.record('control-plane', { kind: 'merged' });
+    expect((db.query('SELECT count(*) AS n FROM manager_inbox WHERE wakeable = 0').get() as { n: number }).n).toBe(2);
+    now = Date.UTC(2026, 10, 2, 13, 0, 0, 1);
+    inbox.deliver(alarm);
+    expect(inbox.pending('control-plane')).toHaveLength(4);
+    expect(inbox.notifications('control-plane').map((entry) => entry.event.summary)).toContain(alarm.summary);
+  } finally {
+    db.close();
+    t.close();
+  }
+});
+
+test('manager sends are capped at six an hour and 600 characters, except the continuation handshake', () => {
+  const t = temporaryDirectory();
+  const db = openDb(join(t.path, 'state.sqlite'));
+  let now = Date.UTC(2026, 10, 2, 12);
+  const inbox = new SqliteManagerInbox(db, t.path, () => now);
+  try {
+    const send = (summary: string) => {
+      inbox.assertManagerSend('web', summary);
+      inbox.deliver({ managerId: 'search', kind: 'decision', summary, from: 'web' });
+    };
+    expect(() => inbox.assertManagerSend('web', 'x'.repeat(601))).toThrow(/601 characters.*at most 600/);
+    for (let index = 1; index <= 6; index++) {
+      send(`Decision ${index}`);
+      now += 60_000;
+    }
+    expect(() => send('Decision 7')).toThrow(/web has sent 6 messages in the last hour and the limit is 6/);
+    expect(() => send('continuation written')).not.toThrow();
+    // System alarms carry no sender and are never capped.
+    for (let index = 0; index < 10; index++)
+      inbox.deliver({ managerId: 'web', kind: 'environment', summary: `Alarm ${index}` });
+    expect(inbox.pending('web')).toHaveLength(10);
+    now = Date.UTC(2026, 10, 2, 13, 0, 0, 1);
+    expect(() => send('Decision 8')).not.toThrow();
+  } finally {
+    db.close();
+    t.close();
+  }
+});

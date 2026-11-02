@@ -1033,6 +1033,14 @@ the page limit, continuation cursor and `hasMore`. The exported `SharedInboxQuer
 `thread` and `digest` reads to operations reports after they have actually been delivered; it does not schedule or send
 an hourly report.
 
+A delivery identical to one made to the same recipient within the last hour is not stored again: the earlier row's
+`delivery_count` and `last_delivered_at` change, nobody is woken, and `inbox read` shows the count as `deliveries`.
+Identity is the recipient, kind, sender, task, reply target and the summary's first line, so the same alarm for two
+tasks stays two events. Records and completion results (`goal-met`, `goal-unmet`) are never folded. A Goal manager's `inbox send` is refused above six sends in the last
+hour or 600 characters, with an error that says which limit was reached; the configured supermanager, workers and
+system events are not capped, and the `continuation written` handshake neither counts nor is refused by the hourly
+limit.
+
 Inbox kinds are explicit. `question` starts an open question. Only a direct linked `info` or `decision` reply answers
 it; another `question` is a clarification and remains open. A `blocker`, `handoff`, `instruction`, system event, read,
 notification or acknowledgement is not an answer. `--reply` takes an existing numeric message id, stores that exact
@@ -1269,12 +1277,41 @@ Goal in each UTC 15-minute bucket when fewer than ten current attempts have live
 pending-start, held or stopped work exists. The event reports the current running and Codex counts, unknown process
 evidence, and known work counts. Ready, held, waiting and stale-identity attempts do not count as running. The manager
 is alerted based on confirmed live workers only; unknown process identities remain explicit evidence and do not
-suppress a low-width notice. Events retain their Goal metadata for shared inbox queries. The manager
-chooses whether to recover, reshape or dispatch real work under the existing source-ownership, current-attempt and
-physical-custody guards; stopped work is never restarted automatically. Runtime metadata cannot observe unsubmitted
+suppress a low-width notice. Events retain their Goal metadata for shared inbox queries. The event tells the manager
+to recover, reshape or dispatch real work, to act on each stopped task within an hour (retry with a rewritten brief,
+split or cancel) and to keep at least eight ready briefs in its backlog. Runtime metadata cannot observe unsubmitted
 work, so Markdown files outside the task inventory are not counted. The notice uses the existing manager turn
-allowance, with at most one width event per Goal per 15-minute bucket; paused, budget-limited and completed managers
-are protected.
+allowance, with at most one width event per Goal per 15-minute bucket; an identical event within the hour folds into
+the earlier one (see [shared inbox](#shared-inbox)). Paused, budget-limited and completed managers are protected.
+
+#### Goal backlogs
+
+A manager's output is ready briefs; the controller dispatches them. Each Goal has a backlog directory,
+`<state>/backlog/<goal>/`, and the width sweep runs one backlog step after the width check:
+
+- **Dispatch.** While running and ready tasks are fewer than the cap (`maxWorkers` in `<state>/capacity.json`, else
+  32), the sweep dispatches up to four of the oldest `*.md` briefs, by modification time, round-robin across Goals,
+  starting with the Goal served longest ago. A brief changed in the last ten seconds waits for the next sweep. It uses
+  the `goal dispatch` path in the host process: the task is created, its first attempt starts without the sweep waiting
+  for it, and the brief moves to `dispatched/<task-id>-<name>.md`. Research briefs dispatch the same way. A refused
+  brief moves to `failed/<name>.md` beside `failed/<name>.reason`, and the Goal's manager receives one event per sweep
+  naming the refused briefs. A brief left in `.dispatching/` by a host that stopped mid-dispatch goes to `failed/` with
+  that reason, since its task may already exist.
+- **Stopped tasks.** A product task that has been `stopped` for more than 60 minutes since its last event, with no
+  pending retry, is cancelled through the `goal cancel` path. Its brief is written to `failed/<task-id>.md` and its
+  blocker and branch to `failed/<task-id>.reason`; each owner receives one event per sweep listing those tasks.
+  Control-plane, stabilize and verification tasks are exempt.
+- **Low backlog.** A running Goal manager whose backlog holds fewer than four ready briefs receives at most one
+  event an hour asking for more.
+
+`goal backlog status [--json]` prints ready, dispatched and failed brief counts per Goal. It reads only the
+directories.
+
+#### Cost: backlog step
+
+- **Touches:** one indexed count of running and ready tasks, the stopped tasks through the task-state index with one
+  latest-event lookup each, the running manager rows, and the backlog directories' entries.
+- **Bound:** at most four dispatches per sweep; the stopped scan is proportional to stopped tasks, not task history.
 
 ### Check result reuse
 
@@ -1395,14 +1432,21 @@ probe is retried up to twice and remains unassigned if it still cannot run; it i
 moves expensive checks after integration and lets a batch share them while keeping unstable `dev` separate from
 promotion's verified input.
 
-When a Codex manager reaches 90% of its token budget, the host delivers one instruction to write
-`.temp/goal/<manager>/CONTINUATION.md` with live task IDs and states, current decisions, pending cross-owner agreements
-and next actions, then message its supermanager with `continuation written`. A confirmation or a `budgetLimited` Goal
+When a Codex manager reaches 90% of its token budget, the host delivers one instruction to replace
+`.temp/goal/<manager>/CONTINUATION.md` with at most 8,000 characters (live task IDs, decisions in force as links to
+owner documents, and next actions), without appending to the old file, then message its supermanager with
+`continuation written`. A confirmation or a `budgetLimited` Goal
 automatically pauses and renews the manager with a fresh thread. If the continuation file exists, the new thread's first
 prompt names it; the supermanager receives one environment event with the old token count and new thread. A manual
 `manager renew` also accepts Codex Goals in `budgetLimited` or `blocked` status without a separate stop.
 
 Manager events are committed to SQLite and signaled through filesystem notifications. Inbox waiting has no sleep loop.
+Codex managers are event-driven: the opening tells a manager to end the turn when no decision is pending. When an
+event is delivered, the host steers it into the manager's active turn or starts a new turn on the persisted thread; if
+the app-server has not loaded that thread, the host resumes it once and starts the turn there. The opening also states
+the manager's outputs (ready briefs in its backlog and decisions), the stopped-task hour, the message limits, and that
+the brief and continuation are read once per session. The host counts `clock.sleep` items per manager and UTC hour;
+the eleventh in an hour sends the supermanager one `environment` alarm and the manager one correction.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is
 a proposal: `manager complete <goal>` records the request and returns immediately while the host checks that all scoped
 tasks are merged and the main gate passes in an isolated checkout. The gate checks the main commit captured when it

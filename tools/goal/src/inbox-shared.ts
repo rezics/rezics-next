@@ -49,6 +49,16 @@ const inboxMigrations = [
         WHEN OLD.created_at IS NOT NEW.created_at
         BEGIN SELECT RAISE(ABORT, 'manager inbox creation time is immutable'); END;`,
   },
+  {
+    module: 'inbox',
+    version: 3,
+    sql: `
+      ALTER TABLE manager_inbox ADD COLUMN dedupe_key TEXT;
+      ALTER TABLE manager_inbox ADD COLUMN delivery_count INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE manager_inbox ADD COLUMN last_delivered_at INTEGER;
+      CREATE INDEX manager_inbox_dedupe ON manager_inbox(dedupe_key, created_at) WHERE dedupe_key IS NOT NULL;
+      CREATE INDEX manager_inbox_sender_created ON manager_inbox(sender, created_at);`,
+  },
 ] as const;
 
 /** The writer and all read-only consumers use this one schema contract. Historical arrival times stay unknown. */

@@ -114,10 +114,13 @@ test('a Codex manager reaching 90% of its budget is asked once to write a contin
     const instructions = s.inbox.pending(started.id).filter((entry) => entry.event.kind === 'instruction');
     expect(instructions).toHaveLength(1);
     expect(instructions[0]!.event.summary).toContain('.temp/goal/manager/CONTINUATION.md');
-    expect(instructions[0]!.event.summary).toContain('live task IDs and states');
-    expect(instructions[0]!.event.summary).toContain('decisions in force');
-    expect(instructions[0]!.event.summary).toContain('pending cross-owner agreements');
+    expect(instructions[0]!.event.summary).toContain(
+      'Replace .temp/goal/manager/CONTINUATION.md with at most 8,000 characters',
+    );
+    expect(instructions[0]!.event.summary).toContain('live task IDs');
+    expect(instructions[0]!.event.summary).toContain('decisions in force as links to owner documents');
     expect(instructions[0]!.event.summary).toContain('next actions');
+    expect(instructions[0]!.event.summary).toContain('Do not append to the old file');
     expect(instructions[0]!.event.summary).toContain('continuation written');
     expect(s.managers.get(started.id)).toMatchObject({
       continuationAsked: true,
