@@ -296,6 +296,8 @@ test('Statement consent composes the complete family with isolated confirmation,
       cache: 'no-store',
     });
     expect(host.textContent).toContain(m.statement_consent_uncertain());
+    for (const readAction of [m.statement_consent_retry_page(), m.statement_consent_restart()])
+      expect([...host.querySelectorAll('button')].some((node) => node.textContent === readAction)).toBe(false);
     expect(checkbox(host).hasAttribute('data-disabled')).toBe(true);
     expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.candidate_cancel())).toBe(false);
     await click(button(host, m.candidate_retry()));
