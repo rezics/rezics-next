@@ -996,6 +996,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     nextClient.setQueryData(sessionQuery.queryKey, signedOut());
     pageReader = async (input) => pageFor(input.address, true, input.credentialMode);
     const route = await loadSpaceRoute(nextClient);
+    await mount(<PageFrame page={route.page} admission={route.admission} />, { queryClient: nextClient });
     let boardCall = 0;
     boardReader = async () => {
       boardCall++;
@@ -1009,7 +1010,6 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
       next: null,
       unavailable: 0,
     });
-    await mount(<PageFrame page={route.page} admission={route.admission} />, { queryClient: nextClient });
     click(m.realm_boards_more());
     click(m.realm_publications_more());
     await settle();
