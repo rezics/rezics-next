@@ -188,16 +188,20 @@ test('A newly selected retained facet property keeps cursor-cycle history and it
 
 test('a replacement property keeps consumed cursors until genuine eviction removes its cache', async () => {
   const p8Cursors: (string | undefined)[] = [];
-  let p8 = { value: 'selected-p8', next: 'cursor-0' as string | null };
+  let evicted = false;
   await replace(
     makeProps('first', async (facets) => {
       const property = facets[0]!.property;
+      const cursor = facets[0]?.cursor;
       if (property === 'schema:p8') {
-        p8Cursors.push(facets[0]?.cursor);
-        return ready(p8.value, p8.next, property);
+        p8Cursors.push(cursor);
+        if (evicted) return ready('fresh schema:p8', cursor === undefined ? 'cursor-0' : 'cursor-1', property);
+        if (cursor === undefined) return ready('selected-p8', 'cursor-0', property);
+        if (cursor === 'cursor-0') return ready('continued-p8', 'cursor-1', property);
+        return ready('cycled-p8', 'cursor-0', property);
       }
       if (property === 'schema:p0')
-        return ready('later-p0', facets[0]?.cursor === 'p0-cursor-0' ? 'p0-cursor-1' : 'p0-cursor-2', property);
+        return ready('later-p0', cursor === 'p0-cursor-0' ? 'p0-cursor-1' : 'p0-cursor-2', property);
       return ready(`fresh ${property}`, null, property);
     }),
   );
@@ -207,15 +211,13 @@ test('a replacement property keeps consumed cursors until genuine eviction remov
   await act(async () => moreFor('Property 0').click());
   expect(host.textContent).toContain('later-p0');
 
-  p8 = { value: 'continued-p8', next: 'cursor-1' };
   await act(async () => moreFor('Property 8').click());
-  p8 = { value: 'cycled-p8', next: 'cursor-0' };
   await act(async () => moreFor('Property 8').click());
   expect(host.textContent).toContain(m.refinement_restart());
   expect(host.textContent).toContain('continued-p8');
   expect(host.textContent).not.toContain('cycled-p8');
 
-  p8 = { value: 'fresh schema:p8', next: 'cursor-0' };
+  evicted = true;
   for (const index of [7, 6, 5, 4, 3, 2, 1, 0]) await selectProperty(`schema:p${index}`);
   expect(host.textContent).not.toContain('continued-p8');
 

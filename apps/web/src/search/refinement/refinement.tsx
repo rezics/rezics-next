@@ -101,7 +101,7 @@ function RefinementInstance({
   const [busy, setBusy] = useState(false);
   const active = useRef<AbortController | null>(null);
   const continuations = useRef(new FacetContinuationLedger(queryIdentity));
-  continuations.current.retain(initialShown);
+  continuations.current.retain(shown);
   const lastRead = useRef<{ facets: RequestedFacet[]; more?: string | undefined } | undefined>(undefined);
   const waiting = useSearchRetryWait(state && state.status !== 'ready' ? state.retryAt : undefined);
   useEffect(() => () => active.current?.abort(), []);
