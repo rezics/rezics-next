@@ -4563,5 +4563,8 @@
   "library_labels_address_cursor_description": "La position de page enregistrée est trop longue ou invalide. Modifiez-la pour continuer avec exactement le même préfixe, ou effacez la recherche.",
   "library_labels_address_cursor_label": "Position de page enregistrée",
   "library_labels_address_continue": "Continuer",
-  "library_labels_address_clear": "Effacer la recherche"
+  "library_labels_address_clear": "Effacer la recherche",
+  "correction_remove_qualifier": "Retirer le qualificatif ajouté",
+  "correction_remove_reference": "Retirer la référence ajoutée",
+  "correction_remove_reference_part": "Retirer la partie de référence ajoutée"
 }

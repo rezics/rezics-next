@@ -4563,5 +4563,8 @@
   "library_labels_address_cursor_description": "저장된 페이지 위치가 너무 길거나 올바르지 않습니다. 편집하면 같은 접두사로 계속할 수 있습니다. 검색을 지울 수도 있습니다.",
   "library_labels_address_cursor_label": "저장된 페이지 위치",
   "library_labels_address_continue": "계속",
-  "library_labels_address_clear": "검색 지우기"
+  "library_labels_address_clear": "검색 지우기",
+  "correction_remove_qualifier": "추가한 한정자 삭제",
+  "correction_remove_reference": "추가한 참고 자료 삭제",
+  "correction_remove_reference_part": "추가한 참고 자료 항목 삭제"
 }

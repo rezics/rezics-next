@@ -4598,5 +4598,8 @@
   "library_labels_address_cursor_description": "The saved page position is too long or malformed. Edit it to continue with the exact same prefix, or clear the search.",
   "library_labels_address_cursor_label": "Saved page position",
   "library_labels_address_continue": "Continue",
-  "library_labels_address_clear": "Clear search"
+  "library_labels_address_clear": "Clear search",
+  "correction_remove_qualifier": "Remove added qualifier",
+  "correction_remove_reference": "Remove added reference",
+  "correction_remove_reference_part": "Remove added reference part"
 }

@@ -506,7 +506,9 @@ function PartEditor({
   onChange,
   control,
   feedback,
+  removal,
 }: {
+  removal?: ReactNode;
   feedback?: ScalarFeedback | undefined;
   control?: ((part: SnakInput, change: (value: SnakInput['value']) => void) => ReactNode) | undefined;
   part: SnakInput;
@@ -534,6 +536,7 @@ function PartEditor({
             onChange={onChange}
           />
         )}
+        {removal}
       </div>
     </ContentItemFrame>
   );
@@ -564,7 +567,7 @@ function AddPart({
   });
   if (!choices.length) return null;
   return (
-    <div className="flex min-w-0 flex-wrap items-end gap-3">
+    <div data-add-part className="flex min-w-0 flex-wrap items-end gap-3">
       <Field className="min-w-0 flex-1 basis-full sm:basis-48">
         <FieldLabel className={labelClassName} htmlFor={selectId}>
           {label}
@@ -623,6 +626,46 @@ export function StatementFields({
   heading?: 'h2' | 'h4';
 }) {
   const o = { locale: locale as never };
+  const lifetime = useEditorLifetime();
+  const addReference = useRef<HTMLButtonElement>(null);
+  const removalFocus = useRef<{ focus: () => void; isConnected: boolean } | null>(null);
+  useLayoutEffect(() => {
+    const target = removalFocus.current;
+    removalFocus.current = null;
+    if (lifetime.active() && target?.isConnected) target.focus();
+  });
+  // UI identity and local provenance never become native statement fields. Existing parts,
+  // including unsupported values, are protected even when definitions or values change.
+  const [identities] = useState(() => new WeakMap<object, { key: number; added: boolean }>());
+  const sequence = useRef(0);
+  function identity(value: object, added = false) {
+    let entry = identities.get(value);
+    if (!entry) {
+      entry = { key: sequence.current++, added };
+      identities.set(value, entry);
+    }
+    return entry;
+  }
+  function addition<T extends object>(value: T): T {
+    identity(value, true);
+    return value;
+  }
+  function revision<T extends object>(previous: T, next: T): T {
+    identities.set(next, identity(previous));
+    return next;
+  }
+  function remove(next: StatementInput, button: HTMLButtonElement, kind: 'qualifier' | 'reference' | 'part') {
+    if (!lifetime.active() || button.matches(':disabled')) return;
+    const scope = button.closest<HTMLElement>(kind === 'part' ? 'fieldset' : 'section');
+    const target =
+      kind === 'reference'
+        ? addReference.current
+        : ((scope?.querySelector('[data-add-part] select') as HTMLSelectElement | null) ?? scope);
+    // Wait for removal to re-enable Add reference when the draft was at its group limit.
+    // Stable keys keep surviving custom controls and unfinished selections mounted.
+    removalFocus.current = target ?? null;
+    change(next);
+  }
   const definition = current.release.properties[draft.property.id];
   const section = (name: string) => ({ id: feedback ? `${feedback.id}-${name}` : undefined, tabIndex: -1 });
   const scalarFeedback = (address: string) => (feedback ? { ...feedback, address } : undefined);
@@ -672,14 +715,34 @@ export function StatementFields({
           <PartEditor
             control={partControl}
             feedback={scalarFeedback(`qualifier-${index}`)}
-            key={index}
+            key={identity(part).key}
             part={part}
             read={current}
             locale={locale}
+            removal={
+              identity(part).added && (
+                <Button
+                  className={actionClassName}
+                  type="button"
+                  variant="ghost"
+                  onClick={(event) =>
+                    remove(
+                      { ...draft, qualifiers: draft.qualifiers!.filter((_, i) => i !== index) },
+                      event.currentTarget,
+                      'qualifier',
+                    )
+                  }
+                >
+                  {m.correction_remove_qualifier({}, o)}
+                </Button>
+              )
+            }
             onChange={(value) =>
               change({
                 ...draft,
-                qualifiers: draft.qualifiers!.map((item, i) => (i === index ? { ...item, value } : item)),
+                qualifiers: draft.qualifiers!.map((item, i) =>
+                  i === index ? revision(item, { ...item, value }) : item,
+                ),
               })
             }
           />
@@ -693,7 +756,10 @@ export function StatementFields({
           onAdd={(id) =>
             change({
               ...draft,
-              qualifiers: [...(draft.qualifiers ?? []), { property: { id }, value: { type: 'value', content: '' } }],
+              qualifiers: [
+                ...(draft.qualifiers ?? []),
+                addition({ property: { id }, value: { type: 'value', content: '' } }),
+              ],
             })
           }
         />
@@ -704,7 +770,11 @@ export function StatementFields({
         </ContentItemHeading>
         <p className="text-sm text-muted-foreground">{m.correction_citation_hint({}, o)}</p>
         {draft.references.map((reference, index) => (
-          <fieldset key={index} className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4">
+          <fieldset
+            key={identity(reference).key}
+            tabIndex={-1}
+            className={`${sectionClassName} border border-border bg-card p-4`}
+          >
             <legend className="max-w-full whitespace-normal px-1 text-sm font-medium [overflow-wrap:anywhere]">
               {m.correction_references({}, o)} {index + 1}
             </legend>
@@ -712,17 +782,48 @@ export function StatementFields({
               <PartEditor
                 control={partControl}
                 feedback={scalarFeedback(`reference-${index}-part-${partIndex}`)}
-                key={partIndex}
+                key={identity(part).key}
                 part={part}
                 read={current}
                 locale={locale}
+                removal={
+                  identity(part).added && (
+                    <Button
+                      className={actionClassName}
+                      type="button"
+                      variant="ghost"
+                      onClick={(event) =>
+                        remove(
+                          {
+                            ...draft,
+                            references: draft.references.map((item, i) =>
+                              i !== index
+                                ? item
+                                : revision(item, {
+                                    parts: item.parts.filter((_, n) => n !== partIndex),
+                                  }),
+                            ),
+                          },
+                          event.currentTarget,
+                          'part',
+                        )
+                      }
+                    >
+                      {m.correction_remove_reference_part({}, o)}
+                    </Button>
+                  )
+                }
                 onChange={(value) =>
                   change({
                     ...draft,
                     references: draft.references.map((item, i) =>
                       i !== index
                         ? item
-                        : { parts: item.parts.map((snak, n) => (n === partIndex ? { ...snak, value } : snak)) },
+                        : revision(item, {
+                            parts: item.parts.map((snak, n) =>
+                              n === partIndex ? revision(snak, { ...snak, value }) : snak,
+                            ),
+                          }),
                     ),
                   })
                 }
@@ -740,19 +841,38 @@ export function StatementFields({
                   references: draft.references.map((item, i) =>
                     i !== index
                       ? item
-                      : { parts: [...item.parts, { property: { id }, value: { type: 'value', content: '' } }] },
+                      : revision(item, {
+                          parts: [...item.parts, addition({ property: { id }, value: { type: 'value', content: '' } })],
+                        }),
                   ),
                 })
               }
             />
+            {identity(reference).added && (
+              <Button
+                className={actionClassName}
+                type="button"
+                variant="ghost"
+                onClick={(event) =>
+                  remove(
+                    { ...draft, references: draft.references.filter((_, i) => i !== index) },
+                    event.currentTarget,
+                    'reference',
+                  )
+                }
+              >
+                {m.correction_remove_reference({}, o)}
+              </Button>
+            )}
           </fieldset>
         ))}
         <Button
+          ref={addReference}
           className={actionClassName}
           type="button"
           variant="outline"
           disabled={draft.references.length >= 16}
-          onClick={() => change({ ...draft, references: [...draft.references, { parts: [] }] })}
+          onClick={() => change({ ...draft, references: [...draft.references, addition({ parts: [] })] })}
         >
           {m.correction_add_reference({}, o)}
         </Button>

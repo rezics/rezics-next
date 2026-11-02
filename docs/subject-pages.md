@@ -409,6 +409,10 @@ Controls follow the current emitted property definition: text and value language
 precision with its declared calendar, and quantity with explicit admitted units and optional bounds. No unit,
 calendar, date precision or word-count coverage is inferred. Known, unknown and no-value remain distinct.
 Qualifiers use the property's admitted definitions. Citations retain their statement-level groups and parts.
+A contributor can remove a qualifier, reference group or reference part added through the current draft controls;
+removal immediately returns focus to its surviving add control (or section if no choices remain). Removing the
+last added part leaves its local reference group available for another part or explicit group removal. Parts
+present when the controls open remain protected; removal never edits selected evidence or submits a command.
 Unsupported qualifier or citation values remain visible and are submitted intact with an explanation; an assertion
 that is no longer safe under current definitions is rejected without narrowing it. Definition labels use the
 existing locale fallback; a value's language remains authored data.

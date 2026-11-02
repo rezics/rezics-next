@@ -4563,5 +4563,8 @@
   "library_labels_address_cursor_description": "Die gespeicherte Seitenposition ist zu lang oder ungültig. Bearbeite sie, um mit genau demselben Präfix fortzufahren, oder lösche die Suche.",
   "library_labels_address_cursor_label": "Gespeicherte Seitenposition",
   "library_labels_address_continue": "Fortfahren",
-  "library_labels_address_clear": "Suche löschen"
+  "library_labels_address_clear": "Suche löschen",
+  "correction_remove_qualifier": "Hinzugefügten Qualifikator entfernen",
+  "correction_remove_reference": "Hinzugefügte Referenz entfernen",
+  "correction_remove_reference_part": "Hinzugefügten Referenzteil entfernen"
 }

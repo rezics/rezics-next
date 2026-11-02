@@ -4563,5 +4563,8 @@
   "library_labels_address_cursor_description": "La posición de página guardada es demasiado larga o no es válida. Edítala para continuar con el mismo prefijo exacto o borra la búsqueda.",
   "library_labels_address_cursor_label": "Posición de página guardada",
   "library_labels_address_continue": "Continuar",
-  "library_labels_address_clear": "Borrar búsqueda"
+  "library_labels_address_clear": "Borrar búsqueda",
+  "correction_remove_qualifier": "Quitar el calificador añadido",
+  "correction_remove_reference": "Quitar la referencia añadida",
+  "correction_remove_reference_part": "Quitar la parte de referencia añadida"
 }

@@ -443,6 +443,7 @@ function fixture(
         };
       }
       if (invocation.phase === 'run-prepared') {
+        expect(existsSync(prepared.environmentFile)).toBe(true);
         const raw = terminalMessages(descriptor, options.nativeExitCode ?? 0, prepared.returns, options);
         const native = options.tamperNativeBinding
           ? { ...raw.native, binding: { ...descriptor.binding, argvSha256: sha('foreign binding') } }

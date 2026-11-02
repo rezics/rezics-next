@@ -1001,7 +1001,7 @@ function removeEnvironmentInput(files: WebCheckPrivateFiles, record: WebCustodyR
   }
 }
 
-/** Remove the one-shot private input after its prepare caller has closed, or while unwinding before dispatch. */
+/** Remove the private input after its last consuming caller closes, or while unwinding before dispatch. */
 export function disposeWebCheckEnvironmentInput(files: WebCheckPrivateFiles): void {
   if (files.environmentFile !== join(resolve(files.directory), 'environment.json'))
     throw new Error('Web check custody: private environment path escaped its invocation directory');
@@ -2309,7 +2309,6 @@ export async function runPreparedWebCheck(
     prepare = { code: null, signal: null, closed: false, output: '', outputOverflow: false };
   }
   record.cancellation = { requested: Boolean(signal?.aborted), signal: signal?.aborted ? signalNumber(signal) : null };
-  if (prepare.closed) removeEnvironmentInput(input.files, record);
   persistRecord(input.files, record);
   let descriptor: PreparedCheckRunDescriptor | null = null;
   let descriptorRaw: Buffer | null = null;
@@ -2375,9 +2374,9 @@ export async function runPreparedWebCheck(
     !prepare.closed ||
     prepare.outputOverflow ||
     abortAfterPrepare ||
-    prepareRejected ||
-    record.cleanup.environmentInput !== 'removed'
+    prepareRejected
   ) {
+    if (prepare.closed) removeEnvironmentInput(input.files, record);
     const recovered = await reconcileWithRuntime(
       runtime,
       input.files,
@@ -2430,6 +2429,7 @@ export async function runPreparedWebCheck(
   }
   const receiver = new FinalWireReceiver(descriptor, expected, record, input.files);
   if (signal?.aborted) {
+    removeEnvironmentInput(input.files, record);
     record.cancellation = { requested: true, signal: signalNumber(signal) };
     const recovered = await reconcileWithRuntime(
       runtime,
@@ -2471,6 +2471,8 @@ export async function runPreparedWebCheck(
     record.caller.run = { ...emptyProcessLifetime(), state: 'unknown' };
     run = { code: null, signal: null, closed: false, output: '', outputOverflow: false };
   }
+  // The producer revalidates the original environment against its binding during run-prepared admission.
+  if (run.closed) removeEnvironmentInput(input.files, record);
   const wire = receiver.finish();
   const cancellationRequested = Boolean(signal?.aborted);
   record.cancellation = {

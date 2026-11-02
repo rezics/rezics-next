@@ -4563,5 +4563,8 @@
   "library_labels_address_cursor_description": "保存されたページ位置が長すぎるか無効です。編集すると同じ接頭辞で続行できます。検索をクリアすることもできます。",
   "library_labels_address_cursor_label": "保存されたページ位置",
   "library_labels_address_continue": "続行",
-  "library_labels_address_clear": "検索をクリア"
+  "library_labels_address_clear": "検索をクリア",
+  "correction_remove_qualifier": "追加した修飾子を削除",
+  "correction_remove_reference": "追加した出典を削除",
+  "correction_remove_reference_part": "追加した出典の項目を削除"
 }

@@ -990,9 +990,13 @@ test('absolute host-path settings are dropped while runtime option refusals stay
 test('unsupported host dependencies and destinations fail before a driver or native process starts', async () => {
   expect(() => workspacePath(root, '/outside/screenshots')).toThrow('inside the candidate workspace');
   expect(() => webCheckEnvironment({ WEB_TEST_STATE_DIR: '/outside/state' }, root, app)).toThrow();
-  expect(webCheckEnvironment({ NATIVE_CONFIG_FILE: '/outside/config' }, root, app)).not.toHaveProperty(
-    'NATIVE_CONFIG_FILE',
-  );
+  expect(
+    webCheckEnvironment(
+      { NATIVE_CONFIG_FILE: '/outside/config', EDITOR: '/usr/bin/vi', NVM_BIN: '/outside/bin', CI: '1' },
+      root,
+      app,
+    ),
+  ).toEqual({ CI: '1' });
   const f = fixture();
   await expect(
     routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['bun', 'test', '/outside/test.ts'] }), {}, f.adapter),

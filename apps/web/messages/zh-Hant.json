@@ -4563,5 +4563,8 @@
   "library_labels_address_cursor_description": "儲存的位置過長或無效。編輯後可使用完全相同的前綴繼續，也可以清除搜尋。",
   "library_labels_address_cursor_label": "儲存位置",
   "library_labels_address_continue": "繼續",
-  "library_labels_address_clear": "清除搜尋"
+  "library_labels_address_clear": "清除搜尋",
+  "correction_remove_qualifier": "移除新增的限定詞",
+  "correction_remove_reference": "移除新增的參考資料",
+  "correction_remove_reference_part": "移除新增的參考資料部分"
 }

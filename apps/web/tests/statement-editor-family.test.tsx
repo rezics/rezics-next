@@ -267,6 +267,12 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     expect(control(first, m.correction_upper()).value).toBe('+1.76');
     expect(first.textContent).toContain(m.correction_preserved());
     const firstIds = [...first.querySelectorAll<HTMLLabelElement>('label')].map((node) => node.htmlFor);
+    for (const label of [
+      m.correction_remove_qualifier(),
+      m.correction_remove_reference(),
+      m.correction_remove_reference_part(),
+    ])
+      expect(buttons(host, label)).toHaveLength(0);
     const addQualifier = control(first, m.correction_add_qualifier());
     await input(addQualifier, 'schema:position');
     const addScope = addQualifier.closest('[data-slot="field"]')!.parentElement!;
@@ -306,10 +312,67 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     expect(draftChanges.A!.references).toEqual(original.references);
     associations(host);
 
+    // Undo only local additions, including a duplicate in the middle. Surviving controls
+    // keep their DOM identity and uncommitted property selection after indexes shift.
+    await click(first, m.correction_remove_qualifier());
+    expect(draftChanges.A).toEqual(original);
+    expect(window.document.activeElement).toBe(addQualifier);
+    for (let count = 0; count < 2; count++) {
+      await input(addQualifier, 'schema:position');
+      await click(addScope, m.correction_add());
+    }
+    const qualifierRemovals = buttons(first, m.correction_remove_qualifier());
+    const survivingValue = qualifierRemovals[1]!.parentElement!.querySelector<HTMLInputElement>('input')!;
+    await input(survivingValue, 'Keep this ordinal');
+    await act(async () => qualifierRemovals[0]!.click());
+    expect(draftChanges.A!.qualifiers).toEqual([
+      ...original.qualifiers!,
+      { property: { id: 'schema:position' }, value: { type: 'value', content: 'Keep this ordinal' } },
+    ]);
+    expect(button(first, m.correction_remove_qualifier()).parentElement!.querySelector('input')).toBe(survivingValue);
+    expect(window.document.activeElement).toBe(addQualifier);
+    await click(first, m.correction_remove_qualifier());
+    await click(second, m.correction_remove_reference_part());
+    expect(draftChanges.B!.references).toEqual(original.references);
+    expect(draftChanges.B!.qualifiers![1]!.value).toEqual({
+      type: 'value',
+      content: 'Independent spelling · 別の表記',
+    });
+    expect(window.document.activeElement).toBe(addPart);
+    await click(first, m.correction_add_reference());
+    const localGroup = first.querySelectorAll('fieldset')[2]!;
+    const localPartChoice = control(localGroup, m.correction_add_part());
+    await input(localPartChoice, 'schema:url');
+    await click(localPartChoice.closest('[data-slot="field"]')!.parentElement!, m.correction_add());
+    await click(localGroup, m.correction_remove_reference_part());
+    expect(draftChanges.A!.references).toEqual([...original.references, { parts: [] }]);
+    expect(window.document.activeElement).toBe(localPartChoice);
+    await click(first, m.correction_add_reference());
+    const survivingChoice = control(first, m.correction_add_part(), 3);
+    await input(survivingChoice, 'schema:url');
+    await click(localGroup, m.correction_remove_reference());
+    expect(control(first, m.correction_add_part(), 2)).toBe(survivingChoice);
+    expect(survivingChoice.value).toBe('schema:url');
+    expect(window.document.activeElement).toBe(button(first, m.correction_add_reference()));
+    for (let count = 0; count < 13; count++) await click(first, m.correction_add_reference());
+    expect(button(first, m.correction_add_reference()).disabled).toBe(true);
+    while (buttons(first, m.correction_remove_reference()).length) {
+      await act(async () => buttons(first, m.correction_remove_reference())[0]!.click());
+      expect(button(first, m.correction_add_reference()).disabled).toBe(false);
+      expect(window.document.activeElement).toBe(button(first, m.correction_add_reference()));
+    }
+    expect(draftChanges.A).toEqual(original);
+    associations(host);
+
     // No-choice -> choice on the same AddPart mount keeps unconditional DOM ids valid.
     const hiddenChoices = structuredClone(current);
     hiddenChoices.release.properties['schema:author']!.qualifiers = [];
+    await input(addQualifier, 'schema:position');
+    await click(addScope, m.correction_add());
     await render(pair(hiddenChoices));
+    await click(first, m.correction_remove_qualifier());
+    expect(window.document.activeElement).toBe(first.querySelectorAll('section')[1]!);
+    expect(draftChanges.A).toEqual(original);
     expect([...first.querySelectorAll('label')].some((node) => node.textContent === m.correction_add_qualifier())).toBe(
       false,
     );
@@ -416,6 +479,11 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     expect(year.value).toBe('1946');
     expect(year.matches(':disabled')).toBe(true);
     expect(buttons(host, m.correction_reload())).toHaveLength(0);
+    for (const label of [m.correction_remove_reference(), m.correction_remove_reference_part()]) {
+      expect(button(host, label).matches(':disabled')).toBe(true);
+      await click(host, label);
+    }
+    expect(control(host, m.correction_url(), 1).value).toBe(citation);
     expect(writes(fixture)).toHaveLength(1);
     const frozen = structuredClone(writes(fixture)[0]!);
     expect(frozen.body).toMatchObject({
