@@ -331,6 +331,14 @@ test('Statement consent composes the complete family with isolated confirmation,
     ).toBe(true);
 
     // Sparse reads never advance automatically; both failure shapes retain the exact page and token.
+    const continued = consentFixture('more');
+    await show(panel(continued));
+    await click(button(host, m.statement_consent_open()));
+    await until(() => !!host.querySelector('[data-consent-part="empty"]'));
+    await click(button(host, m.statement_consent_continue()));
+    await until(() => !!host.querySelector('[data-consent-part="assertion"]'));
+    expect(window.document.activeElement).toBe(host.querySelector('[data-consent-part="assertion"]')?.parentElement);
+
     for (const failure of ['returned', 'thrown'] as const) {
       const more = consentFixture('more');
       const pageInputs: unknown[][] = [];
