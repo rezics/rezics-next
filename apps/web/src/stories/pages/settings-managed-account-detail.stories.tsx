@@ -172,7 +172,7 @@ export const InitialReadRecovery: Story = {
     const canvas = within(context.canvasElement);
     await canvas.findByRole('alert');
     selectManagementStory('populated');
-    const retry = canvas.getByRole('button', { name: m.settings_retry(), exact: true });
+    const retry = canvas.getByRole('button', { name: m.settings_retry() });
     retry.focus();
     await expect(retry).toHaveFocus();
     await userEvent.keyboard('{Enter}');
