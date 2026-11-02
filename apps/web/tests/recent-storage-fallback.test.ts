@@ -38,15 +38,19 @@ test('storage removals and clear stay deleted while failed local writes survive 
   try {
     for (const clear of [false, true]) {
       const storage = createRecentBrowserStorage();
+      const direct = createRecentBrowserStorage();
       local.values.set(key, 'durable');
       expect(storage.getItem(key)).toBe('durable');
+      expect(direct.getItem(key)).toBe('durable');
       expect(observeRecentHistoryStorageEvent(storage, event(local.area, key, 'other'), 'account:other')).toBe(false);
       expect(observeRecentHistoryStorageEvent(storage, event({} as Storage, null), bucket)).toBe(false);
       if (clear) local.values.clear();
       else local.values.delete(key);
+      expect(direct.getItem(key)).toBeNull();
       expect(observeRecentHistoryStorageEvent(storage, event(local.area, clear ? null : key), bucket)).toBe(true);
       local.setUnavailable(true);
       expect(storage.getItem(key)).toBeNull();
+      expect(direct.getItem(key)).toBeNull();
       local.setUnavailable(false);
     }
 
