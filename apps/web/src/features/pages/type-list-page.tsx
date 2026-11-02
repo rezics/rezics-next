@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnonymousSessionContext, sessionQuery, useSession } from '../../session/query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
+import { isLocale } from '../../paraglide/runtime.js';
 import { useListReaderAdmission, type ListReaderSession } from './list-reader-admission';
 import { createConfiguredListRetryController } from './configured-list-retry';
 import { hasSelectedRealmTarget, typeListTargetFromPage } from './type-list-model';
@@ -53,6 +54,10 @@ function sameSession(left: ListReaderSession, right: ListReaderSession) {
     (left.subject ?? null) === (right.subject ?? null) &&
     left.csrfToken === right.csrfToken
   );
+}
+
+function listMessageOptions(locale: string) {
+  return { locale: isLocale(locale) ? locale : 'en' };
 }
 
 /** A route list observes the current session before admitting rows or continuation controls. */
@@ -218,14 +223,17 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
     }
   }
 
+  const messages = listMessageOptions(locale);
   const recovery = (unavailable: boolean) => (
     <div className="mx-auto max-w-5xl space-y-3" aria-busy={!unavailable}>
       <p role="status">
-        {unavailable ? m.configured_list_recovery_unavailable() : m.configured_list_recovery_pending()}
+        {unavailable
+          ? m.configured_list_recovery_unavailable({}, messages)
+          : m.configured_list_recovery_pending({}, messages)}
       </p>
       {unavailable ? (
         <Button variant="outline" disabled={retrying} onClick={() => void retry()}>
-          {m.configured_list_recovery_retry()}
+          {m.configured_list_recovery_retry({}, messages)}
         </Button>
       ) : null}
     </div>
@@ -286,7 +294,7 @@ export function TypeListPage({
         {...(page.account ? { account: page.account } : {})}
         listTarget={target}
         fullList={node}
-        messages={subjectPageMessages()}
+        messages={subjectPageMessages(listMessageOptions(locale).locale)}
       >
         <TypeList {...list.props} />
       </PageData>
