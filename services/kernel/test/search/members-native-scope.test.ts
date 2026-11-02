@@ -149,10 +149,14 @@ async function preparedFixture(native: Runtime) {
   const { collection } = (await header.json()) as { collection: { revision: number } };
   expect(
     (
-      await native.send(
-        f.owner,
-        'DELETE',
-        `/v1/collections/${f.collectionId}/members/${members[2]!.id}?revision=${collection.revision}`,
+      await native.kernel.handle(
+        new Request(
+          `http://kernel.test/v1/collections/${f.collectionId}/members/${members[2]!.id}?revision=${collection.revision}`,
+          {
+            method: 'DELETE',
+            headers: { authorization: `Bearer ${f.owner.bearer}`, 'idempotency-key': JSON.stringify(randomUUID()) },
+          },
+        ),
       )
     ).status,
   ).toBe(204);
