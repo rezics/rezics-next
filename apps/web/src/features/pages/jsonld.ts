@@ -1,6 +1,7 @@
 import { hasPublicMean, PUBLIC_RATING_SCALE } from './subject-ratings';
 import type { PublicFigure } from './subject-ratings';
 import { pickLanguage } from '@rezics/composition';
+import { isExists } from 'date-fns/isExists';
 import {
   checkDocument,
   documentParagraphs,
@@ -91,18 +92,27 @@ function record(value: unknown): value is Record<string, unknown> {
 function date(value: unknown): string | undefined {
   // Accept both a time payload and an explicitly wrapped time value.
   if (record(value) && value.type === 'value') value = value.content;
-  if (!record(value) || typeof value.time !== 'string' || typeof value.precision !== 'number') return;
-  if (!Number.isInteger(value.precision) || value.precision < 9) return;
-  const parts = /^\+?(\d+)-(\d{2})-(\d{2})T/.exec(value.time);
-  if (!parts || !/[1-9]/.test(parts[1]!)) return;
-  const year = parts[1]!.replace(/^0+/, '').padStart(4, '0');
-  if (value.precision === 9) return year;
-  const month = Number(parts[2]);
-  if (month < 1 || month > 12) return;
-  if (value.precision === 10) return `${year}-${parts[2]}`;
-  const day = Number(parts[3]);
-  if (day < 1 || day > 31) return;
-  return `${year}-${parts[2]}-${parts[3]}`;
+  if (!record(value)) return;
+  const { time, precision } = value;
+  if (typeof time !== 'string' || typeof precision !== 'number') return;
+  if (!Number.isInteger(precision) || precision < 9) return;
+  const parts = /^\+?(\d+)-(\d{2})-(\d{2})T/.exec(time);
+  if (!parts) return;
+  const yearDigits = parts[1]!;
+  if (!/[1-9]/.test(yearDigits)) return;
+  const year = yearDigits.replace(/^0+/, '').padStart(4, '0');
+  if (precision === 9) return year;
+  const month = parts[2]!;
+  const monthNumber = Number(month);
+  if (monthNumber < 1 || monthNumber > 12) return;
+  const yearMonth = `${year}-${month}`;
+  if (precision === 10) return yearMonth;
+  const day = parts[3]!;
+  // Gregorian dates repeat every 400 years. An equivalent year keeps validation within
+  // Date's range, avoids its 0–99 year offset and preserves arbitrarily long authored years.
+  const calendarYear = 400 + (Number(year.slice(-4)) % 400);
+  if (!isExists(calendarYear, monthNumber - 1, Number(day))) return;
+  return `${yearMonth}-${day}`;
 }
 
 /** The released property measures integer minutes; never round or guess a unit. */
