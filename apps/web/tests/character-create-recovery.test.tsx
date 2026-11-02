@@ -14,8 +14,16 @@ test('required Character metadata recovery gates new commands and preserves priv
   const window = new Window({ url: 'https://site.test/en/catalogue/character' });
   const globals = {
     ...Object.fromEntries(
-      ['document', 'navigator', 'HTMLElement', 'Element', 'Node', 'Document', 'DocumentFragment', 'MutationObserver']
-        .map((key) => [key, Reflect.get(window, key)]),
+      [
+        'document',
+        'navigator',
+        'HTMLElement',
+        'Element',
+        'Node',
+        'Document',
+        'DocumentFragment',
+        'MutationObserver',
+      ].map((key) => [key, Reflect.get(window, key)]),
     ),
     window,
     getComputedStyle: window.getComputedStyle.bind(window),
@@ -53,31 +61,46 @@ test('required Character metadata recovery gates new commands and preserves priv
     create: async (command: CharacterCommand) => {
       commands.push(command);
       if (commands.length === 1) return { ok: false as const, reason: 'invalid' as const, refreshDefinitions: true };
-      if (commands.length === 2) return { ok: false as const, reason: 'unavailable' as const, refreshDefinitions: true };
+      if (commands.length === 2)
+        return { ok: false as const, reason: 'unavailable' as const, refreshDefinitions: true };
       return fixture.transport.create(command);
     },
   };
   const click = (name: string) => act(async () => user.click(canvas.getByRole('button', { name })));
   const input = (name: string, index = 0) => canvas.getAllByRole('textbox', { name })[index] as HTMLInputElement;
-  const replace = (control: HTMLElement, value: string) => act(async () => {
-    await user.clear(control);
-    await user.type(control, value);
-  });
-  const submit = () => act(async () => {
-    host.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-  });
+  const replace = (control: HTMLElement, value: string) =>
+    act(async () => {
+      await user.clear(control);
+      await user.type(control, value);
+    });
+  const submit = () =>
+    act(async () => {
+      host.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    });
   try {
-    await act(async () => root.render(
-      <QueryClientProvider client={client}>
-        <CandidateReaderBoundary address="character-recovery" observed={{ state: 'signed-in', subject: 'reader', csrfToken: 'original' }}>
-          <CharacterProfileCreate release={fixture.release} locale="en" transport={transport}
-            onCreated={() => { created++; }} onRefreshDefinitions={async () => {
-              if (++refreshes < 3) throw new Error('Metadata unavailable');
-              return current;
-            }} />
-        </CandidateReaderBoundary>
-      </QueryClientProvider>,
-    ));
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <CandidateReaderBoundary
+            address="character-recovery"
+            observed={{ state: 'signed-in', subject: 'reader', csrfToken: 'original' }}
+          >
+            <CharacterProfileCreate
+              release={fixture.release}
+              locale="en"
+              transport={transport}
+              onCreated={() => {
+                created++;
+              }}
+              onRefreshDefinitions={async () => {
+                if (++refreshes < 3) throw new Error('Metadata unavailable');
+                return current;
+              }}
+            />
+          </CandidateReaderBoundary>
+        </QueryClientProvider>,
+      ),
+    );
     await replace(input(m.catalogue_create_label()), 'Traveler');
     await click(m.catalogue_create_add_language());
     await replace(input(m.catalogue_create_language(), 1), 'ja');
@@ -106,7 +129,9 @@ test('required Character metadata recovery gates new commands and preserves priv
     expect(refreshes).toBe(3);
     expect(commands).toHaveLength(1);
     expect(canvas.queryByRole('textbox', { name: m.correction_url() })).toBeNull();
-    expect(host.querySelector('[data-slot="character-initial-fact"] code')!.textContent).toContain('https://example.org/edited');
+    expect(host.querySelector('[data-slot="character-initial-fact"] code')!.textContent).toContain(
+      'https://example.org/edited',
+    );
     expect(host.textContent).toContain(m.character_create_correction_summary());
     await submit();
     expect(commands).toHaveLength(1);
@@ -115,8 +140,12 @@ test('required Character metadata recovery gates new commands and preserves priv
     await click(m.character_create());
     expect(commands).toHaveLength(2);
     expect(commands[1]!.key).not.toBe(commands[0]!.key);
-    expect(commands[1]!.item).toMatchObject({ labels: { en: 'Traveler', ja: '新しい旅人' },
-      descriptions: { ja: 'Private description' }, aliases: { ja: ['旅行者'] }, statements: {} });
+    expect(commands[1]!.item).toMatchObject({
+      labels: { en: 'Traveler', ja: '新しい旅人' },
+      descriptions: { ja: 'Private description' },
+      aliases: { ja: ['旅行者'] },
+      statements: {},
+    });
     expect(input(m.catalogue_create_label()).closest('fieldset[disabled]')).not.toBeNull();
     const sealed = structuredClone(commands[1]);
     await click(m.correction_retry());
