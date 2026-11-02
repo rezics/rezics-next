@@ -138,10 +138,9 @@ test('clean navigation is quiet; Stay preserves the proposed handle and confirma
   expect(document.activeElement).toBe(input);
 });
 
-test('Leave clears an unsent review before navigation', async () => {
-  const ui = await mount(source());
-  await setHandle(ui.host, 'after');
-  await confirm(ui.host);
+test('Leave clears an unsent invalid draft before navigation', async () => {
+  const ui = await mount(source({ readCurrent: async () => ({ kind: 'ready', target: target('account', null) }) }));
+  await setHandle(ui.host, '!');
   const { navigation } = await startNavigation(ui.router, '/next');
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-leave]')!.click());
   await flush(() => navigation);

@@ -75,11 +75,13 @@ function RoutedRenameReview({ source }: { source: RenameSource }) {
 }
 
 function sameRenameSession(left: RenameTarget, right: RenameTarget) {
+  const leftScopes = left.scopes ?? [];
+  const rightScopes = right.scopes ?? [];
   return (
     left.accountId === right.accountId &&
     left.clientId === right.clientId &&
-    left.scopes?.length === right.scopes?.length &&
-    left.scopes?.every((scope, index) => scope === right.scopes?.[index])
+    leftScopes.length === rightScopes.length &&
+    leftScopes.every((scope, index) => scope === rightScopes[index])
   );
 }
 
@@ -281,7 +283,9 @@ function RenameReview({
   }
 
   const candidate = normalizeSignupHandle(handle);
-  const hasChangedInput = handle.trim().length > 0 && candidate !== (current?.kind === 'ready' ? current.target.handle : null);
+  const hasChangedInput =
+    handle.trim().length > 0 &&
+    (candidate === null || candidate !== (current?.kind === 'ready' ? current.target.handle : null));
   if (departure)
     departure.current.protected = !renamed && (hasChangedInput || Boolean(attempt.current?.submitted) || (pending && attempt.current !== null));
 
