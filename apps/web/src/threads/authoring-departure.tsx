@@ -25,12 +25,13 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { sessionQuery } from '../session/query';
 
+type DepartureKind = 'realm-claim' | 'realm-ban';
 type Draft = {
   needsDecision: () => boolean;
   unresolved: () => boolean;
   discard: () => void;
   leave?: () => void;
-  kind?: 'realm-claim' | undefined;
+  kind?: DepartureKind | undefined;
 };
 type Decision = { kind: 'navigation'; resolve: (stay: boolean) => void } | { kind: 'discard'; draftId: number };
 
@@ -77,6 +78,8 @@ export class AuthoringDepartureState {
   needsDecision = () => this.active && [...this.drafts.values()].some((draft) => draft.needsDecision());
   hasRealmClaim = () =>
     this.active && [...this.drafts.values()].some((draft) => draft.kind === 'realm-claim' && draft.needsDecision());
+  hasRealmBan = () =>
+    this.active && [...this.drafts.values()].some((draft) => draft.kind === 'realm-ban' && draft.needsDecision());
   unresolved = () => {
     const id = this.decision?.kind === 'discard' ? this.decision.draftId : undefined;
     return (
@@ -318,6 +321,7 @@ function DepartureDialog({
   const discard = navigation.prompt?.kind === 'discard';
   const recovery = navigation.unresolved();
   const claim = !discard && navigation.hasRealmClaim();
+  const ban = !discard && !claim && navigation.hasRealmBan();
   return (
     <AlertDialogContent
       className="min-w-0 max-w-lg grid-cols-[minmax(0,1fr)] gap-6 p-5 text-start sm:max-w-xl sm:p-6"
@@ -336,20 +340,26 @@ function DepartureDialog({
             ? (messages?.discardTitle ?? m.thread_authoring_discard_title())
             : claim
               ? m.realm_claim_leave_title()
-              : (messages?.title ?? m.thread_authoring_leave_title())}
+              : ban
+                ? m.realm_bans_leave_title()
+                : (messages?.title ?? m.thread_authoring_leave_title())}
         </AlertDialogTitle>
         <AlertDialogDescription className="min-w-0 text-base leading-relaxed text-pretty [overflow-wrap:anywhere]">
           {claim
             ? recovery
               ? m.realm_claim_leave_pending()
               : m.realm_claim_leave_confirmation()
-            : discard
+            : ban
               ? recovery
-                ? (messages?.discardPending ?? m.thread_authoring_discard_pending())
-                : (messages?.discardUnsaved ?? m.thread_authoring_discard_unsaved())
-              : recovery
-                ? (messages?.pending ?? m.thread_authoring_leave_pending())
-                : (messages?.unsaved ?? m.thread_authoring_leave_unsaved())}
+                ? m.realm_bans_leave_pending()
+                : m.realm_bans_leave_unsaved()
+              : discard
+                ? recovery
+                  ? (messages?.discardPending ?? m.thread_authoring_discard_pending())
+                  : (messages?.discardUnsaved ?? m.thread_authoring_discard_unsaved())
+                : recovery
+                  ? (messages?.pending ?? m.thread_authoring_leave_pending())
+                  : (messages?.unsaved ?? m.thread_authoring_leave_unsaved())}
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-stretch gap-3 sm:grid-cols-2">
@@ -401,7 +411,7 @@ export function useAuthoringDeparture(
   signature: string,
   onDiscard?: () => void,
   onLeave?: () => void,
-  kind?: 'realm-claim',
+  kind?: DepartureKind,
 ) {
   const navigation = useContext(DepartureContext);
   const latest = useRef({ needsDecision, unresolved, signature, onDiscard, onLeave, kind, released: false });

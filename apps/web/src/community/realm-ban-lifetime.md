@@ -44,6 +44,23 @@ signed-out and role-required responses retain their existing meanings. Sparse em
 invalid cursors offer explicit first-page refresh. Ban acceptance remains distinct from Accounts' membership
 removal completion, and unban does not promise membership restoration or follow changes.
 
+## Departure
+
+Ban controls register with the existing page authoring departure owner; standalone controls use its boundary.
+Nonempty target input or reason, an explicit selected account, either reviewed confirmation, and sending or
+uncertain commands require the shared Stay/Leave decision. Opening management and inspecting rows are browsing.
+Cancelling an unsent confirmation clears only that confirmation; remaining draft fields still protect departure.
+Stay preserves the exact reviewed identity, reason and confirmation without resolving the handle again or
+generating a new key. An uncertain retry retains the original immutable command and excludes refresh.
+
+Confirmed Leave synchronously retires the original visit gate, aborts lookup and invalidates operation, read
+and intent continuations before destination reads. Late lookup, write and refresh responses cannot update a
+replacement Realm or disclose old private state. Leave does not cancel or roll back a native ban. A definitive
+receipt releases command protection immediately, including while list refresh is pending; another nonempty
+draft still protects departure. These registrations introduce no native reads, writes or polling.
+
+Decision: whitespace-only target input and reasons count as nonempty drafts until explicitly cleared.
+
 ## Cost and verification boundary
 
 Work is fixed per lifetime plus O(page size) rendering. The existing native page limit remains 20, target

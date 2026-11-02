@@ -2,7 +2,7 @@ import { afterAll, afterEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import type { BanReadState, BanWriteInput, BanWriteResult, RealmBanPage } from '../src/community/realm-bans';
-import type { RealmBanTarget } from '../src/community/realm-ban-target';
+import type { BanTargetState, RealmBanTarget } from '../src/community/realm-ban-target';
 import type { RealmBansControlProps } from '../src/community/realm-bans-control';
 
 // Actual mounted presentation and public callback boundary; authored UNRUN.
@@ -50,6 +50,7 @@ const host = window.document.createElement('main') as unknown as HTMLElement;
 window.document.body.append(host);
 let root: ReturnType<typeof createRoot> | undefined;
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+const protectedUnload = () => !window.dispatchEvent(new window.Event('beforeunload', { cancelable: true }));
 const id = (suffix: string) => `01a1a000-0000-7000-8000-${suffix.padStart(12, '0')}`;
 const realmId = id('2');
 const accountId = id('81');
@@ -81,7 +82,8 @@ function boundary(initial?: BanReadState) {
   const lookups: { handle: string; signal: AbortSignal }[] = [];
   const writes: BanWriteInput[] = [];
   let page: RealmBanPage = { items: [row], next: 'opaque-continuation' };
-  let readResult: BanReadState | undefined;
+  let readResult: BanReadState | Promise<BanReadState> | undefined;
+  let lookupResult: BanTargetState | Promise<BanTargetState> = { state: 'ready', target };
   let writeResult: BanWriteResult | Promise<BanWriteResult> = success;
   const props: RealmBansControlProps = {
     realmId,
@@ -89,7 +91,7 @@ function boundary(initial?: BanReadState) {
     initial: initial ?? { state: 'ready', page },
     resolve: async (handle, signal) => {
       lookups.push({ handle, signal });
-      return { state: 'ready', target };
+      return lookupResult;
     },
     read: async (cursor) => {
       reads.push(cursor);
@@ -108,8 +110,11 @@ function boundary(initial?: BanReadState) {
     setPage(value: RealmBanPage) {
       page = value;
     },
-    setRead(value: BanReadState) {
+    setRead(value: BanReadState | Promise<BanReadState>) {
       readResult = value;
+    },
+    setLookup(value: BanTargetState | Promise<BanTargetState>) {
+      lookupResult = value;
     },
     setWrite(value: BanWriteResult | Promise<BanWriteResult>) {
       writeResult = value;
@@ -236,6 +241,9 @@ test('human rows and ban/lifted receipts disclose exact identity, full reason an
   setLocale('en', { reload: false });
   const source = boundary();
   await mount(source.props);
+  await edit('textarea', ' ');
+  expect(protectedUnload()).toBe(true);
+  await edit('textarea', '');
   const previousRow = listedAccount(previousAccountId);
   expect(previousRow.textContent).toContain(fullReason);
   preciseDate(previousRow);
@@ -250,6 +258,7 @@ test('human rows and ban/lifted receipts disclose exact identity, full reason an
   expect(button(m.realm_bans_unban(), previousRow).closest('button')).not.toBe(button(m.realm_bans_confirm(), unban));
   await click(m.realm_bans_cancel(), unban);
   expect(host.querySelector('[role="group"]')).toBeNull();
+  expect(protectedUnload()).toBe(false);
   expect(source.writes).toHaveLength(0);
 
   await review();
@@ -261,6 +270,7 @@ test('human rows and ban/lifted receipts disclose exact identity, full reason an
   expect(source.lookups.map((lookup) => lookup.handle)).toEqual(['river']);
   expect(source.writes).toHaveLength(0);
   await click(m.realm_bans_cancel(), ban);
+  expect(protectedUnload()).toBe(true);
   expect(source.writes).toHaveLength(0);
   await click(m.realm_bans_ban());
   source.setWrite({ ok: false, reason: 'unavailable' });
@@ -410,5 +420,102 @@ test('session retirement removes confirmation, uncertain command and pending-rem
     expect(source.lookups).toHaveLength(before.lookups);
     expect(source.writes).toHaveLength(before.writes);
     withheld();
+  }
+});
+
+test('shared departure preserves reviewed bans and recovery, then retires before destination reads', async () => {
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useParams } =
+    await import('@tanstack/react-router');
+  const { AuthoringDepartureProvider, useAuthoringDeparture } = await import('../src/threads/authoring-departure');
+  for (const phase of ['lookup', 'confirmation', 'sending', 'uncertain', 'refresh', 'unban']) {
+    await close();
+    const source = boundary(),
+      replacement = boundary({ state: 'ready', page: { items: [], next: null } });
+    replacement.props.realmId = id('3');
+    const lookup = Promise.withResolvers<BanTargetState>(),
+      write = Promise.withResolvers<BanWriteResult>();
+    const read = Promise.withResolvers<BanReadState>();
+    let sibling = false;
+    function Page() {
+      useAuthoringDeparture(() => sibling, false, phase);
+      const { visit } = useParams({ strict: false });
+      return <RealmBansControl {...(visit === 'one' ? source : replacement).props} />;
+    }
+    const owner = createRootRoute({
+      component: () => (
+        <AuthoringDepartureProvider sessionBound={false}>
+          <Outlet />
+        </AuthoringDepartureProvider>
+      ),
+    });
+    const page = createRoute({
+      getParentRoute: () => owner,
+      path: '/$visit',
+      component: Page,
+      loader: async ({ params }) => {
+        if (params.visit !== 'two') return;
+        expect(source.lookups.every(({ signal }) => signal.aborted)).toBe(true);
+        lookup.resolve({ state: 'ready', target });
+        write.resolve(success);
+        read.resolve({ state: 'ready', page: { items: [row], next: 'old-next' } });
+        await tick();
+        expect(host.textContent).not.toContain(target.account.displayName);
+        expect(host.querySelector('article[role="status"]')).toBeNull();
+      },
+    });
+    const router = createRouter({
+      routeTree: owner.addChildren([page]),
+      history: createMemoryHistory({ initialEntries: ['/one'] }),
+    });
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(<RouterProvider router={router} />);
+      await router.load();
+    });
+    expect(protectedUnload()).toBe(false);
+    if (phase === 'unban') await click(m.realm_bans_unban());
+    else if (phase === 'lookup') {
+      source.setLookup(lookup.promise);
+      await edit('input', '@river');
+      await click(m.realm_bans_target_lookup());
+    } else {
+      await review();
+      if (phase === 'sending') source.setWrite(write.promise);
+      if (phase === 'uncertain') source.setWrite({ ok: false, reason: 'unavailable' });
+      if (phase === 'refresh') source.setRead(read.promise);
+      if (phase !== 'confirmation') await click(m.realm_bans_confirm_ban());
+    }
+    expect(protectedUnload()).toBe(phase !== 'refresh');
+    if (phase === 'refresh') sibling = true;
+    const before = [source.lookups.length, source.writes.length, source.reads.length];
+    let pending!: Promise<void>;
+    const navigate = () =>
+      act(async () => {
+        pending = router.navigate({ to: '/two' });
+        await tick();
+      });
+    await navigate();
+    expect(window.document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+    await click(m.thread_authoring_stay(), window.document);
+    expect(source.lookups).toHaveLength(before[0]);
+    if (phase !== 'refresh' && phase !== 'unban') expect(host.querySelector('input')?.value).toBe('@river');
+    if (['confirmation', 'sending', 'uncertain'].includes(phase)) {
+      disclosedAccount(confirmation(m.realm_bans_ban_confirm()), accountId);
+      expect(host.querySelector('textarea')?.value).toBe(fullReason);
+    }
+    if (phase === 'unban') disclosedAccount(confirmation(m.realm_bans_unban_confirm()), previousAccountId);
+    if (phase === 'uncertain') {
+      await click(m.realm_bans_retry());
+      expect(source.writes[1]).toEqual(source.writes[0]);
+      expect(source.lookups).toHaveLength(before[0]);
+    }
+    await navigate();
+    await click(m.thread_authoring_leave(), window.document);
+    await act(async () => pending);
+    expect(router.state.location.pathname).toBe('/two');
+    expect(source.reads).toHaveLength(before[2]);
+    expect(source.writes).toHaveLength(before[1]! + (phase === 'uncertain' ? 1 : 0));
+    expect(host.textContent).not.toContain(fullReason);
+    expect(router.state.matches.at(-1)?.status).toBe('success');
   }
 });

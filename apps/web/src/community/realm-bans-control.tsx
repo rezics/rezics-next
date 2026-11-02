@@ -17,6 +17,7 @@ import {
 import type { BanReadState, BanWriteInput, BanWriteResult } from './realm-bans';
 import { RealmBanLifetime } from './realm-ban-lifetime';
 import { useCommunityManagementAdmission } from './community-management';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
 
 export type RealmBansControlProps = {
   realmId: string;
@@ -153,6 +154,17 @@ function TargetPreview({ target, headingLevel = 3 }: { target: RealmBanTarget; h
 const unavailableTarget: ResolveBanTarget = async () => ({ state: 'unavailable' });
 
 const serverCurrent = () => false;
+
+/** Departure can run before React commits an edit or a definitive command settlement. */
+function useBanDraftField<T>(initial: T) {
+  const [value, setValue] = useState(initial);
+  const current = useRef(initial);
+  const set = useCallback((next: T) => {
+    current.current = next;
+    setValue(next);
+  }, []);
+  return [value, set, current] as const;
+}
 const retiredInitials = new WeakSet<BanReadState>();
 
 /** Replace the whole private visit synchronously when any original caller source changes. */
@@ -192,7 +204,11 @@ export function RealmBansControl(props: RealmBansControlProps) {
   const retired = useSyncExternalStore(current.gate.subscribe, current.gate.snapshot, serverCurrent);
   useLayoutEffect(() => current.gate.connect(), [current]);
   if (retired || !props.ready) return null;
-  return <RealmBansVisit key={current.gate.id} {...props} initial={current.initial} gate={current.gate} />;
+  return (
+    <AuthoringDepartureBoundary sessionBound={false}>
+      <RealmBansVisit key={current.gate.id} {...props} initial={current.initial} gate={current.gate} />
+    </AuthoringDepartureBoundary>
+  );
 }
 
 /** A complete Realm management region, composed from the existing administration controls. */
@@ -206,10 +222,10 @@ function RealmBansVisit({
 }: Omit<RealmBansControlProps, 'initial'> & { initial: BanReadState | undefined; gate: RealmBanLifetime }) {
   const id = useId();
   const [view, setView] = useState<BanReadState>(initial ?? { state: 'loading' });
-  const [query, setQuery] = useState('');
+  const [query, setQuery, queryNow] = useBanDraftField('');
   const [target, setTarget] = useState<BanTargetState>({ state: 'idle' });
-  const [selected, setSelected] = useState<RealmBanTarget | null>(null);
-  const [banConfirm, setBanConfirm] = useState(false);
+  const [selected, setSelected, selectedNow] = useBanDraftField<RealmBanTarget | null>(null);
+  const [banConfirm, setBanConfirm, banConfirmNow] = useBanDraftField(false);
   const lookup = useRef<AbortController | null>(null);
   const intent = useRef(0);
   const renderIntent = intent.current;
@@ -220,9 +236,9 @@ function RealmBansVisit({
     setTarget({ state: 'idle' });
     setSelected(null);
     setBanConfirm(false);
-  }, []);
-  const [reason, setReason] = useState('');
-  const [confirm, setConfirm] = useState<string | null>(null);
+  }, [setSelected, setBanConfirm]);
+  const [reason, setReason, reasonNow] = useBanDraftField('');
+  const [confirm, setConfirm, confirmNow] = useBanDraftField<string | null>(null);
   const [result, setResult] = useState<BanWriteResult | null>(null);
   const [retry, setRetry] = useState<BanWriteInput | null>(null);
   const [busy, setBusy] = useState(false);
@@ -232,6 +248,33 @@ function RealmBansVisit({
   const pageReady = useRef(initial?.state === 'ready');
   const uncertain = useRef<BanWriteInput | null>(null);
   const visible = useCommunityManagementAdmission('bans', gate.current() && view.state === 'ready');
+
+  const unresolved = () => gate.current() && (working.current !== null || uncertain.current !== null);
+  useAuthoringDeparture(
+    () =>
+      gate.current() &&
+      (queryNow.current.length > 0 ||
+        reasonNow.current.length > 0 ||
+        selectedNow.current !== null ||
+        banConfirmNow.current ||
+        confirmNow.current !== null ||
+        unresolved()),
+    unresolved,
+    JSON.stringify([gate.id, query, reason, selected?.account.id, banConfirm, confirm, busy, retry?.idempotencyKey]),
+    undefined,
+    () => {
+      // Retire admission and all local continuations before the router starts destination reads.
+      gate.retire();
+      lookup.current?.abort();
+      lookup.current = null;
+      intent.current++;
+      generation.current++;
+      working.current = null;
+      uncertain.current = null;
+      pageReady.current = false;
+    },
+    'realm-ban',
+  );
 
   const refresh = useCallback(
     async (cursor?: string) => {
@@ -263,7 +306,7 @@ function RealmBansVisit({
         setReason('');
       }
     },
-    [read, invalidateTarget, gate],
+    [read, invalidateTarget, gate, setConfirm, setQuery, setReason],
   );
 
   useEffect(() => {
