@@ -17,6 +17,7 @@ publish safe page compositions without adding a page implementation for each ver
 - Admitted plans cover filter, source and order together, with bounded direct execution or bounded preparation.
 - Shared compositions validate against the registry, reject executable input and render each launch vertical from
   configuration. Aggregate page reads keep standalone authorization and declared budgets.
+- At render time, unavailable components are skipped and malformed declared slots render empty, preserving supported siblings in document order.
 - The real default worker proves convergence, freshness, generation recovery and public rating-sort consumption.
 
 Completion requires the scoped outcomes on main with recorded checks covering the promoted commit. Specified,
