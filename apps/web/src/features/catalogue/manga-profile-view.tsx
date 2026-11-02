@@ -487,7 +487,7 @@ function MangaCreate({
         className="min-w-0 space-y-8 [overflow-wrap:anywhere] [&_label]:whitespace-normal [&_label]:text-start [&_input]:min-w-0 [&_textarea]:min-w-0"
         onBlurCapture={(event) => {
           const intent = addFocusIntent.current;
-          if (!intent || event.target !== intent.trigger) return;
+          if (!intent || event.nativeEvent.target !== intent.trigger) return;
           const automaticDisabledBlur =
             intent.trigger.disabled && (event.relatedTarget === null || event.relatedTarget === document.body);
           if (!automaticDisabledBlur) addFocusIntent.current = null;
