@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import { m } from '../src/paraglide/messages.js';
-import { getLocale, setLocale } from '../src/paraglide/runtime.js';
+import { getLocale, overwriteGetLocale } from '../src/paraglide/runtime.js';
 import type { AccountDiscoverySummary, DiscoveryPage, DiscoveryState } from '../src/search/discovery';
 import { DiscoveryResults } from '../src/search/discovery-results';
 import { subjectHref } from '../src/subject/subject-href';
@@ -20,12 +20,12 @@ function options(locale: string) {
 }
 
 function withAmbient<T>(ambient: string, run: () => T): T {
-  const previous = getLocale();
-  setLocale(ambient as never, { reload: false });
+  const previous = getLocale;
+  overwriteGetLocale(() => ambient as never);
   try {
     return run();
   } finally {
-    setLocale(previous, { reload: false });
+    overwriteGetLocale(previous);
   }
 }
 
