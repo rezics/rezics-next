@@ -354,7 +354,11 @@ test('Editorial Context family retains supplied comparison, independent controls
     expect(window.document.activeElement).toBe(confirm);
     expect(lifecycle.calls).toHaveLength(1);
     await act(async () => userEvent.keyboard('{Enter}'));
-    await until(() => buttons(host, m.editorial_restore({}, o)).length === 1);
+    await until(
+      () =>
+        buttons(host, m.editorial_restore({}, o)).length === 1 &&
+        host.querySelector('section')!.getAttribute('aria-busy') === 'false',
+    );
     expect(host.querySelector('[data-review-entry]')).toBeNull();
     expect(host.querySelector('a[href^="/exact-review"]')).toBeNull();
     expect(host.textContent).toContain(m.editorial_deleted({}, o));
@@ -364,7 +368,11 @@ test('Editorial Context family retains supplied comparison, independent controls
     const restoreConfirm = button(m.contribution_confirm({}, o));
     restoreConfirm.focus();
     await act(async () => userEvent.keyboard('{Enter}'));
-    await until(() => host.textContent!.includes(m.editorial_restored({}, o)));
+    await until(
+      () =>
+        host.textContent!.includes(m.editorial_restored({}, o)) &&
+        host.querySelector('section')!.getAttribute('aria-busy') === 'false',
+    );
     expect(document.activeElement).toBe(
       restoreConfirm.isConnected ? restoreConfirm : host.querySelector('[data-editorial-result]'),
     );
@@ -440,7 +448,11 @@ test('Editorial Context family retains supplied comparison, independent controls
     const retryCreate = button(m.editorial_retry({}, o));
     retryCreate.focus();
     await act(async () => userEvent.keyboard('{Enter}'));
-    await until(() => host.textContent!.includes(m.editorial_created({}, o)));
+    await until(
+      () =>
+        host.textContent!.includes(m.editorial_created({}, o)) &&
+        host.querySelector('section')!.getAttribute('aria-busy') === 'false',
+    );
     expect(document.activeElement).toBe(
       retryCreate.isConnected ? retryCreate : host.querySelector('[data-editorial-result]'),
     );

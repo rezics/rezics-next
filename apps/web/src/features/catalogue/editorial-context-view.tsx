@@ -223,6 +223,7 @@ function EditorialContextWorkspaceLive({
           aria-label={m.editorial_title({}, o)}
           aria-describedby={`${fieldId}-result`}
           tabIndex={-1}
+          hidden={!(busy || notice || knownDeleted || failure || (reading && !reading.ok))}
           data-editorial-result
         >
           <div id={`${fieldId}-result`} className="space-y-6">
