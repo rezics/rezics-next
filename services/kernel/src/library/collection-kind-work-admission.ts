@@ -331,19 +331,41 @@ function footprint(sql: string, values: readonly unknown[]): WorkDimensions | un
 // for the two admitted account Source kinds. Parameters fit 4096 after the native
 // identity bounds above, including JSON escaping; its projection adds 4096 each.
 const custodyPlan: WorkDimensions = Object.freeze({
-  candidateKeys: 0, nativeRows: 208, nativePoints: 10, identityMetadataRows: 0,
-  witnessKeys: 0, emptySeeks: 0, statements: 7,
-  bytes: [custodyPartition, custodyAccount, custodySource, custodyFences, custodyRead, custodyProof, custodyHold]
-    .reduce((bytes, query) => bytes + Buffer.byteLength(query.sql) + 4096 + 4096, 0),
+  candidateKeys: 0,
+  nativeRows: 208,
+  nativePoints: 10,
+  identityMetadataRows: 0,
+  witnessKeys: 0,
+  emptySeeks: 0,
+  statements: 7,
+  bytes: [
+    custodyPartition,
+    custodyAccount,
+    custodySource,
+    custodyFences,
+    custodyRead,
+    custodyProof,
+    custodyHold,
+  ].reduce((bytes, query) => bytes + Buffer.byteLength(query.sql) + 4096 + 4096, 0),
 });
 
 /** Pure complete local admission, without a checkout or another reservation. */
 export function collectionKindInputAdmissionWork(): WorkDimensions {
   return Object.freeze({
-    candidateKeys: 11, nativeRows: 219, nativePoints: 22, identityMetadataRows: 0,
-    witnessKeys: 0, emptySeeks: 2, statements: 9,
-    bytes: Buffer.byteLength(admitEpisode.sql) + Buffer.byteLength(readSource.sql) + 2 * 4096 +
-      2 * (6 * 4096 + 2048) + 10240 + custodyPlan.bytes,
+    candidateKeys: 11,
+    nativeRows: 219,
+    nativePoints: 22,
+    identityMetadataRows: 0,
+    witnessKeys: 0,
+    emptySeeks: 2,
+    statements: 9,
+    bytes:
+      Buffer.byteLength(admitEpisode.sql) +
+      Buffer.byteLength(readSource.sql) +
+      2 * 4096 +
+      2 * (6 * 4096 + 2048) +
+      10240 +
+      custodyPlan.bytes,
   });
 }
 
@@ -438,16 +460,17 @@ export async function admitCollectionKindPreparationStep(
     if (!identity) return null;
     // This call revalidates the exact current owner/capture/receipt/hold in the same live T and
     // transfers only the already-reserved remainder of this original frame to Native custody.
-    const held = await work.compose((allowance: WorkAllowance) =>
-      createNativeLibrarySourceCustody({ pool: invocation.pool }).readAndHold({
-        client: tx,
-        at: time,
-        identity,
-        captureId: token.captureId,
-        holdId: token.holdId,
-        allowance,
-        deadline: invocation.deadline,
-      }),
+    const held = await work.compose(
+      (allowance: WorkAllowance) =>
+        createNativeLibrarySourceCustody({ pool: invocation.pool }).readAndHold({
+          client: tx,
+          at: time,
+          identity,
+          captureId: token.captureId,
+          holdId: token.holdId,
+          allowance,
+          deadline: invocation.deadline,
+        }),
       custodyPlan,
     );
     if (

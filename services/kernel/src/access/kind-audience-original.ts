@@ -471,7 +471,8 @@ export function createKindAudienceOriginal(
     >(
       (input) => {
         const local = sameLocator(input.origin.locator, input.work.locator)
-          ? localBound(input, input.origin.id) : undefined;
+          ? localBound(input, input.origin.id)
+          : undefined;
         return local && { access: local.access, source: add(local.source, collectionKindInputWork()) };
       },
       async (input, _bound) => {
@@ -481,12 +482,20 @@ export function createKindAudienceOriginal(
         const localDeclaration = localBound(input, input.origin.id)!;
         const result = await local(input, input.origin.id, localDeclaration);
         if (!matches(result.row, held.identity) || !result.row?.referenceId)
-          return { status: 'unavailable', reason: 'Collection Kind origin/enrollment is stale or absent', work: result.work };
+          return {
+            status: 'unavailable',
+            reason: 'Collection Kind origin/enrollment is stale or absent',
+            work: result.work,
+          };
         // Real Source reads, immutable write and exact collision readback share the
         // original live home. The first result waits for THIS transaction's commit;
         // no Type completion or foreign repair receipt is required for the next lookup.
-        const resolved = await resolveCollectionKindRawInput(input.work.tx, input.work.locator,
-          input.origin.id, held.native);
+        const resolved = await resolveCollectionKindRawInput(
+          input.work.tx,
+          input.work.locator,
+          input.origin.id,
+          held.native,
+        );
         assertOriginal(held.originalRequest, held.identity);
         if (!localRequest(input)) throw new AccessWorkUnavailableError('Collection Kind input invocation ended');
         const after = held.native.receipt().used;
@@ -494,11 +503,25 @@ export function createKindAudienceOriginal(
         for (const axis of axes) used[axis] = after[axis] - before[axis];
         const work = Object.freeze({ reservationId: input.allowance.reservationId, used: Object.freeze(used) });
         return resolved.status === 'committed'
-          ? { status: 'resolved', origin: input.origin, input: Object.freeze({ kind: 'collection-kind-audience-input',
-              locator: Object.freeze({ ...input.work.locator }), id: resolved.binding.inputId }), binding: resolved.binding, work }
-          : { status: 'unavailable', reason: resolved.status === 'awaiting_commit'
-              ? 'Collection Kind raw interval awaits the original Source transaction commit'
-              : resolved.reason, work };
+          ? {
+              status: 'resolved',
+              origin: input.origin,
+              input: Object.freeze({
+                kind: 'collection-kind-audience-input',
+                locator: Object.freeze({ ...input.work.locator }),
+                id: resolved.binding.inputId,
+              }),
+              binding: resolved.binding,
+              work,
+            }
+          : {
+              status: 'unavailable',
+              reason:
+                resolved.status === 'awaiting_commit'
+                  ? 'Collection Kind raw interval awaits the original Source transaction commit'
+                  : resolved.reason,
+              work,
+            };
       },
     ),
     prepare: operation<
@@ -533,17 +556,25 @@ export function createKindAudienceOriginal(
             });
             if (!matches(row, identity, source) || !row?.referenceId) return false;
             const committed = await readCommittedInput.run(client, {
-              ...parameters(input.origin.locator), origin_id: input.origin.id, input_id: input.input.id,
+              ...parameters(input.origin.locator),
+              origin_id: input.origin.id,
+              input_id: input.input.id,
             });
             if (!committed?.committed) return false;
             const body: CollectionKindRawInputBody = JSON.parse(committed.body);
             // The immutable native input is a control operand, never permission,
             // Type authority or a proof that the Semantic owners completed.
-            return body.format === 1 && body.original.id === input.origin.id &&
-              body.original.digest === identity.digest && body.original.formula === config.formulaDigest &&
-              body.original.audience === identity.audience && body.source.capture === row.sourceCapture &&
+            return (
+              body.format === 1 &&
+              body.original.id === input.origin.id &&
+              body.original.digest === identity.digest &&
+              body.original.formula === config.formulaDigest &&
+              body.original.audience === identity.audience &&
+              body.source.capture === row.sourceCapture &&
               body.source.identity.generation === row.sourceGeneration &&
-              body.enrollment.reference === row.referenceId && body.enrollment.generation === row.enrollmentGeneration;
+              body.enrollment.reference === row.referenceId &&
+              body.enrollment.generation === row.enrollmentGeneration
+            );
           },
         );
         return {

@@ -177,13 +177,13 @@ Source axis order below is candidate keys / native rows / native points / identi
 empty seeks / statements / bytes. Let `J(sql,input,P)` be UTF8 SQL bytes plus JSON input bytes plus bounded projection
 `P`. Literal inputs and projections are in the exported operation's declaration, never measured result row counts.
 
-| Owned operation | Source eight-axis envelope before the Access bridge |
-| --- | --- |
-| Exact observation/owner/home capture read | `4/4/4/0/0/1/1/J(sql,input,12*4096+1024)` |
-| Retire old original and insert immutable current original | `3/3/3/0/0/1/1/J(sql,input,6*4096+2048)` |
-| Exact original/observation/Collection/enrollment/revocation lookup | `6/6/6/0/0/1/1/J(sql,input,6*4096+2048)` |
-| Detached checkout, serializable controls and rollback | `0/0/1/0/0/0/6/1024` |
-| Original evaluator implicit checkouts and SQL/control text | `0/0/4/0/0/0/13/B`, where B sums the thirteen literal SQL/control texts in `kind-audience-formula.ts` |
+| Owned operation                                                    | Source eight-axis envelope before the Access bridge                                                   |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| Exact observation/owner/home capture read                          | `4/4/4/0/0/1/1/J(sql,input,12*4096+1024)`                                                             |
+| Retire old original and insert immutable current original          | `3/3/3/0/0/1/1/J(sql,input,6*4096+2048)`                                                              |
+| Exact original/observation/Collection/enrollment/revocation lookup | `6/6/6/0/0/1/1/J(sql,input,6*4096+2048)`                                                              |
+| Detached checkout, serializable controls and rollback              | `0/0/1/0/0/0/6/1024`                                                                                  |
+| Original evaluator implicit checkouts and SQL/control text         | `0/0/4/0/0/0/13/B`, where B sums the thirteen literal SQL/control texts in `kind-audience-formula.ts` |
 
 Capture and detached preparation declare the sum of these rows plus the installed Access-six-axis envelope mapped
 once to Source. Access receipts attribute the actual original invocation; dispatched Source row bounds cannot be

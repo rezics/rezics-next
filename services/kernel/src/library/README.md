@@ -2499,7 +2499,6 @@ rows, statements, blocks and bytes remain independent inclusive bounds; no nativ
 raw-width cases. `collection-list-facts-growth.test.ts` measures the whole fixed native page and its actual helpers at
 64/512/4096 unrelated fact/history populations, including failed and private/source-change work.
 
-
 ### Native identity scope planning and current seals
 
 `createLibraryIdentityNativePlanner` in `module.ts` exposes the default native `advance`, `readPage` and
@@ -2633,4 +2632,3 @@ its own exact lookup and the original Core entry supplies its existing control d
 and accounting remain unchanged. The raw interval cannot establish a pinned Kind definition, Type/disclosure,
 Semantic repair receipt or any of the five audience closures. Those dependent dispatches retain the precise
 Semantic refusal described in [Access](../access/README.md).
-

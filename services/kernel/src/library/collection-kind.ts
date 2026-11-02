@@ -273,7 +273,8 @@ export function createCollectionKindNative(
 ): CollectionKindNative {
   return {
     ...(sources.dependencies.access?.kindAudience
-      ? { prepareInput: sources.dependencies.access.kindAudience.resolveInput } : {}),
+      ? { prepareInput: sources.dependencies.access.kindAudience.resolveInput }
+      : {}),
     prepare: (input) => preparation.prepare(input),
     select: (input) => preparation.select(input),
     revalidate: (input) => preparation.revalidate(input),

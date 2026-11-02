@@ -106,9 +106,13 @@ export async function stepCollectionKind(
     // Returning lets that caller commit the raw interval and RELEASE this home
     // before any detached Type/Access phase; DBOS locators never contain it.
     const locator = original.work.locator;
-    if (locator.collectionId !== input.collectionId || locator.ownerAccountId !== input.accounts[0] ||
-        locator.preparationId !== input.generation || !native.prepareInput ||
-        native.prepareInput.bound(original) === undefined)
+    if (
+      locator.collectionId !== input.collectionId ||
+      locator.ownerAccountId !== input.accounts[0] ||
+      locator.preparationId !== input.generation ||
+      !native.prepareInput ||
+      native.prepareInput.bound(original) === undefined
+    )
       throw new ProblemError('semantic_not_ready');
     return native.prepareInput.run(original);
   }

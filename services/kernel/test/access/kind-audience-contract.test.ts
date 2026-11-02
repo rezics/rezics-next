@@ -136,7 +136,10 @@ test('Native Kind audience origin and current evidence have one original-evaluat
 // Authored for integration; kept separate from the five-closure positive ABI above.
 test('pre-Type Kind input is a committed raw operand and does not require a positive work definition', async () => {
   type InputBinding = import('../../src/library/collection-kind-input.ts').CollectionKindInputBinding;
-  type Resolved = Extract<import('../../src/access/kind-audience.ts').ResolveKindAudienceResult, { status: 'resolved' }>;
+  type Resolved = Extract<
+    import('../../src/access/kind-audience.ts').ResolveKindAudienceResult,
+    { status: 'resolved' }
+  >;
   expectTypeOf<Resolved['binding']>().toEqualTypeOf<InputBinding>();
   expectTypeOf<Extract<keyof InputBinding, 'actor' | 'jwt' | 'definition' | 'repairReceipt'>>().toEqualTypeOf<never>();
   expectTypeOf<InputBinding['body']['rows'][number]['key']>().toEqualTypeOf<
@@ -165,12 +168,17 @@ test('a raw-input locator and constructor-funded work cannot replace private liv
       throw new Error('Unadmitted raw input reached SQL');
     },
   };
-  const native = new NativeCollectionWork({
-    reservationId: crypto.randomUUID(), remaining: collectionKindInputWork(),
-  }, Date.now() + 5000);
+  const native = new NativeCollectionWork(
+    {
+      reservationId: crypto.randomUUID(),
+      remaining: collectionKindInputWork(),
+    },
+    Date.now() + 5000,
+  );
   // @ts-expect-error A structural SQL client cannot supply the native operational admission.
-  await expect(resolveCollectionKindRawInput(copied, locator, 'sha256:' + '0'.repeat(64), native))
-    .rejects.toMatchObject({ code: 'semantic_not_ready' });
+  await expect(
+    resolveCollectionKindRawInput(copied, locator, 'sha256:' + '0'.repeat(64), native),
+  ).rejects.toMatchObject({ code: 'semantic_not_ready' });
   expect(queries).toBe(0);
   expect(Object.values(native.receipt().used).every((value) => value === 0)).toBe(true);
 });
