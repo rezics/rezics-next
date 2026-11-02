@@ -11,7 +11,7 @@ import { formatLifecycleMetrics, formatUsageReport, report } from './report.ts';
 import { flowReport, readFlow, readFlowTasks } from './flow.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import type { LandingQueue, ManagerInbox } from './contracts.ts';
-import type { AttemptRecord, Effort, Settings, Task, Tokens } from './types.ts';
+import type { AttemptRecord, Effort, Settings, Task, TaskState, Tokens } from './types.ts';
 import { devVerificationState } from './dev-verifier.ts';
 import { retryWait } from './watchdog.ts';
 import { authenticatedCallingManager } from './integration-cli.ts';
@@ -30,6 +30,53 @@ export type WorkerCommandOptions = {
   env?: NodeJS.ProcessEnv;
   parsedArguments?: ParsedWorkerCommandArguments;
 };
+
+export const READ_ONLY_WORKER_COMMANDS = new Set(['status', 'attempts', 'report']);
+
+const taskStates = new Set<TaskState>([
+  'ready',
+  'held',
+  'running',
+  'landing',
+  'integrated',
+  'merged',
+  'stopped',
+  'cancelled',
+  'verified',
+]);
+
+function isTaskState(value: unknown): value is TaskState {
+  return typeof value === 'string' && taskStates.has(value as TaskState);
+}
+
+function heldDependencies(task: Task, tasks: WorkerTasks, store: WorkerStore) {
+  const after: unknown = task.brief.after;
+  if (after === undefined) return [];
+  if (!Array.isArray(after)) return [{ id: 'unknown', state: 'unknown' as const, ready: false }];
+  return after.map((id: unknown, index: number) => {
+    if (typeof id !== 'string' || !id)
+      return { id: `dependency-${index + 1}`, state: 'unknown' as const, ready: false };
+
+    let state: TaskState | 'unknown' = 'unknown';
+    try {
+      const dependency = store.dependency(id);
+      if (isTaskState(dependency?.state)) state = dependency.state;
+    } catch {
+      // A missing or malformed dependency should not prevent other task statuses from being displayed.
+    }
+
+    let ready = false;
+    if (state !== 'unknown') {
+      try {
+        ready = tasks.dependenciesMet({ brief: { ...task.brief, after: [id] } });
+      } catch {
+        state = 'unknown';
+      }
+    }
+    return { id, state, ready };
+  });
+}
+
 /** Tests may inject individual services. Production commands always use the shared runtime. */
 export async function runWorkerCommand(
   command: string,
@@ -46,7 +93,7 @@ export async function runWorkerCommand(
     options.tasks?.settings ??
     loadSettings({ ...(options.env ? { env: options.env } : {}) });
   const databasePath = join(settings.stateDirectory, 'goal.sqlite');
-  mkdirSync(settings.stateDirectory, { recursive: true });
+  if (!READ_ONLY_WORKER_COMMANDS.has(command)) mkdirSync(settings.stateDirectory, { recursive: true });
   const runtime =
     options.runtime ??
     (!options.store && !options.tasks && !options.landing && !options.inbox ? createRuntime({ settings }) : undefined);
@@ -61,7 +108,7 @@ export async function runWorkerCommand(
   const priorityActor = options.runtime ? (authenticatedCallingManager(options.runtime, env) ?? null) : undefined;
   try {
     // A worker's inherited sequence fences every mutating command before it can dispatch another task or retry itself.
-    if (!['status', 'attempts', 'report'].includes(command) && env.GOAL_TASK_ID && env.GOAL_ATTEMPT) {
+    if (!READ_ONLY_WORKER_COMMANDS.has(command) && env.GOAL_TASK_ID && env.GOAL_ATTEMPT) {
       store.assertCurrent({ taskId: env.GOAL_TASK_ID, attempt: Number(env.GOAL_ATTEMPT) });
     }
     if (parsedArguments.command === 'dispatch') {
@@ -89,6 +136,8 @@ export async function runWorkerCommand(
         const incident = task.currentAttempt
           ? toolIncidentForRetry(store, { taskId: task.id, attempt: task.currentAttempt })
           : null;
+        const dependencies =
+          task.state === 'held' || intent?.status === 'pending' ? heldDependencies(task, tasks, store) : [];
         const wait = incident
           ? {
               reason: 'environment-incident',
@@ -97,14 +146,23 @@ export async function runWorkerCommand(
               isProbe: incident.probe.taskId === task.id && incident.probe.attempt === task.currentAttempt,
             }
           : intent?.status === 'pending'
-            ? (retryWait(intent, task, (id) => store.dependency(id)?.state, Date.now(), settings.stateDirectory) ?? {
+            ? (retryWait(
+                intent,
+                { brief: { ...task.brief, after: dependencies.map(({ id }) => id) } },
+                (id) => (dependencies.find((dependency) => dependency.id === id)?.ready ? 'merged' : undefined),
+                Date.now(),
+                settings.stateDirectory,
+              ) ?? {
                 reason: 'start',
               })
             : undefined;
         return {
           ...task,
           ...(task.state === 'held'
-            ? { waitingFor: (task.brief.after ?? []).filter((id) => store.task(id).state !== 'merged') }
+            ? {
+                dependencies,
+                waitingFor: dependencies.filter((dependency) => !dependency.ready).map(({ id }) => id),
+              }
             : {}),
           ...(wait ? { pendingRetry: wait } : {}),
         };
@@ -271,7 +329,7 @@ export async function runWorkerCommand(
         ),
       );
     } else throw new Error(`unknown worker command: ${command}`);
-    await job.drain();
+    if (!READ_ONLY_WORKER_COMMANDS.has(command)) await job.drain();
     // The command's own change is committed; work drained after it can belong to other tasks, whose failure must not
     // turn this command's exit into an error (a retry exited 1 over an unrelated held task on 2026-10-29).
     if (runtime && ['dispatch', 'retry', 'consult'].includes(command))

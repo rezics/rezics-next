@@ -867,8 +867,10 @@ New tasks and retries branch from the integration branch, except control-plane b
 `target: stabilize`, which branch from `main`. The landing train routes such releases under `tools/goal/` to `main` and
 measures their change set from their fork from `main`. If the integration branch does not exist, the controller creates
 it from `main`.
-Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
-promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
+Held tasks become ready when each `after:` dependency is integrated or merged. A dependency with the same target
+satisfies the edge at integration; a dependency with a different target satisfies it when its integration commit is
+already on the dependent's base branch, or when no integration commit was recorded. Integrated tasks remain in flight
+until promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
 Task worktrees exist while an attempt can use them. A background control-plane sweep removes integrated, merged and
 cancelled worktrees one at a time, under idle I/O priority, after waiting up to 30 seconds for `/proc/pressure/io` to
 report `some avg10` at or below 20 (hosts without that file do not wait); sustained pressure defers the pass and lets a
@@ -1450,6 +1452,11 @@ bun tools/goal/src/cli.ts inbox read <manager>
 bun tools/goal/src/cli.ts inbox ack <manager>
 bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] [--evidence <path>]
 ```
+
+`status`, `attempts` and `report` are read-only: they do not recover orphans, record manager commands or drain queued
+work. For held tasks, `status` keeps `waitingFor` as the blocking dependency IDs and adds `dependencies` entries with
+their state and readiness. Missing or malformed dependencies have state `unknown`; readiness follows the same target
+and integration-commit policy used to release held work.
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
 

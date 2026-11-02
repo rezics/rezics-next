@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { checkSettings, createRuntime, settingsFile, type Runtime } from './config.ts';
 import { runIntegration, type IntegrationRuntime, recordManagerCommand } from './integration-cli.ts';
-import { runWorkerCommand } from './worker-commands.ts';
+import { runWorkerCommand, READ_ONLY_WORKER_COMMANDS } from './worker-commands.ts';
 import { parseWorkerCommandArguments, type ParsedWorkerCommandArguments } from './command-arguments.ts';
 import { installPrivate } from './shared-dependencies.ts';
 import { runPublicationCommand } from './publication-command.ts';
@@ -34,7 +34,14 @@ const integrationCommands = [
 ];
 export const commands = [...workerCommands, ...integrationCommands];
 /** Commands that run often and never settle workers themselves; the manager host's sweep recovers orphans. */
-export const SWEEP_FREE_COMMANDS = new Set(['train', 'inbox', 'backlog', 'publication', 'amend']);
+export const SWEEP_FREE_COMMANDS = new Set([
+  'train',
+  'inbox',
+  'backlog',
+  'publication',
+  'amend',
+  ...READ_ONLY_WORKER_COMMANDS,
+]);
 
 /** Runtime injection is confined to the programmatic test entry point. */
 export async function run(
@@ -87,7 +94,7 @@ export async function run(
       await runtime.recoverOrphans({ adoptRunning: false });
     if (workerCommands.includes(command)) {
       if (!('job' in runtime)) throw new Error('Worker commands require the shared runtime');
-      await recordManagerCommand(runtime);
+      if (!READ_ONLY_WORKER_COMMANDS.has(command)) await recordManagerCommand(runtime);
       if (command === 'retarget') {
         if (!('tasks' in runtime)) throw new Error('Worker commands require the shared runtime');
         if (process.env.GOAL_TASK_ID && process.env.GOAL_ATTEMPT)
