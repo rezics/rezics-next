@@ -1,7 +1,7 @@
 # Development workflow
 
 Read [AGENTS](../../AGENTS.md), [architecture](../architecture.md), [scope](../scope.md) and the documents owning the
-work. Repository documents own durable rules; research reports provide evidence; tracked Goal definitions own scoped outcomes; attempt briefs link them.
+work; a worker reads only what its brief links. Every agent follows [agent conduct](agent-conduct.md). Repository documents own durable rules; research reports provide evidence; tracked Goal definitions own scoped outcomes; attempt briefs link them.
 
 The [rezics-workflow skill](../../.agents/skills/rezics-workflow/SKILL.md) supplies the operating procedures for these
 rules. Keep durable rules here and command mechanics in their owning runbooks; the skill links both.

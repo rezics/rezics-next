@@ -10,9 +10,8 @@ contract has reached; an implementation worker consumes adopted design rather th
 stage references needed for the current work. This skill supplies procedures; [development
 rules](../../../docs/development/README.md), owner documents and [AGENTS](../../../AGENTS.md) retain authority.
 
-1. **Orient.** Read AGENTS, the development entry point, [architecture](../../../docs/architecture.md),
-   [scope](../../../docs/scope.md), the relevant [Goal definition](../../../docs/goals/README.md) and owner contracts.
-   Identify your role, assigned checkout, acceptance, frozen files and risk boundaries before editing.
+1. **Orient.** Workers: the brief is the orientation; read only what it links. Managers and designers: read the
+   owner documents for the decision at hand. Follow [agent conduct](../../../docs/development/agent-conduct.md).
 2. **Design and adopt.** Use [feature design](references/feature-design.md) to derive capabilities from the shared
    architecture, survey mainstream products, write acceptance in user terms and adopt the result in its owner doc.
 3. **Brief and implement.** Use [briefing](references/briefing.md) to preflight dependencies, freeze missing outcome

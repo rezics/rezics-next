@@ -34,7 +34,9 @@ The `legacy` branch (tags `legacy-final` and `legacy-main-final`) is a read-only
 
 - Put temporary files in `.temp/`.
 - Keep task and ticket IDs out of code and documents; put them in commit messages.
+- Follow [agent conduct](docs/development/agent-conduct.md): bounded reading and verification, act instead of asking,
+  no receipts.
 
-Read the [development workflow](docs/development/README.md) and its linked Goal definitions.
-
-Load [rezics-workflow](.agents/skills/rezics-workflow/SKILL.md) for all repository development work.
+A worker starts from its brief and reads only what the brief links. Other roles read the
+[development workflow](docs/development/README.md) and its linked Goal definitions, and load
+[rezics-workflow](.agents/skills/rezics-workflow/SKILL.md) for repository development work.
