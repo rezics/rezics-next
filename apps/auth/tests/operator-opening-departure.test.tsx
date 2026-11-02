@@ -1,6 +1,6 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import {
-  createMemoryHistory,
+  createBrowserHistory,
   createRootRoute,
   createRoute,
   createRouter,
@@ -18,7 +18,11 @@ const subject = '33333333-3333-4333-8333-333333333333';
 const identity = (id: string) => ({ id, kind: 'actor' as const, handle: null, displayName: null });
 const metadata = { kind: 'ready' as const, metadata: { subject: identity(subject), operator: identity(operator) } };
 let read: ReturnType<typeof spyOn<typeof opening, 'loadOpeningMetadata'>>;
-afterEach(() => read.mockRestore());
+let history: ReturnType<typeof createBrowserHistory>;
+afterEach(() => {
+  read.mockRestore();
+  history.destroy();
+});
 async function setup(scopes = ['account:manage']) {
   const session = {
     account_id: human,
@@ -33,7 +37,9 @@ async function setup(scopes = ['account:manage']) {
   const routeTree = root.addChildren(
     ['/automated/open', '/security'].map((path) => createRoute({ getParentRoute: () => root, path })),
   );
-  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/automated/open'] }) });
+  window.history.replaceState(null, '', '/automated/open');
+  history = createBrowserHistory({ window: dom });
+  const router = createRouter({ routeTree, history });
   const page = await open(
     <RouterContextProvider router={router}>
       <OperatorSessionOpeningPage />
@@ -44,7 +50,7 @@ async function setup(scopes = ['account:manage']) {
   const input = (id: string) => page.host.querySelector<HTMLInputElement>(`#opening-${id}`)!;
   const navigate = (to = '/security') =>
     flush(() => {
-      void router.navigate({ to });
+      router.history.push(to);
     });
   const unload = () => {
     const event = new dom.Event('beforeunload', { cancelable: true });
