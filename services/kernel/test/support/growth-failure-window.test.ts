@@ -19,7 +19,7 @@ const sample = (
       Array.from({ length: relationCount }, (_, index) => [
         `${relation}_${index}_${'x'.repeat(100)}`,
         { rows: rows + index, blocks: index + 1, sequentialScans: index === 0 ? 0 : 1 },
-      ]),
+      ] as const),
     ),
   },
   repetitions: repetitionRows.map((value) => ({ rows: value, blocks: 1, statements: 1 })),
