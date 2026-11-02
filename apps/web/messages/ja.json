@@ -1384,6 +1384,8 @@
   "settings_profile_avatar_retry_after": "アップロードや状態の確認は {seconds} 秒お待ちください。待機後に再試行してください。",
   "settings_public_activity_heading": "公開アクティビティ",
   "settings_public_activity_text": "公開プロフィールに表示するアクティビティを選択します。",
+  "settings_public_activity_save_help": "アクティビティの選択は「アクティビティの選択を保存」を選ぶまでローカルの下書きとして保持されます。",
+  "settings_public_activity_unsaved": "未保存のアクティビティの選択",
   "settings_public_posts": "投稿",
   "settings_public_reviews": "レビュー",
   "settings_public_collections": "コレクション",

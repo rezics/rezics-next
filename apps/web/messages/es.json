@@ -1384,6 +1384,8 @@
   "settings_profile_avatar_retry_after": "Espera {seconds} segundos antes de volver a subir o comprobar la imagen. Reinténtalo al terminar la espera.",
   "settings_public_activity_heading": "Actividad pública",
   "settings_public_activity_text": "Elige qué actividad aparece en tu perfil público.",
+  "settings_public_activity_save_help": "Las opciones de actividad quedan como borrador local hasta que elijas Guardar opciones de actividad.",
+  "settings_public_activity_unsaved": "Opciones de actividad sin guardar",
   "settings_public_posts": "Publicaciones",
   "settings_public_reviews": "Reseñas",
   "settings_public_collections": "Colecciones",

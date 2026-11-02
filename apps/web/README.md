@@ -1546,7 +1546,10 @@ indicator compares only those Profile fields, never Public activity. It yields t
 outcomes; existing save, confirmed readback and recovery announcements retain their separate meanings.
 Local preview requires both supplied link approval and a safe HTTPS destination; stale approval keeps invalid destinations inert without rewriting them.
 Link labels must contain non-whitespace text; validation preserves the exact draft for correction before saving.
-Notifications, Collection visibility and Public activity explain automatic saving inside their own sections.
+Notifications and Collection visibility explain automatic saving inside their own sections.
+Public activity choices remain local until **Save activity choices**; its unsaved announcement compares only activity fields.
+An uncertain activity save keeps its original operation for explicit retry; later choices remain editable and require a separate save after recovery.
+Opening, closing or updating the local Profile preview neither saves nor replaces activity choices.
 Recovery still requires the existing explicit review and confirmation controls when indicated.
 Save and reload readbacks retain later explicit field edits, including a return to the original value; retries
 retain that same draft protection for the original command.

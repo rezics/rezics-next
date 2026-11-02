@@ -1384,6 +1384,8 @@
   "settings_profile_avatar_retry_after": "Attendez {seconds} secondes avant un nouvel envoi ou une vérification. Réessayez à la fin de ce délai.",
   "settings_public_activity_heading": "Activité publique",
   "settings_public_activity_text": "Choisissez les activités visibles sur votre profil public.",
+  "settings_public_activity_save_help": "Les choix d’activité restent un brouillon local jusqu’à ce que vous choisissiez Enregistrer les choix d’activité.",
+  "settings_public_activity_unsaved": "Choix d’activité non enregistrés",
   "settings_public_posts": "Publications",
   "settings_public_reviews": "Avis",
   "settings_public_collections": "Collections",

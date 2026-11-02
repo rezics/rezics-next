@@ -107,6 +107,9 @@ export const RefusedSaveRecovery: Story = {
 
     const reviews = canvas.getByRole('switch', { name: m.settings_public_reviews() });
     await userEvent.click(reviews);
+    await expect(onSave).not.toHaveBeenCalled();
+    await expect(canvas.getByText(m.settings_public_activity_unsaved())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.settings_profile_save_activity() }));
     await canvas.findByText(m.settings_public_activity_conflict());
     await expect(reviews).not.toBeChecked();
     await expect(displayName).toHaveValue('Unrelated profile draft');

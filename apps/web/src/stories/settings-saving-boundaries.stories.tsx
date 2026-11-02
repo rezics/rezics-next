@@ -89,10 +89,13 @@ export const SavingBoundaries: Story = {
         const navigation = within(view.getByRole('navigation', { name: m.settings_sections_label() }));
         await userEvent.click(navigation.getByRole('link', { name: m.settings_public_activity_heading() }));
         const activity = within(await view.findByRole('region', { name: m.settings_public_activity_heading() }));
-        await expect(activity.getByText(m.settings_automatic_save_help())).toBeVisible();
+        await expect(activity.getByText(m.settings_public_activity_save_help())).toBeVisible();
         const reviews = await activity.findByRole('switch', { name: m.settings_public_reviews() });
         const wasChecked = reviews.getAttribute('aria-checked') === 'true';
         await userEvent.click(reviews);
+        await expect(writes).toHaveLength(1);
+        await expect(activity.getByText(m.settings_public_activity_unsaved())).toBeVisible();
+        await userEvent.click(activity.getByRole('button', { name: m.settings_profile_save_activity() }));
         await expect(await activity.findByText(m.settings_saved())).toHaveAttribute('role', 'status');
         await expect(reviews).toHaveAttribute('aria-checked', String(!wasChecked));
         await expect(writes).toHaveLength(2);

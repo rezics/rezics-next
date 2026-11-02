@@ -1385,6 +1385,8 @@
   "settings_profile_avatar_retry_after": "请等待 {seconds} 秒后再上传或查询。等待结束后，请手动重试。",
   "settings_public_activity_heading": "公开动态",
   "settings_public_activity_text": "选择要显示在公开个人主页上的动态。",
+  "settings_public_activity_save_help": "活动选项会保留为本地草稿，直到你选择“保存活动选项”。",
+  "settings_public_activity_unsaved": "尚未保存的活动选项",
   "settings_public_posts": "帖子",
   "settings_public_reviews": "评论",
   "settings_public_collections": "合集",

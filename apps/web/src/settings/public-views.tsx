@@ -8,6 +8,7 @@ import { ProfileFeedback } from './profile';
 import { profileChanges } from './profile-data';
 import type { ProfileEditor } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
+import { usePreferenceRetry } from './preference-failure-retry';
 
 export function PublicViewsSection() {
   const { editor, readable, writable } = useProfileEditor();
@@ -24,6 +25,7 @@ export function PublicViewsCard({
   readable?: boolean;
 }) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
+  const waiting = usePreferenceRetry(state.failure);
   const canRead = readable ?? writable;
   const profile = canRead && state.readAuthority === 'allowed' ? state.draft : null;
   const ids = useId();
@@ -48,10 +50,15 @@ export function PublicViewsCard({
         <CardDescription>
           {m.settings_public_activity_text()} {m.settings_profile_visibility_help()}
         </CardDescription>
-        <CardDescription>{m.settings_automatic_save_help()}</CardDescription>
+        <CardDescription>{m.settings_public_activity_save_help()}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4" aria-busy={busy}>
         <ProfileFeedback editor={editor} scope="views" writable={writable} readable={canRead} showReaderReload />
+        <div role="status" aria-live="polite" aria-atomic="true" className="text-sm font-medium">
+          {changed && !closed && !busy && !state.attempt && state.phase !== 'uncertain'
+            ? m.settings_public_activity_unsaved()
+            : null}
+        </div>
         {profile ? (
           <>
             {(['posts', 'reviews', 'collections', 'realms'] as const).map((view) => (
@@ -66,7 +73,6 @@ export function PublicViewsCard({
                     disabled={closed || busy}
                     onCheckedChange={(checked) => {
                       editor.edit({ publicViews: { ...profile.publicViews, [view]: checked } });
-                      void editor.submit('views');
                     }}
                   />
                 </Field>
@@ -84,7 +90,6 @@ export function PublicViewsCard({
                     disabled={closed || busy}
                     onCheckedChange={(checked) => {
                       editor.edit({ speakersListed: checked });
-                      void editor.submit('views');
                     }}
                   />
                 </Field>
@@ -95,7 +100,7 @@ export function PublicViewsCard({
                 type="button"
                 variant="outline"
                 className="mt-2 h-auto min-h-11 w-full max-w-sm justify-start whitespace-normal break-words py-2 text-left"
-                disabled={closed || !!state.attempt}
+                disabled={closed || !!state.attempt || waiting}
                 onClick={() => void editor.submit('views')}
               >
                 {m.settings_profile_save_activity()}

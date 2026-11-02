@@ -245,6 +245,7 @@ export const SharedReadback: Story = {
     await userEvent.type(name, 'Unsaved draft');
     const activity = within(within(canvasElement).getByRole('region', { name: m.settings_public_activity_heading() }));
     await userEvent.click(activity.getByRole('switch', { name: m.settings_public_reviews() }));
+    await userEvent.click(activity.getByRole('button', { name: m.settings_profile_save_activity() }));
     // A profile draft keeps the shared editor in review after the independent view write.
     await activity.findByText(m.settings_profile_review_needed());
     await expect(name).toHaveValue('Unsaved draft');
@@ -543,6 +544,7 @@ export const PublicActivityRetryDate: Story = {
   play: async ({ canvasElement, args }) => {
     const activity = within(within(canvasElement).getByRole('region', { name: m.settings_public_activity_heading() }));
     await userEvent.click(await activity.findByRole('switch', { name: m.settings_public_reviews() }));
+    await userEvent.click(activity.getByRole('button', { name: m.settings_profile_save_activity() }));
     await activity.findByText(m.settings_retry_wait());
     await expect(activity.getByRole('button', { name: m.settings_public_activity_retry() })).toBeDisabled();
     await expect(activity.getByRole('button', { name: m.settings_profile_reload_current() })).toBeDisabled();

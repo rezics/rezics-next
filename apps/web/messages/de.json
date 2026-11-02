@@ -1384,6 +1384,8 @@
   "settings_profile_avatar_retry_after": "Warte {seconds} Sekunden, bevor du erneut hochlädst oder den Status prüfst. Versuche es nach der Wartezeit erneut.",
   "settings_public_activity_heading": "Öffentliche Aktivitäten",
   "settings_public_activity_text": "Wähle aus, welche Aktivitäten auf deinem öffentlichen Profil erscheinen.",
+  "settings_public_activity_save_help": "Aktivitätsauswahl bleibt ein lokaler Entwurf, bis du „Aktivitätsauswahl speichern“ wählst.",
+  "settings_public_activity_unsaved": "Ungespeicherte Aktivitätsauswahl",
   "settings_public_posts": "Beiträge",
   "settings_public_reviews": "Rezensionen",
   "settings_public_collections": "Sammlungen",

@@ -1384,6 +1384,8 @@
   "settings_profile_avatar_retry_after": "請等待 {seconds} 秒後再上傳或查詢。等待結束後，請手動重試。",
   "settings_public_activity_heading": "公開動態",
   "settings_public_activity_text": "選擇要顯示在公開個人頁面上的動態。",
+  "settings_public_activity_save_help": "活動選項會保留為本機草稿，直到你選擇「儲存活動選項」。",
+  "settings_public_activity_unsaved": "尚未儲存的活動選項",
   "settings_public_posts": "貼文",
   "settings_public_reviews": "評論",
   "settings_public_collections": "合集",

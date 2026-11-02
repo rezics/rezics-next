@@ -1415,6 +1415,8 @@
   "settings_profile_avatar_retry_after": "Wait {seconds} seconds before uploading or checking again. Retry when the wait ends.",
   "settings_public_activity_heading": "Public activity",
   "settings_public_activity_text": "Choose which activity appears on your public profile.",
+  "settings_public_activity_save_help": "Activity choices stay in a local draft until you choose Save activity choices.",
+  "settings_public_activity_unsaved": "Unsaved activity choices",
   "settings_public_posts": "Posts",
   "settings_public_reviews": "Reviews",
   "settings_public_collections": "Collections",

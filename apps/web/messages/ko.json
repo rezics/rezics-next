@@ -1384,6 +1384,8 @@
   "settings_profile_avatar_retry_after": "업로드하거나 상태를 확인하려면 {seconds}초 기다리세요. 대기 시간이 끝나면 다시 시도하세요.",
   "settings_public_activity_heading": "공개 활동",
   "settings_public_activity_text": "공개 프로필에 표시할 활동을 선택합니다.",
+  "settings_public_activity_save_help": "활동 공개 설정은 활동 설정 저장을 선택하기 전까지 로컬 초안으로 남습니다.",
+  "settings_public_activity_unsaved": "저장하지 않은 활동 설정",
   "settings_public_posts": "게시물",
   "settings_public_reviews": "리뷰",
   "settings_public_collections": "컬렉션",
