@@ -333,7 +333,6 @@ function RenameReview({
     );
   return (
     <>
-      <div className="contents" inert={blocker?.status === 'blocked'}>
       <AuthPage returnToSecurity heading={m.auth_rename_heading()}>
         <div className="auth-account-operation-copy">
           <p>{m.auth_rename_description()}</p>
@@ -420,7 +419,6 @@ function RenameReview({
           </form>
         )}
       </AuthPage>
-      </div>
       <AlertDialog
         open={blocker?.status === 'blocked'}
         onOpenChange={(open) => {

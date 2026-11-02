@@ -145,8 +145,6 @@ test('keyboard navigation stays in the departure dialog and Escape stays on the 
   const leave = document.body.querySelector<HTMLButtonElement>('[data-leave]')!;
   const dialog = document.body.querySelector<HTMLElement>('[role="alertdialog"]')!;
   const input = ui.host.querySelector<HTMLInputElement>('#rename-handle')!;
-  const background = input.closest<HTMLElement>('[inert]')!;
-  expect(background.inert).toBe(true);
   for (const [edge, shiftKey] of [[leave, false], [stay, true]] as const) {
     await flush(() => {
       edge.focus();
@@ -157,7 +155,6 @@ test('keyboard navigation stays in the departure dialog and Escape stays on the 
   await flush(() => document.activeElement!.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   await flush(() => navigation);
   expect(ui.router.state.location.pathname).toBe('/account/rename');
-  expect(background.inert).toBe(false);
   expect(input.value).toBe('after');
   expect(ui.host.querySelector<HTMLInputElement>('#rename-confirm')!.checked).toBe(true);
   expect(document.activeElement).toBe(ui.host.querySelector('#rename-handle'));
