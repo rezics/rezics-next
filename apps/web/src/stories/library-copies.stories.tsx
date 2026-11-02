@@ -368,7 +368,7 @@ export const EmptyLaterPage: Story = {
     expect(await canvas.findByRole('status')).toHaveTextContent(m.library_copy_page_empty());
     expect(canvas.queryByText(m.library_copy_empty())).not.toBeInTheDocument();
     const first = canvas.getByRole('link', { name: m.library_collections_first_page() });
-    expect(new URL(first.href).searchParams.has('cursor')).toBe(false);
+    expect(new URL(first.getAttribute('href')!, window.location.href).searchParams.has('cursor')).toBe(false);
     expect(canvas.queryByRole('link', { name: m.library_copy_more() })).not.toBeInTheDocument();
     expect(canvas.getByRole('button', { name: m.library_copy_add() })).toBeVisible();
   },
@@ -381,7 +381,10 @@ export const FilteredEmptyLaterPage: Story = {
     const canvas = within(canvasElement);
     await canvas.findByText(m.library_copy_page_empty());
     expect(canvas.queryByText(m.library_copy_filtered_empty())).not.toBeInTheDocument();
-    const target = new URL(canvas.getByRole('link', { name: m.library_collections_first_page() }).href);
+    const target = new URL(
+      canvas.getByRole('link', { name: m.library_collections_first_page() }).getAttribute('href')!,
+      window.location.href,
+    );
     expect(target.searchParams.get('subjectId')).toBe(recording.copies[0]!.subjectId);
     expect(target.searchParams.has('cursor')).toBe(false);
     expect(canvas.getByRole('link', { name: m.library_copy_all() })).toBeVisible();
