@@ -403,10 +403,14 @@ export const IndependentMounts: Story = {
   play: async ({ canvasElement }) => {
     const articles = [...canvasElement.querySelectorAll<HTMLElement>('article')];
     await waitFor(() => expect(articles).toHaveLength(2));
-    const controls = articles.map((article) => within(article).getByRole('combobox', { name: m.work_parts_relation() }));
+    const controls = articles.map((article) => {
+      const select = article.querySelector<HTMLSelectElement>('select')!;
+      expect(select).toBe(within(article).getByRole('combobox', { name: m.work_parts_relation() }));
+      return select;
+    });
     expect(controls[0]!.id).not.toBe(controls[1]!.id);
     const fixtures = familyMount.fixtures;
-    const original = (controls[0] as HTMLSelectElement).value;
+    const original = controls[0]!.value;
     for (const [index, article] of articles.entries()) {
       const label = article.querySelector<HTMLLabelElement>('label')!;
       expect(label.htmlFor).toBe(controls[index]!.id);
@@ -419,8 +423,8 @@ export const IndependentMounts: Story = {
     const alternative = initial.streams.find((stream) => stream.direction === 'inverse' && stream.key !== original)!;
     await userEvent.selectOptions(controls[0]!, alternative.key);
     await waitFor(() => expect(controls[0]!).not.toBeDisabled());
-    expect((controls[0] as HTMLSelectElement).value).toBe(alternative.key);
-    expect((controls[1] as HTMLSelectElement).value).toBe(original);
+    expect(controls[0]!.value).toBe(alternative.key);
+    expect(controls[1]!.value).toBe(original);
     expect(fixtures[1]!.calls).toHaveLength(0);
     expect(fixtures[0]!.calls).toHaveLength(2);
     await userEvent.selectOptions(controls[1]!, alternative.key);
