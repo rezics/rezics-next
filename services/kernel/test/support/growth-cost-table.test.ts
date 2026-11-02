@@ -1,12 +1,7 @@
 import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
-import {
-  COST_CITATION_SOURCE_LIMITS,
-  costTableProblems,
-  expectCostTable,
-  readCostTable,
-} from './growth-cost-table';
+import { COST_CITATION_SOURCE_LIMITS, costTableProblems, expectCostTable, readCostTable } from './growth-cost-table';
 
 const actualRepositoryRoot = resolve(import.meta.dir, '../../../../');
 const temporaryRoot = join(actualRepositoryRoot, '.temp');
@@ -54,10 +49,7 @@ function writeCitedSource(f: Fixture, path: string, title: string, bytes: number
 }
 
 function citationRows(count: number, check: string): string[] {
-  return Array.from(
-    { length: count },
-    (_, index) => `| Repeat ${index} | one request | constant work | ${check} |`,
-  );
+  return Array.from({ length: count }, (_, index) => `| Repeat ${index} | one request | constant work | ${check} |`);
 }
 
 function costReadme(
