@@ -631,6 +631,34 @@ test('checkGrowth rejects an open measured transaction before a later repetition
   );
 });
 
+test('checkGrowth rejects an open prepare transaction instead of recording a settle failure', async () => {
+  const client = await db.pool.connect();
+  let operations = 0;
+  try {
+    await expect(
+      checkGrowth(db, {
+        ...closedCheck,
+        name: 'prepare transaction must close before measuring',
+        prepare: async () => {
+          await client.query('BEGIN');
+          await client.query('SELECT 1');
+        },
+        operation: async () => {
+          operations++;
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: 'GrowthSettleInfrastructureError',
+      kind: 'measured-transaction',
+      message: expect.stringContaining('keeps a transaction open'),
+    });
+    expect(operations).toBe(0);
+  } finally {
+    await client.query('ROLLBACK').catch(() => undefined);
+    client.release();
+  }
+});
+
 test('checkGrowth distinguishes an unrelated snapshot from the measured transaction token', async () => {
   const holder = await db.pool.connect();
   try {

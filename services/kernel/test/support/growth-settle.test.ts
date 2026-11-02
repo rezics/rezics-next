@@ -63,6 +63,37 @@ test('settle diagnoses a transaction that remains open on its measured backend',
   }
 });
 
+test('settle retires a maintenance connection blocked by a locked relation', async () => {
+  const lockedTable = `${schema}.locked_rows`;
+  await db.admin.query(
+    `CREATE TABLE ${lockedTable} (id integer PRIMARY KEY)
+      WITH (autovacuum_enabled = false, toast.autovacuum_enabled = false)`,
+  );
+  const holder = await db.admin.connect();
+  try {
+    await holder.query('BEGIN');
+    await holder.query(`LOCK TABLE ${lockedTable} IN ACCESS EXCLUSIVE MODE`);
+    const started = performance.now();
+
+    await expect(settle(db, { relations: [lockedTable], timeoutMs: 100 })).rejects.toBeInstanceOf(
+      GrowthSettleInfrastructureError,
+    );
+    expect(performance.now() - started).toBeLessThan(1000);
+
+    const pending = await db.admin.query<{ count: number }>(
+      `SELECT count(*)::integer AS count FROM pg_stat_activity
+        WHERE datname=current_database() AND pid<>pg_backend_pid() AND state='active'
+          AND query LIKE 'VACUUM%' AND query LIKE $1`,
+      ['%locked_rows%'],
+    );
+    expect(pending.rows[0]!.count).toBe(0);
+  } finally {
+    await holder.query('ROLLBACK').catch(() => undefined);
+    holder.release();
+    await db.admin.query(`DROP TABLE IF EXISTS ${lockedTable}`);
+  }
+});
+
 test('settle does not mistake a later transaction for the measured transaction on the same backend', async () => {
   await db.admin.query(`TRUNCATE ${table}`);
   await db.admin.query(`INSERT INTO ${table} SELECT i,i FROM generate_series(1,1000) i`);

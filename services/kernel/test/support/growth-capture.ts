@@ -1,7 +1,7 @@
 import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 import { Buffer } from 'node:buffer';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import pg, { type Pool, type PoolClient } from 'pg';
+import pg, { type Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { GrowthCaptureBudget, parseNativePlanNotice, type GrowthCaptureBudgetLimits } from './growth-capture-budget.ts';
 import { walkPlanTree } from './growth-plan-walk.ts';
@@ -1173,11 +1173,166 @@ export function captureMeasuredRun<T>(operation: () => Promise<T>): Promise<{
   }));
 }
 
+type GrowthSettleErrorOptions = ErrorOptions & {
+  readonly kind?: 'infrastructure' | 'measured-transaction';
+};
+
 export class GrowthSettleInfrastructureError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
+  readonly kind: 'infrastructure' | 'measured-transaction';
+  readonly cleanupErrors: unknown[] = [];
+
+  constructor(message: string, options?: GrowthSettleErrorOptions) {
     super(message, options);
     this.name = 'GrowthSettleInfrastructureError';
+    this.kind = options?.kind ?? 'infrastructure';
   }
+}
+
+const DEFAULT_SETTLE_TIMEOUT_MS = 30_000;
+
+type SettleDeadline = { readonly expiresAt: number; readonly timeoutMs: number };
+type SettleClient = {
+  readonly client: PoolClient;
+  release(destroy?: boolean): unknown;
+};
+
+function makeSettleDeadline(timeoutMs: number): SettleDeadline {
+  return { expiresAt: performance.now() + timeoutMs, timeoutMs };
+}
+
+function deadlineFailure(
+  deadline: SettleDeadline,
+  operation: string,
+  kind: GrowthSettleInfrastructureError['kind'] = 'infrastructure',
+): GrowthSettleInfrastructureError {
+  return new GrowthSettleInfrastructureError(
+    `Growth settle exceeded its ${deadline.timeoutMs}ms infrastructure deadline during ${operation}`,
+    { kind },
+  );
+}
+
+function preserveCleanupFailure(primary: unknown, cleanup: unknown): void {
+  if (primary instanceof GrowthSettleInfrastructureError) {
+    primary.cleanupErrors.push(cleanup);
+  } else if (primary instanceof Error) {
+    const custody = primary as Error & { cleanupErrors?: unknown[] };
+    (custody.cleanupErrors ??= []).push(cleanup);
+  }
+}
+
+function ownedClient(client: PoolClient): SettleClient {
+  let released = false;
+  return {
+    client,
+    release(destroy = false) {
+      if (released) return;
+      released = true;
+      try {
+        client.release(destroy);
+      } catch (error) {
+        return error;
+      }
+    },
+  };
+}
+
+function releaseClient(lease: SettleClient, destroy = false, primary?: unknown): void {
+  const cleanup = lease.release(destroy);
+  if (cleanup === undefined) return;
+  if (primary !== undefined) {
+    preserveCleanupFailure(primary, cleanup);
+    return;
+  }
+  throw new GrowthSettleInfrastructureError('Could not release the owned growth settle connection', {
+    cause: cleanup,
+  });
+}
+
+function waitUntilDeadline<T>(
+  pending: Promise<T>,
+  deadline: SettleDeadline,
+  operation: string,
+  onTimeout: (error: GrowthSettleInfrastructureError) => void,
+  kind: GrowthSettleInfrastructureError['kind'] = 'infrastructure',
+): Promise<T> {
+  const remaining = deadline.expiresAt - performance.now();
+  if (remaining <= 0) {
+    const error = deadlineFailure(deadline, operation, kind);
+    onTimeout(error);
+    void pending.catch(() => undefined);
+    return Promise.reject(error);
+  }
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const error = deadlineFailure(deadline, operation, kind);
+      onTimeout(error);
+      reject(error);
+    }, remaining);
+    pending.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function checkoutSettleClient(
+  database: GrowthDatabase,
+  deadline: SettleDeadline,
+  kind: GrowthSettleInfrastructureError['kind'] = 'infrastructure',
+): Promise<SettleClient> {
+  let expired: GrowthSettleInfrastructureError | undefined;
+  let timedOut = false;
+  const pending = database.admin.connect().then((client) => {
+    if (timedOut) {
+      try {
+        client.release(true);
+      } catch (cleanup) {
+        if (expired) preserveCleanupFailure(expired, cleanup);
+      }
+      return undefined;
+    }
+    return ownedClient(client);
+  });
+  const lease = await waitUntilDeadline(
+    pending,
+    deadline,
+    'admin pool checkout',
+    (error) => {
+      timedOut = true;
+      expired = error;
+    },
+    kind,
+  );
+  if (!lease) throw deadlineFailure(deadline, 'admin pool checkout', kind);
+  return lease;
+}
+
+function querySettleClient<T extends QueryResultRow = QueryResultRow>(
+  lease: SettleClient,
+  deadline: SettleDeadline,
+  sql: string,
+  values: unknown[] | undefined,
+  operation: string,
+  kind: GrowthSettleInfrastructureError['kind'] = 'infrastructure',
+): Promise<QueryResult<T>> {
+  if (deadline.expiresAt <= performance.now()) {
+    const error = deadlineFailure(deadline, operation, kind);
+    releaseClient(lease, true, error);
+    return Promise.reject(error);
+  }
+  let pending: Promise<QueryResult<T>>;
+  try {
+    pending = lease.client.query<T>(sql, values);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+  return waitUntilDeadline(pending, deadline, operation, (error) => releaseClient(lease, true, error), kind);
 }
 
 function quoteIdentifier(value: string): string {
@@ -1204,10 +1359,12 @@ function qualifiedName(value: string): { schema: string; name: string } {
 }
 
 async function relationMaintenance(
-  database: GrowthDatabase,
   relations?: readonly string[],
+  lease?: SettleClient,
+  deadline?: SettleDeadline,
 ): Promise<RelationMaintenance[]> {
   if (relations && relations.length === 0) return [];
+  if (!lease || !deadline) throw new Error('Relation maintenance requires an owned settle connection and deadline');
   const wanted = relations?.map(qualifiedName);
   const from = `SELECT n.nspname AS schema, c.relname AS name,c.relkind AS kind,c.reloptions AS options,
             c.reltoastrelid=0 OR COALESCE(t.reloptions @> ARRAY['autovacuum_enabled=false'],false) AS toast_disabled
@@ -1215,40 +1372,67 @@ async function relationMaintenance(
        LEFT JOIN pg_class t ON t.oid=c.reltoastrelid`;
   const catalog = `c.relkind IN ('r','m') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname !~ '^pg_'`;
   const result = wanted
-    ? await database.admin.query<RelationMaintenance>(
+    ? await querySettleClient<RelationMaintenance>(
+        lease,
+        deadline,
         `${from}
        JOIN unnest($1::text[], $2::text[]) AS wanted(schema, name)
          ON n.nspname=wanted.schema AND c.relname=wanted.name
       WHERE ${catalog}
       ORDER BY n.nspname,c.relname`,
         [wanted.map((row) => row.schema), wanted.map((row) => row.name)],
+        'scoped relation maintenance metadata',
       )
-    : await database.admin.query<RelationMaintenance>(
+    : await querySettleClient<RelationMaintenance>(
+        lease,
+        deadline,
         `${from}
       WHERE ${catalog}
       ORDER BY n.nspname,c.relname`,
+        undefined,
+        'relation maintenance metadata',
       );
   return result.rows;
 }
 
 async function disableAutovacuum(database: GrowthDatabase, relations?: readonly string[]): Promise<void> {
-  await disableAutovacuumOn(database, await relationMaintenance(database, relations));
+  const deadline = makeSettleDeadline(DEFAULT_SETTLE_TIMEOUT_MS);
+  const lease = await checkoutSettleClient(database, deadline);
+  let primary: unknown;
+  try {
+    const metadata = await relationMaintenance(relations, lease, deadline);
+    await disableAutovacuumOn(metadata, lease, deadline);
+  } catch (error) {
+    primary = error;
+    throw error;
+  } finally {
+    const cause = primary instanceof GrowthSettleInfrastructureError ? primary.cause : primary;
+    releaseClient(lease, cause !== undefined && retireHeldClient(cause), primary);
+  }
 }
 
-async function disableAutovacuumOn(database: GrowthDatabase, relations: readonly RelationMaintenance[]): Promise<void> {
+async function disableAutovacuumOn(
+  relations: readonly RelationMaintenance[],
+  lease: SettleClient,
+  deadline: SettleDeadline,
+): Promise<void> {
   for (const { schema, name, kind, options, toast_disabled } of relations) {
     if (kind !== 'r') continue;
     if (options?.includes('autovacuum_enabled=false') && toast_disabled) continue;
-    await database.admin.query(
+    await querySettleClient(
+      lease,
+      deadline,
       `ALTER TABLE ${qualifiedIdentifier(`${schema}.${name}`)} SET (autovacuum_enabled = false, toast.autovacuum_enabled = false)`,
+      undefined,
+      `autovacuum settings for ${schema}.${name}`,
     );
   }
 }
 
-export async function assertMeasuredTransactionsSettled(
+function measuredTransactionBackend(
   database: GrowthDatabase,
   operationBackends: ReadonlySet<number> | undefined,
-): Promise<void> {
+): number | undefined {
   if (!operationBackends) return;
   const transactions = (
     operationBackends as ReadonlySet<number> & {
@@ -1259,8 +1443,15 @@ export async function assertMeasuredTransactionsSettled(
   const backend = [...(transactions ?? [])].find(
     ([pid, token]) => operationBackends.has(pid) && activeTransactions?.get(pid) === token,
   )?.[0];
-  if (backend === undefined) return;
-  const result = await database.admin.query<{
+  return backend;
+}
+
+async function assertMeasuredTransactionOnClient(
+  backend: number,
+  lease: SettleClient,
+  deadline: SettleDeadline,
+): Promise<void> {
+  const result = await querySettleClient<{
     pid: number;
     backend_type: string;
     application_name: string;
@@ -1268,13 +1459,38 @@ export async function assertMeasuredTransactionsSettled(
     xact_start: Date | null;
     query: string;
   }>(
+    lease,
+    deadline,
     `SELECT pid,backend_type,application_name,state,xact_start,split_part(query,E'\\n',1) AS query
        FROM pg_stat_activity WHERE pid=$1`,
     [backend],
+    `measured transaction metadata for backend ${backend}`,
+    'measured-transaction',
   );
   throw new GrowthSettleInfrastructureError(
     `Backend ${backend} from the measured operation keeps a transaction open; each warmup and measured sample must end its own transaction. Holding backend: ${JSON.stringify(result.rows[0] ?? { pid: backend })}`,
+    { kind: 'measured-transaction' },
   );
+}
+
+export async function assertMeasuredTransactionsSettled(
+  database: GrowthDatabase,
+  operationBackends: ReadonlySet<number> | undefined,
+): Promise<void> {
+  const backend = measuredTransactionBackend(database, operationBackends);
+  if (backend === undefined) return;
+  const deadline = makeSettleDeadline(DEFAULT_SETTLE_TIMEOUT_MS);
+  const lease = await checkoutSettleClient(database, deadline, 'measured-transaction');
+  let primary: unknown;
+  try {
+    await assertMeasuredTransactionOnClient(backend, lease, deadline);
+  } catch (error) {
+    primary = error;
+    throw error;
+  } finally {
+    const cause = primary instanceof GrowthSettleInfrastructureError ? primary.cause : primary;
+    releaseClient(lease, cause !== undefined && retireHeldClient(cause), primary);
+  }
 }
 
 export async function settle(
@@ -1283,22 +1499,42 @@ export async function settle(
     readonly relations?: readonly string[];
     readonly analyze?: boolean;
     readonly timeoutMs?: number;
-    readonly pollMs?: number;
     /** Backends observed in the preceding measured run. */
     readonly operationBackends?: ReadonlySet<number>;
   } = {},
 ): Promise<number> {
+  if (options === null || typeof options !== 'object') throw new TypeError('Settle options must be an object');
+  if ('pollMs' in options) throw new TypeError('settle does not poll; remove pollMs and configure timeoutMs');
+  const timeoutMs = options.timeoutMs === undefined ? DEFAULT_SETTLE_TIMEOUT_MS : options.timeoutMs;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1)
+    throw new RangeError('Settle timeoutMs must be a positive safe integer');
+  if (options.analyze !== undefined && typeof options.analyze !== 'boolean')
+    throw new TypeError('Settle analyze must be a boolean');
+  if (options.relations !== undefined) {
+    if (!Array.isArray(options.relations)) throw new TypeError('Settle relations must be an array');
+    for (const relation of options.relations) qualifiedName(relation);
+  }
+  if (
+    options.operationBackends !== undefined &&
+    (typeof options.operationBackends.has !== 'function' || typeof options.operationBackends[Symbol.iterator] !== 'function')
+  )
+    throw new TypeError('Settle operationBackends must be a set');
+
   const started = performance.now();
-  await assertMeasuredTransactionsSettled(database, options.operationBackends);
-  const metadata = await relationMaintenance(database, options.relations);
-  await disableAutovacuumOn(database, metadata);
-  const names = options.relations ?? metadata.map(({ schema, name }) => `${schema}.${name}`);
-  if (names.length > 0) {
-    const client = await database.admin.connect();
-    const physicalName = connectedDatabase(client) ?? poolDatabaseName(database.admin) ?? databaseName(database);
-    let failure: GrowthSettleInfrastructureError | undefined;
-    try {
-      for (const relation of names) {
+  const deadline = makeSettleDeadline(timeoutMs);
+  const backend = measuredTransactionBackend(database, options.operationBackends);
+  const needsMaintenance = options.relations === undefined || options.relations.length > 0;
+  if (!needsMaintenance && backend === undefined) return performance.now() - started;
+
+  const lease = await checkoutSettleClient(database, deadline);
+  const physicalName = connectedDatabase(lease.client) ?? poolDatabaseName(database.admin) ?? databaseName(database);
+  let primary: unknown;
+  try {
+    if (backend !== undefined) await assertMeasuredTransactionOnClient(backend, lease, deadline);
+    const metadata = needsMaintenance ? await relationMaintenance(options.relations, lease, deadline) : [];
+    await disableAutovacuumOn(metadata, lease, deadline);
+    const names = options.relations ?? metadata.map(({ schema, name }) => `${schema}.${name}`);
+    for (const relation of names) {
         const sql = [
           'VACUUM (INDEX_CLEANUP ON',
           options.analyze ? ', ANALYZE' : '',
@@ -1306,30 +1542,20 @@ export async function settle(
           qualifiedIdentifier(relation),
         ].join('');
         try {
-          await client.query(sql);
+          await querySettleClient(lease, deadline, sql, undefined, `VACUUM relation ${relation}`);
         } catch (error) {
-          failure = new GrowthSettleInfrastructureError(
+          throw new GrowthSettleInfrastructureError(
             `Could not settle database ${physicalName} relation ${relation}: ${error instanceof Error ? error.message : String(error)}`,
             { cause: error },
           );
-          break;
         }
-      }
-    } finally {
-      try {
-        client.release(failure !== undefined && retireHeldClient(failure.cause) ? true : undefined);
-      } catch (cleanup) {
-        const cleanupMessage = asError(cleanup).message;
-        failure = failure
-          ? new GrowthSettleInfrastructureError(`${failure.message}; cleanup failed: ${cleanupMessage}`, {
-              cause: failure,
-            })
-          : new GrowthSettleInfrastructureError(`Could not release the settle admin client: ${cleanupMessage}`, {
-              cause: cleanup,
-            });
-      }
     }
-    if (failure) throw failure;
+  } catch (error) {
+    primary = error;
+    throw error;
+  } finally {
+    const cause = primary instanceof GrowthSettleInfrastructureError ? primary.cause : primary;
+    releaseClient(lease, cause !== undefined && retireHeldClient(cause), primary);
   }
   return performance.now() - started;
 }

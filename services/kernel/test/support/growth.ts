@@ -971,9 +971,9 @@ async function runGrowthCheck(
     const recordedSettle = async (target: GrowthDatabase, options: Parameters<typeof settle>[1]): Promise<number> => {
       const started = performance.now();
       try {
-        return await settle(target, laterSettleTimeout ? { ...options, timeoutMs: 900, pollMs: 25 } : options);
+        return await settle(target, laterSettleTimeout ? { ...options, timeoutMs: 900 } : options);
       } catch (error) {
-        if (!(error instanceof GrowthSettleInfrastructureError)) throw error;
+        if (!(error instanceof GrowthSettleInfrastructureError) || error.kind === 'measured-transaction') throw error;
         laterSettleTimeout = true;
         settleFailures.push(error.message.slice(0, 2000));
         return performance.now() - started;

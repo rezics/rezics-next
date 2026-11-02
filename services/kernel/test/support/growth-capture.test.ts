@@ -4,6 +4,7 @@ import { withConnection } from '../../src/database/pool.ts';
 import {
   capture,
   captureMeasuredRun,
+  GrowthSettleInfrastructureError,
   openGrowthDatabase,
   settle,
   trackGrow,
@@ -901,18 +902,30 @@ test('fails at open when the database cannot report plans', async () => {
 function recordAdminQueries(database: GrowthDatabase) {
   const originalQuery = database.admin.query.bind(database.admin);
   const statements: { text: string; values: unknown }[] = [];
-  database.admin.query = ((...args: Parameters<typeof database.admin.query>) => {
+  const record = (args: Parameters<typeof database.admin.query>) => {
     const query = args[0] as string | QueryConfig;
     statements.push(
       typeof query === 'string'
         ? { text: query, values: args[1] }
         : { text: query.text, values: query.values ?? args[1] },
     );
+  };
+  database.admin.query = ((...args: Parameters<typeof database.admin.query>) => {
+    record(args);
     return originalQuery(...args);
   }) as typeof database.admin.query;
+  const acquired = (client: PoolClient) => {
+    const originalClientQuery = client.query.bind(client);
+    client.query = ((...args: Parameters<typeof client.query>) => {
+      record(args as Parameters<typeof database.admin.query>);
+      return originalClientQuery(...args);
+    }) as typeof client.query;
+  };
+  database.admin.on('acquire', acquired);
   return {
     statements,
     restore() {
+      database.admin.removeListener('acquire', acquired);
       database.admin.query = originalQuery;
     },
   };
@@ -1060,4 +1073,93 @@ test('captures and closes an extra library pool with the production pool', async
   await database.close();
   dbClosed = true;
   await expect(libraryPool.query('SELECT 73 AS answer')).rejects.toThrow();
+});
+
+type SettleAdminPool = GrowthDatabase['admin'];
+type SettleAdminClient = Awaited<ReturnType<SettleAdminPool['connect']>>;
+
+function fakeSettleDatabase(connect: () => Promise<SettleAdminClient>): GrowthDatabase {
+  const admin = { connect } as unknown as SettleAdminPool;
+  return {
+    url: 'postgres://localhost/settle_test',
+    admin,
+    pool: admin,
+    openPool: () => {
+      throw new Error('not used by settle tests');
+    },
+    close: async () => {},
+  };
+}
+
+function fakeSettleClient(
+  query: (sql: string) => Promise<unknown>,
+  release: (destroy?: boolean) => void,
+): SettleAdminClient {
+  return { query, release } as unknown as SettleAdminClient;
+}
+
+test('times out a starved checkout and retires a client that arrives later', async () => {
+  let resolveCheckout!: (client: SettleAdminClient) => void;
+  const checkout = new Promise<SettleAdminClient>((resolve) => {
+    resolveCheckout = resolve;
+  });
+  const database = fakeSettleDatabase(() => checkout);
+  let released!: (destroy: boolean | undefined) => void;
+  const lateClient = fakeSettleClient(async () => ({ rows: [] }), (destroy) => released(destroy));
+  const releaseSeen = new Promise<boolean | undefined>((resolve) => {
+    released = resolve;
+  });
+  const started = performance.now();
+
+  await expect(settle(database, { relations: ['public.rows'], timeoutMs: 20 })).rejects.toBeInstanceOf(
+    GrowthSettleInfrastructureError,
+  );
+  expect(performance.now() - started).toBeLessThan(500);
+
+  resolveCheckout(lateClient);
+  expect(await releaseSeen).toBe(true);
+});
+
+test('retires the owned connection when maintenance remains blocked past its deadline', async () => {
+  let rejectMaintenance!: (error: Error) => void;
+  let maintenanceFinished = false;
+  const maintenance = new Promise<unknown>((_resolve, reject) => {
+    rejectMaintenance = (error) => {
+      maintenanceFinished = true;
+      reject(error);
+    };
+  });
+  let destroyed: boolean | undefined;
+  const adminClient = fakeSettleClient(
+    async (sql) => (sql.startsWith('VACUUM') ? maintenance : { rows: [] }),
+    (destroy) => {
+      destroyed = destroy;
+      if (destroy) rejectMaintenance(new Error('owned connection retired'));
+    },
+  );
+  const database = fakeSettleDatabase(async () => adminClient);
+  const started = performance.now();
+
+  await expect(settle(database, { relations: ['public.locked_rows'], timeoutMs: 20 })).rejects.toMatchObject({
+    name: 'GrowthSettleInfrastructureError',
+    message: expect.stringContaining('infrastructure deadline'),
+  });
+  expect(performance.now() - started).toBeLessThan(500);
+  expect(destroyed).toBe(true);
+  await Promise.resolve();
+  expect(maintenanceFinished).toBe(true);
+});
+
+test('validates deadline options before checkout and rejects the removed poll interval', async () => {
+  let checkouts = 0;
+  const database = fakeSettleDatabase(async () => {
+    checkouts++;
+    throw new Error('must not check out');
+  });
+
+  await expect(settle(database, { timeoutMs: 0 })).rejects.toThrow('positive safe integer');
+  await expect(
+    settle(database, { timeoutMs: 20, pollMs: 5 } as unknown as NonNullable<Parameters<typeof settle>[1]>),
+  ).rejects.toThrow('settle does not poll');
+  expect(checkouts).toBe(0);
 });

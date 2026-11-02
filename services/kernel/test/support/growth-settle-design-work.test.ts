@@ -36,7 +36,7 @@ test('Growth setup does not require or inspect invisible tuple versions as bound
     expect((await holder.query(`SELECT count(*)::integer AS count FROM ${relation}`)).rows[0]!.count).toBe(0);
     await db.admin.query(`INSERT INTO ${relation} VALUES (1)`);
 
-    await settle(db, { relations: [relation], analyze: true, timeoutMs: 250, pollMs: 5 });
+    await settle(db, { relations: [relation], analyze: true, timeoutMs: 250 });
 
     expect((await holder.query(`SELECT count(*)::integer AS count FROM ${relation}`)).rows[0]!.count).toBe(0);
     expect((await db.admin.query(`SELECT count(*)::integer AS count FROM ${relation}`)).rows[0]!.count).toBe(1);
