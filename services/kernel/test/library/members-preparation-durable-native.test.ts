@@ -19,6 +19,11 @@ import {
   verifyOperationalWorkReplay,
 } from '../../src/history/operational-work-receiving.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
+import {
+  declareMembersPreparationRequest,
+  runMembersPreparationRequest,
+} from '../../src/library/members-preparation-request.ts';
+import { MEMBERS_PREPARATION_CHILDREN } from '../../src/library/members-preparation-budget.ts';
 import { definition, membersPreparationRuntime } from './support/members-preparation-runtime.ts';
 
 let native: Awaited<ReturnType<typeof membersPreparationRuntime>>;
@@ -218,4 +223,137 @@ test('a reconstructed service recovers the exact committed definition only durin
   const expiry = new Date(header.last_read_at).getTime() + 24 * 60 * 60 * 1000;
   expect(await read(locator, () => new Date(expiry))).toBeNull();
   expect((await native.rows(fixture.owner))[0]).toMatchObject({ state: 'live', episode_id: locator.episodeId });
+});
+
+test('one finite request parent holds every child before native reservation and commits before Source dispatch', async () => {
+  const f = await native.fixture();
+  // Explicit finite test declarations exercise composition, not a release of native Source prices.
+  const allowance = {
+    candidateKeys: 100,
+    nativeRows: 4096,
+    identityMetadataRows: 8192,
+    nativePoints: 4096,
+    witnessKeys: 100,
+    statements: 16,
+    bytes: 4 * 1024 * 1024,
+    emptySeeks: 4096,
+  };
+  const owners = Object.fromEntries(MEMBERS_PREPARATION_CHILDREN.map((name) => [name, allowance])) as Parameters<
+    typeof declareMembersPreparationRequest
+  >[0];
+  const declared = declareMembersPreparationRequest(owners);
+  expect(declared.children.history).toEqual(OPERATIONAL_WORK_LOCAL_DECLARATION);
+  const parent = new NativeCollectionWork(
+    { reservationId: 'whole-request', remaining: declared.total },
+    Date.now() + 60_000,
+  );
+  const dependencies = { pool: native.db.pool, workClient: native.workClient, preparation: f.store };
+  const input = { actor: f.actor, collectionId: f.collectionId, definition: definition(), parent, owners };
+  let sources = 0;
+  let cleanups = 0;
+  await expect(
+    runMembersPreparationRequest(
+      dependencies,
+      {
+        ...input,
+        owners: { ...owners, sourceResolve: null },
+      },
+      async () => {
+        sources++;
+      },
+      async () => {
+        cleanups++;
+      },
+    ),
+  ).rejects.toMatchObject({ code: 'dependency_unavailable' });
+  const short = new NativeCollectionWork({ reservationId: 'local-subtotal', remaining: allowance }, parent.deadlineAt);
+  await expect(
+    runMembersPreparationRequest(
+      dependencies,
+      { ...input, parent: short },
+      async () => {
+        sources++;
+      },
+      async () => {
+        cleanups++;
+      },
+    ),
+  ).rejects.toMatchObject({ code: 'dependency_unavailable' });
+  expect(await native.rows(f.owner)).toHaveLength(0);
+  expect(sources).toBe(0);
+  expect(cleanups).toBe(0);
+  let held: NativeCollectionWork | undefined;
+  const admitted = await runMembersPreparationRequest(
+    dependencies,
+    input,
+    async (request) => {
+      sources++;
+      held = request.children.sourceResolve;
+      for (const axis of Object.keys(allowance) as (keyof typeof allowance)[]) expect(parent.available(axis)).toBe(0);
+      expect(held.receipt().reservationId).toBe('whole-request');
+      expect(request.history).not.toBeNull();
+      // A different native client sees both copies only after the actual reservation COMMIT.
+      expect((await native.rows(f.owner))[0]!.episode_id).toBe(request.episode.locator.episodeId);
+      expect((await native.workflow(request.episode.workflowId)).status?.status).toBe('ENQUEUED');
+      return request.episode;
+    },
+    async (_children, outcome) => {
+      cleanups++;
+      expect(outcome.ok).toBe(true);
+    },
+  );
+  expect(sources).toBe(1);
+  expect(cleanups).toBe(1);
+  expect(() => held!.assertReady()).toThrow('allocation is closed');
+  await expect(
+    runMembersPreparationRequest(
+      dependencies,
+      input,
+      async () => {
+        sources++;
+      },
+      async () => {
+        cleanups++;
+      },
+    ),
+  ).rejects.toMatchObject({ code: 'dependency_unavailable' });
+  expect(sources).toBe(1);
+  expect(cleanups).toBe(1);
+  const retryParent = new NativeCollectionWork(
+    { reservationId: 'retry-request', remaining: declared.total },
+    Date.now() + 60_000,
+  );
+  const duplicate = await runMembersPreparationRequest(
+    dependencies,
+    { ...input, parent: retryParent },
+    async (request) => {
+      expect(request.history).toBeNull();
+      return request.episode;
+    },
+    async () => {},
+  );
+  expect(duplicate.value).toEqual(admitted.value);
+  expect(await native.rows(f.owner)).toHaveLength(1);
+  const failureParent = new NativeCollectionWork(
+    { reservationId: 'failed-source', remaining: declared.total },
+    Date.now() + 60_000,
+  );
+  const error = new Error('Source unavailable after reservation');
+  await expect(
+    runMembersPreparationRequest(
+      dependencies,
+      { ...input, parent: failureParent },
+      async () => {
+        throw error;
+      },
+      async (children, outcome) => {
+        expect(outcome).toEqual({ ok: false, error });
+        const cleanup = children.cleanup.reserve(allowance);
+        cleanup.dispatch();
+        cleanup.settle();
+      },
+    ),
+  ).rejects.toBe(error);
+  expect(Reflect.get(error, 'work')).toEqual(failureParent.receipt());
+  expect((await native.rows(f.owner))[0]).toMatchObject({ state: 'live', complete: false });
 });

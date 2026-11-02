@@ -2832,3 +2832,21 @@ three-path component arithmetic, serialized bind refusal, fixed-width transform/
 refusal. The pure projection fixtures do not claim private admission or native snapshot/owner proof. These cases and the
 retained native positive/zero/driver/rollback outcomes are UNRUN in this source delivery; typing is not native
 private-grant, physical closure or whole-original acceptance evidence.
+
+### Funded Members request admission
+
+`members-preparation-request.ts` connects one exact definition to native reservation and positioned History
+registration. `declareMembersPreparationRequest` uses History's complete released three-attempt original once;
+all other owner declarations remain explicit. `runMembersPreparationRequest` transfers that whole declaration
+from the existing request parent before checkout, commits the native reservation, then invokes the Source
+callback with disjoint held children. Duplicate requests reuse the live episode without a new intent or original.
+The callback and terminal cleanup settle before unused capacity returns; failed dispatched work stays charged.
+The native journey covers missing declarations, insufficient funding, actual COMMIT visibility, duplicate admission
+and failure after reservation. Its finite test declarations do not release production Source prices.
+
+Decision: group native History registration, transfers and retries in its existing complete original; keep all
+non-History owner prices explicit and retain the request's original payer and deadline.
+
+This is the request composition seam. The default Members reader and selected-runtime worker still require
+current Source/physical binding, bounded execution, final publication and prepared-page readback before they can
+return a useful retained page. The callback, locator and allocation declaration confer none of those authorities.
