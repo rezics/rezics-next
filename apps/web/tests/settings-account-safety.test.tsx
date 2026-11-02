@@ -56,6 +56,8 @@ test('failed and uncertain native sign-out recover independently without replay 
     document: window.document,
     HTMLElement: window.HTMLElement,
     HTMLFormElement: window.HTMLFormElement,
+    Element: window.Element,
+    Node: window.Node,
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = Object.entries(globals).map(([key, value]) => {
@@ -70,6 +72,7 @@ test('failed and uncertain native sign-out recover independently without replay 
     renamed = 0,
     refreshed = 0,
     fail = true,
+    current = false,
     refreshFails = false;
   window.HTMLFormElement.prototype.submit = function () {
     submitted++;
@@ -86,9 +89,11 @@ test('failed and uncertain native sign-out recover independently without replay 
           state="signed-in"
           csrfToken="fresh"
           securityHref="https://auth.test/security"
+          isCurrent={() => current}
           onReload={async () => {
             refreshed++;
             if (refreshFails) throw new Error('Session unavailable');
+            current = true;
           }}
           renameRead={{
             loading: false,
@@ -101,6 +106,10 @@ test('failed and uncertain native sign-out recover independently without replay 
       ),
     );
     await click('button[type="submit"]');
+    expect(submitted).toBe(0);
+    expect(host.textContent).toContain(m.settings_account_csrf_unavailable());
+    await click(reload);
+    await click('button[type="submit"]');
     expect(host.textContent).toContain(m.settings_account_sign_out_failed());
     refreshFails = true;
     await click(reload);
@@ -110,7 +119,7 @@ test('failed and uncertain native sign-out recover independently without replay 
     expect(renamed).toBe(1);
     expect(submitted).toBe(1);
     await click(reload);
-    expect(refreshed).toBe(2);
+    expect(refreshed).toBe(3);
     expect(submitted).toBe(1);
     fail = false;
     await click('button[type="submit"]');
