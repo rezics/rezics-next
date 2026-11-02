@@ -6,20 +6,37 @@ const HUNK = /^<<<<<<< [^\n]*\n([\s\S]*?)^=======\n([\s\S]*?)^>>>>>>> [^\n]*\n/g
 const IMPORT = /^import\s+(?:(type)\s+)?(.*?)\s+from\s+(['"])([^'"]+)\3;?\s*$/;
 const SIDE_EFFECT = /^import\s+(['"])[^'"]+\1;?\s*$/;
 
-type Named = { text: string; local: string };
+type Named = { exported: string; local: string; typeOnly: boolean };
 type Line = {
   module: string;
   typeOnly: boolean;
   defaultName?: string | undefined;
   namespace?: string | undefined;
   named: Named[];
+  clashes: Set<string>;
 };
+
+function parseNamed(part: string): Named | undefined {
+  const typeOnly = /^type\s+\S/.test(part);
+  const body = typeOnly ? part.replace(/^type\s+/, '').trim() : part;
+  const pieces = body.split(/\s+as\s+/);
+  if (pieces.length > 2) return undefined;
+  const exported = pieces[0]!.trim();
+  const local = (pieces[1] ?? pieces[0])!.trim();
+  if (!/^\w+$/.test(exported) || !/^\w+$/.test(local)) return undefined;
+  return { exported, local, typeOnly };
+}
+
+function renderNamed(item: Named): string {
+  const body = item.exported === item.local ? item.exported : `${item.exported} as ${item.local}`;
+  return item.typeOnly ? `type ${body}` : body;
+}
 
 function parse(line: string): Line | undefined {
   const match = IMPORT.exec(line.trim());
   if (!match) return undefined;
   const [, typeOnly, clause, , module] = match;
-  const result: Line = { module: module!, typeOnly: typeOnly === 'type', named: [] };
+  const result: Line = { module: module!, typeOnly: typeOnly === 'type', named: [], clashes: new Set() };
   let rest = clause!.trim();
   const braces = /\{([^{}]*)\}/.exec(rest);
   if (braces) {
@@ -27,13 +44,9 @@ function parse(line: string): Line | undefined {
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean)) {
-      const local = part
-        .split(/\s+as\s+/)
-        .pop()!
-        .replace(/^type\s+/, '')
-        .trim();
-      if (!/^\w+$/.test(local)) return undefined;
-      result.named.push({ text: part, local });
+      const named = parseNamed(part);
+      if (!named) return undefined;
+      result.named.push(named);
     }
     rest = rest.replace(braces[0], '').trim();
   }
@@ -53,9 +66,22 @@ function render(line: Line): string {
   const parts = [
     ...(line.defaultName ? [line.defaultName] : []),
     ...(line.namespace ? [`* as ${line.namespace}`] : []),
-    ...(line.named.length ? [`{ ${line.named.map((item) => item.text).join(', ')} }`] : []),
+    ...(line.named.length ? [`{ ${line.named.map(renderNamed).join(', ')} }`] : []),
   ];
   return `import ${line.typeOnly ? 'type ' : ''}${parts.join(', ')} from '${line.module}';\n`;
+}
+
+function mergeNamed(into: Line, item: Named) {
+  const existing = into.named.find((other) => other.local === item.local);
+  if (!existing) {
+    into.named.push(item);
+    return;
+  }
+  if (existing.exported !== item.exported) {
+    into.clashes.add(item.local);
+    return;
+  }
+  if (existing.typeOnly && !item.typeOnly) existing.typeOnly = false;
 }
 
 /** The file with every import-only conflict hunk resolved, or undefined when a hunk holds anything else. */
@@ -91,16 +117,17 @@ export function resolveImportConflicts(text: string): string | undefined {
         return undefined;
       merged.defaultName ??= line.defaultName;
       merged.namespace ??= line.namespace;
-      for (const item of line.named)
-        if (!merged.named.some((other) => other.local === item.local)) merged.named.push(item);
+      for (const item of line.named) mergeNamed(merged, item);
     }
     const kept: Line[] = [];
     const bound = new Set<string>();
     for (const line of byModule.values()) {
+      if ([...line.clashes].some(used)) return undefined;
       const next: Line = {
         module: line.module,
         typeOnly: line.typeOnly,
         named: line.named.filter((item) => used(item.local)),
+        clashes: line.clashes,
       };
       if (line.defaultName && used(line.defaultName)) next.defaultName = line.defaultName;
       if (line.namespace && used(line.namespace)) next.namespace = line.namespace;
