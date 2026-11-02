@@ -148,11 +148,13 @@ test('keyboard navigation stays in the departure dialog and Escape stays on the 
   for (const [edge, shiftKey] of [[leave, false], [stay, true]] as const) {
     await flush(() => {
       edge.focus();
-      edge.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true }));
+      edge.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true }));
     });
     expect(dialog.contains(document.activeElement)).toBe(true);
   }
-  await flush(() => document.activeElement!.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  await flush(() =>
+    document.activeElement!.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })),
+  );
   await flush(() => navigation);
   expect(ui.router.state.location.pathname).toBe('/account/rename');
   expect(input.value).toBe('after');
