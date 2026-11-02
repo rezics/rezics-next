@@ -112,9 +112,12 @@ test('canonical committed scope stays the same owner; Type, kinds, facets, range
   const pending = owner(results);
   expect(searchRetryOwnerCurrent(pending, owner({ ...results }))).toBe(true);
   for (const state of replacements) expect(searchRetryOwnerCurrent(pending, owner(state))).toBe(false);
-  expect(searchRetryOwnerCurrent(owner({ ...results, languages: ['ja', 'en'] }), owner({ ...results, languages: ['en', 'ja'] }))).toBe(
-    false,
-  );
+  expect(
+    searchRetryOwnerCurrent(
+      owner({ ...results, languages: ['ja', 'en'] }),
+      owner({ ...results, languages: ['en', 'ja'] }),
+    ),
+  ).toBe(false);
   expect(searchRetryOwnerCurrent(owner(empty), owner({ ...empty, type: 'schema:Book' }))).toBe(false);
 });
 
