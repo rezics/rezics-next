@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import {
   PROFILE_FORMAT,
+  profileDigest,
   resolveTemplate,
   type CompositionDocument,
   type PresentationProfile,
@@ -17,7 +18,6 @@ const profile: PresentationProfile = {
   types: [{ type: 'schema:Book', document }],
   routes: [{ route: '/', document }],
 };
-const digest = `sha256:${'a'.repeat(64)}`;
 
 test('structural bases insert once, preserve other templates, resolve as fallback, and publish normally', async () => {
   const before = structuredClone(profile);
@@ -42,6 +42,7 @@ test('structural bases insert once, preserve other templates, resolve as fallbac
     resolveTemplate(addition.profile, { bases: ['schema:Article'] }).scope,
   ]).toEqual(['route', 'type', 'base']);
 
+  const digest = profileDigest(addition.profile);
   const requests: { path: string; body: unknown }[] = [];
   const client = createKernelClient('https://kernel.invalid', {
     fetch: async (input, init) => {

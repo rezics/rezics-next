@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import {
+  profileDigest,
   templateViews,
   VIEWS,
   isView,
@@ -10,6 +11,7 @@ import {
   type View,
   type ViewDocuments,
 } from '@rezics/composition';
+import { admittedActivationResult, admittedPublishDigest } from './curation-publication-response';
 
 export type Template = { scope: 'generic'; key: null } | { scope: 'base' | 'type' | 'route'; key: string };
 /** The failed stage remains visible even when the server returned a typed rejection. */
@@ -262,7 +264,9 @@ export async function publishProfile(
   client: KernelClient,
   { profile, expectedHead, authorization, keys }: PublishInput & { authorization: string },
 ): Promise<PublishResult> {
+  const digest = profileDigest(profile);
   let phase: 'publish' | 'activate' = 'publish';
+  const unknown = (): PublishResult => ({ ok: false, reason: 'unavailable', outcome: 'unknown', phase });
   try {
     const published = await client.presentation.profiles.post(
       { profile },
@@ -270,20 +274,19 @@ export async function publishProfile(
     );
     if (published.status >= 400)
       return { ...curationFailure(published.status, published.error?.value, published.headers), phase };
-    if (!published.data) return { ok: false, reason: 'unavailable', outcome: 'unknown', phase };
+    if (!admittedPublishDigest(published.data, digest)) return unknown();
     phase = 'activate';
     const activated = await client.presentation
-      .profiles({ digest: published.data.digest })
+      .profiles({ digest })
       .$activate.post(
         { expected_head: expectedHead },
         { headers: { authorization, 'idempotency-key': keys.activate } as { 'idempotency-key': string } },
       );
     if (activated.status >= 400)
       return { ...curationFailure(activated.status, activated.error?.value, activated.headers), phase };
-    return activated.data
-      ? { ok: true, ...activated.data }
-      : { ok: false, reason: 'unavailable', outcome: 'unknown', phase };
+    const admitted = admittedActivationResult(activated.data, digest);
+    return admitted ? { ok: true, digest: admitted.digest, head: admitted.head } : unknown();
   } catch {
-    return { ok: false, reason: 'unavailable', outcome: 'unknown', phase };
+    return unknown();
   }
 }
