@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { acquireDirectoryLease } from './lease.ts';
 import { processIdentity, sameProcess, stopProcessesUnder, terminateProcessGroup, waitForProcess } from './process.ts';

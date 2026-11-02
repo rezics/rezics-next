@@ -2,7 +2,7 @@ import type { Database } from 'bun:sqlite';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { migrate } from './db.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { authenticatedManager } from './priority-authority.ts';

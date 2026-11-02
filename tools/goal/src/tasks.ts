@@ -488,7 +488,7 @@ export class WorkerTasks {
         const workspace = controller.open(module, this.taskBaseHead(submittedBrief));
         mkdirSync(dirname(briefPath), { recursive: true });
         writeFileSync(briefPath, submittedBrief.markdown, { flag: 'wx' });
-        const task = this.store.createTask(
+        this.store.createTask(
           submittedBrief,
           { branch: workspace.branch, worktree: workspace.worktree, briefPath, base: workspace.base },
           taskClass,

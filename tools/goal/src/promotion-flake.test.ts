@@ -173,8 +173,7 @@ test('a failing stabilize candidate publishes no passing prefix to main', async 
     await h.seed('gamma');
     const dev = h.head(),
       main = h.head('main');
-    await h.promote(async (command, cwd) => {
-      const commit = git(cwd, 'rev-parse', 'HEAD');
+    await h.promote(async (_command, cwd) => {
       return existsSync(`${cwd}/bad`) ? failure : success;
     });
     expect(h.head('main')).toBe(main);

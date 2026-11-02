@@ -5,7 +5,7 @@ import { TrainResolver, TrainResolverInfrastructureError, type TrainConflict } f
 import { groupMembers, processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
@@ -4874,7 +4874,6 @@ export class MergeTrain {
           assertControlPlaneMember(store, member.taskId, manifest.managerId);
           store.assertCurrent(member);
           const entry = o.queue.entry(member);
-          const task = store.task(member.taskId);
           if (
             !entry ||
             (entry.batchId !== member.readmitFrom && entry.batchId !== batchId) ||

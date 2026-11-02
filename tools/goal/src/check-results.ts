@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { join, relative, sep } from 'node:path';
+import { relative, sep } from 'node:path';
 import type { Database } from 'bun:sqlite';
 import { git } from './merge.ts';
 

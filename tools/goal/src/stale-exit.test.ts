@@ -103,7 +103,7 @@ async function waitingAttempt(h: ReturnType<typeof harness>) {
 test('a resumed launch failure is settled from its appended output, not the prior waiting result', async () => {
   const h = harness(waitingCli);
   try {
-    const { task, ref } = await waitingAttempt(h);
+    const { ref } = await waitingAttempt(h);
     const attempt = h.store.attempt(ref);
     const resumed = await launch(
       h.store,

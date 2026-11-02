@@ -15,18 +15,6 @@ function markTask(h: ReturnType<typeof integrationHarness>, taskId: string, valu
   });
 }
 
-function markAffectedFailure(h: ReturnType<typeof integrationHarness>, taskId: string): void {
-  const row = h.store.db.query('SELECT id, request FROM landing_queue WHERE task=?').get(taskId) as {
-    id: number;
-    request: string;
-  };
-  const request = JSON.parse(row.request);
-  request.affectedTests = [
-    { command: ['false'], status: 'failed', failingFiles: [], durationMs: 1, output: 'failed affected check' },
-  ];
-  h.store.db.query('UPDATE landing_queue SET request=? WHERE id=?').run(JSON.stringify(request), row.id);
-}
-
 test('the dev lane batches eligible dev entries without worker-side affected results', async () => {
   const h = integrationHarness();
   try {
