@@ -261,16 +261,16 @@ test('An ambiguous released COMMIT dispatches its separately prepaid ROLLBACK; c
   });
 });
 
-test('An authentic callback cannot dispatch unclassified SQL or use the raw executor as a guarded prepaid command', async () => {
+test('An authentic callback uses Core prepaid command dispatch and still rejects unclassified native work', async () => {
   await selected(async (deps, parent) => {
     await withPrepaidAgentIdentityHistoryUnit(deps, parent, async (funded) => {
       let ran = false;
-      await expect(
-        identityHistoryCommand(deps.pool, funded, async () => {
-          ran = true;
-        }),
-      ).rejects.toThrow('identity-history-native-command-dispatch-lifetime-unavailable');
-      expect(ran).toBe(false);
+      const result = await identityHistoryCommand(deps.pool, funded, async () => {
+        ran = true;
+        return parent.originalId;
+      });
+      expect(result).toBe(parent.originalId);
+      expect(ran).toBe(true);
       await expect(
         reserveIdentityHistoryWork(
           deps.pool,
