@@ -1,9 +1,10 @@
-import { useContext, useRef, useState } from 'react';
+import { useContext, useLayoutEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnonymousSessionContext, sessionQuery, useSession } from '../../session/query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
-import { useListReaderAdmission } from './list-reader-admission';
+import { useListReaderAdmission, type ListReaderSession } from './list-reader-admission';
+import { createConfiguredListRetryController } from './configured-list-retry';
 import { hasSelectedRealmTarget, typeListTargetFromPage } from './type-list-model';
 import { typeListQuery, type TypeListAdmissionInput, type TypeListQueryResult } from './type-list-query';
 import type { TypeListTarget } from './type-list-model';
@@ -42,6 +43,18 @@ function sameReaderRequest(
   );
 }
 
+function healthySession(session: ListReaderSession) {
+  return session.state !== 'unknown' && session.state !== 'unavailable';
+}
+
+function sameSession(left: ListReaderSession, right: ListReaderSession) {
+  return (
+    left.state === right.state &&
+    (left.subject ?? null) === (right.subject ?? null) &&
+    left.csrfToken === right.csrfToken
+  );
+}
+
 /** A route list observes the current session before admitting rows or continuation controls. */
 export function ConfiguredList({ list, page, cursor, locale, initialData }: ConfiguredListProps) {
   const session = useSession();
@@ -49,12 +62,16 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
   const queryClient = useQueryClient();
   const [retrying, setRetrying] = useState(false);
   const retryingRef = useRef(false);
+  const retryControllerRef = useRef<ReturnType<typeof createConfiguredListRetryController> | null>(null);
+  if (!retryControllerRef.current) retryControllerRef.current = createConfiguredListRetryController();
+  const retryController = retryControllerRef.current;
   const target = typeListTargetFromPage(page);
   const selectedRealm = hasSelectedRealmTarget(target);
+  const sourceFingerprint = initialData
+    ? JSON.stringify([initialData.kind, initialData.admission.request])
+    : 'no-loader-data';
   const reader = useListReaderAdmission(queryClient, JSON.stringify([locale, list, page, cursor ?? null]), {
-    sourceFingerprint: initialData
-      ? JSON.stringify([initialData.kind, initialData.admission.request])
-      : 'no-loader-data',
+    sourceFingerprint,
     privateReading: selectedRealm,
     observeSession: selectedRealm && !anonymous,
     fallbackSession: session,
@@ -114,12 +131,37 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
         : initialData
       : undefined;
   const queryKey = options.queryKey;
+  const queryIdentity = JSON.stringify(queryKey);
+  const routeIdentity = JSON.stringify([locale, list, page, cursor ?? null, target.realm, sourceFingerprint]);
+  const sessionIdentity = healthySession(currentSession)
+    ? JSON.stringify([currentSession.state, currentSession.subject ?? null, currentSession.csrfToken])
+    : null;
+  const retryOwner = selectedRealm
+    ? {
+        routeKey: routeIdentity,
+        sessionKey: sessionIdentity,
+        queryKey: queryIdentity,
+        isCurrent: () => reader.current(incarnation),
+        read: () => {
+          if (!reader.current(incarnation)) return Promise.reject(new Error('Retired configured list'));
+          return queryClient.fetchQuery({ ...options, staleTime: 0 });
+        },
+      }
+    : null;
+
+  useLayoutEffect(() => {
+    retryController.attach();
+    return () => retryController.detach();
+  }, [retryController]);
+  useLayoutEffect(() => retryController.select(retryOwner));
+
   if (selectedRealm) reader.registerQuery('configured-list', queryKey);
   const query = useQuery({
     ...options,
     enabled:
       mode !== 'initial-hydration' &&
-      (!selectedRealm || (reader.canRead && state !== 'unknown' && state !== 'unavailable')),
+      (!selectedRealm || (reader.canRead && state !== 'unknown' && state !== 'unavailable')) &&
+      !retryController.shouldSuppressAutomaticRead(queryIdentity),
     ...(loaderResult ? { initialData: loaderResult, initialDataUpdatedAt: Date.now() } : {}),
   });
 
@@ -127,12 +169,55 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
     if (retryingRef.current) return;
     retryingRef.current = true;
     setRetrying(true);
+    const attempt = selectedRealm ? retryController.begin() : null;
     try {
-      if (selectedRealm) await queryClient.fetchQuery({ ...sessionQuery, staleTime: 0 });
-      else await query.refetch();
+      if (selectedRealm) {
+        if (!attempt) return;
+        const beforeQuery = queryClient.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
+        const before = beforeQuery?.state;
+        const beforeSession = before?.data as ListReaderSession | undefined;
+        if (
+          !before ||
+          before.status !== 'success' ||
+          before.fetchStatus !== 'idle' ||
+          !beforeSession ||
+          !healthySession(beforeSession) ||
+          !sameSession(beforeSession, currentSession)
+        )
+          return;
+
+        const refreshed = (await queryClient.fetchQuery({ ...sessionQuery, staleTime: 0 })) as ListReaderSession;
+        const afterQuery = queryClient.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
+        const after = afterQuery?.state;
+        const afterSession = after?.data as ListReaderSession | undefined;
+        if (
+          !retryController.isCurrent(attempt) ||
+          !after ||
+          afterQuery !== beforeQuery ||
+          after.status !== 'success' ||
+          after.fetchStatus !== 'idle' ||
+          after.dataUpdateCount !== before.dataUpdateCount + 1 ||
+          after.errorUpdateCount !== before.errorUpdateCount ||
+          !afterSession ||
+          !healthySession(refreshed) ||
+          !sameSession(refreshed, beforeSession) ||
+          !sameSession(afterSession, beforeSession)
+        )
+          return;
+
+        const currentOwner = await retryController.waitForCurrentOwner(attempt);
+        if (
+          !currentOwner ||
+          !retryController.markRead(attempt, currentOwner) ||
+          !currentOwner.isCurrent()
+        )
+          return;
+        await currentOwner.read();
+      } else await query.refetch();
     } catch {
       // The unavailable state stays available for another deliberate retry.
     } finally {
+      if (attempt) retryController.finish(attempt);
       retryingRef.current = false;
       setRetrying(false);
     }
