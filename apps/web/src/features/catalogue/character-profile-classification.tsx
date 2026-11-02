@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -23,6 +23,23 @@ import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-life
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+
+function hasContent(value: unknown): boolean {
+  if (typeof value === 'string') return !!value.trim();
+  if (value == null) return false;
+  if (typeof value === 'object') return Object.values(value).some(hasContent);
+  return true;
+}
+
+function hasAuthoredFactContent(statement: StatementInput): boolean {
+  const populated = (part: { value: { type: string; content?: unknown } }) =>
+    part.value.type !== 'value' || hasContent(part.value.content);
+  return (
+    populated(statement) ||
+    statement.qualifiers?.some(populated) === true ||
+    statement.references.some((reference) => reference.parts.some(populated))
+  );
+}
 
 /** Classification uses field-wide native review, with the same sealed per-field command and reference controls. */
 export function CharacterClassification({
@@ -51,19 +68,26 @@ export function CharacterClassification({
   const [picked, setPicked] = useState<EntityPickerSubject[]>([]);
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [confirmation, setConfirmation] = useState<{ draft: FactDraft; active: () => boolean }>();
   const running = useRef(false);
   const wasVisible = useRef(visible);
   if (wasVisible.current !== visible) {
     wasVisible.current = visible;
     running.current = false;
     setBusy(false);
-    if (!visible) setPicked([]);
+    if (!visible) {
+      setPicked([]);
+      setConfirmation(undefined);
+    }
     if (!visible)
       setDraft((previous) =>
         previous?.command && !previous.result ? { ...previous, result: { ok: false, reason: 'uncertain' } } : previous,
       );
   }
   const chooser = useRef<HTMLDivElement>(null);
+  const discardTrigger = useRef<HTMLButtonElement>(null);
+  const cancelConfirmation = useRef<HTMLButtonElement>(null);
+  const restoreDiscardFocus = useRef(false);
   const returnFocus = useRef(false);
   useEffect(() => {
     if (draft || !returnFocus.current) return;
@@ -72,6 +96,24 @@ export function CharacterClassification({
     const control = chooser.current?.querySelector<HTMLElement>('select, button');
     control?.focus();
   }, [draft]);
+  const current = useRef({ draft, confirmation, busy, active });
+  current.current = { draft, confirmation, busy, active };
+  const confirming =
+    !!draft &&
+    confirmation?.draft === draft &&
+    confirmation.active() &&
+    active() &&
+    !busy &&
+    !running.current &&
+    !factLocked(draft);
+  const discardTitle = m.candidate_confirm_title({ action: m.curation_view_discard({}, o) }, o);
+  useLayoutEffect(() => {
+    if (confirming) cancelConfirmation.current?.focus();
+    else if (restoreDiscardFocus.current) {
+      restoreDiscardFocus.current = false;
+      discardTrigger.current?.focus();
+    }
+  }, [confirming]);
   const result = draft?.result;
   const reviewTransport = useMemo(
     () => review(property, result?.ok ? result.session : undefined),
@@ -85,6 +127,7 @@ export function CharacterClassification({
     const source = selected.find((statement) => statement.id === id);
     if (id && !source) return;
     const baseline = source ? statementInput(source) : null;
+    setConfirmation(undefined);
     setPicked([]);
     setReviewing(false);
     setDraft({
@@ -103,15 +146,47 @@ export function CharacterClassification({
           },
     });
   };
-  const discard = () => {
-    if (!active()) return;
-    if (!draft || running.current || factLocked(draft)) return;
+  const closeDraft = (original: FactDraft, pending?: { draft: FactDraft; active: () => boolean }) => {
+    const latest = current.current;
+    if (
+      !latest.active() ||
+      latest.draft !== original ||
+      latest.busy ||
+      running.current ||
+      factLocked(original) ||
+      (pending &&
+        (latest.confirmation !== pending || pending.draft !== original || !pending.active() || !latest.active()))
+    )
+      return;
     returnFocus.current = true;
+    setConfirmation(undefined);
     setDraft(undefined);
     setPicked([]);
     setReviewing(false);
     setSource(selected.length === 1 ? selected[0]!.id : '');
   };
+  const discard = () => {
+    if (!active() || !draft || running.current || busy || factLocked(draft)) return;
+    if (factChanged(draft) && (draft.baseline !== null || hasAuthoredFactContent(draft.statement))) {
+      setConfirmation({ draft, active });
+      return;
+    }
+    closeDraft(draft);
+  };
+  const cancelDiscard = () => {
+    const latest = current.current;
+    if (
+      !latest.active() ||
+      !latest.confirmation ||
+      latest.confirmation.draft !== latest.draft ||
+      !latest.confirmation.active()
+    )
+      return;
+    restoreDiscardFocus.current = true;
+    setConfirmation(undefined);
+  };
+  const confirmDiscard = (pending: { draft: FactDraft; active: () => boolean }) =>
+    closeDraft(pending.draft, pending);
   const change = (statement: StatementInput) => {
     if (!active()) return;
     if (!draft || running.current || factLocked(draft)) return;
@@ -277,14 +352,51 @@ export function CharacterClassification({
                 >
                   {draft.command ? m.correction_retry({}, o) : m.correction_submit({}, o)}
                 </Button>
-                <Button
-                  className={actionClassName}
-                  variant="outline"
-                  disabled={busy || factLocked(draft)}
-                  onClick={discard}
-                >
-                  {m.curation_view_discard({}, o)}
-                </Button>
+                {confirming && confirmation ? (
+                  <div
+                    role="group"
+                    aria-label={discardTitle}
+                    className="space-y-2"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        cancelDiscard();
+                      }
+                    }}
+                  >
+                    <p>{discardTitle}</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        ref={cancelConfirmation}
+                        className={actionClassName}
+                        type="button"
+                        variant="outline"
+                        onClick={cancelDiscard}
+                      >
+                        {m.candidate_cancel({}, o)}
+                      </Button>
+                      <Button
+                        className={actionClassName}
+                        type="button"
+                        variant="destructive"
+                        disabled={busy || running.current || factLocked(draft)}
+                        onClick={() => confirmDiscard(confirmation)}
+                      >
+                        {m.curation_view_discard({}, o)}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    ref={discardTrigger}
+                    className={actionClassName}
+                    variant="outline"
+                    disabled={busy || factLocked(draft)}
+                    onClick={discard}
+                  >
+                    {m.curation_view_discard({}, o)}
+                  </Button>
+                )}
               </div>
             )}
           </>

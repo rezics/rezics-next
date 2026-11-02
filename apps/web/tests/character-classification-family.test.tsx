@@ -116,6 +116,9 @@ test('discard changes locally, choose another source, and keep its pending or un
     await act(async () => button(host, m.facts_edit_field()).click());
     await enter(input(), evidence + 'draft');
     await act(async () => button(host, m.curation_view_discard()).click());
+    expect(host.ownerDocument.activeElement).toBe(button(host, m.candidate_cancel()));
+    expect(input().value).toBe(evidence + 'draft');
+    await act(async () => button(host, m.curation_view_discard()).click());
     expect(host.ownerDocument.activeElement).toBe(host.querySelector('select'));
     expect(host.querySelector<HTMLSelectElement>('select')!.value).toBe('');
     expect(setup.fixture.calls).toEqual([]);
