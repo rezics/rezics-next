@@ -107,28 +107,82 @@ const endActions: Record<FlowStage, string[]> = {
   integration: ['integrated'],
   promotion: ['promoted'],
 };
+function attemptIntervals(
+  events: FlowEvent[],
+  stage: FlowStage,
+  starts: string[],
+  ends: string[],
+): {
+  durations: number[];
+  durationsByAttempt: Map<number, number>;
+  observed: boolean;
+  incomplete: boolean;
+} {
+  const open = new Map<number, number>();
+  const durations: number[] = [];
+  const durationsByAttempt = new Map<number, number>();
+  let observed = false;
+  let incomplete = false;
+  for (const event of events) {
+    if (event.stage !== stage) continue;
+    if (starts.includes(event.action)) {
+      observed = true;
+      if (open.has(event.attempt)) incomplete = true;
+      open.set(event.attempt, Date.parse(event.at));
+      continue;
+    }
+    if (event.action === 'closed') {
+      if (open.delete(event.attempt)) incomplete = true;
+      continue;
+    }
+    if (!ends.includes(event.action) || !open.has(event.attempt)) continue;
+    const start = open.get(event.attempt)!;
+    open.delete(event.attempt);
+    const end = Date.parse(event.at);
+    if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+      const duration = end - start;
+      durations.push(duration);
+      durationsByAttempt.set(event.attempt, (durationsByAttempt.get(event.attempt) ?? 0) + duration);
+    } else incomplete = true;
+  }
+  if (open.size) incomplete = true;
+  return { durations, durationsByAttempt, observed, incomplete };
+}
+
+function nextIntervalBoundary(
+  events: FlowEvent[],
+  start: FlowEvent,
+  starts: string[],
+  ends: string[],
+): FlowEvent | undefined {
+  const index = events.indexOf(start);
+  return events.slice(index + 1).find(
+    (event) =>
+      event.taskId === start.taskId &&
+      event.attempt === start.attempt &&
+      event.stage === start.stage &&
+      (starts.includes(event.action) || ends.includes(event.action) || event.action === 'closed'),
+  );
+}
+
 function stageDurations(events: FlowEvent[], stage: FlowStage): number[] {
   if (stage === 'dispatch') {
     const dispatch = events.find((e) => e.stage === 'dispatch' && e.action === 'dispatched');
-    const started = events.find((e) => e.stage === 'start' && e.action === 'requested');
-    if (dispatch && started) return [Math.max(0, Date.parse(started.at) - Date.parse(dispatch.at))];
-  }
-  const groups = new Map<number, FlowEvent[]>();
-  for (const event of events)
-    if (event.stage === stage) groups.set(event.attempt, [...(groups.get(event.attempt) ?? []), event]);
-  const durations: number[] = [];
-  for (const group of groups.values()) {
-    let start: number | undefined;
-    for (const event of group) {
-      if (startActions[stage].includes(event.action)) start = Date.parse(event.at);
-      if (start !== undefined && endActions[stage].includes(event.action)) {
-        const end = Date.parse(event.at);
-        if (Number.isFinite(start) && Number.isFinite(end) && end >= start) durations.push(end - start);
-        start = undefined;
-      }
+    const started = dispatch && events.find(
+      (e) =>
+        e.stage === 'start' &&
+        e.action === 'requested' &&
+        e.attempt === dispatch.attempt &&
+        e.at >= dispatch.at,
+    );
+    if (dispatch && started) {
+      const start = Date.parse(dispatch.at);
+      const end = Date.parse(started.at);
+      if (Number.isFinite(start) && Number.isFinite(end) && end >= start) return [end - start];
     }
+    return [];
   }
-  return durations;
+  return attemptIntervals(events, stage, startActions[stage], endActions[stage]).durations;
 }
 
 export type FlowTask = Pick<Task, 'id'> & {
@@ -202,34 +256,14 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     const dispatch = es.find((e) => e.stage === 'dispatch' && e.action === 'dispatched');
     const integrated = es.find((e) => e.stage === 'integration' && e.action === 'integrated');
     const elapsed = dispatch && integrated ? Date.parse(integrated.at) - Date.parse(dispatch.at) : null;
-    let workerMs = 0;
-    let open: number | undefined;
-    for (const e of es)
-      if (e.stage === 'worker') {
-        if (e.action === 'started') open = Date.parse(e.at);
-        else if (e.action === 'finished' && open !== undefined) {
-          workerMs += Math.max(0, Date.parse(e.at) - open);
-          open = undefined;
-        }
-      }
-    const checks = es.filter((e) => e.stage === 'check');
-    let checkWaitMs = 0;
-    let checkKnown = true;
-    let requested: number | undefined;
-    for (const e of checks) {
-      if (e.action === 'requested') requested = Date.parse(e.at);
-      if (e.action === 'acquired' && requested !== undefined) {
-        checkWaitMs += Math.max(0, Date.parse(e.at) - requested);
-        requested = undefined;
-      }
-      if (e.action === 'requested' && !checks.some((x) => x.at >= e.at && x.action === 'acquired')) checkKnown = false;
-    }
-    const working =
-      es.some((e) => e.stage === 'worker' && e.action === 'started') &&
-      open === undefined &&
-      (!checks.length || checkKnown)
-        ? Math.max(0, workerMs - checkWaitMs)
-        : null;
+    const worker = attemptIntervals(es, 'worker', ['started'], ['finished']);
+    const checkWait = attemptIntervals(es, 'check', ['requested'], ['acquired']);
+    const working = worker.observed && !worker.incomplete && !checkWait.incomplete
+      ? [...worker.durationsByAttempt].reduce(
+          (total, [attempt, duration]) => total + Math.max(0, duration - (checkWait.durationsByAttempt.get(attempt) ?? 0)),
+          0,
+        )
+      : null;
     return {
       taskId: task.id,
       goal: task.brief.goal,
@@ -255,14 +289,7 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
               x.at >= e.at,
           )
         ) &&
-        !ordered.some(
-          (x) =>
-            x.taskId === e.taskId &&
-            x.attempt === e.attempt &&
-            x.stage === stage &&
-            x.at >= e.at &&
-            (endActions[stage].includes(x.action) || x.action === 'closed'),
-        ),
+        !nextIntervalBoundary(ordered, e, startActions[stage], endActions[stage]),
     );
     return {
       stage,
@@ -304,29 +331,15 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
         stage: q.stage,
         ms: ordered.reduce((sum, e) => {
           if (e.stage !== q.stage || !['requested', 'enqueued'].includes(e.action)) return sum;
-          const end = ordered.find(
-            (x) =>
-              x.taskId === e.taskId &&
-              x.attempt === e.attempt &&
-              x.stage === e.stage &&
-              x.at >= e.at &&
-              waitEnds[q.stage].includes(x.action),
-          );
+          const boundary = nextIntervalBoundary(ordered, e, startActions[q.stage], waitEnds[q.stage]);
+          const end = boundary && waitEnds[q.stage].includes(boundary.action) ? boundary : undefined;
           // Closed or legacy terminal requests have no observed wait end. Keep their duration unknown.
-          const closed = ordered.some(
-            (x) =>
-              x.taskId === e.taskId &&
-              x.attempt === e.attempt &&
-              x.stage === e.stage &&
-              x.at >= e.at &&
-              x.action === 'closed',
-          );
           const terminal = tasks.some((task) => task.id === e.taskId && terminalCloses(task.terminalState, e.stage));
           return (
             sum +
             (end
               ? Math.max(0, Date.parse(end.at) - Date.parse(e.at))
-              : closed || terminal
+              : boundary || terminal
                 ? 0
                 : Math.max(0, now - Date.parse(e.at)))
           );
