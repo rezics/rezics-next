@@ -1,5 +1,5 @@
 import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
@@ -95,6 +95,80 @@ function GameProfileLive({
     );
   }
   const refreshFailed = query.isError || (!!query.data && !query.data.ok && query.data.reason === 'unavailable');
+  const read = refreshFailed ? lastReading : query.data;
+  const creationUnavailable = useRef(false);
+  creationUnavailable.current = !id && (!read || !read.ok);
+  const creationResult = useRef<HTMLDivElement>(null);
+  const creationFailure = useRef<HTMLDivElement>(null);
+  // Reuse the editor's retirement boundary; session observations also retire local retry intent.
+  const recovery = useMemo(() => ({ pending: false, dispose: () => {} }), [lifetime.generation, id, locale, session]);
+  const currentRecovery = useRef(recovery);
+  currentRecovery.current = recovery;
+  const [creationAttempt, setCreationAttempt] = useState<{ owner: typeof recovery; pending: boolean }>();
+  const creationPending = creationAttempt?.owner === recovery && creationAttempt.pending;
+  const focusIntent = useRef<{ owner: typeof recovery; opener: HTMLButtonElement; complete: boolean } | undefined>(
+    undefined,
+  );
+  useLayoutEffect(() => () => recovery.dispose(), [recovery]);
+  useLayoutEffect(() => {
+    const intent = focusIntent.current;
+    if (!intent?.complete || creationPending || query.isFetching) return;
+    const document = intent.opener.ownerDocument;
+    const current = intent.owner === recovery && lifetime.active();
+    recovery.dispose();
+    if (!current || (document.activeElement !== intent.opener && document.activeElement !== document.body)) return;
+    // A surviving failure-shell opener retains its ordinary focus.
+    if (intent.opener.isConnected && !intent.opener.disabled) return;
+    const target = creationResult.current?.querySelector('h1') ?? creationFailure.current;
+    if (target) {
+      target.tabIndex = -1;
+      target.focus();
+    }
+  });
+  const retryCreation = (event: MouseEvent<HTMLButtonElement>) => {
+    if (
+      !lifetime.active() ||
+      currentRecovery.current !== recovery ||
+      !creationUnavailable.current ||
+      recovery.pending ||
+      query.isFetching
+    )
+      return;
+    recovery.dispose();
+    const opener = event.currentTarget;
+    const document = opener.ownerDocument;
+    if (event.detail === 0 && document.activeElement === opener) {
+      const intent = { owner: recovery, opener, complete: false };
+      focusIntent.current = intent;
+      const cancel = () => recovery.dispose();
+      const moved = (event: FocusEvent) => {
+        if (event.target !== opener) cancel();
+      };
+      const tabbed = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') cancel();
+      };
+      document.addEventListener('focusin', moved, true);
+      document.addEventListener('pointerdown', cancel, true);
+      document.addEventListener('keydown', tabbed, true);
+      document.defaultView?.addEventListener('blur', cancel);
+      recovery.dispose = () => {
+        if (focusIntent.current === intent) focusIntent.current = undefined;
+        document.removeEventListener('focusin', moved, true);
+        document.removeEventListener('pointerdown', cancel, true);
+        document.removeEventListener('keydown', tabbed, true);
+        document.defaultView?.removeEventListener('blur', cancel);
+      };
+    }
+    recovery.pending = true;
+    setCreationAttempt({ owner: recovery, pending: true });
+    // Match existing explicit readers: coalesce, never cancel and replace an in-flight read.
+    void query.refetch({ cancelRefetch: false }).then(() => {
+      if (!lifetime.active() || currentRecovery.current !== recovery) return;
+      recovery.pending = false;
+      if (focusIntent.current?.owner === recovery) focusIntent.current.complete = true;
+      setCreationAttempt({ owner: recovery, pending: false });
+    });
+  };
   const o = { locale: locale as never };
   const admitted =
     !query.isError && !query.isFetching && query.data?.ok && query.data.public && query.data.public.subject.id === id
@@ -153,26 +227,29 @@ function GameProfileLive({
         )}
       </CatalogueCurrentReading>
     );
-  const read = refreshFailed ? lastReading : query.data;
-  if (!read || !read.ok)
+  if (!read || !read.ok || creationPending)
     return (
       <article className="mx-auto min-w-0 max-w-4xl space-y-5">
         <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
-        {query.isPending ? (
+        {query.isPending || query.isFetching || creationPending ? (
           <p role="status">{m.catalogue_create_loading({}, o)}</p>
         ) : (
           <>
-            <EditorFailure reason={read && !read.ok ? read.reason : 'unavailable'} locale={locale} />
-            <Button className={gameActionClass} disabled={query.isFetching} onClick={() => void query.refetch()}>
-              {id ? m.game_profile_refresh({}, o) : m.correction_reload({}, o)}
-            </Button>
+            <div ref={creationFailure} tabIndex={-1}>
+              <EditorFailure reason={read && !read.ok ? read.reason : 'unavailable'} locale={locale} />
+            </div>
           </>
+        )}
+        {!query.isPending && (
+          <Button className={gameActionClass} disabled={query.isFetching || creationPending} onClick={retryCreation}>
+            {m.correction_reload({}, o)}
+          </Button>
         )}
       </article>
     );
   if (!id)
     return (
-      <div className="space-y-6">
+      <div ref={creationResult} className="space-y-6">
         <p className="mx-auto max-w-3xl text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
         <CreateSubjectForm
           locale={locale}

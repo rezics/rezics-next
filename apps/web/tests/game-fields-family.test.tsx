@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Release } from '@rezics/definitions';
 import type { FactCommand, FactResult } from '../src/features/catalogue/subject-facts';
 import type { StatementInput } from '../src/features/catalogue/statement-editor';
+import type { GameRead } from '../src/features/catalogue/game-profile';
 import * as start from '../.storybook/react-start';
 
 mock.module('@tanstack/react-start', () => start);
@@ -786,6 +787,130 @@ test('Game and Addon complete fields family preserves independent labels, native
     }
   });
 }, 60_000);
+
+test('initial Game creation retry coalesces reads and orients only current deliberate keyboard recovery', async () => {
+  await mounted(async ({ host, render, user, within, waitFor }) => {
+    const { GameProfile } = await import('../src/features/catalogue/game-profile-view');
+    const { gameProfileFixture } = await import('../src/kernel/fake/catalogue-game-profile');
+    const { m } = await import('../src/paraglide/messages.js');
+    const fixture = gameProfileFixture();
+    const unavailable: GameRead = { ok: false, reason: 'unavailable' };
+    const ready: GameRead = { ok: true, release: fixture.release, public: null };
+    let next: GameRead | Promise<GameRead> | Error = unavailable;
+    let loads = 0;
+    const transport = {
+      ...fixture.transport,
+      load: async () => {
+        loads++;
+        if (next instanceof Error) throw next;
+        return await next;
+      },
+    };
+    const outside = host.ownerDocument.createElement('button');
+    host.ownerDocument.body.append(outside);
+    const show = (key: string, locale = 'en', reader = originalReader) =>
+      render(
+        <GameProfile
+          key={key}
+          locale={locale}
+          session="signed-in"
+          transport={transport}
+          search={async () => []}
+          onNavigate={() => {}}
+        />,
+        reader,
+      );
+    const retry = () => within(host).getByRole('button', { name: m.correction_reload() });
+    const failure = () => waitFor(() => expect(within(host).getByRole('alert')).toBeDefined());
+    const pending = () => {
+      expect(host.textContent).toContain(m.catalogue_create_loading());
+      expect(within(host).queryByRole('alert')).toBeNull();
+      expect(retry()).toHaveProperty('disabled', true);
+    };
+    let finish!: (read: GameRead) => void;
+    const hold = () => {
+      next = new Promise<GameRead>((resolve) => {
+        finish = resolve;
+      });
+    };
+    const settle = async (read: GameRead) => {
+      await act(async () => {
+        finish(read);
+      });
+      await waitFor(() => expect(host.textContent).not.toContain(m.catalogue_create_loading()));
+    };
+    try {
+      hold();
+      await show('initial');
+      await act(async () => outside.focus());
+      await settle(ready);
+      expect(host.ownerDocument.activeElement).toBe(outside);
+      for (const scenario of ['keyboard', 'missing', 'pointer', 'moved', 'locale', 'session', 'editor', 'unmount']) {
+        next = scenario === 'keyboard' ? new Error('Metadata read failed') : unavailable;
+        await show(scenario);
+        await failure();
+        const opener = retry();
+        const propsKey = Object.keys(opener).find((key) => key.startsWith('__reactProps$'))!;
+        const queued = Reflect.get(opener, propsKey).onClick;
+        hold();
+        const before = loads;
+        await act(async () => {
+          if (scenario === 'pointer') await user.click(opener);
+          else {
+            opener.focus();
+            await user.keyboard('{Enter}');
+          }
+          queued({ currentTarget: opener, detail: 0 });
+          queued({ currentTarget: opener, detail: 1 });
+        });
+        await waitFor(() => expect(loads).toBe(before + 1));
+        pending();
+        if (scenario === 'keyboard') {
+          await settle(unavailable);
+          await failure();
+          expect(host.ownerDocument.activeElement).toBe(opener);
+          hold();
+          await act(async () => user.keyboard(' '));
+          pending();
+          expect(loads).toBe(before + 2);
+        }
+        if (scenario === 'missing') opener.remove();
+        if (scenario === 'moved')
+          await act(async () => {
+            outside.focus();
+            opener.focus();
+          });
+        if (['locale', 'session', 'editor', 'unmount'].includes(scenario)) {
+          next = unavailable;
+          if (scenario === 'unmount') await render(<p>Closed</p>);
+          else
+            await show(
+              scenario === 'editor' ? 'replacement' : scenario,
+              scenario === 'locale' ? 'ja' : 'en',
+              scenario === 'session' ? replacementReader : originalReader,
+            );
+          await act(async () => outside.focus());
+        }
+        await settle(scenario === 'missing' ? unavailable : ready);
+        if (scenario === 'keyboard') {
+          expect(host.ownerDocument.activeElement).toBe(host.querySelector('h1'));
+          expect(host.querySelector('form')).not.toBeNull();
+        } else if (scenario === 'missing') {
+          expect(host.ownerDocument.activeElement).toBe(within(host).getByRole('alert').parentElement);
+        } else {
+          expect(host.ownerDocument.activeElement).not.toBe(host.querySelector('h1'));
+          if (['locale', 'session', 'editor', 'unmount'].includes(scenario)) {
+            expect(host.ownerDocument.activeElement).toBe(outside);
+            expect(host.querySelector('form')).toBeNull();
+          }
+        }
+      }
+      expect(fixture.calls).toEqual([]);
+    } finally {
+      outside.remove();
+    }
+  });
+});
 
 test('Game creation recovers rejected multilingual drafts and exact corrections without replacing uncertain intent', async () => {
   await mounted(async ({ host, render, user, within, waitFor }) => {
