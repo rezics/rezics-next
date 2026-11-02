@@ -570,23 +570,24 @@ function PeopleCreate({
                               className={peopleInputTarget}
                               type="url"
                               value={citation?.type === 'value' ? String(citation.content) : ''}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const value = event.target.value;
                                 update(type, property, id, canEdit, (latest) => ({
                                   ...latest,
-                                  references: event.target.value.trim()
+                                  references: value.trim()
                                     ? [
                                         {
                                           parts: [
                                             {
                                               property: { id: 'schema:url' },
-                                              value: { type: 'value', content: event.target.value },
+                                              value: { type: 'value', content: value },
                                             },
                                           ],
                                         },
                                       ]
                                     : [],
-                                }))
-                              }
+                                }));
+                              }}
                             />
                           </Field>
                           {errors.map((error) => (

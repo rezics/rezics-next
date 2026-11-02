@@ -200,8 +200,11 @@ test('People removal retains scalar, citation and sibling correction identities 
     await click(within(sibling).getByRole('button', { name: m.candidate_cancel() }));
     expect(inputs[1]!.value).toBe('https://example.org/source');
     await click(remove('schema:url'));
+    const unavailableEdits = inputs.map(retain);
     metadata = false;
     await refresh();
+    await act(async () => unavailableEdits.forEach((edit) => edit('https://unavailable.test/')));
+    expect(inputs.map((input) => input.value)).toEqual(['', 'https://example.org/source']);
     expect(remove('schema:url').disabled).toBe(true);
     await act(async () => remove('schema:url').dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
     expect(row('schema:url')).toBe(sibling);
