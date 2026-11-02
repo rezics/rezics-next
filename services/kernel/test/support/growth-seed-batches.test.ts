@@ -74,12 +74,18 @@ test('preserves each ordinal when a row and nested byte container are reused', a
   const bytes = new Uint8Array([0]);
   const nested = { n: 0 };
   const row = { id: 0n, bytes, nested };
-  await seedBulkRows(database.admin, 0, 3, (ordinal) => ordinal, (ordinal) => {
-    row.id = BigInt(ordinal);
-    bytes[0] = ordinal;
-    nested.n = ordinal;
-    return { 'growth.reused': [row] };
-  });
+  await seedBulkRows(
+    database.admin,
+    0,
+    3,
+    (ordinal) => ordinal,
+    (ordinal) => {
+      row.id = BigInt(ordinal);
+      bytes[0] = ordinal;
+      nested.n = ordinal;
+      return { 'growth.reused': [row] };
+    },
+  );
 
   expect(database.transactions).toEqual([
     [
