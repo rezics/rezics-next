@@ -91,7 +91,10 @@ test('Following uses shared item headings and independent native actions while p
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'owner', csrfToken: 'current-csrf' });
   client.setQueryData(exposureQuery.queryKey, ['personal_library', 'collections']);
-  const write = spyOn(followActions, 'setFollow').mockResolvedValue({ ok: true, following: false });
+  const write = spyOn(followActions, 'setFollow')
+    .mockResolvedValueOnce({ ok: false, reason: 'conflict' })
+    .mockResolvedValue({ ok: true, following: false });
+  let reviews = 0;
   const edgeRead = spyOn(followActions, 'readFollowState').mockImplementation(() => {
     throw new Error('Following already supplies its own edge state');
   });
@@ -107,7 +110,10 @@ test('Following uses shared item headings and independent native actions while p
     component: function FollowingFixture() {
       const [current, setCurrent] = useState(page);
       replacePage = setCurrent;
-      return <MineFollowingPageView page={current} />;
+      return <MineFollowingPageView page={current} onReview={async () => {
+        reviews++;
+        return { state: 'ready', following: true };
+      }} />;
     },
   });
   const router = createRouter({
@@ -199,6 +205,22 @@ test('Following uses shared item headings and independent native actions while p
       idempotencyKey: subject.idempotencyKey,
     });
     expect(new Headers(write.mock.calls[0]![0].headers).get('X-CSRF-Token')).toBe('current-csrf');
+    expect(host.querySelectorAll('li[data-slot="list-row"]')).toHaveLength(4);
+    await act(async () => {
+      const review = [...host.querySelectorAll('button')].find((node) => node.textContent === m.library_follow_conflict_recovery_review())!;
+      await user.click(review);
+      await tick();
+    });
+    expect(reviews).toBe(1);
+    expect(write.mock.calls).toHaveLength(1);
+    await act(async () => {
+      await user.click(trigger);
+      await tick();
+      await user.click(window.document.querySelector<HTMLElement>('[role="menuitem"]')!);
+      await tick();
+    });
+    expect(write.mock.calls).toHaveLength(2);
+    expect(write.mock.calls[1]![0].data.idempotencyKey).not.toBe(subject.idempotencyKey);
     expect(host.querySelectorAll('li[data-slot="list-row"]')).toHaveLength(3);
     expect(heading.isConnected).toBe(false);
     expect(rows.slice(1).every((row) => row.isConnected)).toBe(true);

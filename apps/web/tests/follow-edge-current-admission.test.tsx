@@ -387,3 +387,62 @@ test('supplied edges do no reads and uncertain retry retains exact intent throug
     following: false,
   });
 });
+
+test('a ready conflict requires deliberate current own-edge review and a separate fresh action', async () => {
+  await paint();
+  await settle(reads[0]!, page(firstTarget, false));
+  await click(m.library_follow());
+  await settle(writes[0]!, { ok: false, reason: 'conflict' });
+  expect(button(m.library_follow()).disabled).toBe(true);
+  await click(m.library_follow_conflict_recovery_review(), true);
+  expect(reads).toHaveLength(2);
+  await settle(reads[1]!, { ...page(), edge: { state: 'unavailable' } });
+  expect(writes).toHaveLength(1);
+  expect(host.textContent).toContain(m.library_follow_conflict_recovery_unavailable());
+  await act(async () => client.setQueryData(sessionQuery.queryKey, viewer('alice', null)));
+  await click(m.library_follow_conflict_recovery_review());
+  await settle(reads[2]!, page(firstTarget, false));
+  expect(button(m.library_follow()).disabled).toBe(true);
+  expect(writes).toHaveLength(1);
+  await act(async () => client.setQueryData(sessionQuery.queryKey, viewer('alice', 'csrf-two')));
+  await click(m.library_follow());
+  expect(writes[1]!.input.idempotencyKey).not.toBe(firstKey);
+  expect(writes[1]!.csrfToken).toBe('csrf-two');
+  await settle(writes[1]!, { ok: true, following: true });
+});
+
+test('read recovery never renews an uncertain command or replaces its original credential', async () => {
+  await paint();
+  await settle(reads[0]!, page(firstTarget, false));
+  await click(m.library_follow());
+  const original = writes[0]!;
+  await settle(original, { ok: false, reason: 'unavailable' });
+  await act(async () => {
+    client.setQueryData(sessionQuery.queryKey, viewer('alice', 'csrf-two'));
+    void client.refetchQueries({ queryKey: ['follow-state'] });
+    await tick();
+  });
+  await settle(reads[1]!, page());
+  await click(m.library_follow());
+  expect(writes[1]!.input).toBe(original.input);
+  expect(writes[1]!.csrfToken).toBe(original.csrfToken);
+  await settle(writes[1]!, { ok: true, following: true });
+});
+
+test('a delete-only supplied edge can prepare a new removal after conflict without reading a hidden target', async () => {
+  admitted = ['follow.delete'];
+  let removed = 0;
+  props = { ...props, following: true, onRemoved: () => removed++ };
+  await paint();
+  await click(m.library_follow_unfollow());
+  await settle(writes[0]!, { ok: false, reason: 'conflict' });
+  await click(m.library_follow_conflict_recovery_remove());
+  expect(writes).toHaveLength(1);
+  expect(removed).toBe(0);
+  await click(m.library_follow_unfollow());
+  expect(writes[1]!.input.following).toBe(false);
+  expect(writes[1]!.input.idempotencyKey).not.toBe(firstKey);
+  await settle(writes[1]!, { ok: true, following: false });
+  expect(removed).toBe(1);
+  expect(reads).toHaveLength(0);
+});
