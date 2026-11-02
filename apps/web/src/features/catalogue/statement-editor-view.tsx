@@ -89,10 +89,20 @@ const reviewControlsClassName = [
 
 export { ScalarControl };
 
-export function EditorFailure({ reason, locale }: { reason: string; locale: string }) {
+export function EditorFailure({
+  reason,
+  locale,
+  id,
+  tabIndex,
+}: {
+  reason: string;
+  locale: string;
+  id?: string;
+  tabIndex?: number;
+}) {
   const o = { locale: locale as never };
   return (
-    <p role="alert">
+    <p id={id} role="alert" tabIndex={tabIndex}>
       {reason === 'denied'
         ? m.correction_denied({}, o)
         : reason === 'stale'

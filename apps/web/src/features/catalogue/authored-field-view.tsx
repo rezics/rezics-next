@@ -1,5 +1,15 @@
 import { useCandidateWork, type CandidateWork } from '../../subject/candidate-lifetime';
-import { useEffect, useId, useMemo, useReducer, useRef, useState, type ComponentProps } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type ComponentProps,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
 import { RichTextEditor } from '@rezics/ui';
 import { hasDocumentContent } from '@rezics/document';
@@ -41,6 +51,16 @@ const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const summaryClassName =
   'min-h-11 min-w-11 cursor-pointer py-3 text-sm [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
+
+type ReadRecoveryFocus = {
+  opener: HTMLButtonElement;
+  label: string;
+  generation: number;
+  reviewDraft: boolean;
+  completed: boolean;
+  cancel: () => void;
+};
 
 type DiscardQuestion = { property: string; draft: AuthoredDraft; editor: number; keyboard: boolean };
 
@@ -135,6 +155,7 @@ function AuthoredFieldLive({
     draft: `${formId}-draft`,
     draftHint: `${formId}-draft-hint`,
     errors: `${formId}-errors`,
+    failure: `${formId}-failure`,
     discard: `${formId}-discard`,
   };
   const visible = useCurrentReadingVisible();
@@ -160,6 +181,11 @@ function AuthoredFieldLive({
   const [editorVersion, setEditorVersion] = useState(0);
   const editorGeneration = useRef(0);
   const discardButton = useRef<HTMLButtonElement>(null);
+  const readRecoveryFocus = useRef<ReadRecoveryFocus | null>(null);
+  const selectedBoundary = useRef<HTMLElement>(null);
+  const emptyBoundary = useRef<HTMLParagraphElement>(null);
+  const draftBoundary = useRef<HTMLFormElement>(null);
+  const readFailureBoundary = useRef<HTMLParagraphElement>(null);
   const running = useRef(false);
   const session = useRef(initial.ok ? initial.session : undefined);
   const requestedProperty = useRef(initial.ok ? initial.property : '');
@@ -173,9 +199,80 @@ function AuthoredFieldLive({
     discardQuestion.current = undefined;
     setDiscarding(undefined);
   }
-  function retireReading(retireComparison = true) {
+  function clearReadRecoveryFocus(focus = readRecoveryFocus.current) {
+    if (!focus) return;
+    focus.cancel();
+    if (readRecoveryFocus.current === focus) readRecoveryFocus.current = null;
+  }
+  function noteReadRecovery(event: ReactMouseEvent<HTMLButtonElement>, reviewDraft: boolean) {
+    clearReadRecoveryFocus();
+    const opener = event.currentTarget;
+    const document = opener.ownerDocument;
+    if (event.detail !== 0 || document.activeElement !== opener || !opener.isConnected) return undefined;
+    let focus: ReadRecoveryFocus;
+    const cancel = () => {
+      document.removeEventListener('focusin', moved, true);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', tabbed, true);
+      document.defaultView?.removeEventListener('blur', cancel);
+      if (readRecoveryFocus.current === focus) readRecoveryFocus.current = null;
+    };
+    const moved = (change: FocusEvent) => {
+      const lostToPage = change.target === document.body || change.target === document.documentElement;
+      if (
+        change.target !== opener &&
+        !(lostToPage && (!opener.isConnected || opener.matches(':disabled')))
+      )
+        clearReadRecoveryFocus(focus);
+    };
+    const tabbed = (key: KeyboardEvent) => {
+      if (key.key === 'Tab') clearReadRecoveryFocus(focus);
+    };
+    focus = {
+      opener,
+      label: opener.getAttribute('aria-label') ?? opener.textContent?.trim() ?? '',
+      generation: -1,
+      reviewDraft,
+      completed: false,
+      cancel,
+    };
+    document.addEventListener('focusin', moved, true);
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', tabbed, true);
+    document.defaultView?.addEventListener('blur', cancel);
+    readRecoveryFocus.current = focus;
+    return focus;
+  }
+  useFocusLayoutEffect(() => () => clearReadRecoveryFocus(), []);
+  useFocusLayoutEffect(() => {
+    const focus = readRecoveryFocus.current;
+    if (!focus) return;
+    if (!work.live() || focus.generation !== readGeneration.current) {
+      clearReadRecoveryFocus(focus);
+      return;
+    }
+    if (busy || !focus.completed) return;
+    const document = focus.opener.ownerDocument;
+    const active = document.activeElement;
+    if (active !== focus.opener && active !== document.body && active !== document.documentElement) {
+      clearReadRecoveryFocus(focus);
+      return;
+    }
+    const openerLabel = focus.opener.getAttribute('aria-label') ?? focus.opener.textContent?.trim() ?? '';
+    const openerSurvives = focus.opener.isConnected && !focus.opener.disabled && openerLabel === focus.label;
+    clearReadRecoveryFocus(focus);
+    if (openerSurvives) {
+      if (active !== focus.opener) focus.opener.focus();
+      return;
+    }
+    (readFailureBoundary.current ??
+      (focus.reviewDraft ? draftBoundary.current : selectedBoundary.current) ??
+      emptyBoundary.current)?.focus();
+  }, [busy, current, readFailure, work, ids.failure]);
+  function retireReading(retireComparison = true, keepFocus?: ReadRecoveryFocus) {
     retireDiscard();
     focusEditor.current = false;
+    if (readRecoveryFocus.current !== keepFocus) clearReadRecoveryFocus();
     const generation = ++readGeneration.current;
     setCurrent(undefined);
     if (retireComparison) {
@@ -319,9 +416,14 @@ function AuthoredFieldLive({
     reviewDraft = false,
     readingOnly = false,
     origin: CandidateWork = work,
+    focus?: ReadRecoveryFocus,
   ) {
-    if (!readingLive() || !origin.live() || running.current || (command && !reviewDraft && !readingOnly)) return;
-    const live = retireReading(!readingOnly);
+    if (!readingLive() || !origin.live() || running.current || (command && !reviewDraft && !readingOnly)) {
+      clearReadRecoveryFocus(focus);
+      return;
+    }
+    const live = retireReading(!readingOnly, focus);
+    if (focus) focus.generation = readGeneration.current;
     // The owner now holds recovery; retiring its child comparison must not cancel this read.
     const readWork = { reader: origin.reader, live };
     requestedProperty.current = nextProperty;
@@ -370,6 +472,7 @@ function AuthoredFieldLive({
       dispatch({ type: 'read', read: { ok: false, reason: 'unavailable' }, reviewDraft });
     } finally {
       if (!readWork.live()) return;
+      if (focus && focus.generation === readGeneration.current) focus.completed = true;
       running.current = false;
       setBusy(false);
       setReading(false);
@@ -557,23 +660,26 @@ function AuthoredFieldLive({
       {failure && (
         <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
           {readFailure && !command ? (
-            <p role="alert">
+            <p id={ids.failure} ref={readFailureBoundary} role="alert" tabIndex={-1}>
               {readFailure === 'denied'
                 ? m.catalogue_result_read_denied({}, o)
                 : m.catalogue_result_read_unavailable({}, o)}
             </p>
           ) : (
-            <EditorFailure reason={failure} locale={locale} />
+            <EditorFailure reason={failure} locale={locale} id={ids.failure} tabIndex={-1} />
           )}
           <Button
             variant="outline"
             className={actionClassName}
             disabled={busy}
-            onClick={() =>
-              void (command && failure === 'unavailable' && current
-                ? submit()
-                : refresh(property, failure === 'stale', !!readFailure || !current))
-            }
+            onClick={(event) => {
+              if (command && failure === 'unavailable' && current) void submit();
+              else {
+                const reviewDraft = failure === 'stale';
+                const focus = noteReadRecovery(event, reviewDraft);
+                void refresh(property, reviewDraft, !!readFailure || !current, work, focus);
+              }
+            }}
           >
             {command && failure === 'unavailable' && current
               ? m.correction_retry({}, o)
@@ -587,7 +693,11 @@ function AuthoredFieldLive({
       )}
       {busy && <p role="status">{reading ? m.candidate_loading({}, o) : m.correction_saving({}, o)}</p>}
       {proposed && !current && <p role="status">{m.authored_submitted({}, o)}</p>}
-      {current && !property && <p>{m.authored_empty({}, o)}</p>}
+      {current && !property && (
+        <p ref={emptyBoundary} tabIndex={-1}>
+          {m.authored_empty({}, o)}
+        </p>
+      )}
       {current && property && (
         <>
           <Field>
@@ -608,7 +718,7 @@ function AuthoredFieldLive({
               ))}
             </NativeSelect>
           </Field>
-          <section aria-label={m.authored_selected({}, o)}>
+          <section ref={selectedBoundary} aria-label={m.authored_selected({}, o)} tabIndex={-1}>
             <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
               <ContentItemHeading className="text-lg font-semibold">{m.authored_selected({}, o)}</ContentItemHeading>
               {current.selected ? (
@@ -625,7 +735,10 @@ function AuthoredFieldLive({
                 variant="outline"
                 className={actionClassName}
                 disabled={busy || !!command || confirmingDiscard}
-                onClick={() => void refresh(property, false, true)}
+                onClick={(event) => {
+                  const focus = noteReadRecovery(event, false);
+                  void refresh(property, false, true, work, focus);
+                }}
               >
                 {m.authored_reload_current_text({}, o)}
               </Button>
@@ -637,10 +750,12 @@ function AuthoredFieldLive({
         <>
           {(current || command) && draft && failure !== 'denied' && (
             <form
+              ref={draftBoundary}
               className="min-w-0"
               aria-labelledby={ids.draft}
               aria-describedby={ids.draftHint}
               aria-busy={busy}
+              tabIndex={-1}
               onSubmit={(event) => {
                 event.preventDefault();
                 void submit();
