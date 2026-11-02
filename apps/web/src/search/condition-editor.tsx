@@ -8,6 +8,7 @@ import {
 } from '@rezics/filter';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
