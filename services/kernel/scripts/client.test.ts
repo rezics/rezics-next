@@ -1,10 +1,71 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { expect, expectTypeOf, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
 import { clientDeclarationCacheDirectory, clientDeclarations, withOrderReconcileAuthorization } from './client.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
+
+test('generated Library operation requests accept removal and require status state', () => {
+  mkdirSync(resolve(repository, '.temp'), { recursive: true });
+  const fixture = mkdtempSync(resolve(repository, '.temp/kernel-library-client-test-'));
+  try {
+    writeFileSync(
+      resolve(fixture, 'tsconfig.json'),
+      JSON.stringify({
+        extends: resolve(repository, 'packages/client/tsconfig.json'),
+        include: ['./request.ts'],
+      }),
+    );
+    writeFileSync(
+      resolve(fixture, 'request.ts'),
+      `import type { KernelClient } from ${JSON.stringify(resolve(repository, 'packages/client/src/index.ts'))};
+declare const client: KernelClient;
+type Request = Parameters<KernelClient['libraryOperations']['post']>[0];
+const selection = { kind: 'explicit', targets: [{ subjectId: 'subject-id' }] } as const;
+const removal = {
+  action: 'remove_from_library',
+  selection: { kind: selection.kind, targets: [...selection.targets] },
+} satisfies Request;
+const status = {
+  action: 'set_status', state: 'reading', selection: removal.selection,
+} satisfies Request;
+// @ts-expect-error A status change still requires its destination state.
+const missingState: Request = { action: 'set_status', selection: removal.selection };
+const headers = { 'idempotency-key': 'request-key' };
+const preview = await client.libraryOperations.post(removal, { headers });
+await client.libraryOperations.post(status, { headers });
+const operation = client.libraryOperations({ operationId: 'operation-id' });
+const confirmed = await operation.$confirm.post({}, { headers });
+const current = await operation.get();
+const outcomes = await operation.outcomes.get({ query: { limit: 10, state: 'applied' } });
+const cancelled = await operation.$cancel.post({}, { headers });
+for (const result of [preview, confirmed, current, cancelled]) {
+  if (result.data) {
+    const id: string = result.data.operation.id;
+    const action: string = result.data.operation.action;
+  }
+}
+if (outcomes.data) {
+  const next: string | null = outcomes.data.next;
+  for (const outcome of outcomes.data.outcomes) {
+    const subjectId: string = outcome.subjectId;
+  }
+}
+`,
+    );
+    const result = spawnSync('bun', ['check', '--no-script', '-p', resolve(fixture, 'tsconfig.json')], {
+      cwd: repository,
+      encoding: 'utf8',
+    });
+    expect(result.error).toBeUndefined();
+    expect(`${result.stdout}${result.stderr}`).toBe('');
+    expect(result.status).toBe(0);
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
 
 const reconcileOrder = (client: KernelClient) =>
   client.orders({ orderId: 'order-id' }).$reconcile.post(
