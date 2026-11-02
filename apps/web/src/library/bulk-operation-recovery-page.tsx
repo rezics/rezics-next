@@ -29,9 +29,12 @@ function OperationReader({ id, origin, hydrated }: {
   useEffect(() => {
     const viewer = origin.read().subject;
     if (!viewer) return;
+    const owner = origin.read().owner;
+    const mount = origin.read().mount;
+    const owned = () => current() && origin.read().owner === owner && origin.read().mount === mount;
     attempted.current = false;
     const reader = new BulkOperationRecovery({ id, viewer }, {
-      current,
+      current: owned,
       capture: () => origin.capture('personal_library'),
       csrf: () => origin.read().csrfToken,
     }, {

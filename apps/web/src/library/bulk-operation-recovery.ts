@@ -5,8 +5,8 @@ import type {
 export type RecoveryState = {
   read: BulkRead['state'] | 'loading';
   operation?: BulkOperation;
-  page?: BulkOutcomes;
-  cursor?: string;
+  page?: BulkOutcomes | undefined;
+  cursor?: string | undefined;
   cancel?: CancelResult['state'] | 'sending';
 };
 type Access = {

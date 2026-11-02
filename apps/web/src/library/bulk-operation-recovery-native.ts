@@ -53,9 +53,8 @@ export async function cancelNativeOperation(
   try {
     operationAddress(command);
     if (!/^[0-9a-f-]{36}$/i.test(command.key)) return { state: 'invalid' };
-    const result = await client.libraryOperations({ operationId: command.id }).$cancel.post({}, {
-      headers: { authorization, 'idempotency-key': command.key },
-    });
+    const headers = { authorization, 'idempotency-key': command.key };
+    const result = await client.libraryOperations({ operationId: command.id }).$cancel.post({}, { headers });
     if (result.error || !result.data)
       return { state: result.status >= 500 ? 'uncertain' : failure(result.status) };
     if (result.data.operation.id !== command.id) return { state: 'uncertain' };
