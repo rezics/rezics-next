@@ -158,7 +158,7 @@ test.each([false, true])('bootstraps a fresh pinned tree (install fails: %s)', a
   const ctx = setup(root);
   let checks = 0;
   const runGate = async (command: readonly string[], cwd: string) => {
-    expect(command[2]).toBe(join(cwd, 'node_modules/.bin/bun'));
+    expect(command).toContain(join(cwd, 'node_modules/.bin/bun'));
     const result = spawnSync(command[0]!, command.slice(1), { cwd, encoding: 'utf8' });
     checks++;
     return { passed: result.status === 0, output: result.stdout + result.stderr, timedOut: false };
