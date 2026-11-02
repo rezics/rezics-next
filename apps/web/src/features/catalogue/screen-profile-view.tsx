@@ -316,7 +316,12 @@ function ScreenProfileLive({
     return (
       <div className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6">
         <header className="min-w-0 space-y-3">
-          <ViewHeading label={m.screen_title({}, o)} headingRef={creationHeading} headingTabIndex={-1} headingClassName="font-sans" />
+          <ViewHeading
+            label={m.screen_title({}, o)}
+            headingRef={creationHeading}
+            headingTabIndex={-1}
+            headingClassName="font-sans"
+          />
           {intro}
         </header>
         <CreateSubjectForm

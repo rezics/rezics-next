@@ -460,19 +460,46 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     }
 
     // Initial metadata recovery owns one pending read and only surviving keyboard focus intent.
-    for (const mode of ['keyboard', 'pointer', 'moved-back', 'pointer-during', 'locale', 'reader', 'csrf', 'session-aba', 'unmount', 'initial']) {
+    for (const mode of [
+      'keyboard',
+      'pointer',
+      'moved-back',
+      'pointer-during',
+      'locale',
+      'reader',
+      'csrf',
+      'session-aba',
+      'unmount',
+      'initial',
+    ]) {
       await render(null);
       await act(async () => client.setQueryData(sessionQuery.queryKey, originalReader));
       const current = screenProfileFixture();
       const ready = await current.transport.load();
       let reads = 0;
       let deliver!: (read: ScreenRead) => void;
-      const hold = () => new Promise<ScreenRead>((resolve) => { deliver = resolve; });
-      let response: Promise<ScreenRead> = mode === 'initial' ? hold() : Promise.resolve({ ok: false, reason: 'unavailable' });
-      const transport = { ...current.transport, load: () => { reads++; return response; } };
+      const hold = () =>
+        new Promise<ScreenRead>((resolve) => {
+          deliver = resolve;
+        });
+      let response: Promise<ScreenRead> =
+        mode === 'initial' ? hold() : Promise.resolve({ ok: false, reason: 'unavailable' });
+      const transport = {
+        ...current.transport,
+        load: () => {
+          reads++;
+          return response;
+        },
+      };
       const editor = (locale = 'en', reader = originalReader) => (
         <CandidateReaderBoundary observed={reader} address="screen-metadata-recovery">
-          <SessionProfile locale={locale} session="signed-in" transport={transport} search={search} onNavigate={() => {}} />
+          <SessionProfile
+            locale={locale}
+            session="signed-in"
+            transport={transport}
+            search={search}
+            onNavigate={() => {}}
+          />
         </CandidateReaderBoundary>
       );
       outside.focus();
@@ -489,12 +516,18 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
       expect(window.document.activeElement).toBe(outside);
       const retry = within(host).getByRole('button', { name: m.correction_retry() }) as HTMLButtonElement;
       const props = Object.keys(retry).find((key) => key.startsWith('__reactProps$'))!;
-      const queued = Reflect.get(retry, props).onClick as (event: { currentTarget: HTMLButtonElement; detail: number }) => void;
+      const queued = Reflect.get(retry, props).onClick as (event: {
+        currentTarget: HTMLButtonElement;
+        detail: number;
+      }) => void;
       response = hold();
       retry.focus();
       if (mode === 'pointer') await act(async () => user.click(retry));
       else await key('{Enter}');
-      await act(async () => { queued({ currentTarget: retry, detail: 0 }); queued({ currentTarget: retry, detail: 0 }); });
+      await act(async () => {
+        queued({ currentTarget: retry, detail: 0 });
+        queued({ currentTarget: retry, detail: 0 });
+      });
       expect(reads).toBe(2);
       expect(retry.disabled).toBe(true);
       expect(host.querySelector('article')?.getAttribute('aria-busy')).toBe('true');
@@ -510,17 +543,21 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
         await key(' ');
         expect(reads).toBe(3);
       }
-      if (mode === 'moved-back') { outside.focus(); retry.focus(); }
+      if (mode === 'moved-back') {
+        outside.focus();
+        retry.focus();
+      }
       if (mode === 'pointer-during') retry.dispatchEvent(new window.PointerEvent('pointerdown', { bubbles: true }));
       const finish = deliver;
       response = Promise.resolve({ ok: false, reason: 'unavailable' });
       if (mode === 'locale') await render(editor('fr'));
       if (mode === 'reader') await render(editor('en', { ...originalReader, subject: 'replacement-reader' }));
       if (mode === 'csrf') await render(editor('en', { ...originalReader, csrfToken: 'replacement-csrf' }));
-      if (mode === 'session-aba') await act(async () => {
-        client.setQueryData(sessionQuery.queryKey, { ...originalReader, subject: 'replacement-reader' });
-        client.setQueryData(sessionQuery.queryKey, originalReader);
-      });
+      if (mode === 'session-aba')
+        await act(async () => {
+          client.setQueryData(sessionQuery.queryKey, { ...originalReader, subject: 'replacement-reader' });
+          client.setQueryData(sessionQuery.queryKey, originalReader);
+        });
       if (mode === 'unmount') await render(null);
       await settle();
       const retired = ['locale', 'reader', 'csrf', 'session-aba', 'unmount'].includes(mode);
