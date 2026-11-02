@@ -6,6 +6,7 @@ import {
   storePendingAccountOperationStepUp,
 } from '../src/account-operation-step-up';
 import { emptyInventory } from '../src/stories/accounts-operations/story';
+import { loadAccountSession } from '../src/account-operations';
 const { approval, button, dom, fill, flush, leave, open, send } = fixture;
 fixture.creationFixture();
 const initial = fixture.session('delete');
@@ -59,6 +60,8 @@ test('uncertain deletion survives cached return with its exact command; accepted
   await flush(() => page.calls[2]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
   expect(page.calls[2]!.body).toEqual(page.calls[1]!.body);
   const saved = readPendingAccountOperationStepUp()!;
+  expect(saved).not.toBeNull();
+  expect(await loadAccountSession()).toEqual(initial);
   await flush(leave);
   await flush(restore);
   expect(page.calls).toHaveLength(3);
