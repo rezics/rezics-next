@@ -32,7 +32,6 @@ const meta = {
     threadId: 'thread +/雪',
     postId: 'post?&=é',
     next: null,
-    onSelection: fn(),
   },
 } satisfies Meta<typeof ModerationReportsView>;
 export default meta;
@@ -69,13 +68,13 @@ async function observeControls(
   const reset = view.getByRole('button', { name: m.moderation_filter_reset() });
   const summary = canvasElement.ownerDocument.getElementById(group.getAttribute('aria-describedby')!)!;
   await expect(summary).toBeVisible();
-  const selectedLabels = selects.map((select) => (select as HTMLSelectElement).selectedOptions[0]!.textContent!);
+  const selectedLabels = selects.map((select) => select.querySelector('option:checked')!.textContent!);
   await expect(summary).toHaveTextContent(m.moderation_controls_details_summary({
     status: selectedLabels[0]!, kind: selectedLabels[1]!, order: selectedLabels[2]!,
   }));
   for (const select of selects) {
     await expect(select).toHaveAccessibleName(select.closest('label')!.querySelector('span')!.textContent!);
-    await expect(summary).toHaveTextContent((select as HTMLSelectElement).selectedOptions[0]!.textContent!);
+    await expect(summary).toHaveTextContent(select.querySelector('option:checked')!.textContent!);
   }
   for (const control of [back, ...links, ...selects, reset]) {
     await expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
@@ -94,6 +93,7 @@ async function observeControls(
 }
 
 export const SelectedReports: Story = {
+  args: { onSelection: fn() },
   globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement, args }) => {
     const { selects, reset } = await observeControls(canvasElement);
@@ -109,13 +109,12 @@ export const SelectedReports: Story = {
 };
 
 export const SelectedAppeals: Story = {
-  args: { tab: 'appeals' },
+  args: { tab: 'appeals', onSelection: fn() },
   globals: { viewport: { value: 'desktop1280', isRotated: false } },
   play: async ({ canvasElement }) => { await observeControls(canvasElement, 'appeals'); },
 };
 
 export const DisabledSelection: Story = {
-  args: { onSelection: undefined },
   globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const { group, selects, reset } = await observeControls(canvasElement);
@@ -130,7 +129,8 @@ export const PendingSelection: Story = {
   play: async ({ canvasElement, args }) => {
     const { view, group, selects, reset } = await observeControls(canvasElement);
     await userEvent.selectOptions(selects[0]!, 'resolved');
-    await expect(args.onSelection).toHaveBeenCalledExactlyOnceWith({ status: 'resolved', targetKind: 'post', order: 'oldest' });
+    await expect(args.onSelection).toHaveBeenCalledTimes(1);
+    await expect(args.onSelection).toHaveBeenCalledWith({ status: 'resolved', targetKind: 'post', order: 'oldest' });
     await expect(group).toBeDisabled();
     await expect(reset).toBeDisabled();
     await expect(view.getByRole('status')).toHaveTextContent(m.moderation_queue_loading());
@@ -143,14 +143,13 @@ export const PendingSelection: Story = {
 };
 
 export const LongLocalizedPhone: Story = {
-  args: { selection: { status: 'all', targetKind: 'all', order: 'oldest' } },
+  args: { selection: { status: 'all', targetKind: 'all', order: 'oldest' }, onSelection: fn() },
   globals: { locale: 'fr', viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement, args }) => { await observeControls(canvasElement, 'reports', args.selection); },
 };
 export const LongLocalizedDesktop: Story = {
-  args: LongLocalizedPhone.args,
+  ...LongLocalizedPhone,
   globals: { locale: 'fr', viewport: { value: 'desktop1280', isRotated: false } },
-  play: LongLocalizedPhone.play,
 };
 export const LongLocalizedRtlPhone: Story = {
   ...LongLocalizedPhone,
