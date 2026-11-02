@@ -6,6 +6,7 @@ import type { SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import { StatementConsentLink } from './statement-consent-view';
 import { consentAddress, type ConsentAddress } from './statement-consent';
+import { RelationEditorNavigation } from './relation-editor-navigation';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -91,6 +92,7 @@ function RelationEditorLive({
   const formId = useId();
   const [read, setRead] = useState(initial);
   const [draft, setDraft] = useState<RelationDraft>(() => structuredClone(composition?.statement ?? blankDraft('')));
+  const initialProposal = useRef(JSON.stringify([composition?.statement ?? blankDraft(''), '']));
   const [slot, setSlot] = useState<RelationSlot | undefined>(composition?.slot);
   const [candidate, setCandidate] = useState<Candidate>();
   const [rank, setRank] = useState<'normal' | 'preferred'>('normal');
@@ -183,6 +185,7 @@ function RelationEditorLive({
       (statement) =>
         statement.id === candidate.id && statement.rank !== 'deprecated' && relationSlotMatches(statement, slot, field),
     );
+  const dirty = !proposed && JSON.stringify([draft, citation]) !== initialProposal.current;
 
   function editable() {
     return lifetime.active() && !running.current && !request.current && !frozen;
@@ -380,6 +383,7 @@ function RelationEditorLive({
   if (!visible) return null;
   return (
     <section aria-label={m.relation_title({}, options)} className={relationSurface} aria-busy={busy}>
+      <RelationEditorNavigation dirty={dirty} pending={!!request.current} isCurrent={() => lifetime.active()} />
       <header className="space-y-2">
         {composition ? (
           <ContentItemHeading level={2} className="font-sans text-2xl font-semibold">

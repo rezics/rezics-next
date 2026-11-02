@@ -754,3 +754,88 @@ test('Relation candidate recovery repeats the failed page and explicitly restart
     await ui.close();
   }
 });
+
+test('relation editor keeps an edited proposal on Stay and leaves only after an explicit choice', async () => {
+  const ui = await mounted();
+  const { host, window, render, user, within, RelationEditor, relationFixture, m, confirm } = ui;
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } =
+    await import('@tanstack/react-router');
+  const fixture = relationFixture();
+  const initial = await fixture.transport.read();
+  let arrivals = 0;
+  const rootRoute = createRootRoute({ component: Outlet });
+  const editorRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/relation-edit',
+    component: () =>
+      h(
+        'div',
+        null,
+        h(Link, { to: '/subject' }, 'Back to subject'),
+        h(RelationEditor, {
+          id: fixture.id,
+          locale: 'en',
+          initial,
+          transport: fixture.transport,
+          search: async () => [],
+          composition: { statement: fixture.draft, slot: fixture.slot, positionEditable: true },
+        }),
+      ),
+  });
+  const subjectRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/subject',
+    onEnter: () => arrivals++,
+    component: () => h('h1', null, 'Subject'),
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([editorRoute, subjectRoute]),
+    history: createMemoryHistory({ initialEntries: ['/subject', '/relation-edit'] }),
+  });
+  const goToSubject = () => act(async () => user.click(within(host).getByRole('link', { name: 'Back to subject' })));
+  const backToEditor = () => act(async () => router.history.back());
+  try {
+    await router.load();
+    await render(h(RouterProvider, { router }));
+    const region = ui.region();
+    const citation = within(region).getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement;
+    await act(async () => user.type(citation, 'https://example.org/new-source'));
+    const unload = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+
+    await goToSubject();
+    const dialog = window.document.querySelector('[role="alertdialog"]')!;
+    await act(async () => user.click(within(dialog).getByRole('button', { name: m.thread_authoring_stay() })));
+    expect(router.state.location.pathname).toBe('/relation-edit');
+    expect(region.textContent).toContain('Aoi Yuki');
+    expect(region.textContent).toContain('The traveler');
+    expect(region.textContent).toContain('Original credit');
+    expect([...region.querySelectorAll('a')].some((link) => link.href === 'https://example.org/credits')).toBe(true);
+    expect(citation.value).toBe('https://example.org/new-source');
+    expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(0);
+
+    await act(async () => user.clear(citation));
+    await goToSubject();
+    expect(window.document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(router.state.location.pathname).toBe('/subject');
+    await backToEditor();
+
+    const secondCitation = within(ui.region()).getByRole('textbox', { name: m.relation_citation() });
+    await act(async () => user.type(secondCitation, 'https://example.org/new-source'));
+    await goToSubject();
+    const leaveDialog = window.document.querySelector('[role="alertdialog"]')!;
+    await act(async () => user.click(within(leaveDialog).getByRole('button', { name: m.thread_authoring_leave() })));
+    expect(router.state.location.pathname).toBe('/subject');
+    expect(arrivals).toBe(2);
+    await backToEditor();
+
+    await confirm(ui.region(), m.relation_propose());
+    await goToSubject();
+    expect(window.document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(router.state.location.pathname).toBe('/subject');
+    expect(arrivals).toBe(3);
+  } finally {
+    await ui.close();
+  }
+}, 60_000);
