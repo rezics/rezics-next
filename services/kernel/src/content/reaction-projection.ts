@@ -79,8 +79,8 @@ async function applyChange(client: PoolClient, change: Change): Promise<void> {
     source_epoch: change.epoch,
     source_position: change.position,
   });
-  if (slot.length === 0) return;
-  const previous = slot[0]!.previous_kind as ReactionKind | null;
+  if (!slot) return;
+  const previous = slot.previous_kind;
   const deltas: { kind: ReactionKind; delta: number }[] = [];
   if (previous && previous !== change.kind) deltas.push({ kind: previous, delta: -1 });
   if (change.kind && change.kind !== previous) deltas.push({ kind: change.kind, delta: 1 });
@@ -143,10 +143,9 @@ async function applyReactionChange(pool: Pool, event: CloudEvent): Promise<void>
   const change = parse(event);
   // Installation rebuilt counts from frozen native slots. Events at or below
   // that source cutover are already represented, including cleared slots.
-  const baseline = await withConnection(pool, (client) =>
+  const cutover = await withConnection(pool, (client) =>
     readBaseline.run(client, { source_partition: change.sourcePartition }),
   );
-  const cutover = baseline[0];
   if (
     cutover &&
     (change.epoch < cutover.source_epoch ||
