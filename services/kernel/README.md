@@ -597,7 +597,9 @@ with the test file, check name, scales and each scale's `seeding`.
 those counts and ends seeding, on success and on failure, and keeps the grow error as the primary failure. Seed
 production-write concurrency inside `grow` is unchanged.
 Native plan trees are bounded to 10,000 nodes and depth 256 (root depth 0); cycles, sparse children and invalid child
-collections fail with their plan location. These are evidence input limits, not growth verdicts.
+collections fail with their plan location. One cost or report traversal of a capture shares a 20,000-node envelope
+with retained capture evidence entries and refuses a child collection before it would exceed remaining capacity.
+These are evidence input limits, not growth verdicts.
 Measured-run write discovery uses those same admitted EXPLAIN document envelopes and the native plan walk; a
 ModifyTable without Relation Name fails at that node path, a missing Schema defaults to public, and malformed
 documents fail at their location instead of omitting writes.

@@ -7,7 +7,13 @@ import {
   sumFinite,
 } from './growth-numeric.ts';
 import { indexCteScopes, unscannedCteBlocks, type CteBlocks } from './growth-cte-cost.ts';
-import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
+import {
+  createPlanWalkSession,
+  explainPlanEntries,
+  walkPlanTree,
+  type PlanNode,
+  type PlanWalkSession,
+} from './growth-plan-walk.ts';
 import { classifyGrowthSql } from './growth-sql-kind.ts';
 import { validateCaptureEvidence } from './growth-capture-evidence.ts';
 import {
@@ -131,29 +137,10 @@ function optionalNumber(node: PlanNode, field: string, fallback = 0): number {
   return value;
 }
 
-type PlanEntry = { readonly queryText: string | undefined; readonly plan: PlanNode; readonly location: string };
-
-function documentEntries(document: unknown, location = 'plan'): PlanEntry[] {
-  if (Array.isArray(document)) {
-    if (document.length === 0) throw new TypeError('EXPLAIN plan document is empty');
-    return document.map((entry, index) => {
-      if (!isRecord(entry) || !isRecord(entry.Plan)) throw new TypeError('EXPLAIN plan document has no Plan');
-      return {
-        queryText: typeof entry['Query Text'] === 'string' ? entry['Query Text'] : undefined,
-        plan: entry.Plan,
-        location: `${location}[${index}].Plan`,
-      };
-    });
-  }
-  if (isRecord(document) && typeof document['Query Text'] === 'string' && isRecord(document.Plan))
-    return [{ queryText: document['Query Text'], plan: document.Plan, location: `${location}.Plan` }];
-  throw new TypeError('Unrecognized plan document');
-}
-
-function isCatalogOnlyPlan(root: PlanNode, location: string): boolean {
+function isCatalogOnlyPlan(root: PlanNode, location: string, session: PlanWalkSession): boolean {
   let hasRelation = false;
   let catalogOnly = true;
-  for (const { node } of walkPlanTree(root, location)) {
+  for (const { node } of walkPlanTree(root, location, 'preorder', session)) {
     if (typeof node['Relation Name'] === 'string') {
       hasRelation = true;
       catalogOnly = catalogOnly && (node.Schema === 'pg_catalog' || node.Schema === 'information_schema');
@@ -180,7 +167,11 @@ function isFreshnessProbeText(text: string): boolean {
 
 const reyloFreshnessIntervalMs = 60_000;
 
-function classifyCatalogStatements(capture: Capture, planCollection = 'plans'): CatalogClassification {
+function classifyCatalogStatements(
+  capture: Capture,
+  planCollection = 'plans',
+  session = createPlanWalkSession(),
+): CatalogClassification {
   const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
   const statementEntries = capture.statements.flatMap((text, index) =>
     !isControlStatement(text) ? [{ index, text, backend: capture.statementBackends?.[index] }] : [],
@@ -191,14 +182,14 @@ function classifyCatalogStatements(capture: Capture, planCollection = 'plans'): 
   const freshnessProbeKeys = new Set<string>();
   const catalogOnlyByText = new Map<string, boolean>();
   if (capture.planStatements !== undefined) {
-    const plansByStatement = new Map<number, PlanEntry[]>();
+    const plansByStatement = new Map<number, ReturnType<typeof explainPlanEntries>>();
     const catalogOnlyByKey = new Map<string, boolean>();
     const textByKey = new Map<string, string>();
     for (let planIndex = 0; planIndex < capture.plans.length; planIndex++) {
       const owner = capture.planStatements[planIndex];
       if (owner === undefined || !Number.isInteger(owner) || owner < 0 || owner >= capture.statements.length) continue;
       const plans = plansByStatement.get(owner) ?? [];
-      plans.push(...documentEntries(capture.plans[planIndex], `${planCollection}[${planIndex}]`));
+      plans.push(...explainPlanEntries(capture.plans[planIndex], `${planCollection}[${planIndex}]`));
       plansByStatement.set(owner, plans);
     }
     for (const { index, text, backend } of statementEntries) {
@@ -207,7 +198,7 @@ function classifyCatalogStatements(capture: Capture, planCollection = 'plans'): 
       const catalogOnly =
         plans !== undefined &&
         plans.length > 0 &&
-        plans.every(({ plan, location }) => isCatalogOnlyPlan(plan, location));
+        plans.every(({ plan, location }) => isCatalogOnlyPlan(plan, location, session));
       catalogOnlyByText.set(text, (catalogOnlyByText.get(text) ?? true) && catalogOnly);
       catalogOnlyByKey.set(key, (catalogOnlyByKey.get(key) ?? true) && catalogOnly);
       textByKey.set(key, text);
@@ -223,10 +214,10 @@ function classifyCatalogStatements(capture: Capture, planCollection = 'plans'): 
     for (const [text, catalogOnly] of catalogOnlyByText) if (catalogOnly) catalogTexts.add(text);
   } else {
     const clientKeys = new Set(statementEntries.map(({ text, backend }) => catalogKey(backendAware, backend, text)));
-    const plansByKey = new Map<string, PlanEntry[]>();
+    const plansByKey = new Map<string, ReturnType<typeof explainPlanEntries>>();
     for (let index = 0; index < capture.plans.length; index++) {
       const backend = capture.planBackends?.[index];
-      for (const entry of documentEntries(capture.plans[index], `${planCollection}[${index}]`)) {
+      for (const entry of explainPlanEntries(capture.plans[index], `${planCollection}[${index}]`)) {
         if (entry.queryText === undefined) continue;
         const key = catalogKey(backendAware, backend, entry.queryText);
         if (!clientKeys.has(key)) continue;
@@ -237,7 +228,8 @@ function classifyCatalogStatements(capture: Capture, planCollection = 'plans'): 
     }
     for (const [key, plans] of plansByKey) {
       const queryText = plans[0]!.queryText!;
-      const catalogOnly = plans.length > 0 && plans.every(({ plan, location }) => isCatalogOnlyPlan(plan, location));
+      const catalogOnly =
+        plans.length > 0 && plans.every(({ plan, location }) => isCatalogOnlyPlan(plan, location, session));
       if (catalogOnly) {
         catalogKeys.add(key);
         if (isFreshnessProbeText(queryText)) freshnessProbeKeys.add(key);
@@ -365,7 +357,7 @@ export function withoutCatalogTexts(
       return remappedStatements.has(owner) ? [index] : [];
     }
     if (owner !== undefined && !remappedStatements.has(owner)) return [];
-    return documentEntries(document).some(
+    return explainPlanEntries(document).some(
       ({ queryText }) =>
         hasMatchingStatement(matchingStatements, backendAware, queryText, backend) &&
         (queryText === undefined || !isCatalogQuery(catalog, queryText, backend)),
@@ -441,14 +433,15 @@ function costNode(
   root: PlanNode,
   relations: Map<string, MutableRelationCost>,
   location: string,
+  session: PlanWalkSession,
   database?: string,
 ): { readonly totals: NodeTotals; readonly cteBlocks: CteBlocks; readonly cteLimitations: readonly string[] } {
-  const cteScopes = indexCteScopes(root, location);
+  const cteScopes = indexCteScopes(root, location, session);
   const producerBlocks = new Map<PlanNode, CteBlocks>();
   const scanBlocks = new Map<PlanNode, CteBlocks>();
   const relationContexts = new Map<PlanNode, RelationContext | undefined>();
   const parentContexts: (RelationContext | undefined)[] = [];
-  for (const { node, depth } of walkPlanTree(root, location, 'preorder')) {
+  for (const { node, depth } of walkPlanTree(root, location, 'preorder', session)) {
     const parent = depth === 0 ? undefined : parentContexts[depth - 1];
     relationContexts.set(node, parent);
     const hasRelation = typeof node['Relation Name'] === 'string';
@@ -456,7 +449,7 @@ function costNode(
     parentContexts[depth] = hasRelation ? (schema === undefined ? {} : { schema }) : parent;
   }
   const totalsByNode = new Map<PlanNode, NodeTotals>();
-  for (const { node, depth } of walkPlanTree(root, location, 'postorder')) {
+  for (const { node, depth } of walkPlanTree(root, location, 'postorder', session)) {
     const nodeType = typeof node['Node Type'] === 'string' ? node['Node Type'] : '';
     const actualRows = requiredNumber(node, 'Actual Rows');
     const loops = optionalNumber(node, 'Actual Loops', 1);
@@ -636,7 +629,7 @@ export function costOf(capture: Capture): Cost {
   return costOfAt(capture, 'plans');
 }
 
-function costOfAt(capture: Capture, planCollection: string): Cost {
+function costOfAt(capture: Capture, planCollection: string, session = createPlanWalkSession()): Cost {
   validateCaptureEvidence(capture);
   validateByteMeasurements(capture.requestBytes, capture.statements.length, 'Request bytes');
   validateByteMeasurements(capture.responseBytes, capture.statements.length, 'Response bytes');
@@ -655,7 +648,7 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
   let sharedHit = 0;
   let sharedRead = 0;
   const limitations: string[] = [];
-  const catalog = classifyCatalogStatements(capture, planCollection);
+  const catalog = classifyCatalogStatements(capture, planCollection, session);
   const nativeCatalogIndexes = nativeCatalogOccurrences.get(catalog);
   const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
   const matchingStatements = statementKeys(capture.statements, capture.statementBackends, backendAware);
@@ -665,7 +658,7 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
     const document = capture.plans[index];
     const backend = capture.planBackends?.[index];
     const owner = capture.planStatements?.[index];
-    for (const { queryText, plan, location } of documentEntries(document, `${planCollection}[${index}]`)) {
+    for (const { queryText, plan, location } of explainPlanEntries(document, `${planCollection}[${index}]`)) {
       let included = true;
       if (capture.planStatements !== undefined) {
         if (
@@ -684,6 +677,7 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
         plan,
         included ? relations : new Map<string, MutableRelationCost>(),
         location,
+        session,
         capture.planDatabases?.[index],
       );
       if (!included) continue;
@@ -714,7 +708,7 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
     const document = capture.backgroundPlans![index];
     const backend = capture.backgroundPlanBackends?.[index];
     const owner = capture.backgroundPlanStatements?.[index];
-    const entries = documentEntries(document, `backgroundPlans[${index}]`);
+    const entries = explainPlanEntries(document, `backgroundPlans[${index}]`);
     for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
       const entry = entries[entryIndex]!;
       const included = !(
@@ -732,6 +726,7 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
             : { planDatabases: [capture.backgroundPlanDatabases[index]] }),
         },
         `backgroundPlans[${index}]`,
+        session,
       );
       if (!included) continue;
       const statementOccurrence = capture.backgroundPlanStatements?.[index];

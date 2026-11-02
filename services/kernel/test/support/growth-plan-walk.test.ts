@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { costOf } from './growth-cost.ts';
-import { collectModifyTargets, MAX_PLAN_DEPTH, MAX_PLAN_NODES } from './growth-plan-walk.ts';
+import { collectModifyTargets, MAX_CAPTURE_PLAN_NODES, MAX_PLAN_DEPTH, MAX_PLAN_NODES } from './growth-plan-walk.ts';
 import { statementAttributions, statementOccurrences } from './growth-report.ts';
 
 function node(fields: Record<string, unknown> = {}, children?: unknown[]) {
@@ -16,7 +16,7 @@ function node(fields: Record<string, unknown> = {}, children?: unknown[]) {
 }
 
 function capture(plan: unknown) {
-  return { statements: ['select 1'], plans: [{ 'Query Text': 'select 1', Plan: plan }] };
+  return { statements: ['select 1'], plans: [{ 'Query Text': 'select 1', Plan: plan }], planStatements: [0] };
 }
 
 function chain(edges: number) {
@@ -28,6 +28,14 @@ function chain(edges: number) {
     current = child;
   }
   return root;
+}
+
+function forest(size: number) {
+  return {
+    statements: ['select 1'],
+    plans: Array.from({ length: size }, () => ({ 'Query Text': 'select 1', Plan: node() })),
+    planStatements: Array.from({ length: size }, () => 0),
+  };
 }
 
 test('cost and diagnostics reject cyclic and malformed plan children with their location', () => {
@@ -54,10 +62,24 @@ test('plan traversal enforces documented depth and node limits', () => {
       ),
     ),
   ).toThrow(/maximum node count 10000/);
+  const children = Array.from({ length: MAX_PLAN_NODES - 1 }, () => node());
+  children[children.length - 1]!.Plans = [null];
+  expect(() => costOf(capture(node({}, children)))).toThrow(/maximum node count 10000/);
+});
+
+test('cost and diagnostics bound aggregate plan nodes across a capture forest', () => {
+  const supported = forest(MAX_PLAN_NODES + 1);
+  expect(costOf(supported).plans).toBe(MAX_PLAN_NODES + 1);
+  expect(statementOccurrences(supported).statements[0]?.plans).toHaveLength(MAX_PLAN_NODES + 1);
+
+  const over = forest(MAX_CAPTURE_PLAN_NODES + 1);
+  expect(() => costOf(over)).toThrow(/maximum node count 20000/);
+  expect(() => statementOccurrences(over)).toThrow(/maximum node count 20000/);
+  expect(() => statementAttributions(over)).toThrow(/maximum node count 20000/);
 });
 
 test('valid plan costs and statement diagnostics retain their measured descendants', () => {
-  const plan = node({}, [
+  const plan = node({ 'Shared Hit Blocks': 3 }, [
     node({
       'Node Type': 'Seq Scan',
       Schema: 'app',

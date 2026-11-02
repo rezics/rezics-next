@@ -1,5 +1,5 @@
 import { checkedAdd, checkedSubtract } from './growth-numeric.ts';
-import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
+import { walkPlanTree, type PlanNode, type PlanWalkSession } from './growth-plan-walk.ts';
 
 export type CteBlocks = { readonly hit: number; readonly read: number };
 
@@ -22,13 +22,13 @@ export type CteScopeIndex = {
 };
 
 /** Associates native CTE scans with the nearest producer visible in their nested plan scope. */
-export function indexCteScopes(root: PlanNode, location: string): CteScopeIndex {
+export function indexCteScopes(root: PlanNode, location: string, session?: PlanWalkSession): CteScopeIndex {
   const rootScope: Scope = { parent: undefined, producers: new Map() };
   const scopesAtDepth: Scope[] = [rootScope];
   const producers = new Map<PlanNode, string>();
   const scans: Scan[] = [];
 
-  for (const { node, depth, path } of walkPlanTree(root, location)) {
+  for (const { node, depth, path } of walkPlanTree(root, location, 'preorder', session)) {
     const scope = scopesAtDepth[depth]!;
     const producerName =
       typeof node['Subplan Name'] === 'string' ? /^CTE (.+)$/.exec(node['Subplan Name'])?.[1] : undefined;

@@ -2,7 +2,7 @@ import type { Capture } from './growth-cost.ts';
 import type { ByteMetric, GrowthMetric } from './growth-bound.ts';
 import type { ReportSample, StatementAttribution } from './growth.ts';
 import { indexStatementRepetitions } from './growth-report-index.ts';
-import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
+import { createPlanWalkSession, walkPlanTree, type PlanNode, type PlanWalkSession } from './growth-plan-walk.ts';
 import { validateCaptureEvidence } from './growth-capture-evidence.ts';
 import { relationIdentityKey, type RelationIdentity } from './growth-relation-identity.ts';
 
@@ -202,6 +202,7 @@ function planEntries(document: unknown, location = 'plan'): { queryText?: string
 function planCost(
   root: PlanNode,
   location: string,
+  session: PlanWalkSession,
   database?: string,
 ): { rows: number; blocks: number; node?: string; relationIdentities: readonly RelationIdentity[] } {
   let rows = 0;
@@ -212,7 +213,7 @@ function planCost(
   const blocks =
     (typeof root['Shared Hit Blocks'] === 'number' ? root['Shared Hit Blocks'] : 0) +
     (typeof root['Shared Read Blocks'] === 'number' ? root['Shared Read Blocks'] : 0);
-  for (const { node, depth } of walkPlanTree(root, location)) {
+  for (const { node, depth } of walkPlanTree(root, location, 'preorder', session)) {
     const type = typeof node['Node Type'] === 'string' ? node['Node Type'] : 'Unknown';
     const relationName = typeof node['Relation Name'] === 'string' ? node['Relation Name'] : undefined;
     const indexName = typeof node['Index Name'] === 'string' ? node['Index Name'] : undefined;
@@ -293,12 +294,13 @@ function addPlanCost(
   key: string | undefined,
   plan: PlanNode,
   location: string,
+  session: PlanWalkSession,
   database?: string,
 ) {
   if (key === undefined) return;
   const current = statements.get(key);
   if (!current) return;
-  const cost = planCost(plan, location, database);
+  const cost = planCost(plan, location, session, database);
   current.rows += cost.rows;
   current.blocks += cost.blocks;
   if (cost.node) current.node = cost.node;
@@ -308,6 +310,7 @@ function addPlanCost(
 
 export function statementAttributions(capture: Capture): StatementAttribution[] {
   validateCaptureEvidence(capture);
+  const session = createPlanWalkSession();
   const statements = new Map<
     string,
     { rows: number; blocks: number; count: number; node?: string; relationIdentities: Map<string, RelationIdentity> }
@@ -332,6 +335,7 @@ export function statementAttributions(capture: Capture): StatementAttribution[] 
         ownedKey ?? (queryText === undefined ? undefined : normalizeStatement(queryText)),
         plan,
         location,
+        session,
         capture.planDatabases?.[index],
       );
   }
@@ -366,6 +370,7 @@ export type StatementOccurrences = {
 /** Costs each statement occurrence only from plans linked to it at capture time. */
 export function statementOccurrences(capture: Capture): StatementOccurrences {
   validateCaptureEvidence(capture);
+  const session = createPlanWalkSession();
   const occurrences = (
     statements: readonly string[],
     errors: readonly (string | null)[] | undefined,
@@ -394,7 +399,7 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
       const relationIdentities = new Map<string, RelationIdentity>();
       for (const planIndex of planIndices) {
         for (const entry of planEntries(plans[planIndex], `${planCollection}[${planIndex}]`)) {
-          const cost = planCost(entry.plan, entry.location, planDatabases?.[planIndex]);
+          const cost = planCost(entry.plan, entry.location, session, planDatabases?.[planIndex]);
           rows += cost.rows;
           blocks += cost.blocks;
           for (const identity of cost.relationIdentities)
