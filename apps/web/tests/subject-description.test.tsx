@@ -12,6 +12,9 @@ import subjectRecording from '../src/kernel/recorded/subject.json';
 import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+type PublicTextResult = { ok: false } | { ok: true; document: Record<string, unknown> };
+const readPublicSubjectDocument = mock(async (_input: unknown): Promise<PublicTextResult> => ({ ok: false }));
+mock.module('../src/features/pages/subject-queries.ts', () => ({ readPublicSubjectDocument }));
 const { Summary, OverviewContext } = await import('../src/features/pages/overview');
 const require = createRequire(import.meta.url);
 const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
@@ -82,6 +85,75 @@ function rich(markdown: string, level = 0): Stmt {
         ]
       : [],
     references: [],
+  };
+}
+
+function missingSummary(documentId: string, subjectId?: string) {
+  const statement = rich('');
+  statement.value.content = { language: 'en', document: documentId, digest: `digest-${documentId}` };
+  const value = reading('', 'en', [statement]);
+  if (subjectId) {
+    value.subject = subjectId;
+    const section = value.sections.get('summary');
+    if (!section?.ok) throw new Error('Expected a Subject summary fixture');
+    (section.body.subject as Subject).id = subjectId;
+  }
+  return { value, statement };
+}
+
+function availableDocument(value: OverviewValue, statement: Stmt, text: string) {
+  const content = statement.value.type === 'value' ? (statement.value.content as Record<string, unknown>) : {};
+  const subject = value.sections.get('summary');
+  if (!subject?.ok || !statement.id) throw new Error('Expected a Subject summary fixture');
+  return {
+    id: content.document,
+    subjectId: (subject.body.subject as Subject).id,
+    candidateId: statement.id,
+    digest: content.digest,
+    language: content.language,
+    revision: 1,
+    availability: 'available',
+    body: fromMarkdown(text, 'text'),
+  };
+}
+
+async function mountSummary(value: OverviewValue) {
+  const window = new Window({ url: 'https://site.invalid/en' });
+  const globals = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'Element',
+    'Node',
+    'Event',
+    'MouseEvent',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ];
+  const saved = new Map(globals.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const key of globals)
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key],
+    });
+  const { createRoot } = await import('react-dom/client');
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  await act(async () => root.render(composition(value)));
+  return {
+    host,
+    render: async (next: OverviewValue) => act(async () => root.render(composition(next))),
+    close: async () => {
+      await act(async () => root.unmount());
+      for (const key of globals) {
+        const descriptor = saved.get(key);
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+        else Reflect.deleteProperty(globalThis, key);
+      }
+      await window.happyDOM.close();
+    },
   };
 }
 
@@ -184,6 +256,79 @@ test('unavailable rich text stays unavailable alongside bounded fallback; select
   const permitted = reading('Fallback must not render.', 'en', [rich(markdown, 1)]);
   permitted.reader = { spoilerLevel: 1, suitability: 'blur' };
   expect(render(permitted).querySelector('details')).not.toBeNull();
+});
+
+test('failed public text retries in place, blocks overlapping clicks, and renders the recovered document', async () => {
+  readPublicSubjectDocument.mockReset();
+  let rejectFirst!: (result: PublicTextResult) => void;
+  let calls = 0;
+  const fixture = missingSummary('text-retry');
+  readPublicSubjectDocument.mockImplementation(() => {
+    calls += 1;
+    return calls === 1
+      ? new Promise((resolve) => (rejectFirst = resolve))
+      : Promise.resolve({ ok: true, document: availableDocument(fixture.value, fixture.statement, 'Recovered prose.') });
+  });
+  const mounted = await mountSummary(fixture.value);
+  try {
+    const retry = mounted.host.querySelector('a')!;
+    expect(retry.getAttribute('href')).toBe('/v1/documents/text-retry');
+    await act(async () => retry.click());
+    await act(async () => retry.click());
+    expect(calls).toBe(1);
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    await act(async () => {
+      rejectFirst({ ok: false });
+      await Promise.resolve();
+    });
+    expect(mounted.host.querySelector('[data-slot="subject-text-unavailable"]')).not.toBeNull();
+    await act(async () => {
+      mounted.host.querySelector('a')!.click();
+      await Promise.resolve();
+    });
+    expect(calls).toBe(2);
+    expect(mounted.host.textContent).toContain('Recovered prose.');
+    expect(mounted.host.querySelector('[data-slot="subject-text-unavailable"]')).toBeNull();
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('late text for another Subject is discarded and an available empty document clears the failure', async () => {
+  readPublicSubjectDocument.mockReset();
+  let finishFirst!: (result: PublicTextResult) => void;
+  let calls = 0;
+  const first = missingSummary('text-first', 'subject-first');
+  const second = missingSummary('text-second', 'subject-second');
+  readPublicSubjectDocument.mockImplementation(() => {
+    calls += 1;
+    return calls === 1
+      ? new Promise((resolve) => (finishFirst = resolve))
+      : Promise.resolve({ ok: true, document: availableDocument(second.value, second.statement, '') });
+  });
+  const mounted = await mountSummary(first.value);
+  try {
+    await act(async () => mounted.host.querySelector('a')!.click());
+    await mounted.render(second.value);
+    await act(async () => mounted.host.querySelector('a')!.click());
+    expect(calls).toBe(1);
+    expect(mounted.host.querySelector('a')?.getAttribute('aria-disabled')).toBe('true');
+    await act(async () => {
+      finishFirst({ ok: true, document: availableDocument(first.value, first.statement, 'Late first Subject text.') });
+      await Promise.resolve();
+    });
+    expect(mounted.host.textContent).not.toContain('Late first Subject text.');
+    expect(mounted.host.querySelector('[data-slot="subject-text-unavailable"]')).not.toBeNull();
+    await act(async () => {
+      mounted.host.querySelector('a')!.click();
+      await Promise.resolve();
+    });
+    expect(calls).toBe(2);
+    expect(mounted.host.querySelector('[data-slot="subject-text-unavailable"]')).toBeNull();
+    expect(mounted.host.querySelector('[data-slot="document-body"]')).not.toBeNull();
+  } finally {
+    await mounted.close();
+  }
 });
 
 test('the actual spoiler gate reveals and hides by keyboard and resets for a different summary statement', async () => {

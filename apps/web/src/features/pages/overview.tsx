@@ -50,6 +50,7 @@ import {
   type Stmt,
 } from './shared';
 import { statementDocument } from './documents';
+import { readPublicSubjectDocument } from './subject-queries';
 import { DocumentValue, LanguageTag, readableDocument, SpoilerGate, type ValueLabels } from './values';
 import { DescriptionPassage, SubjectPassage } from './subject-passage';
 import {
@@ -1180,11 +1181,18 @@ function SummaryContent({
         const attempt = controller.current?.begin(target);
         if (!attempt) return;
         setRetryState({ target, status: 'pending' });
-        void readPublicSummaryDocument({ data: { documentId: target.documentId, locale: target.locale } })
+        void readPublicSubjectDocument({
+          data: {
+            documentId: target.documentId,
+            locale: target.locale,
+            realm: value.realm,
+            reader: value.cacheReader ?? null,
+          },
+        })
           .then((result) => {
             if (!controller.current?.isCurrent(attempt)) return;
             setRetryState(
-              result.kind === 'read' && summaryDocumentMatches(result.document, target)
+              result.ok && summaryDocumentMatches(result.document, target)
                 ? { target, status: 'read', document: result.document }
                 : { target, status: 'failed' },
             );
@@ -1192,7 +1200,12 @@ function SummaryContent({
           .catch(() => {
             if (controller.current?.isCurrent(attempt)) setRetryState({ target, status: 'failed' });
           })
-          .finally(() => controller.current?.finish(attempt));
+          .finally(() => {
+            controller.current?.finish(attempt);
+            setRetryState((current) =>
+              current?.target === target && current.status === 'pending' ? { target, status: 'failed' } : current,
+            );
+          });
       }
     : undefined;
   const unavailable =
@@ -1230,15 +1243,17 @@ function SummaryContent({
         <SubjectReadingState
           locale={value.locale}
           href={
-            viewHref(value, 'details') ??
-            subjectViewHref(
-              { id: read.subject.id, label: value.subjectLabel || value.unlabelled },
-              value.locale,
-              'details',
-            )
+            target
+              ? `/v1/documents/${encodeURIComponent(target.documentId)}`
+              : (viewHref(value, 'details') ??
+                subjectViewHref(
+                  { id: read.subject.id, label: value.subjectLabel || value.unlabelled },
+                  value.locale,
+                  'details',
+                ))
           }
           onRetry={onRetry}
-          busy={activeRetry?.status === 'pending'}
+          busy={retryState?.status === 'pending'}
         />
       )}
       {chosen &&

@@ -97,6 +97,36 @@ const readSubjectPage = createServerFn({ method: 'GET', strict: false })
     return { ...(await withComposedCommunity(client, loaded)), shareCard };
   });
 
+/** Read one public Subject document without refreshing the rest of its configured page. */
+export const readPublicSubjectDocument = createServerFn({ method: 'GET', strict: false })
+  .validator((input: unknown) => {
+    const value = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+    if (
+      typeof value.documentId !== 'string' ||
+      !value.documentId ||
+      value.documentId.length > 128 ||
+      typeof value.locale !== 'string' ||
+      value.locale.length > 35
+    )
+      throw notFound();
+    return {
+      documentId: value.documentId,
+      locale: value.locale,
+      realm: validatePageRealm(value.realm),
+      reader: validateReader(value.reader),
+    };
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
+    const response = await client.documents({ id: data.documentId }).get({
+      fetch: { cache: 'no-store', ...(authorization ? { headers: { authorization } } : {}) },
+    });
+    const document = response.data?.document;
+    if (response.status !== 200 || response.error || document?.availability !== 'available') return { ok: false as const };
+    return { ok: true as const, document };
+  });
+
 const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
   .validator((input: unknown) => {
     const value = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};

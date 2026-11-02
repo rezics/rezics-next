@@ -11,10 +11,9 @@ export function createSubjectTextRetryController<Target extends object>() {
   return {
     select(target: Target | null) {
       selected = target;
-      if (pending?.target !== target) pending = null;
     },
     begin(target: Target): SubjectTextRetryToken<Target> | null {
-      if (selected !== target || pending?.target === target) return null;
+      if (selected !== target || pending) return null;
       return (pending = { target });
     },
     isCurrent(token: SubjectTextRetryToken<Target>) {
