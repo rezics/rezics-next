@@ -56,9 +56,7 @@ test('aggregate sampling work admits the boundary and rejects excess before any 
   const check = { name: 'sampling check', scales, bounds: validBounds, warmups: 5 };
   expect(admitGrowthCheck({ ...check, repetitions: 6 })).toMatchObject({ warmups: 5, repetitions: 6 });
   const { calls, ...rest } = hooks();
-  await expect(
-    checkGrowth(database, { ...check, repetitions: 7, ...rest } as GrowthCheck),
-  ).rejects.toMatchObject({
+  await expect(checkGrowth(database, { ...check, repetitions: 7, ...rest } as GrowthCheck)).rejects.toMatchObject({
     name: 'RangeError',
     message: expect.stringContaining('sampling work (68)'),
   });
