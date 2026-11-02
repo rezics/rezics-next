@@ -36,6 +36,7 @@ A focused curation publication Retry or revised-intent activation recovers to th
 A curation editor baseline is admitted only when native active metadata and the returned profile share the canonical profile digest; extra native fields never replace the session reader or the success flag.
 Publication success binds to the submitted profile digest; extra native JSON fields are ignored when that digest and a nonnegative head admit.
 A rate-limited curation profile read waits for the native Retry-After deadline bound to the current reader, admission version or admitted visit, then exposes a manual retry; expiry never dispatches.
+Configured-list recovery shows a disabled Retry action during its native Retry-After wait; expiry enables deliberate retry without dispatch, and each TypeList leaf uses its own hint while preserving its cursor.
 Recent queries repeat `language` values in preference order; missing selections use the current locale fallback.
 Ordered language preference reorder keeps focus on the moved occurrence's surviving move control; removal focuses the next remaining Remove control, otherwise the previous row's Remove, otherwise the language selector.
 History management feedback belongs to the mounted bucket and installed session observation; replacing either permanently retires pending feedback, even when the same account returns.

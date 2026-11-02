@@ -6,6 +6,7 @@ import { m } from '../../paraglide/messages.js';
 import { isLocale } from '../../paraglide/runtime.js';
 import { useListReaderAdmission, type ListReaderSession } from './list-reader-admission';
 import { createConfiguredListRetryController } from './configured-list-retry';
+import { configuredListRetryWaiting } from './configured-list-retry-admission';
 import { hasSelectedRealmTarget, typeListTargetFromPage } from './type-list-model';
 import { typeListQuery, type TypeListAdmissionInput, type TypeListQueryResult } from './type-list-query';
 import type { TypeListTarget } from './type-list-model';
@@ -14,6 +15,7 @@ import type { SubjectPageData } from './subject';
 import { PageData } from './data';
 import { TypeList } from './type-list';
 import { subjectPageMessages } from './route-support';
+import { useSearchRetryWait } from '../../search/search-recovery-retry';
 
 type ConfiguredListProps = {
   list: string;
@@ -169,9 +171,27 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
       !retryController.shouldSuppressAutomaticRead(queryIdentity),
     ...(loaderResult ? { initialData: loaderResult, initialDataUpdatedAt: Date.now() } : {}),
   });
+  const isCurrentRequest = (request: ReaderRequest | undefined) =>
+    !!request &&
+    request.locale === locale &&
+    request.node === list &&
+    request.page === page &&
+    request.cursor === cursor &&
+    request.state === state &&
+    request.expectedReader === expectedReader &&
+    request.incarnation === incarnation &&
+    request.mode === mode &&
+    request.realm === (selectedRealm ? target.realm : null) &&
+    JSON.stringify(request.target) === JSON.stringify(target);
+  const queryResult = query.data;
+  const retryAt =
+    queryResult?.kind === 'unavailable' && isCurrentRequest(queryResult.admission.request)
+      ? queryResult.retryAt
+      : undefined;
+  const retryWaiting = useSearchRetryWait(retryAt);
 
   async function retry() {
-    if (retryingRef.current) return;
+    if (retryingRef.current || configuredListRetryWaiting(retryAt)) return;
     retryingRef.current = true;
     setRetrying(true);
     const attempt = selectedRealm ? retryController.begin() : null;
@@ -232,7 +252,7 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
           : m.configured_list_recovery_pending({}, messages)}
       </p>
       {unavailable ? (
-        <Button variant="outline" disabled={retrying} onClick={() => void retry()}>
+        <Button variant="outline" disabled={retrying || retryWaiting} onClick={() => void retry()}>
           {m.configured_list_recovery_retry({}, messages)}
         </Button>
       ) : null}
@@ -242,21 +262,13 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
   if (selectedRealm && state === 'unavailable') return recovery(true);
   if (selectedRealm && (state === 'unknown' || !reader.current(incarnation))) return recovery(false);
   if (query.isError) return recovery(true);
-  const result = query.data;
+  const result = queryResult;
   if (!result) return recovery(false);
   if (result.kind !== 'ready') return recovery(true);
   const request = result.admission.request;
   const isCurrentResult =
+    isCurrentRequest(request) &&
     (!selectedRealm || state !== 'unavailable') &&
-    request.locale === locale &&
-    request.node === list &&
-    request.page === page &&
-    request.cursor === cursor &&
-    request.state === state &&
-    request.expectedReader === expectedReader &&
-    request.incarnation === incarnation &&
-    request.mode === mode &&
-    request.realm === (selectedRealm ? target.realm : null) &&
     result.node === list &&
     JSON.stringify(result.target) === JSON.stringify(target) &&
     result.admission.context === (result.page.context?.id ?? null) &&
@@ -266,18 +278,28 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
         : result.admission.reader === expectedReader
       : result.admission.reader === null);
   if (!isCurrentResult) return recovery(true);
-  return <TypeListPage page={result.page} target={result.target} node={result.node} locale={locale} />;
+  return (
+    <TypeListPage
+      page={result.page}
+      target={result.target}
+      node={result.node}
+      {...(cursor !== undefined ? { cursor } : {})}
+      locale={locale}
+    />
+  );
 }
 
 export function TypeListPage({
   page,
   target,
   node,
+  cursor,
   locale,
 }: {
   page: SubjectPageData;
   target: TypeListTarget;
   node: string;
+  cursor?: string;
   locale: string;
 }) {
   const list = findTypeList(page.document, node);
@@ -294,6 +316,7 @@ export function TypeListPage({
         {...(page.account ? { account: page.account } : {})}
         listTarget={target}
         fullList={node}
+        {...(cursor !== undefined ? { listCursor: cursor } : {})}
         messages={subjectPageMessages(listMessageOptions(locale).locale)}
       >
         <TypeList {...list.props} />

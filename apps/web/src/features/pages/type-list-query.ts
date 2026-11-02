@@ -2,6 +2,7 @@ import { queryOptions } from '@tanstack/react-query';
 import { notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { configuredListRetryAdmission } from './configured-list-retry-admission';
 import type { SessionState } from '../../session/state';
 import { requestLanguages } from '../../kernel/languages';
 import { kernelClient } from '../../kernel/client';
@@ -47,7 +48,12 @@ type TypeListReadAdmission = {
 
 export type TypeListQueryResult =
   | { kind: 'ready'; page: SubjectPageData; target: TypeListTarget; node: string; admission: TypeListReadAdmission }
-  | { kind: 'admission-mismatch'; node: string; admission: { request: TypeListReadRequest } };
+  | { kind: 'admission-mismatch'; node: string; admission: { request: TypeListReadRequest } }
+  | {
+      kind: 'unavailable';
+      admission: { request: TypeListReadRequest };
+      retryAt?: number;
+    };
 
 type TypeListQueryLifetime = { isCurrent: () => boolean };
 
@@ -185,7 +191,13 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
           statusCode: 308,
         });
     }
-    if (result.status !== 200 || !result.data) throw new Error('presentation_not_ready');
+    if (result.status !== 200 || !result.data) {
+      return {
+        kind: 'unavailable',
+        admission: { request: admissionRequest },
+        ...configuredListRetryAdmission(result.status, result.response?.headers),
+      };
+    }
     const response = result.data;
     const target: TypeListTarget =
       'subject' in data.target && response.subject && response.subject !== data.target.subject
@@ -193,8 +205,20 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
         : data.target;
     if (JSON.stringify(target) !== JSON.stringify(data.target))
       throw redirect({ href: typeListHref(data.locale, target, data.node, data.cursor), statusCode: 308 });
+    const now = Date.now();
+    const reads = Object.fromEntries(
+      Object.entries(response.reads).map(([key, read]) => [
+        key,
+        {
+          status: read.status,
+          body: read.body,
+          ...configuredListRetryAdmission(read.status, read.headers, now),
+        },
+      ]),
+    );
     const page = {
       ...response,
+      reads,
       subject: response.subject ?? null,
       ...(response.account && 'account' in target
         ? { account: { id: response.account, handle: target.account } }

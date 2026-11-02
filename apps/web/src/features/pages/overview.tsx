@@ -66,7 +66,7 @@ export type { Count } from '../count';
 
 /** What one node's read returned: its planned descriptor and body, or the fact that it did not succeed. */
 export type Section =
-  | { ok: false; status?: number | undefined; retryAfter?: string | undefined }
+  | { ok: false; status?: number | undefined; retryAfter?: string | undefined; retryAt?: number | undefined }
   | { ok: true; read: PageRead; body: Record<string, unknown>; sources?: Sources };
 
 /** The page representation a continuation must retain while extending one native stream. */

@@ -7,18 +7,20 @@ import { OverviewContext, type Item } from './overview';
 import { pageText, linkClass, linkColor } from './shared';
 import { typeListHref, type TypeListTarget } from './type-list-model';
 import { nativeTypeListPage } from './type-list-page-admission';
+import { useSearchRetryWait } from '../../search/search-recovery-retry';
 
-export const TypeListContext = createContext<{ target?: TypeListTarget; full?: string }>({});
+export const TypeListContext = createContext<{ target?: TypeListTarget; full?: string; cursor?: string }>({});
 
 const controlClass = `${linkClass} ${linkColor} inline-flex min-h-[44px] min-w-[44px] max-w-full items-center rounded-sm px-2 py-2 text-start whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
 
 /** Render only native search hits and its explicit terminal/continuation outcome, never a detail object's facts. */
 export function TypeList(props: Record<string, unknown>) {
   const value = useContext(OverviewContext);
-  const { target, full } = useContext(TypeListContext);
-  if (!value) return null;
+  const { target, full, cursor } = useContext(TypeListContext);
   const id = String(props.id);
-  const section = value.sections.get(id);
+  const section = value?.sections.get(id);
+  const retryWaiting = useSearchRetryWait(section && !section.ok ? section.retryAt : undefined);
+  if (!value) return null;
   if (section && !section.ok && section.status === 204) return null;
   const title = pageText(props.title, value.locale);
   const options = { locale: value.locale as never };
@@ -31,7 +33,7 @@ export function TypeList(props: Record<string, unknown>) {
     type: hit.type,
     ...(hit.summary !== null ? { summary: hit.summary } : {}),
   }));
-  const href = target ? typeListHref(value.locale, target, id) : undefined;
+  const href = target ? typeListHref(value.locale, target, id, full === id ? cursor : undefined) : undefined;
   const next = page?.next && target ? typeListHref(value.locale, target, id, page.next) : undefined;
   return (
     <section data-slot="type-list" aria-labelledby={`${id}-title`} className="min-w-0 space-y-4">
@@ -51,9 +53,15 @@ export function TypeList(props: Record<string, unknown>) {
         <p role="alert" className="[overflow-wrap:anywhere]">
           {m.subject_section_failed({}, options)}{' '}
           {href && (
-            <a href={href} className={controlClass}>
-              {m.subject_section_retry({}, options)}
-            </a>
+            retryWaiting ? (
+              <button type="button" disabled className={`${controlClass} disabled:cursor-not-allowed disabled:opacity-60`}>
+                {m.subject_section_retry({}, options)}
+              </button>
+            ) : (
+              <a href={href} className={controlClass}>
+                {m.subject_section_retry({}, options)}
+              </a>
+            )
           )}
         </p>
       ) : (

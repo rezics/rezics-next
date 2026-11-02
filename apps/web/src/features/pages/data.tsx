@@ -738,6 +738,7 @@ export function PageData({
   continuation,
   listTarget,
   fullList,
+  listCursor,
   realm,
   cacheReader,
   account,
@@ -763,6 +764,7 @@ export function PageData({
   continuation?: PageContinuation | undefined;
   listTarget?: TypeListTarget | undefined;
   fullList?: string | undefined;
+  listCursor?: string | undefined;
   realm?: string | undefined;
   cacheReader?: string | null | undefined;
   /** The account of an agent page, and the address of its overview. */
@@ -770,7 +772,7 @@ export function PageData({
   operator?: { id: string; handle: string | null; displayName: string | null };
   base?: string;
   document: PageDocument;
-  reads: Record<string, { status: number; body: unknown }>;
+  reads: Record<string, { status: number; body: unknown; retryAt?: number }>;
   messages: PageMessages;
   link?: PageLink;
   reader?: Reader;
@@ -858,7 +860,11 @@ export function PageData({
             body: result.body,
             ...(prepared.get(key)?.sources ? { sources: prepared.get(key)!.sources! } : {}),
           }
-        : { ok: false, status: result?.status },
+        : {
+            ok: false,
+            status: result?.status,
+            ...(result?.retryAt !== undefined ? { retryAt: result.retryAt } : {}),
+          },
     );
   }
   const profile = Object.entries(plan.reads).flatMap(([key, planned]) =>
@@ -915,7 +921,11 @@ export function PageData({
   return (
     <overview.OverviewContext.Provider value={overviewValue}>
       <TypeListContext.Provider
-        value={{ ...(listTarget ? { target: listTarget } : {}), ...(fullList ? { full: fullList } : {}) }}
+        value={{
+          ...(listTarget ? { target: listTarget } : {}),
+          ...(fullList ? { full: fullList } : {}),
+          ...(listCursor !== undefined ? { cursor: listCursor } : {}),
+        }}
       >
         <PageContext.Provider
           value={{

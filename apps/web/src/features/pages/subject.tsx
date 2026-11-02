@@ -85,7 +85,7 @@ export type SubjectPageData = {
   document: PageDocument;
   /** The views the subject's templates define; absent when the kernel did not say. */
   views?: string[];
-  reads: Record<string, { status: number; body: unknown }>;
+  reads: Record<string, { status: number; body: unknown; retryAt?: number }>;
 };
 
 export type SubjectPageLoad =
