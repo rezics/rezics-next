@@ -31,7 +31,13 @@ Directory phases use the ordinary `runCommand` executor, including authorization
 command deadlines, partition ownership, source hooks, events and native commit callbacks. They do
 not require a separate executor profile, a pre-I/O quote, prepaid execution funds or a spent-ticket
 ledger. Cleanup uses native retained records, not a second allowance or a refreshed callback grant.
-Historical original/ticket tables have no runtime producer and are not authorization evidence.
+The historical execution-original and spent-ticket tables have no runtime producer and are retired by a forward
+migration, together with their bootstrap-page grant/cleanup columns. The directory group's native cleanup flag
+remains recovery state. Owner changes still refuse retained native source, export, directory and admission work.
+
+Decision: subtract only deleted pricing rows from shared physical counters; preserve unmatched provisional copies
+and native reservation keys until native disposal and empty indexed ranges permit reclamation. The migration never
+zeros or deletes a generation reservation, and an inconsistent physical count fails its existing constraint.
 
 Existing structural bounds remain: source export and directory keyset pages contain at most 100
 originals; a group contains at most 4,096 originals; its native keyset drain therefore has at most

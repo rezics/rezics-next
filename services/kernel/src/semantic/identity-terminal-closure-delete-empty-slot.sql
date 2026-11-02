@@ -11,7 +11,3 @@ WHERE g.partition_no=i.home AND g.generation=i.reservation AND g.job_id=i.reserv
    WHERE m.route/16=i.home AND m.closure_source_reservation=i.reservation)
  AND NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_mapping m
    WHERE m.route/16=i.home AND m.closure_ticket_reservation=i.reservation)
- AND NOT EXISTS(SELECT 1 FROM semantic.identity_terminal_closure_original o
-   WHERE o.partition_no=i.home AND o.reservation=i.reservation)
- AND NOT EXISTS(SELECT 1 FROM semantic.identity_terminal_closure_ticket t
-   WHERE t.partition_no=i.home AND t.reservation=i.reservation)
