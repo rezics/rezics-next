@@ -97,7 +97,8 @@ async function mount(initial: RenameSource) {
 }
 const setHandle = (host: HTMLElement, value: string) =>
   flush(() => {
-    const input = host.querySelector<HTMLInputElement>('#rename-handle')!;
+    const input = host.querySelector<HTMLInputElement>('#rename-handle');
+    if (!input) throw new Error(`Rename input missing: ${host.textContent}`);
     Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
     input.dispatchEvent(new dom.Event('input', { bubbles: true }));
   });
