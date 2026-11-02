@@ -72,140 +72,144 @@ export async function checkHits(
   const lifetime = new RequestSourceLifetime();
   let next = 0;
   async function worker(): Promise<void> {
-    try {
-      while (!lifetime.stopped) {
-        const entry = partitions[next++];
-        if (!entry) return;
-        const [partition, group] = entry;
-        const ids = [...group.ids];
-        const subjects = new Map<string, IndexedSubject>();
-        for (let offset = 0; offset < ids.length; offset += REQUEST_SOURCE_KEYS) {
-          if (lifetime.stopped) return;
-          const chunk = ids.slice(offset, offset + REQUEST_SOURCE_KEYS);
-          const read = await lifetime.start(async () =>
-            validateRequestSourceSnapshot(await source.read(partition, chunk), partition, chunk),
-          );
-          if (!read.ok) return;
-          for (const [id, subject] of read.value) subjects.set(id, subject);
-        }
-        type Point = { probe: RelationFacetProbe; result?: RelationFacetMatch };
-        const points = new Map<string, Point>();
-        const evaluations = new Map<string, () => { passed: boolean; relationRejected: boolean }>();
-        const eligible: { hit: Hit; subject: IndexedSubject; index: number }[] = [];
-        for (const { hit, index } of group.candidates) {
-          const subject = subjects.get(hit.id);
-          if (
-            !subject ||
-            subject.visibility !== 'visible' ||
-            subject.redirect !== null ||
-            subject.securityRevision !== hit.securityRevision
-          )
-            continue;
-          if (plan) {
-            eligible.push({ hit, subject, index });
-            if (evaluations.has(subject.id)) continue;
-            // Hints determine work order only. Every leaf, including unreported negative leaves,
-            // is resolved from current facts before evaluating the original boolean expression.
-            const order = new Set<number>();
-            for (const name of hit.matched) {
-              const leaf = hints.get(name);
-              if (leaf !== undefined) order.add(leaf);
-            }
-            for (const leaf of plan.leaves.keys()) order.add(leaf);
-            const values: (boolean | Point[])[] = new Array(plan.leaves.length);
-            for (const leaf of order) {
-              const clause = plan.leaves[leaf]!;
-              const overflow = clause.facet === 'statement' && subject.relationFacetOverflow?.includes(clause.property);
-              const live =
-                clause.facet === 'statement' && relationProperties.has(clause.property) && plan.positive.has(leaf);
-              if (clause.facet === 'statement' && (overflow || live) && clause.qualifiers !== undefined)
-                throw new Error('Qualified relation overflow cannot be checked by unqualified probes');
-              if (clause.facet !== 'statement' || !('values' in clause) || !(overflow || live)) {
-                values[leaf] =
-                  clause.facet === 'type'
-                    ? holdsCurrentType(subject.type, clause)
-                    : holdsCurrentStatements(subject.statements, clause);
-                continue;
-              }
-              values[leaf] = sortedValues(clause.values).map((value) => {
-                const probe: RelationFacetProbe = {
-                  subject: subject.id,
-                  property: clause.property,
-                  value,
-                };
-                const key = JSON.stringify(probe);
-                let point = points.get(key);
-                if (!point) {
-                  point = { probe };
-                  points.set(key, point);
-                }
-                return point;
-              });
-            }
-            evaluations.set(subject.id, () => {
-              const resolved = values.map((value) =>
-                typeof value === 'boolean' ? value : anyCurrentMatch(value.map((point) => point.result!)),
-              );
-              // Bounded uncertainty remains unknown through negation and cannot disclose a hit.
-              const passed = plan.evaluate(resolved) === true;
-              return {
-                passed,
-                // Rejection after live positive-leaf evaluation invalidates the candidate total.
-                // A shared leaf's true proof can also reject its negative occurrence.
-                relationRejected:
-                  !passed && values.some((value, leaf) => Array.isArray(value) && plan.positive.has(leaf)),
-              };
-            });
-            continue;
+    while (!lifetime.stopped) {
+      const entry = partitions[next++];
+      if (!entry) return;
+      const [partition, group] = entry;
+      const ids = [...group.ids];
+      const subjects = new Map<string, IndexedSubject>();
+      for (let offset = 0; offset < ids.length; offset += REQUEST_SOURCE_KEYS) {
+        if (lifetime.stopped) return;
+        const chunk = ids.slice(offset, offset + REQUEST_SOURCE_KEYS);
+        const read = await lifetime.start(async () =>
+          validateRequestSourceSnapshot(await source.read(partition, chunk), partition, chunk),
+        );
+        if (!read.ok) return;
+        for (const [id, subject] of read.value) subjects.set(id, subject);
+      }
+      type Point = { probe: RelationFacetProbe; result?: RelationFacetMatch };
+      const points = new Map<string, Point>();
+      const evaluations = new Map<string, () => { passed: boolean; relationRejected: boolean }>();
+      const eligible: { hit: Hit; subject: IndexedSubject; index: number }[] = [];
+      for (const { hit, index } of group.candidates) {
+        const subject = subjects.get(hit.id);
+        if (
+          !subject ||
+          subject.visibility !== 'visible' ||
+          subject.redirect !== null ||
+          subject.securityRevision !== hit.securityRevision
+        )
+          continue;
+        if (plan) {
+          eligible.push({ hit, subject, index });
+          if (evaluations.has(subject.id)) continue;
+          // Hints determine work order only. Every leaf, including unreported negative leaves,
+          // is resolved from current facts before evaluating the original boolean expression.
+          const order = new Set<number>();
+          for (const name of hit.matched) {
+            const leaf = hints.get(name);
+            if (leaf !== undefined) order.add(leaf);
           }
-          if (
-            !hit.matched.every((name) => {
-              const clause = clauses.get(name);
-              return (
-                clause === undefined ||
-                (clause.facet === 'type'
+          for (const leaf of plan.leaves.keys()) order.add(leaf);
+          const values: (boolean | Point[])[] = new Array(plan.leaves.length);
+          for (const leaf of order) {
+            const clause = plan.leaves[leaf]!;
+            const overflow = clause.facet === 'statement' && subject.relationFacetOverflow?.includes(clause.property);
+            const live =
+              clause.facet === 'statement' && relationProperties.has(clause.property) && plan.positive.has(leaf);
+            if (clause.facet === 'statement' && (overflow || live) && clause.qualifiers !== undefined)
+              throw new Error('Qualified relation overflow cannot be checked by unqualified probes');
+            if (clause.facet !== 'statement' || !('values' in clause) || !(overflow || live)) {
+              values[leaf] =
+                clause.facet === 'type'
                   ? holdsCurrentType(subject.type, clause)
-                  : holdsCurrentStatements(subject.statements, clause))
-              );
-            })
-          )
-            continue;
-          checked[index] = { hit, subject };
-        }
-        const pending = [...points.values()];
-        for (let offset = 0; offset < pending.length; offset += MAX_RELATION_FACET_PROBES) {
-          if (lifetime.stopped) return;
-          if (!source.matchRelationFacets) throw new Error('Relation disclosure requires relation facet probes');
-          const batch = pending.slice(offset, offset + MAX_RELATION_FACET_PROBES);
-          const probe = await lifetime.start(() =>
-            source.matchRelationFacets!(
-              partition,
-              batch.map((point) => point.probe),
-            ),
-          );
-          if (!probe.ok) return;
-          const results = probe.value;
-          if (!Array.isArray(results) || results.length !== batch.length)
-            throw new Error('Malformed relation facet probe results');
-          for (const [index, point] of batch.entries()) {
-            const result = results[index];
-            if (!Object.hasOwn(results, index) || (result !== true && result !== false && result !== 'not_proven'))
-              throw new Error('Malformed relation facet probe results');
-            point.result = result;
+                  : holdsCurrentStatements(subject.statements, clause);
+              continue;
+            }
+            values[leaf] = sortedValues(clause.values).map((value) => {
+              const probe: RelationFacetProbe = {
+                subject: subject.id,
+                property: clause.property,
+                value,
+              };
+              const key = JSON.stringify(probe);
+              let point = points.get(key);
+              if (!point) {
+                point = { probe };
+                points.set(key, point);
+              }
+              return point;
+            });
           }
+          evaluations.set(subject.id, () => {
+            const resolved = values.map((value) =>
+              typeof value === 'boolean' ? value : anyCurrentMatch(value.map((point) => point.result!)),
+            );
+            // Bounded uncertainty remains unknown through negation and cannot disclose a hit.
+            const passed = plan.evaluate(resolved) === true;
+            return {
+              passed,
+              // Rejection after live positive-leaf evaluation invalidates the candidate total.
+              // A shared leaf's true proof can also reject its negative occurrence.
+              relationRejected:
+                !passed && values.some((value, leaf) => Array.isArray(value) && plan.positive.has(leaf)),
+            };
+          });
+          continue;
         }
-        for (const { hit, subject, index } of eligible) {
-          const result = evaluations.get(subject.id)!();
-          if (result.passed) checked[index] = { hit, subject };
-          relationRejected ||= result.relationRejected;
+        if (
+          !hit.matched.every((name) => {
+            const clause = clauses.get(name);
+            return (
+              clause === undefined ||
+              (clause.facet === 'type'
+                ? holdsCurrentType(subject.type, clause)
+                : holdsCurrentStatements(subject.statements, clause))
+            );
+          })
+        )
+          continue;
+        checked[index] = { hit, subject };
+      }
+      const pending = [...points.values()];
+      for (let offset = 0; offset < pending.length; offset += MAX_RELATION_FACET_PROBES) {
+        if (lifetime.stopped) return;
+        if (!source.matchRelationFacets) throw new Error('Relation disclosure requires relation facet probes');
+        const batch = pending.slice(offset, offset + MAX_RELATION_FACET_PROBES);
+        const probe = await lifetime.start(() =>
+          source.matchRelationFacets!(
+            partition,
+            batch.map((point) => point.probe),
+          ),
+        );
+        if (!probe.ok) return;
+        const results = probe.value;
+        if (!Array.isArray(results) || results.length !== batch.length)
+          throw new Error('Malformed relation facet probe results');
+        for (const [index, point] of batch.entries()) {
+          const result = results[index];
+          if (!Object.hasOwn(results, index) || (result !== true && result !== false && result !== 'not_proven'))
+            throw new Error('Malformed relation facet probe results');
+          point.result = result;
         }
-        }
-    } catch (error) {
-      lifetime.fail(error);
+      }
+      for (const { hit, subject, index } of eligible) {
+        const result = evaluations.get(subject.id)!();
+        if (result.passed) checked[index] = { hit, subject };
+        relationRejected ||= result.relationRejected;
+      }
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(concurrency, groups.size) }, () => worker()));
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, groups.size) }, async () => {
+      try {
+        await worker();
+      } catch (error) {
+        lifetime.fail(error);
+      }
+    }),
+  );
   lifetime.throwIfFailed();
   const passed = checked.filter((entry) => entry !== undefined);
   return { passed, dropped: hits.length - passed.length, ...(relationRejected ? { relationRejected: true } : {}) };
