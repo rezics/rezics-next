@@ -14,6 +14,7 @@ import { NativeCollectionWork } from '../../src/library/collection-source-work.t
 import {
   MEMBERS_PREPARATION_CHILDREN,
   declareMembersPreparationParent,
+  runFundedMembersPreparation,
   transferMembersPreparationBudget,
   type MembersPreparationDeclarations,
 } from '../../src/library/members-preparation-budget.ts';
@@ -37,6 +38,102 @@ const cost = (amount: number): WorkDimensions => ({
   witnessKeys: amount,
   statements: amount,
   bytes: amount,
+});
+
+test('funded execution refuses missing owner prices and a local subtotal before invoking any child', async () => {
+  let calls = 0;
+  const body = async () => ++calls;
+  const cleanup = async () => {
+    calls++;
+  };
+  await expect(
+    runFundedMembersPreparation(parent(), 'key', { ...declarations(), sourceResolve: null }, body, cleanup),
+  ).rejects.toBeInstanceOf(ProblemError);
+  // This balance covers a Members body, but cannot authorize the complete History/Source composition.
+  const original = parent(16);
+  await expect(runFundedMembersPreparation(original, 'key', declarations(), body, cleanup)).rejects.toBeInstanceOf(
+    ProblemError,
+  );
+  expect(original.available('statements')).toBe(16);
+  expect(calls).toBe(0);
+});
+
+for (const fails of [false, true]) {
+  test(`funded execution settles Source and cleanup on the original parent (failure=${fails})`, async () => {
+    const declared = declareMembersPreparationParent(declarations());
+    const original = new NativeCollectionWork(
+      { reservationId: 'original', remaining: declared.total },
+      Date.now() + 60000,
+    );
+    const unavailable = new ProblemError('dependency_unavailable');
+    let source: NativeCollectionWork | undefined;
+    let cleanups = 0;
+    const running = runFundedMembersPreparation(
+      original,
+      'key',
+      declarations(),
+      async (children) => {
+        source = children.sourceResolve;
+        for (const axis of axes) expect(original.available(axis)).toBe(0);
+        expect(children.historyRegistration.available('statements')).toBe(464);
+        expect(children.receivingReadback.available('statements')).toBe(429);
+        dispatch(source, 1);
+        if (fails) throw unavailable;
+        return 'completed body';
+      },
+      async (children, outcome) => {
+        cleanups++;
+        expect(outcome.ok).toBe(!fails);
+        dispatch(children.cleanup, 1);
+      },
+    );
+    if (fails) {
+      await expect(running).rejects.toBe(unavailable);
+      expect(Reflect.get(unavailable, 'work')).toEqual(original.receipt());
+    } else expect(await running).toEqual({ value: 'completed body', work: original.receipt() });
+    expect(cleanups).toBe(1);
+    expect(original.receipt().used).toEqual(cost(2));
+    expect(() => dispatch(source!, 1)).toThrow('allocation is closed');
+    await expect(
+      runFundedMembersPreparation(
+        original,
+        'key',
+        declarations(),
+        async () => 'duplicate',
+        async () => {},
+      ),
+    ).rejects.toBeInstanceOf(ProblemError);
+    expect(original.receipt().used).toEqual(cost(2));
+  });
+}
+
+test('cleanup failure still closes the group and retains both failures and their charges', async () => {
+  const declared = declareMembersPreparationParent(declarations());
+  const original = new NativeCollectionWork(
+    { reservationId: 'original', remaining: declared.total },
+    Date.now() + 60000,
+  );
+  const sourceError = new ProblemError('dependency_unavailable');
+  const cleanupError = new Error('cleanup failed');
+  let cleanup: NativeCollectionWork | undefined;
+  const error = await runFundedMembersPreparation(
+    original,
+    'key',
+    declarations(),
+    async (children) => {
+      dispatch(children.sourceResolve, 1);
+      throw sourceError;
+    },
+    async (children) => {
+      cleanup = children.cleanup;
+      dispatch(cleanup, 1);
+      throw cleanupError;
+    },
+  ).catch((error: unknown) => error);
+  expect(error).toBeInstanceOf(AggregateError);
+  expect((error as AggregateError).errors).toEqual([sourceError, cleanupError]);
+  expect(original.receipt().used).toEqual(cost(2));
+  expect(() => dispatch(cleanup!, 1)).toThrow('allocation is closed');
 });
 const declarations = (): MembersPreparationDeclarations =>
   Object.fromEntries(MEMBERS_PREPARATION_CHILDREN.map((name) => [name, cost(2)])) as MembersPreparationDeclarations;

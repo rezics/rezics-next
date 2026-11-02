@@ -2377,6 +2377,14 @@ charges and closes every child, including cleanup. Missing declarations and insu
 typed unavailable. Durable cross-request registration, the released Source declaration and final current
 physical Source authority remain required producer dependencies; this seam does not enable the adapters.
 
+Decision: execute the complete Members declaration against the caller's existing C3 parent; a local subtotal
+cannot create or authorize that parent, and missing Source declarations keep the producer unavailable.
+`runFundedMembersPreparation` validates the owner declarations and transfers every child before invoking
+the body. History's registration/readback prices come from its exports, not callback inputs. Its awaited
+cleanup uses only the original rollback/cleanup children, also on body failure or expiry, before closing
+the group. Failed work remains charged and errors expose the original parent's receipt. Native registration,
+Source authority, result production and mounted dispatch remain separate required runtime work.
+
 The existing Collection POST/PATCH accept optional `presentationKind` and `coverMediaId`; PATCH keeps its numeric
 revision CAS. Omission preserves a choice, null clears it. `collection-presentation.ts` validates a new exact TypeId
 against the active definitions release, without changing members or accepted personal profile pins. Stored choices

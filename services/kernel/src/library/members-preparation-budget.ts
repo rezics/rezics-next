@@ -7,7 +7,7 @@ import {
   OPERATIONAL_WORK_TRANSFER_COST,
   sumOperationalWork,
 } from '../history/operational-work-budget.ts';
-import type { WorkDimensions } from './collection-source.ts';
+import type { WorkDimensions, WorkReceipt } from './collection-source.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 
 /** Disjoint owner declarations, including failed prefixes and terminal controls. A missing
@@ -113,4 +113,62 @@ export function transferMembersPreparationBudget(
   keys.add(preparationKey);
   registered.set(parent, keys);
   return transferred;
+}
+
+export type MembersPreparationBudgets = Readonly<Record<MembersPreparationChild, NativeCollectionWork>>;
+
+/** Execute within the caller's original C3 balance, never a ledger made from our local subtotal.
+ * All owner declarations and the whole transfer must succeed before either callback can run.
+ * The body still owns native registration/current Source verification; these budgets grant no authority.
+ * Both callbacks must await their dispatched work. Cleanup always runs after an admitted body, even on
+ * failure or expiry, and uses only its original children (terminal controls may use reserve's cleanup flag).
+ */
+export async function runFundedMembersPreparation<T>(
+  parent: NativeCollectionWork,
+  preparationKey: string,
+  owners: MembersPreparationOwnerDeclarations,
+  body: (children: MembersPreparationBudgets) => Promise<T>,
+  cleanup: (
+    children: Pick<MembersPreparationBudgets, 'rollback' | 'cleanup'>,
+    outcome: Readonly<{ ok: true } | { ok: false; error: unknown }>,
+  ) => Promise<void>,
+): Promise<Readonly<{ value: T; work: WorkReceipt }>> {
+  // In particular, a caller cannot supply a cheaper History registration/readback declaration here.
+  // The total describes required funding; only the already existing parent can authorize the transfer.
+  const declared = declareMembersPreparationParent(owners);
+  const funded = transferMembersPreparationBudget(parent, preparationKey, declared.children);
+  let outcome: { ok: true; value: T } | { ok: false; error: unknown };
+  try {
+    outcome = { ok: true, value: await body(funded.children) };
+  } catch (error) {
+    outcome = { ok: false, error };
+  }
+  const failures: unknown[] = outcome.ok ? [] : [outcome.error];
+  try {
+    await cleanup(
+      Object.freeze({ rollback: funded.children.rollback, cleanup: funded.children.cleanup }),
+      Object.freeze(outcome.ok ? { ok: true as const } : { ok: false as const, error: outcome.error }),
+    );
+  } catch (error) {
+    failures.push(error);
+  }
+  // Close every child only after cleanup settles; dispatched failed prefixes remain on the parent.
+  // If a callback leaves work in flight, finish refuses and the original allocation stays held.
+  let work: WorkReceipt | undefined;
+  try {
+    work = funded.finish();
+  } catch (error) {
+    failures.push(error);
+  }
+  if (failures.length) {
+    const error = failures.length === 1 ? failures[0] : new AggregateError(failures, 'Members preparation failed');
+    if (error instanceof Error && Object.isExtensible(error)) {
+      const descriptor = Object.getOwnPropertyDescriptor(error, 'work');
+      if (!descriptor || descriptor.configurable)
+        Object.defineProperty(error, 'work', { get: () => parent.receipt(), configurable: true });
+    }
+    throw error;
+  }
+  if (!outcome.ok || !work) throw new TypeError('Members preparation did not settle');
+  return Object.freeze({ value: outcome.value, work });
 }
