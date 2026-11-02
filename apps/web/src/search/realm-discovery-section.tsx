@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { RealmDiscoverySection, type RealmDiscoveryState } from '../community/realm-discovery';
 import { readRealmDiscovery, type RealmDiscoveryWindow } from './realm-discovery-loader';
+import { useRealmPageFocus } from './realm-page-focus';
 import { createRealmPageProgress } from './realm-page-progress';
 
 export type {
@@ -90,8 +91,14 @@ export function SearchRealmDiscoverySection({
     snapshot?.owner === owner
       ? snapshot
       : { state: { kind: 'loading' as const }, pending: false, retry: false, restart: false };
+  const focus = useRealmPageFocus(owner, pending, state);
   return (
-    <div data-search-realm-discovery data-state={state.kind}>
+    <div
+      ref={focus.rootRef}
+      data-search-realm-discovery
+      data-state={state.kind}
+      onClickCapture={focus.captureActivation}
+    >
       <RealmDiscoverySection
         sort="trending"
         state={state}

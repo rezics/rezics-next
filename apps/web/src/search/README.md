@@ -95,6 +95,9 @@ explicit sort value.
 Search Realm discovery owns the rendered window, continuation callbacks and request lifetime by the actual reader,
 locale, sort and QueryClient; a replacement hides old rows during render, injected readers keep a private cache
 identity, and disposing one anonymous consumer does not cancel another.
+A focused Retry or terminal More recovers onto a still-present current action with the same label, otherwise the named
+discovery region, only for the current owner and only while the reader has not moved; unactivated loads do not take
+focus.
 
 Local Recent keeps exact query text within global Search's 512 UTF-8 bytes or native Recent's 256 UTF-16-unit bound,
 never truncates, and leaves longer valid global queries local-only so they cannot block native synchronization.

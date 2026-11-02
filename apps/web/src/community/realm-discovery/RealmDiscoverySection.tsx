@@ -27,6 +27,7 @@ export function RealmDiscoverySection({
     <section
       data-slot="realm-discovery"
       data-sort={sort}
+      tabIndex={-1}
       aria-label={title}
       aria-busy={pending || state.kind === 'loading'}
       className="min-w-0 space-y-3 text-foreground"

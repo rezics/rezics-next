@@ -8,6 +8,7 @@ import {
   type RealmDiscoveryWindow,
 } from './realm-discovery-loader';
 import { realmDiscoveryOwnedWindow, sameRealmDiscoveryOwner, type RealmDiscoveryOwner } from './realm-discovery-owner';
+import { useRealmPageFocus } from './realm-page-focus';
 import { createRealmPageProgress } from './realm-page-progress';
 
 /** Search owns request/continuation state; Content owns the only card renderer and GET adapter. */
@@ -40,6 +41,7 @@ function SearchRealmDiscoveryPage({
   snapshotRef.current = snapshot;
   const active = useRef<ReturnType<typeof createRealmPageProgress> | null>(null);
   const window = realmDiscoveryOwnedWindow(snapshot, owner, initialState);
+  const focus = useRealmPageFocus(owner, window.pending, window);
 
   useEffect(() => {
     const replacing = snapshotRef.current !== undefined && !sameRealmDiscoveryOwner(snapshotRef.current.owner, owner);
@@ -58,7 +60,12 @@ function SearchRealmDiscoveryPage({
   }, [client, initialState, locale, owner, read, sort]);
 
   return (
-    <div className="space-y-3" aria-busy={window.pending}>
+    <div
+      ref={focus.rootRef}
+      className="space-y-3"
+      aria-busy={window.pending}
+      onClickCapture={focus.captureActivation}
+    >
       <RealmDiscoverySection
         sort={sort}
         state={window.state}
