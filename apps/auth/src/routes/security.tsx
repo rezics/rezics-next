@@ -525,7 +525,17 @@ export function SecurityPage({
               <section aria-labelledby="security-passkeys-heading">
                 <h2 id="security-passkeys-heading">{m.auth_security_passkeys_heading()}</h2>
                 {passkeysLoad.kind === 'failure' ? (
-                  <ErrorAlert>{passkeysLoad.message}</ErrorAlert>
+                  <>
+                    <ErrorAlert>{passkeysLoad.message}</ErrorAlert>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={operationBlocked}
+                      onClick={() => retryLoad.current?.()}
+                    >
+                      {m.auth_inventory_reload()}
+                    </Button>
+                  </>
                 ) : (
                   <>
                     <p className="auth-security-hint">{m.auth_security_passkeys_description()}</p>

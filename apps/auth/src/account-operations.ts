@@ -1,3 +1,4 @@
+import { privateAuthRead } from './private-auth-read';
 import { authPost, type AuthPostResult } from './api';
 import { m } from './paraglide/messages.js';
 
@@ -18,39 +19,42 @@ const organizationHandleStorageKey = 'rezics.organization.pending-handle';
 type StoredOperationKey = { signature: string; key: string };
 let memoryOperationKey: StoredOperationKey | null = null;
 
-export async function loadAccountSession(): Promise<AccountSessionResult> {
+export async function loadAccountSession(signal?: AbortSignal): Promise<AccountSessionResult> {
   try {
-    const response = await fetch('/session', {
-      method: 'GET',
-      credentials: 'same-origin',
-      redirect: 'error',
-      cache: 'no-store',
-      headers: { Accept: 'application/json' },
-    });
-    if (response.status === 401) return { kind: 'signed-out' };
-    if (response.status !== 200) return { kind: 'failure', message: m.auth_account_operation_failure() };
-    const body: unknown = await response.json();
-    if (
-      !body ||
-      typeof body !== 'object' ||
-      !('account_id' in body) ||
-      typeof body.account_id !== 'string' ||
-      !body.account_id
-    )
-      return { kind: 'failure', message: m.auth_account_operation_failure() };
-    const clientId = 'client_id' in body ? body.client_id : undefined;
-    const scopes = 'scope' in body ? body.scope : undefined;
-    if (
-      (clientId !== undefined && typeof clientId !== 'string') ||
-      (scopes !== undefined && (!Array.isArray(scopes) || !scopes.every((scope) => typeof scope === 'string')))
-    )
-      return { kind: 'failure', message: m.auth_account_operation_failure() };
-    return {
-      kind: 'ready',
-      accountId: body.account_id,
-      ...(typeof clientId === 'string' ? { clientId } : {}),
-      ...(Array.isArray(scopes) ? { scopes: scopes as string[] } : {}),
-    };
+    return await privateAuthRead(async (readSignal) => {
+      const response = await fetch('/session', {
+        method: 'GET',
+        signal: readSignal,
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      if (response.status === 401) return { kind: 'signed-out' };
+      if (response.status !== 200) return { kind: 'failure', message: m.auth_account_operation_failure() };
+      const body: unknown = await response.json();
+      if (
+        !body ||
+        typeof body !== 'object' ||
+        !('account_id' in body) ||
+        typeof body.account_id !== 'string' ||
+        !body.account_id
+      )
+        return { kind: 'failure', message: m.auth_account_operation_failure() };
+      const clientId = 'client_id' in body ? body.client_id : undefined;
+      const scopes = 'scope' in body ? body.scope : undefined;
+      if (
+        (clientId !== undefined && typeof clientId !== 'string') ||
+        (scopes !== undefined && (!Array.isArray(scopes) || !scopes.every((scope) => typeof scope === 'string')))
+      )
+        return { kind: 'failure', message: m.auth_account_operation_failure() };
+      return {
+        kind: 'ready',
+        accountId: body.account_id,
+        ...(typeof clientId === 'string' ? { clientId } : {}),
+        ...(Array.isArray(scopes) ? { scopes: scopes as string[] } : {}),
+      };
+    }, signal);
   } catch {
     return { kind: 'failure', message: m.auth_account_operation_failure() };
   }

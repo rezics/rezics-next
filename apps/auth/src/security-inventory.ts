@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { authPost } from './api';
 import { readConsent } from './consent';
+import { privateAuthRead } from './private-auth-read';
 
 // Closed public DTOs from Auth's security inventory. Never keep native metadata.
 export type OwnedClient = { client_id: string; display_name: string | null; disabled: boolean; scopes: string[] };
@@ -96,7 +97,7 @@ export async function issuerSecurityRequest(path: string, body?: unknown): Promi
     },
     redirect: 'error',
     cache: 'no-store',
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.any([request.signal, AbortSignal.timeout(5000)]),
   });
 }
 
@@ -127,9 +128,17 @@ const readInventory = createServerFn({ method: 'POST' })
     }
   });
 
-export async function loadInventory<V extends InventoryView>(view: V, cursor?: string): Promise<InventoryPage<V>> {
+export async function loadInventory<V extends InventoryView>(
+  view: V,
+  cursor?: string,
+  signal?: AbortSignal,
+): Promise<InventoryPage<V>> {
   try {
-    return (await readInventory({ data: { view, ...(cursor ? { cursor } : {}) } })) as InventoryPage<V>;
+    return await privateAuthRead(
+      async (readSignal) =>
+        (await readInventory({ data: { view, ...(cursor ? { cursor } : {}) }, signal: readSignal })) as InventoryPage<V>,
+      signal,
+    );
   } catch {
     return { kind: 'unavailable' };
   }
@@ -161,9 +170,9 @@ const readPasskeys = createServerFn({ method: 'POST' }).handler(
     }
   },
 );
-export async function loadPasskeyInventory() {
+export async function loadPasskeyInventory(signal?: AbortSignal) {
   try {
-    return await readPasskeys();
+    return await privateAuthRead((readSignal) => readPasskeys({ signal: readSignal }), signal);
   } catch {
     return { ok: false as const };
   }

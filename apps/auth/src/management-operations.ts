@@ -1,3 +1,4 @@
+import { privateAuthRead } from './private-auth-read';
 export {
   managementOperationProfile,
   type ManagementOperation,
@@ -26,47 +27,50 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 /** Reads the real native proof projection; no fabricated identity or empty-success fallback. */
-export async function loadManagementSession(): Promise<ManagementSessionResult> {
+export async function loadManagementSession(signal?: AbortSignal): Promise<ManagementSessionResult> {
   try {
-    const response = await fetch('/session', {
-      credentials: 'same-origin',
-      redirect: 'error',
-      cache: 'no-store',
-      headers: { Accept: 'application/json' },
-    });
-    if (response.status === 401) return { kind: 'signed-out' };
-    if (response.status !== 200) return { kind: 'unavailable' };
-    const body: unknown = await response.json();
-    if (
-      !record(body) ||
-      Object.keys(body).some(
-        (key) => !['account_id', 'client_id', 'scope', 'authn_epoch', 'auth_time', 'amr'].includes(key),
-      ) ||
-      typeof body.account_id !== 'string' ||
-      !body.account_id ||
-      typeof body.client_id !== 'string' ||
-      !body.client_id ||
-      !Array.isArray(body.scope) ||
-      !body.scope.every((scope) => typeof scope === 'string') ||
-      !Number.isSafeInteger(body.authn_epoch) ||
-      (body.authn_epoch as number) < 0 ||
-      !Number.isSafeInteger(body.auth_time) ||
-      (body.auth_time as number) < 0 ||
-      (body.auth_time as number) > Math.floor(Date.now() / 1000) ||
-      !Array.isArray(body.amr) ||
-      body.amr.length !== 1 ||
-      !['pwd', 'pop'].includes(body.amr[0])
-    )
-      return { kind: 'unavailable' };
-    return {
-      kind: 'ready',
-      accountId: body.account_id,
-      clientId: body.client_id,
-      scopes: body.scope,
-      authTime: body.auth_time as number,
-      authnEpoch: body.authn_epoch as number,
-      amr: body.amr as ('pwd' | 'pop')[],
-    };
+    return await privateAuthRead(async (readSignal) => {
+      const response = await fetch('/session', {
+        signal: readSignal,
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      if (response.status === 401) return { kind: 'signed-out' };
+      if (response.status !== 200) return { kind: 'unavailable' };
+      const body: unknown = await response.json();
+      if (
+        !record(body) ||
+        Object.keys(body).some(
+          (key) => !['account_id', 'client_id', 'scope', 'authn_epoch', 'auth_time', 'amr'].includes(key),
+        ) ||
+        typeof body.account_id !== 'string' ||
+        !body.account_id ||
+        typeof body.client_id !== 'string' ||
+        !body.client_id ||
+        !Array.isArray(body.scope) ||
+        !body.scope.every((scope) => typeof scope === 'string') ||
+        !Number.isSafeInteger(body.authn_epoch) ||
+        (body.authn_epoch as number) < 0 ||
+        !Number.isSafeInteger(body.auth_time) ||
+        (body.auth_time as number) < 0 ||
+        (body.auth_time as number) > Math.floor(Date.now() / 1000) ||
+        !Array.isArray(body.amr) ||
+        body.amr.length !== 1 ||
+        !['pwd', 'pop'].includes(body.amr[0])
+      )
+        return { kind: 'unavailable' };
+      return {
+        kind: 'ready',
+        accountId: body.account_id,
+        clientId: body.client_id,
+        scopes: body.scope,
+        authTime: body.auth_time as number,
+        authnEpoch: body.authn_epoch as number,
+        amr: body.amr as ('pwd' | 'pop')[],
+      };
+    }, signal);
   } catch {
     return { kind: 'unavailable' };
   }

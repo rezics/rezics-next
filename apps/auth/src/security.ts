@@ -1,3 +1,4 @@
+import { privateAuthRead } from './private-auth-read';
 import { authPost, failureMessage, type AuthPostResult } from './api';
 import { m } from './paraglide/messages.js';
 import { loadPasskeyInventory } from './security-inventory';
@@ -44,34 +45,38 @@ type EffectApproval = { reference: string; expiresAt: string };
 
 async function authGet<Body>(
   path: string,
+  signal?: AbortSignal,
 ): Promise<{ ok: true; body: Body } | { ok: false; status: number; code: string }> {
   try {
-    const response = await fetch(path, {
-      method: 'GET',
-      credentials: 'same-origin',
-      redirect: 'error',
-      cache: 'no-store',
-      headers: { Accept: 'application/json' },
-    });
-    if (response.status === 200) return { ok: true, body: (await response.json()) as Body };
-    const body: unknown = await response.json().catch(() => null);
-    const code =
-      body && typeof body === 'object'
-        ? 'error' in body && typeof body.error === 'string'
-          ? body.error
-          : 'code' in body && typeof body.code === 'string'
-            ? body.code
-            : ''
-        : '';
-    return { ok: false, status: response.status, code };
+    return await privateAuthRead(async (readSignal) => {
+      const response = await fetch(path, {
+        method: 'GET',
+        signal: readSignal,
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      if (response.status === 200) return { ok: true, body: (await response.json()) as Body };
+      const body: unknown = await response.json().catch(() => null);
+      const code =
+        body && typeof body === 'object'
+          ? 'error' in body && typeof body.error === 'string'
+            ? body.error
+            : 'code' in body && typeof body.code === 'string'
+              ? body.code
+              : ''
+          : '';
+      return { ok: false, status: response.status, code };
+    }, signal);
   } catch {
     return { ok: false, status: 503, code: 'unavailable' };
   }
 }
 
 // One read of the person's own passkeys; entries that do not have the documented shape are dropped.
-async function loadPasskeys(): Promise<PasskeysLoad> {
-  const listed = await loadPasskeyInventory();
+async function loadPasskeys(signal?: AbortSignal): Promise<PasskeysLoad> {
+  const listed = await loadPasskeyInventory(signal);
   if (!listed.ok) return { kind: 'failure', message: m.auth_security_passkeys_failed() };
   if (!Array.isArray(listed.body.passkeys)) return { kind: 'failure', message: m.auth_security_passkeys_failed() };
   const passkeys = listed.body.passkeys.flatMap((entry: unknown): SecurityPasskey[] => {
@@ -83,8 +88,8 @@ async function loadPasskeys(): Promise<PasskeysLoad> {
   return { kind: 'ready', passkeys };
 }
 
-export async function loadSecurity(withPasskeys: boolean): Promise<SecurityLoadResult> {
-  const session = await authGet<SessionResponse>('/session');
+export async function loadSecurity(withPasskeys: boolean, signal?: AbortSignal): Promise<SecurityLoadResult> {
+  const session = await authGet<SessionResponse>('/session', signal);
   if (!session.ok) {
     if (session.status === 401) return { kind: 'signed-out' };
     return { kind: 'failure', message: failureMessage(session.status, session.code, null) };
@@ -93,8 +98,8 @@ export async function loadSecurity(withPasskeys: boolean): Promise<SecurityLoadR
     return { kind: 'failure', message: failureMessage(503, 'unavailable', null) };
 
   const [listed, passkeys] = await Promise.all([
-    authGet<SessionsResponse>('/sessions'),
-    withPasskeys ? loadPasskeys() : Promise.resolve<PasskeysLoad>({ kind: 'hidden' }),
+    authGet<SessionsResponse>('/sessions', signal),
+    withPasskeys ? loadPasskeys(signal) : Promise.resolve<PasskeysLoad>({ kind: 'hidden' }),
   ]);
   if (!listed.ok) {
     if (listed.status === 401) return { kind: 'signed-out' };

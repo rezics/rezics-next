@@ -1,3 +1,4 @@
+import { privateAuthRead } from './private-auth-read';
 import { authPost, failureMessage, type AuthPostResult } from './api';
 
 export type Consent = {
@@ -150,33 +151,35 @@ function stringArray(value: unknown): value is string[] {
 // This read is browser-only, on the issuer origin, just like the shared Auth writes.
 export async function readConsent(clientId: string, signal?: AbortSignal): Promise<AuthPostResult<Consent>> {
   try {
-    const response = await fetch(`/consent/${encodeURIComponent(clientId)}`, {
-      credentials: 'same-origin',
-      redirect: 'error',
-      cache: 'no-store',
-      signal: signal ?? null,
-    });
-    const body: unknown = await response.json().catch(() => null);
-    if (response.status === 200) {
-      if (
-        !body ||
-        typeof body !== 'object' ||
-        !('client_id' in body) ||
-        body.client_id !== clientId ||
-        !('display_name' in body) ||
-        (body.display_name !== null && typeof body.display_name !== 'string') ||
-        !('scopes' in body) ||
-        !stringArray(body.scopes) ||
-        !('granted' in body) ||
-        !stringArray(body.granted) ||
-        !body.granted.every((scope) => (body.scopes as string[]).includes(scope))
-      )
-        throw new Error('Invalid consent response');
-      return { ok: true, body: body as Consent };
-    }
-    const code = body && typeof body === 'object' && 'code' in body && typeof body.code === 'string' ? body.code : '';
-    const header = response.headers.get('Retry-After');
-    return { ok: false, status: response.status, code, retryAfter: header && /^\d+$/.test(header) ? header : null };
+    return await privateAuthRead(async (readSignal) => {
+      const response = await fetch(`/consent/${encodeURIComponent(clientId)}`, {
+        signal: readSignal,
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+      });
+      const body: unknown = await response.json().catch(() => null);
+      if (response.status === 200) {
+        if (
+          !body ||
+          typeof body !== 'object' ||
+          !('client_id' in body) ||
+          body.client_id !== clientId ||
+          !('display_name' in body) ||
+          (body.display_name !== null && typeof body.display_name !== 'string') ||
+          !('scopes' in body) ||
+          !stringArray(body.scopes) ||
+          !('granted' in body) ||
+          !stringArray(body.granted) ||
+          !body.granted.every((scope) => (body.scopes as string[]).includes(scope))
+        )
+          throw new Error('Invalid consent response');
+        return { ok: true, body: body as Consent };
+      }
+      const code = body && typeof body === 'object' && 'code' in body && typeof body.code === 'string' ? body.code : '';
+      const header = response.headers.get('Retry-After');
+      return { ok: false, status: response.status, code, retryAfter: header && /^\d+$/.test(header) ? header : null };
+    }, signal);
   } catch {
     return { ok: false, status: 503, code: 'unavailable', retryAfter: null };
   }

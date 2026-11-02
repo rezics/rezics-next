@@ -1,0 +1,96 @@
+import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
+import { createElement } from 'react';
+import * as fixture from './creation-page-fixture';
+import { loadAccountSession } from '../src/account-operations';
+import { loadManagementSession } from '../src/management-operations';
+import { loadSecurity } from '../src/security';
+import { createConsentReview, readConsent, type ConsentReview } from '../src/consent';
+import * as inventory from '../src/security-inventory';
+import { SecurityPage } from '../src/routes/security';
+
+fixture.creationFixture();
+const originalFetch = globalThis.fetch;
+const originalTimeout = globalThis.setTimeout;
+const clock = spyOn(globalThis, 'setTimeout').mockImplementation(
+  ((callback: TimerHandler, delay?: number, ...args: unknown[]) =>
+    originalTimeout(callback, delay === 5000 ? 5 : delay, ...args)) as typeof setTimeout,
+);
+const session = {
+  account_id: 'current-human', client_id: 'login', scope: [], authn_epoch: 1,
+  auth_time: Math.floor(Date.now() / 1000), amr: ['pwd'],
+};
+const consent = { client_id: 'selected-app', display_name: 'Reader', scopes: ['openid'], granted: [] };
+afterEach(() => { globalThis.fetch = originalFetch; });
+afterAll(() => clock.mockRestore());
+const readers = [
+  ['security', (signal?: AbortSignal) => loadSecurity(false, signal), 'failure'],
+  ['account', loadAccountSession, 'failure'],
+  ['management', loadManagementSession, 'unavailable'],
+] as const;
+for (const [name, read, kind] of readers) {
+  for (const phase of ['headers', 'body'] as const)
+    test(`${name} stalled ${phase} becomes unavailable, then a fresh read can recover`, async () => {
+      const late = Promise.withResolvers<Response>();
+      let signal: AbortSignal | undefined;
+      globalThis.fetch = ((_, init) => {
+        signal = init?.signal ?? undefined;
+        return phase === 'headers' ? late.promise : Promise.resolve(new Response(new ReadableStream()));
+      }) as typeof fetch;
+      expect((await read()).kind).toBe(kind);
+      expect(signal?.aborted).toBe(true);
+      late.resolve(Response.json(session));
+      globalThis.fetch = (async (path) => Response.json(String(path) === '/sessions' ? { sessions: [] } : session)) as typeof fetch;
+      expect((await read()).kind).toBe('ready');
+    });
+  test(`${name} preserves cancellation and real signed-out responses`, async () => {
+    const controller = new AbortController();
+    globalThis.fetch = (() => new Promise(() => {})) as typeof fetch;
+    const pending = read(controller.signal);
+    controller.abort();
+    expect((await pending).kind).toBe(kind);
+    globalThis.fetch = (async () => new Response(null, { status: 401 })) as typeof fetch;
+    expect((await read()).kind).toBe('signed-out');
+  });
+}
+for (const status of [200, 503])
+  test(`consent stalled ${status} body unlocks explicit read retry; disposal hides late private data`, async () => {
+    const states: ConsentReview[] = [];
+    const review = createConsentReview(consent.client_id, (value) => states.push(value));
+    globalThis.fetch = (async () => new Response(new ReadableStream(), { status })) as typeof fetch;
+    await review.load();
+    expect(states.at(-1)?.state).toBe('failed');
+    const late = Promise.withResolvers<Response>();
+    const calls: string[] = [];
+    globalThis.fetch = ((path, init) => {
+      expect(init?.method ?? 'GET').toBe('GET');
+      calls.push(String(path));
+      return late.promise;
+    }) as typeof fetch;
+    const retry = review.load();
+    await Promise.resolve();
+    review.dispose();
+    late.resolve(Response.json(consent));
+    await retry;
+    expect(states.at(-1)?.state).toBe('loading');
+    expect(calls).toEqual(['/consent/selected-app']);
+    globalThis.fetch = (async () => Response.json(consent)) as typeof fetch;
+    expect((await readConsent(consent.client_id)).ok).toBe(true);
+  });
+test('failed passkeys keep sessions usable and offer a read-only reload of the current review', async () => {
+  const passkeys = spyOn(inventory, 'loadPasskeyInventory').mockResolvedValue({ ok: false });
+  try {
+    const page = await fixture.open(createElement(SecurityPage, {
+      initial: { kind: 'ready', accountId: session.account_id, sessions: [], passkeys: { kind: 'failure', message: 'Unavailable' } },
+      identitySource: async () => ({ kind: 'unavailable' }),
+    }), session);
+    expect(page.host.querySelector('#security-sessions-heading')).not.toBeNull();
+    globalThis.fetch = (async (path, init) => {
+      expect(init?.method ?? 'GET').toBe('GET');
+      return Response.json(String(path) === '/sessions' ? { sessions: [] } : session);
+    }) as typeof fetch;
+    await fixture.flush(() => fixture.button(page.host, 'Reload')!.click());
+    expect(page.calls).toHaveLength(0);
+    expect(page.host.textContent).toContain('Unavailable');
+    expect(page.host.querySelector('#security-sessions-heading')).not.toBeNull();
+  } finally { passkeys.mockRestore(); }
+});

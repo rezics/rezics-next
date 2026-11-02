@@ -133,6 +133,13 @@ Page paths render only for GET and HEAD. Other methods, including `POST /consent
 original request through to Auth at the issuer origin in production, or through the existing `AUTH_ORIGIN` proxy in
 development. Auth's response returns unchanged, without page headers.
 
+## Private review reads
+
+Decision: each private session, consent and inventory read has a five-second deadline through response-body
+completion and browser BFF transport, preserving caller cancellation. Failures reuse the localized unavailable and
+explicit read-retry controls for the current page/account/selection; they never replay a mutation. Independent
+inventories keep their own availability, and existing page generations retire old completions.
+
 ## Security
 
 The security page has Password, Passkeys, Sessions and Organizations sections, followed by Delete account, in a
