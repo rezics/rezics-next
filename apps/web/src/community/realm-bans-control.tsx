@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type MouseEvent,
+} from 'react';
 import { ContentItem, ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -182,6 +191,19 @@ type BanFocusRecovery = {
   sequence: number;
 };
 
+type PageReadFocusIntent = {
+  source: HTMLButtonElement;
+  ticket: number;
+  caller: number;
+  generation: number;
+  realmId: string;
+  controller: AbortController;
+};
+
+function keyboardActivationSource(event: MouseEvent<HTMLButtonElement>) {
+  return event.detail === 0 && event.currentTarget === document.activeElement ? event.currentTarget : undefined;
+}
+
 /** Departure can run before React commits an edit or a definitive command settlement. */
 function useBanDraftField<T>(initial: T) {
   const [value, setValue] = useState(initial);
@@ -284,7 +306,7 @@ function RealmBansVisit({
   const renderGeneration = generation.current;
   const pageReady = useRef(initial?.state === 'ready');
   // Retain only this visit's last bounded page input, including a failed continuation.
-  const pageRead = useRef<{ cursor?: string | undefined; focus: boolean }>({ focus: false });
+  const pageRead = useRef<{ cursor?: string | undefined; focus: PageReadFocusIntent | null }>({ focus: null });
   const pageHeading = useRef<HTMLHeadingElement>(null);
   const currentListHeading = useRef<HTMLHeadingElement>(null);
   const banTrigger = useRef<HTMLButtonElement>(null);
@@ -293,13 +315,69 @@ function RealmBansVisit({
   const uncertain = useRef<BanWriteInput | null>(null);
   const visible = useCommunityManagementAdmission('bans', gate.current() && view.state === 'ready');
 
+  function cancelPageReadFocus() {
+    pageRead.current.focus?.controller.abort();
+  }
+
+  function createPageReadFocusIntent(
+    source: HTMLButtonElement,
+    ticket: number,
+    readGeneration: number,
+  ): PageReadFocusIntent {
+    const controller = new AbortController();
+    const focus = { source, ticket, caller: gate.id, generation: readGeneration, realmId, controller };
+    controller.signal.addEventListener(
+      'abort',
+      () => {
+        if (pageRead.current.focus === focus) pageRead.current = { ...pageRead.current, focus: null };
+      },
+      { once: true },
+    );
+    document.addEventListener('pointerdown', () => controller.abort(), { capture: true, signal: controller.signal });
+    document.addEventListener(
+      'keydown',
+      (event) => {
+        if (event.key === 'Tab') controller.abort();
+      },
+      { capture: true, signal: controller.signal },
+    );
+    document.addEventListener(
+      'focusin',
+      (event) => {
+        if (event.target !== source && event.target !== document.body) controller.abort();
+      },
+      { capture: true, signal: controller.signal },
+    );
+    return focus;
+  }
+
+  useLayoutEffect(
+    () => () => pageRead.current.focus?.controller.abort(),
+    [gate],
+  );
+
   useLayoutEffect(() => {
-    if (!pageRead.current.focus || view.state === 'loading') return;
-    pageRead.current.focus = false;
-    if (!visible || !gate.current()) return;
+    const focus = pageRead.current.focus;
+    if (!focus || view.state === 'loading') return;
+    if (
+      focus.generation !== generation.current ||
+      focus.caller !== gate.id ||
+      focus.realmId !== realmId ||
+      !gate.owns(focus.ticket) ||
+      !visible
+    ) {
+      focus.controller.abort();
+      return;
+    }
+    const active = document.activeElement;
+    if (active !== focus.source && active !== document.body) {
+      focus.controller.abort();
+      return;
+    }
     const boundary = view.state === 'ready' ? pageHeading.current : (retryReadAction.current ?? restartAction.current);
-    boundary?.focus();
-  }, [view, visible, gate]);
+    focus.controller.abort();
+    if (boundary?.isConnected) boundary.focus();
+  }, [view, visible, gate, realmId]);
 
   useLayoutEffect(() => {
     const request = focusRecovery.current;
@@ -407,18 +485,21 @@ function RealmBansVisit({
       working.current = null;
       uncertain.current = null;
       pageReady.current = false;
-      pageRead.current = { focus: false };
+      cancelPageReadFocus();
+      pageRead.current = { focus: null };
     },
     'realm-ban',
   );
 
   const refresh = useCallback(
-    async (cursor?: string, moveFocus = false) => {
+    async (cursor?: string, focusSource?: HTMLButtonElement) => {
       if (!gate.current() || working.current || uncertain.current) return;
+      cancelPageReadFocus();
       pageReady.current = false;
-      pageRead.current = { cursor, focus: moveFocus };
+      pageRead.current = { cursor, focus: null };
       const ticket = gate.ticket();
       const current = ++generation.current;
+      if (focusSource) pageRead.current.focus = createPageReadFocusIntent(focusSource, ticket, current);
       const owns = () => gate.owns(ticket) && generation.current === current;
       invalidateTarget();
       unbanReview.current = null;
@@ -660,10 +741,10 @@ function RealmBansVisit({
           variant="outline"
           className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
           disabled={disabled || view.state === 'loading'}
-          onClick={() => {
+          onClick={(event) => {
             if (!gate.current() || generation.current !== renderGeneration) return;
             setConfirm(null);
-            void refresh(undefined, true);
+            void refresh(undefined, keyboardActivationSource(event));
           }}
         >
           {view.state === 'unavailable' || view.state === 'invalid-cursor'
@@ -683,9 +764,9 @@ function RealmBansVisit({
               variant="outline"
               className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
               disabled={disabled}
-              onClick={() => {
+              onClick={(event) => {
                 if (!gate.current() || generation.current !== renderGeneration) return;
-                void refresh(pageRead.current.cursor, true);
+                void refresh(pageRead.current.cursor, keyboardActivationSource(event));
               }}
             >
               {m.realm_bans_read_retry()}
@@ -1004,10 +1085,10 @@ function RealmBansVisit({
               variant="outline"
               className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
               disabled={disabled}
-              onClick={() => {
+              onClick={(event) => {
                 if (!gate.current() || generation.current !== renderGeneration) return;
                 setConfirm(null);
-                void refresh(view.page.next ?? undefined, true);
+                void refresh(view.page.next ?? undefined, keyboardActivationSource(event));
               }}
             >
               {m.realm_bans_next()}
