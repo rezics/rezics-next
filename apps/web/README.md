@@ -1643,6 +1643,8 @@ adapter enforces the 1,000-Unicode-character note bound; browser UTF-16 length l
 
 ### Reading progress
 
+Decision: After a definitive index-row finish refusal, explicit review uses the existing viewer-bound index read at the same subject and cursor; only a matching returned row unlocks a separate new confirmation, while uncertain retries retain their original sender, credential, revision, action and key.
+
 Active corrections and clearing use a confirmation showing exact captured operands. A clear sends
 `{revision, clear: true}` to the existing record API, retaining session identity, lifecycle, accepted meaning,
 captured total and history. Drafts survive closing the editor; retries retain the original revision, key and

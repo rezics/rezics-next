@@ -42,7 +42,13 @@ import { subjectHref } from '../subject/subject-href';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
-import type { ProgressFinishInput, ProgressIndex, ProgressMode, ProgressStartInput } from './progress-reads';
+import type {
+  ProgressFailure,
+  ProgressFinishInput,
+  ProgressIndex,
+  ProgressMode,
+  ProgressStartInput,
+} from './progress-reads';
 import { progressFailureMessage, progressView } from './progress-label';
 import type { ProgressChoices } from './progress-profile';
 import {
@@ -78,6 +84,8 @@ const buttonClass =
   'inline-flex min-h-[44px] min-w-0 max-w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-center whitespace-normal wrap-anywhere text-primary underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 const subscribe = () => () => {};
+type ProgressRowReview = (id: string) => Promise<ProgressIndex['sessions'][number] | null>;
+
 type ProgressCommand<Input, Sender> = {
   data: Input;
   headers: NonNullable<ReturnType<typeof csrfHeaders>>;
@@ -259,6 +267,11 @@ export function CurrentViewerProgressIndexPage({
         page={result!.page}
         cursor={cursor}
         authority={authority}
+        reviewRow={async (id) => {
+          const fresh = await readCurrentViewerProgressIndex({ data: requested });
+          if (!matches(fresh)) throw new Error('Progress review origin mismatch');
+          return fresh.page.sessions.find((row) => row.id === id) ?? null;
+        }}
       />
     </div>
   );
@@ -268,6 +281,7 @@ export function ProgressIndexPage(props: {
   page: ProgressIndex;
   cursor?: string | null;
   authority?: ProgressAuthority;
+  reviewRow?: ProgressRowReview;
 }) {
   return (
     <AuthoringDepartureBoundary
@@ -283,10 +297,12 @@ function ProgressIndexPageContent({
   page,
   cursor,
   authority,
+  reviewRow,
 }: {
   page: ProgressIndex;
   cursor?: string | null;
   authority?: ProgressAuthority;
+  reviewRow?: ProgressRowReview;
 }) {
   const router = useRouter();
   const identity = authority?.key ?? page;
@@ -495,6 +511,7 @@ function ProgressIndexPageContent({
                 ratio={ratio}
                 sourcePage={page}
                 authority={authority}
+                reviewRow={reviewRow}
               />
             ))}
           </ol>
@@ -722,15 +739,18 @@ function SessionRow({
   ratio,
   sourcePage,
   authority,
+  reviewRow,
 }: {
   session: ProgressIndex['sessions'][number];
   ratio: CoverRatio;
   sourcePage: ProgressIndex;
   authority?: ProgressAuthority | undefined;
+  reviewRow?: ProgressRowReview | undefined;
 }) {
   const readable = useOperation('progress_session.read');
   const completable = useOperation('progress_session.complete');
   const abandonable = useOperation('progress_session.abandon');
+  const listable = useOperation('progress_session.list');
   const admission = useRef({ completable, abandonable });
   admission.current = { completable, abandonable };
   // Only a meaningful fresh row invalidates a completion within an observed viewer lifetime.
@@ -750,6 +770,13 @@ function SessionRow({
     identity,
     () => authority?.rowCurrent(nativeContext) !== false,
   );
+  const review = useProgressAction(
+    authority,
+    'progress_session.list',
+    listable,
+    identity,
+    () => authority?.rowCurrent(nativeContext) !== false,
+  );
   const row = useProgressEpisode(identity, () => true);
   const current = (action?: 'complete' | 'abandon') =>
     row.isCurrent() &&
@@ -760,31 +787,48 @@ function SessionRow({
         : abandon.isCurrent() && admission.current.abandonable));
   const intent = useRef<ProgressCommand<ProgressFinishInput, typeof finishProgressSession> | null>(null);
   const [session, setSession] = useState(initial);
-  const [seenIdentity, setSeenIdentity] = useState({ identity, complete, abandon, row });
+  const [seenIdentity, setSeenIdentity] = useState({ identity, complete, abandon, review, row });
   const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(null);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<ProgressFailure['reason'] | null>(null);
+  const needsReview = useRef(false);
+  const rejectedAction = useRef<'complete' | 'abandon' | null>(null);
+  const reviewRequest = useRef<object | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewed, setReviewed] = useState(false);
   const [key, setKey] = useState(() => crypto.randomUUID());
   if (
     identity !== seenIdentity.identity ||
     complete !== seenIdentity.complete ||
     abandon !== seenIdentity.abandon ||
+    review !== seenIdentity.review ||
     row !== seenIdentity.row
   ) {
     const sameRow = identity === seenIdentity.identity;
-    const action = intent.current?.data.action ?? confirming;
+    const action = intent.current?.data.action ?? confirming ?? rejectedAction.current;
     const previousAction = action === 'complete' ? seenIdentity.complete : seenIdentity.abandon;
     const nextAction = action === 'complete' ? complete : abandon;
-    setSeenIdentity({ identity, complete, abandon, row });
+    setSeenIdentity({ identity, complete, abandon, review, row });
+    if (review !== seenIdentity.review) {
+      reviewRequest.current = null;
+      setReviewing(false);
+    }
     // A sibling admission change cannot release this action's pending lease.
     if (!sameRow || row !== seenIdentity.row || (action && previousAction !== nextAction)) {
       if (!authority || previousAction.revoked) {
         intent.current = null;
         if (authority) setKey(crypto.randomUUID());
       }
-      if (!sameRow) setSession(initial);
+      if (!sameRow) {
+        setSession(initial);
+        needsReview.current = false;
+        rejectedAction.current = null;
+      }
       setConfirming(intent.current?.data.action ?? null);
-      setError(!!intent.current);
+      reviewRequest.current = null;
+      setReviewing(false);
+      setReviewed(false);
+      setError(intent.current ? 'unavailable' : needsReview.current ? error : null);
       setPending(false);
     }
   }
@@ -793,9 +837,19 @@ function SessionRow({
   const confirmation = useRef({ value: confirming, token: {} });
   if (confirmation.current.value !== confirming) confirmation.current = { value: confirming, token: {} };
   const confirmed = confirmation.current;
-  const rowCurrent = (action?: 'complete' | 'abandon') => current(action) && renderedRow.current === session;
+  const rowCurrent = (action?: 'complete' | 'abandon') =>
+    current(action) && authority?.rowCurrent(nativeContext) !== false && renderedRow.current === session;
   const confirm = (action: 'complete' | 'abandon' | null) => {
-    if (!rowCurrent(action ?? undefined) || complete.pending || abandon.pending) return;
+    if (
+      !rowCurrent(action ?? undefined) ||
+      complete.pending ||
+      abandon.pending ||
+      needsReview.current ||
+      reviewRequest.current ||
+      (intent.current && intent.current.data.action !== action) ||
+      (action && session.state !== 'active')
+    )
+      return;
     if (confirmation.current.value === action) return;
     confirmation.current = { value: action, token: {} };
     setConfirming(action);
@@ -805,6 +859,9 @@ function SessionRow({
     const origin = action === 'complete' ? complete : abandon;
     if (
       !rowCurrent(action) ||
+      needsReview.current ||
+      reviewRequest.current ||
+      session.state !== 'active' ||
       confirmation.current !== confirmed ||
       confirmed.value !== action ||
       origin.pending ||
@@ -813,7 +870,7 @@ function SessionRow({
       return;
     origin.pending = true;
     setPending(true);
-    setError(false);
+    setError(null);
     try {
       const headers = authority ? authority.headers() : csrfHeaders();
       if (!headers || !rowCurrent(action)) return;
@@ -830,16 +887,19 @@ function SessionRow({
       const result = await command.send({ data: command.data, headers: command.headers });
       if (!rowCurrent(action)) return;
       if (!result.ok) {
-        setError(true);
-        if (authority && result.reason !== 'unavailable') {
+        setError(result.reason);
+        if (result.reason !== 'unavailable') {
           intent.current = null;
-          confirmation.current = { value: action, token: {} };
-          setKey(crypto.randomUUID());
+          needsReview.current = true;
+          rejectedAction.current = action;
+          confirmation.current = { value: null, token: {} };
+          setConfirming(null);
+          setReviewed(false);
         }
         return;
       }
       if (result.session.id !== command.data.sessionId) {
-        setError(true);
+        setError('unavailable');
         return;
       }
       intent.current = null;
@@ -852,11 +912,48 @@ function SessionRow({
       setKey(crypto.randomUUID());
       setConfirming(null);
     } catch {
-      if (rowCurrent(action)) setError(true);
+      if (rowCurrent(action)) setError('unavailable');
     } finally {
       if (rowCurrent(action)) {
         origin.pending = false;
         setPending(false);
+      }
+    }
+  }
+  async function reviewCurrentRow() {
+    if (!reviewRow || !needsReview.current || reviewRequest.current || !rowCurrent() || !review.isCurrent()) return;
+    const actionOrigin = rejectedAction.current === 'abandon' ? abandon : complete;
+    const request = {};
+    reviewRequest.current = request;
+    setReviewing(true);
+    const isCurrent = () =>
+      reviewRequest.current === request &&
+      rowCurrent() &&
+      review.isCurrent() &&
+      !actionOrigin.retired &&
+      actionOrigin.validate();
+    try {
+      const fresh = await reviewRow(session.id);
+      if (!isCurrent()) return;
+      if (!fresh || fresh.id !== session.id || fresh.revision < session.revision) {
+        setError('unavailable');
+        return;
+      }
+      // Reading only replaces the displayed row. A new menu action and confirmation
+      // capture a new command; the rejected command can never be rebased or replayed.
+      needsReview.current = false;
+      confirmation.current = { value: null, token: {} };
+      setConfirming(null);
+      setSession(fresh);
+      setKey(crypto.randomUUID());
+      setError(null);
+      setReviewed(true);
+    } catch {
+      if (isCurrent()) setError('unavailable');
+    } finally {
+      if (isCurrent()) {
+        reviewRequest.current = null;
+        setReviewing(false);
       }
     }
   }
@@ -983,6 +1080,7 @@ function SessionRow({
                 </Button>
                 <Button
                   variant="outline"
+                  disabled={pending || !!intent.current}
                   onClick={() => {
                     if (confirmation.current === confirmed) confirm(null);
                   }}
@@ -994,9 +1092,21 @@ function SessionRow({
           ) : null}
           {error ? (
             <p role="alert" className="relative text-sm">
-              {m.library_progress_conflict()}
+              {progressFailureMessage(error)}
             </p>
           ) : null}
+          {needsReview.current ? (
+            <ListRowControl>
+              <Button
+                variant="outline"
+                disabled={reviewing || !reviewRow || !review.isCurrent()}
+                onClick={() => void reviewCurrentRow()}
+              >
+                {m.library_progress_finish_recovery_review()}
+              </Button>
+            </ListRowControl>
+          ) : null}
+          {reviewed ? <p role="status">{m.library_progress_finish_recovery_reviewed()}</p> : null}
         </div>
       }
     />

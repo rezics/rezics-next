@@ -718,6 +718,8 @@
   "library_progress_confirm_clear": "Confirm clear progress",
   "library_progress_confirm_correction": "Confirm progress correction",
   "library_progress_review": "Review progress change",
+  "library_progress_finish_recovery_review": "Review current row",
+  "library_progress_finish_recovery_reviewed": "Current row loaded. Any new action requires a separate confirmation.",
   "library_progress_review_latest": "Load latest progress and keep draft",
   "library_progress_clear_scope": "Clear this session’s recorded amount, position or completed units. Its captured total, reading dates, status and history remain. Your Library presence, states, labels and copies remain.",
   "library_progress_cancel": "Cancel",

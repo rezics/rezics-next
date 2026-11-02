@@ -447,3 +447,127 @@ test('Null-CSRF readers reject stale responses and callbacks across session, sub
     }
   }
 });
+
+const reviewFinish = 'Review current row';
+test('Definitive finish refusals require a current-row read and a separate new confirmation', async () => {
+  for (const action of ['complete', 'abandon'] as const)
+    for (const reason of ['conflict', 'forbidden', 'closed', 'invalid'] as const) {
+      const h = await mount(envelope({ sessions: [session()] }), 'A-original');
+      try {
+        const stale = await h.prepare(action);
+        await tick(stale);
+        const first = writes[0]!;
+        await tick(() => first.work.resolve({ ok: false, reason }));
+        expect(h.host.querySelector('[role="alert"]')?.textContent).toContain(
+          reason === 'conflict'
+            ? m.library_progress_conflict()
+            : reason === 'invalid'
+              ? m.library_progress_invalid()
+              : m.library_progress_refused(),
+        );
+        await tick(stale);
+        expect(writes).toHaveLength(1);
+        await tick(() => h.rotate('A', null));
+        await h.click(h.view.getByRole('button', { name: reviewFinish, exact: true }));
+        expect(reads[0]!.data).toEqual({ subjectId: id(1), cursor: 'earlier/opaque+==' });
+        await tick(() =>
+          reads[0]!.work.resolve(envelope({ sessions: [session('Reviewed', { revision: 9, amount: '12' })] })),
+        );
+        expect(h.host.textContent).toContain('Private Reviewed');
+        expect(writes).toHaveLength(1);
+        await tick(() => h.rotate('A', 'A-current'));
+        const confirm = await h.prepare('abandon');
+        expect(writes).toHaveLength(1);
+        await tick(stale);
+        await tick(confirm);
+        expect(writes[1]!.data).toMatchObject({ sessionId: id(20), revision: 9, action: 'abandon' });
+        expect(writes[1]!.data.idempotencyKey).not.toBe(first.data.idempotencyKey);
+        expect(writes[1]!.headers).toEqual({ 'x-csrf-token': 'A-current' });
+        await tick(() =>
+          writes[1]!.work.resolve({ ok: true, session: { ...session(), revision: 10, state: 'abandoned' } }),
+        );
+        expect(h.host.textContent).toContain(m.library_progress_state_abandoned());
+      } finally {
+        await h.close();
+      }
+    }
+});
+
+test('Uncertain finish outcomes retain the exact sender, credential, key and operands without offering review', async () => {
+  for (const outcome of ['unavailable', 'thrown', 'wrong-identity'] as const) {
+    const h = await mount(envelope({ sessions: [session()] }), 'A-original');
+    let replacement: ReturnType<typeof spyOn> | undefined;
+    try {
+      const submit = await h.prepare('abandon');
+      await tick(submit);
+      const first = writes[0]!;
+      await tick(() =>
+        outcome === 'thrown'
+          ? first.work.reject(new Error('Unknown commit'))
+          : first.work.resolve(
+              outcome === 'unavailable'
+                ? { ok: false, reason: 'unavailable' }
+                : { ok: true, session: { ...session(), id: id(99) } },
+            ),
+      );
+      expect(h.host.querySelector('[role="alert"]')?.textContent).toContain(m.library_progress_unavailable());
+      expect(h.view.queryByRole('button', { name: reviewFinish, exact: true })).toBeNull();
+      await tick(() => h.rotate('A', 'A-current'));
+      replacement = spyOn(serverFunctions, 'finishProgressSession').mockRejectedValue(new Error('Wrong sender'));
+      await tick(h.callback('abandon'));
+      expect(replacement).not.toHaveBeenCalled();
+      expect(writes[1]!.data).toBe(first.data);
+      expect(writes[1]!.headers).toBe(first.headers);
+      expect(reads).toHaveLength(0);
+    } finally {
+      replacement?.mockRestore();
+      await h.close();
+    }
+  }
+});
+
+test('Failed, mismatched and retired row reviews never authorize a replacement finish', async () => {
+  for (const boundary of ['thrown', 'foreign', 'missing', 'row', 'viewer', 'exposure', 'locale'] as const) {
+    const h = await mount(envelope({ sessions: [session()] }), 'A-original');
+    try {
+      await tick(await h.prepare('complete'));
+      await tick(() => writes[0]!.work.resolve({ ok: false, reason: 'conflict' }));
+      await h.click(h.view.getByRole('button', { name: reviewFinish, exact: true }));
+      const old = reads[0]!;
+      await tick(() => {
+        if (boundary === 'row')
+          h.client.setQueryData(
+            h.indexQuery().queryKey,
+            envelope({ sessions: [session('Replacement', { revision: 8 })] }),
+          );
+        if (boundary === 'viewer') {
+          h.rotate('B');
+          h.rotate('A');
+        }
+        if (boundary === 'exposure') {
+          h.admit([]);
+          h.admit();
+        }
+        if (boundary === 'locale') setLocale('de', { reload: false });
+      });
+      await tick(() =>
+        boundary === 'thrown'
+          ? old.work.reject(new Error('Read unavailable'))
+          : old.work.resolve(
+              envelope({
+                owner: boundary === 'foreign' ? 'B' : 'A',
+                sessions: boundary === 'missing' ? [] : [session('Late review', { revision: 99 })],
+              }),
+            ),
+      );
+      expect(h.host.textContent).not.toContain('Private Late review');
+      expect(writes).toHaveLength(1);
+      if (['thrown', 'foreign', 'missing'].includes(boundary)) {
+        expect(h.view.getByRole('button', { name: reviewFinish, exact: true })).toBeTruthy();
+        expect(h.view.queryByRole('button', { name: m.library_progress_confirm_complete(), exact: true })).toBeNull();
+      }
+    } finally {
+      await h.close();
+    }
+  }
+});

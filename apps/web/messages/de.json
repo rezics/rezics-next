@@ -700,6 +700,8 @@
   "library_progress_add_units": "Einheiten hinzufügen",
   "library_progress_amount": "Menge",
   "library_progress_batch_limit": "Fügen Sie höchstens 100 Einheiten auf einmal hinzu oder entfernen Sie sie.",
+  "library_progress_finish_recovery_review": "Aktuellen Eintrag prüfen",
+  "library_progress_finish_recovery_reviewed": "Der aktuelle Eintrag wurde geladen. Jede neue Aktion muss separat bestätigt werden.",
   "library_progress_cancel": "Abbrechen",
   "library_progress_changes": "Änderungsverlauf",
   "library_progress_changes_empty": "Es wurde noch kein Fortschritt aufgezeichnet.",

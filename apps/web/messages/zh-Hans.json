@@ -700,6 +700,8 @@
   "library_progress_add_units": "添加单位",
   "library_progress_amount": "数量",
   "library_progress_batch_limit": "一次最多添加或移除 100 个单位。",
+  "library_progress_finish_recovery_review": "查看当前记录",
+  "library_progress_finish_recovery_reviewed": "已加载当前记录。任何新操作都需要单独确认。",
   "library_progress_cancel": "取消",
   "library_progress_changes": "变更记录",
   "library_progress_changes_empty": "尚未记录任何进度。",

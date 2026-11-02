@@ -700,6 +700,8 @@
   "library_progress_add_units": "Añadir unidades",
   "library_progress_amount": "Cantidad",
   "library_progress_batch_limit": "Añade o quita como máximo 100 unidades a la vez.",
+  "library_progress_finish_recovery_review": "Revisar la fila actual",
+  "library_progress_finish_recovery_reviewed": "Se ha cargado la fila actual. Cualquier nueva acción requiere una confirmación por separado.",
   "library_progress_cancel": "Cancelar",
   "library_progress_changes": "Historial de cambios",
   "library_progress_changes_empty": "Aún no se ha registrado ningún progreso.",

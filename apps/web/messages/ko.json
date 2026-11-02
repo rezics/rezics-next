@@ -700,6 +700,8 @@
   "library_progress_add_units": "단위 추가",
   "library_progress_amount": "분량",
   "library_progress_batch_limit": "한 번에 추가하거나 뺄 수 있는 단위는 100개까지입니다.",
+  "library_progress_finish_recovery_review": "현재 행 확인",
+  "library_progress_finish_recovery_reviewed": "현재 행을 불러왔습니다. 새로운 작업은 별도로 확인해야 합니다.",
   "library_progress_cancel": "취소",
   "library_progress_changes": "변경 이력",
   "library_progress_changes_empty": "아직 진행 기록이 없습니다.",

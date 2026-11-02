@@ -700,6 +700,8 @@
   "library_progress_add_units": "単位を追加",
   "library_progress_amount": "数量",
   "library_progress_batch_limit": "一度に追加または削除できる単位は 100 件までです。",
+  "library_progress_finish_recovery_review": "現在の行を確認",
+  "library_progress_finish_recovery_reviewed": "現在の行を読み込みました。新しい操作には、別途確認が必要です。",
   "library_progress_cancel": "キャンセル",
   "library_progress_changes": "変更履歴",
   "library_progress_changes_empty": "進捗はまだ記録されていません。",
