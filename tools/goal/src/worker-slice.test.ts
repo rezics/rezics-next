@@ -334,15 +334,17 @@ describe('worker systemd slice', () => {
     chmodSync(workerPath, 0o755);
     const worker = new WorkerSlice();
     const reports: string[] = [];
-    expect(() => worker.launch(
-      'task',
-      2,
-      workerPath,
-      ['worker-args'],
-      { env: fake.env },
-      () => false,
-      (line) => reports.push(line),
-    )).toThrow(/restart-safe user systemd scope.*no unprotected worker was started/);
+    expect(() =>
+      worker.launch(
+        'task',
+        2,
+        workerPath,
+        ['worker-args'],
+        { env: fake.env },
+        () => false,
+        (line) => reports.push(line),
+      ),
+    ).toThrow(/restart-safe user systemd scope.*no unprotected worker was started/);
 
     expect(existsSync(workerStarted)).toBe(false);
     expect(reports).toHaveLength(1);
@@ -365,15 +367,17 @@ describe('worker systemd slice', () => {
     const fake = fakeSystemd({ systemdRun: 'exit 1' });
     const worker = new WorkerSlice();
     const reports: string[] = [];
-    expect(() => worker.launch(
-      'task',
-      5,
-      'true',
-      [],
-      { env: fake.env, stdio: 'inherit' },
-      () => false,
-      (line) => reports.push(line),
-    )).toThrow(/restart-safe user systemd scope/);
+    expect(() =>
+      worker.launch(
+        'task',
+        5,
+        'true',
+        [],
+        { env: fake.env, stdio: 'inherit' },
+        () => false,
+        (line) => reports.push(line),
+      ),
+    ).toThrow(/restart-safe user systemd scope/);
 
     expect(reports[0]).toContain('systemd-run exited with status 1');
     expect(reports[0]).toContain('no unprotected worker was started');

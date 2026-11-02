@@ -285,12 +285,13 @@ store.db.close();
     });
   const readWhenReady = async (path: string, host: ChildProcess) => {
     for (let n = 0; n < 1000; n++) {
-      if (existsSync(path)) return JSON.parse(readFileSync(path, 'utf8')) as {
-        hostPid: number;
-        attempt: number;
-        process: ProcessIdentity;
-        logPath: string;
-      };
+      if (existsSync(path))
+        return JSON.parse(readFileSync(path, 'utf8')) as {
+          hostPid: number;
+          attempt: number;
+          process: ProcessIdentity;
+          logPath: string;
+        };
       if (host.exitCode !== null || host.signalCode !== null)
         throw new Error(`worker host exited before readiness (${host.exitCode ?? host.signalCode})`);
       await Bun.sleep(10);
@@ -331,7 +332,11 @@ store.db.close();
     expect(sameProcess(adopted.process)).toBe(true);
     expect(adopted.logPath).toBe(launched.logPath);
     expect(readFileSync(adopted.logPath, 'utf8')).toContain('restart-survivor');
-    expect(readFileSync(scopeArgs, 'utf8').split('\n').filter((line) => line.startsWith('--unit='))).toHaveLength(1);
+    expect(
+      readFileSync(scopeArgs, 'utf8')
+        .split('\n')
+        .filter((line) => line.startsWith('--unit=')),
+    ).toHaveLength(1);
 
     await h.tasks.stop(task.id);
     expect(sameProcess(launched.process)).toBe(false);
