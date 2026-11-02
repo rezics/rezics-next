@@ -564,6 +564,9 @@ export async function bindIdentityTerminalMutation(tx: CommandTransaction, origi
 
 async function cancelUnpublished(tx: CommandTransaction, current: Source, claim: string | null) {
   const command = currentCommand(tx);
+  // An ordinary producer does not otherwise emit a bootstrap native receipt.
+  // Recovery must prove this cancellation's committed source transaction too.
+  recordIdentityEpochNativeCommit(tx, 'bootstrap');
   await tx.query(`UPDATE semantic.identity_epoch_mapping SET closure_state='withdrawn',closure_claim=$3,
     closure_source_reservation=NULL,closure_mutation_xid=pg_current_xact_id()::text,
     closure_cancelled_successor=closure_immediate IS NOT NULL AND closure_immediate<>original,
