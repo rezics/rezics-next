@@ -69,7 +69,10 @@ function admitSuggestionIdentities(subjects: SuggestionResult['subjects']): void
   }
 }
 
-function parsePage<T extends { subjects: SuggestionResult['subjects'] }>(schema: v.GenericSchema<T>, value: unknown): T {
+function parsePage<T extends { subjects: SuggestionResult['subjects'] }>(
+  schema: v.GenericSchema<T>,
+  value: unknown,
+): T {
   const parsed = v.safeParse(schema, value);
   if (!parsed.success) throw new TypeError('Malformed suggestion page');
   admitSuggestionIdentities(parsed.output.subjects);

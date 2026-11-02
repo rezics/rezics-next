@@ -5,7 +5,14 @@ const stamp = '2026-01-01T00:00:00.000Z';
 const first = '123e4567-e89b-12d3-a456-426614174000';
 const second = '123e4567-e89b-12d3-a456-426614174001';
 const sentinel = 'Type-label-sentinel';
-const matching = { id: first, type: 'schema:Book', types: ['schema:Book'], label: null, creativeWork: true, cover: null };
+const matching = {
+  id: first,
+  type: 'schema:Book',
+  types: ['schema:Book'],
+  label: null,
+  creativeWork: true,
+  cover: null,
+};
 let native: unknown = { subjects: [], as_of: stamp };
 let release: { types: Record<string, Record<string, string>> } | Error = new Error('missing release');
 
@@ -56,7 +63,9 @@ test('malformed native suggestion pages stay unavailable and never receive type 
     { subjects: { id: first }, as_of: stamp },
     { subjects: [row(first)], as_of: 'yesterday' },
     page(
-      Array.from({ length: 11 }, (_, index) => row(`123e4567-e89b-12d3-a456-4266141740${String(index).padStart(2, '0')}`)),
+      Array.from({ length: 11 }, (_, index) =>
+        row(`123e4567-e89b-12d3-a456-4266141740${String(index).padStart(2, '0')}`),
+      ),
     ),
     page([row(first), row(first.toUpperCase())]),
     page([row(first, { summary: { ...matching, id: second } })]),
