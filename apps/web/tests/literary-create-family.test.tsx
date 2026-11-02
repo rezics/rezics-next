@@ -395,12 +395,16 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     expect(labelledInput(invalidRow, m.correction_amount()).value).toBe('+12000');
     const invalidPosts = () => invalid.calls.filter((call) => call.method === 'POST');
     await until(() => host.textContent!.includes(m.catalogue_create_unavailable()));
-    expect(client.getQueriesData({ queryKey: ['literary-profile'] }).some(([, data]) => (data as LiteraryRead)?.ok)).toBe(true);
+    expect(
+      client.getQueriesData({ queryKey: ['literary-profile'] }).some(([, data]) => (data as LiteraryRead)?.ok),
+    ).toBe(true);
     for (const result of ['refused', 'throw', 'current'] as const) {
       expect(button(host, m.catalogue_create_submit()).disabled).toBe(true);
       recovery = result;
       await click(m.catalogue_create_retry());
-      await until(() => !button(host, result === 'current' ? m.catalogue_create_submit() : m.catalogue_create_retry()).disabled);
+      await until(
+        () => !button(host, result === 'current' ? m.catalogue_create_submit() : m.catalogue_create_retry()).disabled,
+      );
       expect(invalidPosts()).toHaveLength(1); // A definitions retry is read-only.
       expect(row()).toBe(invalidRow);
       expect(host.querySelector<HTMLInputElement>('#create-label-0')!.value).toBe('原語の作品名');
