@@ -1,9 +1,8 @@
 import { EntityPicker, type EntityPickerSubject } from '@rezics/ui/entity-picker';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { coverSrc } from '../media/cover-src';
-import { Label } from '@rezics/ui/shadcn/label';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
-import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { selectedReviewSubject } from './review-policy';
@@ -45,6 +44,7 @@ function ReviewFieldsVisit({
   onSubjectChange: (subjectId: string | null) => void;
   onVoteCitationChange: (citation: CurrentReviewVote | undefined) => void;
 }) {
+  const detailsId = useId();
   const [subject, setSubject] = useState<EntityPickerSubject | null>(() =>
     initialSubjectId ? contentSubjectPreset(initialSubjectId, initialSubjectTitle ?? m.thread_review_subject()) : null,
   );
@@ -122,10 +122,12 @@ function ReviewFieldsVisit({
 
   return (
     <section
-      className="space-y-3 rounded-xl border border-border/70 bg-card p-5"
-      aria-label={m.thread_review_subject()}
+      className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/70 bg-card p-5"
+      aria-labelledby={`${detailsId}-heading`}
     >
-      <Label>{m.thread_review_subject()}</Label>
+      <h2 id={`${detailsId}-heading`} className="text-base font-medium [overflow-wrap:anywhere]">
+        {m.thread_review_details_heading()}
+      </h2>
       <EntityPicker
         label={m.thread_review_subject()}
         search={searchContentSubjects}
@@ -134,24 +136,41 @@ function ReviewFieldsVisit({
         disabled={disabled}
         onValueChange={chooseSubject}
       />
+      {subject ? (
+        <p data-slot="review-selected-subject" className="min-w-0 text-sm [overflow-wrap:anywhere]">
+          {m.thread_review_details_selected_subject({ title: subject.title })}
+        </p>
+      ) : null}
       {vote ? (
         <Field
-          orientation="horizontal"
-          className="min-h-10 items-start gap-3 rounded-lg border border-border/70 bg-background p-3 text-sm"
+          data-disabled={disabled}
+          className="min-w-0 gap-0 rounded-lg border border-border/70 bg-background text-sm"
         >
-          <FieldLabel htmlFor="review-cite-vote" className="items-start">
+          <FieldLabel
+            id={`${detailsId}-citation-label`}
+            htmlFor={`${detailsId}-cite-vote`}
+            className="min-h-11 min-w-0 w-full cursor-pointer items-start gap-3 rounded-lg p-3 text-start has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring group-data-[disabled=true]/field:cursor-not-allowed"
+          >
             <Checkbox
-              id="review-cite-vote"
+              id={`${detailsId}-cite-vote`}
+              aria-describedby={`${detailsId}-citation-help`}
+              className="mt-0.5"
               checked={citingVote}
               disabled={disabled}
               onCheckedChange={(checked) => toggleCitation(checked === true)}
             />
-            <span>
+            <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
               {m.thread_review_cite_vote({
                 score: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(vote.units / 2),
               })}
             </span>
           </FieldLabel>
+          <FieldDescription
+            id={`${detailsId}-citation-help`}
+            className="min-w-0 px-3 pb-3 text-start [overflow-wrap:anywhere]"
+          >
+            {m.thread_review_details_citation_help()}
+          </FieldDescription>
         </Field>
       ) : null}
     </section>
