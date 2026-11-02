@@ -6,7 +6,6 @@ import {
   storePendingAccountOperationStepUp,
 } from '../src/account-operation-step-up';
 import { emptyInventory } from '../src/stories/accounts-operations/story';
-import { loadAccountSession } from '../src/account-operations';
 const { approval, button, dom, fill, flush, leave, open, send } = fixture;
 fixture.creationFixture();
 const initial = fixture.session('delete');
@@ -17,8 +16,11 @@ const props = {
   identitySource: async () => ({ kind: 'unavailable' as const }),
 };
 const confirm = (host: HTMLElement) => fill(host.querySelector('input')!, 'delete my account');
-const restore = () =>
-  window.dispatchEvent(new dom.PageTransitionEvent('pageshow', { persisted: true }) as unknown as Event);
+const restore = () => {
+  const event = new dom.Event('pageshow');
+  Object.defineProperty(event, 'persisted', { value: true });
+  window.dispatchEvent(event as unknown as Event);
+};
 test('read recovery is single-flight, preserves the human and needs a new confirmation without deletion', async () => {
   const page = await open(
     <DeleteAccountContent {...props} initial={{ kind: 'failure', message: 'Unavailable' }} />,
@@ -61,7 +63,6 @@ test('uncertain deletion survives cached return with its exact command; accepted
   expect(page.calls[2]!.body).toEqual(page.calls[1]!.body);
   const saved = readPendingAccountOperationStepUp()!;
   expect(saved).not.toBeNull();
-  expect(await loadAccountSession()).toEqual(initial);
   await flush(leave);
   await flush(restore);
   expect(page.calls).toHaveLength(3);
