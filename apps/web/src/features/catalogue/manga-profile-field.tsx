@@ -1,4 +1,5 @@
-import { useId, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { hasDocumentContent } from '@rezics/document';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { RichTextEditor } from '@rezics/ui/rich-text-editor';
@@ -60,15 +61,69 @@ export function MangaInitialField({
   });
   const [qualifier, setQualifier] = useState('');
   const qualifierId = useId();
+  const section = useRef<HTMLElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  const [confirmingRow, setConfirmingRow] = useState<string | null>(null);
+  const confirming = confirmingRow === row.id;
+  // Late editor emissions and an already-open confirmation must obey the current lock.
+  const current = useRef({ disabled, id: row.id });
+  current.current = { disabled, id: row.id };
+  const editable = () => !current.current.disabled && current.current.id === row.id;
+  const change = (next: MangaRow) => {
+    if (editable()) onChange(next);
+  };
+  useLayoutEffect(() => {
+    if (disabled) return;
+    if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current) {
+      trigger.current?.focus();
+      restoreFocus.current = false;
+    }
+  }, [confirming, disabled]);
+  const cancelRemoval = () => {
+    restoreFocus.current = true;
+    setConfirmingRow(null);
+  };
+  const remove = () => {
+    if (!editable() || !section.current?.isConnected) return;
+    const root = section.current;
+    const controls = [...(root.parentElement?.querySelectorAll<HTMLElement>(
+      'button, input, select, textarea, [tabindex="0"], [contenteditable="true"]',
+    ) ?? [])];
+    const first = controls.findIndex((control) => root.contains(control));
+    const last = controls.findLastIndex((control) => root.contains(control));
+    const surviving = [...controls.slice(last + 1), ...controls.slice(0, first).reverse()];
+    surviving.find((control) =>
+      !control.matches(':disabled, [aria-disabled="true"]') && !control.closest('[hidden], [inert]'),
+    )?.focus();
+    onRemove();
+  };
   const citationPart = row.statement.references?.[0]?.parts.find((part) => part.property.id === 'schema:url');
   const citation =
     citationPart?.value.type === 'value' && typeof citationPart.value.content === 'string'
       ? citationPart.value.content
       : '';
   const authored = row.authored ?? newAuthoredField();
-  const update = (statement: StatementInput) => onChange({ ...row, statement });
+  const hasValue = (value: unknown): boolean => {
+    if (typeof value === 'string') return !!value.trim();
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'object') return Object.values(value).some(hasValue);
+    return true;
+  };
+  const populated =
+    row.statement.value.type !== 'value' ||
+    (property.datatype === 'document'
+      ? hasDocumentContent(authored.document) || !!authored.language.trim() || !!authored.licence.trim()
+      : hasValue(row.statement.value.content)) ||
+    !!row.original ||
+    !!row.statement.qualifiers?.length ||
+    !!row.statement.references?.some((reference) => reference.parts.length) ||
+    !!Object.values(row.targets ?? {}).some((targets) => targets.length);
+  const update = (statement: StatementInput) => change({ ...row, statement });
   const updateAuthored = (next: AuthoredField) =>
-    onChange({ ...row, authored: next, statement: { ...row.statement, value: authoredFieldValue(next) } });
+    change({ ...row, authored: next, statement: { ...row.statement, value: authoredFieldValue(next) } });
   const name = (id: string) => pickText(read.release.properties[id]?.labels ?? {}, locale).text;
   const control = (part: SnakInput, address: string, statement: (value: SnakInput['value']) => StatementInput) => {
     const definition = read.release.properties[part.property.id];
@@ -82,7 +137,7 @@ export function MangaInitialField({
         picked={row.targets?.[part.property.id] ?? []}
         mangaWork={type === 'schema:PublicationVolume' && part.property.id === 'wdt:P179'}
         onChange={(value, items) =>
-          onChange({ ...row, statement: statement(value), targets: { ...row.targets, [part.property.id]: items } })
+          change({ ...row, statement: statement(value), targets: { ...row.targets, [part.property.id]: items } })
         }
       />
     ) : (
@@ -98,6 +153,7 @@ export function MangaInitialField({
   };
   return (
     <section
+      ref={section}
       id={`manga-row-${row.id}`}
       tabIndex={-1}
       aria-label={title.text}
@@ -164,7 +220,7 @@ export function MangaInitialField({
                     id={`original-${row.id}`}
                     {...invalid(`original-${row.id}`)}
                     checked={row.original ?? false}
-                    onCheckedChange={(value) => onChange({ ...row, original: value === true })}
+                    onCheckedChange={(value) => change({ ...row, original: value === true })}
                   />
                   <FieldLabel htmlFor={`original-${row.id}`}>{m.authored_original({}, o)}</FieldLabel>
                 </Field>
@@ -213,7 +269,7 @@ export function MangaInitialField({
                   className="w-full min-w-0"
                   aria-label={m.correction_add_qualifier({}, o)}
                   value={qualifier}
-                  onChange={(event) => setQualifier(event.target.value)}
+                  onChange={(event) => { if (editable()) setQualifier(event.target.value); }}
                 >
                   <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
                   {property.qualifiers
@@ -287,14 +343,42 @@ export function MangaInitialField({
               }}
             />
           </Field>
-          <Button
-            className="h-auto min-h-11 max-w-full whitespace-normal text-start"
-            type="button"
-            variant="ghost"
-            onClick={onRemove}
-          >
-            {m.recipe_remove_field({}, o)}
-          </Button>
+          {confirming ? (
+            <div
+              role="group"
+              aria-label={m.candidate_confirm_title({ action: m.recipe_remove_field({}, o) }, o)}
+              className="space-y-2"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  cancelRemoval();
+                }
+              }}
+            >
+              <p>{m.candidate_confirm_title({ action: m.recipe_remove_field({}, o) }, o)}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button ref={cancel} type="button" variant="outline" disabled={disabled} onClick={cancelRemoval}>
+                  {m.candidate_cancel({}, o)}
+                </Button>
+                <Button type="button" variant="destructive" disabled={disabled} onClick={remove}>
+                  {m.recipe_remove_field({}, o)}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              ref={trigger}
+              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+              type="button"
+              variant="ghost"
+              disabled={disabled}
+              onClick={() => {
+                if (editable()) populated ? setConfirmingRow(row.id) : remove();
+              }}
+            >
+              {m.recipe_remove_field({}, o)}
+            </Button>
+          )}
         </fieldset>
       </ContentItemFrame>
     </section>

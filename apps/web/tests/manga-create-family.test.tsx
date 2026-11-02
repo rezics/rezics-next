@@ -254,6 +254,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     expect(within(authorB).queryByRole('heading', { name: title(volume, 'schema:position'), level: 4 })).toBeNull();
     expect(qualifierA.value).toBe('');
     await click(authorA, m.recipe_remove_field());
+    await click(authorA, m.recipe_remove_field());
     await click(authorB, m.recipe_remove_field());
     const language = await add(a, m.manga_publication(), 'schema:inLanguage', title(series, 'schema:inLanguage'));
     await replace(input(language, m.correction_value()), 'ja');
@@ -517,6 +518,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     const staleLink = host.querySelector<HTMLAnchorElement>(`a[href="#${staleRow.id}"]`)!;
     await act(async () => user.click(staleLink));
     expect(window.document.activeElement).toBe(stalePanel);
+    await click(stalePanel, m.recipe_remove_field());
     await click(stalePanel, m.recipe_remove_field());
     expect(host.querySelector(`#${staleRow.id}`)).toBeNull();
     await click(host, m.manga_title());
