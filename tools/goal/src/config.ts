@@ -687,33 +687,23 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       );
     },
     sweepWidth: async () => {
-      try {
-        await sweepWidthGovernor(db, inbox);
-      } finally {
-        // The same dispatch and cancel paths as `goal dispatch` and `goal cancel`, run in this process.
-        await sweepBacklog({
-          db,
-          stateDirectory: settings.stateDirectory,
-          inbox,
-          async dispatch(brief) {
-            const task = tasks.dispatch(brief, null);
-            if (task.state !== 'held')
-              void job.start(task.id, { expectedAttempt: 0 }).catch((error) =>
-                inbox.deliver({
-                  managerId: settings.integration.supermanager,
-                  kind: 'environment',
-                  taskId: task.id,
-                  summary: `Backlog start of task ${task.id} failed: ${String(error)}`
-                    .replace(/[\r\n]+/g, ' ')
-                    .slice(0, 1000),
-                }),
-              );
-            return task.id;
-          },
-          cancel: (taskId) => tasks.cancel(taskId),
-        });
-      }
+      await sweepWidthGovernor(db, inbox);
     },
+    // Runs in the host's single-flight `backlog dispatch` child: dispatch is synchronous Git and install work.
+    backlog: () =>
+      sweepBacklog({
+        db,
+        stateDirectory: settings.stateDirectory,
+        inbox,
+        async dispatch(brief) {
+          // The `goal dispatch` path. Its first start is a durable request that the host's sweep runs and follows,
+          // so this short-lived process never waits for host capacity or a worker.
+          const task = tasks.dispatch(brief, null);
+          if (task.state !== 'held') store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
+          return task.id;
+        },
+        cancel: (taskId) => tasks.cancel(taskId),
+      }),
     promote: () => promoteNow(),
     verify: () => verifyDev({ settings, store, inbox, runGate: verifierGate }),
     async evaluateFlow() {

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import {
   BACKLOG_WAKE_INTERVAL_MS,
   STOPPED_TASK_LIMIT_MS,
+  STOPPED_TASKS_PER_GOAL_PER_RUN,
   backlogStatus,
   formatBacklogStatus,
   sweepBacklog,
@@ -12,6 +13,7 @@ import {
 } from './backlog.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
+import { acquireDirectoryLease } from './lease.ts';
 import { WorkerStore } from './store.ts';
 import { temporaryDirectory } from './test-support.ts';
 
@@ -288,4 +290,56 @@ test('goal backlog status prints ready, dispatched and failed counts per Goal', 
   expect(table.code).toBe(0);
   expect(table.stdout.split('\n')[2]).toMatch(/^web\s+1\s+1\s+0$/);
   expect((await run('dispatch')).code).not.toBe(0);
+});
+
+test('stopped tasks are cancelled at most twenty per Goal per run, oldest first, with one event per owner', async () => {
+  const f = fixture({ workerCap: 0 });
+  const total = STOPPED_TASKS_PER_GOAL_PER_RUN + 5;
+  for (let index = 0; index < total; index++) {
+    const id = `web-${String(index).padStart(2, '0')}`;
+    task(f.db, id, 'stopped', { goal: 'web', manager: 'web', markdown: id }, index + 1);
+    // Later sequence numbers stopped earlier, so the oldest stop is not the first row.
+    event(f.db, id, 'stopped', NOW - STOPPED_TASK_LIMIT_MS - (index + 1) * 60_000);
+  }
+  task(f.db, 'search-1', 'stopped', { goal: 'search', manager: 'search', markdown: 'search' }, total + 1);
+  event(f.db, 'search-1', 'stopped', NOW - STOPPED_TASK_LIMIT_MS - 60_000);
+
+  const first = await sweepBacklog(f.runtime);
+
+  const web = first.expired.filter((entry) => entry.goal === 'web').map((entry) => entry.taskId);
+  expect(web).toHaveLength(STOPPED_TASKS_PER_GOAL_PER_RUN);
+  expect(web[0]).toBe(`web-${String(total - 1).padStart(2, '0')}`);
+  expect(web).not.toContain('web-00');
+  expect(first.expired.filter((entry) => entry.goal === 'search')).toHaveLength(1);
+  expect(f.inbox.pending('web')).toHaveLength(1);
+  expect(f.inbox.pending('web')[0]!.event.summary).toContain(`${STOPPED_TASKS_PER_GOAL_PER_RUN} task(s)`);
+  expect(f.inbox.pending('search')).toHaveLength(1);
+
+  const second = await sweepBacklog(f.runtime);
+  expect(second.expired.map((entry) => entry.taskId).sort()).toEqual([
+    'web-00',
+    'web-01',
+    'web-02',
+    'web-03',
+    'web-04',
+  ]);
+  expect(f.inbox.pending('web')).toHaveLength(2);
+});
+
+test('a run is single-flight: while another holds the backlog lease it does nothing', async () => {
+  const f = fixture();
+  brief(f.state, 'web', 'waits.md', 60_000);
+  const held = acquireDirectoryLease(join(f.state, 'leases', 'backlog'));
+  try {
+    expect(await sweepBacklog(f.runtime)).toMatchObject({ skipped: true, dispatched: [] });
+    expect(existsSync(join(f.state, 'backlog', 'web', 'waits.md'))).toBe(true);
+  } finally {
+    held.release();
+  }
+  expect((await sweepBacklog(f.runtime)).dispatched.map((entry) => entry.brief)).toEqual(['waits.md']);
+  // The brief's write time stays visible to turn accounting after the run moved it.
+  const row = f.db.query("SELECT last_written_at FROM backlog_goals WHERE goal='web'").get() as {
+    last_written_at: number;
+  };
+  expect(row.last_written_at).toBe(NOW - 60_000);
 });

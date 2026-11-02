@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { StdioAppServer, type Notification } from './app-server.ts';
@@ -571,6 +571,62 @@ test('more than ten clock.sleep calls in an hour raise one alarm and one correct
     s.advance(3_600_000);
     for (let index = 13; index <= 22; index++) await sleep(index);
     expect(s.inbox.pending('supervisor')).toHaveLength(1);
+  } finally {
+    await s.close();
+  }
+});
+
+test('a turn in which the manager writes or returns a backlog brief is not an empty turn', async () => {
+  const s = await setup();
+  try {
+    const spec = { ...s.spec, limits: { turns: 10, turnsWithoutDecision: 1, wallMs: 3_600_000 } };
+    const state = await s.managers.start(spec);
+    await s.managers.flush();
+    const backlog = join(s.path, 'state', 'backlog', 'refactor');
+    mkdirSync(join(backlog, 'failed'), { recursive: true });
+    const turn = async (id: string, work: () => void) => {
+      await s.notify({
+        method: 'turn/started',
+        params: { threadId: state.threadId, turn: { id, status: 'inProgress' } },
+      });
+      work();
+      await s.notify({
+        method: 'turn/completed',
+        params: { threadId: state.threadId, turn: { id, status: 'completed' } },
+      });
+    };
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: state.threadId, turn: { id: state.activeTurnId, status: 'completed' } },
+    });
+    expect(s.managers.get(state.id).turnsWithoutDecision).toBe(1);
+    // File times are wall-clock times: bring the host clock to the wall clock before each turn starts.
+    const sync = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      s.advance(Date.now() - s.services.now());
+    };
+    // A new brief written during the turn.
+    await sync();
+    await turn('write', () => writeFileSync(join(backlog, 'next.md'), 'Next brief\n'));
+    // A refused brief moved back from failed/: its modification time is old, its status time is new.
+    const returned = join(backlog, 'failed', 'returned.md');
+    writeFileSync(returned, 'Returned brief\n');
+    utimesSync(returned, 1, 1);
+    await sync();
+    await turn('return', () => renameSync(returned, join(backlog, 'returned.md')));
+    // A brief written during the turn that a backlog run already dispatched.
+    await sync();
+    await turn('dispatched', () => {
+      s.db.exec('CREATE TABLE IF NOT EXISTS backlog_goals (goal TEXT PRIMARY KEY, last_written_at INTEGER)');
+      s.db
+        .query('INSERT OR REPLACE INTO backlog_goals(goal, last_written_at) VALUES (?, ?)')
+        .run('refactor', Date.now());
+    });
+    expect(s.managers.get(state.id)).toMatchObject({ status: 'running', turnsWithoutDecision: 1 });
+    // Without a brief or a command the turn is still empty.
+    s.advance(60_000);
+    await turn('empty', () => {});
+    expect(s.managers.get(state.id).status).toBe('paused');
   } finally {
     await s.close();
   }

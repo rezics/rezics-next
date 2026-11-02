@@ -3,6 +3,7 @@ import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, wri
 import { basename, join } from 'node:path';
 import type { ManagerEvent, ManagerInbox } from './contracts.ts';
 import { migrate } from './db.ts';
+import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 
 /** A manager is woken when its Goal has fewer ready briefs than this. */
 export const BACKLOG_LOW_WATER = 4;
@@ -10,7 +11,9 @@ export const BACKLOG_LOW_WATER = 4;
 export const BACKLOG_WAKE_INTERVAL_MS = 60 * 60_000;
 /** A product task stopped this long without a manager action is cancelled into its Goal's failed backlog. */
 export const STOPPED_TASK_LIMIT_MS = 60 * 60_000;
-/** Dispatch runs synchronous Git and install work inside the host, so one sweep dispatches only a few briefs. */
+/** At most this many stopped tasks per Goal are cancelled in one run, oldest first, so owners get them in batches. */
+export const STOPPED_TASKS_PER_GOAL_PER_RUN = 20;
+/** Dispatch runs synchronous Git and install work, so one run dispatches only a few briefs and the next run continues. */
 export const BACKLOG_DISPATCHES_PER_SWEEP = 4;
 /** The same default worker cap as host-capacity admission when `<state>/capacity.json` sets none. */
 const DEFAULT_WORKER_CAP = 32;
@@ -27,6 +30,7 @@ export const backlogMigrations = [
     sql: `CREATE TABLE backlog_goals (
       goal TEXT PRIMARY KEY,
       last_dispatch_at INTEGER,
+      last_written_at INTEGER,
       low_wake_at INTEGER
     );`,
   },
@@ -38,7 +42,7 @@ export type BacklogRuntime = {
   db: Database;
   stateDirectory: string;
   inbox: ManagerInbox;
-  /** The `goal dispatch` path: create the task and start its first attempt. Returns the new task ID. */
+  /** The `goal dispatch` path: create the task and request its first attempt. Returns the new task ID. */
   dispatch(briefFile: string): Promise<string>;
   /** The `goal cancel` path. */
   cancel(taskId: string): Promise<void>;
@@ -49,6 +53,8 @@ export type BacklogRuntime = {
 };
 
 export type BacklogSweep = {
+  /** Another run held the backlog lease, so this one did nothing. */
+  skipped?: true;
   dispatched: { goal: string; taskId: string; brief: string }[];
   refused: { goal: string; brief: string; reason: string }[];
   expired: { goal: string; taskId: string }[];
@@ -210,7 +216,7 @@ function pickBriefs(runtime: BacklogRuntime, goals: string[], need: number, now:
       }[]
     ).map((row) => [row.goal, row.last_dispatch_at ?? 0]),
   );
-  // The Goal served longest ago goes first, so a sweep with one free slot does not always serve the same Goal.
+  // The Goal served longest ago goes first, so a run with one free slot does not always serve the same Goal.
   const queues = goals
     .map((goal) => ({ goal, files: briefs(backlogDirectory(runtime.stateDirectory, goal), now - SETTLE_MS) }))
     .filter((queue) => queue.files.length)
@@ -253,7 +259,9 @@ async function dispatchReady(
     const claimDirectory = join(goalDirectory, CLAIM_DIRECTORY);
     const claimed = join(claimDirectory, basename(pick.file));
     mkdirSync(claimDirectory, { recursive: true });
+    let written: number;
     try {
+      written = statSync(pick.file).mtimeMs;
       // The rename is the claim: a manager that moved the brief away in the meantime keeps it.
       renameSync(pick.file, claimed);
     } catch (error) {
@@ -276,15 +284,15 @@ async function dispatchReady(
     const target = join(goalDirectory, DISPATCHED_DIRECTORY);
     mkdirSync(target, { recursive: true });
     renameSync(claimed, join(target, `${taskId}-${basename(pick.file)}`));
+    // The write time lets turn accounting see a brief its manager wrote in a turn that the run already dispatched.
     runtime.db
       .query(
-        `INSERT INTO backlog_goals(goal, last_dispatch_at) VALUES (?, ?)
-        ON CONFLICT(goal) DO UPDATE SET last_dispatch_at = excluded.last_dispatch_at`,
+        `INSERT INTO backlog_goals(goal, last_dispatch_at, last_written_at) VALUES (?, ?, ?)
+        ON CONFLICT(goal) DO UPDATE SET last_dispatch_at = excluded.last_dispatch_at,
+          last_written_at = max(coalesce(last_written_at, 0), excluded.last_written_at)`,
       )
-      .run(pick.goal, (runtime.now ?? Date.now)());
+      .run(pick.goal, (runtime.now ?? Date.now)(), Math.floor(written));
     dispatched.push({ goal: pick.goal, taskId, brief: basename(pick.file) });
-    // Dispatch is synchronous Git and install work; let the host serve its socket between briefs.
-    await new Promise<void>((resolve) => setImmediate(resolve));
   }
   for (const [goal, entries] of refusedByGoal) notifyRefusals(runtime, goal, entries);
   return { dispatched, refused };
@@ -350,7 +358,8 @@ function blocker(db: Database, taskId: string, attempt: number): string {
 
 /**
  * A product task stopped for more than an hour without a manager action is cancelled; its brief and blocker go to
- * `backlog/<goal>/failed/`, and its owner receives one event per sweep. Control-plane and stabilize work is exempt.
+ * `backlog/<goal>/failed/`, and its owner receives one event per run. At most 20 per Goal go per run, longest stopped
+ * first; control-plane and stabilize work is exempt.
  */
 async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise<BacklogSweep['expired']> {
   const { db } = runtime;
@@ -362,6 +371,7 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
     .all() as StoppedRow[];
   const expired: BacklogSweep['expired'] = [];
   const byOwner = new Map<string, { goal: string; tasks: string[] }>();
+  const candidates: { row: StoppedRow; task: StoppedTask; goal: string; manager: string; since: number }[] = [];
   for (const row of rows) {
     let task: StoppedTask;
     try {
@@ -377,7 +387,13 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
     if (hasPendingRetry(db, task.id, row.current_attempt)) continue;
     const since = lastActivity(db, task, row.current_attempt);
     if (since === null || now - since <= STOPPED_TASK_LIMIT_MS) continue;
-
+    candidates.push({ row, task, goal, manager, since });
+  }
+  const perGoal = new Map<string, number>();
+  for (const { row, task, goal, manager, since } of candidates.sort((a, b) => a.since - b.since)) {
+    const count = perGoal.get(goal) ?? 0;
+    if (count >= STOPPED_TASKS_PER_GOAL_PER_RUN) continue;
+    perGoal.set(goal, count + 1);
     const failed = join(backlogDirectory(runtime.stateDirectory, goal), FAILED_DIRECTORY);
     const brief = join(failed, `${task.id}.md`);
     const reason = join(failed, `${task.id}.reason`);
@@ -467,14 +483,27 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
 }
 
 /**
- * One controller step, run from the width sweep: cancel stopped tasks past their limit, dispatch the oldest ready
- * briefs round-robin across Goals while active tasks are below the cap, and wake managers with a low backlog.
+ * One controller run, in a child process the manager host starts each minute: cancel stopped tasks past their
+ * limit, dispatch the oldest ready briefs round-robin across Goals while active tasks are below the cap, and wake
+ * managers with a low backlog.
  */
 export async function sweepBacklog(runtime: BacklogRuntime): Promise<BacklogSweep> {
-  migrate(runtime.db, backlogMigrations);
-  const now = (runtime.now ?? Date.now)();
-  const expired = await expireStoppedTasks(runtime, now);
-  const { dispatched, refused } = await dispatchReady(runtime, now);
-  const woken = wakeLowBacklogs(runtime, now);
-  return { dispatched, refused, expired, woken };
+  // One run at a time, across host restarts too: claim recovery assumes no other run holds a claim.
+  let lease;
+  try {
+    lease = acquireDirectoryLease(join(runtime.stateDirectory, 'leases', 'backlog'));
+  } catch (error) {
+    if (error instanceof LeaseHeldError) return { skipped: true, dispatched: [], refused: [], expired: [], woken: [] };
+    throw error;
+  }
+  try {
+    migrate(runtime.db, backlogMigrations);
+    const now = (runtime.now ?? Date.now)();
+    const expired = await expireStoppedTasks(runtime, now);
+    const { dispatched, refused } = await dispatchReady(runtime, now);
+    const woken = wakeLowBacklogs(runtime, now);
+    return { dispatched, refused, expired, woken };
+  } finally {
+    lease.release();
+  }
 }

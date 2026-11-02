@@ -1287,33 +1287,35 @@ the earlier one (see [shared inbox](#shared-inbox)). Paused, budget-limited and 
 #### Goal backlogs
 
 A manager's output is ready briefs; the controller dispatches them. Each Goal has a backlog directory,
-`<state>/backlog/<goal>/`, and the width sweep runs one backlog step after the width check:
+`<state>/backlog/<goal>/`. Every minute the manager host starts one backlog run, `goal backlog dispatch`, as a child
+process, like promotion: dispatch runs Git and dependency installation synchronously, which must never block the
+host's socket. The host skips the minute while the previous child is still running, and the run holds the
+`leases/backlog` lease, so only one run exists even across a host restart. Each run:
 
 - **Dispatch.** While running and ready tasks are fewer than the cap (`maxWorkers` in `<state>/capacity.json`, else
   32), the sweep dispatches up to four of the oldest `*.md` briefs, by modification time, round-robin across Goals,
-  starting with the Goal served longest ago. A brief changed in the last ten seconds waits for the next sweep. It uses
-  the `goal dispatch` path in the host process: the task is created, its first attempt starts without the sweep waiting
-  for it, and the brief moves to `dispatched/<task-id>-<name>.md`. Research briefs dispatch the same way. A refused
-  brief moves to `failed/<name>.md` beside `failed/<name>.reason`, and the Goal's manager receives one event per sweep
-  naming the refused briefs. A brief left in `.dispatching/` by a host that stopped mid-dispatch goes to `failed/` with
+  starting with the Goal served longest ago. A brief changed in the last ten seconds waits for the next run. It uses
+  the `goal dispatch` path to create the task and records its first start as a durable start request, which the host's
+  next orphan sweep runs and follows; the run itself never waits for host capacity or a worker. The brief moves to
+  `dispatched/<task-id>-<name>.md`. Research briefs dispatch the same way. A refused brief moves to `failed/<name>.md`
+  beside `failed/<name>.reason`, and the Goal's manager receives one event per run naming the refused briefs. A brief left in `.dispatching/` by a host that stopped mid-dispatch goes to `failed/` with
   that reason, since its task may already exist.
 - **Stopped tasks.** A product task that has been `stopped` for more than 60 minutes since its last event, with no
-  pending retry, is cancelled through the `goal cancel` path. Its brief is written to `failed/<task-id>.md` and its
-  blocker and branch to `failed/<task-id>.reason`; each owner receives one event per sweep listing those tasks.
-  Control-plane, stabilize and verification tasks are exempt.
+  pending retry, is cancelled through the `goal cancel` path, at most 20 per Goal per run, longest stopped first. Its
+  brief is written to `failed/<task-id>.md` and its blocker and branch to `failed/<task-id>.reason`; each owner
+  receives one event per run listing those tasks. Control-plane, stabilize and verification tasks are exempt.
 - **Low backlog.** A running Goal manager whose backlog holds fewer than four ready briefs receives at most one
   event an hour asking for more.
 
 `goal backlog status [--json]` prints ready, dispatched and failed brief counts per Goal. It reads only the
-directories.
+directories. The run's one-line JSON results are appended to `<state>/backlog-runner.log`.
 
-#### Cost: backlog step
+#### Cost: backlog run
 
 - **Touches:** one indexed count of running and ready tasks, the stopped tasks through the task-state index with one
   latest-event lookup each, the running manager rows, and the backlog directories' entries.
-- **Bound:** dispatch runs Git and dependency installation synchronously in the host, so a sweep dispatches at most
-  four briefs and yields to the socket between them; the stopped scan is proportional to stopped tasks, not task
-  history.
+- **Bound:** at most four dispatches and 20 cancellations per Goal per run, outside the host process; the stopped scan
+  is proportional to stopped tasks, not task history.
 
 ### Check result reuse
 
@@ -1448,7 +1450,10 @@ event is delivered, the host steers it into the manager's active turn or starts 
 the app-server has not loaded that thread, the host resumes it once and starts the turn there. The opening also states
 the manager's outputs (ready briefs in its backlog and decisions), the stopped-task hour, the message limits, and that
 the brief and continuation are read once per session. The host counts `clock.sleep` items per manager and UTC hour;
-the eleventh in an hour sends the supermanager one `environment` alarm and the manager one correction.
+the eleventh in an hour sends the supermanager one `environment` alarm and the manager one correction. For the
+turns-without-decision limit, a turn in which a ready brief in the Goal's backlog was written or moved back (by
+modification or status time), or a brief the backlog run dispatched was written, counts as a decision, as any
+control-plane command already does.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is
 a proposal: `manager complete <goal>` records the request and returns immediately while the host checks that all scoped
 tasks are merged and the main gate passes in an isolated checkout. The gate checks the main commit captured when it

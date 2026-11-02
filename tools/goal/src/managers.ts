@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -56,6 +56,8 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   turnsWithoutDecision: number;
   decision: boolean;
   countedTurn: string | null;
+  /** Host clock when the counted turn started; a backlog brief written since then is the turn's decision. */
+  turnStartedAt?: number;
   goalState: GoalState | null;
   usage: unknown;
   continuationAsked?: boolean;
@@ -427,6 +429,36 @@ export class ManagerSessions {
   private backlogPath(spec: ManagerSpec): string {
     return join(this.services.backlogDirectory ?? join(spec.cwd, '.temp', 'goal', 'backlog'), spec.goal);
   }
+  /** Whether a ready brief in the Goal's backlog was written or moved there since `since`, or dispatched from it. */
+  private backlogWrittenSince(spec: ManagerSpec, since: number): boolean {
+    const directory = this.backlogPath(spec);
+    for (const path of [directory, join(directory, '.dispatching')]) {
+      let names: string[];
+      try {
+        names = readdirSync(path, { withFileTypes: true })
+          .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+          .map((entry) => entry.name);
+      } catch {
+        continue;
+      }
+      for (const name of names) {
+        try {
+          // A rename back from failed/ keeps the modification time but changes the status time.
+          const stat = statSync(join(path, name));
+          if (Math.max(stat.mtimeMs, stat.ctimeMs) >= since) return true;
+        } catch {
+          // Dispatched or moved away meanwhile.
+        }
+      }
+    }
+    // The backlog run may already have dispatched a brief written in this turn; it records the brief's write time.
+    if (!this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'backlog_goals'").get())
+      return false;
+    const row = this.db.query('SELECT last_written_at FROM backlog_goals WHERE goal = ?').get(spec.goal) as {
+      last_written_at: number | null;
+    } | null;
+    return (row?.last_written_at ?? -1) >= since;
+  }
   private opening(spec: ManagerSpec, continuationFile?: string): string {
     return (
       `${spec.brief}\n\nYou manage Goal ${spec.goal}. Make decisions through the control plane. ` +
@@ -693,6 +725,7 @@ export class ManagerSessions {
       turnsWithoutDecision: _turnsWithoutDecision,
       decision: _decision,
       countedTurn: _countedTurn,
+      turnStartedAt: _turnStartedAt,
       goalState: _goalState,
       usage: _usage,
       history: _history,
@@ -800,6 +833,7 @@ export class ManagerSessions {
       state.turns++;
       state.decision = false;
       state.countedTurn = turn;
+      state.turnStartedAt = this.now();
     }
     state.activeTurnId = turn;
     this.db
@@ -822,6 +856,13 @@ export class ManagerSessions {
       .transaction(() => {
         if (state.activeTurnId !== turn) return;
         if (state.threadId && managerHasDecision(this.db, state.id, state.threadId, turn)) state.decision = true;
+        // Ready briefs are a manager's main output; writing one is a decision even without a control-plane command.
+        if (
+          !state.decision &&
+          state.turnStartedAt !== undefined &&
+          this.backlogWrittenSince(state, state.turnStartedAt)
+        )
+          state.decision = true;
         if (!state.decision) state.turnsWithoutDecision++;
         state.activeTurnId = null;
         this.save(state);
@@ -892,6 +933,7 @@ export class ManagerSessions {
         turnsWithoutDecision: _empty,
         decision: _decision,
         countedTurn: _counted,
+        turnStartedAt: _turnStarted,
         goalState: _goal,
         usage: _usage,
         history: _history,
