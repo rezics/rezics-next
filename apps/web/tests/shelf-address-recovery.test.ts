@@ -87,11 +87,11 @@ test('opaque cursors are bounded and stale recovery removes only the page cursor
     throw new Error('Native read must not start for an overlong cursor');
   });
   const client = { libraryEntries: { get } } as unknown as KernelClient;
-  await expect(readEntryPage(client, 'Bearer owner', 'x'.repeat(SHELF_CURSOR_MAX_LENGTH + 1), undefined)).rejects.toBeInstanceOf(
-    InvalidShelfAddressError,
-  );
-  await expect(readEntryPage(client, 'Bearer owner', undefined, undefined, undefined, undefined, 'schema:Book\n')).rejects.toBeInstanceOf(
-    InvalidShelfAddressError,
-  );
+  await expect(
+    readEntryPage(client, 'Bearer owner', 'x'.repeat(SHELF_CURSOR_MAX_LENGTH + 1), undefined),
+  ).rejects.toBeInstanceOf(InvalidShelfAddressError);
+  await expect(
+    readEntryPage(client, 'Bearer owner', undefined, undefined, undefined, undefined, 'schema:Book\n'),
+  ).rejects.toBeInstanceOf(InvalidShelfAddressError);
   expect(get).not.toHaveBeenCalled();
 });

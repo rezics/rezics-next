@@ -65,8 +65,7 @@ export function shelfAddressIssues(search: Record<string, unknown>): ShelfAddres
   if (supplied('type') && !libraryShelfType(search.type)) issues.push('type');
   if (supplied('state') && !libraryEntryStateWrite(typeof search.state === 'string' ? search.state : undefined))
     issues.push('state');
-  if (supplied('label') && !(typeof search.label === 'string' && routeId.test(search.label)))
-    issues.push('label');
+  if (supplied('label') && !(typeof search.label === 'string' && routeId.test(search.label))) issues.push('label');
   if (supplied('cursor') && !shelfCursor(search.cursor)) issues.push('cursor');
   return issues;
 }

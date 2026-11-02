@@ -1,8 +1,5 @@
 import { m } from '../paraglide/messages.js';
-import {
-  shelfAddressCorrectionHref,
-  type ShelfAddressField,
-} from './shelf-params';
+import { shelfAddressCorrectionHref, type ShelfAddressField } from './shelf-params';
 
 type AddressProps = {
   locale: string;
@@ -22,11 +19,7 @@ function fieldLabel(field: ShelfAddressField): string {
   }
 }
 
-export function ShelfAddressRecovery({
-  locale,
-  search,
-  issues,
-}: AddressProps & { issues: ShelfAddressField[] }) {
+export function ShelfAddressRecovery({ locale, search, issues }: AddressProps & { issues: ShelfAddressField[] }) {
   return (
     <section role="alert" className="space-y-3">
       <h1>{m.library_shelf_address_invalid_title()}</h1>
