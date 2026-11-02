@@ -1,10 +1,16 @@
-# Members preparation reservation (specification only)
+# Members preparation reservation
 
-[The interface](members-preparation.ts) specifies private episode reservation, read touch and the exact step
-admission boundary. Its factory constructs successfully; all three operations throw explicitly. Native cases
-must fail at those operations, never accept their errors as satisfied behavior. This is neither native product
-acceptance nor a freeze. No schema, SQL implementation, route, worker registration or ready member result is added.
-Contract review and native fixture evidence precede the independent bounded producer.
+[The interface](members-preparation.ts) now implements private episode reservation, read touch and exact step
+admission over the native header and owner-control tables. Reservation rechecks the current active curated owner,
+deduplicates exact canonical bytes, applies the 32-live-result quota and 24-hour idle expiry, and commits one
+locator-only workflow intent with each new episode. Touch uses current `collection:read` authorization and moves
+only the exact live episode's LRU timestamp. Step admission locks only its exact live episode under Core's active
+partition and owner fences.
+
+This slice does not establish Source currentness, result readiness, or disclosure authority. `source_identity` and
+`source_observation` remain unbound until the complete funded Source child and current physical authority are
+available. `readWorkDefinition` therefore returns `null` for these reservations, and the registered producer
+continues to fail with a typed unavailable outcome. This is not native result acceptance or a successful empty page.
 
 The authorities are [owner predicates](../../../../docs/library-owner-queries.md), the [Members GET
 exception](../../../../docs/dynamic-collections.md#model-and-identity), [filtered lists](../../../../docs/filtered-lists.md)
