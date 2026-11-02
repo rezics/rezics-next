@@ -12,7 +12,9 @@ export type ShelfOutcome = {
 
 /** A label command retains its original input and the entry identity, independently of entry-state keys. */
 export type ShelfLabelIntent = {
-  input: Extract<SubjectLabelMutationInput, { intent: 'assign' | 'unassign' | 'restore' }> & { intent: 'assign' | 'unassign' };
+  input: Extract<SubjectLabelMutationInput, { intent: 'assign' | 'unassign' | 'restore' }> & {
+    intent: 'assign' | 'unassign';
+  };
   operationId: string;
   labelName: string;
   entry: Pick<PersonalLibraryEntry, 'subjectId' | 'revision' | 'incarnationId' | 'changeKey' | 'removeKey'>;

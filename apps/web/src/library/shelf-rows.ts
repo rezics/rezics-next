@@ -146,9 +146,13 @@ export function useShelfRows(
   };
   const stateCurrent = guard(writeAdmitted, 'library_entry.put');
   const labelCurrent = guard(labelWriteAdmitted && labelListAdmitted, 'library_label.assign', 'library_label.list');
-  const labelRemoveCurrent = guard(labelRemoveAdmitted && labelListAdmitted && labelReadAdmitted,
-    'library_label.unassign', 'library_label.list', 'library_label.assignment_list');
-  const labelKindCurrent = (kind: ShelfLabelKind) => kind === 'assign' ? labelCurrent() : labelRemoveCurrent();
+  const labelRemoveCurrent = guard(
+    labelRemoveAdmitted && labelListAdmitted && labelReadAdmitted,
+    'library_label.unassign',
+    'library_label.list',
+    'library_label.assignment_list',
+  );
+  const labelKindCurrent = (kind: ShelfLabelKind) => (kind === 'assign' ? labelCurrent() : labelRemoveCurrent());
   const removeCurrent = guard(removeAdmitted, 'library_entry.delete');
   const restoreCurrent = guard(restoreAdmitted, 'library_entry.restore');
   const copiesCurrent = guard(copies, 'copy.list');
@@ -157,7 +161,12 @@ export function useShelfRows(
   const headers = () => shelfOrigin?.headers() ?? csrfHeaders();
   const versions = [
     shelfOrigin?.version('library_entry.put'),
-    shelfOrigin?.version('library_label.assign', 'library_label.list', 'library_label.unassign', 'library_label.assignment_list'),
+    shelfOrigin?.version(
+      'library_label.assign',
+      'library_label.list',
+      'library_label.unassign',
+      'library_label.assignment_list',
+    ),
     shelfOrigin?.version('library_entry.delete'),
   ];
   const previousVersions = useRef(versions);
@@ -322,13 +331,18 @@ export function useShelfRows(
     return { status: 'unknown' };
   };
 
-  const selectable = (entry: PersonalLibraryEntry) => selectableEntry(entry) ||
-    (entry.subject !== null && (labelCurrent() || labelRemoveCurrent()));
+  const selectable = (entry: PersonalLibraryEntry) =>
+    selectableEntry(entry) || (entry.subject !== null && (labelCurrent() || labelRemoveCurrent()));
   const eligible = rows.filter((row) => selectable(row.entry));
   const selectedRows = rows.filter((row) => selected.includes(row.entry.subjectId) && selectable(row.entry));
   const commonStates = commonShelfStates(selectedRows.map((row) => row.entry));
   const select = (subjectId: string, value: boolean) => {
-    if (!isCurrent() || (busy.current && !labelOperation.current?.running) || !eligible.some((row) => row.entry.subjectId === subjectId)) return;
+    if (
+      !isCurrent() ||
+      (busy.current && !labelOperation.current?.running) ||
+      !eligible.some((row) => row.entry.subjectId === subjectId)
+    )
+      return;
     setSelected((current) =>
       value
         ? current.includes(subjectId) || current.length >= shelfSelectionLimit
@@ -415,14 +429,22 @@ export function useShelfRows(
     }
   };
 
-  const recordLabel = (operationId: string, subjectId: string, result: Pick<ShelfLabelOutcome, 'status' | 'reason'>) => {
+  const recordLabel = (
+    operationId: string,
+    subjectId: string,
+    result: Pick<ShelfLabelOutcome, 'status' | 'reason'>,
+  ) => {
     if (!isCurrent() || labelOperation.current?.id !== operationId) return;
-    setLabelOutcomes((current) => current.map((outcome) =>
-      outcome.subjectId === subjectId ? { subjectId, title: outcome.title, ...result } : outcome,
-    ));
+    setLabelOutcomes((current) =>
+      current.map((outcome) =>
+        outcome.subjectId === subjectId ? { subjectId, title: outcome.title, ...result } : outcome,
+      ),
+    );
   };
   const mutateLabel = async (intent: ShelfLabelIntent): Promise<Pick<ShelfLabelOutcome, 'status' | 'reason'>> => {
-    const current = () => isCurrent() && labelKindCurrent(intent.input.intent === 'assign' ? 'assign' : 'unassign') &&
+    const current = () =>
+      isCurrent() &&
+      labelKindCurrent(intent.input.intent === 'assign' ? 'assign' : 'unassign') &&
       labelOperation.current?.id === intent.operationId;
     const row = currentRows.current.find((item) => item.entry.subjectId === intent.input.subjectId);
     if (!current() || !row || row.unknownIntent || row.unknownRemove) return { status: 'not-attempted' };
@@ -434,8 +456,13 @@ export function useShelfRows(
     try {
       const result = await mutateSubjectLabelAction({ data: intent.input, headers: headers() });
       if (!current()) return { status: 'unknown' };
-      if (result.ok && result.assignment?.id && Number.isSafeInteger(result.assignment.revision) && result.assignment.revision > 0 &&
-          (intent.input.intent === 'assign' || result.assignment.id === intent.input.assignmentId)) {
+      if (
+        result.ok &&
+        result.assignment?.id &&
+        Number.isSafeInteger(result.assignment.revision) &&
+        result.assignment.revision > 0 &&
+        (intent.input.intent === 'assign' || result.assignment.id === intent.input.assignmentId)
+      ) {
         patch(intent.input.subjectId, (value) => {
           const next = { ...value };
           delete next.unknownLabelIntent;
@@ -460,25 +487,34 @@ export function useShelfRows(
     }
     return { status: 'unknown' };
   };
-  const selectionIdentity = (entries: ShelfRow[], ids: string[]) => JSON.stringify(
-    entries.filter((row) => ids.includes(row.entry.subjectId)).map((row) => captureShelfLabelEntry(row.entry)),
-  );
+  const selectionIdentity = (entries: ShelfRow[], ids: string[]) =>
+    JSON.stringify(
+      entries.filter((row) => ids.includes(row.entry.subjectId)).map((row) => captureShelfLabelEntry(row.entry)),
+    );
   const labelSelectionIdentity = selectionIdentity(rows, selected);
   const captureLabel = (kind: ShelfLabelKind = 'assign') => {
     const expected = labelSelectionIdentity;
-    return () => labelKindCurrent(kind) && expected === selectionIdentity(currentRows.current, currentSelection.current);
+    return () =>
+      labelKindCurrent(kind) && expected === selectionIdentity(currentRows.current, currentSelection.current);
   };
   const assignSelectedLabel = async (label: LibraryLabelSummary, kind: ShelfLabelKind = 'assign') => {
     if (!captureLabel(kind)()) return;
     const targets = currentRows.current.filter((row) => currentSelection.current.includes(row.entry.subjectId));
-    if (!targets.length || targets.length > shelfSelectionLimit || currentRows.current.some((row) => row.unknownLabelIntent) ||
-        targets.some((row) => row.unknownIntent || row.unknownRemove || row.entry.subject === null)) return;
+    if (
+      !targets.length ||
+      targets.length > shelfSelectionLimit ||
+      currentRows.current.some((row) => row.unknownLabelIntent) ||
+      targets.some((row) => row.unknownIntent || row.unknownRemove || row.entry.subject === null)
+    )
+      return;
     const release = lock(() => labelKindCurrent(kind));
     if (!release) return;
     const operation = { id: crypto.randomUUID(), running: true };
     labelOperation.current = operation;
     const request = {
-      id: operation.id, kind, label: { id: label.id, name: label.name },
+      id: operation.id,
+      kind,
+      label: { id: label.id, name: label.name },
       targets: targets.map(({ entry }) => ({
         entry: captureShelfLabelEntry(entry),
         title: entry.subject ? displayLibraryTitle(entry.subject.label, locale).text : m.library_subject_unavailable(),
@@ -487,7 +523,9 @@ export function useShelfRows(
     const current = () => labelOperation.current === operation && isCurrent() && labelKindCurrent(kind);
     setAssignedLabelName(request.label.name);
     setLabelKind(kind);
-    setLabelOutcomes(request.targets.map(({ entry, title }) => ({ subjectId: entry.subjectId, title, status: 'not-attempted' })));
+    setLabelOutcomes(
+      request.targets.map(({ entry, title }) => ({ subjectId: entry.subjectId, title, status: 'not-attempted' })),
+    );
     try {
       await executeShelfLabelRequest(request, {
         isCurrent: current,
@@ -497,8 +535,14 @@ export function useShelfRows(
             const read = await readShelfLabelAssignment({ data: { subjectId, labelId } });
             const viewer = shelfOrigin ? shelfOrigin.viewer() : session.subject;
             if (read.state === 'signed-out') return { ok: false, reason: 'signed-out' };
-            if (!current() || read.state !== 'loaded' || read.provenance.viewer !== viewer ||
-                !read.provenance.csrfToken || read.provenance.subjectId !== subjectId || read.provenance.labelId !== labelId)
+            if (
+              !current() ||
+              read.state !== 'loaded' ||
+              read.provenance.viewer !== viewer ||
+              !read.provenance.csrfToken ||
+              read.provenance.subjectId !== subjectId ||
+              read.provenance.labelId !== labelId
+            )
               return { ok: false, reason: 'unavailable' };
             return { ok: true, assignment: read.assignment };
           } catch {
@@ -516,7 +560,15 @@ export function useShelfRows(
   const retryLabel = async (subjectId: string) => {
     const row = currentRows.current.find((item) => item.entry.subjectId === subjectId);
     const intent = row?.unknownLabelIntent;
-    if (!row || !intent || row.unknownIntent || row.unknownRemove || !matchesShelfLabelIntent(row.entry, intent) || labelOperation.current?.id !== intent.operationId) return;
+    if (
+      !row ||
+      !intent ||
+      row.unknownIntent ||
+      row.unknownRemove ||
+      !matchesShelfLabelIntent(row.entry, intent) ||
+      labelOperation.current?.id !== intent.operationId
+    )
+      return;
     const kind = intent.input.intent === 'assign' ? 'assign' : 'unassign';
     const release = lock(() => labelKindCurrent(kind));
     if (!release) return;
@@ -653,7 +705,12 @@ export function useShelfRows(
     labelRemoveAdmitted: labelRemoveCurrent(),
     labelWriteAdmitted: labelCurrent(),
     captureLabel,
-    labelVersion: shelfOrigin?.version('library_label.assign', 'library_label.list', 'library_label.unassign', 'library_label.assignment_list'),
+    labelVersion: shelfOrigin?.version(
+      'library_label.assign',
+      'library_label.list',
+      'library_label.unassign',
+      'library_label.assignment_list',
+    ),
     labelEpoch: shelfOrigin?.epoch?.(
       'library_entry.list',
       'progress_session.list',

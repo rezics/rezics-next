@@ -52,7 +52,7 @@ export const readShelfLabelAssignment = createServerFn({ method: 'GET' })
     const { readSubjectSlotSession } = await import('./subject-slot');
     const identity = await readSubjectSlotSession(getRequest(), env as Partial<SessionEnv>);
     if (identity.state !== 'signed-in')
-      return { state: identity.state === 'signed-out' ? 'signed-out' as const : 'unavailable' as const };
+      return { state: identity.state === 'signed-out' ? ('signed-out' as const) : ('unavailable' as const) };
     const provenance = { viewer: identity.subject, csrfToken: identity.csrfToken, ...data };
     try {
       const { readSubjectLabelAssignments } = await import('./subject-labels.ts');

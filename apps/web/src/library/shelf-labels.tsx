@@ -43,7 +43,16 @@ export function ShelfLabelAction({ controls, kind = 'assign' }: { controls: Cont
   const selected = controls.selected.join(':');
   const searchScope = useMemo(
     () => ({}),
-    [open, query, session.state, session.subject, controls.labelVersion, selected, controls.labelSelectionIdentity, kind],
+    [
+      open,
+      query,
+      session.state,
+      session.subject,
+      controls.labelVersion,
+      selected,
+      controls.labelSelectionIdentity,
+      kind,
+    ],
   );
   const scope = useMemo(
     () => ({ active: true, current: controls.captureLabel(kind) }),
@@ -157,7 +166,9 @@ export function ShelfLabelAction({ controls, kind = 'assign' }: { controls: Cont
         <DialogContent showCloseButton={false} className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{heading}</DialogTitle>
-            <DialogDescription>{removing ? m.library_selected_labels_remove_description() : m.library_selected_labels_description()}</DialogDescription>
+            <DialogDescription>
+              {removing ? m.library_selected_labels_remove_description() : m.library_selected_labels_description()}
+            </DialogDescription>
           </DialogHeader>
           <label className="grid min-w-0 gap-1 text-sm font-medium">
             {m.library_selected_labels_search()}
@@ -300,7 +311,11 @@ export function ShelfLabelOutcomes({ controls }: { controls: Controls }) {
   return (
     <section aria-label={m.library_selected_labels_results()} className="space-y-2 rounded-lg border p-3 text-sm">
       <p className="break-words">{m.library_selected_labels_result_name({ name: controls.assignedLabelName })}</p>
-      <p>{controls.labelKind === 'unassign' ? m.library_selected_labels_remove_partial() : m.library_selected_labels_partial()}</p>
+      <p>
+        {controls.labelKind === 'unassign'
+          ? m.library_selected_labels_remove_partial()
+          : m.library_selected_labels_partial()}
+      </p>
       <dl role="status" className="flex flex-wrap gap-x-4 gap-y-1">
         {Object.entries(outcomeLabels).map(([status, label]) => (
           <div key={status} className="flex gap-1">
@@ -321,25 +336,41 @@ export function ShelfLabelOutcomes({ controls }: { controls: Controls }) {
                   ? m.library_subject_label_capacity()
                   : outcome.reason === 'closed'
                     ? m.library_subject_label_closed()
-                    : outcome.reason === 'signed-out' ? m.library_sign_in() : m.library_subject_label_unavailable()}
+                    : outcome.reason === 'signed-out'
+                      ? m.library_sign_in()
+                      : m.library_subject_label_unavailable()}
               </span>
             ) : null}
             {outcome.status === 'conflicted' ? <span>{m.library_selected_labels_conflict()}</span> : null}
             {outcome.status === 'unknown' ? (
               <>
-                <span>{controls.labelKind === 'unassign' ? m.library_selected_labels_remove_unknown() : m.library_selected_labels_unknown()}</span>
-                {!controls.canRetryLabel(outcome.subjectId) ? <span>{m.library_selected_labels_changed_recovery()}</span> : null}
+                <span>
+                  {controls.labelKind === 'unassign'
+                    ? m.library_selected_labels_remove_unknown()
+                    : m.library_selected_labels_unknown()}
+                </span>
+                {!controls.canRetryLabel(outcome.subjectId) ? (
+                  <span>{m.library_selected_labels_changed_recovery()}</span>
+                ) : null}
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={controls.pending || !controls.canRetryLabel(outcome.subjectId) || !(controls.labelKind === 'unassign' ? controls.labelRemoveAdmitted : controls.labelWriteAdmitted)}
+                  disabled={
+                    controls.pending ||
+                    !controls.canRetryLabel(outcome.subjectId) ||
+                    !(controls.labelKind === 'unassign' ? controls.labelRemoveAdmitted : controls.labelWriteAdmitted)
+                  }
                   onClick={() => void controls.retryLabel(outcome.subjectId)}
-                  aria-label={(controls.labelKind === 'unassign' ? m.library_selected_labels_remove_retry_title : m.library_selected_labels_retry_title)({
+                  aria-label={(controls.labelKind === 'unassign'
+                    ? m.library_selected_labels_remove_retry_title
+                    : m.library_selected_labels_retry_title)({
                     title: outcome.title,
                     name: controls.assignedLabelName,
                   })}
                 >
-                  {controls.labelKind === 'unassign' ? m.library_selected_labels_remove_retry() : m.library_selected_labels_retry()}
+                  {controls.labelKind === 'unassign'
+                    ? m.library_selected_labels_remove_retry()
+                    : m.library_selected_labels_retry()}
                 </Button>
               </>
             ) : null}

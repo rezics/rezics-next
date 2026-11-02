@@ -229,7 +229,11 @@ function Updated({ entry, locale }: { entry: PersonalLibraryEntry; locale: strin
   return <RelativeTime value={entry.lastActivityAt ?? entry.updatedAt} locale={locale} timeZone="UTC" />;
 }
 function selectionProps(entry: PersonalLibraryEntry, controls: Controls) {
-  if ((!controls.writeAdmitted && !controls.labelWriteAdmitted && !controls.labelRemoveAdmitted) || !controls.hydrated || !controls.selectable(entry))
+  if (
+    (!controls.writeAdmitted && !controls.labelWriteAdmitted && !controls.labelRemoveAdmitted) ||
+    !controls.hydrated ||
+    !controls.selectable(entry)
+  )
     return {};
   if (!controls.selected.length) return { onSelect: () => controls.select(entry.subjectId, true) };
   return {
@@ -246,7 +250,11 @@ function SelectionBar({ controls }: { controls: Controls }) {
   const eligible = controls.rows.some((row) => controls.selectable(row.entry));
   if (!controls.selected.length)
     return eligible ? (
-      <Button variant="outline" disabled={!controls.hydrated || controls.selectionPending} onClick={controls.selectPage}>
+      <Button
+        variant="outline"
+        disabled={!controls.hydrated || controls.selectionPending}
+        onClick={controls.selectPage}
+      >
         {m.library_selection_page()}
       </Button>
     ) : null;
