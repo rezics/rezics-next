@@ -27,6 +27,7 @@ export type OmittedGrowthProfileCheck = Readonly<{
   occurrence: number;
   missingRuns: readonly string[];
   scalesByRun: readonly Readonly<{ run: string; scales: readonly number[] }>[];
+  incompatibleBoundsByRun?: readonly Readonly<{ run: string; bounds: GrowthProfileBounds }>[];
 }>;
 
 export type NonGrowingRelation = Readonly<{
@@ -245,8 +246,20 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
       ({ scales }) =>
         scales.length === referenceScales.length && scales.every((scale, index) => scale === referenceScales[index]),
     );
-    if (missingRuns.length > 0 || !scalesMatch) {
-      omitted.push({ file: first.file, check: first.check, occurrence: first.occurrence, missingRuns, scalesByRun });
+    const boundsMatch = group.every(({ bounds }) =>
+      GROWTH_PROFILE_METRICS.every((metric) => bounds[metric] === first.bounds[metric]),
+    );
+    if (missingRuns.length > 0 || !scalesMatch || !boundsMatch) {
+      omitted.push({
+        file: first.file,
+        check: first.check,
+        occurrence: first.occurrence,
+        missingRuns,
+        scalesByRun,
+        ...(boundsMatch
+          ? {}
+          : { incompatibleBoundsByRun: group.map(({ run, bounds }) => ({ run, bounds })) }),
+      });
       continue;
     }
     complete.push(

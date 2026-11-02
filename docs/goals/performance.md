@@ -54,7 +54,9 @@ Measure at three scales, such as 1×, 8× and 64×, against constant, logarithmi
 before implementation. Include native examined work, not only call counts. Observe projection/worker work within
 its operation context and report independent background work separately without allowing its per-statement cost to
 grow with scale. Use [verification](../development/verification.md) for targeted admission, diagnostic reruns,
-root typecheck and promoted evidence. Document failures by algorithm, fixture or classifier ownership.
+root typecheck and promoted evidence. Repeated-run calibration combines a check occurrence only when declared bounds
+match across runs; incompatible declarations remain visible with their run names. Document failures by algorithm,
+fixture or classifier ownership.
 
 ## External conditions
 

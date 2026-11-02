@@ -188,6 +188,27 @@ test('repeated same-named checks get separate calibration occurrences', () => {
   ]);
 });
 
+test('different declared bounds omit a check and identify each run declaration', () => {
+  const read = readGrowthProfiles([
+    { name: 'run-1', text: profileLine({ check: 'different bounds' }) },
+    {
+      name: 'run-2',
+      text: profileLine({ check: 'different bounds' }).replace('"rows":"constant"', '"rows":"linear"'),
+    },
+  ]);
+
+  expect(read.series.rows).toEqual([]);
+  expect(read.omitted[0]).toMatchObject({
+    file: 'test/search/growth-example.test.ts',
+    check: 'different bounds',
+    occurrence: 1,
+    incompatibleBoundsByRun: [
+      { run: 'run-1', bounds: { rows: 'constant' } },
+      { run: 'run-2', bounds: { rows: 'linear' } },
+    ],
+  });
+});
+
 test('invalid profile lines identify the run and line', () => {
   expect(() => readGrowthProfiles([{ name: 'bad-run', text: '{not json}\n' }])).toThrow('bad-run:1 is not valid JSON');
 });

@@ -584,6 +584,8 @@ Set `GROWTH_PROFILE` to a file inside the workspace to collect profiles on local
 runs forward its workspace-relative path and return the file with the result; earlier local lines are retained when the
 returned profile is merged. The `GROWTH_PROFILE` JSON line includes `statements`, with each scale's complete statement list and median rows,
 blocks and count across measured repetitions.
+Calibration combines a file/check/occurrence only when every run declares the same growth bounds and scales; omitted
+checks with differing bounds report each run and its declaration.
 
 Each measured repetition starts from a settled state. Warm-ups and repetitions may write rows, including through
 triggers; the harness settles every relation written by the previous run before measuring the next one. Checks should
