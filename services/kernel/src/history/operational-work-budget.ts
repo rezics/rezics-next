@@ -169,8 +169,21 @@ export function operationalWorkDeadlineClient(client: PoolClient, deadline: numb
   };
 }
 export type OperationalWorkOriginal = Readonly<{ pool: Pool; deadline: number; workClient?: WorkClient }>;
-type Balance = { remaining: OperationalWorkCost; attempts: number; claimed: boolean };
+const CHILD_PRICES = Object.freeze({
+  registration: OPERATIONAL_WORK_REGISTRATION,
+  ...OPERATIONAL_WORK_TRANSFER_COST,
+  attempt: OPERATIONAL_WORK_COST.attempt,
+});
+type FundedPhase = keyof typeof CHILD_PRICES;
+/** Already allocated children of one caller original. Retry is additional work, never a refill. */
+export type OperationalWorkChildren = Readonly<Record<FundedPhase | 'retry', NativeCollectionWork>>;
+type Balance = { claimed: boolean } &
+  (
+    | { kind: 'local'; remaining: OperationalWorkCost; attempts: number }
+    | { kind: 'children'; children: OperationalWorkChildren; used: Set<FundedPhase> }
+  );
 const originals = new WeakMap<OperationalWorkOriginal, Balance>();
+const fundedChildren = new WeakSet<NativeCollectionWork>();
 const transactionOriginals = new WeakMap<OperationalTransaction, OperationalWorkOriginal>();
 export function attachOperationalWorkOriginal(tx: OperationalTransaction, original: OperationalWorkOriginal): void {
   const resources = currentOperationalResources(tx);
@@ -188,7 +201,7 @@ export function openOperationalWorkOriginal(pool: Pool, deadline: number): Opera
   if (!Number.isFinite(deadline) || Date.now() >= deadline)
     throw new OperationalWorkUnavailable('operational-work-deadline');
   const original = Object.freeze({ pool, deadline });
-  originals.set(original, { remaining: OPERATIONAL_WORK_LOCAL_DECLARATION, attempts: 0, claimed: false });
+  originals.set(original, { kind: 'local', remaining: OPERATIONAL_WORK_LOCAL_DECLARATION, attempts: 0, claimed: false });
   return original;
 }
 /** Trusted parent composition: the complete History child, including retries, transfers and rollback,
@@ -204,7 +217,45 @@ export function fundOperationalWorkOriginal(
   reservation.dispatch();
   reservation.settle();
   const original = Object.freeze({ pool, workClient, deadline });
-  originals.set(original, { remaining: OPERATIONAL_WORK_LOCAL_DECLARATION, attempts: 0, claimed: false });
+  originals.set(original, { kind: 'local', remaining: OPERATIONAL_WORK_LOCAL_DECLARATION, attempts: 0, claimed: false });
+  return original;
+}
+/** Bind the native executor to prepaid caller children without creating a balance from a subtotal.
+ * No I/O or charge occurs here. Each phase dispatches its exported price before its native work;
+ * failed prefixes retain that charge. Additional attempts use only the original retry allocation.
+ * The native executor keeps its absolute deadline policy, with no additional attempt-count cap.
+ */
+export function fundOperationalWorkChildren(
+  children: OperationalWorkChildren,
+  pool: Pool,
+  workClient: WorkClient,
+  deadline: number,
+): OperationalWorkOriginal {
+  if (!Number.isFinite(deadline) || Date.now() >= deadline)
+    throw new OperationalWorkUnavailable('operational-work-deadline');
+  const names = [...Object.keys(CHILD_PRICES), 'retry'] as (keyof OperationalWorkChildren)[];
+  const snapshot = Object.create(null) as Record<keyof OperationalWorkChildren, NativeCollectionWork>;
+  const unique = new Set<NativeCollectionWork>();
+  // Validate the entire binding before marking any child consumed. No partial binding on refusal.
+  for (const name of names) {
+    const child = Object.hasOwn(children, name) ? children[name] : undefined;
+    if (!child || unique.has(child) || fundedChildren.has(child) || child.deadlineAt !== deadline)
+      throw new OperationalWorkUnavailable('operational-work-native-funding-unavailable');
+    child.assertReady();
+    const price = name === 'retry' ? undefined : CHILD_PRICES[name];
+    if (price && OPERATIONAL_WORK_AXES.some((axis) => child.available(axis) < price[axis]))
+      throw new OperationalWorkUnavailable('operational-work-native-funding-unavailable');
+    snapshot[name] = child;
+    unique.add(child);
+  }
+  for (const child of unique) fundedChildren.add(child);
+  const original = Object.freeze({ pool, workClient, deadline });
+  originals.set(original, {
+    kind: 'children',
+    children: Object.freeze(snapshot),
+    used: new Set(),
+    claimed: false,
+  });
   return original;
 }
 /** Executor entry, before time, Access, checkout or BEGIN. Contention retains this same original. */
@@ -228,7 +279,24 @@ export function claimOperationalWorkOriginal(
   return original;
 }
 export function debitOperationalWork(original: OperationalWorkOriginal, amount: OperationalWorkCost): void {
+  debitPhase(original, 'registration', amount);
+}
+function debitPhase(original: OperationalWorkOriginal, phase: FundedPhase, amount: OperationalWorkCost): void {
   const balance = originals.get(original);
+  if (balance?.kind === 'children') {
+    if (
+      !balance.claimed ||
+      Date.now() >= original.deadline ||
+      OPERATIONAL_WORK_AXES.some((axis) => amount[axis] !== CHILD_PRICES[phase][axis])
+    )
+      throw new OperationalWorkUnavailable('operational-work-native-funding-unavailable');
+    const child = balance.children[balance.used.has(phase) ? 'retry' : phase];
+    const reservation = child.reserve(amount);
+    reservation.dispatch();
+    reservation.settle();
+    balance.used.add(phase);
+    return;
+  }
   if (
     !balance ||
     Date.now() >= original.deadline ||
@@ -243,6 +311,10 @@ export function debitOperationalWork(original: OperationalWorkOriginal, amount: 
 }
 export function debitOperationalWorkAttempt(original: OperationalWorkOriginal): void {
   const balance = originals.get(original);
+  if (balance?.kind === 'children') {
+    debitPhase(original, 'attempt', OPERATIONAL_WORK_COST.attempt);
+    return;
+  }
   if (!balance || ++balance.attempts > 3)
     throw new OperationalWorkUnavailable('operational-work-original-attempt-bound');
   debitOperationalWork(original, OPERATIONAL_WORK_COST.attempt);
@@ -276,7 +348,7 @@ export function issueOperationalWorkTransfer(
   const issued = byTransaction.get(tx) ?? new Set<OperationalWorkTransfer>();
   if ([...issued].some((token) => transfers.get(token)?.phase === phase))
     throw new TypeError('Operational work phase already transferred');
-  debitOperationalWork(original, OPERATIONAL_WORK_TRANSFER_COST[phase]);
+  debitPhase(original, phase, OPERATIONAL_WORK_TRANSFER_COST[phase]);
   const token = Object.freeze({}) as OperationalWorkTransfer;
   transfers.set(token, { original, phase, custodyId, state: 'live', used: false });
   issued.add(token);

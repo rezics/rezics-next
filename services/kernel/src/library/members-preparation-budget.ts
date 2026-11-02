@@ -1,5 +1,8 @@
 import { ProblemError } from '../http/problem.ts';
+import type { Pool } from 'pg';
+import type { WorkClient } from '../work/client.ts';
 import {
+  fundOperationalWorkChildren,
   OPERATIONAL_WORK_AXES,
   OPERATIONAL_WORK_COST,
   OPERATIONAL_WORK_REGISTRATION,
@@ -116,6 +119,33 @@ export function transferMembersPreparationBudget(
 }
 
 export type MembersPreparationBudgets = Readonly<Record<MembersPreparationChild, NativeCollectionWork>>;
+
+/** Prepaid native History receiver for the exact Pool, WorkClient and original deadline.
+ * Use inside runFundedMembersPreparation, before reserve or any Source work. Registration and
+ * every transfer consume their own exported prices; native retries cannot borrow siblings.
+ * This original establishes accounting, never Source currentness or durable result authority.
+ */
+export function fundMembersPreparationHistory(
+  children: MembersPreparationBudgets,
+  pool: Pool,
+  workClient: WorkClient,
+) {
+  return fundOperationalWorkChildren(
+    {
+      registration: children.historyRegistration,
+      receive: children.receivingReadback,
+      resolve: children.historyResolve,
+      verify: children.historyVerify,
+      replay: children.historyReplay,
+      retirement: children.historyRetirement,
+      attempt: children.executor,
+      retry: children.retry,
+    },
+    pool,
+    workClient,
+    children.members.deadlineAt,
+  );
+}
 
 /** Execute within the caller's original C3 balance, never a ledger made from our local subtotal.
  * All owner declarations and the whole transfer must succeed before either callback can run.

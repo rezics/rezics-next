@@ -173,8 +173,14 @@ Current implementation evidence is narrower than the capability:
   require combined native verification; source typing does not certify those outcomes.
 - Members preparation's private [C3 parent composition](members-preparation-contract.md#cost-and-required-native-evidence)
   transfers the complete declared children from one caller ledger, including constant History registration and
-  receiving. This allocation seam requires explicit owner declarations; native producer/dispatch integration and
-  useful prepared pages remain required. Neither its budget nor a retained locator grants Source authority.
+  receiving. `fundMembersPreparationHistory` binds those children to the native History original, Pool, WorkClient
+  and unchanged deadline. Each native phase consumes its exported price; repeated phases consume only the original
+  retry child, including failed prefixes. The legacy standalone History original retains its three-attempt limit.
+  Decision: the composed Members original uses finite declared retry capacity and the native deadline without an
+  additional attempt-count limit. This allocation seam requires explicit owner declarations; native producer/dispatch
+  integration and useful prepared pages remain required. Neither its budget nor a retained locator grants Source
+  authority. The Source declaration/receiver, final native physical verification, bounded result/frontier storage,
+  completed readback and coordinated cleanup remain integration work; the runtime stays unmounted.
 - `command/operational.ts` and [Core's frozen contract](../command/README.md#operational-transactions) now provide
   the Accounts-owned additive event-free fenced transaction and same-client DBOS intent in source. Library's
   consumer/preparation/native custody implementation remains required pending; this is no readiness receipt.

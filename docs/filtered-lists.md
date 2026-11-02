@@ -407,7 +407,10 @@ Let `s` be the output slots of one read (`1 ≤ s ≤ 100`), `R` the distinct re
 
    Members preparation transfers all disjoint child reservations from one finite parent before checkout;
    each child's unused capacity stays held until the whole group finishes. Missing declarations remain
-   unavailable; accounting completion alone establishes neither current Source authority nor a prepared result.
+   unavailable. Its native History adapter consumes registration, receiving and transfer prices from those
+   children, with repeated phases charged to the original finite retry child under the unchanged deadline.
+   Accounting completion alone establishes neither current Source authority nor a prepared result; the complete
+   Source producer and bounded result/readback integration remain required before mounting the runtime.
 
 5. **Authority.** These numbers are ceilings for admission and checks. Performance changes a number only from
    capture evidence; an owner needing more sends Performance the capture.

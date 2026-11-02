@@ -3,9 +3,12 @@ import type { Pool } from 'pg';
 import type { WorkClient } from '../../src/work/client.ts';
 import {
   claimOperationalWorkOriginal,
+  debitOperationalWork,
   debitOperationalWorkAttempt,
   fundOperationalWorkOriginal,
+  OPERATIONAL_WORK_COST,
   OPERATIONAL_WORK_LOCAL_DECLARATION,
+  OPERATIONAL_WORK_REGISTRATION,
   sumOperationalWork,
 } from '../../src/history/operational-work-budget.ts';
 import { ProblemError } from '../../src/http/problem.ts';
@@ -14,6 +17,7 @@ import { NativeCollectionWork } from '../../src/library/collection-source-work.t
 import {
   MEMBERS_PREPARATION_CHILDREN,
   declareMembersPreparationParent,
+  fundMembersPreparationHistory,
   runFundedMembersPreparation,
   transferMembersPreparationBudget,
   type MembersPreparationDeclarations,
@@ -354,4 +358,67 @@ test('already funded rollback and cleanup survive expiry and retain dispatched p
   } finally {
     now.mockRestore();
   }
+});
+
+test('the native History receiver uses the original disjoint children through deadline-bounded retries', async () => {
+  const price = sumOperationalWork(OPERATIONAL_WORK_COST.attempt, OPERATIONAL_WORK_REGISTRATION);
+  const owners = { ...declarations(), retry: sumOperationalWork(price, price, price) };
+  const declared = declareMembersPreparationParent(owners);
+  const original = new NativeCollectionWork(
+    { reservationId: 'native-history-c3', remaining: declared.total },
+    Date.now() + 60000,
+  );
+  const pool = {} as Pool;
+  const work = {} as WorkClient;
+  await runFundedMembersPreparation(
+    original,
+    'exact-native-key',
+    owners,
+    async (children) => {
+      const history = fundMembersPreparationHistory(children, pool, work);
+      expect(() => debitOperationalWorkAttempt(history)).toThrow('funding-unavailable');
+      claimOperationalWorkOriginal(history, pool, work, original.deadlineAt);
+      // More than three attempts are possible without changing native deadline policy or adding a payer.
+      for (let attempt = 0; attempt < 4; attempt++) {
+        debitOperationalWorkAttempt(history);
+        debitOperationalWork(history, OPERATIONAL_WORK_REGISTRATION);
+      }
+      expect(children.retry.available('statements')).toBe(0);
+      expect(children.historyRegistration.available('statements')).toBe(0);
+      expect(children.receivingReadback.available('statements')).toBe(429);
+      expect(() => debitOperationalWorkAttempt(history)).toThrow(ProblemError);
+      expect(children.cleanup.available('statements')).toBe(2);
+      expect(children.members.available('statements')).toBe(2);
+      expect(() => fundMembersPreparationHistory(children, pool, work)).toThrow('funding-unavailable');
+    },
+    async () => {},
+  );
+  expect(original.receipt().used).toEqual(sumOperationalWork(price, price, price, price));
+});
+
+test('a native receiver refuses foreign resources and cannot replace exported prices with a cheaper debit', async () => {
+  const declared = declareMembersPreparationParent(declarations());
+  const original = new NativeCollectionWork(
+    { reservationId: 'native-history-binding', remaining: declared.total },
+    Date.now() + 60000,
+  );
+  const pool = {} as Pool;
+  const work = {} as WorkClient;
+  await runFundedMembersPreparation(
+    original,
+    'key',
+    declarations(),
+    async (children) => {
+      const history = fundMembersPreparationHistory(children, pool, work);
+      expect(() => claimOperationalWorkOriginal(history, {} as Pool, work, original.deadlineAt)).toThrow();
+      expect(() => claimOperationalWorkOriginal(history, pool, {} as WorkClient, original.deadlineAt)).toThrow();
+      expect(() => claimOperationalWorkOriginal(history, pool, work, original.deadlineAt + 1)).toThrow();
+      claimOperationalWorkOriginal(history, pool, work, original.deadlineAt);
+      expect(() => debitOperationalWork(history, cost(1))).toThrow('funding-unavailable');
+      expect(children.historyRegistration.available('statements')).toBe(464);
+      debitOperationalWork(history, OPERATIONAL_WORK_REGISTRATION);
+    },
+    async () => {},
+  );
+  expect(original.receipt().used).toEqual(OPERATIONAL_WORK_REGISTRATION);
 });

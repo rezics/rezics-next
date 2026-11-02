@@ -46,9 +46,9 @@ Accounts owns the additive fenced event-free operational transaction plus atomic
 Use only its actual [Core contract/export](../services/kernel/src/command/README.md#operational-transactions):
 the adopted mechanism uses same-client DBOS `enqueueInTransaction`, native Access/current-T finalization and
 partition/account fences with existing DBOS recovery, not a separate intent table or relay. Executor source and
-its frozen contract are now present. Library has native reservation, exact touch and step admission, but positioned
-History registration, cache-fill consumption, the funded Source producer, completed results, and full native custody
-proof remain pending.
+its frozen contract are now present. Library has native reservation, exact touch and step admission. Positioned
+History registration and its prepaid child adapter are available as internal seams. Mounted cache-fill consumption,
+the funded Source producer, completed results, and full native custody proof remain pending.
 `runCommand`/`noEffect`, fabricated transactions or post-commit WorkClient enqueue do not implement this exception.
 
 When a members GET has retained preparation genuinely underway, it returns HTTP 202 with `Retry-After` and the exact
