@@ -372,6 +372,26 @@ not physical/private Accounts History authority. Accounts must adapt its genuine
 Source scheduling/maxima, whole-original Source/Library prices, receiving and physical writer closure remain their
 owners' operands, unavailable rather than zero when absent. No History consumer is converted by this producer.
 
+### Publisher activation result representation
+
+[Publisher activation results](publisher-activation-result.ts) snapshot the closed `activation-step` input
+and progress descriptors before calling Semantic's canonical mechanical encoder. They bind the selected
+original key, immutable input digest and result digest, and validate copied canonical bytes against all three.
+Getters, proxies, serializers, other phases, other activation identities and extra properties refuse before
+foreign execution. These are representation helpers only; they install no native transaction authority and
+cannot establish admission, ticket spending, a fence or committed completion.
+
+The base provides neither the publisher executor association nor its durable result resolver described by the
+requested activation extension. Semantic's [mechanical receiving representation](../semantic/definition-catalogue-native-contract.md#mechanical-receiving-representation)
+and actual `advanceCatalogueActivation` write root closure, activation state/cuts and staged frontier rows with
+no events. Those writes require a distinct coordination fence and cannot use `noEffect`. A complete profile
+still needs separately declared Core controls, retained result storage, resolution and prepaid cleanup, plus
+Semantic's foreign body and canonical representation operands. These helpers quote none of those missing terms.
+Ordinary execution and the refusing Semantic admission boundary retain their current behavior.
+
+Decision: Prepare bounded activation result representation as a separate Core seam while the missing publisher
+association and resolver are implemented; representation bytes never confer admission or commit authority.
+
 ## Selected Source native consumer fence dispatch
 
 The separate trusted server entrypoint is exported from `dispatch-lifetime.ts`:
