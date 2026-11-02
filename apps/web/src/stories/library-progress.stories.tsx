@@ -1,9 +1,14 @@
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
+import { useSuspenseQuery } from '@tanstack/react-query';
+import { Suspense } from 'react';
+import { ProgressIndexPage } from '../library/progress-page';
+import { readProgressIndex } from '../library/progress-server';
+import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { setLibraryProgressStoryMode, type LibraryProgressStoryMode } from '../kernel/fake/library-progress-story';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { unprofiledSubjectId } from '../kernel/fake/library-unprofiled-subject';
-import { PageStory, exposureStory, libraryProgressReady, pagePaths } from './page';
+import { PageStory, PatternStory, exposureStory, libraryProgressReady, pagePaths } from './page';
 
 const viewports = {
   phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
@@ -49,7 +54,121 @@ export const SelectorSheetOpen: Story = {
 export const Empty: Story = {
   render: () => ProgressStory('none'),
   play: async ({ canvasElement }) => {
-    await within(canvasElement).findByRole('main');
+    const canvas = within(canvasElement);
+    await canvas.findByRole('main');
+    await canvas.findByText(m.library_progress_empty());
+    expect(canvas.queryByRole('link', { name: m.library_collections_first_page() })).not.toBeInTheDocument();
+  },
+};
+
+// Authored recovery/disclosure stories are UNRUN; controller owns browser verification.
+export const LaterPageEmpty: Story = {
+  name: 'Empty later page with first page recovery',
+  render: () => ProgressStory('none', '/library/progress?cursor=earlier%2Fopaque%2B%3D%3D'),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(m.library_progress_page_empty());
+    const first = await canvas.findByRole('link', { name: m.library_collections_first_page() });
+    const target = new URL(first.getAttribute('href')!, window.location.origin);
+    expect(target.pathname).toBe(`/${getLocale()}/library/progress`);
+    expect(target.searchParams.has('cursor')).toBe(false);
+    expect(target.searchParams.get('subjectId')).toBe('');
+    expect(canvas.queryByText(m.library_progress_empty())).not.toBeInTheDocument();
+  },
+};
+
+export const FilteredLaterPageEmpty: Story = {
+  name: 'Empty later page retains the subject filter at 390',
+  globals: { viewport: { value: 'phone' }, locale: 'de' },
+  render: () => ProgressStory('none', `${pagePaths['library-progress']}&cursor=earlier%2Fopaque%2B%3D%3D`),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(m.library_progress_page_empty());
+    const first = await canvas.findByRole('link', { name: m.library_collections_first_page() });
+    const target = new URL(first.getAttribute('href')!, window.location.origin);
+    const original = new URL(pagePaths['library-progress'], window.location.origin);
+    expect(target.pathname).toBe(`/${getLocale()}/library/progress`);
+    expect(target.searchParams.get('subjectId')).toBe(original.searchParams.get('subjectId'));
+    expect(target.searchParams.has('cursor')).toBe(false);
+    expect(canvas.queryByText(m.library_progress_empty())).not.toBeInTheDocument();
+  },
+};
+
+function UnknownUnitLongText() {
+  const subjectId = new URL(pagePaths['library-progress'], window.location.origin).searchParams.get('subjectId')!;
+  const { data } = useSuspenseQuery({
+    queryKey: ['story', 'progress-index-unknown-unit', subjectId, getLocale()],
+    queryFn: () => readProgressIndex({ data: { subjectId } }),
+  });
+  const page = {
+    ...data,
+    sessions: data.sessions.map(({ unitLabel: _unitLabel, ...session }) => {
+      const subject = session.subject;
+      if (!subject) return session;
+      const label = typeof subject.label === 'string' ? subject.label : subject.label.value;
+      const longLabel = `${label} — ${label} — ${label} — ${label}`;
+      return {
+        ...session,
+        subject: {
+          ...subject,
+          label: typeof subject.label === 'string' ? longLabel : { ...subject.label, value: longLabel },
+        },
+      };
+    }),
+  };
+  return <ProgressIndexPage page={page} />;
+}
+
+function UnknownUnitStory() {
+  setLibraryProgressStoryMode('recorded');
+  return (
+    <PatternStory visitor="Signed In" path={pagePaths['library-progress']}>
+      <main className="w-full max-w-4xl p-4">
+        <Suspense fallback={null}>
+          <UnknownUnitLongText />
+        </Suspense>
+      </main>
+    </PatternStory>
+  );
+}
+
+export const UnknownUnitNarrow: Story = {
+  name: 'Unknown unit with long titles at 390',
+  globals: { viewport: { value: 'phone' }, locale: 'de' },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Recorded page with unit labels omitted and repeated titles for text wrapping. Native operands and returned order are retained. UNRUN.',
+      },
+    },
+  },
+  render: () => <UnknownUnitStory />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findAllByText(m.library_progress_unit_unspecified());
+    const details = canvasElement.querySelector('details')!;
+    expect(details).not.toHaveAttribute('open');
+    expect(within(details).getByText(m.library_history_unavailable())).not.toBeVisible();
+    expect(details.querySelector('code')).not.toBeVisible();
+    expect(details.querySelector('dt')?.textContent).toBe(
+      `${m.library_progress_mode()} / ${m.library_progress_unit()}`,
+    );
+  },
+};
+
+export const UnknownUnitDetailsOpen: Story = {
+  ...UnknownUnitNarrow,
+  name: 'Optional native progress details opened by keyboard',
+  play: async (context) => {
+    await UnknownUnitNarrow.play?.(context);
+    const details = context.canvasElement.querySelector('details')!;
+    details.querySelector('summary')!.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(details).toHaveAttribute('open');
+    expect(details.querySelector('code')).toBeVisible();
+    expect(within(details).getByText(m.library_history_unavailable())).toBeVisible();
+    expect(details.querySelector('code')?.textContent).toBe('cursor_position / chapter');
   },
 };
 
@@ -66,6 +185,7 @@ export const Unavailable: Story = {
   render: () => ProgressStory('unavailable'),
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByRole('main');
+    expect(within(canvasElement).queryByText(m.library_progress_empty())).not.toBeInTheDocument();
   },
 };
 
@@ -73,6 +193,7 @@ export const Error: Story = {
   render: () => ProgressStory('error'),
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByRole('main');
+    expect(within(canvasElement).queryByText(m.library_progress_empty())).not.toBeInTheDocument();
   },
 };
 

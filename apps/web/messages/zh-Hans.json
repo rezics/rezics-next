@@ -653,6 +653,7 @@
   "library_progress_confirm_complete": "确认完成",
   "library_progress_conflict": "已保存的进度对应较旧版本。你当前输入的内容仍然保留。",
   "library_progress_empty": "这部作品还没有进度会话。",
+  "library_progress_page_empty": "此页没有显示进度会话。",
   "library_progress_heading": "阅读进度",
   "library_progress_invalid": "无法记录这次进度。",
   "library_progress_locator": "定位",

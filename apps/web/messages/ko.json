@@ -652,6 +652,7 @@
   "library_progress_confirm_complete": "완료 확인",
   "library_progress_conflict": "저장된 진행 상황은 이전 버전에 해당합니다. 지금 입력한 내용은 그대로 남아 있습니다.",
   "library_progress_empty": "이 작품의 진행 세션이 아직 없습니다.",
+  "library_progress_page_empty": "이 페이지에 표시되는 진행 세션이 없습니다.",
   "library_progress_heading": "읽기 진행",
   "library_progress_invalid": "이 진행을 기록할 수 없습니다.",
   "library_progress_locator": "위치 표시",

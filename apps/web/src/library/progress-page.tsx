@@ -238,12 +238,25 @@ export function CurrentViewerProgressIndexPage({
     );
   return (
     <div hidden={hydrated && !allowed}>
-      <ProgressIndexPage key={`${scope}:${source.generation}`} page={result!.page} authority={authority} />
+      <ProgressIndexPage
+        key={`${scope}:${source.generation}`}
+        page={result!.page}
+        cursor={cursor}
+        authority={authority}
+      />
     </div>
   );
 }
 
-export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; authority?: ProgressAuthority }) {
+export function ProgressIndexPage({
+  page,
+  cursor,
+  authority,
+}: {
+  page: ProgressIndex;
+  cursor?: string | null;
+  authority?: ProgressAuthority;
+}) {
   const router = useRouter();
   const identity = authority?.key ?? page;
   const creatable = useOperation('progress_session.create');
@@ -377,21 +390,37 @@ export function ProgressIndexPage({ page, authority }: { page: ProgressIndex; au
             ))}
           </ol>
         ) : (
-          <p className="text-muted-foreground">{m.library_progress_empty()}</p>
+          <p className="text-muted-foreground">
+            {cursor || page.next ? m.library_progress_page_empty() : m.library_progress_empty()}
+          </p>
         )}
-        {page.next ? (
+        {cursor || page.next ? (
           <Exposure operation="progress_session.list">
-            <nav>
-              <Link
-                to="/library/progress"
-                search={{ subjectId: page.subjectId, cursor: page.next }}
-                onClick={(event) => {
-                  if (authority && !authority.isCurrent()) event.preventDefault();
-                }}
-                className={buttonClass}
-              >
-                {m.library_progress_more()}
-              </Link>
+            <nav className="flex flex-wrap gap-2">
+              {cursor ? (
+                <Link
+                  to="/library/progress"
+                  search={{ subjectId: page.subjectId }}
+                  onClick={(event) => {
+                    if (authority && !authority.isCurrent()) event.preventDefault();
+                  }}
+                  className={buttonClass}
+                >
+                  {m.library_collections_first_page()}
+                </Link>
+              ) : null}
+              {page.next ? (
+                <Link
+                  to="/library/progress"
+                  search={{ subjectId: page.subjectId, cursor: page.next }}
+                  onClick={(event) => {
+                    if (authority && !authority.isCurrent()) event.preventDefault();
+                  }}
+                  className={buttonClass}
+                >
+                  {m.library_progress_more()}
+                </Link>
+              ) : null}
             </nav>
           </Exposure>
         ) : null}
@@ -795,12 +824,27 @@ function SessionRow({
             />
           </ListRowControl>
           {!session.unitLabel ? (
-            <p className="text-sm text-muted-foreground">
-              {m.library_history_unavailable()}{' '}
-              <code>
-                {session.mode} / {session.unit}
-              </code>
-            </p>
+            <>
+              <p className="text-sm text-muted-foreground">{m.library_progress_unit_unspecified()}</p>
+              <details className="text-sm text-muted-foreground">
+                <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  {m.library_progress_details()}
+                </summary>
+                <div className="mt-2 flex flex-col gap-2">
+                  <p>{m.library_history_unavailable()}</p>
+                  <dl>
+                    <dt>
+                      {m.library_progress_mode()} / {m.library_progress_unit()}
+                    </dt>
+                    <dd>
+                      <code className="break-all">
+                        {session.mode} / {session.unit}
+                      </code>
+                    </dd>
+                  </dl>
+                </div>
+              </details>
+            </>
           ) : null}
           {confirming ? (
             <Exposure

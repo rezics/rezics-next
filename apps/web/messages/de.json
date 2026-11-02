@@ -652,6 +652,7 @@
   "library_progress_confirm_complete": "Abschluss bestätigen",
   "library_progress_conflict": "Der gespeicherte Fortschritt gehört zu einer älteren Version. Deine Eingabe bleibt erhalten.",
   "library_progress_empty": "Für dieses Werk gibt es noch keine Fortschrittssitzungen.",
+  "library_progress_page_empty": "Auf dieser Seite werden keine Fortschrittssitzungen angezeigt.",
   "library_progress_heading": "Lesefortschritt",
   "library_progress_invalid": "Dieser Fortschritt konnte nicht aufgezeichnet werden.",
   "library_progress_locator": "Fundstelle",

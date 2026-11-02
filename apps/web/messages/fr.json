@@ -652,6 +652,7 @@
   "library_progress_confirm_complete": "Confirmer la fin",
   "library_progress_conflict": "La progression enregistrée concerne une ancienne version. Votre saisie est conservée.",
   "library_progress_empty": "Il n’y a pas encore de session de progrès pour cette œuvre.",
+  "library_progress_page_empty": "Aucune session de progression n’est affichée sur cette page.",
   "library_progress_heading": "Progrès de lecture",
   "library_progress_invalid": "Ce progrès n’a pas pu être enregistré.",
   "library_progress_locator": "Repère",

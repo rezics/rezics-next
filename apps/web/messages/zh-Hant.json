@@ -652,6 +652,7 @@
   "library_progress_confirm_complete": "確認完成",
   "library_progress_conflict": "已儲存的進度對應較舊版本。你目前輸入的內容仍然保留。",
   "library_progress_empty": "這部作品還沒有進度工作階段。",
+  "library_progress_page_empty": "此頁沒有顯示進度工作階段。",
   "library_progress_heading": "閱讀進度",
   "library_progress_invalid": "無法記錄這次進度。",
   "library_progress_locator": "定位",

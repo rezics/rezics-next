@@ -665,6 +665,7 @@
   "library_progress_confirm_complete": "Confirm completion",
   "library_progress_conflict": "This saved progress belongs to an older version. Your input is still here.",
   "library_progress_empty": "No progress sessions for this subject yet.",
+  "library_progress_page_empty": "No progress sessions are shown on this page.",
   "library_progress_heading": "Reading progress",
   "library_progress_invalid": "That progress could not be recorded.",
   "library_progress_locator": "Locator",

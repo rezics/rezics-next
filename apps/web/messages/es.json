@@ -652,6 +652,7 @@
   "library_progress_confirm_complete": "Confirmar finalización",
   "library_progress_conflict": "El progreso guardado corresponde a una versión anterior. Lo que has introducido sigue aquí.",
   "library_progress_empty": "Aún no hay sesiones de progreso para esta obra.",
+  "library_progress_page_empty": "No se muestran sesiones de progreso en esta página.",
   "library_progress_heading": "Progreso de lectura",
   "library_progress_invalid": "Ese progreso no se pudo registrar.",
   "library_progress_locator": "Localizador",
