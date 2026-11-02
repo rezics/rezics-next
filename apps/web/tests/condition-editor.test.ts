@@ -25,11 +25,13 @@ test('Distinct released condition choices with identical localized labels are di
     ],
   };
   const pointer = `${CONDITION_POINTER}/and/1/or/0/not/type/in/0`;
+  const locale = 'zh-Hans';
+  const options = { locale };
   const html = renderToStaticMarkup(
     createElement(ConditionEditor, {
       value: tree,
       metadata,
-      locale: 'zh-Hans',
+      locale,
       issues: [{ pointer, code: 'unsupported' }],
       onChange() {},
     }),
@@ -42,7 +44,10 @@ test('Distinct released condition choices with identical localized labels are di
   expect(invalid).toContain('aria-describedby=');
   const errorId = invalid.match(/aria-describedby="([^"]+)"/)?.[1];
   expect(errorId).toBeDefined();
-  const expectedError = m.search_reader_condition_unsupported({ field: m.condition_value({ number: 1 }) });
+  const expectedError = m.search_reader_condition_unsupported(
+    { field: m.condition_value({ number: 1 }, options) },
+    options,
+  );
   expect(html).toContain(`id="${errorId}" class="text-sm text-destructive">${expectedError}</p>`);
   expect(html).toContain('value="bf:Instance" selected="">版本 (bf:Instance)</option>');
   expect(html).toContain('value="retired:Type" selected="">retired:Type</option>');
@@ -53,8 +58,8 @@ test('Distinct released condition choices with identical localized labels are di
   expect(limits).toBeDefined();
   expect(limits).not.toMatch(/\sopen(?:=|\s|>)/);
   expect(limits).toContain('<summary');
-  expect(limits).toContain(m.search_reader_condition_limits_title());
-  expect(limits).toContain(m.search_reader_condition_limits());
+  expect(limits).toContain(m.search_reader_condition_limits_title({}, options));
+  expect(limits).toContain(m.search_reader_condition_limits({}, options));
   const actualValues = [...invalid.matchAll(/<option\b[^>]*\bvalue="([^"]*)"/g)].map(([, value]) => value);
   expect(actualValues).toEqual(['', ...Object.keys(metadata.types)]);
   expect(JSON.stringify(metadata)).toBe(before);

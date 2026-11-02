@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
+import { locales } from '../paraglide/runtime.js';
 
 export type ConditionRangeDatatype = 'quantity' | 'time';
 type RangeDraft = { valid: true; value: number | undefined } | { valid: false };
@@ -35,6 +36,7 @@ export function ConditionRangeInput({
   draft,
   datatype,
   label,
+  locale,
   onValue,
   id,
   'aria-invalid': ariaInvalid,
@@ -44,6 +46,7 @@ export function ConditionRangeInput({
   draft: ConditionRangeDraft;
   datatype: ConditionRangeDatatype;
   label: string;
+  locale: string;
   onValue(value: number | undefined): void;
   id: string;
   'aria-invalid': boolean;
@@ -60,9 +63,10 @@ export function ConditionRangeInput({
     setDraft({ raw: value?.toString() ?? '', value });
   }
 
+  const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   const error = parseConditionRangeDraft(raw, datatype).valid
     ? undefined
-    : m.search_reader_condition_format({ field: label });
+    : m.search_reader_condition_format({ field: label }, options);
   const errorId = `${id}-draft-error`;
   useLayoutEffect(() => input.current?.setCustomValidity(error ?? ''), [error]);
 
@@ -83,7 +87,7 @@ export function ConditionRangeInput({
             datatype,
             onValue,
             (message) => event.currentTarget.setCustomValidity(message),
-            m.search_reader_condition_format({ field: label }),
+            m.search_reader_condition_format({ field: label }, options),
           );
           setDraft({ raw: text, value: next.valid ? next.value : value });
         }}

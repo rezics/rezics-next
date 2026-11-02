@@ -11,6 +11,7 @@ import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/fiel
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../paraglide/messages.js';
+import { locales } from '../paraglide/runtime.js';
 import { localizedLabel } from './results';
 import { ConditionRangeInput } from './condition-range-input';
 import { ConditionLanguages } from './condition-languages';
@@ -41,12 +42,14 @@ import {
 } from './condition-tree-edit';
 
 type Choice = { value: string; labels: Record<string, string> };
+type MessageOptions = { locale: (typeof locales)[number] };
 type PendingPropertyChange =
   | { kind: 'statement'; property: string }
   | { kind: 'qualifier'; index: number; property: string };
 type EditorContext = {
   metadata: ConditionMetadata;
   locale: string;
+  options: MessageOptions;
   issues: readonly ConditionIssue[];
   values: Record<string, Choice[]>;
   announce(message: string, pointer: string): void;
@@ -64,19 +67,24 @@ export type ConditionExtension = {
   render(value: FilterDocument, onChange: (value: FilterDocument) => void): ReactNode;
 };
 
-function fieldErrorText(code: string, field: string) {
-  if (code === 'required') return m.search_reader_condition_required({ field });
-  if (code === 'unsupported' || code === 'unknown_field') return m.search_reader_condition_unsupported({ field });
-  if (code === 'invalid_type') return m.search_reader_condition_type({ field });
-  if (code === 'invalid_format') return m.search_reader_condition_format({ field });
-  return m.search_reader_condition_invalid({ field });
+function messageOptions(locale: string): MessageOptions {
+  return { locale: locales.find((value) => value === locale) ?? 'en' };
 }
 
-function summaryErrorText(issue: ConditionIssue) {
-  if (issue.pointer.startsWith('/text')) return m.condition_text_error();
-  if (issue.pointer.startsWith('/cursor')) return m.condition_cursor_error();
-  if (issue.code === 'out_of_range') return m.search_reader_condition_filter_review();
-  return m.search_reader_condition_fields_review();
+function fieldErrorText(code: string, field: string, options: MessageOptions) {
+  if (code === 'required') return m.search_reader_condition_required({ field }, options);
+  if (code === 'unsupported' || code === 'unknown_field')
+    return m.search_reader_condition_unsupported({ field }, options);
+  if (code === 'invalid_type') return m.search_reader_condition_type({ field }, options);
+  if (code === 'invalid_format') return m.search_reader_condition_format({ field }, options);
+  return m.search_reader_condition_invalid({ field }, options);
+}
+
+function summaryErrorText(issue: ConditionIssue, options: MessageOptions) {
+  if (issue.pointer.startsWith('/text')) return m.condition_text_error({}, options);
+  if (issue.pointer.startsWith('/cursor')) return m.condition_cursor_error({}, options);
+  if (issue.code === 'out_of_range') return m.search_reader_condition_filter_review({}, options);
+  return m.search_reader_condition_fields_review({}, options);
 }
 
 /** The existing Filters form composes shared fields; shadcn has no FilterDocument tree editor. */
@@ -105,6 +113,7 @@ export function ConditionEditor({
   extension?: ConditionExtension;
   embedded?: boolean;
 }) {
+  const options = messageOptions(locale);
   const root = useRef<HTMLDivElement>(null);
   const serial = useRef(0);
   const nextKey = () => ++serial.current;
@@ -169,6 +178,7 @@ export function ConditionEditor({
     ? {
         metadata,
         locale,
+        options,
         issues,
         values,
         announce,
@@ -184,14 +194,16 @@ export function ConditionEditor({
     : undefined;
   return (
     <div ref={root} className="min-w-0 space-y-3 border-t border-border/60 pt-4" data-condition-editor>
-      <h2 className="font-medium">{m.condition_heading()}</h2>
-      <p className="text-sm text-muted-foreground">{embedded ? m.library_rule_hint() : m.condition_hint()}</p>
+      <h2 className="font-medium">{m.condition_heading({}, options)}</h2>
+      <p className="text-sm text-muted-foreground">
+        {embedded ? m.library_rule_hint({}, options) : m.condition_hint({}, options)}
+      </p>
       {!embedded && (
         <details className="text-sm">
           <summary className="min-h-10 cursor-pointer content-center rounded-lg px-2 text-muted-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
-            {m.search_reader_condition_limits_title()}
+            {m.search_reader_condition_limits_title({}, options)}
           </summary>
-          <p className="mt-1 text-muted-foreground">{m.search_reader_condition_limits()}</p>
+          <p className="mt-1 text-muted-foreground">{m.search_reader_condition_limits({}, options)}</p>
         </details>
       )}
       <p role="status" aria-live="polite" className="sr-only">
@@ -208,14 +220,14 @@ export function ConditionEditor({
               data-error-pointer={issue.pointer}
               data-error-code={issue.code}
             >
-              {summaryErrorText(issue)}
+              {summaryErrorText(issue, options)}
               {isConditionEditorPointer(issue.pointer) && (
                 <button
                   type="button"
                   className="ml-2 font-medium underline underline-offset-2"
                   onClick={() => findConditionErrorTarget(root.current, issue.pointer)?.element.focus()}
                 >
-                  {m.condition_error_jump_target()}
+                  {m.condition_error_jump_target({}, options)}
                 </button>
               )}
             </p>
@@ -242,23 +254,23 @@ export function ConditionEditor({
                 onClick={() => {
                   const next: FilterDocument = { and: [{ type: { in: [''] } }] };
                   publish(next, createConditionDraftNode(next, nextKey));
-                  announce(m.condition_added(), `${CONDITION_POINTER}/and/0`);
+                  announce(m.condition_added({}, options), `${CONDITION_POINTER}/and/0`);
                 }}
               >
-                {m.condition_add()}
+                {m.condition_add({}, options)}
               </Button>
             )}
           </>
         ) : (
           <p role="status" className="text-sm text-muted-foreground">
-            {m.condition_metadata_unavailable()}
+            {m.condition_metadata_unavailable({}, options)}
           </p>
         )}
       </fieldset>
       {value && <input type="hidden" name="condition" value={JSON.stringify(value)} />}
       {!embedded && (
         <Button type="submit" variant="outline" disabled={disabled || !conditionTreeCanSubmit(value)}>
-          {m.search_apply()}
+          {m.search_apply({}, options)}
         </Button>
       )}
     </div>
@@ -294,7 +306,9 @@ function EditorField({
       })}
       {errors.length > 0 && (
         <p id={`${id}-error`} className="text-sm text-destructive">
-          {fieldSpecific ? fieldErrorText(firstError!.code, label) : m.search_reader_condition_filter_review()}
+          {fieldSpecific
+            ? fieldErrorText(firstError!.code, label, context.options)
+            : m.search_reader_condition_filter_review({}, context.options)}
         </p>
       )}
     </Field>
@@ -314,6 +328,7 @@ function NodeEditor({
   path: ConditionTreePath;
   context: EditorContext;
 }) {
+  const { options } = context;
   const onChange = (next: FilterDocument | undefined) => {
     const replacesRange =
       next &&
@@ -329,18 +344,18 @@ function NodeEditor({
   const group = 'and' in value ? value.and : 'or' in value ? value.or : undefined;
   const label =
     operator === 'and'
-      ? m.condition_and()
+      ? m.condition_and({}, options)
       : operator === 'or'
-        ? m.condition_or()
+        ? m.condition_or({}, options)
         : operator === 'not'
-          ? m.condition_not()
+          ? m.condition_not({}, options)
           : 'saved' in value
-            ? m.condition_saved_filter_label({ id: value.saved })
+            ? m.condition_saved_filter_label({ id: value.saved }, options)
             : 'type' in value
-              ? m.search_type()
+              ? m.search_type({}, options)
               : 'statement' in value
-                ? m.condition_statement()
-                : m.condition_leaf();
+                ? m.condition_statement({}, options)
+                : m.condition_leaf({}, options);
   const extensionLeaf = context.extension?.render(value, onChange);
   const name = (labels: Record<string, string> | undefined, fallback: string) =>
     localizedLabel(labels ?? {}, context.locale).text || fallback;
@@ -402,7 +417,7 @@ function NodeEditor({
   };
   const remove = () => {
     if (context.editTree(path, { type: 'remove' }))
-      context.announce(m.condition_removed(), pointer.replace(/\/(and|or)\/\d+$|\/not$/, ''));
+      context.announce(m.condition_removed({}, options), pointer.replace(/\/(and|or)\/\d+$|\/not$/, ''));
   };
   return (
     <FieldSet
@@ -412,7 +427,7 @@ function NodeEditor({
     >
       <FieldLegend variant="label">{label}</FieldLegend>
       <div className="flex flex-wrap items-end gap-2">
-        <EditorField context={context} pointer={pointer} label={m.condition_group()} exact>
+        <EditorField context={context} pointer={pointer} label={m.condition_group({}, options)} exact>
           {(props) => (
             <NativeSelect
               {...props}
@@ -425,42 +440,42 @@ function NodeEditor({
                     : next === '' && 'not' in value
                       ? context.editTree(path, { type: 'unwrap' })
                       : false;
-                if (changed) context.announce(m.condition_group_changed(), pointer);
+                if (changed) context.announce(m.condition_group_changed({}, options), pointer);
               }}
             >
               <NativeSelectOption value="" disabled={!!group}>
-                {operator === 'not' ? m.condition_unwrap() : m.condition_leaf()}
+                {operator === 'not' ? m.condition_unwrap({}, options) : m.condition_leaf({}, options)}
               </NativeSelectOption>
               <NativeSelectOption
                 value="and"
                 disabled={!context.canEditTree(path, { type: 'operator', operator: 'and' })}
               >
-                {m.condition_and()}
+                {m.condition_and({}, options)}
               </NativeSelectOption>
               <NativeSelectOption
                 value="or"
                 disabled={!context.canEditTree(path, { type: 'operator', operator: 'or' })}
               >
-                {m.condition_or()}
+                {m.condition_or({}, options)}
               </NativeSelectOption>
               <NativeSelectOption
                 value="not"
                 disabled={operator === 'not' || !context.canEditTree(path, { type: 'operator', operator: 'not' })}
               >
-                {m.condition_not()}
+                {m.condition_not({}, options)}
               </NativeSelectOption>
             </NativeSelect>
           )}
         </EditorField>
         <Button type="button" variant="ghost" size="sm" onClick={remove}>
-          {m.condition_remove()}
+          {m.condition_remove({}, options)}
         </Button>
       </div>
       {group && (
         <>
           {group.length === 0 && (
             <p role="status" className="text-sm text-muted-foreground">
-              {m.condition_tree_empty_group()}
+              {m.condition_tree_empty_group({}, options)}
             </p>
           )}
           {group.map((child, index) => (
@@ -487,10 +502,10 @@ function NodeEditor({
                   disabled={!context.canEditTree(path, edit)}
                   onClick={() => {
                     if (context.editTree(path, edit))
-                      context.announce(m.condition_added(), `${pointer}/${operator}/${group.length}`);
+                      context.announce(m.condition_added({}, options), `${pointer}/${operator}/${group.length}`);
                   }}
                 >
-                  {kind === 'type' ? m.condition_add_type() : m.condition_add_statement()}
+                  {kind === 'type' ? m.condition_add_type({}, options) : m.condition_add_statement({}, options)}
                 </Button>
               );
             })}
@@ -504,7 +519,7 @@ function NodeEditor({
               disabled={!context.canEditTree(path, { type: 'append', value: choice.value })}
               onClick={() => {
                 if (context.editTree(path, { type: 'append', value: choice.value }))
-                  context.announce(m.condition_added(), `${pointer}/${operator}/${group.length}`);
+                  context.announce(m.condition_added({}, options), `${pointer}/${operator}/${group.length}`);
               }}
             >
               {choice.label}
@@ -512,10 +527,11 @@ function NodeEditor({
           ))}
           <ConditionSavedFilter
             filters={context.savedFilters}
+            locale={context.locale}
             canSelect={(id) => context.canSelectSavedFilter(path, id, 'append')}
             onSelect={(id) => {
               const added = context.selectSavedFilter(path, id, 'append');
-              if (added) context.announce(m.condition_added(), `${pointer}/${operator}/${group.length}`);
+              if (added) context.announce(m.condition_added({}, options), `${pointer}/${operator}/${group.length}`);
               return added;
             }}
           />
@@ -547,7 +563,11 @@ function NodeEditor({
       )}
       {'statement' in value && (
         <>
-          <EditorField context={context} pointer={`${pointer}/statement/property`} label={m.refinement_property()}>
+          <EditorField
+            context={context}
+            pointer={`${pointer}/statement/property`}
+            label={m.refinement_property({}, options)}
+          >
             {(props) => (
               <NativeSelect
                 {...props}
@@ -556,7 +576,7 @@ function NodeEditor({
                   selectStatementProperty(event.currentTarget.value);
                 }}
               >
-                <NativeSelectOption value="">{m.refinement_choose_property()}</NativeSelectOption>
+                <NativeSelectOption value="">{m.refinement_choose_property({}, options)}</NativeSelectOption>
                 {fieldChoices(properties, property ?? '').map(({ value, label }) => (
                   <NativeSelectOption key={value} value={value}>
                     {label}
@@ -569,7 +589,7 @@ function NodeEditor({
           {range ? (
             <>
               {(['gte', 'lte'] as const).map((bound) => {
-                const label = bound === 'gte' ? m.refinement_lower() : m.refinement_upper();
+                const label = bound === 'gte' ? m.refinement_lower({}, options) : m.refinement_upper({}, options);
                 return (
                   <EditorField
                     key={bound}
@@ -582,6 +602,7 @@ function NodeEditor({
                         {...props}
                         draft={draft.ranges[bound]}
                         datatype={definition?.datatype === 'time' ? 'time' : 'quantity'}
+                        locale={context.locale}
                         label={label}
                         value={range[bound]}
                         onValue={(number) => {
@@ -596,10 +617,14 @@ function NodeEditor({
                 );
               })}
               {definition?.datatype === 'time' && (
-                <p className="text-sm text-muted-foreground">{m.refinement_year_hint()}</p>
+                <p className="text-sm text-muted-foreground">{m.refinement_year_hint({}, options)}</p>
               )}
               {(definition?.datatype !== 'time' || range.unit !== undefined) && (
-                <EditorField context={context} pointer={`${pointer}/statement/range/unit`} label={m.refinement_unit()}>
+                <EditorField
+                  context={context}
+                  pointer={`${pointer}/statement/range/unit`}
+                  label={m.refinement_unit({}, options)}
+                >
                   {(props) => (
                     <NativeSelect
                       {...props}
@@ -611,7 +636,7 @@ function NodeEditor({
                         replaceStatement({ range: next });
                       }}
                     >
-                      <NativeSelectOption value="">{m.condition_choose_value()}</NativeSelectOption>
+                      <NativeSelectOption value="">{m.condition_choose_value({}, options)}</NativeSelectOption>
                       {range.unit && !definition?.units?.includes(range.unit) && (
                         <NativeSelectOption value={range.unit}>{range.unit}</NativeSelectOption>
                       )}
@@ -643,11 +668,11 @@ function NodeEditor({
               data-condition-pointer={`${pointer}/statement/qualifiers/${index}`}
               tabIndex={-1}
             >
-              <FieldLegend variant="label">{m.condition_qualifier()}</FieldLegend>
+              <FieldLegend variant="label">{m.condition_qualifier({}, options)}</FieldLegend>
               <EditorField
                 context={context}
                 pointer={`${pointer}/statement/qualifiers/${index}/property`}
-                label={m.refinement_property()}
+                label={m.refinement_property({}, options)}
               >
                 {(props) => (
                   <NativeSelect
@@ -655,7 +680,7 @@ function NodeEditor({
                     value={qualifier.property}
                     onChange={(event) => selectQualifierProperty(index, event.currentTarget.value)}
                   >
-                    <NativeSelectOption value="">{m.refinement_choose_property()}</NativeSelectOption>
+                    <NativeSelectOption value="">{m.refinement_choose_property({}, options)}</NativeSelectOption>
                     {fieldChoices(definition?.qualifiers ?? [], qualifier.property).map(({ value, label }) => (
                       <NativeSelectOption key={value} value={value}>
                         {label}
@@ -685,10 +710,10 @@ function NodeEditor({
                   const qualifiers = value.statement.qualifiers!.filter((_, at) => at !== index);
                   const { qualifiers: _old, ...statement } = value.statement;
                   onChange({ statement: { ...statement, ...(qualifiers.length ? { qualifiers } : {}) } });
-                  context.announce(m.condition_removed(), pointer);
+                  context.announce(m.condition_removed({}, options), pointer);
                 }}
               >
-                {m.condition_remove()}
+                {m.condition_remove({}, options)}
               </Button>
             </FieldSet>
           ))}
@@ -700,10 +725,10 @@ function NodeEditor({
               disabled={(value.statement.qualifiers?.length ?? 0) >= FILTER_LIMITS.qualifiers}
               onClick={() => {
                 replaceStatement({ qualifiers: [...(value.statement.qualifiers ?? []), { property: '', in: [''] }] });
-                context.announce(m.condition_added(), pointer);
+                context.announce(m.condition_added({}, options), pointer);
               }}
             >
-              {m.condition_add_qualifier()}
+              {m.condition_add_qualifier({}, options)}
             </Button>
           )}
         </>
@@ -712,11 +737,14 @@ function NodeEditor({
         <ConditionSavedFilter
           filters={context.savedFilters}
           value={value.saved}
+          locale={context.locale}
           canSelect={(id) => context.canSelectSavedFilter(path, id, 'replace')}
           onSelect={(id) => context.selectSavedFilter(path, id, 'replace')}
         />
       )}
-      {'owner' in value && !extensionLeaf && <p className="text-sm text-muted-foreground">{m.condition_retained()}</p>}
+      {'owner' in value && !extensionLeaf && (
+        <p className="text-sm text-muted-foreground">{m.condition_retained({}, options)}</p>
+      )}
       {pendingPropertyChange && (
         <dialog
           ref={propertyChangeDialog}
@@ -731,7 +759,7 @@ function NodeEditor({
           }}
         >
           <h2 id={`${propertyChangeId}-title`} className="font-semibold">
-            {m.condition_property_change_title()}
+            {m.condition_property_change_title({}, options)}
           </h2>
           <p className="mt-2 font-medium">
             {pendingPropertyChange.property
@@ -739,17 +767,17 @@ function NodeEditor({
                   context.metadata.properties[pendingPropertyChange.property]?.labels,
                   pendingPropertyChange.property,
                 )
-              : m.refinement_choose_property()}
+              : m.refinement_choose_property({}, options)}
           </p>
           <p id={`${propertyChangeId}-description`} className="mt-2 text-sm text-muted-foreground">
-            {m.condition_property_change_message()}
+            {m.condition_property_change_message({}, options)}
           </p>
           <div className="mt-4 flex justify-end gap-2">
             <Button type="button" variant="outline" autoFocus onClick={() => resolvePendingPropertyChange(false)}>
-              {m.condition_property_change_cancel()}
+              {m.condition_property_change_cancel({}, options)}
             </Button>
             <Button type="button" onClick={() => resolvePendingPropertyChange(true)}>
-              {m.condition_property_change_confirm()}
+              {m.condition_property_change_confirm({}, options)}
             </Button>
           </div>
         </dialog>
@@ -795,7 +823,7 @@ function ValueFields({
           <EditorField
             context={context}
             pointer={`${pointer}/${index}`}
-            label={m.condition_value({ number: index + 1 })}
+            label={m.condition_value({ number: index + 1 }, context.options)}
           >
             {(props) =>
               closed && choices?.length ? (
@@ -806,7 +834,7 @@ function ValueFields({
                     onChange(values.map((entry, at) => (at === index ? event.currentTarget.value : entry)))
                   }
                 >
-                  <NativeSelectOption value="">{m.condition_choose_value()}</NativeSelectOption>
+                  <NativeSelectOption value="">{m.condition_choose_value({}, context.options)}</NativeSelectOption>
                   {value && !choices.some((entry) => entry.value === value) && (
                     <NativeSelectOption value={value}>{value}</NativeSelectOption>
                   )}
@@ -832,13 +860,16 @@ function ValueFields({
             type="button"
             variant="ghost"
             size="sm"
-            aria-label={m.refinement_remove({ value: m.condition_value({ number: index + 1 }) })}
+            aria-label={m.refinement_remove(
+              { value: m.condition_value({ number: index + 1 }, context.options) },
+              context.options,
+            )}
             onClick={() => {
               onChange(values.filter((_, at) => at !== index));
-              context.announce(m.condition_removed(), pointer.replace(/\/(type|statement).*$/, ''));
+              context.announce(m.condition_removed({}, context.options), pointer.replace(/\/(type|statement).*$/, ''));
             }}
           >
-            {m.condition_remove()}
+            {m.condition_remove({}, context.options)}
           </Button>
         </div>
       ))}
@@ -849,10 +880,10 @@ function ValueFields({
         disabled={values.length >= FILTER_LIMITS.in}
         onClick={() => {
           onChange([...values, '']);
-          context.announce(m.condition_added(), pointer.replace(/\/(type|statement).*$/, ''));
+          context.announce(m.condition_added({}, context.options), pointer.replace(/\/(type|statement).*$/, ''));
         }}
       >
-        {m.condition_add_value()}
+        {m.condition_add_value({}, context.options)}
       </Button>
     </div>
   );

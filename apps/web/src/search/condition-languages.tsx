@@ -93,6 +93,7 @@ export function ConditionLanguages({
   const displayNames = new Intl.DisplayNames([locale], { type: 'language' });
   const allocateKey = () => `language-pref:${nextOccurrenceKey.current++}`;
   occurrenceKeys.current = alignOccurrenceKeys(occurrenceKeys.current, languages.length, allocateKey);
+  const options = { locale: locales.find((value) => value === locale) ?? 'en' };
 
   const update = (action: LanguagePreferenceAction) => {
     const next = updateLanguagePreferences(languages, action);
@@ -129,7 +130,7 @@ export function ConditionLanguages({
 
   return (
     <Field ref={rootRef}>
-      <FieldLabel htmlFor={selectId}>{m.condition_languages_label()}</FieldLabel>
+      <FieldLabel htmlFor={selectId}>{m.condition_languages_label({}, options)}</FieldLabel>
       <div className="flex flex-wrap items-end gap-2">
         <NativeSelect
           id={selectId}
@@ -137,7 +138,7 @@ export function ConditionLanguages({
           disabled={disabled || atLimit || available.length === 0}
           onChange={(event) => setSelected(event.currentTarget.value)}
         >
-          <NativeSelectOption value="">{m.condition_languages_choose()}</NativeSelectOption>
+          <NativeSelectOption value="">{m.condition_languages_choose({}, options)}</NativeSelectOption>
           {available.map((tag) => (
             <NativeSelectOption key={tag} value={tag}>
               {displayLanguage(tag, displayNames)} ({tag})
@@ -154,11 +155,11 @@ export function ConditionLanguages({
             setSelected('');
           }}
         >
-          {m.condition_languages_add()}
+          {m.condition_languages_add({}, options)}
         </Button>
       </div>
       {languages.length > 0 && (
-        <ol aria-label={m.condition_languages_label()} className="mt-2 space-y-2">
+        <ol aria-label={m.condition_languages_label({}, options)} className="mt-2 space-y-2">
           {languages.map((tag, index) => (
             <li
               key={occurrenceKeys.current[index]}
@@ -175,38 +176,38 @@ export function ConditionLanguages({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  aria-label={m.condition_languages_move_up({ language: tag })}
+                  aria-label={m.condition_languages_move_up({ language: tag }, options)}
                   disabled={disabled || index === 0}
                   onClick={() => update({ type: 'move', index, offset: -1 })}
                 >
-                  {m.condition_languages_up()}
+                  {m.condition_languages_up({}, options)}
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  aria-label={m.condition_languages_move_down({ language: tag })}
+                  aria-label={m.condition_languages_move_down({ language: tag }, options)}
                   disabled={disabled || index === languages.length - 1}
                   onClick={() => update({ type: 'move', index, offset: 1 })}
                 >
-                  {m.condition_languages_down()}
+                  {m.condition_languages_down({}, options)}
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  aria-label={m.condition_languages_remove({ language: tag })}
+                  aria-label={m.condition_languages_remove({ language: tag }, options)}
                   disabled={disabled}
                   onClick={() => update({ type: 'remove', index })}
                 >
-                  {m.condition_languages_remove_action()}
+                  {m.condition_languages_remove_action({}, options)}
                 </Button>
               </div>
             </li>
           ))}
         </ol>
       )}
-      {atLimit && <p className="mt-2 text-sm text-muted-foreground">{m.condition_languages_limit()}</p>}
+      {atLimit && <p className="mt-2 text-sm text-muted-foreground">{m.condition_languages_limit({}, options)}</p>}
       <Button
         type="button"
         variant="ghost"
@@ -215,7 +216,7 @@ export function ConditionLanguages({
         disabled={disabled || languages.length === 0}
         onClick={() => update({ type: 'clear' })}
       >
-        {m.condition_languages_use_default()}
+        {m.condition_languages_use_default({}, options)}
       </Button>
     </Field>
   );

@@ -55,7 +55,12 @@ test('unavailable references stay identified and removable; additions without re
   expect(retained).toContain(m.condition_remove());
 
   const unavailable = renderToStaticMarkup(
-    createElement(ConditionSavedFilter, { filters: [], canSelect: () => false, onSelect: () => false }),
+    createElement(ConditionSavedFilter, {
+      filters: [],
+      locale: 'en',
+      canSelect: () => false,
+      onSelect: () => false,
+    }),
   );
   expect(unavailable).toContain(m.condition_saved_filter_unavailable());
   expect(unavailable).toMatch(/<select\b[^>]*disabled=""/);
