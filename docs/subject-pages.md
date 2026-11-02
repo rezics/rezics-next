@@ -733,7 +733,9 @@ belong to that address. A failed candidate read retries its exact slot, cursor a
 restart opens the first page. Starting a read retires the previous comparison as decision authority, and changing
 slots retires the retry destination and late results. Empty intermediate pages retain deliberate continuation.
 Candidate continuation or explicit retry moves focus to the admitted page boundary or empty-page status; a failed
-read moves it to the error. Initial reads and mutation readbacks do not move focus.
+read moves it to the error. Initial standalone or embedded keyboard Open focuses the admitted property control,
+or the truthful empty, unsupported Context or failed/denied boundary; pointer opening, automatic reads, moved focus
+and retired intent stay quiet. Composition opening and mutation readbacks retain their existing focus behavior.
 The comparison shows the public selection for that slot, proposed qualifiers, evidence,
 source details, decision and selected rank. Unresolved references remain unresolved; unavailable summaries never
 become invented identities. Related labels come from supplied summaries or the existing bounded suggestion response.

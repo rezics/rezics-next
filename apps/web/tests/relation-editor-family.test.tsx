@@ -689,6 +689,88 @@ test('Relation Editor proposal/exact-slot family keeps independent native associ
   }
 }, 60_000);
 
+test('initial Relation Open orients only admitted keyboard results after its opener disappears', async () => {
+  const ui = await mounted();
+  const { render, region, within, user, m, RelationEditor, relationFixture, window } = ui;
+  const outside = window.document.createElement('button');
+  window.document.body.append(outside);
+  try {
+    const fixture = relationFixture();
+    const ready = await fixture.transport.read();
+    if (!ready.ok) throw new Error('Expected admitted relation fields');
+    for (const state of [
+      'standalone',
+      'embedded',
+      'empty',
+      'context',
+      'failed',
+      'denied',
+      'moved',
+      'pointer',
+      'retired',
+    ]) {
+      let finish!: (read: Awaited<ReturnType<RelationTransport['read']>>) => void;
+      const pending = new Promise<Awaited<ReturnType<RelationTransport['read']>>>((resolve) => (finish = resolve));
+      let reads = 0;
+      await render(
+        h(RelationEditor, {
+          key: state,
+          id: fixture.id,
+          locale: 'en',
+          embedded: state === 'embedded',
+          search: async () => [],
+          transport: {
+            ...fixture.transport,
+            read: () => {
+              reads++;
+              return pending;
+            },
+          },
+        }),
+      );
+      const opener = within(region()).getByRole('button', { name: m.relation_open() });
+      opener.focus();
+      await act(async () => (state === 'pointer' ? user.click(opener) : user.keyboard('{Enter}')));
+      expect(opener.isConnected).toBe(false);
+      if (state === 'moved') outside.focus();
+      if (state === 'retired') {
+        await render(null);
+        outside.focus();
+      }
+      await act(async () =>
+        finish(
+          state === 'failed' || state === 'denied'
+            ? { ok: false, reason: state === 'failed' ? 'unavailable' : 'denied' }
+            : state === 'empty'
+              ? { ...ready, fields: [] }
+              : state === 'context'
+                ? { ...ready, public: { ...ready.public, subject: { ...ready.public.subject, context: 'other' } } }
+                : ready,
+        ),
+      );
+      expect(reads).toBe(1);
+      if (state === 'retired' || state === 'moved') expect(window.document.activeElement).toBe(outside);
+      else if (state === 'pointer')
+        expect(window.document.activeElement).not.toBe(
+          within(region()).getByRole('combobox', { name: m.relation_property() }),
+        );
+      else if (state === 'failed' || state === 'denied')
+        expect(window.document.activeElement).toBe(within(region()).getByRole('alert'));
+      else if (state === 'empty' || state === 'context')
+        expect(window.document.activeElement?.textContent).toBe(
+          state === 'empty' ? m.relation_no_fields() : m.relation_context(),
+        );
+      else
+        expect(window.document.activeElement).toBe(
+          within(region()).getByRole('combobox', { name: m.relation_property() }),
+        );
+    }
+  } finally {
+    outside.remove();
+    await ui.close();
+  }
+});
+
 test('Relation candidate recovery repeats the failed page and explicitly restarts or retires the slot', async () => {
   const ui = await mounted();
   const { render, click, region, within, m, RelationEditor, relationFixture } = ui;

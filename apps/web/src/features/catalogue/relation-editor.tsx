@@ -141,6 +141,16 @@ function RelationEditorLive({
   const candidatePageBoundary = useRef<HTMLElement>(null);
   const candidatePageEmpty = useRef<HTMLParagraphElement>(null);
   const candidateReadFailure = useRef<HTMLDivElement>(null);
+  const openingControl = useRef<HTMLSelectElement>(null);
+  const openingBoundary = useRef<HTMLParagraphElement>(null);
+  const openingIntent = useRef<
+    | {
+        opener: HTMLButtonElement;
+        active: () => boolean;
+        generation: number;
+      }
+    | undefined
+  >(undefined);
   const candidateReadFocus = useRef<'boundary' | 'failure' | undefined>(undefined);
   const failedCandidateRead = useRef(false);
   const [result, setResult] = useState<Extract<RelationResult, { ok: true }>>();
@@ -171,6 +181,7 @@ function RelationEditorLive({
       readGeneration.current++;
       running.current = false;
       candidateReadFocus.current = undefined;
+      openingIntent.current = undefined;
       failedCandidateRead.current = false;
       setBusy(false);
       setRead(undefined);
@@ -313,6 +324,47 @@ function RelationEditorLive({
     else candidatePageBoundary.current?.focus();
   }, [closeConfirmation, read, failure, visible]);
   const closeLocked = compositionCloseLocked();
+
+  // The initial opener disappears while reading. Only its admitted keyboard intent
+  // may orient to the result; candidate-page and composition opening keep their owners.
+  useEffect(() => {
+    const cancel = (event: Event) => {
+      const intent = openingIntent.current;
+      if (!intent) return;
+      if (event.type !== 'focusin' || event.target !== intent.opener) openingIntent.current = undefined;
+    };
+    document.addEventListener('focusin', cancel, true);
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', cancel, true);
+    return () => {
+      openingIntent.current = undefined;
+      document.removeEventListener('focusin', cancel, true);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', cancel, true);
+    };
+  }, [mount]);
+  useLayoutEffect(() => {
+    const intent = openingIntent.current;
+    if (!intent) return;
+    if (!visible || !intent.active() || readGeneration.current !== intent.generation) {
+      openingIntent.current = undefined;
+      return;
+    }
+    if (busy) return;
+    openingIntent.current = undefined;
+    const active = document.activeElement;
+    if (active !== intent.opener && active !== document.body && active !== document.documentElement) return;
+    (failure ? candidateReadFailure.current : (openingBoundary.current ?? openingControl.current))?.focus();
+  }, [busy, read, failure, visible, mount]);
+
+  function open(event: MouseEvent<HTMLButtonElement>) {
+    if (!lifetime.active() || running.current || uncertain) return;
+    openingIntent.current =
+      !composition && event.detail === 0 && event.currentTarget === document.activeElement
+        ? { opener: event.currentTarget, active: lifetime.active, generation: readGeneration.current + 1 }
+        : undefined;
+    void load();
+  }
 
   function editable() {
     return lifetime.active() && !running.current && !request.current && !frozen;
@@ -629,15 +681,27 @@ function RelationEditorLive({
           </ContentItemFrame>
         </div>
       )}
-      {!current && !reading.current && !busy && <Button onClick={() => load()}>{m.relation_open({}, options)}</Button>}
+      {!current && !reading.current && !busy && <Button onClick={open}>{m.relation_open({}, options)}</Button>}
       {current && current.public.subject.context !== candidateContext ? (
-        <p>{m.relation_context({}, options)}</p>
+        <p
+          ref={openingBoundary}
+          tabIndex={-1}
+          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {m.relation_context({}, options)}
+        </p>
       ) : (
         current &&
         !concealed && (
           <>
             {!current.fields.length ? (
-              <p>{m.relation_no_fields({}, options)}</p>
+              <p
+                ref={openingBoundary}
+                tabIndex={-1}
+                className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                {m.relation_no_fields({}, options)}
+              </p>
             ) : (
               <>
                 <ContentItemFrame as="div" className="min-w-0 rounded-xl bg-card p-4 sm:p-5">
@@ -659,6 +723,7 @@ function RelationEditorLive({
                         }}
                       />
                       <NativeSelect
+                        ref={openingControl}
                         id={`${formId}-property`}
                         disabled={!!composition}
                         value={draft.property.id}
