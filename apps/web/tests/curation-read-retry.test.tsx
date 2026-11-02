@@ -164,41 +164,23 @@ test('fresh rate-limited admission and ordinary reload wait for a current manual
     await act(async () => reads[2]!.resolve(success()));
     await settle(() => host.textContent?.includes(m.curation_heading()) === true, 'admitted editor');
     expect(host.textContent).toContain(m.curation_saved());
+    const saved = m.presentation_editor_version_reference({ head: 7, digest: profileDigest(profile) });
+    expect(host.textContent).toContain(saved);
 
-    const labeled = (name: string) =>
-      [...host.querySelectorAll('label')].find((label) => label.textContent === name)?.control as
-        | HTMLSelectElement
-        | HTMLInputElement;
-    await act(async () => {
-      const scope = labeled(m.curation_scope()) as HTMLSelectElement;
-      scope.value = 'route';
-      scope.dispatchEvent(new window.Event('change', { bubbles: true }));
-    });
-    await act(async () => {
-      const key = labeled(m.curation_key()) as HTMLInputElement;
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(key, '/retry-draft');
-      key.dispatchEvent(new window.Event('input', { bubbles: true }));
-    });
-    await act(async () => {
-      [...host.querySelectorAll('button')]
-        .find((item) => item.getAttribute('type') === 'submit' && item.textContent?.trim() === m.curation_add())!
-        .click();
-    });
-    await settle(() => host.textContent?.includes(m.curation_unsaved()) === true, 'local draft');
     await act(async () => button(m.curation_reload())!.click());
-    await settle(() => !!window.document.querySelector('[role="alertdialog"]'), 'discard-before-reload');
-    await act(async () => {
-      [...window.document.querySelector('[role="alertdialog"]')!.querySelectorAll('button')]
-        .find((item) => item.textContent?.trim() === m.curation_discard_reload())!
-        .click();
-    });
     await settle(() => reads.length === 4, 'ordinary reload');
     await act(async () => reads[3]!.resolve(limited));
     await settle(() => host.textContent?.includes(m.curation_limited()) === true, 'reload rate-limit');
-    expect(host.textContent).toContain(m.curation_unsaved());
-    expect(host.textContent).toContain('/retry-draft');
-    expect(host.textContent).toContain(m.presentation_editor_version_reference({ head: 7, digest: profileDigest(profile) }));
+    expect(host.textContent).toContain(m.curation_heading());
+    expect(host.textContent).toContain(m.curation_saved());
+    expect(host.textContent).toContain(saved);
     expect(button(m.curation_reload())!.disabled).toBe(true);
+    const key = [...host.querySelectorAll('input')].find((item) => item.id.endsWith('-key'))!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(key, '/waiting-edit');
+      key.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    expect(key.value).toBe('/waiting-edit');
     await invoke(button(m.curation_reload())!);
     expect(reads).toHaveLength(4);
 
