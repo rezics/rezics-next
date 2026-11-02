@@ -612,7 +612,7 @@ test('Default report review preserves authorized rich reported and current evide
   expect(markup).toContain('<strong>Original evidence ');
   expect(markup).toContain('href="https://example.com/source"');
   expect(markup).toContain(m.thread_reveal_spoiler());
-  expect(markup).toContain(`href="${threadLocation(getLocale(), current.thread)}#post-${selected.id}"`);
+  expect(markup).toContain(`href="${threadLocation(getLocale(), current.thread, undefined, selected.id)}"`);
   expect(markup).toContain(
     `href="${exactRevisionHref({ postId: selected.id, revisionId: selected.revisionId }, getLocale())}"`,
   );

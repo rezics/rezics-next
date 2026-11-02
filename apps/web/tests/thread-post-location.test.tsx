@@ -79,7 +79,18 @@ const input = { id: thread.thread.id, post: target.id, cursor: 'unrelated-old-pa
 
 test('a cross-page link renders the exact admitted post through one native page, with ordinary continuation', async () => {
   const { client, paths } = native('available');
-  const page = await loadThreadPage(client, request, {}, input, verification, 'anonymous');
+  const { moderationTargetContent } = await import('../src/moderation/target-content');
+  const evidence = {
+    id: target.id, kind: 'post', state: 'available', post: target, thread: thread.thread,
+    now: '2030-01-01T00:00:00Z', documentMedia: { kind: 'unavailable' },
+  };
+  const markup = renderToStaticMarkup(moderationTargetContent({
+    key: `post:${target.id}`, kind: 'post', value: { moderationEvidence: evidence },
+  }));
+  const destination = new URL(/href="([^"]+)"/.exec(markup)![1]!, request.url);
+  expect(destination.hash).toBe(`#post-${target.id}`);
+  const linkedInput = { id: input.id, ...threadSearch(Object.fromEntries(destination.searchParams)) };
+  const page = await loadThreadPage(client, request, {}, linkedInput, verification, 'anonymous');
   expect(page.posts.posts.map((post) => post.id)).toEqual([target.id]);
   const html = await render(page);
   expect(html).toContain(`id="post-${target.id}"`);

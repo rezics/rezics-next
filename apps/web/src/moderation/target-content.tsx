@@ -84,13 +84,24 @@ function EvidenceContent({ evidence }: { evidence: ModerationEvidence['moderatio
   if (evidence.state !== 'available') return m.moderation_target_unavailable();
   const post = evidence.post;
   const thread = evidence.thread;
+  // Evidence can belong to a different page of the current thread reader.
+  // Keep its anchored identity and let the existing point locator admit that page.
+  // Thread and board evidence still link to the thread beginning.
+  const destination = thread
+    ? threadLocation(
+        locale,
+        thread,
+        undefined,
+        evidence.kind === 'post' && post ? post.id : undefined,
+      )
+    : undefined;
   return (
     <div className="w-full min-w-0 max-w-prose space-y-3 [overflow-wrap:anywhere]">
       <div className="space-y-1 text-sm">
         {thread ? (
           <a
             className="block underline underline-offset-4"
-            href={`${threadLocation(locale, thread)}${evidence.kind === 'post' && post ? `#post-${encodeURIComponent(post.id)}` : ''}`}
+            href={destination}
           >
             {thread.title || m.threads_untitled()}
           </a>
