@@ -46,11 +46,11 @@ test('connectPool reads ANSI-colored 0.164.0 readiness and starts the app-server
     chmodSync(executable, 0o755);
     const codexHome = join(temporary.path, 'home');
     mkdirSync(codexHome);
-    const server = await connectPool(
-      { id: 'pool', codexHome, executable },
-      undefined,
-      { ...process.env, FORCE_COLOR: '1', TERM: 'xterm-256color' },
-    );
+    const server = await connectPool({ id: 'pool', codexHome, executable }, undefined, {
+      ...process.env,
+      FORCE_COLOR: '1',
+      TERM: 'xterm-256color',
+    });
     try {
       expect(server.endpoint).toMatch(/^ws:\/\/127\.0\.0\.1:\d+$/);
       expect(JSON.parse(readFileSync(join(codexHome, 'spawn-env.json'), 'utf8'))).toEqual({
