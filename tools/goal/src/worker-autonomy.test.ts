@@ -210,7 +210,7 @@ test("a dev product attempt's continuation briefs move to its Goal backlog when 
       .events(task.id, 1)
       .filter((event) => event.kind === 'continuation-dropped')
       .map((event) => JSON.parse(event.body) as { file: string; reason: string });
-      expect(dropped).toEqual([
+    expect(dropped).toEqual([
       { file: 'notes.txt', reason: 'a continuation must be a regular Markdown file' },
       { file: 'other-goal.md', reason: "goal web is not the task's goal fixture" },
     ]);
@@ -313,12 +313,14 @@ function progressStore(attempt = 1) {
   git(worktree, ['commit', '-qm', 'b']);
   const store = new WorkerStore(openDb(join(directory.path, 'g.sqlite')));
   const id = 't';
-  store.db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?,?,?,?)').run(
-    id,
-    1,
-    attempt,
-    JSON.stringify({ id, currentAttempt: attempt, state: 'running', worktree, branch: 'worker/t' }),
-  );
+  store.db
+    .query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?,?,?,?)')
+    .run(
+      id,
+      1,
+      attempt,
+      JSON.stringify({ id, currentAttempt: attempt, state: 'running', worktree, branch: 'worker/t' }),
+    );
   for (let n = 1; n <= attempt; n++)
     store.db
       .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?,?,?)')
