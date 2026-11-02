@@ -34,10 +34,12 @@ test('range drafts follow surviving occurrences, retire on removal, and reset on
     root = createRoot(host as unknown as HTMLElement);
     const metadata = conditionMetadata(recording.release);
     metadata.properties['compatible'] = { ...metadata.properties['schema:wordCount']! };
+    metadata.types = { test: { bases: [], facets: ['schema:wordCount', 'compatible', 'schema:datePublished'] } };
     const range = (): FilterDocument => ({
       statement: { property: 'schema:wordCount', range: { gte: 12, lte: 20, unit: '1' } },
     });
-    const initial: FilterDocument = { and: [range(), range(), range()] };
+    const shared = range();
+    const initial: FilterDocument = { and: [shared, shared, shared] };
     let committed: FilterDocument | undefined = initial;
     let replace!: (value: FilterDocument | undefined) => void;
     function Harness() {
@@ -67,6 +69,11 @@ test('range drafts follow surviving occurrences, retire on removal, and reset on
         element.dispatchEvent(new window.Event(element.tagName === 'INPUT' ? 'input' : 'change', { bubbles: true }));
       });
     const operator = (path: string, value: string) => change(node(path).querySelector('select')!, value);
+    const property = (path: string, value: string) =>
+      change(
+        node(path).querySelector<HTMLSelectElement>('[data-condition-field-pointer$="/statement/property"] select')!,
+        value,
+      );
     const remove = async (path: string) =>
       act(async () => {
         Array.from(node(path).querySelectorAll('button'))
@@ -97,12 +104,7 @@ test('range drafts follow surviving occurrences, retire on removal, and reset on
     await operator('/and/0/or/0', '');
     assertDraft('/and/0/or/0', '-');
     assertDraft('/and/0/or/0', '2e1', false, 'lte');
-    await change(
-      node('/and/0/or/0').querySelector<HTMLSelectElement>(
-        '[data-condition-field-pointer$="/statement/property"] select',
-      )!,
-      'compatible',
-    );
+    await property('/and/0/or/0', 'compatible');
     assertDraft('/and/0/or/0', '-');
     // A sibling field edit must not remount the unfinished lower bound.
     await change(input('/and/0/or/0', 'lte'), '25');
@@ -111,6 +113,13 @@ test('range drafts follow surviving occurrences, retire on removal, and reset on
     await change(input('/and/0/or/0'), '15');
     expect(host.checkValidity()).toBe(true);
     await change(input('/and/0/or/0'), '1e309');
+    await property('/and/0/or/0', 'schema:datePublished');
+    await act(async () =>
+      Array.from(host.querySelectorAll('button'))
+        .find((button) => button.textContent === m.condition_property_change_confirm())!
+        .click(),
+    );
+    assertDraft('/and/0/or/0', '', false);
     await act(async () => replace(initial)); // Reuse the original document, not just a fresh clone.
     assertDraft('/and/0', '12', false);
     assertDraft('/and/1', '12', false);
@@ -122,6 +131,13 @@ test('range drafts follow surviving occurrences, retire on removal, and reset on
     await remove('/and/0');
     assertDraft('/and/0', '12', false);
     expect(host.checkValidity()).toBe(true);
+    await act(async () =>
+      Array.from(node('').querySelectorAll('button'))
+        .find((button) => button.textContent === m.condition_add_statement())!
+        .click(),
+    );
+    await property('/and/2', 'schema:wordCount');
+    assertDraft('/and/2', '', false);
     await act(async () => replace(undefined));
     await act(async () => replace(initial));
     assertDraft('/and/0', '12', false);
