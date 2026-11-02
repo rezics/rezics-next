@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
+import { cn } from '@rezics/ui/utils';
 import type { ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { RELATION_GROUPS, type RelationDefinition } from '../../subject/relations';
@@ -106,7 +107,13 @@ export function RelationsView({
             <EmptyTitle className="text-base font-normal">{m.subject_section_failed({}, options)}</EmptyTitle>
           </EmptyHeader>
         </Empty>
-      ) : items.length === 0 ? null : (
+      ) : items.length === 0 ? (
+        <Empty className="border" role="status" data-state="empty">
+          <EmptyHeader>
+            <EmptyTitle className="text-base font-normal">{m.subject_relation_empty_page({}, options)}</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
+      ) : (
         groups.map(({ group, members }) => (
           <div key={group} data-slot="relation-group" data-group={group} className="min-w-0 space-y-3">
             {groups.length > 1 && (
@@ -120,7 +127,10 @@ export function RelationsView({
         <a
           data-slot="next-page"
           href={viewHref(locale, subject, data.property, next)}
-          className={buttonVariants({ variant: 'outline' })}
+          className={cn(
+            buttonVariants({ variant: 'outline' }),
+            'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] px-4 py-3 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+          )}
         >
           {m.subject_relations_more({}, options)}
         </a>
