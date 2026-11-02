@@ -90,14 +90,13 @@ async function mountFields(locale: 'en' | 'de' | 'es' | 'fr' | 'ja' | 'ko' | 'zh
   const subjects: (string | null)[][] = [[], []];
   const citations: (CurrentReviewVote | undefined)[][] = [[], []];
   const subjectCallbacks = [0, 1].map((index) => (value: string | null) => subjects[index]!.push(value));
-  const citationCallbacks = [0, 1].map((index) => (value: CurrentReviewVote | undefined) => citations[index]!.push(value));
+  const citationCallbacks = [0, 1].map(
+    (index) => (value: CurrentReviewVote | undefined) => citations[index]!.push(value),
+  );
   let disabled = false;
   let selected = true;
   function Visit({ index }: { index: number }) {
-    const visit = useThreadCreationLifetime(
-      { boardId: id(10), purpose: 'reviews', initialKey: id(20) },
-      admission,
-    );
+    const visit = useThreadCreationLifetime({ boardId: id(10), purpose: 'reviews', initialKey: id(20) }, admission);
     // The actual route also removes metadata when its original visit is no longer bound.
     return (
       <ThreadCreationLifetimeProvider lifetime={visit.lifetime}>
@@ -169,8 +168,21 @@ async function mountFields(locale: 'en' | 'de' | 'es' | 'fr' | 'ja' | 'ko' | 'zh
     }
   };
   return {
-    host, window, user, m, reads, subjects, citations, forms, checkbox, label, render, settle,
-    resolveVotes, retire, dispose,
+    host,
+    window,
+    user,
+    m,
+    reads,
+    subjects,
+    citations,
+    forms,
+    checkbox,
+    label,
+    render,
+    settle,
+    resolveVotes,
+    retire,
+    dispose,
   };
 }
 
@@ -198,7 +210,10 @@ test('two actual ReviewFields keep labels, optional citations and keyboard/disab
     expect(page.citations).toEqual([[undefined, votes[0]], [undefined]]);
     expect(second.getAttribute('aria-checked')).toBe('false');
     await act(async () => page.user.click(page.label(1).lastElementChild!));
-    expect(page.citations).toEqual([[undefined, votes[0]], [undefined, votes[1]]]);
+    expect(page.citations).toEqual([
+      [undefined, votes[0]],
+      [undefined, votes[1]],
+    ]);
     await act(async () => {
       first.focus();
       await page.user.keyboard('[Space]');
@@ -335,12 +350,17 @@ test.each(['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] as const)(
             const help = page.window.document.getElementById(control.getAttribute('aria-describedby')!)!;
             expect(form.contains(help)).toBe(true);
             expect(help.textContent).toBe(page.m.thread_review_details_citation_help());
-            expect(page.label(index).textContent).toBe(page.m.thread_review_cite_vote({
-              score: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(votes[index]!.units / 2),
-            }));
+            expect(page.label(index).textContent).toBe(
+              page.m.thread_review_cite_vote({
+                score: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(votes[index]!.units / 2),
+              }),
+            );
             for (const token of [
-              'min-h-11', 'w-full', 'text-start',
-              'has-[:focus-visible]:outline-2', 'has-[:focus-visible]:outline-ring',
+              'min-h-11',
+              'w-full',
+              'text-start',
+              'has-[:focus-visible]:outline-2',
+              'has-[:focus-visible]:outline-ring',
             ])
               expect(page.label(index).classList.contains(token)).toBe(true);
             expect(page.label(index).lastElementChild!.classList.contains('[overflow-wrap:anywhere]')).toBe(true);
