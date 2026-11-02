@@ -1,29 +1,22 @@
 import { expect, mock, test } from 'bun:test';
 import { fromMarkdown } from '@rezics/document';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createSubjectTextRetryController, SubjectReadingState } from '../src/subject/reading-state';
-import type { Subject } from '../src/subject/types';
-import type { Stmt } from '../src/features/pages/shared';
-import subjectRecording from '../src/kernel/recorded/subject.json';
+import { statementDocument } from '../src/features/pages/documents';
 
-mock.module('cloudflare:workers', () => ({ env: {} }));
-const { chosenSummary } = await import('../src/features/pages/overview');
+mock.module('../src/paraglide/messages.js', () => ({
+  m: { subject_section_failed: () => 'Text unavailable', subject_section_retry: () => 'Retry text' },
+}));
+const { createSubjectTextRetryController, SubjectReadingState } = await import('../src/subject/reading-state');
 
 test('a successful empty public document remains distinct from a failed read', () => {
-  const subject = structuredClone(subjectRecording.subject) as Subject;
   const statement = {
     id: '0494501a-36af-8cc7-95c9-d7ffe4728201',
-    rank: 'normal',
-    property: { id: 'schema:abstract', data_type: 'document' },
     value: { type: 'value', content: { language: 'en', document: 'public-document', digest: 'a'.repeat(64) } },
-    qualifiers: [],
-    references: [],
-  } as unknown as Stmt;
-  subject.statements = { 'schema:abstract': [statement] } as Subject['statements'];
+  };
   const filled = {
-    [statement.id!]: {
+    [statement.id]: {
       id: 'public-document',
-      subjectId: subject.id,
+      subjectId: 'public-subject',
       candidateId: statement.id,
       digest: 'a'.repeat(64),
       language: 'en',
@@ -32,8 +25,8 @@ test('a successful empty public document remains distinct from a failed read', (
     },
   };
 
-  expect(chosenSummary(subject, 'en', filled)?.document).toEqual(fromMarkdown(''));
-  expect(chosenSummary(subject, 'en')).toBeUndefined();
+  expect(statementDocument('public-subject', statement, filled)).toEqual(fromMarkdown(''));
+  expect(statementDocument('public-subject', statement, undefined)).toBeUndefined();
 });
 
 test('retry allows one read per visit and rejects a late result after the visit changes', () => {
