@@ -66,7 +66,7 @@ function RetiringCreation() {
       <AppShell navigation={zonesNavigation}>
         <div className="min-w-0 space-y-6">
           <Button variant="outline" onClick={() => {
-            client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', csrfToken: null });
+            client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
             setSession('signed-out');
           }}>{m.account_sign_out()}</Button>
           <CreateZone locale={locale} session={session} owner={owner} onCreate={async (command, capture) => {
