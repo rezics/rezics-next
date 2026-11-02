@@ -30,8 +30,7 @@ export function updateLanguagePreferences(current: readonly string[], action: La
   }
 
   const target = action.index + action.offset;
-  if (action.index < 0 || action.index >= current.length || target < 0 || target >= current.length)
-    return [...current];
+  if (action.index < 0 || action.index >= current.length || target < 0 || target >= current.length) return [...current];
   const updated = [...current];
   [updated[action.index], updated[target]] = [updated[target]!, updated[action.index]!];
   return updated;
@@ -59,7 +58,9 @@ export function ConditionLanguages({
   const selectId = useId();
   const [selected, setSelected] = useState('');
   const atLimit = languages.length >= MAX_LANGUAGE_PREFERENCES;
-  const available = locales.filter((tag) => !languages.some((language) => language.toLowerCase() === tag.toLowerCase()));
+  const available = locales.filter(
+    (tag) => !languages.some((language) => language.toLowerCase() === tag.toLowerCase()),
+  );
   const displayNames = new Intl.DisplayNames([locale], { type: 'language' });
 
   const update = (action: LanguagePreferenceAction) => onChange(updateLanguagePreferences(languages, action));
@@ -97,7 +98,10 @@ export function ConditionLanguages({
       {languages.length > 0 && (
         <ol aria-label={m.condition_languages_label()} className="mt-2 space-y-2">
           {languages.map((tag, index) => (
-            <li key={`${tag}:${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 p-2">
+            <li
+              key={`${tag}:${index}`}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 p-2"
+            >
               <div className="flex min-w-0 flex-col">
                 <span>{displayLanguage(tag, displayNames)}</span>
                 <code className="break-all text-xs text-muted-foreground" dir="ltr">
