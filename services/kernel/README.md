@@ -620,7 +620,10 @@ in every database that run measured. It also settles `dbos.workflow_status` when
 scale, repetition)` hook runs as unmeasured capture after that settle and before every measured repetition, never
 before warm-ups. Nested captures inside it inherit that custody. The harness tracks its writes and open transactions,
 including on other instrumented databases, and settles the same boundary before measuring; prepare SQL is not product
-cost. A fixture that writes during warm-up, `prepare`, or a direct capture settles after that write and immediately
+cost. After every completed warmup and measured sample, including the last sample and related databases, it rejects
+the check if that run's own transaction tokens remain open. The check does not depend on observing a ModifyTable. A
+later unrelated snapshot on the same backend is a different token. The harness does not commit or roll back the
+caller's work. A fixture that writes during warm-up, `prepare`, or a direct capture settles after that write and immediately
 before the capture. Work captured inside `grow` is never settled. A fixture that measures outside `checkGrowth` calls
 the exported `settle` API instead of issuing a bare VACUUM: bare VACUUM neither waits for older snapshots nor verifies
 visibility
@@ -658,8 +661,9 @@ Calibration combines a file/check/occurrence only when every run declares the sa
 checks with differing bounds report each run and its declaration.
 
 Each measured repetition starts from a settled state. Warm-ups and repetitions may write rows, including through
-triggers; the harness settles every relation written by the previous run before measuring the next one. Checks should
-use fresh keys where production does, and declare any intentional repeated writes in their growth model.
+triggers; the harness settles every relation written by the previous run before measuring the next one. An operation
+that leaves its own transaction open fails the check at that sample, including the last. Checks should use fresh keys
+where production does, and declare any intentional repeated writes in their growth model.
 
 A module README cites a growth check by its test file and test title and says what grows and what stays fixed. A
 source-only scan matches generated titles iteratively against their fixed text, requires at least 12 fixed Unicode

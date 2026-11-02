@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { PoolClient } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
 import {
   checkGrowth,
   GrowthBoundError,
+  GrowthSettleInfrastructureError,
   openGrowthDatabase,
   readAttemptLedger,
   validateAttemptSamples,
@@ -554,4 +556,100 @@ test('attempt ledger: a statement mismatch reports actual and reference SQL sepa
   expect(() => validateAttemptSamples(attemptCheck, samples)).toThrow(
     /scale 4, repetition 1.*statements: SELECT actual_first; SELECT actual_second; reference committed statements: SELECT 1/,
   );
+});
+
+const closedCheck = {
+  scales: [1, 4, 16] as const,
+  repetitions: 1,
+  warmups: 1,
+  bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' } as const,
+  grow: async () => {},
+  warmup: async (database: GrowthDatabase) => database.pool.query('SELECT 1'),
+};
+
+async function expectOpenMeasuredTransaction(run: () => Promise<unknown>, leaked: PoolClient[]): Promise<void> {
+  try {
+    const error = await run().then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(GrowthSettleInfrastructureError);
+    expect((error as Error).message).toMatch(/keeps a transaction open/);
+  } finally {
+    for (const client of leaked) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      client.release();
+    }
+  }
+}
+
+test('checkGrowth rejects a read-only transaction left open on the last sample', async () => {
+  const leaked: PoolClient[] = [];
+  await expectOpenMeasuredTransaction(
+    () =>
+      checkGrowth(db, {
+        ...closedCheck,
+        name: 'last sample open transaction',
+        operation: async (database, scale) => {
+          const client = await database.pool.connect();
+          await client.query('BEGIN');
+          await client.query('SELECT 1');
+          if (scale === 16) {
+            leaked.push(client);
+            return;
+          }
+          await client.query('COMMIT');
+          client.release();
+        },
+      }),
+    leaked,
+  );
+});
+
+test('checkGrowth rejects an open measured transaction before a later repetition', async () => {
+  const leaked: PoolClient[] = [];
+  let measured = 0;
+  await expectOpenMeasuredTransaction(
+    () =>
+      checkGrowth(db, {
+        ...closedCheck,
+        name: 'open transaction before later repetition',
+        repetitions: 2,
+        operation: async (database) => {
+          const client = await database.pool.connect();
+          await client.query('BEGIN');
+          await client.query('SELECT 1');
+          if (++measured === 1) {
+            leaked.push(client);
+            return;
+          }
+          await client.query('COMMIT');
+          client.release();
+        },
+      }),
+    leaked,
+  );
+});
+
+test('checkGrowth distinguishes an unrelated snapshot from the measured transaction token', async () => {
+  const holder = await db.pool.connect();
+  try {
+    await holder.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    await holder.query('SELECT 1');
+    const report = await checkGrowth(db, {
+      ...closedCheck,
+      name: 'unrelated snapshot is not the measured token',
+      operation: async (database) => {
+        await withConnection(database.pool, async (client) => {
+          await client.query('BEGIN');
+          await client.query('SELECT 1');
+          await client.query('COMMIT');
+        });
+      },
+    });
+    expect(report.samples).toHaveLength(3);
+  } finally {
+    await holder.query('ROLLBACK');
+    holder.release();
+  }
 });

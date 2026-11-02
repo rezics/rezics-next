@@ -1137,7 +1137,7 @@ async function disableAutovacuum(database: GrowthDatabase): Promise<void> {
   }
 }
 
-async function assertMeasuredTransactionsSettled(
+export async function assertMeasuredTransactionsSettled(
   database: GrowthDatabase,
   operationBackends: ReadonlySet<number> | undefined,
 ): Promise<void> {
@@ -1165,7 +1165,7 @@ async function assertMeasuredTransactionsSettled(
     [backend],
   );
   throw new GrowthSettleInfrastructureError(
-    `Backend ${backend} from the measured operation keeps a transaction open across repetitions; each repetition must commit. Holding backend: ${JSON.stringify(result.rows[0] ?? { pid: backend })}`,
+    `Backend ${backend} from the measured operation keeps a transaction open; each warmup and measured sample must end its own transaction. Holding backend: ${JSON.stringify(result.rows[0] ?? { pid: backend })}`,
   );
 }
 

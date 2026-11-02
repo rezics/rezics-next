@@ -13,6 +13,7 @@ import {
   type Slack,
 } from './growth-bound.ts';
 import {
+  assertMeasuredTransactionsSettled,
   capture,
   captureMeasuredRun,
   captureWarmup,
@@ -827,6 +828,12 @@ function operationBackends(
   return value;
 }
 
+async function assertRunTransactionsClosed(run: Awaited<ReturnType<typeof captureMeasuredRun>>): Promise<void> {
+  const backends = operationBackends(run.backends, run.transactions);
+  for (const target of new Set([...run.databases, ...run.transactions.keys()]))
+    await assertMeasuredTransactionsSettled(target, backends);
+}
+
 export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promise<GrowthReport> {
   return withGrowthCheck(db, () => runGrowthCheck(db, check));
 }
@@ -940,14 +947,14 @@ async function runGrowthCheck(db: GrowthDatabase, check: GrowthCheck): Promise<G
       pendingBackends = operationBackends();
     };
     for (let warmup = 0; warmup < warmups; warmup++) {
-      absorbUnmeasured(
-        await captureMeasuredRun(() =>
-          captureWarmup(db, async () => {
-            if (check.warmup) await check.warmup(db, scale, repetition);
-            else await check.operation(db, scale, repetition);
-          }),
-        ),
+      const warmupRun = await captureMeasuredRun(() =>
+        captureWarmup(db, async () => {
+          if (check.warmup) await check.warmup(db, scale, repetition);
+          else await check.operation(db, scale, repetition);
+        }),
       );
+      absorbUnmeasured(warmupRun);
+      await assertRunTransactionsClosed(warmupRun);
       repetition++;
     }
 
@@ -972,6 +979,7 @@ async function runGrowthCheck(db: GrowthDatabase, check: GrowthCheck): Promise<G
           capture(db, () => check.operation(db, scale, repetition), { includeBackends: true }),
         );
         for (const target of captured.databases) measuredDatabases.add(target);
+        await assertRunTransactionsClosed(captured);
         pendingBackends = operationBackends(captured.backends, captured.transactions);
         const writes = captured.writes;
         const measured = captured.value;
