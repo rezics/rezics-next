@@ -2,7 +2,12 @@ import { expect, test } from 'bun:test';
 import type { FilterDocument } from '@rezics/filter';
 import { checkHits, type FactClause, type Hit } from '../../src/search/disclosure/check.ts';
 import { discloseFacetValues } from '../../src/search/facets.ts';
-import { subjectPartition, type IndexedSubject, type SubjectSnapshot, type SubjectSource } from '../../src/search/source.ts';
+import {
+  subjectPartition,
+  type IndexedSubject,
+  type SubjectSnapshot,
+  type SubjectSource,
+} from '../../src/search/source.ts';
 
 type Home = { id: string; partition: number };
 
@@ -49,9 +54,7 @@ const snapshot = (partition: number, ids: readonly string[]): SubjectSnapshot =>
   subjects: ids.map((value) => subject(value)),
 });
 
-async function expectReadDrain(
-  run: (source: SubjectSource, ids: readonly string[]) => Promise<unknown>,
-) {
+async function expectReadDrain(run: (source: SubjectSource, ids: readonly string[]) => Promise<unknown>) {
   const selected = homes(9);
   const gates = new Map(selected.slice(0, 8).map(({ partition }) => [partition, deferred<SubjectSnapshot>()]));
   const reads: number[] = [];
@@ -69,7 +72,10 @@ async function expectReadDrain(
   };
   const failure = new Error('Source read failed');
   let settled = false;
-  const pending = run(source, selected.map(({ id }) => id));
+  const pending = run(
+    source,
+    selected.map(({ id }) => id),
+  );
   void pending.then(
     () => (settled = true),
     () => (settled = true),
@@ -125,9 +131,7 @@ test('relation probe failure stops later homes and drains the already-started pr
     },
   };
   const filter: FilterDocument = { statement: { property, in: [target] } };
-  const hits = selected.map(
-    ({ id, partition }): Hit => ({ id, partition, securityRevision: 1, matched: [] }),
-  );
+  const hits = selected.map(({ id, partition }): Hit => ({ id, partition, securityRevision: 1, matched: [] }));
   const failure = new Error('Relation probe failed');
   let settled = false;
   const pending = checkHits(source, hits, new Map<string, FactClause>(), {
@@ -207,7 +211,6 @@ test('successful fanout remains bounded and returns values in request order', as
         new Map<string, FactClause>(),
         { concurrency: 20 },
       ),
-    (result) =>
-      expect((result as Awaited<ReturnType<typeof checkHits>>).passed.map(({ hit }) => hit.id)).toEqual(ids),
+    (result) => expect((result as Awaited<ReturnType<typeof checkHits>>).passed.map(({ hit }) => hit.id)).toEqual(ids),
   );
 });
