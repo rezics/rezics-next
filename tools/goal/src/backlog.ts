@@ -165,12 +165,77 @@ function stem(file: string): string {
   return basename(file, '.md');
 }
 
+function recordGoalDispatch(runtime: BacklogRuntime, goal: string, writtenMs: number): void {
+  runtime.db
+    .query(
+      `INSERT INTO backlog_goals(goal, last_dispatch_at, last_written_at) VALUES (?, ?, ?)
+        ON CONFLICT(goal) DO UPDATE SET last_dispatch_at = excluded.last_dispatch_at,
+          last_written_at = max(coalesce(last_written_at, 0), excluded.last_written_at)`,
+    )
+    .run(goal, (runtime.now ?? Date.now)(), Math.floor(writtenMs));
+}
+
 /** Move a brief into `failed/` beside a `.reason` file holding the refusal. */
 function fail(goalDirectory: string, file: string, reason: string): void {
   const failed = join(goalDirectory, FAILED_DIRECTORY);
   mkdirSync(failed, { recursive: true });
   writeFileSync(join(failed, `${stem(file)}.reason`), `${reason.trim()}\n`);
   renameSync(file, join(failed, basename(file)));
+}
+
+function returnClaimToReady(goalDirectory: string, file: string): void {
+  const ready = join(goalDirectory, basename(file));
+  if (existsSync(ready)) throw new Error(`cannot recover claim because ${basename(file)} already exists`);
+  renameSync(file, ready);
+}
+
+function taskHasDispatchArchive(goalDirectory: string, taskId: string): boolean {
+  try {
+    const prefix = `${taskId}-`;
+    return readdirSync(join(goalDirectory, DISPATCHED_DIRECTORY)).some(
+      (name) => name.startsWith(prefix) && name.endsWith('.md'),
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+/** Unarchived tasks in this Goal whose stored brief text is this claim. */
+function unarchivedTasksForBrief(runtime: BacklogRuntime, goal: string, markdown: string): string[] {
+  if (!tableExists(runtime.db, 'worker_tasks')) return [];
+  const goalDirectory = backlogDirectory(runtime.stateDirectory, goal);
+  const ids: string[] = [];
+  for (const row of runtime.db.query('SELECT id, body FROM worker_tasks').all() as { id: string; body: string }[]) {
+    let brief: { goal?: string; markdown?: string } | undefined;
+    try {
+      brief = (JSON.parse(row.body) as { brief?: { goal?: string; markdown?: string } }).brief;
+    } catch {
+      continue;
+    }
+    if (brief?.goal !== goal || brief.markdown !== markdown) continue;
+    if (taskHasDispatchArchive(goalDirectory, row.id)) continue;
+    ids.push(row.id);
+  }
+  return ids.sort();
+}
+
+function archiveCommittedClaim(runtime: BacklogRuntime, goal: string, file: string, taskId: string): void {
+  const goalDirectory = backlogDirectory(runtime.stateDirectory, goal);
+  const target = join(goalDirectory, DISPATCHED_DIRECTORY);
+  mkdirSync(target, { recursive: true });
+  const dest = join(target, `${taskId}-${basename(file)}`);
+  if (existsSync(dest)) {
+    if (readFileSync(dest, 'utf8') !== readFileSync(file, 'utf8'))
+      throw new Error(
+        `cannot archive interrupted dispatch of ${basename(file)} onto task ${taskId} because ${dest} already exists with different contents`,
+      );
+    rmSync(file);
+    return;
+  }
+  const written = statSync(file).mtimeMs;
+  renameSync(file, dest);
+  recordGoalDispatch(runtime, goal, written);
 }
 
 function notifyRefusals(runtime: BacklogRuntime, goal: string, refused: { brief: string; reason: string }[]): void {
@@ -192,38 +257,46 @@ function notifyRefusals(runtime: BacklogRuntime, goal: string, refused: { brief:
   });
 }
 
-/** A claim left by a host that stopped mid-dispatch may or may not have created its task: return it to the owner. */
-function recoverClaims(runtime: BacklogRuntime, goal: string): { brief: string; reason: string }[] {
+/**
+ * A claim left by a host that stopped mid-dispatch: archive a unique committed task, return an uncommitted
+ * claim to ready, and refuse when several unarchived tasks share this brief.
+ */
+function recoverClaims(
+  runtime: BacklogRuntime,
+  goal: string,
+): { dispatched: { taskId: string; brief: string }[]; refused: { brief: string; reason: string }[] } {
   const goalDirectory = backlogDirectory(runtime.stateDirectory, goal);
-  const recovered: { brief: string; reason: string }[] = [];
+  const dispatched: { taskId: string; brief: string }[] = [];
+  const refused: { brief: string; reason: string }[] = [];
   for (const file of briefs(join(goalDirectory, CLAIM_DIRECTORY))) {
     try {
-      if (readBriefContinuation(readFileSync(file, 'utf8'))) {
-        const ready = join(goalDirectory, basename(file));
-        if (existsSync(ready)) throw new Error(`cannot recover continuation because ${basename(file)} already exists`);
-        renameSync(file, ready);
+      const markdown = readFileSync(file, 'utf8');
+      if (readBriefContinuation(markdown)) {
+        returnClaimToReady(goalDirectory, file);
         continue;
       }
+      const matches = unarchivedTasksForBrief(runtime, goal, markdown);
+      if (matches.length > 1)
+        throw new Error(
+          `Interrupted dispatch of ${basename(file)} matches multiple unarchived tasks (${matches.join(', ')}). Inspect those tasks and archive or fail this brief by hand; do not submit it again.`,
+        );
+      if (matches.length === 1) {
+        archiveCommittedClaim(runtime, goal, file, matches[0]!);
+        dispatched.push({ taskId: matches[0]!, brief: basename(file) });
+        continue;
+      }
+      returnClaimToReady(goalDirectory, file);
     } catch (error) {
       const reason = errorText(error);
       try {
         fail(goalDirectory, file, reason);
-        recovered.push({ brief: basename(file), reason });
+        refused.push({ brief: basename(file), reason });
       } catch (moveError) {
         console.error(`backlog claim recovery failed for ${file}:`, moveError);
       }
-      continue;
-    }
-    const reason =
-      'The controller stopped while dispatching this brief. Check `goal status` for a task with this brief before moving it back.';
-    try {
-      fail(goalDirectory, file, reason);
-      recovered.push({ brief: basename(file), reason });
-    } catch (error) {
-      console.error(`backlog claim recovery failed for ${file}:`, error);
     }
   }
-  return recovered;
+  return { dispatched, refused };
 }
 
 type BriefPick = { goal: string; file: string };
@@ -272,7 +345,11 @@ async function dispatchReady(
     refused.push({ goal, brief, reason });
     refusedByGoal.set(goal, [...(refusedByGoal.get(goal) ?? []), { brief, reason }]);
   };
-  for (const goal of goals) for (const entry of recoverClaims(runtime, goal)) refuse(goal, entry.brief, entry.reason);
+  for (const goal of goals) {
+    const recovered = recoverClaims(runtime, goal);
+    for (const entry of recovered.dispatched) dispatched.push({ goal, ...entry });
+    for (const entry of recovered.refused) refuse(goal, entry.brief, entry.reason);
+  }
 
   const cap = runtime.workerCap ?? backlogWorkerCap(runtime.stateDirectory);
   const perSweep = runtime.perSweep ?? BACKLOG_DISPATCHES_PER_SWEEP;
@@ -316,13 +393,7 @@ async function dispatchReady(
       : `${taskId}-${basename(pick.file)}`;
     renameSync(claimed, join(target, targetName));
     // The write time lets turn accounting see a brief its manager wrote in a turn that the run already dispatched.
-    runtime.db
-      .query(
-        `INSERT INTO backlog_goals(goal, last_dispatch_at, last_written_at) VALUES (?, ?, ?)
-        ON CONFLICT(goal) DO UPDATE SET last_dispatch_at = excluded.last_dispatch_at,
-          last_written_at = max(coalesce(last_written_at, 0), excluded.last_written_at)`,
-      )
-      .run(pick.goal, (runtime.now ?? Date.now)(), Math.floor(written));
+    recordGoalDispatch(runtime, pick.goal, written);
     if (continuation)
       continued.push({ goal: pick.goal, taskId, attempt: continuation.expectedAttempt, brief: basename(pick.file) });
     else dispatched.push({ goal: pick.goal, taskId, brief: basename(pick.file) });

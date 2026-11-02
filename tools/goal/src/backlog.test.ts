@@ -221,19 +221,62 @@ test('a refused brief moves to failed with its reason, and the owner gets one ev
   expect(events[0]!.event.summary).toContain(failed);
 });
 
-test('a brief claimed by a host that stopped mid-dispatch is returned to its owner instead of dispatched again', async () => {
+test('an uncommitted interrupted claim returns to the ready backlog and dispatches once', async () => {
   const f = fixture();
   const claims = join(f.state, 'backlog', 'web', '.dispatching');
   mkdirSync(claims, { recursive: true });
-  writeFileSync(join(claims, 'interrupted.md'), 'Interrupted brief\n');
+  const file = join(claims, 'interrupted.md');
+  writeFileSync(file, 'Interrupted brief\n');
+  utimesSync(file, (NOW - 60_000) / 1000, (NOW - 60_000) / 1000);
+
+  const sweep = await sweepBacklog(f.runtime);
+
+  expect(f.dispatched.map((entry) => entry.text)).toEqual(['Interrupted brief\n']);
+  expect(sweep.dispatched).toEqual([{ goal: 'web', taskId: 'task-1', brief: 'interrupted.md' }]);
+  expect(sweep.refused).toEqual([]);
+  expect(readdirSync(join(f.state, 'backlog', 'web', 'dispatched'))).toEqual(['task-1-interrupted.md']);
+  expect(existsSync(join(f.state, 'backlog', 'web', 'failed', 'interrupted.md'))).toBe(false);
+});
+
+test('an interrupted claim whose dispatch already committed archives onto the existing task once', async () => {
+  const f = fixture();
+  const text = 'Committed brief\n';
+  const id = 'existing-task';
+  task(f.db, id, 'ready', { goal: 'web', manager: 'web', markdown: text }, 1);
+  task(f.db, 'older', 'integrated', { goal: 'web', manager: 'web', markdown: text }, 2);
+  task(f.db, 'other-goal', 'ready', { goal: 'search', manager: 'search', markdown: text }, 3);
+  mkdirSync(join(f.state, 'backlog', 'web', 'dispatched'), { recursive: true });
+  writeFileSync(join(f.state, 'backlog', 'web', 'dispatched', 'older-prior.md'), text);
+  const claims = join(f.state, 'backlog', 'web', '.dispatching');
+  mkdirSync(claims, { recursive: true });
+  writeFileSync(join(claims, 'work.md'), text);
 
   const sweep = await sweepBacklog(f.runtime);
 
   expect(f.dispatched).toEqual([]);
-  expect(sweep.refused.map((entry) => entry.brief)).toEqual(['interrupted.md']);
-  expect(readFileSync(join(f.state, 'backlog', 'web', 'failed', 'interrupted.reason'), 'utf8')).toContain(
-    'goal status',
-  );
+  expect(sweep.dispatched).toEqual([{ goal: 'web', taskId: id, brief: 'work.md' }]);
+  expect(readdirSync(join(f.state, 'backlog', 'web', 'dispatched')).sort()).toEqual([`${id}-work.md`, 'older-prior.md']);
+  expect(readFileSync(join(f.state, 'backlog', 'web', 'dispatched', `${id}-work.md`), 'utf8')).toBe(text);
+  expect((await sweepBacklog(f.runtime)).dispatched).toEqual([]);
+  expect(f.dispatched).toEqual([]);
+});
+
+test('an interrupted claim that matches several unarchived tasks is refused with those ids', async () => {
+  const f = fixture();
+  const text = 'Shared brief\n';
+  task(f.db, 'task-a', 'ready', { goal: 'web', manager: 'web', markdown: text }, 1);
+  task(f.db, 'task-b', 'ready', { goal: 'web', manager: 'web', markdown: text }, 2);
+  const claims = join(f.state, 'backlog', 'web', '.dispatching');
+  mkdirSync(claims, { recursive: true });
+  writeFileSync(join(claims, 'shared.md'), text);
+
+  const sweep = await sweepBacklog(f.runtime);
+
+  expect(f.dispatched).toEqual([]);
+  expect(sweep.refused.map((entry) => entry.brief)).toEqual(['shared.md']);
+  expect(sweep.refused[0]!.reason).toContain('task-a');
+  expect(sweep.refused[0]!.reason).toContain('task-b');
+  expect(existsSync(join(f.state, 'backlog', 'web', 'failed', 'shared.md'))).toBe(true);
   expect(f.inbox.pending('web')).toHaveLength(1);
 });
 
