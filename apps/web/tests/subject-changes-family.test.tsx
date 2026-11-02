@@ -200,9 +200,11 @@ test('the complete Subject history family keeps independent headings, bounded su
       </>,
     );
   try {
+    outside.focus();
     await showReaders();
     await until(() => histories().length === 2 && histories().every((page) => !!page.querySelector('ol button')));
     const [a, b] = histories() as [HTMLElement, HTMLElement];
+    expect(document.activeElement).toBe(outside);
     const ids = associations();
     expect(a.textContent).toContain(longTitle);
     expect(revisions(a).querySelectorAll('li')).toHaveLength(2);
@@ -222,6 +224,10 @@ test('the complete Subject history family keeps independent headings, bounded su
     await act(async () => user.keyboard('{Enter}'));
     await settle();
     expect(calls.at(-1)).toEqual({ operation: 'detail', operand: 5, session: 'changes-session' });
+    expect(document.activeElement).toBe(explanation(a).querySelector('h2'));
+    outside.focus();
+    await showReaders();
+    expect(document.activeElement).toBe(outside);
     expect(button(a, selectFive).getAttribute('aria-pressed')).toBe('true');
     expect(button(b, selectFive).getAttribute('aria-pressed')).toBe('false');
     expect(explanation(b).textContent).toContain(m.changes_choose());
@@ -260,6 +266,7 @@ test('the complete Subject history family keeps independent headings, bounded su
     // A failed continuation replays exactly its original opaque cursor and continuity.
     listFailure = true;
     await click(a, m.changes_more());
+    expect(document.activeElement).toBe(button(a, m.changes_retry()));
     const retry = queued(button(a, m.changes_retry()));
     expect(calls.at(-1)).toEqual({ operation: 'list', operand: changesCursor, session: 'changes-session' });
     authoredControls(a);
@@ -267,6 +274,7 @@ test('the complete Subject history family keeps independent headings, bounded su
     listFailure = false;
     await click(a, m.changes_retry());
     expect(calls.at(-1)).toEqual({ operation: 'list', operand: changesCursor, session: 'changes-session' });
+    expect(document.activeElement?.textContent).toBe(m.subject_relation_completed_more({ label: m.changes_revisions(), count: '0' }));
     expect(revisions(a).querySelectorAll('li')).toHaveLength(2);
     expect(a.textContent).not.toContain(m.changes_empty());
     const afterRetry = calls.length;
@@ -277,6 +285,7 @@ test('the complete Subject history family keeps independent headings, bounded su
     await click(a, m.changes_more());
     expect(calls.at(-1)).toEqual({ operation: 'list', operand: changesLastCursor, session: 'changes-session' });
     expect(revisions(a).querySelectorAll('li')).toHaveLength(3);
+    expect(document.activeElement).toBe(button(a, m.changes_revision({ revision: '2' })).closest('li')?.querySelector('p'));
     expect([...revisions(a).querySelectorAll('button')].some((node) => node.textContent === m.changes_more())).toBe(
       false,
     );
@@ -286,6 +295,7 @@ test('the complete Subject history family keeps independent headings, bounded su
     expect(calls).toHaveLength(endCalls);
     detailFailure = true;
     await click(a, m.changes_revision({ revision: '2' }));
+    expect(document.activeElement).toBe(button(a, m.changes_retry_detail()));
     const oldDetailRetry = queued(button(a, m.changes_retry_detail()));
     expect(a.textContent).toContain(m.changes_unavailable());
     expect(a.querySelector('dl')).toBeNull();
@@ -293,6 +303,7 @@ test('the complete Subject history family keeps independent headings, bounded su
     detailFailure = false;
     await click(a, m.changes_retry_detail());
     expect(calls.at(-1)).toEqual({ operation: 'detail', operand: 2, session: 'changes-session' });
+    expect(document.activeElement).toBe(explanation(a).querySelector('h2'));
     const afterDetailRetry = calls.length;
     oldDetailRetry();
     await settle();
@@ -356,6 +367,34 @@ test('the complete Subject history family keeps independent headings, bounded su
     ]);
     expect(first.calls).toHaveLength(12);
     expect(second.calls).toHaveLength(4);
+
+    // Empty final batches retain the accumulated list and allow a subsequent explanation.
+    const initial = await second.transport.list();
+    if (initial.kind !== 'ready') throw new Error('Expected list');
+    let edgeReads = 0;
+    let edgeFailure = false;
+    const edgeTransport: ChangesTransport = {
+      list: async () => edgeReads++ === 0 ? initial : {
+        kind: 'ready', page: { ...initial.page, revisions: [], next: null },
+      },
+      detail: async (revision) => edgeFailure ? { kind: 'missing', scope: 'subject' } : {
+        kind: 'ready', detail: { id: initial.page.id, revision, summary: { kind: 'limited' } },
+      },
+    };
+    outside.focus();
+    await render(<SubjectChanges key="empty-final" locale="en" transport={edgeTransport} />);
+    expect(document.activeElement).toBe(outside);
+    await click(host, m.changes_more());
+    expect(document.activeElement?.textContent).toBe(m.subject_relation_completed_end({ label: m.changes_revisions(), count: '0' }));
+    expect(host.querySelectorAll('ol li')).toHaveLength(initial.page.revisions.length);
+    await click(host, selectFive);
+    expect(document.activeElement).toBe(explanation(histories()[0]!).querySelector('h2'));
+    expect(host.textContent).toContain(m.changes_limited());
+    edgeFailure = true;
+    await click(host, selectFive);
+    expect(document.activeElement?.textContent).toBe(m.changes_missing());
+    expect(host.querySelector('section[aria-labelledby]')).toBeNull();
+    expect(host.textContent).not.toContain(m.changes_limited());
 
     // Supplied full-family states keep all existing notices, semantics and callbacks.
     const list = await first.transport.list();

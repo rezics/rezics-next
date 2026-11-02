@@ -1,5 +1,5 @@
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { useEffect, useId, useReducer, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState, type Ref } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { SubjectFrame, ViewHeading } from '../pages/subject-frame';
@@ -16,7 +16,13 @@ import {
   type ChangesTransport,
 } from './subject-changes';
 
+type FocusResult =
+  | { kind: 'batch'; revision?: number; count: number; next: string | null }
+  | { kind: 'detail' | 'failure' };
+
 type Props = {
+  rootRef?: Ref<HTMLElement>;
+  focusResult?: FocusResult | undefined;
   state: ChangesState;
   locale: string;
   currentHref?: string;
@@ -161,7 +167,9 @@ export function ChangeExplanation({ detail, locale }: { detail: ChangeDetail; lo
 }
 
 /** Shared subject frame and controls; no historical payload, actor or raw identifier is rendered. */
-export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelect, onRetry, onDetailRetry }: Props) {
+export function SubjectChangesPage({
+  state, locale, currentHref, onMore, onSelect, onRetry, onDetailRetry, rootRef, focusResult,
+}: Props) {
   const explanationHeadingId = useId();
   const o = { locale: locale as never };
   const busy = !!state.loading;
@@ -169,8 +177,17 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
   const detail = state.detail?.kind === 'ready' ? state.detail.detail : undefined;
   const reading =
     detail?.summary.kind === 'candidate' || detail?.summary.kind === 'decision' ? detail.summary.reading : undefined;
+  const batch = focusResult?.kind === 'batch' ? focusResult : undefined;
+  const batchBoundary = batch && (
+    <p tabIndex={-1} data-changes-focus="batch" className="text-sm text-muted-foreground">
+      {batch.next === null
+        ? m.subject_relation_completed_end({ label: m.changes_revisions({}, o), count: String(batch.count) }, o)
+        : m.subject_relation_completed_more({ label: m.changes_revisions({}, o), count: String(batch.count) }, o)}
+    </p>
+  );
   return (
     <article
+      ref={rootRef}
       data-slot="subject-changes"
       className="flex min-w-0 flex-col gap-8 [overflow-wrap:anywhere]"
       aria-busy={busy}
@@ -210,7 +227,7 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
       )}
       {state.loading === 'list' && <p role="status">{m.changes_loading({}, o)}</p>}
       {state.failure && (
-        <div className="space-y-3">
+        <div className="space-y-3" tabIndex={-1} data-changes-focus="failure">
           <Failure failure={state.failure} locale={locale} />
           {state.failure.kind !== 'missing' && onRetry && (
             <Button variant="outline" className={actionClassName} disabled={busy} onClick={onRetry}>
@@ -233,6 +250,7 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
             <ol className="space-y-2">
               {page.revisions.map((row) => (
                 <li key={row.revision}>
+                  {batch?.revision === row.revision && batchBoundary}
                   <ContentItemFrame as="div" className="min-w-0">
                     <Button
                       variant={state.selected === row.revision ? 'secondary' : 'ghost'}
@@ -252,6 +270,7 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
                 </li>
               ))}
             </ol>
+            {batch && batch.revision === undefined && batchBoundary}
             {page.next !== null && onMore && (
               <Button variant="outline" className={actionClassName} disabled={busy} onClick={onMore}>
                 {m.changes_more({}, o)}
@@ -262,7 +281,7 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
           {!!page.revisions.length && (
             <section aria-labelledby={explanationHeadingId} className="min-w-0">
               <ContentItemFrame as="div" className="min-w-0 space-y-4 p-4 sm:p-5">
-                <ContentItemHeading level={2} id={explanationHeadingId} className="text-xl font-semibold">
+                <ContentItemHeading level={2} id={explanationHeadingId} tabIndex={-1} data-changes-focus="detail" className="text-xl font-semibold">
                   {state.selected
                     ? m.changes_revision({ revision: String(state.selected) }, o)
                     : m.changes_explanation({}, o)}
@@ -271,7 +290,7 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
                 {state.loading === 'detail' && <p role="status">{m.changes_detail_loading({}, o)}</p>}
                 {detail && <ChangeExplanation detail={detail} locale={locale} />}
                 {state.detail && state.detail.kind !== 'ready' && (
-                  <div className="space-y-3">
+                  <div className="space-y-3" tabIndex={-1} data-changes-focus="detail-failure">
                     <Failure failure={state.detail} locale={locale} />
                     {onDetailRetry && (
                       <Button variant="outline" className={actionClassName} disabled={busy} onClick={onDetailRetry}>
@@ -310,6 +329,8 @@ function SubjectChangesReader({
   work: ReturnType<typeof useCatalogueLifetime>;
 }) {
   const [state, dispatch] = useReducer(changesState, { loading: 'list' });
+  const [focusResult, setFocusResult] = useState<FocusResult>();
+  const focusRoot = useRef<HTMLElement>(null);
   const session = useRef<string | undefined>(undefined);
   const running = useRef<number | null>(null);
   const sequence = useRef(0);
@@ -321,10 +342,18 @@ function SubjectChangesReader({
   const latest = useRef(state);
   latest.current = state;
   const active = () => mounted.current && work.active();
+  useLayoutEffect(() => {
+    if (!focusResult || !active()) return;
+    const kind = state.failure ? 'failure' : state.detail && state.detail.kind !== 'ready'
+      ? 'detail-failure' : focusResult.kind;
+    const boundary = focusRoot.current?.querySelector<HTMLElement>(`[data-changes-focus="${kind}"]`);
+    (boundary?.querySelector<HTMLButtonElement>('button:not(:disabled)') ?? boundary)?.focus();
+  }, [focusResult]);
   function begin() {
     if (!active() || running.current !== null) return;
     const operation = ++sequence.current;
     running.current = operation;
+    setFocusResult(undefined);
     return {
       current: () => active() && running.current === operation,
       finish: () => {
@@ -340,20 +369,32 @@ function SubjectChangesReader({
       running.current = null;
     };
   }, [work]);
-  async function load(cursor?: string) {
+  async function load(cursor?: string, explicit = cursor !== undefined) {
     // A continuation belongs only to the page that supplied it, including retries.
     if (cursor !== undefined && cursor !== latest.current.page?.next) return;
     const operation = begin();
     if (!operation) return;
     retryCursor.current = cursor;
+    const previous = new Set(latest.current.page?.revisions.map((row) => row.revision));
     dispatch({ type: 'list-start', more: cursor !== undefined });
+    const finish = (result: Parameters<typeof changesState>[1] & { type: 'list' }) => {
+      dispatch(result);
+      if (!explicit) return;
+      const admitted = result.result.kind === 'ready' &&
+        (!latest.current.page || result.result.page.id === latest.current.page.id);
+      const rows = admitted && result.result.kind === 'ready'
+        ? result.result.page.revisions.filter((row) => !previous.has(row.revision)) : [];
+      setFocusResult(admitted && result.result.kind === 'ready'
+        ? { kind: 'batch', revision: rows[0]?.revision, count: rows.length, next: result.result.page.next }
+        : { kind: 'failure' });
+    };
     try {
       const result = await currentTransport.current.list(cursor, session.current);
       if (!operation.current()) return;
       if (result.kind === 'ready') session.current = result.session ?? session.current;
-      dispatch({ type: 'list', result, more: cursor !== undefined });
+      finish({ type: 'list', result, more: cursor !== undefined });
     } catch {
-      if (operation.current()) dispatch({ type: 'list', result: { kind: 'unavailable' }, more: cursor !== undefined });
+      if (operation.current()) finish({ type: 'list', result: { kind: 'unavailable' }, more: cursor !== undefined });
     } finally {
       operation.finish();
     }
@@ -368,14 +409,20 @@ function SubjectChangesReader({
       if (!operation.current()) return;
       if (result.kind === 'ready') session.current = result.session ?? session.current;
       dispatch({ type: 'detail', result });
+      setFocusResult({ kind: 'detail' });
     } catch {
-      if (operation.current()) dispatch({ type: 'detail', result: { kind: 'unavailable' } });
+      if (operation.current()) {
+        dispatch({ type: 'detail', result: { kind: 'unavailable' } });
+        setFocusResult({ kind: 'detail' });
+      }
     } finally {
       operation.finish();
     }
   }
   return (
     <SubjectChangesPage
+      rootRef={focusRoot}
+      focusResult={focusResult}
       state={state}
       locale={locale}
       {...(currentHref ? { currentHref } : {})}
@@ -386,7 +433,7 @@ function SubjectChangesReader({
       onRetry={() => {
         if (state !== latest.current) return;
         const cursor = retryCursor.current;
-        void load(cursor !== undefined && cursor === state.page?.next ? cursor : undefined);
+        void load(cursor !== undefined && cursor === state.page?.next ? cursor : undefined, true);
       }}
       onSelect={(revision) => {
         void select(revision);

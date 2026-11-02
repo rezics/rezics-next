@@ -342,6 +342,8 @@ data languages, a proposal, a Context decision or an adoption. A proposal, accep
 remain separate; the latest revision is never labelled as the current selection. Return to current reading uses
 the ordinary public subject journey. This page offers no lifecycle command or historical snapshot comparison.
 
+Explicit continuation focuses a boundary for newly admitted unique revisions (including zero and the actual next-page state); choosing or retrying an explanation focuses its heading, while failed reads focus their own retry or failure boundary. Initial reads and retired results never move focus.
+
 Loading, no revisions, denied, invalid, changed, unavailable/retry and limited safe detail are distinct states.
 The temporary detail port remains unavailable until the published closed Semantic response is bound; consumer
 presentation examples do not establish native detail availability. There is no guessed detail wire schema or
