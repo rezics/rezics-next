@@ -1,11 +1,11 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
-import { ContentItem } from '@rezics/ui/content-item';
-import { ListRowControl } from '@rezics/ui/list-row';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { ListRowLink } from '@rezics/ui/list-row';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
@@ -54,6 +54,7 @@ function WorkPartsPageLive({
   search: EntityPickerSearch;
   initial?: WorkPartsRead | undefined;
 }) {
+  const streamId = useId();
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const query = useQuery({
@@ -184,9 +185,9 @@ function WorkPartsPageLive({
             {stream && (
               <>
                 <Field>
-                  <FieldLabel htmlFor="work-parts-stream">{m.work_parts_relation({}, o)}</FieldLabel>
+                  <FieldLabel htmlFor={streamId}>{m.work_parts_relation({}, o)}</FieldLabel>
                   <NativeSelect
-                    id="work-parts-stream"
+                    id={streamId}
                     className="min-w-0 max-w-full max-md:[&_select]:min-h-11 max-md:[&_select]:min-w-11 pointer-coarse:[&_select]:min-h-11 pointer-coarse:[&_select]:min-w-11"
                     value={stream.key}
                     disabled={busy}
@@ -216,23 +217,35 @@ function WorkPartsPageLive({
                 )}
                 {!read.rows.length && <p>{m.work_parts_empty({}, o)}</p>}
                 <ul>
-                  {read.rows.map((row) => (
-                    <ContentItem
+                  {read.rows.map((row, index) => (
+                    <li
                       key={`${row.holder}:${row.statementId}`}
-                      title={
-                        row.summary
-                          ? row.summary.label?.value || m.subject_value_unlabelled({}, o)
-                          : m.work_parts_unresolved({}, o)
-                      }
-                      {...(row.summary?.label ? { titleLang: row.summary.label.language } : {})}
-                      {...(row.summary
-                        ? {
-                            href: subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale)
-                              .href,
-                          }
-                        : {})}
-                      preview={
-                        <ListRowControl className="space-y-3">
+                      data-slot="list-row"
+                      aria-labelledby={`${streamId}-part-${index}`}
+                    >
+                      <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
+                        {row.summary && (
+                          <ListRowLink
+                            href={subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale).href}
+                            lang={row.summary.label?.language}
+                            aria-labelledby={`${streamId}-part-${index}`}
+                          >
+                            {row.summary.label?.value || m.subject_value_unlabelled({}, o)}
+                          </ListRowLink>
+                        )}
+                        <ContentItemHeading
+                          id={`${streamId}-part-${index}`}
+                          lang={row.summary?.label?.language}
+                          className="font-sans text-[17px] leading-snug font-semibold whitespace-normal [overflow-wrap:anywhere] sm:text-lg md:text-xl"
+                        >
+                          {row.summary
+                            ? row.summary.label?.value || m.subject_value_unlabelled({}, o)
+                            : m.work_parts_unresolved({}, o)}
+                        </ContentItemHeading>
+                        <div
+                          data-content-item-slot="preview"
+                          className="min-w-0 space-y-3 text-sm leading-relaxed [&_a]:relative [&_a]:z-10 [&_a]:whitespace-normal [&_a]:[overflow-wrap:anywhere] [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_button]:relative [&_button]:z-10 [&_summary]:relative [&_summary]:z-10"
+                        >
                           {row.statement ? (
                             <div className="space-y-3 text-sm">
                               <div>
@@ -312,9 +325,9 @@ function WorkPartsPageLive({
                               </pre>
                             )}
                           </details>
-                        </ListRowControl>
-                      }
-                    />
+                        </div>
+                      </ContentItemFrame>
+                    </li>
                   ))}
                 </ul>
                 <div className="flex flex-wrap gap-2">

@@ -257,3 +257,188 @@ export const Uncertain: Story = {
   },
 };
 export const Loading: Story = { args: { scenario: 'loading' } };
+
+// Canonical additions; the original fixtures, exports and plays above remain intact.
+// Authored UNRUN: browser plays own keyboard, focus and actual layout evidence.
+// Supplied rich data exercises presentation, not admission of additional native qualifiers.
+function suppliedComposition(fixture: ReturnType<typeof workPartsFixture>) {
+  const initial = fixture.snapshot();
+  if (!initial.ok || !initial.stream) throw new Error('Expected a supplied composition');
+  const row = initial.rows[0]!;
+  row.summary = { ...row.summary!, label: { value: longPartTitle, language: 'ja' } };
+  row.statement = structuredClone(row.statement!);
+  row.statement.qualifiers.push({
+    property: { id: 'schema:name', data_type: 'monolingualtext' },
+    value: { type: 'value', content: { text: 'Édition originale — toutes les informations conservées', language: 'fr' } },
+  });
+  row.statement.references.push({
+    hash: 'complete-second-reference',
+    parts: [{
+      property: { id: 'schema:url', data_type: 'url' },
+      value: { type: 'value', content: 'https://archive.example.test/' + 'complete-reference/'.repeat(12) },
+    }],
+  });
+  initial.labels['schema:name'] = { text: 'معلومات الطبعة الأصلية كاملة', lang: 'ar' };
+  return initial;
+}
+let familyMount: { fixtures: ReturnType<typeof workPartsFixture>[]; initial: ReturnType<typeof suppliedComposition>[] };
+function WorkPartsFamilyExample({ paired = false, rtl = false }: { paired?: boolean; rtl?: boolean }) {
+  const locale = getLocale();
+  const supplied = useMemo(() => {
+    const fixtures = Array.from({ length: paired ? 2 : 1 }, () => workPartsFixture('partial', locale));
+    const value = { fixtures, initial: fixtures.map(suppliedComposition) };
+    familyMount = value;
+    return value;
+  }, [locale, paired]);
+  return (
+    <PatternStory visitor="Signed In">
+      <AppShell>
+        <div dir={rtl ? 'rtl' : 'ltr'} className="min-w-0 space-y-12">
+          {supplied.fixtures.map((fixture, index) => (
+            <WorkPartsPage
+              key={`${locale}:${index}`}
+              id={fixture.id}
+              locale={locale}
+              initial={supplied.initial[index]}
+              search={fixture.search}
+              transport={fixture.transport}
+            />
+          ))}
+        </div>
+      </AppShell>
+    </PatternStory>
+  );
+}
+async function readableComposition(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const primary = await canvas.findByRole('link', { name: longPartTitle });
+  const row = primary.closest('li')!;
+  const article = primary.closest('article')!;
+  const heading = within(row).getByRole('heading', { level: 2, name: longPartTitle });
+  await expect(row).toHaveAttribute('aria-labelledby', heading.id);
+  await expect(primary).toHaveAttribute('aria-labelledby', heading.id);
+  await expect(heading).toHaveAttribute('lang', 'ja');
+  await expect(within(row).getByRole('heading', { level: 3, name: m.sources_citations() })).toBeVisible();
+  await expect(within(row).getByText('Édition originale — toutes les informations conservées')).toBeVisible();
+  await expect(within(row).getByText('معلومات الطبعة الأصلية كاملة')).toHaveAttribute('lang', 'ar');
+  await expect(row.querySelector('[data-slot="list-row-control"]')).toBeNull();
+  await expect(row.querySelector('a a, a button, a summary')).toBeNull();
+  const fixture = familyMount.fixtures[0]!;
+  const initial = familyMount.initial[0]!;
+  if (!initial.ok) throw new Error('Expected supplied reading data');
+  await expect(primary).toHaveAttribute('href', expect.stringContaining(initial.rows[0]!.summary!.id));
+  const before = fixture.calls.length;
+  const document = canvasElement.ownerDocument;
+  const view = document.defaultView!;
+  const width = document.documentElement.clientWidth;
+  const touch = width < 768 || view.matchMedia('(pointer: coarse)').matches;
+  const contained = (element: HTMLElement) => {
+    const rect = element.getBoundingClientRect();
+    expect(rect.width).toBeGreaterThan(0);
+    expect(rect.left).toBeGreaterThanOrEqual(0);
+    expect(rect.right).toBeLessThanOrEqual(width + 1);
+    expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+  };
+  contained(article);
+  contained(heading);
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width + 1);
+  expect(view.getComputedStyle(heading).whiteSpace).toBe('normal');
+  expect(view.getComputedStyle(heading).webkitLineClamp).toBe('none');
+  const range = document.createRange();
+  for (const element of [heading, ...row.querySelectorAll<HTMLElement>('p,a:not([data-slot="list-row-link"])')]) {
+    range.selectNodeContents(element);
+    for (const rect of range.getClientRects()) {
+      expect(rect.left).toBeGreaterThanOrEqual(0);
+      expect(rect.right).toBeLessThanOrEqual(width + 1);
+    }
+  }
+  const controls = [...row.querySelectorAll<HTMLElement>('a,button,summary')];
+  primary.focus();
+  await expect(primary).toHaveFocus();
+  for (const control of controls.slice(1)) {
+    await userEvent.tab();
+    await expect(control).toHaveFocus();
+    contained(control);
+    // Actual targets, not DOM-construction evidence.
+    if (touch && control.matches('button,summary')) {
+      const rect = control.getBoundingClientRect();
+      expect(rect.width).toBeGreaterThanOrEqual(44);
+      expect(rect.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(view.getComputedStyle(control).position).toBe('relative');
+    expect(Number(view.getComputedStyle(control).zIndex)).toBeGreaterThan(0);
+    expect(view.getComputedStyle(control).outlineStyle).not.toBe('none');
+  }
+  const summary = row.querySelector('summary')!;
+  await userEvent.keyboard('{Enter}');
+  await expect(summary.parentElement).toHaveAttribute('open');
+  expect(row.querySelector('pre')!.textContent).toBe(JSON.stringify(initial.rows[0]!.statement, null, 2));
+  for (const reference of [initial.rows[0]!.holder, initial.stream!.property, initial.rows[0]!.statementId]) {
+    await expect(row.querySelector('dl')).toHaveTextContent(reference);
+  }
+  await userEvent.keyboard(' ');
+  await expect(summary.parentElement).not.toHaveAttribute('open');
+  expect(fixture.calls).toHaveLength(before);
+  await userEvent.click(within(row).getByRole('button', { name: m.work_parts_correct() }));
+  const correctionSummary = article.querySelector<HTMLElement>(':scope > div > section > details > summary')!;
+  await expect(correctionSummary).not.toBeNull();
+  correctionSummary.focus();
+  await userEvent.keyboard('{Enter}');
+  await expect(correctionSummary.parentElement).toHaveAttribute('open');
+  await expect(within(article).getByRole('button', { name: m.relation_open() })).toBeVisible();
+  expect(fixture.calls).toHaveLength(before);
+}
+export const SuppliedCompositionPhone: Story = {
+  render: () => <WorkPartsFamilyExample />,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => readableComposition(canvasElement),
+};
+export const SuppliedCompositionDesktopRTL: Story = {
+  render: () => <WorkPartsFamilyExample rtl />,
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  play: async ({ canvasElement }) => readableComposition(canvasElement),
+};
+export const IndependentMounts: Story = {
+  render: () => <WorkPartsFamilyExample paired />,
+  play: async ({ canvasElement }) => {
+    const articles = [...canvasElement.querySelectorAll<HTMLElement>('article')];
+    await waitFor(() => expect(articles).toHaveLength(2));
+    const controls = articles.map((article) => within(article).getByRole('combobox', { name: m.work_parts_relation() }));
+    expect(controls[0]!.id).not.toBe(controls[1]!.id);
+    const fixtures = familyMount.fixtures;
+    const original = (controls[0] as HTMLSelectElement).value;
+    for (const [index, article] of articles.entries()) {
+      const label = article.querySelector<HTMLLabelElement>('label')!;
+      expect(label.htmlFor).toBe(controls[index]!.id);
+      expect(label.control).toBe(controls[index]);
+      await userEvent.click(label);
+      await expect(controls[index]!).toHaveFocus();
+    }
+    const initial = familyMount.initial[0]!;
+    if (!initial.ok) throw new Error('Expected supplied streams');
+    const alternative = initial.streams.find((stream) => stream.direction === 'inverse' && stream.key !== original)!;
+    await userEvent.selectOptions(controls[0]!, alternative.key);
+    await waitFor(() => expect(controls[0]!).not.toBeDisabled());
+    expect((controls[0] as HTMLSelectElement).value).toBe(alternative.key);
+    expect((controls[1] as HTMLSelectElement).value).toBe(original);
+    expect(fixtures[1]!.calls).toHaveLength(0);
+    expect(fixtures[0]!.calls).toHaveLength(2);
+    await userEvent.selectOptions(controls[1]!, alternative.key);
+    await waitFor(() => expect(controls[1]!).not.toBeDisabled());
+    expect(fixtures[0]!.calls).toHaveLength(2);
+    expect(fixtures[1]!.calls).toHaveLength(2);
+    await userEvent.selectOptions(controls[0]!, original);
+    await waitFor(() => expect(within(articles[0]!).getByRole('button', { name: m.work_parts_correct() })).toBeVisible());
+    const calls = fixtures[0]!.calls.length;
+    const row = articles[0]!.querySelector('li')!;
+    const summary = row.querySelector('summary')!;
+    summary.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(summary.parentElement).toHaveAttribute('open');
+    await userEvent.click(within(row).getByRole('button', { name: m.work_parts_correct() }));
+    await expect(articles[0]!.querySelector(':scope > div > section > details > summary')).not.toBeNull();
+    await expect(articles[1]!.querySelector(':scope > div > section > details > summary')).toBeNull();
+    expect(fixtures[0]!.calls).toHaveLength(calls);
+    expect(fixtures[1]!.calls).toHaveLength(2);
+  },
+};
