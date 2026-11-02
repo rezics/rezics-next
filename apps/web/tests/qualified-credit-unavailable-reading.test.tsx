@@ -115,7 +115,9 @@ test('unavailable item labels retain their localized categories without inventin
     ]);
   }
   // A matching summary keeps its supplied label and links to the requested target.
-  expect(qualifiedNotes(item, { [role]: { id: role, label: { value: '  Disclosed label  ', language: 'en' } } }, 'en')).toEqual([
+  expect(
+    qualifiedNotes(item, { [role]: { id: role, label: { value: '  Disclosed label  ', language: 'en' } } }, 'en'),
+  ).toEqual([
     {
       property: 'wdt:P3831',
       text: 'Role:   Disclosed label  ',

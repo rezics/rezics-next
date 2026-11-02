@@ -97,8 +97,7 @@ export function qualifiedNotes(statement: Stmt, related: unknown, locale: string
       const units: Related = {};
       if (isRecord(content) && typeof content.unit === 'string') {
         const label = summaryLabel(disclosedSummary(disclosed, content.unit));
-        if (label?.language !== undefined)
-          units[content.unit] = { labels: { [label.language]: label.value } };
+        if (label?.language !== undefined) units[content.unit] = { labels: { [label.language]: label.value } };
       }
       const presentation = quantityPresentation(content, units, locale);
       return presentation && isRecord(content)

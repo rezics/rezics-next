@@ -23,7 +23,11 @@ test('qualified labels and unit labels require the supplied summary identity to 
     },
     'en',
   );
-  expect(notes.map((note) => note.text)).toEqual(['Role: Unlabelled subject', 'Character: Current character', 'Order:']);
+  expect(notes.map((note) => note.text)).toEqual([
+    'Role: Unlabelled subject',
+    'Character: Current character',
+    'Order:',
+  ]);
   expect(notes[0]?.subject).toBeUndefined();
   expect(notes[1]?.subject).toEqual({ id: character, label: 'Current character' });
   expect(notes[2]?.quantity?.presentation.unitLabel).toBeNull();
