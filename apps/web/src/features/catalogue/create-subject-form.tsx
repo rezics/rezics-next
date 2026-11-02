@@ -200,8 +200,7 @@ function CreateSubjectFormLive({
   const selectedType = types.find((entry) => entry.id === type);
   const selectedTypeName = selectedType?.label.trim();
   const hasTypeName = !!selectedTypeName && selectedTypeName !== type;
-  const uncertain =
-    (failure?.reason === 'unavailable' && request.current !== null) || (unresolvedDelivery.current);
+  const uncertain = (failure?.reason === 'unavailable' && request.current !== null) || unresolvedDelivery.current;
   const locked = busy || uncertain || failure?.reason === 'conflict';
   const disabled = locked || session !== 'signed-in';
   const errors = failure?.errors ?? [];
