@@ -3,6 +3,7 @@ export function workerTestEnv(overrides: Record<string, string | undefined> = {}
   return {
     KERNEL_ROUTE_KEY: Buffer.alloc(32, 41).toString('base64url'),
     KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 42).toString('base64url')}`,
+    KERNEL_RECEIPT_KEYS: `1:${Buffer.alloc(32, 17).toString('base64url')}`,
     KERNEL_RATING_COUNTER_SECRET: Buffer.alloc(32, 43).toString('base64url'),
     AUTH_ISSUER: 'https://auth.worker.test',
     AUTH_AUDIENCE: 'https://kernel.worker.test',

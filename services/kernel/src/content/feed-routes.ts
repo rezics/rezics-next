@@ -43,6 +43,7 @@ export function feedRoutes(
         400: problemSchema('invalid_request', 'invalid_cursor'),
         401: problemSchema('authentication_required', 'invalid_credentials'),
         403: problemSchema('forbidden', 'platform_closed'),
+        404: problemSchema('not_found'),
         409: problemSchema('stale_cursor', 'search_restart_required'),
         422: problemSchema('unsupported_query'),
         503: problemSchema('deadline_exceeded', 'dependency_unavailable', 'overloaded', 'partition_unavailable'),

@@ -14,6 +14,7 @@ import { createFollowActivitySource } from '../library/follow-activity.ts';
 import { createCollectionReads } from '../library/collection-reads.ts';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { feedExcerpt, feedAuthor } from './feed-summary.ts';
+import { openFollowingSpace, type FollowingSpace } from './feed-space.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import { readPublication } from '../community/publication.ts';
 import { ContentNotFoundError, discloseThreads, readBoard, readPost, type ThreadView } from './reads.ts';
@@ -48,6 +49,9 @@ export const FEED_DISCOVERY_FIXED_CANDIDATES = 3;
 // Accounts accepts 100 keys; each can expand to one avatar and one verified-agent Subject.
 export const FEED_ACCOUNT_BATCH_LIMIT = 100;
 export const FEED_AUTHOR_KEYS_PER_CANDIDATE = 3;
+// Initial/final selected Space and Realm; at most one distinct board per inbox candidate.
+export const FEED_SPACE_FIXED_KEYS = 4;
+export const FEED_SPACE_BOARD_KEYS_PER_CANDIDATE = 1;
 export const feedCandidateBound = (discovery: number, following: number, continued: boolean) =>
   (discovery ? FEED_DISCOVERY_CANDIDATES_PER_RESULT * discovery + FEED_DISCOVERY_FIXED_CANDIDATES : 0) +
   following +
@@ -106,6 +110,7 @@ export function createFeedReads(deps: FeedDependencies) {
     summaries: Awaited<ReturnType<typeof readSubjectSummaries>>,
     threads: ReadonlyMap<string, ThreadView | null>,
     authors: Map<string, string>,
+    space?: FollowingSpace,
   ): Promise<FeedItem | null> {
     if (!(await supported(activity, actor, deadline))) return null;
     const object = activity.object;
@@ -121,9 +126,16 @@ export function createFeedReads(deps: FeedDependencies) {
       )
         return null;
       if (activity.target.type === 'space') {
-        const board = (await readBoard(content, thread.boardId, { actor, deadline })).value;
-        if (!board || board.community?.spaceId !== activity.target.id) return null;
+        if (space && activity.target.id !== space.spaceId) return null;
+        // Reuse the selected Space's bounded current board read when present.
+        if (space) {
+          if (!(await space.containsBoard(thread.boardId))) return null;
+        } else {
+          const board = (await readBoard(content, thread.boardId, { actor, deadline })).value;
+          if (!board || board.community?.spaceId !== activity.target.id) return null;
+        }
       }
+      if (space && activity.target.type !== 'space' && !(await space.containsBoard(thread.boardId))) return null;
       let entry = thread.firstPost;
       let postAt = thread.createdAt;
       if (object.kind === 'post') {
@@ -168,6 +180,7 @@ export function createFeedReads(deps: FeedDependencies) {
               destination: { kind: 'post', id: object.id, threadId: thread.id, postId: object.id, title: thread.title },
             };
     } else if (object.owner === 'semantic') {
+      if (space && object.realmId !== space.realmId) return null;
       const publication = await readPublication(deps, object.realmId, object.id, { actor, deadline });
       if (!publication || publication.publicationId !== object.publicationId) return null;
       const summary = summaries.get(object.id);
@@ -181,6 +194,9 @@ export function createFeedReads(deps: FeedDependencies) {
         destination: { kind: 'subject', id: summary.id, title: summary.label?.value ?? null },
       };
     } else {
+      // Collections have no native Space membership. Contained Subjects are not
+      // the primary candidate and cannot supply it on the Collection's behalf.
+      if (space) return null;
       const collection = await collections.readCollection(actor, object.id, deadline);
       if (collection.visibility !== 'public') return null;
       item = {
@@ -269,11 +285,13 @@ export function createFeedReads(deps: FeedDependencies) {
             continue: personal && stream === 'home' ? null : false,
             resume: null,
           };
-      // Exact selection metadata is not candidate membership. Neither native Space membership
-      // nor question witnesses are composed yet. Refuse before reading any unselected lane;
-      // their producers will join this same reader rather than introducing another stream.
-      if (query.spaceId !== undefined || query.ratingQuestionId !== undefined)
-        throw new ProblemError('dependency_unavailable');
+      // Point question witnesses do not establish population coverage. Keep the
+      // independent Context producer closed before enumerating any source.
+      if (query.ratingQuestionId !== undefined) throw new ProblemError('dependency_unavailable');
+      const space =
+        query.spaceId === undefined
+          ? undefined
+          : await openFollowingSpace(deps, actor, query.spaceId, deadline, now.toISOString());
       const sources: FeedPage['sources'] = {
         discovery: stream === 'home' ? 'ready' : 'not_requested',
         following: personal ? 'ready' : 'not_requested',
@@ -294,7 +312,8 @@ export function createFeedReads(deps: FeedDependencies) {
         personal && stream === 'home',
       );
       const authorKeys = personal ? followingLimit * FEED_AUTHOR_KEYS_PER_CANDIDATE : 0;
-      if (followingLimit > FEED_ACCOUNT_BATCH_LIMIT || candidateBound + authorKeys > FEED_CANDIDATE_LIMIT)
+      const spaceKeys = space ? FEED_SPACE_FIXED_KEYS + followingLimit * FEED_SPACE_BOARD_KEYS_PER_CANDIDATE : 0;
+      if (followingLimit > FEED_ACCOUNT_BATCH_LIMIT || candidateBound + authorKeys + spaceKeys > FEED_CANDIDATE_LIMIT)
         throw new RangeError('Feed native candidate bound exceeded');
       // One bounded mixed round. Reserve native raw costs, including rejected keys inside owners:
       // discovery <=6D+3, Continue <=39, inbox <=F. Mixed max91; anonymous max123.
@@ -303,6 +322,9 @@ export function createFeedReads(deps: FeedDependencies) {
           if (position[lane] === false) return;
           try {
             if (lane === 'discovery') {
+              // The public retained Source has not supplied Space population yet.
+              // Never enumerate an unselected discovery page as a substitute.
+              if (space) throw new ProblemError('dependency_unavailable');
               if (!deps.discovery) throw new ProblemError('dependency_unavailable');
               const page = await deps.discovery(
                 personal ? `account:${actor.accountId}` : 'anonymous',
@@ -342,6 +364,7 @@ export function createFeedReads(deps: FeedDependencies) {
               }));
               next.discovery = page.next ?? false;
             } else if (lane === 'continue') {
+              if (space) throw new ProblemError('dependency_unavailable');
               const page = await continued.list(
                 actor,
                 {
@@ -416,7 +439,7 @@ export function createFeedReads(deps: FeedDependencies) {
               lanes.following = await Promise.all(
                 page.activities.map(async (activity) => {
                   try {
-                    return { item: await hydrate(activity, actor, deadline, summaries, threads, authorIds) };
+                    return { item: await hydrate(activity, actor, deadline, summaries, threads, authorIds, space) };
                   } catch (error) {
                     if (
                       error instanceof ContentNotFoundError ||
@@ -456,6 +479,9 @@ export function createFeedReads(deps: FeedDependencies) {
           }
         }),
       );
+      // Repeat the original selected Space authority after all native hydration
+      // and final follow checks, including on an empty/sparse examined page.
+      await space?.finish();
       // Keep rejected candidates in their original slots: they still consume the native
       // raw budget and examined frontier, including Continue's fingerprint/resume keys.
       if (kind !== undefined)

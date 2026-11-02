@@ -24,6 +24,7 @@ import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { systemClock, type KernelClock } from '../../src/clock.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -240,6 +241,7 @@ async function startDriver(
     let runtimeAuth: { issuer: string; audience: string; jwksUrl: string } | undefined;
     let access!: ReturnType<typeof createAccess>;
     const app = compose({
+      receiptKeys: testReceiptKeys(),
       pool: runtimePool,
       ...(options.clock ? { clock: options.clock } : {}),
       routeKey,

@@ -84,6 +84,12 @@ continuation rounds and stricter native operation budgets. Owner point probes an
 batched semantic summary/reference reads are bounded by these candidates; merge work
 is O(B log B), and native indexed owner probes are O(B log R).
 
+Space-selected Following adds initial/final native Space and Realm reads (four keys)
+and at most F distinct current board reads, cached only for this request. It adds no
+feed candidates or refill. The conservative candidate/author/Space key reservation is
+123 for mixed Home and 104 for Following at P=20, below B=160. The native board and
+Space readers retain their own container, presentation and final disclosure work.
+
 Discovery/inbox pages wider than one fit completely in the response budget. Small pages
 may partially consume Continue's native six: the cursor retains the original owner
 cursor, the last examined native activity key and the page's key fingerprint. The next
@@ -184,20 +190,29 @@ Module schema dumps are derived by the controller through the normal supported p
 
 ## Home dimensions
 
-Native kind selection is delivered. Space candidate membership depends on Search's actual retained
-Source and scoped journey; a declared task or point read alone does not establish candidate
-membership. The adopted kind, Space and question selections apply as a literal conjunction to the same
-primary candidate in the existing mixed stream.
+Native kind selection and Space membership of the existing Following inbox are delivered.
+Following threads/replies use their currently disclosed board's native Space; adopted
+Subjects use the current publication and that Space's current Realm slot. A stale follow
+reason cannot establish membership. Collections have no native Space membership; contained
+Subjects do not change their primary identity. Initial and final selected Space authority,
+head and Realm slot must agree, including on empty pages. Kind, Space and available question
+selections apply as a literal conjunction to the same primary candidate in the mixed stream.
+Discovery and Continue Space selection still depend on Search's original retained Source
+and scoped journey; a point read alone does not establish their population membership.
 
-Home accepts exact `spaceId` and `ratingQuestionId` request selections, but returns
-`dependency_unavailable` until their original native membership producers are composed;
-accepting parameters, point witnesses or metadata supplies no population coverage and
-never broadens the stream to unselected candidates.
+Decision: Space-selected Home keeps native Following usable and reports Discovery/Continue
+unavailable until their original selected-population producers are ready.
 
-The available default sources remain catalogue/Account discovery, recent Following and
-Continue. Public Board/Realm/discussion/Collection discovery and Space/Context membership
-are omitted, pending their original producers. Failed source lanes remain omitted; only
-a ready lane with a native frontier enables Next, while Retry may retry a failed lane.
+Home accepts exact `spaceId` and `ratingQuestionId` request selections. Space selection
+uses the existing Following order and examined positions, including sparse continuation;
+Discovery and Continue are omitted as unavailable before reading unselected candidates.
+An unknown or unreadable selected Space returns `not_found`. Question selection still
+returns `dependency_unavailable` before enumeration until its original population producer
+is composed; point review witnesses do not activate it. Failed source lanes
+remain omitted; only a ready lane with a native frontier enables Next, while Retry may
+retry a failed lane. The available default sources remain catalogue/Account discovery,
+recent Following and Continue. Public Board/Realm/discussion/Collection discovery and
+Discovery/Continue Space membership and Context membership remain pending their original producers.
 
 Home Space choice reads retain the resolved Space identity on point-read failure so a failed
 revalidation disables that selection; platform closure remains distinct from access denial.
