@@ -342,6 +342,7 @@ type CallbackState = { active: boolean; callbacks: CommandCallback[] };
 type CallbackTransaction = CommandTransaction & { [transactionCallbacks]?: CallbackState };
 // Optional-path copies must not inherit callback authority by copying a symbol.
 const selectedCallbacks = new WeakMap<CallbackState, { tx: CommandTransaction; dispatch: CommandDispatchLifetime }>();
+const publisherCallbacks = new WeakSet<CallbackState>();
 function assertSelectedCallback(tx: CommandTransaction): void {
   const state = (tx as CallbackTransaction)[transactionCallbacks];
   const selected = state && selectedCallbacks.get(state);
@@ -361,6 +362,7 @@ export function registerCommandCallback(tx: CommandTransaction, callback: Comman
   // This optional profile never admits callbacks, including descendants that try
   // to register while final controls await after the body's association check.
   if (selectedCallbacks.has(state)) throw new TypeError('Unsupported dispatch lifetime callback profile');
+  if (publisherCallbacks.has(state)) throw new TypeError('Publisher coordination registers no callbacks');
   if (typeof callback !== 'function') throw new TypeError('Command callback must be a function');
   state.callbacks.push(callback);
 }
@@ -671,6 +673,7 @@ async function executeCommand<T>(
         const callbackState: CallbackState = { active: true, callbacks: [] };
         Object.defineProperty(tx, transactionCallbacks, { value: callbackState });
         if (dispatch) selectedCallbacks.set(callbackState, { tx, dispatch });
+        if (publisher) publisherCallbacks.add(callbackState);
         try {
           dispatch?.checkpoint();
           if (dispatch) await dispatch.control('begin', () => client.query('BEGIN ISOLATION LEVEL SERIALIZABLE'));
