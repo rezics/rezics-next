@@ -64,13 +64,7 @@ export function MyRealmsPageView({
               to="/realms"
               search={{ cursor: next }}
               onClick={(event) => {
-                if (
-                  event.detail === 0 &&
-                  !event.metaKey &&
-                  !event.ctrlKey &&
-                  !event.shiftKey &&
-                  !event.altKey
-                )
+                if (event.detail === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
                   onKeyboardNext?.(next);
               }}
               className="inline-flex min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal rounded-lg border border-border px-4 py-2 text-start text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"

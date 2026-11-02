@@ -275,8 +275,7 @@ class MyRealmsSessionSource {
 
   remove(caller: MyRealmsCaller) {
     if (this.active === caller) this.active = null;
-    if (this.continuationFocus?.callerId === caller.visit.id)
-      this.continuationFocus = null;
+    if (this.continuationFocus?.callerId === caller.visit.id) this.continuationFocus = null;
     this.visits.delete(caller.visit.id);
   }
 
@@ -913,11 +912,7 @@ export function MyRealmsCallerHost({
         <Link to="/realms/new" className="inline-flex min-h-10 items-center text-primary underline underline-offset-4">
           {m.space_setup_heading()}
         </Link>
-        <MyRealmsPageView
-          page={initial.page}
-          onKeyboardNext={onKeyboardNext}
-          focusContinuation={focusContinuation}
-        />
+        <MyRealmsPageView page={initial.page} onKeyboardNext={onKeyboardNext} focusContinuation={focusContinuation} />
       </div>
     );
   if (hydrated && caller.adoptionPending()) return null;
@@ -935,11 +930,7 @@ export function MyRealmsCallerHost({
       <Link to="/realms/new" className="inline-flex min-h-10 items-center text-primary underline underline-offset-4">
         {m.space_setup_heading()}
       </Link>
-      <MyRealmsPageView
-        page={page}
-        onKeyboardNext={onKeyboardNext}
-        focusContinuation={focusContinuation}
-      />
+      <MyRealmsPageView page={page} onKeyboardNext={onKeyboardNext} focusContinuation={focusContinuation} />
     </div>
   );
 }
