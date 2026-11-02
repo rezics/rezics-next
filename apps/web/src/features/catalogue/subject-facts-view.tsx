@@ -1,4 +1,9 @@
-import { catalogueEditor, useEditorLifetime, useCurrentReadingVisible } from './editor-lifetime';
+import {
+  catalogueEditor,
+  useEditorLifetime,
+  useCurrentReadingVisible,
+  useCurrentReadingActive,
+} from './editor-lifetime';
 import { useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -156,6 +161,8 @@ function FactField({
   onReview: (address: ReviewAddress) => void;
 }) {
   const o = { locale: locale as never };
+  const visible = useCurrentReadingVisible();
+  const active = useCurrentReadingActive();
   const definition = read.release.properties[property]!;
   const label = pageText(definition.labels, locale).text || m.subject_value_unlabelled({}, o);
   const selected = read.public.subject.statements[property] ?? [];
@@ -182,6 +189,7 @@ function FactField({
   const canEdit = canStage && !busy && (sourceSelected || (!selected.length && !sourceUnavailable));
   const sourceIndex = draft?.source ? selected.findIndex((item) => item.id === draft.source) : -1;
   const locked = !!draft && factLocked(draft);
+  if (!visible) return null;
   return (
     <section aria-label={label} className="min-w-0 [overflow-wrap:anywhere]">
       <ContentItemFrame as="div" className="min-w-0 space-y-4 rounded-xl bg-card p-4 sm:p-5">
@@ -215,6 +223,7 @@ function FactField({
                   disabled={busy || !canStage || !selected.length}
                   value={source}
                   onChange={(event) => {
+                    if (!active()) return;
                     const next = event.target.value;
                     setChoice({
                       source: next,

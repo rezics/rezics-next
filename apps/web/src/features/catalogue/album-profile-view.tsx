@@ -1,4 +1,9 @@
-import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import {
+  CatalogueCurrentReading,
+  catalogueEditor,
+  useEditorLifetime,
+  useCurrentReadingVisible,
+} from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -152,26 +157,23 @@ function AlbumCorrections({
   const [read, setRead] = useState<FactsCurrent>(initial);
   const [loadFailure, setLoadFailure] =
     useState<Extract<Awaited<ReturnType<FactsTransport['read']>>, { ok: false }>['reason']>();
-  const [drafts, setDrafts] = useState<FactDraft[]>([]);
-  const [reviewing, setReviewing] = useState<{ property: string; candidate: string; session?: string | undefined }>();
-  const [busy, setBusy] = useState(false);
-  const running = useRef(false);
-  const current = read;
-  const subject = current?.public.subject;
-  const fields = current ? albumFields(current.release) : undefined;
-  const title = pickText(subject?.labels ?? {}, locale).text;
-  const href = subject ? subjectHref({ id: subject.id, label: title }, locale).href : '';
-  const label = subject?.labels;
-  const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
+  const [loading, setLoading] = useState(false);
+  const reading = useRef(false);
+  const [revision, setRevision] = useState(0);
   const reload = async () => {
-    if (!lifetime.active()) return;
-    if (running.current) return;
-    running.current = true;
-    setBusy(true);
+    if (!lifetime.active() || reading.current) return;
+    reading.current = true;
+    setLoading(true);
+    setRevision((previous) => previous + 1);
     try {
       const next = await editors.facts.read();
       if (!lifetime.active()) return;
-      if (next.ok && next.public.subject.type === albumType && next.release.types[albumType]) {
+      if (
+        next.ok &&
+        next.public.subject.id === initial.public.subject.id &&
+        next.public.subject.type === albumType &&
+        next.release.types[albumType]
+      ) {
         setRead(next);
         setLoadFailure(undefined);
       } else setLoadFailure(next.ok ? 'invalid' : next.reason);
@@ -179,23 +181,99 @@ function AlbumCorrections({
       if (!lifetime.active()) return;
       setLoadFailure('unavailable');
     } finally {
-      if (!lifetime.active()) return;
-      running.current = false;
-      setBusy(false);
+      if (lifetime.active()) {
+        reading.current = false;
+        setLoading(false);
+      }
     }
   };
+  const visible = !loading && !loadFailure;
+  return (
+    <div className="space-y-8" aria-busy={loading}>
+      {loadFailure && <EditorFailure reason={loadFailure} locale={locale} />}
+      {loading && <p role="status">{m.candidate_loading({}, o)}</p>}
+      <CatalogueCurrentReading visible={visible} ready={visible} revision={String(revision)}>
+        <AlbumCorrectionWorkspace
+          read={read}
+          locale={locale}
+          enabled={enabled}
+          search={search}
+          editors={editors}
+          onReload={reload}
+        />
+      </CatalogueCurrentReading>
+      <Button type="button" variant="outline" disabled={loading} onClick={() => void reload()}>
+        {loadFailure ? m.correction_retry({}, o) : m.correction_reload({}, o)}
+      </Button>
+    </div>
+  );
+}
+
+const AlbumCorrectionWorkspace = catalogueEditor(AlbumCorrectionWorkspaceLive);
+
+function AlbumCorrectionWorkspaceLive({
+  read: current,
+  locale,
+  enabled,
+  search,
+  editors,
+  onReload,
+}: {
+  read: FactsCurrent;
+  locale: string;
+  enabled: boolean;
+  search: EntityPickerSearch;
+  editors: AlbumEditors;
+  onReload: () => Promise<void>;
+}) {
+  const lifetime = useEditorLifetime();
+  const visible = useCurrentReadingVisible();
+  const o = { locale: locale as never };
+  const [drafts, setDrafts] = useState<FactDraft[]>([]);
+  const [reviewing, setReviewing] = useState<{ property: string; candidate: string; session?: string | undefined }>();
+  const [busy, setBusy] = useState(false);
+  const running = useRef(false);
+  const wasVisible = useRef(visible);
+  if (wasVisible.current !== visible) {
+    wasVisible.current = visible;
+    running.current = false;
+    setBusy(false);
+    if (!visible)
+      setDrafts((previous) =>
+        previous.map((draft) =>
+          draft.command && !draft.result ? { ...draft, result: { ok: false, reason: 'uncertain' } } : draft,
+        ),
+      );
+  }
+  const subject = current.public.subject;
+  const fields = albumFields(current.release);
+  const title = pickText(subject.labels, locale).text;
+  const href = subjectHref({ id: subject.id, label: title }, locale).href;
+  const label = subject.labels;
+  const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
+  const admitted = new Set(fields.scalar);
+  const staleDraft = drafts.some((draft) => !admitted.has(draft.property));
   const submit = async () => {
     if (!lifetime.active()) return;
-    if (running.current || !current || !enabled || loadFailure || !changed.length) return;
+    if (running.current || !visible || !enabled || staleDraft || !changed.length) return;
     running.current = true;
     setBusy(true);
     try {
       const sealed = sealFacts(current.public.subject.id, current.release, drafts);
       setDrafts(sealed);
-      await sendFacts(sealed, editors.facts.propose, (property, result) => {
-        if (!lifetime.active()) return;
-        setDrafts((previous) => previous.map((draft) => (draft.property === property ? { ...draft, result } : draft)));
-      });
+      await sendFacts(
+        sealed,
+        (command) => {
+          if (!lifetime.active()) throw new Error('Retired catalogue editor');
+          return editors.facts.propose(command);
+        },
+        (property, result) => {
+          if (!lifetime.active()) return;
+          setDrafts((previous) =>
+            previous.map((draft) => (draft.property === property ? { ...draft, result } : draft)),
+          );
+        },
+      );
       if (!lifetime.active()) return;
     } finally {
       if (!lifetime.active()) return;
@@ -205,95 +283,96 @@ function AlbumCorrections({
   };
   return (
     <div className="space-y-8" aria-busy={busy}>
-      {loadFailure && <EditorFailure reason={loadFailure} locale={locale} />}
-      <section
-        aria-label={m.album_identity({}, o)}
-        className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5"
-      >
-        <h2
-          className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans text-2xl font-semibold"
-          lang={pickText(label ?? {}, locale).lang ?? undefined}
+      {visible && (
+        <section
+          aria-label={m.album_identity({}, o)}
+          className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5"
         >
-          {title || m.subject_value_unlabelled({}, o)}
-        </h2>
-        <p className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">
-          <DefinitionMeaning values={current.release.types[subject!.type]?.labels} locale={locale} />
-        </p>
-        <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
-        <p className="text-muted-foreground">{m.album_grain({}, o)}</p>
-        <p className="text-sm text-muted-foreground">{m.album_scope({}, o)}</p>
-        <div className="flex min-w-0 flex-wrap gap-3 [&>a]:h-auto [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:break-words [&>a]:[overflow-wrap:anywhere]">
-          <a className={buttonVariants({ variant: 'outline' })} href={href}>
-            {m.candidate_view_public({}, o)}
-          </a>
-          <SubjectTermsEntry id={subject!.id} label={title} locale={locale} />
-          <DefinitionGuideLink locale={locale} address={{ type: subject!.type, returnTo: `${href}/album` }} />
-        </div>
-        <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
-          <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
-            {m.specialist_identity_names({}, o)}
-          </summary>
-          <dl className="mt-3 min-w-0 space-y-3">
-            {Array.from(
-              new Set([
-                ...Object.keys(subject!.labels),
-                ...Object.keys(subject!.descriptions),
-                ...Object.keys(subject!.aliases),
-              ]),
-            ).map((language) => (
-              <div key={language} className="min-w-0">
-                <dt className="text-sm text-muted-foreground">{language}</dt>
-                <dd
-                  lang={language}
-                  className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
-                >
-                  {subject!.labels[language]}
+          <h2
+            className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans text-2xl font-semibold"
+            lang={pickText(label ?? {}, locale).lang ?? undefined}
+          >
+            {title || m.subject_value_unlabelled({}, o)}
+          </h2>
+          <p className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">
+            <DefinitionMeaning values={current.release.types[subject!.type]?.labels} locale={locale} />
+          </p>
+          <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
+          <p className="text-muted-foreground">{m.album_grain({}, o)}</p>
+          <p className="text-sm text-muted-foreground">{m.album_scope({}, o)}</p>
+          <div className="flex min-w-0 flex-wrap gap-3 [&>a]:h-auto [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:break-words [&>a]:[overflow-wrap:anywhere]">
+            <a className={buttonVariants({ variant: 'outline' })} href={href}>
+              {m.candidate_view_public({}, o)}
+            </a>
+            <SubjectTermsEntry id={subject!.id} label={title} locale={locale} />
+            <DefinitionGuideLink locale={locale} address={{ type: subject!.type, returnTo: `${href}/album` }} />
+          </div>
+          <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
+            <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+              {m.specialist_identity_names({}, o)}
+            </summary>
+            <dl className="mt-3 min-w-0 space-y-3">
+              {Array.from(
+                new Set([
+                  ...Object.keys(subject!.labels),
+                  ...Object.keys(subject!.descriptions),
+                  ...Object.keys(subject!.aliases),
+                ]),
+              ).map((language) => (
+                <div key={language} className="min-w-0">
+                  <dt className="text-sm text-muted-foreground">{language}</dt>
+                  <dd
+                    lang={language}
+                    className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+                  >
+                    {subject!.labels[language]}
+                  </dd>
+                  {subject!.descriptions[language] && (
+                    <dd
+                      lang={language}
+                      className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm"
+                    >
+                      {subject!.descriptions[language]}
+                    </dd>
+                  )}
+                  {!!subject!.aliases[language]?.length && (
+                    <dd
+                      lang={language}
+                      className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm text-muted-foreground"
+                    >
+                      {subject!.aliases[language]!.join(' · ')}
+                    </dd>
+                  )}
+                </div>
+              ))}
+            </dl>
+          </details>
+          <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
+            <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+              {m.specialist_identity_reference({}, o)}
+            </summary>
+            <dl className="mt-3 min-w-0 space-y-3">
+              <div className="min-w-0">
+                <dt className="text-sm text-muted-foreground">{m.specialist_identity_subject_id({}, o)}</dt>
+                <dd className="min-w-0">
+                  <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+                    {subject!.id}
+                  </code>
                 </dd>
-                {subject!.descriptions[language] && (
-                  <dd
-                    lang={language}
-                    className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm"
-                  >
-                    {subject!.descriptions[language]}
-                  </dd>
-                )}
-                {!!subject!.aliases[language]?.length && (
-                  <dd
-                    lang={language}
-                    className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm text-muted-foreground"
-                  >
-                    {subject!.aliases[language]!.join(' · ')}
-                  </dd>
-                )}
               </div>
-            ))}
-          </dl>
-        </details>
-        <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
-          <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
-            {m.specialist_identity_reference({}, o)}
-          </summary>
-          <dl className="mt-3 min-w-0 space-y-3">
-            <div className="min-w-0">
-              <dt className="text-sm text-muted-foreground">{m.specialist_identity_subject_id({}, o)}</dt>
-              <dd className="min-w-0">
-                <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
-                  {subject!.id}
-                </code>
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="text-sm text-muted-foreground">{m.specialist_identity_type({}, o)}</dt>
-              <dd className="min-w-0">
-                <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
-                  {subject!.type}
-                </code>
-              </dd>
-            </div>
-          </dl>
-          <p className="text-sm text-muted-foreground">{m.album_terms_help({}, o)}</p>
-        </details>
-      </section>
+              <div className="min-w-0">
+                <dt className="text-sm text-muted-foreground">{m.specialist_identity_type({}, o)}</dt>
+                <dd className="min-w-0">
+                  <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+                    {subject!.type}
+                  </code>
+                </dd>
+              </div>
+            </dl>
+            <p className="text-sm text-muted-foreground">{m.album_terms_help({}, o)}</p>
+          </details>
+        </section>
+      )}
       <form
         className="space-y-5"
         onSubmit={(event) => {
@@ -301,36 +380,44 @@ function AlbumCorrections({
           void submit();
         }}
       >
-        <h2 className="text-xl font-semibold">{m.album_facts({}, o)}</h2>
-        <p className="text-sm text-muted-foreground">
-          {m.facts_intro({}, o)} {m.facts_separate_results({}, o)}
-        </p>
-        <fieldset disabled={!enabled || !!loadFailure} className="space-y-4">
-          {fields!.scalar.map((property) => {
+        {visible && (
+          <>
+            <h2 className="text-xl font-semibold">{m.album_facts({}, o)}</h2>
+            <p className="text-sm text-muted-foreground">
+              {m.facts_intro({}, o)} {m.facts_separate_results({}, o)}
+            </p>
+          </>
+        )}
+        <fieldset disabled={!enabled || !visible} className="space-y-4">
+          {[...new Set([...fields.scalar, ...drafts.map((draft) => draft.property)])].map((property) => {
             const draft = drafts.find((item) => item.property === property);
             return (
               <div key={property} className="space-y-2">
-                <FactField
-                  property={property}
-                  read={current}
-                  locale={locale}
-                  href={href}
-                  busy={busy}
-                  canStage={drafts.length < factLimit}
-                  draft={draft}
-                  onReview={setReviewing}
-                  onChange={(draft) => {
-                    if (!lifetime.active() || running.current) return;
-                    setDrafts((previous) => changeAlbumSelection(previous, { kind: 'revise', draft }));
-                  }}
-                  onStage={(source) => {
-                    if (!lifetime.active() || running.current) return;
-                    setDrafts((previous) =>
-                      changeAlbumSelection(previous, { kind: 'stage', read: current, property, source }),
-                    );
-                  }}
-                />
-                {draft && !draft.command && (
+                {admitted.has(property) && (
+                  <FactField
+                    property={property}
+                    read={current}
+                    locale={locale}
+                    href={href}
+                    busy={busy}
+                    canStage={drafts.length < factLimit}
+                    draft={draft}
+                    onReview={(address) => {
+                      if (lifetime.active()) setReviewing(address);
+                    }}
+                    onChange={(draft) => {
+                      if (!lifetime.active() || running.current) return;
+                      setDrafts((previous) => changeAlbumSelection(previous, { kind: 'revise', draft }));
+                    }}
+                    onStage={(source) => {
+                      if (!lifetime.active() || running.current) return;
+                      setDrafts((previous) =>
+                        changeAlbumSelection(previous, { kind: 'stage', read: current, property, source }),
+                      );
+                    }}
+                  />
+                )}
+                {visible && draft && !draft.command && (
                   <Button
                     type="button"
                     variant="outline"
@@ -342,7 +429,7 @@ function AlbumCorrections({
                     }}
                   >
                     {m.album_remove_draft(
-                      { field: pickText(current.release.properties[property]!.labels, locale).text },
+                      { field: pickText(current.release.properties[property]?.labels ?? {}, locale).text || property },
                       o,
                     )}
                   </Button>
@@ -350,16 +437,19 @@ function AlbumCorrections({
               </div>
             );
           })}
-          <div className="space-y-3 rounded-xl border border-border p-4">
-            <p>{m.facts_selection({ count: changed.length, limit: factLimit }, o)}</p>
-            {drafts.length >= factLimit && <p role="status">{m.album_selection_limit({}, o)}</p>}
-            <Button type="submit" disabled={busy || !changed.length}>
-              {m.facts_submit({}, o)}
-            </Button>
-          </div>
+          {visible && (
+            <div className="space-y-3 rounded-xl border border-border p-4">
+              <p>{m.facts_selection({ count: changed.length, limit: factLimit }, o)}</p>
+              {drafts.length >= factLimit && <p role="status">{m.album_selection_limit({}, o)}</p>}
+              {staleDraft && <EditorFailure reason="stale" locale={locale} />}
+              <Button type="submit" disabled={busy || staleDraft || !changed.length}>
+                {m.facts_submit({}, o)}
+              </Button>
+            </div>
+          )}
         </fieldset>
       </form>
-      {reviewing && (
+      {visible && reviewing && (
         <ExactReview
           key={`${reviewing.property}:${reviewing.candidate}`}
           id={subject!.id}
@@ -368,20 +458,24 @@ function AlbumCorrections({
           review={editors.review}
         />
       )}
-      <section className="space-y-4" aria-label={m.album_credits_parts({}, o)}>
-        <h2 className="text-xl font-semibold">{m.album_credits_parts({}, o)}</h2>
-        <p className="text-sm text-muted-foreground">{m.album_credits_help({}, o)}</p>
-        {fields!.relations
-          .filter((id) => ['credit', 'membership'].includes(current.release.properties[id]!.relation!.group))
-          .map((property) => (
-            <section key={property} className="space-y-2">
-              <h3 className="font-semibold">
-                <DefinitionMeaning values={current.release.properties[property]!.labels} locale={locale} />
-              </h3>
-              <SelectedFacts property={property} read={current} locale={locale} />
-            </section>
-          ))}
-        <fieldset disabled={!enabled || !!loadFailure}>
+      <section className="space-y-4" aria-label={visible ? m.album_credits_parts({}, o) : undefined}>
+        {visible && (
+          <>
+            <h2 className="text-xl font-semibold">{m.album_credits_parts({}, o)}</h2>
+            <p className="text-sm text-muted-foreground">{m.album_credits_help({}, o)}</p>
+            {fields!.relations
+              .filter((id) => ['credit', 'membership'].includes(current.release.properties[id]!.relation!.group))
+              .map((property) => (
+                <section key={property} className="space-y-2">
+                  <h3 className="font-semibold">
+                    <DefinitionMeaning values={current.release.properties[property]!.labels} locale={locale} />
+                  </h3>
+                  <SelectedFacts property={property} read={current} locale={locale} />
+                </section>
+              ))}
+          </>
+        )}
+        <fieldset disabled={!enabled || !visible}>
           <RelationEditor
             id={subject!.id}
             locale={locale}
@@ -398,13 +492,13 @@ function AlbumCorrections({
             }}
             onSelected={async () => {
               if (!lifetime.active()) return;
-              await Promise.all([reload(), editors.onSelected?.()]);
+              await Promise.all([onReload(), editors.onSelected?.()]);
               if (!lifetime.active()) return;
             }}
           />
         </fieldset>
       </section>
-      {!!fields!.classifications.length && (
+      {visible && !!fields!.classifications.length && (
         <section className="space-y-4">
           <h2 className="text-xl font-semibold">{m.album_classification({}, o)}</h2>
           {fields!.classifications.map((property) => (
@@ -424,16 +518,13 @@ function AlbumCorrections({
           ))}
         </section>
       )}
-      {!!fields!.authored.length && (
+      {visible && !!fields!.authored.length && (
         <section className="space-y-3 rounded-xl border border-border p-4 sm:p-5">
           <h2 className="text-xl font-semibold">{m.album_summary({}, o)}</h2>
           <p className="text-sm text-muted-foreground">{m.album_summary_help({}, o)}</p>
           <AuthoredFieldEntry id={subject!.id} title={title} locale={locale} />
         </section>
       )}
-      <Button type="button" variant="outline" disabled={busy} onClick={() => void reload()}>
-        {m.correction_reload({}, o)}
-      </Button>
     </div>
   );
 }
