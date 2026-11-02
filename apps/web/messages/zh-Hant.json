@@ -2685,6 +2685,8 @@
   "subject_relation_unavailable": "無法讀取此關係。",
   "subject_relation_invalid": "請檢查清單網址後再試一次。",
   "subject_relation_loading": "正在載入更多…",
+  "subject_relation_limited": "此清單暫時受到限制。目前頁面會保留。",
+  "subject_relation_retry_after": "請在 {seconds} 秒後再試。",
   "moderation_queue_loading": "正在載入檢舉…",
   "moderation_queue_error": "無法載入檢舉。",
   "moderation_queue_retry": "重試",

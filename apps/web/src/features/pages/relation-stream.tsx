@@ -5,6 +5,7 @@ import { isView } from '@rezics/composition';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../../paraglide/messages.js';
+import { useSearchRetryWait } from '../../search/search-recovery-retry';
 import { subjectViewHref } from '../../subject/subject-href';
 import { sessionQuery } from '../../session/query';
 import { CoverList } from './cover-list';
@@ -16,6 +17,11 @@ import {
   type OverviewValue,
   type Section,
 } from './overview';
+import {
+  admitRelationRetryAt,
+  relationRetryAfterFromCause,
+  relationRetryBlocks,
+} from './relation-retry-admission';
 import { loadRelationGroup, relationGroupKey, type RelationGroupRequest } from './relation-stream-query';
 import { admitRelationPage } from './relation-page-admission';
 import { sameRelationStream } from './relation-stream-descriptor';
@@ -155,7 +161,7 @@ function useRelationIncarnation(): string {
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-function failure(status: number | undefined, locale: string): string {
+function failure(status: number | undefined, locale: string, retrySeconds?: number): string {
   const options = { locale: locale as never };
   return status === 409
     ? m.subject_relation_changed({}, options)
@@ -163,7 +169,11 @@ function failure(status: number | undefined, locale: string): string {
       ? m.subject_relation_invalid({}, options)
       : status === 401 || status === 403 || status === 404
         ? m.subject_relation_unavailable({}, options)
-        : m.subject_section_failed({}, options);
+        : status === 429
+          ? retrySeconds !== undefined
+            ? m.subject_relation_retry_after({ seconds: retrySeconds }, options)
+            : m.subject_relation_limited({}, options)
+          : m.subject_section_failed({}, options);
 }
 
 export function relationStreamItems(section: Section, value: OverviewValue, limit = Number.POSITIVE_INFINITY) {
@@ -261,7 +271,7 @@ function StreamState({
     page: Section | undefined;
     progress: RelationProgress;
     pending: boolean;
-    error?: { status?: number | undefined } | undefined;
+    error?: { status?: number | undefined; retryAt?: number | undefined } | undefined;
     completion?: { count: number; terminal: boolean; trigger: HTMLAnchorElement | null } | undefined;
   };
   const [state, setState] = useState<State>(() => ({
@@ -353,6 +363,7 @@ function StreamState({
   const visiblePending = currentSession && pending;
   const visibleError = currentSession ? (error ?? (malformedPage ? {} : undefined)) : undefined;
   const visibleCompletion = currentSession ? completion : undefined;
+  const retryWait = useSearchRetryWait(currentSession ? error?.retryAt : undefined);
 
   useLayoutEffect(() => {
     if (owner.retired) return;
@@ -459,7 +470,7 @@ function StreamState({
     // Keep the native restart path available when admission has changed but React has not committed yet.
     if (!continuationEnabled || !owner.current(generation)) return;
     event.preventDefault();
-    if (active.current) return;
+    if (active.current || (error?.status === 429 && relationRetryBlocks(error.retryAt))) return;
     active.current = true;
     const trigger = event.currentTarget;
     setState((previous) =>
@@ -509,6 +520,8 @@ function StreamState({
         );
       } else {
         if (next.ok && !windowItems(next, value)) next = { ok: false };
+        const rateLimited = !next.ok && next.status === 429;
+        const retryAt = !next.ok && next.status === 429 ? admitRelationRetryAt(next.retryAfter) : undefined;
         if (next.ok && owner.expectedReader !== null) {
           const nextObjects = privateReadingObjects(next);
           if (!claimPrivateReading(nextObjects, owner)) {
@@ -521,6 +534,13 @@ function StreamState({
         const focusTrigger = trigger.ownerDocument.activeElement === trigger ? trigger : null;
         setState((previous) => {
           if (!owner.matches(generation)) return previous;
+          if (rateLimited) {
+            return {
+              ...previous,
+              error: { status: 429, ...(retryAt !== undefined ? { retryAt } : {}) },
+              completion: undefined,
+            };
+          }
           const nextCursor = next.ok ? relationCursor(next.body) : undefined;
           const nextProgress = next.ok ? advanceRelationProgress(previous.progress, nextCursor) : previous.progress;
           return {
@@ -537,22 +557,24 @@ function StreamState({
               : undefined,
           };
         });
-        if (!next.ok && owner.current(generation)) void router?.invalidate();
+        if (!next.ok && !rateLimited && owner.current(generation)) void router?.invalidate();
       }
     } catch (cause) {
       if (owner.current(generation)) {
         const status = relationFailureStatus(cause);
+        const rateLimited = status === 429;
+        const retryAt = rateLimited ? admitRelationRetryAt(relationRetryAfterFromCause(cause)) : undefined;
         setState((previous) =>
           owner.matches(generation)
             ? {
                 ...previous,
-                page: status === undefined ? previous.page : undefined,
-                error: { status },
+                page: status === undefined || rateLimited ? previous.page : undefined,
+                error: { status, ...(rateLimited && retryAt !== undefined ? { retryAt } : {}) },
                 completion: undefined,
               }
             : previous,
         );
-        if (status !== undefined && owner.current(generation)) void router?.invalidate();
+        if (status !== undefined && !rateLimited && owner.current(generation)) void router?.invalidate();
       }
     } finally {
       if (queryKey && ownedKey) {
@@ -623,8 +645,18 @@ function StreamState({
               : m.subject_relation_end({ label: title }, options)}
         </p>
       )}
-      {visibleError && <p role="alert">{failure(visibleError.status, value.locale)}</p>}
-      {href && cursor && (
+      {visibleError && (
+        <p role="alert">
+          {failure(
+            visibleError.status,
+            value.locale,
+            visibleError.status === 429 && retryWait && error?.retryAt !== undefined
+              ? Math.max(0, Math.ceil((error.retryAt - Date.now()) / 1000))
+              : undefined,
+          )}
+        </p>
+      )}
+      {href && cursor && !retryWait && (
         <a
           data-slot="continue-group"
           href={href}
@@ -636,7 +668,7 @@ function StreamState({
           {visibleError ? m.subject_section_retry({}, options) : m.subject_section_more({ label: title }, options)}
         </a>
       )}
-      {(stopped || visibleError || !section.ok || readerUnavailable) && base && (
+      {(stopped || (visibleError && !retryWait) || !section.ok || readerUnavailable) && base && (
         <a
           data-slot="restart-group"
           href={`${base}?${new URLSearchParams({ node, ...(realm ? { realm } : {}) })}`}

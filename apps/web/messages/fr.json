@@ -2685,6 +2685,8 @@
   "subject_relation_unavailable": "Cette relation est indisponible.",
   "subject_relation_invalid": "Vérifiez l’adresse de la liste et réessayez.",
   "subject_relation_loading": "Chargement…",
+  "subject_relation_limited": "Cette liste est temporairement limitée. La page actuelle est conservée.",
+  "subject_relation_retry_after": "Réessayez dans {seconds} secondes.",
   "moderation_queue_loading": "Chargement des signalements…",
   "moderation_queue_error": "Les signalements n’ont pas pu être chargés.",
   "moderation_queue_retry": "Réessayer",

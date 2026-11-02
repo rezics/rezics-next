@@ -13,6 +13,7 @@ import { notFound } from '@tanstack/react-router';
 import { pageContext, loadSubjectPage, PageReadError } from './subject';
 import { validatePageNode, validatePageRealm, validateViewCursor } from './view-cursor';
 import type { Section } from './overview';
+import { relationRetryAfter, sectionFailure } from './relation-retry-admission';
 import { isRecord } from './shared';
 
 export type RelationGroupRequest = {
@@ -58,10 +59,10 @@ export async function readRelationGroup(
       continuation: { node: input.node, cursor: input.cursor },
     });
   } catch (error) {
-    if (error instanceof PageReadError) return { ok: false, status: error.status };
+    if (error instanceof PageReadError) return sectionFailure(error.status, error.retryAfter);
     throw error;
   }
-  if (loaded.kind !== 'page') return { ok: false, status: loaded.kind === 'missing' ? 404 : 409 };
+  if (loaded.kind !== 'page') return sectionFailure(loaded.kind === 'missing' ? 404 : 409);
   const actualPopulation = loaded.page.context?.population;
   if (
     (input.context !== undefined && input.context !== (loaded.page.context?.id ?? PAGE_GLOBAL_CONTEXT)) ||
@@ -69,15 +70,15 @@ export async function readRelationGroup(
     (input.populationId !== undefined &&
       (actualPopulation?.kind !== 'realm' || input.populationId !== actualPopulation.id))
   )
-    return { ok: false, status: 409 };
+    return sectionFailure(409);
   const plan = planReads(platformRegistry, loaded.page.document as CompositionDocument, pageContext(loaded.page));
   const key = plan.nodes[input.node];
   const read = key ? plan.reads[key] : undefined;
   const result = key ? loaded.page.reads[key] : undefined;
-  if (!read || (read.kind !== 'links' && read.kind !== 'relations')) return { ok: false, status: 400 };
+  if (!read || (read.kind !== 'links' && read.kind !== 'relations')) return sectionFailure(400);
   return result?.status === 200 && isRecord(result.body)
     ? { ok: true, read, body: result.body }
-    : { ok: false, status: result?.status };
+    : sectionFailure(result?.status, relationRetryAfter(result?.headers));
 }
 
 export const loadRelationGroup = createServerFn({ method: 'GET', strict: false })

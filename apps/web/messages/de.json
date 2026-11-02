@@ -2685,6 +2685,8 @@
   "subject_relation_unavailable": "Diese Beziehung ist nicht verfügbar.",
   "subject_relation_invalid": "Prüfe die Listenadresse und versuche es erneut.",
   "subject_relation_loading": "Weitere werden geladen…",
+  "subject_relation_limited": "Diese Liste ist vorübergehend begrenzt. Die aktuelle Seite bleibt erhalten.",
+  "subject_relation_retry_after": "Versuche es in {seconds} Sekunden erneut.",
   "moderation_queue_loading": "Meldungen werden geladen…",
   "moderation_queue_error": "Die Meldungen konnten nicht geladen werden.",
   "moderation_queue_retry": "Erneut versuchen",

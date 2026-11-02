@@ -2685,6 +2685,8 @@
   "subject_relation_unavailable": "이 관계를 표시할 수 없습니다.",
   "subject_relation_invalid": "목록 주소를 확인하고 다시 시도해 주세요.",
   "subject_relation_loading": "더 불러오는 중…",
+  "subject_relation_limited": "이 목록은 일시적으로 제한되었습니다. 현재 페이지는 유지됩니다.",
+  "subject_relation_retry_after": "{seconds}초 후에 다시 시도하세요.",
   "moderation_queue_loading": "신고 불러오는 중…",
   "moderation_queue_error": "신고를 불러오지 못했습니다.",
   "moderation_queue_retry": "다시 시도",

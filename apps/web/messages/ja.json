@@ -2685,6 +2685,8 @@
   "subject_relation_unavailable": "この関係を表示できません。",
   "subject_relation_invalid": "一覧のアドレスを確認して再試行してください。",
   "subject_relation_loading": "追加を読み込み中…",
+  "subject_relation_limited": "このリストは一時的に制限されています。現在のページは保持されます。",
+  "subject_relation_retry_after": "{seconds} 秒後に再試行してください。",
   "moderation_queue_loading": "通報を読み込み中…",
   "moderation_queue_error": "通報を読み込めませんでした。",
   "moderation_queue_retry": "再試行",

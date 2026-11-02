@@ -2683,6 +2683,8 @@
   "subject_relation_unavailable": "This relation is unavailable.",
   "subject_relation_invalid": "Check the list address and try again.",
   "subject_relation_loading": "Loading more…",
+  "subject_relation_limited": "This list is temporarily limited. The current page is kept.",
+  "subject_relation_retry_after": "Try again in {seconds} seconds.",
   "moderation_queue_loading": "Loading reports…",
   "moderation_queue_error": "Reports could not be loaded.",
   "moderation_queue_retry": "Try again",

@@ -2685,6 +2685,8 @@
   "subject_relation_unavailable": "无法读取此关系。",
   "subject_relation_invalid": "请检查列表网址后重试。",
   "subject_relation_loading": "正在加载更多…",
+  "subject_relation_limited": "此列表暂时受到限制。当前页面会保留。",
+  "subject_relation_retry_after": "请在 {seconds} 秒后再试。",
   "moderation_queue_loading": "正在加载举报…",
   "moderation_queue_error": "无法加载举报。",
   "moderation_queue_retry": "重试",

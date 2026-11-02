@@ -85,7 +85,7 @@ export type SubjectPageData = {
   document: PageDocument;
   /** The views the subject's templates define; absent when the kernel did not say. */
   views?: string[];
-  reads: Record<string, { status: number; body: unknown; retryAt?: number }>;
+  reads: Record<string, { status: number; body: unknown; retryAt?: number; headers?: Record<string, string> }>;
 };
 
 export type SubjectPageLoad =
@@ -121,14 +121,26 @@ export class PageReadError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly retryAfter?: string,
   ) {
     super(message);
   }
 }
 
-function problemError(value: unknown, status: number): Error {
+function retryAfterHeader(headers: unknown): string | undefined {
+  if (headers == null) return;
+  try {
+    const value = new Headers(headers as HeadersInit).get('retry-after');
+    return value?.trim() ? value : undefined;
+  } catch {
+    return;
+  }
+}
+
+function problemError(value: unknown, status: number, headers?: unknown): Error {
   const code = isRecord(value) && typeof value.code === 'string' && value.code ? value.code : 'internal_error';
-  return new PageReadError(code, status);
+  const retryAfter = retryAfterHeader(headers);
+  return retryAfter ? new PageReadError(code, status, retryAfter) : new PageReadError(code, status);
 }
 
 /** The context the page's reads are planned in. */
@@ -238,7 +250,7 @@ export async function loadSubjectPage(
     const { account: _account, ...page } = result.data;
     return { kind: 'page', page: { ...page, subject: page.subject ?? null, requestedRealm: options.realm } };
   }
-  throw problemError(result.error?.value, result.status);
+  throw problemError(result.error?.value, result.status, result.headers);
 }
 
 /** The properties the page's inverse reads follow, for the definitions that label them. */

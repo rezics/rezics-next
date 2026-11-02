@@ -2685,6 +2685,8 @@
   "subject_relation_unavailable": "Esta relación no está disponible.",
   "subject_relation_invalid": "Comprueba la dirección de la lista e inténtalo de nuevo.",
   "subject_relation_loading": "Cargando más…",
+  "subject_relation_limited": "Esta lista está temporalmente limitada. Se conserva la página actual.",
+  "subject_relation_retry_after": "Vuelve a intentarlo en {seconds} segundos.",
   "moderation_queue_loading": "Cargando denuncias…",
   "moderation_queue_error": "No se pudieron cargar las denuncias.",
   "moderation_queue_retry": "Reintentar",
