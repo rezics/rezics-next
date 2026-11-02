@@ -134,12 +134,7 @@ function StoryArcProfileLive({
       {(query.isError || (query.data && !query.data.ok)) && (
         <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
       )}
-      <Button
-        variant="outline"
-        className={callerActionClass}
-        disabled={query.isFetching}
-        onClick={reload}
-      >
+      <Button variant="outline" className={callerActionClass} disabled={query.isFetching} onClick={reload}>
         {m.correction_reload({}, o)}
       </Button>
       {session === 'signed-in' && !readable && (id || work) && (

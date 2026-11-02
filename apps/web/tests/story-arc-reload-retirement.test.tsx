@@ -51,15 +51,15 @@ test('same-identity reload retires the old page observation and keeps its privat
   });
   const transport = {
     ...fixture.transport,
-    load: async (address: { id?: string; work?: string }) =>
-      heldRead ?? fixture.transport.load(address),
+    load: async (address: { id?: string; work?: string }) => heldRead ?? fixture.transport.load(address),
   };
   const settle = async (action: () => void) => {
     act(action);
     await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
   };
   const button = (label: string) => [...host.querySelectorAll('button')].find((node) => node.textContent === label)!;
-  const visible = (selector: string) => [...host.querySelectorAll(selector)].filter((node) => !node.closest('[hidden]'));
+  const visible = (selector: string) =>
+    [...host.querySelectorAll(selector)].filter((node) => !node.closest('[hidden]'));
   const deferRead = () => {
     heldRead = new Promise((resolve) => {
       finishRead = resolve;
@@ -91,10 +91,15 @@ test('same-identity reload retires the old page observation and keeps its privat
     const url = [...host.querySelectorAll('section')].find(
       (node) => node.getAttribute('aria-label') === fixture.release.properties['schema:url']!.labels.en,
     )!;
-    await settle(() => [...url.querySelectorAll('button')].find((node) => node.textContent === m.facts_edit_field())!.click());
+    await settle(() =>
+      [...url.querySelectorAll('button')].find((node) => node.textContent === m.facts_edit_field())!.click(),
+    );
     const draft = host.querySelector<HTMLInputElement>('input[type="url"]')!;
     await settle(() => {
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(draft, 'https://draft.test');
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(
+        draft,
+        'https://draft.test',
+      );
       draft.dispatchEvent(new window.Event('input', { bubbles: true }));
     });
     const form = draft.closest('form')!;
@@ -104,7 +109,9 @@ test('same-identity reload retires the old page observation and keeps its privat
     deferRead();
     await settle(() => button(m.correction_reload()).click());
     expect(visible('input').includes(draft)).toBe(false);
-    expect(visible('a').some((link) => link.getAttribute('href')?.includes(`/subjects/${storyArcProfileId}/`))).toBe(false);
+    expect(visible('a').some((link) => link.getAttribute('href')?.includes(`/subjects/${storyArcProfileId}/`))).toBe(
+      false,
+    );
     expect(host.querySelector<HTMLInputElement>('input[type="url"]')?.value).toBe('https://draft.test');
     await settle(() => oldSubmit({ preventDefault() {} }));
     expect(proposals).toHaveLength(0);
@@ -121,7 +128,9 @@ test('same-identity reload retires the old page observation and keeps its privat
     await settle(() => button(m.correction_reload()).click());
     expect(visible('input').includes(restoredDraft)).toBe(false);
     await refreshRead();
-    await settle(() => finishProposal!({ ok: true, kind: 'proposed-awaiting-review', candidate: 'retired-result', revision: 1 }));
+    await settle(() =>
+      finishProposal!({ ok: true, kind: 'proposed-awaiting-review', candidate: 'retired-result', revision: 1 }),
+    );
     expect(host.innerHTML).not.toContain('retired-result');
     const retryDraft = host.querySelector<HTMLInputElement>('input[type="url"]')!;
     expect(retryDraft.value).toBe('https://draft.test');
