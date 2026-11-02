@@ -2,10 +2,16 @@ import { expect, test } from 'bun:test';
 import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as v from 'valibot';
-import { searchLoaderDeps, searchParams } from '../src/search/search-params';
+import { searchParams } from '../src/search/search-params';
 import { SearchSort } from '../src/search/sort';
 
-const props = { locale: 'en', query: 'Reader', type: undefined, facets: {}, state: { query: 'Reader', type: undefined, facets: {}, cursor: 'old', sort: undefined } };
+const props = {
+  locale: 'en',
+  query: 'Reader',
+  type: undefined,
+  facets: {},
+  state: { query: 'Reader', type: undefined, facets: {}, cursor: 'old', sort: undefined },
+};
 
 test('native sort submission uses a supported value and independently labeled selectors', () => {
   const html = renderToStaticMarkup(
@@ -25,7 +31,7 @@ test('native sort submission uses a supported value and independently labeled se
   expect(selects[0]![2]).toMatch(/<option value="" selected=""/);
   expect(selects[1]![2]).toMatch(/<option value="rating" selected=""/);
   expect(html).toContain('type="submit"');
-  expect(searchLoaderDeps(v.parse(searchParams, { sort: '' })).sort).toBeUndefined();
+  expect(v.parse(searchParams, { sort: '' }).sort).toBeUndefined();
 });
 
 test('disabled sorting cannot submit a new order', () => {
