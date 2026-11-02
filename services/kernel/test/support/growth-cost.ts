@@ -717,6 +717,20 @@ function lowerMedian(values: readonly number[]): number {
   return [...values].sort((left, right) => left - right)[(values.length - 1) >> 1]!;
 }
 
+function ownedRelationCosts(relations: Cost['relations']): Cost['relations'] {
+  return Object.fromEntries(
+    Object.entries(relations).map(([name, relation]) => [
+      name,
+      {
+        rows: relation.rows,
+        blocks: relation.blocks,
+        nodes: relation.nodes,
+        sequentialScans: relation.sequentialScans,
+      },
+    ]),
+  );
+}
+
 type OptionalCostField =
   | 'requestBytes'
   | 'responseBytes'
@@ -871,7 +885,7 @@ export function medianCost(costs: readonly Cost[]): Cost {
     sharedHit: lowerMedian(costs.map((cost) => cost.sharedHit)),
     sharedRead: lowerMedian(costs.map((cost) => cost.sharedRead)),
     ...(limitations.length === 0 ? {} : { limitations }),
-    relations: representative.relations,
+    relations: ownedRelationCosts(representative.relations),
   };
   const failedStatements = new Map<string, number>();
   for (const code of new Set(costs.flatMap((cost) => Object.keys(cost.failedStatements ?? {}))))

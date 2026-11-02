@@ -467,6 +467,40 @@ test('median cost takes the lower median of each measure and matching relations'
   expect(() => medianCost([])).toThrow(RangeError);
 });
 
+test('Aggregated cost evidence owns its nested relation values independently of raw repetition objects.', () => {
+  const relation = { rows: 10, blocks: 4, nodes: 1, sequentialScans: 1 };
+  const relations: Record<string, typeof relation> = { items: relation };
+  const first: Cost = {
+    statements: 1,
+    controlStatements: 0,
+    catalogStatements: 0,
+    plans: 1,
+    rows: 10,
+    blocks: 4,
+    sharedHit: 2,
+    sharedRead: 2,
+    relations,
+  };
+  const second: Cost = {
+    ...first,
+    blocks: 8,
+    relations: { items: { rows: 20, blocks: 8, nodes: 2, sequentialScans: 2 } },
+  };
+  const aggregated = medianCost([first, second]);
+  const snapshot = aggregated.relations.items!;
+  expect(snapshot).toEqual({ rows: 10, blocks: 4, nodes: 1, sequentialScans: 1 });
+  expect(snapshot).not.toBe(relation);
+  expect(aggregated.relations).not.toBe(relations);
+  relation.rows = 99;
+  relation.blocks = 99;
+  relation.nodes = 99;
+  relation.sequentialScans = 99;
+  relations.extra = { rows: 1, blocks: 1, nodes: 1, sequentialScans: 0 };
+  delete relations.items;
+  expect(aggregated.relations).toEqual({ items: { rows: 10, blocks: 4, nodes: 1, sequentialScans: 1 } });
+  expect(relation).toEqual({ rows: 99, blocks: 99, nodes: 99, sequentialScans: 99 });
+});
+
 test('plan measurements reject negative and non-finite physical work', () => {
   const plan = (fields: Record<string, unknown>) => ({
     'Node Type': 'Seq Scan',
