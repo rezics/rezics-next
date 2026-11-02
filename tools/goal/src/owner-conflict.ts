@@ -138,7 +138,8 @@ function inheritedGitConfigOffset(env: NodeJS.ProcessEnv, added: number): number
     throw new Error('inherited GIT_CONFIG_COUNT overflows the appendable range');
   for (let index = 0; index < count; index++) {
     if (env[`GIT_CONFIG_KEY_${index}`] === undefined) throw new Error(`inherited GIT_CONFIG_KEY_${index} is missing`);
-    if (env[`GIT_CONFIG_VALUE_${index}`] === undefined) throw new Error(`inherited GIT_CONFIG_VALUE_${index} is missing`);
+    if (env[`GIT_CONFIG_VALUE_${index}`] === undefined)
+      throw new Error(`inherited GIT_CONFIG_VALUE_${index} is missing`);
   }
   return count;
 }
