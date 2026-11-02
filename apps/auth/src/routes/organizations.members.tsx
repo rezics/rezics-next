@@ -254,7 +254,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         saved === 'invalid' ||
         (saved && (saved.accountId !== initiatingAccount || saved.operation.organizationId !== organizationId))
       ) {
-        installPage({ kind: 'denied' });
+        setPage({ kind: 'unavailable' });
         return;
       }
       if (saved) {

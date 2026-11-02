@@ -11,6 +11,7 @@ const globals = {
   window: dom,
   document: dom.document,
   navigator: dom.navigator,
+  scrollTo: dom.scrollTo.bind(dom),
   HTMLElement: dom.HTMLElement,
   HTMLInputElement: dom.HTMLInputElement,
   IS_REACT_ACT_ENVIRONMENT: true,
