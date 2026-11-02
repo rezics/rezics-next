@@ -11,7 +11,7 @@ mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 afterAll(() => mock.restore());
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
-const viewer = (subject: string, csrfToken = `csrf-${subject}`) => ({ state: 'signed-in', subject, csrfToken });
+const viewer = (subject: string, csrfToken: string | null = `csrf-${subject}`) => ({ state: 'signed-in', subject, csrfToken });
 const groups = [
   'personal_library',
   'reading_progress',
@@ -220,7 +220,7 @@ async function mount() {
     get continueRead() {
       return continueRead;
     },
-    session: (subject: string, token?: string) => client.setQueryData(['session'], viewer(subject, token)),
+    session: (subject: string, token?: string | null) => client.setQueryData(['session'], viewer(subject, token)),
     admission: (admitted = groups) => client.setQueryData(['exposure', 'viewer'], admitted),
     refresh: () =>
       run(() => {
@@ -350,6 +350,45 @@ test('Whole personal Shelf reads, sequential commands and Undo retire on actual 
   }
 });
 
+test('A signed-in Shelf keeps authorized reads and label search available without a CSRF token, while writes stay unsent', async () => {
+  const ui = await mount();
+  try {
+    await ui.run(() => ui.session('A', null));
+    await ui.refresh();
+    const page = response('A');
+    await ui.settle(ui.reads.at(-1)!, page);
+    expect(ui.host.textContent).toContain('Private A 1');
+
+    let recovered!: ReturnType<typeof ui.continueRead>;
+    await ui.run(() => {
+      recovered = ui.continueRead();
+    });
+    await ui.settle(ui.continues.at(-1)!, {
+      sessionSubject: 'A',
+      requested: page.requested,
+      result: { state: 'loaded', entries: [{ subjectId: id(4), label: 'Continue A', summary: null, progress: null }], next: null },
+    } as never);
+    expect(await recovered).toMatchObject({ state: 'loaded', entries: [{ label: 'Continue A' }] });
+
+    await ui.run(() => {
+      ui.controls.select(id(1), true);
+      void ui.controls.changeState(id(1), 'completed');
+    });
+    expect(ui.writes).toHaveLength(0);
+    await ui.run(() => ui.button(ui.m.library_selected_labels_open()).click());
+    await ui.debounce();
+    await ui.settle(ui.searches.at(-1)!.work, {
+      state: 'loaded',
+      labels: [{ id: 'label-read', name: 'Read without mutation token', revision: 1 }],
+      next: null,
+      provenance: { viewer: 'A', csrfToken: null, query: '', cursor: undefined },
+    } as never);
+    expect(ui.host.textContent).toContain('Read without mutation token');
+  } finally {
+    await ui.close();
+  }
+});
+
 test('Per-operation retirement keeps healthy reads, exact uncertain keys and partial outcomes across nonempty token rotation and healthy refresh', async () => {
   const ui = await mount();
   try {
@@ -377,7 +416,7 @@ test('Per-operation retirement keeps healthy reads, exact uncertain keys and par
       void ui.controls.retryState(id(2));
     });
     expect(ui.writes[2]!.input.data).toEqual(exact);
-    expect(new Headers(ui.writes[2]!.input.headers).get('X-CSRF-Token')).toBe('rotated');
+    expect(new Headers(ui.writes[2]!.input.headers).get('X-CSRF-Token')).toBe('csrf-A');
     const before = ui.reads.length;
     const label = ui.controls.captureLabel();
     await ui.run(() => {

@@ -120,7 +120,6 @@ export function ShelfLabelAction({ controls, kind = 'assign' }: { controls: Cont
     return (
       !!viewer &&
       provenance.viewer === viewer &&
-      !!provenance.csrfToken &&
       provenance.query === request.query &&
       provenance.cursor === request.cursor
     );

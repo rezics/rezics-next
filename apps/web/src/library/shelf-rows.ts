@@ -120,6 +120,12 @@ export function useShelfRows(
   const labelOperation = useRef<{ id: string; running: boolean } | null>(null);
   const [outcomes, setOutcomes] = useState<ShelfOutcome[]>([]);
   const stateTargets = useRef(new Map<string, CapturedStateTarget>());
+  const stateCommands = useRef(
+    new WeakMap<ShelfStateIntent, { headers: Headers; send: typeof savePersonalLibraryEntry }>(),
+  );
+  const labelCommands = useRef(
+    new WeakMap<ShelfLabelIntent, { headers: Headers; send: typeof mutateSubjectLabelAction }>(),
+  );
   const [labelOutcomes, setLabelOutcomes] = useState<ShelfLabelOutcome[]>([]);
   const [assignedLabelName, setAssignedLabelName] = useState('');
   const [labelKind, setLabelKind] = useState<ShelfLabelKind>('assign');
@@ -147,6 +153,12 @@ export function useShelfRows(
   const labelListAdmitted = useOperation('library_label.list');
   const labelRemoveAdmitted = useOperation('library_label.unassign');
   const labelReadAdmitted = useOperation('library_label.assignment_list');
+  const headers = () => shelfOrigin?.headers() ?? csrfHeaders();
+  const captureMutationHeaders = () => {
+    const captured = new Headers(headers());
+    return captured.get('x-csrf-token')?.trim() ? captured : null;
+  };
+  const hasMutationCredential = () => !!new Headers(headers()).get('x-csrf-token')?.trim();
   const guard = (fallback: boolean, ...ops: Parameters<NonNullable<typeof shelfOrigin>['capture']>) => {
     const current = shelfOrigin?.capture(...ops);
     return () => isCurrent() && (current ? current() : fallback);
@@ -165,7 +177,6 @@ export function useShelfRows(
   const copiesCurrent = guard(copies, 'copy.list');
   const progressCurrent = guard(progress, 'progress_session.list');
   const listCurrent = guard(list, 'library_entry.list');
-  const headers = () => shelfOrigin?.headers() ?? csrfHeaders();
   const versions = [
     shelfOrigin?.version('library_entry.put'),
     shelfOrigin?.version(
@@ -284,9 +295,16 @@ export function useShelfRows(
     const row = currentRows.current.find((item) => item.entry.subjectId === intent.subjectId);
     if (!row || row.unknownRemove || row.unknownLabelIntent || !matchesShelfIntent(row.entry, intent))
       return { status: 'not-attempted' };
+    let command = stateCommands.current.get(intent);
+    if (!command) {
+      const requestHeaders = captureMutationHeaders();
+      if (!requestHeaders) return { status: 'not-attempted', stop: true };
+      command = { headers: requestHeaders, send: savePersonalLibraryEntry };
+      stateCommands.current.set(intent, command);
+    }
     patch(intent.subjectId, (current) => ({ ...current, unknownIntent: intent }));
     try {
-      const result = await savePersonalLibraryEntry({ data: intent, headers: headers() });
+      const result = await command.send({ data: intent, headers: new Headers(command.headers) });
       if (!isCurrent() || !stateCurrent()) return { status: 'unknown', stop: true };
       if (result.ok && result.entry && result.entry.subjectId === intent.subjectId) {
         const saved = result.entry;
@@ -384,7 +402,8 @@ export function useShelfRows(
       row.unknownRemove ||
       row.unknownLabelIntent ||
       row.entry.state === value ||
-      !stateCurrent()
+      !stateCurrent() ||
+      !hasMutationCredential()
     )
       return;
     const intent = shelfStateIntent(row.entry, value);
@@ -405,6 +424,7 @@ export function useShelfRows(
     const target = stateTargets.current.get(subjectId);
     const intent = row.unknownIntent ?? (target?.status === 'not-attempted' ? target.intent : undefined);
     if (!intent || !matchesShelfIntent(row.entry, intent)) return undefined;
+    if (!stateCommands.current.has(intent) && !hasMutationCredential()) return undefined;
     return { intent, unchanged: !row.unknownIntent && !!target?.unchanged };
   };
   const retryState = async (subjectId: string) => {
@@ -426,7 +446,8 @@ export function useShelfRows(
       targets.length > shelfSelectionLimit ||
       targets.some((row) => row.unknownIntent || row.unknownLabelIntent || row.unknownRemove) ||
       !commonShelfStates(targets.map((row) => row.entry)).some((option) => option.id === value) ||
-      !stateCurrent()
+      !stateCurrent() ||
+      !hasMutationCredential()
     )
       return;
     const snapshot = targets.map((row) => ({
@@ -481,10 +502,17 @@ export function useShelfRows(
     // A recovery replays the original label command, even after an entry-state refresh. It never adopts new CAS.
     if (!row.unknownLabelIntent && !matchesShelfLabelIntent(row.entry, intent)) return { status: 'conflicted' };
     if (row.unknownLabelIntent && row.unknownLabelIntent !== intent) return { status: 'not-attempted' };
+    let command = labelCommands.current.get(intent);
+    if (!command) {
+      const requestHeaders = captureMutationHeaders();
+      if (!requestHeaders) return { status: 'not-attempted' };
+      command = { headers: requestHeaders, send: mutateSubjectLabelAction };
+      labelCommands.current.set(intent, command);
+    }
     patch(intent.input.subjectId, (value) => ({ ...value, unknownLabelIntent: intent }));
     recordLabel(intent.operationId, intent.input.subjectId, { status: 'unknown' });
     try {
-      const result = await mutateSubjectLabelAction({ data: intent.input, headers: headers() });
+      const result = await command.send({ data: intent.input, headers: new Headers(command.headers) });
       if (!current()) return { status: 'unknown' };
       if (
         result.ok &&
@@ -569,7 +597,6 @@ export function useShelfRows(
               !current() ||
               read.state !== 'loaded' ||
               read.provenance.viewer !== viewer ||
-              !read.provenance.csrfToken ||
               read.provenance.subjectId !== subjectId ||
               read.provenance.labelId !== labelId ||
               (read.assignment !== null &&
@@ -620,6 +647,8 @@ export function useShelfRows(
     const subjectId = removing;
     const row = currentRows.current.find((item) => item.entry.subjectId === subjectId);
     if (!isCurrent() || !removeCurrent() || !subjectId || !row || row.unknownIntent || row.unknownLabelIntent) return;
+    const requestHeaders = captureMutationHeaders();
+    if (!requestHeaders) return;
     const release = lock(removeCurrent);
     if (!release) return;
     try {
@@ -632,7 +661,7 @@ export function useShelfRows(
           ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
           idempotencyKey: entry.removeKey,
         },
-        headers: headers(),
+        headers: new Headers(requestHeaders),
       });
       if (!isCurrent() || !removeCurrent()) return;
       if (result.ok || result.reason === 'missing') {
@@ -645,13 +674,18 @@ export function useShelfRows(
             () => {
               const restore = () => {
                 if (!undoCurrent()) return;
+                const requestHeaders = captureMutationHeaders();
+                if (!requestHeaders) return;
                 // Undo is an explicit user command too. Keep it behind the current request lease rather than losing it.
                 const release = lock(undoCurrent);
                 if (!release) {
                   queuedUndo.current = restore;
                   return;
                 }
-                void restorePersonalLibraryEntryAction({ data: { subjectId, ...receipt }, headers: headers() })
+                void restorePersonalLibraryEntryAction({
+                  data: { subjectId, ...receipt },
+                  headers: new Headers(requestHeaders),
+                })
                   .then((restored) => {
                     if (!undoCurrent()) return;
                     if (restored.ok) {
@@ -777,7 +811,7 @@ export function useShelfRows(
     changeSelectedState,
     retryState,
     canRetryState: (subjectId: string) => !!recoverableState(subjectId),
-    writeAdmitted: stateCurrent(),
+    writeAdmitted: stateCurrent() && hasMutationCredential(),
     selectionBlocked: selectedRows.some(
       (row) => !!row.unknownIntent || !!row.unknownLabelIntent || !!row.unknownRemove,
     ),

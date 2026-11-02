@@ -112,6 +112,7 @@ export function CurrentLabelShelf({
   const source = sourceAt(search);
   const { origin, value, hydrated } = usePrivateReportOrigin(addressOf(source, locale), locale, (href) =>
     addressAt(href, locale),
+    false,
   );
   // Accepted payloads survive healthy credential/admission refreshes without manufacturing new native intents.
   const payload = useRef<Payload>({ owner: value.owner });
@@ -224,10 +225,10 @@ function LabelShelfRead({
   const sameRead = capturePayload(query.data);
   const isCurrent = () => current() && sameRead();
   const write = origin.capture(...readGroups, 'library_label.unassign');
-  const canUnassign = () => isCurrent() && write();
   const accepted = isCurrent() && query.data && matches(query.data, subject, source, locale) ? query.data : undefined;
   if (accepted?.state === 'loaded') payload.value = accepted;
   const page: LabelShelfPageData = accepted ?? { state: query.isError ? 'unavailable' : 'preparing' };
+  const canUnassign = () => isCurrent() && page.state === 'loaded' && !!page.csrfToken?.trim() && write();
   // CSRF, revisions and command keys remain exactly those captured by this payload's originating read.
   return (
     <LabelShelfPage page={page} locale={locale} display={display} isCurrent={isCurrent} canUnassign={canUnassign} />

@@ -36,6 +36,7 @@ test('The actual named-label Library renders private FULL assignments and remove
   const undoKey = id(801);
   const admitted = ['personal_library', 'reading_progress', 'library_label.assignment_list', 'library_label.unassign'];
   let credentialSubject = A;
+  let noCsrf = true;
   let credentials = 0;
   const tokens = new Map([
     [A, 'credential-a'],
@@ -49,7 +50,7 @@ test('The actual named-label Library renders private FULL assignments and remove
       status: 'active',
       subject: credentialSubject,
       accessToken: tokens.get(credentialSubject),
-      csrfToken: csrf(credentialSubject),
+      csrfToken: noCsrf ? null : csrf(credentialSubject),
     };
   };
   const sessionEnv = {
@@ -160,7 +161,7 @@ test('The actual named-label Library renders private FULL assignments and remove
   const { hydrateRoot } = await import('react-dom/client');
   const { flushSync } = await import('react-dom');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: A, csrfToken: csrf(A) });
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: A, csrfToken: null });
   client.setQueryData(exposureQuery.queryKey, admitted);
   // Synchronous notifications let assertions inspect the committed render before a passive-effect cleanup could help.
   notifyManager.setScheduler((callback) => callback());
@@ -195,7 +196,7 @@ test('The actual named-label Library renders private FULL assignments and remove
     expect(host.querySelector('form')).toBeNull();
     expect(host.innerHTML).not.toContain('idempotencyKey');
   };
-  const visible = (subject: string) => {
+  const visible = (subject: string, token: string | null = csrf(subject)) => {
     expect(host.textContent).toContain(name(subject));
     expect(host.textContent).toContain(`${name(subject)} entry`);
     expect(host.textContent).toContain('42%');
@@ -204,7 +205,7 @@ test('The actual named-label Library renders private FULL assignments and remove
       assignmentId: id(10),
       revision: '9',
       idempotencyKey: undoKey,
-      csrf_token: csrf(subject),
+      csrf_token: token ?? '',
     });
     expect(fields().find((form) => form.intent === 'unassign')).toMatchObject({
       assignmentId: id(12),
@@ -237,6 +238,7 @@ test('The actual named-label Library renders private FULL assignments and remove
       input,
     );
     expect(envelope.state).toBe('loaded');
+    expect(envelope.csrfToken).toBeNull();
     expect(envelope.provenance).toEqual({
       subject: A,
       locale: 'en',
@@ -262,6 +264,7 @@ test('The actual named-label Library renders private FULL assignments and remove
     const old = await loadLabelShelfPage(kernelClient(), request(), sessionEnv as unknown as SessionEnv, input);
     expect(old).not.toHaveProperty('provenance');
     expect(old.state).toBe('loaded');
+    expect(old.csrfToken).toBeNull();
     expect(credentials).toBe(2);
     expect(reads).toHaveLength(4);
     if (old.state !== 'loaded' || envelope.state !== 'loaded') throw new Error('Missing actual FULL result');
@@ -288,7 +291,12 @@ test('The actual named-label Library renders private FULL assignments and remove
     await act(async () => {
       root = hydrateRoot(host, tree());
     });
-    visible(A);
+    visible(A, null);
+    const undoForm = host.querySelector<HTMLFormElement>('[data-label-undo]')!;
+    const blockedSubmit = new window.Event('submit', { bubbles: true, cancelable: true });
+    undoForm.dispatchEvent(blockedSubmit);
+    expect(blockedSubmit.defaultPrevented).toBe(true);
+    noCsrf = false;
     expect(serial).toBe(beforeHydration); // Matching SSR does not repeat the FULL page read.
     const originalForms = fields();
     const display = new URLSearchParams(parameters);

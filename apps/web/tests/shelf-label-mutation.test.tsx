@@ -39,12 +39,13 @@ test('selected removal keeps later selection separate, preserves personal facts 
   const reads: string[] = [];
   let assignmentRevision = 4;
   let readViewer = 'owner';
+  let readCsrfToken: string | null = 'csrf';
   mock.module('../src/library/labels-actions', () => ({
     readShelfLabelAssignment: async ({ data }: { data: { subjectId: string; labelId: string } }) => {
       reads.push(data.subjectId);
       return {
         state: 'loaded',
-        provenance: { viewer: readViewer, csrfToken: 'csrf', ...data },
+        provenance: { viewer: readViewer, csrfToken: readCsrfToken, ...data },
         assignment:
           data.subjectId === 'b' ? null : { id: `assignment-${data.subjectId}`, revision: assignmentRevision },
       };
@@ -93,7 +94,7 @@ test('selected removal keeps later selection separate, preserves personal facts 
     capture: () => () => true,
     version: () => '0',
     watch: () => () => {},
-    headers: () => new Headers(),
+    headers: () => new Headers(readCsrfToken ? { 'x-csrf-token': readCsrfToken } : {}),
   };
   const lease = shelfMutationLease();
   let controls!: ReturnType<typeof useShelfRows>;
@@ -170,6 +171,17 @@ test('selected removal keeps later selection separate, preserves personal facts 
     expect(calls).toHaveLength(sent);
     expect(controls.labelOutcomes[0]!.status).toBe('failed');
     expect(lease.current).toBe(false);
+
+    readViewer = 'owner';
+    readCsrfToken = null;
+    await act(async () => {
+      controls.clearSelection();
+      controls.select('a', true);
+      await controls.assignSelectedLabel(label, 'unassign');
+    });
+    expect(reads.at(-1)).toBe('a');
+    expect(calls).toHaveLength(sent);
+    expect(controls.labelOutcomes[0]!.status).toBe('not-attempted');
   } finally {
     release?.();
     await act(async () => root.unmount());
