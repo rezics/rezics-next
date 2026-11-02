@@ -4712,5 +4712,15 @@
   "creator_offer_draft_navigation_discard": "Leaving discards unsent changes. Stay to keep editing.",
   "creator_offer_draft_navigation_uncertain": "This operation may already have committed. Leaving keeps its original request for recovery; it does not cancel or retry it.",
   "creator_offer_draft_navigation_stay": "Stay",
-  "creator_offer_draft_navigation_leave": "Leave"
+  "creator_offer_draft_navigation_leave": "Leave",
+  "library_owned_collections_address_invalid": "This saved Collections address is invalid. Choose how to recover.",
+  "library_owned_collections_address_cursor": "Page cursor",
+  "library_owned_collections_address_layout": "Layout",
+  "library_owned_collections_address_context": "Requested invalid values are shown as text, limited to 160 characters; non-text values show their type.",
+  "library_owned_collections_address_layout_restart": "Correcting the layout starts the first page because layouts use different page sizes.",
+  "library_owned_collections_address_rows": "Rows",
+  "library_owned_collections_address_previews": "Previews",
+  "library_owned_collections_address_correct": "Open corrected page",
+  "library_owned_collections_address_restart": "Restart first page",
+  "library_owned_collections_address_restart_rows": "Restart first page with rows"
 }

@@ -4,16 +4,14 @@ import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute } from '@tanstack/react-router';
 import { readMineCollectionsViewerPage } from '../../library/mine-collections-route';
 import { MineCollectionsCurrentViewer } from '../../library/mine-collections-page';
+import { admitMineCollectionsAddress } from '../../library/mine-collections-address';
 import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/library/collections')({
   beforeLoad: requireSignedIn,
-  validateSearch: (search: Record<string, unknown>) => ({
-    ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
-    layout: search.layout === 'previews' ? ('previews' as const) : ('rows' as const),
-  }),
-  loaderDeps: ({ search }) => ({ cursor: search.cursor, layout: search.layout }),
-  loader: ({ deps }) => readMineCollectionsViewerPage({ data: { cursor: deps.cursor, layout: deps.layout } }),
+  validateSearch: admitMineCollectionsAddress,
+  loaderDeps: ({ search }) => search,
+  loader: ({ deps }) => readMineCollectionsViewerPage({ data: deps }),
   head: ({ match }) =>
     pageHead({ title: m.library_collections_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: () => {
@@ -23,6 +21,7 @@ export const Route = createFileRoute('/library/collections')({
       <MineCollectionsCurrentViewer
         initial={initial}
         layout={search.layout}
+        addressError={search.addressError}
         {...(search.cursor ? { cursor: search.cursor } : {})}
       />
     );

@@ -174,6 +174,12 @@ original support and terminal: a withheld original never becomes public because 
 
 ## Destinations and actions
 
+Decision: My Collections admits an optional string cursor of at most 4096 characters and only rows/previews layout
+(default rows when absent); malformed addresses retain bounded escaped context and make no private list or pins
+read until explicit GET correction or restart. Cursor correction/restart keeps a valid layout; layout correction
+always starts page one because rows and previews have different page bounds. Native stale-cursor restart retains
+its separate notice, and current viewer/address retirement applies through malformed-address recovery.
+
 Decision: The embedded Subject Library slot, Copies, Labels, Following and private follow counts admit authorized
 current-subject reads, detail, cursor navigation and read-only retry
 without a CSRF token; commands require the actual current token, while uncertain retries retain their original

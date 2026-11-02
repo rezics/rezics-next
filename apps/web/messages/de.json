@@ -4663,5 +4663,15 @@
   "creator_offer_draft_navigation_discard": "Beim Verlassen werden nicht gesendete Änderungen verworfen. Bleibe hier, um weiterzubearbeiten.",
   "creator_offer_draft_navigation_uncertain": "Dieser Vorgang wurde möglicherweise bereits ausgeführt. Beim Verlassen bleibt die ursprüngliche Anfrage zur Wiederherstellung erhalten; sie wird weder abgebrochen noch erneut gesendet.",
   "creator_offer_draft_navigation_stay": "Bleiben",
-  "creator_offer_draft_navigation_leave": "Verlassen"
+  "creator_offer_draft_navigation_leave": "Verlassen",
+  "library_owned_collections_address_invalid": "Diese gespeicherte Sammlungsadresse ist ungültig. Wähle eine Wiederherstellung.",
+  "library_owned_collections_address_cursor": "Seitencursor",
+  "library_owned_collections_address_layout": "Ansicht",
+  "library_owned_collections_address_context": "Ungültige Werte werden als Text mit höchstens 160 Zeichen angezeigt; andere Werte werden durch ihren Typ dargestellt.",
+  "library_owned_collections_address_layout_restart": "Eine Korrektur der Ansicht öffnet die erste Seite, da die Ansichten unterschiedliche Seitengrößen verwenden.",
+  "library_owned_collections_address_rows": "Zeilen",
+  "library_owned_collections_address_previews": "Vorschauen",
+  "library_owned_collections_address_correct": "Korrigierte Seite öffnen",
+  "library_owned_collections_address_restart": "Erste Seite öffnen",
+  "library_owned_collections_address_restart_rows": "Erste Seite als Zeilen öffnen"
 }

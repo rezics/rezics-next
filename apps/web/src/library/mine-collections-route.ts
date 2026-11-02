@@ -5,9 +5,14 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { loadMineCollectionsPage, type MineCollectionsPage } from './mine-collections';
+import { admitMineCollectionsAddress, type MineCollectionsAddressError } from './mine-collections-address';
 import { preparedPinsOrigin, readPreparedLibraryPins, type LibraryPinsRead } from './pins-read';
 
-export type MineCollectionsAddress = { cursor: string | null; layout: 'rows' | 'previews' };
+export type MineCollectionsAddress = {
+  cursor: string | null;
+  layout: 'rows' | 'previews';
+  addressError?: MineCollectionsAddressError;
+};
 export type MineCollectionsViewerPage = {
   sessionSubject: string | null;
   requested: MineCollectionsAddress;
@@ -15,24 +20,8 @@ export type MineCollectionsViewerPage = {
   pins: LibraryPinsRead;
 };
 
-function validateInput(input: unknown): { cursor?: string; layout?: 'rows' | 'previews' } {
-  if (
-    !input ||
-    typeof input !== 'object' ||
-    ('cursor' in input &&
-      input.cursor !== undefined &&
-      (typeof input.cursor !== 'string' || input.cursor.length > 4096)) ||
-    ('layout' in input && input.layout !== undefined && input.layout !== 'rows' && input.layout !== 'previews')
-  )
-    throw new Error('Invalid collection page input');
-  return {
-    ...('cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {}),
-    ...('layout' in input && (input.layout === 'rows' || input.layout === 'previews') ? { layout: input.layout } : {}),
-  };
-}
-
 export const readMineCollectionsPage = createServerFn({ method: 'GET' })
-  .validator(validateInput)
+  .validator(admitMineCollectionsAddress)
   .handler(async ({ data }): Promise<MineCollectionsPage> => {
     setResponseHeader('cache-control', 'private, no-store');
     return loadMineCollectionsPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
@@ -40,10 +29,14 @@ export const readMineCollectionsPage = createServerFn({ method: 'GET' })
 
 /** The provenance and both private payloads come from one actual prepared request. */
 export const readMineCollectionsViewerPage = createServerFn({ method: 'GET' })
-  .validator(validateInput)
+  .validator(admitMineCollectionsAddress)
   .handler(async ({ data }): Promise<MineCollectionsViewerPage> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const requested: MineCollectionsAddress = { cursor: data.cursor ?? null, layout: data.layout ?? 'rows' };
+    const requested: MineCollectionsAddress = {
+      cursor: data.cursor ?? null,
+      layout: data.layout,
+      ...(data.addressError ? { addressError: data.addressError } : {}),
+    };
     const closed: MineCollectionsViewerPage = {
       sessionSubject: null,
       requested,
@@ -55,6 +48,12 @@ export const readMineCollectionsViewerPage = createServerFn({ method: 'GET' })
     const subject = sessionSubject(request);
     const authorization = viewerCredential(request);
     if (!subject || !authorization || !preparedPinsOrigin(request, 100).credentialAgrees) return closed;
+    if (data.addressError)
+      return {
+        ...closed,
+        sessionSubject: subject,
+        page: { signedIn: true, state: 'unavailable', invalidAddress: data.addressError, collections: [], next: null },
+      };
     const client = kernelClient();
     const [page, pins] = await Promise.all([
       // This GET is already prepared. An unconfigured environment keeps the reader on the

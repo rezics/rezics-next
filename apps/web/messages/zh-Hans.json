@@ -4663,5 +4663,15 @@
   "creator_offer_draft_navigation_discard": "离开将丢弃尚未发送的更改。留下可继续编辑。",
   "creator_offer_draft_navigation_uncertain": "此操作可能已经提交。离开后仍保留原始请求以供恢复，不会取消或重试该请求。",
   "creator_offer_draft_navigation_stay": "留下",
-  "creator_offer_draft_navigation_leave": "离开"
+  "creator_offer_draft_navigation_leave": "离开",
+  "library_owned_collections_address_invalid": "保存的收藏集地址无效。请选择恢复方式。",
+  "library_owned_collections_address_cursor": "分页游标",
+  "library_owned_collections_address_layout": "布局",
+  "library_owned_collections_address_context": "无效值以最多 160 个字符的文本显示；非文本值显示其类型。",
+  "library_owned_collections_address_layout_restart": "不同布局使用不同的分页大小，因此修正布局会打开第一页。",
+  "library_owned_collections_address_rows": "行",
+  "library_owned_collections_address_previews": "预览",
+  "library_owned_collections_address_correct": "打开修正后的页面",
+  "library_owned_collections_address_restart": "返回第一页",
+  "library_owned_collections_address_restart_rows": "以行布局打开第一页"
 }

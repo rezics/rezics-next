@@ -1,3 +1,4 @@
+import { admitMineCollectionsAddress, type MineCollectionsAddressError } from './mine-collections-address';
 import { collectionPresentationOf, type CollectionPresentationData } from './collection-presentation';
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
@@ -36,6 +37,7 @@ export type MineCollectionsPage = {
   next: string | null;
   state?: 'loaded' | 'preparing' | 'denied' | 'unavailable' | 'error';
   cursorReset?: true;
+  invalidAddress?: MineCollectionsAddressError;
 };
 
 class MineCollectionsReadError extends Error {
@@ -141,27 +143,37 @@ export async function loadMineCollectionsPage(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { cursor?: string; layout?: 'rows' | 'previews' },
+  input: { cursor?: string; layout?: 'rows' | 'previews'; addressError?: MineCollectionsAddressError },
 ): Promise<MineCollectionsPage> {
   if (await prepareSession(request, sessionEnv)) return { signedIn: false, collections: [], next: null };
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return { signedIn: false, collections: [], next: null };
 
+  const address = admitMineCollectionsAddress(input);
+  if (address.addressError)
+    return {
+      signedIn: true,
+      state: 'unavailable',
+      invalidAddress: address.addressError,
+      collections: [],
+      next: null,
+    };
+
   let cursorReset = false;
   try {
     let page: CollectionRead;
     let navigationPage: CollectionRead | undefined;
     try {
-      page = await readPage(client, accountId, authorization, input.cursor, input.layout === 'previews');
+      page = await readPage(client, accountId, authorization, address.cursor, address.layout === 'previews');
     } catch (error) {
-      if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
+      if (!(error instanceof StaleCursorError) || !address.cursor) throw error;
       cursorReset = true;
       page = await readPage(client, accountId, authorization, undefined, input.layout === 'previews');
       navigationPage = page;
     }
     // Preview navigation shares the returned page's budget, including on later cursor pages.
-    if (!input.cursor || input.layout === 'previews') navigationPage = page;
+    if (!address.cursor || address.layout === 'previews') navigationPage = page;
     if (!navigationPage) navigationPage = await readPage(client, accountId, authorization);
     return {
       signedIn: true,

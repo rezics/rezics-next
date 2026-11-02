@@ -4663,5 +4663,15 @@
   "creator_offer_draft_navigation_discard": "Al salir se descartan los cambios no enviados. Quédate para seguir editando.",
   "creator_offer_draft_navigation_uncertain": "Es posible que esta operación ya se haya confirmado. Al salir se conserva la solicitud original para recuperarla; no se cancela ni se vuelve a enviar.",
   "creator_offer_draft_navigation_stay": "Quedarme",
-  "creator_offer_draft_navigation_leave": "Salir"
+  "creator_offer_draft_navigation_leave": "Salir",
+  "library_owned_collections_address_invalid": "Esta dirección guardada de Colecciones no es válida. Elige cómo recuperarla.",
+  "library_owned_collections_address_cursor": "Cursor de página",
+  "library_owned_collections_address_layout": "Vista",
+  "library_owned_collections_address_context": "Los valores no válidos se muestran como texto de hasta 160 caracteres; los demás valores muestran su tipo.",
+  "library_owned_collections_address_layout_restart": "Corregir la vista abre la primera página porque las vistas usan distintos tamaños de página.",
+  "library_owned_collections_address_rows": "Filas",
+  "library_owned_collections_address_previews": "Vistas previas",
+  "library_owned_collections_address_correct": "Abrir página corregida",
+  "library_owned_collections_address_restart": "Volver a la primera página",
+  "library_owned_collections_address_restart_rows": "Abrir la primera página en filas"
 }

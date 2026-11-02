@@ -4663,5 +4663,15 @@
   "creator_offer_draft_navigation_discard": "Quitter abandonne les modifications non envoyées. Restez pour continuer à modifier.",
   "creator_offer_draft_navigation_uncertain": "Cette opération a peut-être déjà été effectuée. Quitter conserve la requête initiale pour la récupération, sans l’annuler ni la renvoyer.",
   "creator_offer_draft_navigation_stay": "Rester",
-  "creator_offer_draft_navigation_leave": "Quitter"
+  "creator_offer_draft_navigation_leave": "Quitter",
+  "library_owned_collections_address_invalid": "Cette adresse enregistrée de Collections est invalide. Choisissez comment la corriger.",
+  "library_owned_collections_address_cursor": "Curseur de page",
+  "library_owned_collections_address_layout": "Affichage",
+  "library_owned_collections_address_context": "Les valeurs invalides sont affichées en texte, limité à 160 caractères ; les autres valeurs sont représentées par leur type.",
+  "library_owned_collections_address_layout_restart": "Corriger l’affichage ouvre la première page, car les affichages utilisent des tailles de page différentes.",
+  "library_owned_collections_address_rows": "Lignes",
+  "library_owned_collections_address_previews": "Aperçus",
+  "library_owned_collections_address_correct": "Ouvrir la page corrigée",
+  "library_owned_collections_address_restart": "Revenir à la première page",
+  "library_owned_collections_address_restart_rows": "Ouvrir la première page en lignes"
 }

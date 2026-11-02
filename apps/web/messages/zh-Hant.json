@@ -4663,5 +4663,15 @@
   "creator_offer_draft_navigation_discard": "離開會捨棄尚未送出的變更。留下可繼續編輯。",
   "creator_offer_draft_navigation_uncertain": "此操作可能已經提交。離開後仍保留原始請求以供復原，不會取消或重試該請求。",
   "creator_offer_draft_navigation_stay": "留下",
-  "creator_offer_draft_navigation_leave": "離開"
+  "creator_offer_draft_navigation_leave": "離開",
+  "library_owned_collections_address_invalid": "儲存的收藏集網址無效。請選擇復原方式。",
+  "library_owned_collections_address_cursor": "分頁游標",
+  "library_owned_collections_address_layout": "版面配置",
+  "library_owned_collections_address_context": "無效值以最多 160 個字元的文字顯示；非文字值顯示其類型。",
+  "library_owned_collections_address_layout_restart": "不同版面配置使用不同的分頁大小，因此修正版面配置會開啟第一頁。",
+  "library_owned_collections_address_rows": "列",
+  "library_owned_collections_address_previews": "預覽",
+  "library_owned_collections_address_correct": "開啟修正後的頁面",
+  "library_owned_collections_address_restart": "返回第一頁",
+  "library_owned_collections_address_restart_rows": "以列版面開啟第一頁"
 }

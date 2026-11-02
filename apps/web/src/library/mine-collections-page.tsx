@@ -1,3 +1,5 @@
+import { admitMineCollectionsAddress, type MineCollectionsAddressError } from './mine-collections-address';
+import { MineCollectionsAddressRecovery } from './mine-collections-address-recovery';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { ContentItem } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -32,6 +34,8 @@ import {
 const subscribe = () => () => {};
 function matchesViewer(page: MineCollectionsViewerPage | undefined, subject: string, address: MineCollectionsAddress) {
   return (
+    !address.addressError &&
+    !page?.requested.addressError &&
     page?.sessionSubject === subject &&
     page.page.signedIn &&
     page.requested.cursor === address.cursor &&
@@ -44,8 +48,10 @@ export function MineCollectionsCurrentViewer({
   initial,
   layout = 'rows',
   cursor,
+  addressError,
 }: {
   initial: MineCollectionsViewerPage;
+  addressError?: MineCollectionsAddressError;
   layout?: CollectionBrowseLayout;
   cursor?: string;
 }) {
@@ -60,12 +66,15 @@ export function MineCollectionsCurrentViewer({
   const subject = hydrated ? (session.state === 'signed-in' ? session.subject : null) : initial.sessionSubject;
   const admitted = !hydrated || canList;
   const pinsAdmitted = !hydrated || canListPins;
-  const address: MineCollectionsAddress = { cursor: cursor || null, layout };
+  const admittedAddress = admitMineCollectionsAddress({ cursor, layout, addressError });
+  const address: MineCollectionsAddress = { ...admittedAddress, cursor: admittedAddress.cursor ?? null };
   const locale = getLocale();
   const origin = useLibraryReadOrigin(JSON.stringify([address, locale]), initial.sessionSubject);
-  const key = JSON.stringify([subject, admitted, pinsAdmitted, address.cursor, layout, locale, origin.lifetime]);
+  const key = JSON.stringify([subject, admitted, pinsAdmitted, address, locale, origin.lifetime]);
   const [lifetime, setLifetime] = useState({ key, generation: 0, seed: true });
   if (lifetime.key !== key) setLifetime({ key, generation: lifetime.generation + 1, seed: false });
+
+  if (admittedAddress.addressError) return <MineCollectionsAddressRecovery address={admittedAddress} />;
 
   if (!subject || (!admitted && !pinsAdmitted)) {
     const page: MineCollectionsPage = {
@@ -205,7 +214,8 @@ export function MineCollectionsPageView({
   const canCreate = useOperation('collection.create');
   const canReadLibrary = useOperation('library_entry.list');
   const loaded = page.signedIn && (!page.state || page.state === 'loaded');
-  const requestedCursor = cursor && cursor.length <= 4096 ? cursor : undefined;
+  const requestedAddress = admitMineCollectionsAddress({ cursor, layout, addressError: page.invalidAddress });
+  const requestedCursor = requestedAddress.cursor;
   const currentCursor = page.cursorReset ? undefined : requestedCursor;
   const search = new URLSearchParams({ layout, ...(currentCursor ? { cursor: currentCursor } : {}) });
   const currentHref = `/${getLocale()}/library/collections?${search}`;
@@ -226,6 +236,7 @@ export function MineCollectionsPageView({
       {m.library_collection_new()}
     </a>
   );
+  if (requestedAddress.addressError) return <MineCollectionsAddressRecovery address={requestedAddress} />;
   return (
     <div className="w-full min-w-0 max-w-none space-y-5 text-foreground">
       <article className="w-full min-w-0 space-y-5">

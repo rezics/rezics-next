@@ -4663,5 +4663,15 @@
   "creator_offer_draft_navigation_discard": "離れると未送信の変更は破棄されます。編集を続けるには、このページに留まってください。",
   "creator_offer_draft_navigation_uncertain": "この操作はすでに確定している可能性があります。離れても復旧用に元のリクエストは保持されます。キャンセルや再送信は行われません。",
   "creator_offer_draft_navigation_stay": "留まる",
-  "creator_offer_draft_navigation_leave": "離れる"
+  "creator_offer_draft_navigation_leave": "離れる",
+  "library_owned_collections_address_invalid": "保存されたコレクションのアドレスが無効です。復旧方法を選択してください。",
+  "library_owned_collections_address_cursor": "ページカーソル",
+  "library_owned_collections_address_layout": "表示形式",
+  "library_owned_collections_address_context": "無効な値は最大160文字のテキストで表示されます。テキスト以外の値は型で表示されます。",
+  "library_owned_collections_address_layout_restart": "表示形式によってページの件数が異なるため、表示形式を修正すると最初のページが開きます。",
+  "library_owned_collections_address_rows": "行",
+  "library_owned_collections_address_previews": "プレビュー",
+  "library_owned_collections_address_correct": "修正したページを開く",
+  "library_owned_collections_address_restart": "最初のページに戻る",
+  "library_owned_collections_address_restart_rows": "行表示で最初のページを開く"
 }

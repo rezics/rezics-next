@@ -4,6 +4,7 @@ import { act, StrictMode } from 'react';
 import type { MenuProps } from '@rezics/ui/menu';
 import * as start from '../.storybook/react-start';
 import type { MineCollectionsViewerPage } from '../src/library/mine-collections-route';
+import type { MineCollectionsSearch } from '../src/library/mine-collections-address';
 import type { PinMutation } from '../src/library/pins-actions';
 
 // UNRUN: one mounted/deferred journey for controller integration. The installed DOM and
@@ -242,7 +243,7 @@ test('The default My Collections route immediately retires private collections a
     return work.promise;
   });
   let initial = response('A');
-  let search: { cursor?: string; layout: 'rows' | 'previews' } = { layout: 'previews' };
+  let search: MineCollectionsSearch = { layout: 'previews' };
   const loader = spyOn(Route, 'useLoaderData').mockImplementation(() => initial);
   const address = spyOn(Route, 'useSearch').mockImplementation(() => search);
   const Page = Route.options.component!;
@@ -374,6 +375,16 @@ test('The default My Collections route immediately retires private collections a
     await settle(8, response('B', search.cursor!, 'rows'));
     expect(host.textContent).toContain('Private B');
     expect(host.textContent).toContain('Pinned B');
+    // Entering a malformed saved address retires the active private read before it can settle.
+    await refetch();
+    search = { layout: 'rows', addressError: { cursor: 'number' } };
+    await show(session('B'));
+    expect(host.querySelector('[data-collections-state="invalid-address"]')).not.toBeNull();
+    retired('B');
+    expect(pendingReads).toHaveLength(10);
+    await settle(9, response('B', 'old-page', 'rows'));
+    retired('B');
+    expect(pendingReads).toHaveLength(10);
     expect(hydrationErrors).toEqual([]);
   } finally {
     if (root) await act(async () => root!.unmount());
