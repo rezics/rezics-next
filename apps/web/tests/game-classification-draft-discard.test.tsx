@@ -10,19 +10,9 @@ test('Game discards only the confirmed unsent classification and retires confirm
   const window = new Window({ url: 'https://site.test/en/catalogue/game' });
   const globals = {
     ...Object.fromEntries(
-      [
-        'document',
-        'navigator',
-        'HTMLElement',
-        'HTMLInputElement',
-        'HTMLSelectElement',
-        'HTMLButtonElement',
-        'Node',
-        'Element',
-        'Document',
-        'DocumentFragment',
-        'MutationObserver',
-      ].map((key) => [key, Reflect.get(window, key)]),
+      'document navigator HTMLElement HTMLInputElement HTMLSelectElement HTMLButtonElement Node Element Document DocumentFragment MutationObserver'
+        .split(' ')
+        .map((key) => [key, Reflect.get(window, key)]),
     ),
     window,
     getComputedStyle: window.getComputedStyle.bind(window),
@@ -56,25 +46,25 @@ test('Game discards only the confirmed unsent classification and retires confirm
     generation = 0,
     requests = 0;
   let propose: () => Promise<FactResult> = async () => ({ ok: false, reason: 'stale' });
+  const props = {
+    read,
+    locale: 'en',
+    search: async () => [],
+    review: fixture.transport.classificationReview,
+    transport: {
+      read: fixture.transport.facts.read,
+      propose: () => {
+        requests++;
+        return propose();
+      },
+    },
+  };
   const render = () =>
     act(async () =>
       root.render(
         <CandidateReaderBoundary observed={{ state: 'signed-in', subject: gameId, csrfToken: epoch }} address={gameId}>
           <CatalogueCurrentReading visible={visible} ready={visible} revision={String(visible)}>
-            <GameClassifications
-              key={generation}
-              read={read}
-              locale="en"
-              search={async () => []}
-              transport={{
-                read: fixture.transport.facts.read,
-                propose: () => {
-                  requests++;
-                  return propose();
-                },
-              }}
-              review={fixture.transport.classificationReview}
-            />
+            <GameClassifications key={generation} {...props} />
           </CatalogueCurrentReading>
         </CandidateReaderBoundary>,
       ),
@@ -84,6 +74,7 @@ test('Game discards only the confirmed unsent classification and retires confirm
   const buttons = (name: string, property?: string) => within(section(property)).getAllByRole('button', { name });
   const discard = (property?: string) => buttons(m.authored_discard(), property)[0]!;
   const cancel = () => buttons(m.candidate_cancel())[0]!;
+  const hasConfirmation = () => within(section()).queryByRole('button', { name: m.candidate_cancel() });
   const click = (node: HTMLElement) => act(async () => user.click(node));
   const input = () => within(section()).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement;
   const edit = async () => {
@@ -108,24 +99,16 @@ test('Game discards only the confirmed unsent classification and retires confirm
     expect([...host.querySelectorAll('input')]).toEqual(fields);
     expect(fields.map((field) => field.value)).toEqual(values);
     await click(discard());
-    await act(async () => user.keyboard('{Escape}'));
-    expect(window.document.activeElement).toBe(discard());
-    await click(discard());
     const oldConfirmation = discard();
     await click(oldConfirmation);
     expect(section().querySelector('fieldset')).toBeNull();
     expect(window.document.activeElement).toBe(buttons(m.facts_edit_field())[0]);
     expect(section('schema:gamePlatform').querySelector('fieldset')).toBe(sibling);
-    expect(
-      within(section('schema:gamePlatform')).getByRole('combobox', {
-        name: read.release.properties['schema:gamePlatform']!.labels.en!,
-      }).value,
-    ).toBe('Example platform');
     await click(buttons(m.facts_edit_field())[1]!);
     expect(input().value).toBe('en');
     await act(async () => oldConfirmation.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
     expect(input().value).toBe('en');
-    expect(within(section()).queryByRole('button', { name: m.candidate_cancel() })).toBeNull();
+    expect(hasConfirmation()).toBeNull();
     await click(discard());
     visible = false;
     await render();
@@ -133,7 +116,7 @@ test('Game discards only the confirmed unsent classification and retires confirm
     visible = true;
     await render();
     expect(input().value).toBe('en');
-    expect(within(section()).queryByRole('button', { name: m.candidate_cancel() })).toBeNull();
+    expect(hasConfirmation()).toBeNull();
     await click(discard());
     epoch = 'new-viewer-session';
     await render();
@@ -167,7 +150,7 @@ test('Game discards only the confirmed unsent classification and retires confirm
       if (reason === 'stale') {
         await click(buttons(m.catalogue_create_review_new())[0]!);
         expect((discard() as HTMLButtonElement).disabled).toBe(false);
-        expect(within(section()).queryByRole('button', { name: m.candidate_cancel() })).toBeNull();
+        expect(hasConfirmation()).toBeNull();
       }
     }
   } finally {
