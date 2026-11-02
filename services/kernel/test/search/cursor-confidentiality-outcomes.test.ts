@@ -46,25 +46,35 @@ for (const mode of ['hidden', 'taken_down'] as const) {
       await driver.remove(b, mode); // Await the production visibility commit, leaving the index stale.
 
       const request = { text: marker, sort: 'name', limit: 1 };
-      const first = await driver.request('anonymous', 'POST', '/v1/subjects:search', request);
-      expect(ids(first)).toEqual([a]);
-      expect(JSON.stringify(first.body.subjects)).not.toContain(b);
-      expect(JSON.stringify(first.body.subjects)).not.toContain(secretName);
-      const token = first.body.next;
-      expect(token).toBeString();
-      expect(typeof token === 'string' && token.length > 0).toBe(true);
-      if (typeof token !== 'string') throw new Error('Expected an actual continuation token');
+      for (const persona of ['anonymous', 'editor'] as const) {
+        const first = await driver.request(persona, 'POST', '/v1/subjects:search', request);
+        expect(ids(first)).toEqual([a]);
+        expect(JSON.stringify(first.body.subjects)).not.toContain(b);
+        expect(JSON.stringify(first.body.subjects)).not.toContain(secretName);
+        expect(first.body).not.toHaveProperty('total');
+        expect(first.body).not.toHaveProperty('count');
+        const token = first.body.next;
+        expect(token).toBeString();
+        expect(typeof token === 'string' && token.length > 0).toBe(true);
+        if (typeof token !== 'string') throw new Error('Expected an actual continuation token');
 
-      // A is emitted, rejected B is consumed, and accepted C remains unconsumed lookahead.
-      // Resume pagination while indexing stays paused so index deletion cannot mask a lost position.
-      const second = await driver.request('anonymous', 'POST', '/v1/subjects:search', { ...request, cursor: token });
-      expect(ids(second)).toEqual([c]);
-      expect(second.body.next).toBeNull();
-      expect([...ids(first), ...ids(second)]).toEqual([a, c]);
+        // A is emitted, rejected B is consumed, and accepted C remains unconsumed lookahead.
+        // Resume pagination while indexing stays paused so index deletion cannot mask a lost position.
+        const second = await driver.request(persona, 'POST', '/v1/subjects:search', { ...request, cursor: token });
+        expect(ids(second)).toEqual([c]);
+        expect(second.body.next).toBeNull();
+        expect(second.body).not.toHaveProperty('total');
+        expect([...ids(first), ...ids(second)]).toEqual([a, c]);
 
-      // The attacker sees only the wire token: no signing keys or backend decode.
-      const views = [token, ...token.split('.').map((part) => Buffer.from(part, 'base64url').toString('utf8'))];
-      expect([b, secretName].filter((secret) => views.some((view) => view.includes(secret)))).toEqual([]);
+        // The attacker sees only the wire token: no signing keys or backend decode.
+        const views = [token, ...token.split('.').map((part) => Buffer.from(part, 'base64url').toString('utf8'))];
+        expect([b, secretName].filter((secret) => views.some((view) => view.includes(secret)))).toEqual([]);
+      }
+
+      const denied = await driver.request('suspended', 'POST', '/v1/subjects:search', request);
+      expect(denied.status).toBe(401);
+      expect(denied.body.code).toBe('invalid_credentials');
+      expect(denied.body).not.toHaveProperty('subjects');
     } finally {
       await driver.close();
     }

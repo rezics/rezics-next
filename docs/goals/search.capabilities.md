@@ -147,7 +147,8 @@ disclosed source matches and values” and “repeated facts and duplicate hits 
 these helper cases are internal accounting evidence, not public count permission or complete API binding.
 [Confidentiality outcomes](../../services/kernel/test/search/cursor-confidentiality-outcomes.test.ts) declares two:
 “real API cursor confidentiality after a rejected hidden lookahead” and “real API cursor confidentiality after a
-rejected taken_down lookahead”. They resume from rejected consumed keys through real HTTP with indexing paused.
+rejected taken_down lookahead”. They resume from rejected consumed keys through real HTTP with indexing paused
+for anonymous and editor; the suspended pre-suspension bearer stays 401 and pages omit totals.
 
 **Native wrapper/command:** these outcomes import [Search driver](../../services/kernel/test/search/outcome-driver.ts);
 `bun run --cwd services/kernel check test/search/deletion-count-outcomes.test.ts test/search/cursor-confidentiality-outcomes.test.ts`.
