@@ -68,7 +68,7 @@ test('mounted current Type pages and descriptors span releases, survive staging 
       pool,
       access: authority.access,
       writeRate: createWriteRateLimiter({
-        secret: 'type-directory-bulk-fixture',
+        secret: 'type-directory-native-regression-rate-secret',
         overrides: JSON.stringify({
           'new-account': { write: { maximum: 100000, seconds: 60 } },
           member: { write: { maximum: 100000, seconds: 60 } },

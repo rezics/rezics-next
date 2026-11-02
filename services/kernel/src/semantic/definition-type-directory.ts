@@ -193,12 +193,8 @@ async function pageKeys(
         [catalogue, locale, parent, lower, limit - keys.length],
       )
     ).rows;
-  async function walk(parent: string, path: Buffer): Promise<void> {
-    const depth = path.length;
-    const boundary =
-      after && after.length > depth && after.subarray(0, depth).equals(path)
-        ? after.subarray(depth, depth + CHUNK)
-        : null;
+  async function walk(parent: string, depth: number, onBoundary: boolean): Promise<void> {
+    const boundary = after && onBoundary && after.length > depth ? after.subarray(depth, depth + CHUNK) : null;
     const required = prefix.length > depth ? prefix.subarray(depth, depth + CHUNK) : null;
     const lower = boundary ?? required ?? Buffer.alloc(0);
     let cursor = lower,
@@ -208,17 +204,17 @@ async function pageKeys(
       if (!rows.length) return;
       for (const row of rows) {
         if (required && !row.chunk.subarray(0, required.length).equals(required)) return;
-        const full = Buffer.concat([path, row.chunk]);
+        const equalBoundary = boundary !== null && row.chunk.equals(boundary);
         if (row.entry_key) {
-          if (!after || Buffer.compare(full, after) > 0) keys.push(row.entry_key);
-        } else await walk(row.node_key, full);
+          if (!equalBoundary) keys.push(row.entry_key);
+        } else await walk(row.node_key, depth + row.chunk.length, equalBoundary);
         if (keys.length === limit) return;
       }
       cursor = rows.at(-1)!.chunk;
       inclusive = false;
     }
   }
-  await walk(ROOT, Buffer.alloc(0));
+  await walk(ROOT, 0, after !== null);
   return keys;
 }
 
