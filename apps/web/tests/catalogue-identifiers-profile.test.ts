@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { identifierFields, identifierProperties } from '../src/features/catalogue/identifiers-profile';
-import { SubjectFacts } from '../src/features/catalogue/subject-facts-view';
+import { reconcileFactSource, SubjectFacts } from '../src/features/catalogue/subject-facts-view';
 import {
   factChanged,
   factLocked,
@@ -22,6 +22,13 @@ import {
 } from '../src/kernel/fake/catalogue-identifiers-profile';
 
 const correctedIsbn = '978-4-00-000001-7';
+
+test('refreshed fact sources follow current statements and preserve a surviving choice', () => {
+  expect(reconcileFactSource(identifiersStatement, [])).toBe('');
+  expect(reconcileFactSource(identifiersStatement, [{ id: 'replacement' }])).toBe('replacement');
+  expect(reconcileFactSource(identifiersStatement, [{ id: identifiersStatement }])).toBe(identifiersStatement);
+});
+
 async function isbnDraft(fixture: ReturnType<typeof identifiersProfileFixture>) {
   const read = await fixture.transport.read();
   if (!read.ok) throw new Error('Expected a current native read');

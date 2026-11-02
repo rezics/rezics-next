@@ -32,6 +32,12 @@ export { ExactReview };
 export { SelectedFacts };
 
 type ReviewAddress = { property: string; candidate: string; session?: string | undefined };
+/** Keep a staged field's source on the refreshed public selection when it still exists. */
+export function reconcileFactSource(source: string, selected: readonly { id: string }[]): string {
+  if (selected.some((statement) => statement.id === source)) return source;
+  return selected.length === 1 ? selected[0]!.id : '';
+}
+
 export type FactsProfile = {
   properties: (read: FactsCurrent) => string[];
   title: string;
@@ -154,7 +160,13 @@ function FactField({
   const definition = read.release.properties[property]!;
   const label = pageText(definition.labels, locale).text || m.subject_value_unlabelled({}, o);
   const selected = read.public.subject.statements[property] ?? [];
+  const selection = JSON.stringify(selected.map((statement) => statement.id));
   const [source, setSource] = useState(selected.length === 1 ? selected[0]!.id : '');
+  const [previousSelection, setPreviousSelection] = useState(selection);
+  if (previousSelection !== selection) {
+    setPreviousSelection(selection);
+    setSource((current) => reconcileFactSource(current, selected));
+  }
   const sourceId = useId();
   const includeId = useId();
   const sourceIndex = draft?.source ? selected.findIndex((item) => item.id === draft.source) : -1;

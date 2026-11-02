@@ -1,5 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useRef } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { m } from '../../paraglide/messages.js';
 import { ViewHeading } from '../pages/view-heading';
@@ -35,14 +35,14 @@ function IdentifiersProfileLive({ id, locale, session, transport, review, initia
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const retained = useRef<Extract<EditorRead, { ok: true }> | undefined>(undefined);
-  if (query.data?.ok && query.data.public.subject.id === id) retained.current = query.data;
+  const [retained, setRetained] = useState<Extract<EditorRead, { ok: true }> | undefined>();
+  const current = query.data?.ok && query.data.public.subject.id === id ? query.data : undefined;
+  if (current && retained !== current) setRetained(current);
   const readable =
     session === 'signed-in' &&
     !query.isError &&
     !query.isFetching &&
-    query.data?.ok &&
-    query.data.public.subject.id === id;
+    !!current;
   return (
     <section className="flex flex-col gap-4" data-slot="identifiers-profile">
       {!readable && (
@@ -66,10 +66,10 @@ function IdentifiersProfileLive({ id, locale, session, transport, review, initia
           )}
         </div>
       )}
-      {retained.current && (
+      {retained && (
         <div hidden={!readable}>
           <SubjectFacts
-            initial={retained.current}
+            initial={retained}
             locale={locale}
             transport={transport}
             review={review}
