@@ -46,6 +46,9 @@ funding/cut descriptions are superseded by this contract. The store seam does no
 
 ## Remaining native composition
 
+The separate integration delivery owns native commands/routes, outbox and worker delivery, lifecycle/erasure
+composition and the recoverable Web journey. This storage increment supplies only the internal transaction seam.
+
 Mount native preview, confirmation, operation and outcome routes with the ordinary Access catalogue and command
 receipts. Capture the native durable initiator and install its reader. Emit and consume one registered Core outbox
 confirmation event through the existing Library WorkModule and queue. Use the source's documented direct or
@@ -58,6 +61,9 @@ Compose retention and erasure with Accounts 27af and the existing Library cleanu
 owner/expiry indexes. Do not expose the internal store before this composition lands.
 
 ## Static bounds
+
+The separately owned command envelope admits at most 64 KiB. The stored-value ceilings below bound internal
+persistence; they do not enlarge that envelope or admit an oversized command.
 
 One preview holds at most 1,000 targets, each at most 4,096 canonical JSON bytes, and request and initiator at most
 131,072 bytes each. Stored JSON whitespace has a separate finite SQL ceiling. An admitted source is read in pages
