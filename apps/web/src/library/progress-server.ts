@@ -85,12 +85,14 @@ function validateRecord(input: unknown): ProgressRecordInput {
   if (!input || typeof input !== 'object') throw new Error('Invalid progress request');
   const value = input as Record<string, unknown>;
   if (typeof value.revision !== 'number') throw new Error('Invalid progress request');
+  if (value.clear !== undefined && value.clear !== true) throw new Error('Invalid progress request');
   const add = stringList(value.add);
   const remove = stringList(value.remove);
   return {
     sessionId: requiredString(value.sessionId, 128),
     revision: value.revision,
     idempotencyKey: requiredString(value.idempotencyKey, 64),
+    ...(value.clear === true ? { clear: true as const } : {}),
     ...(value.amount === undefined ? {} : { amount: requiredString(value.amount, 32) }),
     ...(value.locator === undefined ? {} : { locator: requiredString(value.locator, 256) }),
     ...(value.position === undefined ? {} : { position: requiredString(value.position, 32) }),

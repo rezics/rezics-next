@@ -592,6 +592,7 @@ export type ProgressRecordInput = {
   sessionId: string;
   revision: number;
   idempotencyKey: string;
+  clear?: true;
   amount?: string;
   locator?: string;
   position?: string;
@@ -600,6 +601,7 @@ export type ProgressRecordInput = {
 };
 
 type RecordBody =
+  | { revision: number; clear: true }
   | { revision: number; amount: string }
   | { revision: number; locator: string; position: string }
   | { revision: number; add: string[] }
@@ -608,11 +610,16 @@ type RecordBody =
 function recordBody(input: ProgressRecordInput): RecordBody | null {
   if (!routeId.test(input.sessionId) || !Number.isSafeInteger(input.revision) || input.revision < 0) return null;
   if (!idempotencyKeyPattern.test(input.idempotencyKey)) return null;
+  const clear = input.clear !== undefined;
   const amount = input.amount !== undefined;
   const cursor = input.locator !== undefined || input.position !== undefined;
   const batch = input.add !== undefined || input.remove !== undefined;
-  if ([amount, cursor, batch].filter(Boolean).length !== 1 || (input.add !== undefined && input.remove !== undefined))
+  if (
+    [clear, amount, cursor, batch].filter(Boolean).length !== 1 ||
+    (input.add !== undefined && input.remove !== undefined)
+  )
     return null;
+  if (clear) return input.clear === true ? { revision: input.revision, clear: true } : null;
   if (input.amount !== undefined) {
     if (!decimal.test(input.amount)) return null;
     return { revision: input.revision, amount: input.amount };

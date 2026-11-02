@@ -188,8 +188,8 @@ async function mount(initial: LoadedPage) {
       await user.type(field(label), value);
     });
   const key = () => dialog().querySelector<HTMLInputElement>('[name="idempotencyKey"]')!.value;
-  const submit = async (kind: Kind) =>
-    click(
+  const submit = async (kind: Kind) => {
+    await click(
       kind === 'finish'
         ? m.library_progress_confirm_complete()
         : kind === 'record'
@@ -198,6 +198,9 @@ async function mount(initial: LoadedPage) {
             ? m.library_progress_add_units()
             : m.library_progress_remove_units(),
     );
+    if (kind !== 'finish' && body.queryByRole('button', { name: m.library_progress_confirm_correction() }))
+      await click(m.library_progress_confirm_correction());
+  };
   const start = async (kind: Kind) => {
     if (kind === 'finish') {
       await click(m.library_collection_actions());
@@ -420,6 +423,77 @@ test('same-page retries keep uncertain intent, successful saves refresh authorit
     await settle(() => commands[2]!.work.resolve({ ok: false, reason: 'conflict' }));
     expect(h.key()).toBe(rotated);
     expect(h.field(m.library_progress_amount()).value).toBe('4.75');
+  } finally {
+    await h.close();
+  }
+});
+
+test('correction review keeps a closed draft and recovers a conflict only after explicitly loading latest progress', async () => {
+  const initial = page();
+  const h = await mount(initial);
+  try {
+    await h.click(m.library_progress_update());
+    await h.fill(m.library_progress_amount(), '0');
+    await h.click(m.library_progress_record());
+    expect(commands).toHaveLength(0);
+    await h.click(m.library_progress_cancel());
+    expect(h.field(m.library_progress_amount()).value).toBe('0');
+    // Closing the dialog and reopening must preserve the deliberate zero.
+    await act(async () => {
+      h.dialog().dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(h.body.queryByRole('dialog')).toBeNull();
+    await h.click(m.library_progress_update());
+    expect(h.field(m.library_progress_amount()).value).toBe('0');
+    await h.submit('record');
+    const original = commands[0]!.data;
+    await settle(() => commands[0]!.work.resolve({ ok: false, reason: 'conflict' }));
+    await h.click(m.library_progress_confirm_correction());
+    expect(commands[1]!.data).toEqual(original);
+    await settle(() => commands[1]!.work.resolve({ ok: false, reason: 'conflict' }));
+    await h.click(m.library_progress_review_latest());
+    await settle(() =>
+      histories[0]!.work.resolve({ ...initial, session: { ...initial.session, amount: '25', revision: 10 } }),
+    );
+    expect(h.field(m.library_progress_amount()).value).toBe('0');
+    await h.submit('record');
+    expect(commands[2]!.data).toMatchObject({ amount: '0', revision: 10 });
+    expect(commands[2]!.data.idempotencyKey).not.toBe(original.idempotencyKey);
+  } finally {
+    await h.close();
+  }
+});
+
+test('clear confirms an unsupported finished session, retries its exact operands and refreshes saved facts', async () => {
+  const initial = page();
+  Object.assign(initial.session, {
+    state: 'completed',
+    completedAt: '2026-01-02T00:00:00Z',
+    recordingState: 'unsupported',
+  });
+  const h = await mount(initial);
+  try {
+    await h.click(m.library_progress_clear());
+    expect(commands).toHaveLength(0);
+    expect(h.dialog().textContent).toContain(m.library_progress_clear_scope());
+    await h.click(m.library_progress_confirm_clear());
+    const original = commands[0]!.data;
+    expect(original).toEqual({
+      sessionId: initial.session.id,
+      revision: 7,
+      idempotencyKey: initial.idempotencyKey,
+      clear: true,
+    });
+    await settle(() => commands[0]!.work.reject(new Error('response lost')));
+    await h.click(m.library_progress_confirm_clear());
+    expect(commands[1]!.data).toEqual(original);
+    const cleared = success(initial);
+    cleared.session.amount = null;
+    await settle(() => commands[1]!.work.resolve(cleared));
+    await settle(() => histories[0]!.work.resolve({ ...initial, session: { ...initial.session, ...cleared.session } }));
+    expect(h.body.queryByRole('dialog')).toBeNull();
+    expect(h.host.textContent).toContain(m.library_progress_state_completed());
+    expect(histories[0]!.data.changes).toBe(initial.changesCursor);
   } finally {
     await h.close();
   }

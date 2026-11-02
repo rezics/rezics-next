@@ -330,6 +330,8 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
   const click = async (label: string) =>
     act(async () => {
       await user.click(body.getByRole('button', { name: label, exact: true }));
+      if (label === m.library_progress_record())
+        await user.click(body.getByRole('button', { name: m.library_progress_confirm_correction(), exact: true }));
     });
   const field = (label: string) => body.getByLabelText(label) as HTMLInputElement;
   const fill = async (label: string, value: string) =>

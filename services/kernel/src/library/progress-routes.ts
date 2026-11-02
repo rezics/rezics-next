@@ -91,6 +91,7 @@ export const progressPresentationSchema = t.Unsafe<ProgressPresentation>(
 const presentationFields = { ...sessionFields, presentation: t.Optional(progressPresentationSchema) };
 const progressSessionResponse = t.Object({ progressSession: sessionSchema }, closed);
 const changeIntent = t.Union([
+  t.Object({ clear: t.Literal(true) }, closed),
   t.Object({ amount: t.String() }, closed),
   t.Object({ locator: t.String(), position: t.String() }, closed),
   t.Object({ add: t.Array(t.String()), remove: t.Optional(t.Array(t.String())) }, closed),
@@ -155,6 +156,7 @@ const pageQuery = {
 const recordBody = t.Object(
   {
     revision,
+    clear: t.Optional(t.Literal(true)),
     amount: t.Optional(t.String()),
     locator: t.Optional(t.String()),
     position: t.Optional(t.String()),

@@ -42,6 +42,7 @@ export type ProgressRecord = ScalarRecord | CursorRecord | CompletedUnitsRecord;
 
 /** History payload. Unit ids are the ones given, sorted by code unit, never a filled range. */
 export type ProgressIntent =
+  | { clear: true }
   | { amount: string }
   | { locator: string; position: string }
   | { add: string[] }

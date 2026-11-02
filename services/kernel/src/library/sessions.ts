@@ -42,6 +42,7 @@ import { createShelfHeads, createProgressActivity } from './shelf-heads.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { prepareProgressPresentation } from './progress-presentation.ts';
 import sessionLock from './session-lock.sql';
+import { clearProgressValues, isProgressClear } from './progress-commands.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
@@ -197,6 +198,7 @@ export function createSessionCommands(config: Dependencies) {
     const { revision, record } = revisionInput(input);
     if (action !== 'record' && Object.keys(record).length)
       throw new ProgressInvalidError(Object.keys(record).sort()[0]!);
+    const clearing = action === 'record' && isProgressClear(record);
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     return runner.ownAccountPrepared(
       actor,
@@ -207,7 +209,7 @@ export function createSessionCommands(config: Dependencies) {
         input: { sessionId, revision, ...record },
         async prepare(attempt) {
           try {
-            if (action !== 'record') return { original: null, source: null, pin: null };
+            if (action !== 'record' || clearing) return { original: null, source: null, pin: null };
             // Release the owner snapshot before any source or Global connection is acquired.
             const fact = await withConnection(pool, async (client) => {
               await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -248,13 +250,16 @@ export function createSessionCommands(config: Dependencies) {
         if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
         const current = fact.session;
         // A concurrent NULL-pin migration cannot let prepared legacy meaning admit a pinned value.
-        if (action === 'record' && JSON.stringify(fact.pin) !== JSON.stringify(prepared.pin))
+        if (action === 'record' && !clearing && JSON.stringify(fact.pin) !== JSON.stringify(prepared.pin))
           throw new ProgressConflictError();
         if (current.revision !== revision) throw new ProgressConflictError();
         const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
         const changes: ProgressSessionUpdate = { ...current };
         let intent: unknown;
-        if (action === 'record') {
+        if (clearing) {
+          Object.assign(changes, await clearProgressValues(tx, route, current));
+          intent = { clear: true };
+        } else if (action === 'record') {
           const parsed = valid(
             parseRecord(
               current.mode,

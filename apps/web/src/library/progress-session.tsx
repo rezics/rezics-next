@@ -36,6 +36,7 @@ import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
 import { displayLibraryTitle, LibraryTitle } from './title';
 import { progressFailureMessage, progressView } from './progress-label';
 import { scalarRecordingValue } from './progress-view';
+import { ProgressCorrectionReview } from './progress-actions';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 
 const buttonClass =
@@ -531,6 +532,10 @@ function SessionEditor({
     retained?.kind === 'finish' ? retained.data.action : null,
   );
   const [editing, setEditing] = useState(false);
+  const [review, setReview] = useState<CapturedIntent | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [conflict, setConflict] = useState(false);
+  const [draftOpened, setDraftOpened] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const [readDenied, setReadDenied] = useState(false);
   const completeAllowed = exposure.useOperation('progress_session.complete');
@@ -584,9 +589,13 @@ function SessionEditor({
     if (!canHandle() || (commandGuards.record && !commandGuards.record.isCurrent())) return;
     const retry = lifetime.current?.custody.retry;
     const recording = retry && retry.kind !== 'finish' ? retry.data : undefined;
-    setAmount(recording?.amount ?? session.amount ?? '');
-    setLocator(recording?.locator ?? session.locator ?? '');
-    setPosition(recording?.position ?? session.position ?? '');
+    if (!draftOpened) {
+      setAmount(recording?.amount ?? session.amount ?? '');
+      setLocator(recording?.locator ?? session.locator ?? '');
+      setPosition(recording?.position ?? session.position ?? '');
+      setDraftOpened(true);
+    }
+    if (retry) setReview(retry);
     setEditing(true);
   }
 
@@ -611,6 +620,10 @@ function SessionEditor({
       setAddText('');
       setRemoveText('');
       setEditing(false);
+      setReview(null);
+      setBusy(false);
+      setConflict(false);
+      setDraftOpened(false);
       setAlert(null);
       setConfirming(null);
     }
@@ -658,6 +671,7 @@ function SessionEditor({
         setSession((current) => (!originating || fresh.session.revision >= current.revision ? fresh.session : current));
         setReadDenied(false);
         setAlert(null);
+        return fresh;
       } else {
         setReadDenied(true);
         setAlert(m.library_progress_refused());
@@ -694,6 +708,7 @@ function SessionEditor({
     )
       return;
     setAlert(null);
+    setBusy(true);
     const flight = {};
     origin.custody.flight = flight;
     const currentAttempt = () => isCurrent(origin) && origin.custody.flight === flight && (!guard || guard.isCurrent());
@@ -706,6 +721,7 @@ function SessionEditor({
       // Native work may commit after retirement; its completion has no replacement UI authority.
       if (!currentAttempt()) return;
       if (!result.ok) {
+        setConflict(result.reason === 'conflict');
         explain(result.reason, captured.kind !== 'finish');
         return;
       }
@@ -714,8 +730,15 @@ function SessionEditor({
         return;
       }
       delete origin.custody.retry;
+      setConflict(false);
+      setReview(null);
+      setDraftOpened(false);
       setKey(crypto.randomUUID());
       if (captured.kind === 'record') {
+        if (captured.data.clear) {
+          setAddText('');
+          setRemoveText('');
+        }
         setAmount('');
         setLocator('');
         setPosition('');
@@ -735,6 +758,7 @@ function SessionEditor({
     } finally {
       // This physical latch belongs to the dispatched command, not an admission render.
       if (origin.custody.flight === flight) delete origin.custody.flight;
+      if (isCurrent(origin)) setBusy(false);
     }
   }
 
@@ -743,17 +767,17 @@ function SessionEditor({
     if (!canHandle() || !isCurrent(origin) || session.state !== 'active' || !offered) return;
     const intent =
       session.mode === 'cursor_position' ? { locator, position: position.trim() } : { amount: amount.trim() };
-    await dispatch(
-      { kind: 'record', data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, ...intent } },
-      origin,
-    );
+    stage({
+      kind: 'record',
+      data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, ...intent },
+    });
   }
 
   async function onUnits(kind: 'add' | 'remove') {
     const origin = lifetime.current;
     if (!canHandle() || !isCurrent(origin) || origin.custody.flight || session.state !== 'active' || !offered) return;
     if (origin.custody.retry) {
-      if (origin.custody.retry.kind === kind) await dispatch(origin.custody.retry, origin);
+      if (origin.custody.retry.kind === kind) stage(origin.custody.retry);
       return;
     }
     const parsed = parseUnitBatch(kind === 'add' ? addText : removeText);
@@ -761,18 +785,40 @@ function SessionEditor({
       setAlert(parsed.reason === 'limit' ? m.library_progress_batch_limit() : m.library_progress_invalid());
       return;
     }
-    await dispatch(
-      {
-        kind,
-        data: {
-          sessionId: session.id,
-          revision: session.revision,
-          idempotencyKey: key,
-          ...(kind === 'add' ? { add: parsed.ids } : { remove: parsed.ids }),
-        },
+    stage({
+      kind,
+      data: {
+        sessionId: session.id,
+        revision: session.revision,
+        idempotencyKey: key,
+        ...(kind === 'add' ? { add: parsed.ids } : { remove: parsed.ids }),
       },
-      origin,
-    );
+    });
+  }
+
+  function stage(intent: CapturedIntent) {
+    const origin = lifetime.current;
+    if (!canHandle() || !isCurrent(origin) || origin.custody.flight) return;
+    setReview(origin.custody.retry ?? intent);
+    setEditing(true);
+  }
+
+  async function reviewLatest() {
+    const origin = lifetime.current;
+    if (!canHandle() || !isCurrent(origin) || !conflict || origin.custody.flight) return;
+    setBusy(true);
+    const fresh = await refreshHistory(origin);
+    if (!isCurrent(origin)) return;
+    setBusy(false);
+    if (!fresh || fresh.session.revision < session.revision) return;
+    // Only an explicit conflict recovery retires the rejected operands. Uncertain retries keep them exactly.
+    delete origin.custody.retry;
+    const newKey = crypto.randomUUID();
+    setKey(newKey);
+    setConflict(false);
+    if (review?.kind === 'record' && review.data.clear) {
+      setReview({ kind: 'record', data: { ...review.data, revision: fresh.session.revision, idempotencyKey: newKey } });
+    } else setReview(null);
   }
 
   async function onFinish(action: 'complete' | 'abandon') {
@@ -966,6 +1012,25 @@ function SessionEditor({
     </Exposure>
   );
 
+  const editorContent = (
+    <>
+      {offered ? recordForm : null}
+      {review && review.kind !== 'finish' ? (
+        <ProgressCorrectionReview
+          data={review.data}
+          busy={busy}
+          conflict={conflict}
+          onConfirm={() => {
+            const origin = lifetime.current;
+            if (canHandle() && isCurrent(origin)) void dispatch(review, origin);
+          }}
+          onCancel={() => edit(() => setReview(null))}
+          onReload={() => void reviewLatest()}
+        />
+      ) : null}
+    </>
+  );
+
   return (
     <article className="max-w-4xl space-y-10 text-foreground">
       <header className="space-y-6">
@@ -1118,6 +1183,19 @@ function SessionEditor({
           </Button>
         </div>
       ) : null}
+      <Exposure operation="progress_session.record">
+        <Button
+          variant="outline"
+          onClick={() =>
+            stage({
+              kind: 'record',
+              data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, clear: true },
+            })
+          }
+        >
+          {m.library_progress_clear()}
+        </Button>
+      </Exposure>
       <Exposure operation="progress_session.create">
         <section className="space-y-3">
           <Link to="/library/progress" search={{ subjectId: session.subjectId }} className={buttonClass}>
@@ -1139,7 +1217,7 @@ function SessionEditor({
                 {alert}
               </p>
             ) : null}
-            {offered ? recordForm : null}
+            {editorContent}
           </BottomSheet>
         ) : (
           <Dialog open={editing} onOpenChange={(value) => edit(() => setEditing(value))}>
@@ -1151,7 +1229,7 @@ function SessionEditor({
                   {alert}
                 </p>
               ) : null}
-              {offered ? recordForm : null}
+              {editorContent}
             </DialogContent>
           </Dialog>
         )
