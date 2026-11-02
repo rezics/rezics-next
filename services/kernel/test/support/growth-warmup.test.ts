@@ -15,6 +15,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const schema = 'growth_warmup_test';
 const probes = `${schema}.probes`;
 const catalog = `${schema}.catalog`;
+const staged = `${schema}.staged`;
 const route = 1;
 const spareProbe = 1_000_000;
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
@@ -38,6 +39,10 @@ beforeAll(async () => {
     id integer NOT NULL,
     payload jsonb NOT NULL,
     PRIMARY KEY (route, id)
+  )`);
+  await db.admin.query(`CREATE TABLE ${staged} (
+    id integer PRIMARY KEY,
+    payload text NOT NULL
   )`);
 });
 
@@ -97,6 +102,55 @@ test('a warmup hook runs in place of the operation for every unmeasured run', as
     { kind: 'operation', scale: 64, repetition: 11 },
   ]);
 });
+
+test('prepare writes settle before measurement and stay out of product cost', async () => {
+  const database = db!;
+  const calls: string[] = [];
+  const vacuumBeforePrepare = new Map<string, number>();
+  await database.admin.query(`TRUNCATE ${staged}`);
+  const report = await checkGrowth(database, {
+    name: 'prepare writes settle',
+    repetitions: 1,
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    grow: async () => {},
+    warmup: async (_growthDb, scale, repetition) => {
+      calls.push(`warmup:${scale}:${repetition}`);
+      await withConnection(database.pool, (client) => client.query('SELECT 1'));
+    },
+    prepare: async (growthDb, scale, repetition) => {
+      calls.push(`prepare:${scale}:${repetition}`);
+      const before = await growthDb.admin.query<{ vacuumCount: number }>(
+        `SELECT vacuum_count::integer AS "vacuumCount" FROM pg_stat_user_tables WHERE relid = $1::regclass`,
+        [staged],
+      );
+      vacuumBeforePrepare.set(`${scale}:${repetition}`, before.rows[0]?.vacuumCount ?? 0);
+      await withConnection(growthDb.pool, (client) =>
+        client.query(`INSERT INTO ${staged} (id, payload) VALUES ($1, 'prepare')`, [repetition]),
+      );
+    },
+    operation: async (growthDb, scale, repetition) => {
+      calls.push(`operation:${scale}:${repetition}`);
+      const after = await growthDb.admin.query<{ vacuumCount: number }>(
+        `SELECT vacuum_count::integer AS "vacuumCount" FROM pg_stat_user_tables WHERE relid = $1::regclass`,
+        [staged],
+      );
+      expect(after.rows[0]!.vacuumCount).toBeGreaterThan(vacuumBeforePrepare.get(`${scale}:${repetition}`)!);
+      await withConnection(growthDb.pool, (client) =>
+        client.query(`SELECT payload FROM ${staged} WHERE id = $1`, [repetition]),
+      );
+    },
+  });
+  expect(calls.some((call) => call === 'prepare:1:0')).toBe(false);
+  for (const scale of [1, 8, 64]) {
+    const operations = calls.filter((call) => call.startsWith(`operation:${scale}:`));
+    expect(operations.length).toBeGreaterThanOrEqual(1);
+    expect(calls.filter((call) => call.startsWith(`prepare:${scale}:`))).toEqual(
+      operations.map((call) => call.replace('operation:', 'prepare:')),
+    );
+  }
+  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([1, 1, 1]);
+  expect(report.samples.map(({ cost }) => cost.rows)).toEqual([1, 1, 1]);
+}, 60_000);
 
 test('without a warmup hook the unmeasured runs call the operation as before', async () => {
   const calls: Call[] = [];

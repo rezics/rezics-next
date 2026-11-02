@@ -1014,7 +1014,7 @@ async function captureInternal<T>(
   }
 }
 
-/** Runs an explicitly owned warm-up capture; nested captures inherit warm-up custody. */
+/** Runs an explicitly owned unmeasured capture; nested captures inherit that custody. Used for warm-up and prepare. */
 export function captureWarmup<T>(database: GrowthDatabase, operation: () => Promise<T>) {
   return captureInternal(database, operation, { includeBackends: true }, true);
 }

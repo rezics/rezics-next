@@ -601,13 +601,16 @@ still fails, the infrastructure error includes those notices, prepared transacti
 relation owners, and (when the admin role can create `pg_visibility`) non-visible block numbers and
 `pg_check_visible` results. The default horizon wait is 30 seconds. A direct call to `settle()` still throws
 `GrowthSettleInfrastructureError`. Settle also disables autovacuum on every table, including tables created since the
-database opened. Before each measured repetition, the harness captures each warm-up or preceding run's ModifyTable
-targets, including nested trigger and foreign-key statements, and settles those relations without ANALYZE in every
-database that run measured. It also settles `dbos.workflow_status` when present. The optional `prepare(db, scale,
-repetition)` hook runs outside capture after settling and before every measured repetition, never before warm-ups. A
-fixture that writes during warm-up, `prepare`, or a direct capture settles after that write and immediately before the
-capture. Work captured inside `grow` is never settled. A fixture that measures outside `checkGrowth` calls the exported
-`settle` API instead of issuing a bare VACUUM: bare VACUUM neither waits for older snapshots nor verifies visibility
+database opened. Before each measured repetition, the harness captures each warm-up, prepare hook, or preceding run's
+ModifyTable targets, including nested trigger and foreign-key statements, and settles those relations without ANALYZE
+in every database that run measured. It also settles `dbos.workflow_status` when present. The optional `prepare(db,
+scale, repetition)` hook runs as unmeasured capture after that settle and before every measured repetition, never
+before warm-ups. Nested captures inside it inherit that custody. The harness tracks its writes and open transactions,
+including on other instrumented databases, and settles the same boundary before measuring; prepare SQL is not product
+cost. A fixture that writes during warm-up, `prepare`, or a direct capture settles after that write and immediately
+before the capture. Work captured inside `grow` is never settled. A fixture that measures outside `checkGrowth` calls
+the exported `settle` API instead of issuing a bare VACUUM: bare VACUUM neither waits for older snapshots nor verifies
+visibility
 ([growth bare VACUUM sites](../docs/research/growth-bare-vacuum-sites.md)).
 
 When a settle fails, moving table counters classify a concurrent writer, which the check must stop outside the

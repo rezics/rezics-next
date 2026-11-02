@@ -113,7 +113,10 @@ export type GrowthCheck = {
   operation(db: GrowthDatabase, scale: number, repetition: number): Promise<unknown>;
   /** One unmeasured run of the same code path on spare state, used for warm-ups in place of `operation`. */
   warmup?(db: GrowthDatabase, scale: number, repetition: number): Promise<unknown>;
-  /** Unmeasured setup before each measured repetition, after harness preparation; never runs before warm-ups. */
+  /**
+   * Unmeasured setup before each measured repetition, after harness preparation; never runs before warm-ups.
+   * Writes and open transactions are settled before the measured operation and are not product cost.
+   */
   prepare?(db: GrowthDatabase, scale: number, repetition: number): Promise<void>;
 };
 
@@ -854,26 +857,50 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     let pendingWrites = new Map<GrowthDatabase, Set<string>>();
     const seenBackends = new Set<number>();
     let pendingBackends = operationBackends();
-    for (let warmup = 0; warmup < warmups; warmup++) {
-      const warmed = await captureMeasuredRun(() =>
-        captureWarmup(db, async () => {
-          if (check.warmup) await check.warmup(db, scale, repetition);
-          else await check.operation(db, scale, repetition);
-        }),
-      );
-      for (const backend of warmed.backends) seenBackends.add(backend);
-      for (const target of warmed.databases) measuredDatabases.add(target);
-      for (const [target, relations] of warmed.writes) {
+    const absorbUnmeasured = (run: Awaited<ReturnType<typeof captureMeasuredRun>>) => {
+      for (const backend of run.backends) seenBackends.add(backend);
+      for (const target of run.databases) measuredDatabases.add(target);
+      for (const [target, relations] of run.writes) {
         const accumulated = pendingWrites.get(target) ?? new Set<string>();
         for (const relation of relations) accumulated.add(relation);
         pendingWrites.set(target, accumulated);
       }
-      for (const backend of warmed.backends) pendingBackends.add(backend);
-      for (const [target, transactions] of warmed.transactions) {
+      for (const backend of run.backends) pendingBackends.add(backend);
+      for (const [target, transactions] of run.transactions) {
         const collected = pendingBackends.transactions.get(target) ?? new Map<number, number>();
         for (const [backend, transaction] of transactions) collected.set(backend, transaction);
         pendingBackends.transactions.set(target, collected);
       }
+    };
+    const settlePending = async () => {
+      for (const target of pendingWrites.keys()) {
+        const workflowStatus = await target.admin.query<{ exists: boolean }>(
+          `SELECT to_regclass('"dbos".workflow_status') IS NOT NULL AS exists`,
+        );
+        if (workflowStatus.rows[0]!.exists) pendingWrites.get(target)!.add('dbos.workflow_status');
+      }
+      const targets = new Set<GrowthDatabase>([...pendingWrites.keys(), ...pendingBackends.transactions.keys()]);
+      for (const target of targets) {
+        const relations = [...(pendingWrites.get(target) ?? [])];
+        if (relations.length === 0 && (pendingBackends.transactions.get(target)?.size ?? 0) === 0) continue;
+        settleMs += await recordedSettle(target, {
+          relations,
+          operationBackends: pendingBackends,
+        });
+      }
+      (seeding as { settleMs: number }).settleMs = settleMs;
+      pendingWrites = new Map();
+      pendingBackends = operationBackends();
+    };
+    for (let warmup = 0; warmup < warmups; warmup++) {
+      absorbUnmeasured(
+        await captureMeasuredRun(() =>
+          captureWarmup(db, async () => {
+            if (check.warmup) await check.warmup(db, scale, repetition);
+            else await check.operation(db, scale, repetition);
+          }),
+        ),
+      );
       repetition++;
     }
 
@@ -887,24 +914,14 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     for (let run = 0; run < repetitions; run++) {
       let accepted = false;
       while (!accepted) {
-        for (const target of pendingWrites.keys()) {
-          const workflowStatus = await target.admin.query<{ exists: boolean }>(
-            `SELECT to_regclass('"dbos".workflow_status') IS NOT NULL AS exists`,
+        await settlePending();
+        if (check.prepare) {
+          const prepare = check.prepare;
+          absorbUnmeasured(
+            await captureMeasuredRun(() => captureWarmup(db, () => prepare(db, scale, repetition))),
           );
-          if (workflowStatus.rows[0]!.exists) {
-            const relations = pendingWrites.get(target)!;
-            relations.add('dbos.workflow_status');
-          }
+          await settlePending();
         }
-        for (const [target, relations] of pendingWrites) {
-          if (relations.size > 0)
-            settleMs += await recordedSettle(target, {
-              relations: [...relations],
-              operationBackends: pendingBackends,
-            });
-        }
-        (seeding as { settleMs: number }).settleMs = settleMs;
-        if (check.prepare) await check.prepare(db, scale, repetition);
         const captured = await captureMeasuredRun(() =>
           capture(db, () => check.operation(db, scale, repetition), { includeBackends: true }),
         );
