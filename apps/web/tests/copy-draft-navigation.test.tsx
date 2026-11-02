@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, forwardRef, useState, type ReactNode } from 'react';
-import type { CopyItem } from '../src/library/copies-read';
+import type { CopyDetailResult, CopyItem } from '../src/library/copies-read';
 import { m } from '../src/paraglide/messages.js';
 
 const { Window } = await import(
@@ -28,7 +28,7 @@ for (const [key, value] of Object.entries(globals))
 const create = mock(async (_input: unknown): Promise<unknown> => ({ ok: false, reason: 'unavailable' }));
 const update = mock(async (_input: unknown): Promise<unknown> => ({ ok: false, reason: 'unavailable' }));
 const deletion = mock(async (_input: unknown): Promise<unknown> => ({ ok: false, reason: 'unavailable' }));
-const detail = mock(async (_id: string): Promise<any> => ({ ok: false, reason: 'unavailable' }));
+const detail = mock(async (_id: string): Promise<CopyDetailResult> => ({ ok: false, reason: 'unavailable' }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/library/copies-actions', () => ({
   createCopy: create,
@@ -102,7 +102,7 @@ const profile = {
 };
 const originating = {
   isCurrent: () => true,
-  headers: () => ({ 'x-csrf-token': 'current' }),
+  headers: (): HeadersInit | null => ({ 'x-csrf-token': 'current' }),
   readDetail: detail,
   readSubject: async () => ({ state: 'unavailable' as const }),
 };
@@ -341,12 +341,17 @@ test('conflict review retries failed reads and conceals deletion/denial without 
     { ok: false, reason: 'unavailable' },
     { ok: true, copy: { ...copy, id: 'other-copy' } },
     { ok: false, reason: 'forbidden' },
-  ]) {
+  ] as const) {
     detail.mockResolvedValueOnce(result);
     await click(m.library_copy_conflict_review_open());
-    expect(host.textContent).toContain(result.reason === 'forbidden'
-      ? m.library_copy_detail_forbidden() : m.library_copy_detail_unavailable());
-    expect([...host.querySelectorAll('button')].some(b => b.textContent === m.library_copy_conflict_review_accept())).toBe(false);
+    expect(host.textContent).toContain(
+      !result.ok && result.reason === 'forbidden'
+        ? m.library_copy_detail_forbidden()
+        : m.library_copy_detail_unavailable(),
+    );
+    expect(
+      [...host.querySelectorAll('button')].some((b) => b.textContent === m.library_copy_conflict_review_accept()),
+    ).toBe(false);
     expect(form().dataset.idempotencyKey).toBe(copy.idempotencyKey);
   }
   expect(update).toHaveBeenCalledTimes(1);
@@ -355,7 +360,9 @@ test('conflict review retries failed reads and conceals deletion/denial without 
 test('an uncertain update cannot enter conflict review and retries its original command after draft edits', async () => {
   await mount('edit');
   await click(m.library_copy_save());
-  expect([...host.querySelectorAll('button')].some(b => b.textContent === m.library_copy_conflict_review_open())).toBe(false);
+  expect(
+    [...host.querySelectorAll('button')].some((b) => b.textContent === m.library_copy_conflict_review_open()),
+  ).toBe(false);
   await click(m.library_copy_more());
   await changeInput(m.library_copy_note(), 'Changed after lost response');
   await click(m.library_copy_save());
@@ -367,10 +374,15 @@ test('read-only conflict review works without command headers and ignores a resp
   await mount('edit');
   update.mockResolvedValueOnce({ ok: false, reason: 'conflict' });
   await click(m.library_copy_save());
-  let finish!: (result: unknown) => void;
-  detail.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  let finish!: (result: CopyDetailResult) => void;
+  detail.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
   const headers = originating.headers;
-  originating.headers = () => null as unknown as ReturnType<typeof headers>;
+  originating.headers = () => null;
   try {
     await click(m.library_copy_conflict_review_open());
     expect(detail).toHaveBeenCalledTimes(1);
@@ -379,5 +391,31 @@ test('read-only conflict review works without command headers and ignores a resp
     expect(host.querySelector('form')).toBeNull();
     expect(host.textContent).not.toContain('Late current data');
     expect(saved).not.toHaveBeenCalled();
-  } finally { originating.headers = headers; }
+  } finally {
+    originating.headers = headers;
+  }
+});
+
+test('retired read admission cannot install conflict detail or accept it into a draft', async () => {
+  await mount('edit');
+  update.mockResolvedValueOnce({ ok: false, reason: 'conflict' });
+  await click(m.library_copy_save());
+  let finish!: (result: CopyDetailResult) => void;
+  detail.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await click(m.library_copy_conflict_review_open());
+  const isCurrent = originating.isCurrent;
+  originating.isCurrent = () => false;
+  try {
+    await act(async () => finish({ ok: true, copy: { ...copy, note: 'Retired detail' } }));
+    expect(host.textContent).not.toContain('Retired detail');
+    expect(form().dataset.idempotencyKey).toBe(copy.idempotencyKey);
+    expect(saved).not.toHaveBeenCalled();
+  } finally {
+    originating.isCurrent = isCurrent;
+  }
 });

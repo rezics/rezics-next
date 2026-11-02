@@ -200,6 +200,7 @@ The existing native invalid-cursor fallback remains bounded to one retry with th
 and visibly announces that it restarted at page one.
 Detail/edit return and page recovery keep that subject. Decision: changed drafts prompt before closure or internal
 navigation; an unresolved command allows only Stay until its exact intent resolves.
+Decision: A definitive Copy update/delete conflict blocks new commands until explicit current-detail review and acceptance; accepting replaces the draft under the existing discard choice, uses a fresh key, and never submits a write. A concealed or unavailable detail cannot be accepted; uncertain commands keep their exact original retry.
 
 The destinations are **Library**, **Following** and **History**. Library contains a bounded Continue row, Everything,
 Liked, pinned Collections and All Collections. Desktop uses a short pinned sidebar; phone uses a Collection selector

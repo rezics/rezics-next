@@ -24,6 +24,7 @@ import { Menu } from '@rezics/ui/menu';
 import { EllipsisIcon } from 'lucide-react';
 
 import type { CopyProfile, CopySubjectResult } from './copies-profiles';
+import { CopyConflictReview, type ConflictReview } from './copy-conflict-review';
 import { CopyEditionPicker } from './copy-edition-picker';
 import { CopyDraftNavigation, type CopyDraftNavigationHandle } from './copy-draft-navigation';
 import { CopiesFallback } from './copies-fallback';
@@ -154,7 +155,7 @@ export type CopiesOrigin = {
 };
 
 export function CopyForm({
-  copy,
+  copy: initialCopy,
   profile,
   sendKind = false,
   inline = false,
@@ -166,6 +167,7 @@ export function CopyForm({
   onClose,
   onCreated,
   onSaved,
+  onReviewed,
   onRemoved,
   onKey,
   originating,
@@ -183,9 +185,14 @@ export function CopyForm({
   onClose: () => void;
   onCreated: (copy: CopyItem) => void;
   onSaved: (copy: CopyItem) => void;
+  onReviewed?: ((copy: CopyItem) => void) | undefined;
   onRemoved: (id: string, result: CopyRemoved, deadline: number) => void;
   onKey: (key: string) => void;
 }) {
+  const [copy, setCopy] = useState(initialCopy);
+  const [conflicted, setConflicted] = useState(false);
+  const [review, setReview] = useState<ConflictReview>({ state: 'idle' });
+  const reviewing = useRef(false);
   const mobile = useIsMobile();
   const lookup = useRef(0);
   const [edition, setEdition] = useState<EntityPickerSubject | null>(null);
@@ -305,10 +312,63 @@ export function CopyForm({
     }
   }
 
+  async function reviewCurrent() {
+    if (!copy || !conflicted || !current('copy.get') || busy.current || reviewing.current || intent.current) return;
+    const request = ++lookup.current;
+    reviewing.current = true;
+    setReview({ state: 'loading' });
+    try {
+      const result = await (originating ? originating.readDetail(copy.id) : readCopyDetail({ data: { id: copy.id } }));
+      if (!current('copy.get') || request !== lookup.current) return;
+      setReview(
+        result.ok
+          ? result.copy.id === copy.id
+            ? { state: 'ready', copy: result.copy }
+            : { state: 'unavailable' }
+          : { state: result.reason },
+      );
+    } catch {
+      if (current('copy.get') && request === lookup.current) setReview({ state: 'unavailable' });
+    } finally {
+      if (current('copy.get') && request === lookup.current) reviewing.current = false;
+    }
+  }
+
+  function acceptCurrent() {
+    if (!current('copy.get') || !conflicted || review.state !== 'ready' || busy.current || intent.current) return;
+    const accepted = review.copy;
+    const request = lookup.current;
+    const accept = () => {
+      if (!current('copy.get') || request !== lookup.current || busy.current || intent.current) return;
+      const next = { ...accepted, idempotencyKey: crypto.randomUUID() };
+      const draft = draftOf(next);
+      setCopy(next);
+      setDraft(draft);
+      setKind(next.kind ?? '');
+      originalDraft.current = { draft, kind: next.kind ?? '', editionId: null };
+      deleteStarted.current = null;
+      setConfirming(false);
+      setConflicted(false);
+      setFailure(null);
+      setReview({ state: 'idle' });
+      onReviewed?.(next);
+    };
+    // Reuse the single existing departure choice when accepting would discard a draft.
+    if (departure.current) departure.current.requestClose(accept, m.library_copy_conflict_review_discard());
+    else if (!meaningfulChanges) accept();
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const operation = copy ? 'copy.update' : 'copy.create';
-    if (!current(operation) || busy.current || confirming || !editable || intent.current?.operation === 'delete')
+    if (
+      !current(operation) ||
+      busy.current ||
+      conflicted ||
+      confirming ||
+      !editable ||
+      intent.current?.operation === 'delete'
+    )
       return;
     const editionBinding = binding.current;
     const credentialHeaders = headers(operation);
@@ -360,6 +420,7 @@ export function CopyForm({
       if (!current(operation)) return;
       if (!result.ok) {
         if (result.reason !== 'unavailable') intent.current = null;
+        if (copy && result.reason === 'conflict') setConflicted(true);
         setFailure(
           result.reason === 'conflict'
             ? m.library_copy_conflict()
@@ -437,6 +498,7 @@ export function CopyForm({
       !current('copy.delete') ||
       !copy ||
       !editable ||
+      conflicted ||
       busy.current ||
       (intent.current && intent.current.operation !== 'delete')
     )
@@ -462,6 +524,7 @@ export function CopyForm({
       if (!current('copy.delete')) return;
       if (!result.ok) {
         if (result.reason !== 'unavailable') intent.current = null;
+        if (result.reason === 'conflict') setConflicted(true);
         setFailure(result.reason === 'conflict' ? m.library_copy_conflict() : m.library_copy_failure());
         setConfirming(false);
         return;
@@ -581,7 +644,7 @@ export function CopyForm({
           {detailState === 'unavailable' ? (
             <div className="space-y-2">
               <p role="status">{m.library_copy_detail_unavailable()}</p>
-              {onRetryDetail ? (
+              {onRetryDetail && !conflicted ? (
                 <button
                   type="button"
                   className={quiet}
@@ -661,6 +724,14 @@ export function CopyForm({
         </>
       ) : null}
       {failure ? <p role="alert">{failure}</p> : null}
+      {conflicted ? (
+        <CopyConflictReview
+          review={review}
+          disabled={!current('copy.get') || pending || confirming || !!intent.current}
+          onReview={() => void reviewCurrent()}
+          onAccept={acceptCurrent}
+        />
+      ) : null}
       {confirming ? (
         <div
           role="alertdialog"
@@ -686,7 +757,11 @@ export function CopyForm({
       ) : null}
       <div className="flex flex-wrap gap-3">
         {editable ? (
-          <button type="submit" className={button} disabled={pending || !headers(copy ? 'copy.update' : 'copy.create')}>
+          <button
+            type="submit"
+            className={button}
+            disabled={pending || conflicted || !headers(copy ? 'copy.update' : 'copy.create')}
+          >
             {copy ? m.library_copy_save() : m.library_copy_add_submit()}
           </button>
         ) : null}
@@ -695,7 +770,7 @@ export function CopyForm({
             type="button"
             ref={deleteControl}
             className={quiet}
-            disabled={pending || !editable || !headers('copy.delete')}
+            disabled={pending || conflicted || !editable || !headers('copy.delete')}
             onClick={() =>
               current() && (!intent.current || intent.current.operation === 'delete') && setConfirming(true)
             }
@@ -1215,6 +1290,10 @@ function LoadedCopiesPage({
           }}
           onSaved={(next) => {
             if (currentEditor('copy.update'))
+              setCopies((current) => current.map((item) => (item.id === next.id ? next : item)));
+          }}
+          onReviewed={(next) => {
+            if (currentEditor('copy.get'))
               setCopies((current) => current.map((item) => (item.id === next.id ? next : item)));
           }}
           onRemoved={(id, result, deadline) => {
