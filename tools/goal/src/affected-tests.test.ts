@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadSettings } from './config.ts';
+import { checkSettings, loadSettings } from './config.ts';
 import defaults from '../defaults.json';
 import { failingTestFiles } from './merge-train.ts';
 import { settle } from './settle.ts';
@@ -375,7 +375,7 @@ test('affected-test settings use defaults, accept local overrides and reject mal
     expect(settings().affectedTests).toEqual([]);
     local.affectedTests = [{ paths: ['**'], command: [] }];
     writeFileSync(h.settings.localFile, JSON.stringify(local));
-    expect(settings).toThrow('affectedTests[0].command');
+    expect(() => checkSettings({ cwd: h.root, env: {} })).toThrow('affectedTests[0].command');
   } finally {
     h.dispose();
   }
