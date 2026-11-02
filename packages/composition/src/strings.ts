@@ -7,12 +7,13 @@ const CONTROL = '\\u0000-\\u001F\\u007F-\\u009F';
 const HREF_FORBIDDEN = `${CONTROL}\\s\\\\<>"'`;
 const HOST_LABEL = '[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?';
 const HOST = `${HOST_LABEL}(?:\\.${HOST_LABEL})*`;
+const PORT = '(?:[0-5]?[0-9]{1,4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])';
 
 /** Tab and newline stay; every other C0/C1 control, and an HTML-like `<`, do not. */
 export const PLAIN_TEXT_PATTERN = `^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*${END}`;
 
-/** A site path, or `https:` with a host and optional port and no user info. */
-export const HREF_PATTERN = `^(?:/(?:[^${HREF_FORBIDDEN}/][^${HREF_FORBIDDEN}]*)?|https://${HOST}(?::[0-9]{1,5})?(?:[/?#][^${HREF_FORBIDDEN}]*)?)${END}`;
+/** A site path, or `https:` with a host, optional in-range port and no user info. */
+export const HREF_PATTERN = `^(?:/(?:[^${HREF_FORBIDDEN}/][^${HREF_FORBIDDEN}]*)?|https://${HOST}(?::${PORT})?(?:[/?#][^${HREF_FORBIDDEN}]*)?)${END}`;
 
 /** The search filter's CURIE rule. */
 export const CURIE_PATTERN = `^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*${END}`;

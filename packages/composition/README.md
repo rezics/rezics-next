@@ -94,8 +94,9 @@ Every string a registry admits is one of:
   followed by an ASCII letter, `/`, `!` or `?` (`3 < 4` is text; `<b>` is not);
 - `href()`: at most 2,048 characters. A site path starts with `/`, the next character is not
   `/` or `\`, and the value contains no whitespace, backslash, `<`, `>`, `"` or `'`. An
-  absolute `https:` URL has a host name, an optional port and no user information. Any other
-  scheme, a protocol-relative URL or a control character is refused;
+  absolute `https:` URL has a host name, an optional decimal port from 0 through 65,535 and
+  no user information. Any other scheme, a protocol-relative URL or a control character is
+  refused;
 - `curie()`: `^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*$`, at most 128 characters;
 - `subjectId()`: a lowercase canonical UUID;
 - `localizedText({ maxLength })`: `plainText({ maxLength })`, or an object of 1 to 16 entries
