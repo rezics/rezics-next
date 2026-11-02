@@ -35,7 +35,7 @@ export function EntitlementsState({
   history = {},
 }: {
   kind: Exclude<EntitlementsRead<never>['kind'], 'ready'>;
-  history?: PurchaseHistoryPosition;
+  history?: PurchaseHistoryPosition | undefined;
   locale: string;
   retry?: () => void;
 }) {
@@ -79,7 +79,7 @@ export function EntitlementsPage({
   locale: string;
   retry?: () => void;
   continuation?: boolean;
-  history?: PurchaseHistoryPosition;
+  history?: PurchaseHistoryPosition | undefined;
 }) {
   return (
     <section className="max-w-4xl min-w-0 space-y-6" aria-labelledby="entitlements-heading">
