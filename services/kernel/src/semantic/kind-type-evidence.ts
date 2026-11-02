@@ -274,17 +274,18 @@ export function kindTypeEvidenceLocalFootprint(input: Readonly<{
  * Only the exact native body uses this pin; it cannot be serialized as authority.
  */
 class KindTypeBodyInvocation {
-  readonly time;
-  readonly locator;
+  readonly time: ReturnType<typeof commandTime>;
+  readonly locator: CollectionKindPreparationLocator;
+  readonly tx: OperationalTransaction;
   constructor(
     readonly pool: Pool,
-    readonly tx: OperationalTransaction,
-    locator: CollectionKindPreparationLocator,
+    readonly context: CollectionKindPreparationWorkContext,
     readonly work: NativeCollectionWork,
     readonly deadline: number,
   ) {
-    this.locator = Object.freeze({ ...locator });
-    this.time = commandTime(tx);
+    this.tx = context.tx;
+    this.locator = Object.freeze({ ...context.locator });
+    this.time = commandTime(this.tx);
     this.current();
     // This base's actual Core exports cannot authenticate the association of
     // this ledger with this invocation, and Library's installed admit/read
@@ -298,6 +299,8 @@ class KindTypeBodyInvocation {
   current(): void {
     if (
       !(this.work instanceof NativeCollectionWork) || !this.time ||
+      this.context.kind !== 'collection-kind-preparation' || this.context.tx !== this.tx ||
+      !isDeepStrictEqual(this.context.locator, this.locator) ||
       !validLocator(this.locator) || !hasLiveOperationalTransaction(this.tx) ||
       !Number.isFinite(this.deadline) || Date.now() >= this.deadline || commandTime(this.tx) !== this.time
     ) throw new ProblemError('dependency_unavailable');
@@ -343,7 +346,7 @@ export async function captureNativeKindTypeDependency(
   work: NativeCollectionWork,
   deadline: number,
 ): Promise<NativeKindTypeDependencyBody> {
-  const invocation = new KindTypeBodyInvocation(pool, context.tx, context.locator, work, deadline);
+  const invocation = new KindTypeBodyInvocation(pool, context, work, deadline);
   const snapshot = structuredClone(input);
   if (context.kind !== 'collection-kind-preparation' || !validReference(snapshot.reference) || !sha256.test(snapshot.releaseDigest) ||
     !['readable', 'denied'].includes(snapshot.originalDisclosure) || !['readable', 'denied'].includes(snapshot.terminalDisclosure))
@@ -352,13 +355,13 @@ export async function captureNativeKindTypeDependency(
   // original cannot silently drop a foreign/unsupported terminal dependency.
   const originalRoute = invocation.home(snapshot.reference.key.storedSubjectId);
   const terminalRoute = invocation.home(snapshot.reference.canonicalSubjectId);
-  const original = await readNativeKindTypeAnchor(context.tx, {
+  const original = await readNativeKindTypeAnchor(invocation.tx, {
     route: originalRoute, subjectId: snapshot.reference.key.storedSubjectId, includeType: false,
   }, work, deadline);
   invocation.current();
   const includeType = snapshot.originalDisclosure === 'readable' && original.present && original.visibility === 'visible' &&
     snapshot.terminalDisclosure === 'readable';
-  const terminal = await readNativeKindTypeAnchor(context.tx, {
+  const terminal = await readNativeKindTypeAnchor(invocation.tx, {
     route: terminalRoute, subjectId: snapshot.reference.canonicalSubjectId, includeType,
   }, work, deadline);
   invocation.current();
@@ -466,8 +469,9 @@ export async function retainNativeKindTypeDependencyBody(
   work: NativeCollectionWork,
   deadline: number,
 ): Promise<void> {
-  const invocation = new KindTypeBodyInvocation(pool, context.tx, context.locator, work, deadline);
+  const invocation = new KindTypeBodyInvocation(pool, context, work, deadline);
   const snapshot = structuredClone(value);
+  const key = Object.freeze(recordKey(reference));
   if (context.kind !== 'collection-kind-preparation' || !uuid.test(reference.evidenceId) ||
     !isDeepStrictEqual(reference.locator, invocation.locator) || !isDeepStrictEqual(snapshot.binding.locator, invocation.locator))
     throw new ProblemError('dependency_unavailable');
@@ -475,10 +479,10 @@ export async function retainNativeKindTypeDependencyBody(
   invocation.home(snapshot.body.dependencies.original.subject_id);
   invocation.home(snapshot.body.dependencies.terminal!.subject_id);
   await bodyQuery(invocation, bodyWrite, {
-    ...recordKey(reference), binding: JSON.stringify(jsonData(snapshot.binding)), body: JSON.stringify(snapshot.body),
+    ...key, binding: JSON.stringify(jsonData(snapshot.binding)), body: JSON.stringify(snapshot.body),
     progress: JSON.stringify(snapshot.progress),
   });
-  const rows = await bodyQuery<RetainedRow>(invocation, bodyRead, recordKey(reference));
+  const rows = await bodyQuery<RetainedRow>(invocation, bodyRead, key);
   const row = rows[0];
   if (!row || !row.producer_transaction || !isDeepStrictEqual(row.binding, jsonData(snapshot.binding)) ||
     !isDeepStrictEqual(row.body, snapshot.body) || !isDeepStrictEqual(row.progress, snapshot.progress))
@@ -497,12 +501,13 @@ export async function readNativeKindTypeDependencyBody(
   work: NativeCollectionWork,
   deadline: number,
 ): Promise<Readonly<{ body: NativeKindTypeDependencyBody; progress: KindTypeEvidenceProgress; producerTransaction: string }> | null> {
-  const invocation = new KindTypeBodyInvocation(pool, context.tx, context.locator, work, deadline);
+  const invocation = new KindTypeBodyInvocation(pool, context, work, deadline);
   const snapshot = structuredClone(binding);
+  const key = Object.freeze(recordKey(reference));
   if (context.kind !== 'collection-kind-preparation' || !uuid.test(reference.evidenceId) ||
     !isDeepStrictEqual(reference.locator, invocation.locator) || !isDeepStrictEqual(snapshot.locator, invocation.locator))
     throw new ProblemError('dependency_unavailable');
-  const rows = await bodyQuery<RetainedRow>(invocation, bodyRead, recordKey(reference));
+  const rows = await bodyQuery<RetainedRow>(invocation, bodyRead, key);
   const row = rows[0];
   if (!row || !isDeepStrictEqual(row.binding, jsonData(snapshot))) return null;
   validateRetainedBody({ binding: snapshot, body: row.body, progress: row.progress });
@@ -525,8 +530,9 @@ export async function compareNativeKindTypeDependencyBody(
   work: NativeCollectionWork,
   deadline: number,
 ): Promise<KindTypeSelection | null> {
-  const invocation = new KindTypeBodyInvocation(pool, context.tx, context.locator, work, deadline);
+  const invocation = new KindTypeBodyInvocation(pool, context, work, deadline);
   const snapshot = structuredClone(expected);
+  const key = Object.freeze(recordKey(reference));
   if (context.kind !== 'collection-kind-preparation' || !uuid.test(reference.evidenceId) ||
     !isDeepStrictEqual(reference.locator, invocation.locator) || !isDeepStrictEqual(snapshot.binding.locator, invocation.locator))
     throw new ProblemError('dependency_unavailable');
@@ -535,17 +541,17 @@ export async function compareNativeKindTypeDependencyBody(
   // Reject all foreign homes before dispatch, even on excluded branches.
   const originalRoute = invocation.home(original.subject_id);
   const terminalRoute = invocation.home(terminal!.subject_id);
-  const rows = await bodyQuery<RetainedRow>(invocation, bodyRead, recordKey(reference));
+  const rows = await bodyQuery<RetainedRow>(invocation, bodyRead, key);
   const row = rows[0];
   if (!row || !isDeepStrictEqual(row.binding, jsonData(snapshot.binding)) ||
     !isDeepStrictEqual(row.body, snapshot.body) || !isDeepStrictEqual(row.progress, snapshot.progress)) return null;
-  const originalCurrent = await verifyNativeKindTypeAnchor(context.tx, {
+  const originalCurrent = await verifyNativeKindTypeAnchor(invocation.tx, {
     route: originalRoute, expected: original, includeType: false,
   }, work, deadline);
   invocation.current();
   // Always verify both, even after a stale/denied original, with the same paid
   // plan. A failed original cannot choose a cheaper unaccounted terminal branch.
-  const terminalCurrent = await verifyNativeKindTypeAnchor(context.tx, {
+  const terminalCurrent = await verifyNativeKindTypeAnchor(invocation.tx, {
     route: terminalRoute, expected: terminal!, includeType: snapshot.body.originalDisclosure === 'readable' &&
       original.present && original.visibility === 'visible' && snapshot.body.terminalDisclosure === 'readable',
   }, work, deadline);
