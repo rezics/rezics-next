@@ -81,7 +81,12 @@ type LifecycleFocusRequest = {
 };
 
 function isFocusDestination(element: HTMLElement | null): element is HTMLElement {
-  return !!element && element.isConnected && !(element as HTMLButtonElement).disabled && !element.closest('[hidden], [inert]');
+  return (
+    !!element &&
+    element.isConnected &&
+    !(element as HTMLButtonElement).disabled &&
+    !element.closest('[hidden], [inert]')
+  );
 }
 
 /** A lifecycle region has no shadcn equivalent; fields and confirmation use existing shadcn controls. */
@@ -180,11 +185,7 @@ function LifecycleControlsView({
     }
     const ownerDocument = request.source.ownerDocument;
     const active = ownerDocument.activeElement;
-    if (
-      active !== request.source &&
-      active !== ownerDocument.body &&
-      active !== ownerDocument.documentElement
-    ) {
+    if (active !== request.source && active !== ownerDocument.body && active !== ownerDocument.documentElement) {
       focusRequestRef.current = null;
       return;
     }
@@ -197,8 +198,12 @@ function LifecycleControlsView({
       } else destination = resultBoundaryRef.current ?? readStatusRef.current;
     } else if (request.destination === 'action') {
       if (confirmation !== null) return;
-      const actionButton = actions.includes(request.action) ? (actionButtonRefs.current.get(request.action) ?? null) : null;
-      destination = isFocusDestination(actionButton) ? actionButton : resultBoundaryRef.current ?? readStatusRef.current;
+      const actionButton = actions.includes(request.action)
+        ? (actionButtonRefs.current.get(request.action) ?? null)
+        : null;
+      destination = isFocusDestination(actionButton)
+        ? actionButton
+        : (resultBoundaryRef.current ?? readStatusRef.current);
     } else {
       const intent = state.intent;
       if (request.intentKey && (intent?.action !== request.action || intent.idempotencyKey !== request.intentKey)) {
@@ -306,7 +311,14 @@ function LifecycleControlsView({
           </Field>
         ) : null}
         {state.outcome === 'confirmed' ? (
-          <div ref={(element) => { resultBoundaryRef.current = element; }} tabIndex={-1} role="status" className="space-y-2 rounded-xl bg-muted p-4 text-sm">
+          <div
+            ref={(element) => {
+              resultBoundaryRef.current = element;
+            }}
+            tabIndex={-1}
+            role="status"
+            className="space-y-2 rounded-xl bg-muted p-4 text-sm"
+          >
             <p>
               {state.intent?.action === 'remove' ? m.container_lifecycle_removed() : m.container_lifecycle_restored()}
             </p>
@@ -322,17 +334,37 @@ function LifecycleControlsView({
           </div>
         ) : null}
         {state.outcome === 'uncertain' ? (
-          <p ref={(element) => { resultBoundaryRef.current = element; }} tabIndex={-1} role="alert" className="text-sm">
+          <p
+            ref={(element) => {
+              resultBoundaryRef.current = element;
+            }}
+            tabIndex={-1}
+            role="alert"
+            className="text-sm"
+          >
             {m.container_lifecycle_uncertain()}
           </p>
         ) : null}
         {state.outcome === 'conflict' ? (
-          <p ref={(element) => { resultBoundaryRef.current = element; }} tabIndex={-1} role="alert" className="text-sm">
+          <p
+            ref={(element) => {
+              resultBoundaryRef.current = element;
+            }}
+            tabIndex={-1}
+            role="alert"
+            className="text-sm"
+          >
             {m.container_lifecycle_conflict()}
           </p>
         ) : null}
         {problem ? (
-          <div ref={(element) => { resultBoundaryRef.current = element; }} tabIndex={-1} className="space-y-2 text-sm">
+          <div
+            ref={(element) => {
+              resultBoundaryRef.current = element;
+            }}
+            tabIndex={-1}
+            className="space-y-2 text-sm"
+          >
             {state.outcome !== 'conflict' ? <p role="alert">{m.container_lifecycle_refused()}</p> : null}
             <details className="min-w-0">
               <summary className="min-h-11 cursor-pointer py-2 font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">

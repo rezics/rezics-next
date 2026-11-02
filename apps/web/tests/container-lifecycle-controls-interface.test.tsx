@@ -52,9 +52,7 @@ test('keyboard lifecycle confirmation keeps focus on cancel and the current resu
     matchMedia: window.matchMedia.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
-  const previous = new Map(
-    Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
-  );
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -89,7 +87,13 @@ test('keyboard lifecycle confirmation keeps focus on cancel and the current resu
     change(intent) {
       if (intent.action === 'remove') {
         snapshotState = 'removed';
-        return Promise.resolve({ kind: 'confirmed', target, action: intent.action, head: 'head-removed', contextId: null });
+        return Promise.resolve({
+          kind: 'confirmed',
+          target,
+          action: intent.action,
+          head: 'head-removed',
+          contextId: null,
+        });
       }
       restoreStarted();
       return new Promise((resolve) => {
@@ -105,11 +109,12 @@ test('keyboard lifecycle confirmation keeps focus on cancel and the current resu
   };
   const button = (label: string) =>
     [...host.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === label.trim())!;
-  const flush = () => act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-  });
+  const flush = () =>
+    act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
   try {
     await act(async () =>
       root.render(
