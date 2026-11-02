@@ -4,7 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { withConnection } from '../../src/database/pool.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthCheck, type GrowthDatabase } from './growth.ts';
-import { countedSample, countedViolations, medianCounted, validateCountedRun } from './growth-counters.ts';
+import {
+  COUNTED_UNIT_LIMITS,
+  countedNames,
+  countedSample,
+  countedViolations,
+  medianCounted,
+  validateCountedConfig,
+  validateCountedRun,
+} from './growth-counters.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -169,4 +177,89 @@ test('counted comparisons require configured medians and coherent scale repetiti
     ]),
   ).toThrow(/growth slack/);
   expect(countedViolations({ read: () => ({}) }, [])).toEqual([]);
+});
+
+function unitDictionary(count: number, name = (index: number) => `u${index}`, value = 1): Record<string, number> {
+  return Object.fromEntries(Array.from({ length: count }, (_, index) => [name(index), value]));
+}
+
+test('counted configuration admits a finite unit-name budget before sorting and keeps own custom names', () => {
+  const tooMany = unitDictionary(COUNTED_UNIT_LIMITS.units + 1);
+  expect(() => validateCountedConfig({ read: () => ({}), limits: tooMany })).toThrow(
+    `Counted checks exceed the ${COUNTED_UNIT_LIMITS.units} unit capacity`,
+  );
+  expect(() => countedNames({ read: () => ({}), limits: tooMany })).toThrow(
+    `Counted checks exceed the ${COUNTED_UNIT_LIMITS.units} unit capacity`,
+  );
+  const long = 'n'.repeat(COUNTED_UNIT_LIMITS.nameBytes + 1);
+  expect(() => validateCountedConfig({ read: () => ({}), limits: { [long]: 1 } })).toThrow(
+    `Counted unit name in limits exceeds the ${COUNTED_UNIT_LIMITS.nameBytes} byte name limit`,
+  );
+  expect(() =>
+    validateCountedConfig({
+      read: () => ({}),
+      bounds: { slots: 'constant' },
+      slack: { [long]: { absolute: 0, relative: 0 } },
+    }),
+  ).toThrow(`Counted unit name in slack exceeds the ${COUNTED_UNIT_LIMITS.nameBytes} byte name limit`);
+  const allowed = unitDictionary(COUNTED_UNIT_LIMITS.units);
+  expect(countedNames({ read: () => ({}), limits: allowed })).toEqual(Object.keys(allowed).sort());
+  const inherited = Object.assign(Object.create({ inherited: 9 }), { custom: 4, diagnostic: 1 });
+  expect(countedNames({ read: () => ({}), limits: inherited })).toEqual(['custom', 'diagnostic']);
+  expect(
+    validateCountedConfig({
+      read: () => ({}),
+      limits: { slots: 1 },
+      slack: { slots: { absolute: 0, relative: 0 } },
+    }).declared.has('slots'),
+  ).toBe(true);
+  expect(() =>
+    validateCountedConfig({
+      read: () => ({}),
+      limits: { slots: 1 },
+      slack: { other: { absolute: 0, relative: 0 } },
+    }),
+  ).toThrow('Slack configured for undeclared counted unit other');
+});
+
+test('returned counted evidence keeps undeclared diagnostic units and refuses oversized runs before medians', () => {
+  const check = { read: () => ({}), limits: { slots: 3 } };
+  expect(validateCountedRun(check, { slots: 1, extra: 2 }, 1)).toEqual({ slots: 1, extra: 2 });
+  expect(countedSample([{ slots: 1, extra: 2 }, { slots: 3, extra: 4 }])).toEqual({
+    extra: { value: 3, repetitions: [2, 4] },
+    slots: { value: 2, repetitions: [1, 3] },
+  });
+  const inherited = Object.assign(Object.create({ inherited: 9 }), { slots: 2, extra: 5 });
+  expect(validateCountedRun(check, inherited, 1)).toEqual({ slots: 2, extra: 5 });
+  const oversized = { slots: 1, ...unitDictionary(COUNTED_UNIT_LIMITS.units) };
+  expect(() => validateCountedRun(check, oversized, 1)).toThrow(
+    `Counted checks exceed the ${COUNTED_UNIT_LIMITS.units} unit capacity`,
+  );
+  expect(() => medianCounted([oversized])).toThrow(
+    `Counted checks exceed the ${COUNTED_UNIT_LIMITS.units} unit capacity`,
+  );
+  expect(() => validateCountedRun(check, {}, 1)).toThrow('Counted unit slots was not reported at scale 1');
+});
+
+test('oversized counted configuration is rejected before grow, warmup or operation', async () => {
+  const calls: string[] = [];
+  await expect(
+    checkGrowth(db!, {
+      name: 'too many counted units',
+      bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+      grow: async () => {
+        calls.push('grow');
+      },
+      warmup: async () => {
+        calls.push('warmup');
+      },
+      operation: async () => {
+        calls.push('operation');
+      },
+      counted: { read: () => ({}), limits: unitDictionary(COUNTED_UNIT_LIMITS.units + 1) },
+    }),
+  ).rejects.toThrow(
+    `too many counted units: counted: Counted checks exceed the ${COUNTED_UNIT_LIMITS.units} unit capacity`,
+  );
+  expect(calls).toEqual([]);
 });

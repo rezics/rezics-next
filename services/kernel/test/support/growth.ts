@@ -60,6 +60,7 @@ import { growthMeasurementIdentity } from './growth-profile-read.ts';
 import {
   countedSample,
   countedViolations,
+  validateCountedConfig,
   validateCountedRun,
   type CountedCheck,
   type CountedSample,
@@ -938,6 +939,7 @@ async function runGrowthCheck(
   const profileMode = growthProfileExportMode(process.env.GROWTH_PROFILE_REQUIRED);
   const listed = GROWTH_BASELINE.some(({ name }) => name === check.name);
   const { scales, repetitions, warmups, rule } = admitted;
+  const countedIndex = check.counted === undefined ? undefined : validateCountedConfig(check.counted);
 
   let previous = 0;
   let repetition = 0;
@@ -1060,14 +1062,10 @@ async function runGrowthCheck(
         if (coldBackends.length > 0) coldBackendExhaustion.push(backendRepetitions.length);
         backendRepetitions.push(runBackends);
         const cost = costOf(measured.capture);
-        if (check.counted) {
+        if (check.counted && countedIndex) {
           const values = check.counted.read(measured.value, scale);
           const merged = { ...values };
-          const configuredNames = [
-            ...Object.keys(check.counted.limits ?? {}),
-            ...Object.keys(check.counted.bounds ?? {}),
-          ];
-          if (configuredNames.includes('connections')) {
+          if (countedIndex.declared.has('connections')) {
             const backends = measured.capture.statementBackends;
             if (backends === undefined)
               throw new Error(
@@ -1075,7 +1073,7 @@ async function runGrowthCheck(
               );
             merged.connections = new Set(backends.filter((backend): backend is number => backend !== undefined)).size;
           }
-          countedRuns.push({ ...validateCountedRun(check.counted, merged, scale) });
+          countedRuns.push(validateCountedRun(check.counted, merged, scale, countedIndex));
         }
         assertCatalogBound(check.name, scale, measured.capture, samples);
         costs.push(cost);
@@ -1170,19 +1168,17 @@ async function runGrowthCheck(
     samples,
     verdicts: verdicts as GrowthReport['verdicts'],
     shadow,
-    ...(check.counted === undefined
+    ...(check.counted === undefined || countedIndex === undefined
       ? {}
       : {
           counted: Object.fromEntries(
-            [...new Set([...Object.keys(check.counted.limits ?? {}), ...Object.keys(check.counted.bounds ?? {})])].map(
-              (name) => [
-                name,
-                {
-                  ...(check.counted!.limits?.[name] === undefined ? {} : { limits: check.counted!.limits[name] }),
-                  ...(check.counted!.bounds?.[name] === undefined ? {} : { bounds: check.counted!.bounds[name] }),
-                },
-              ],
-            ),
+            countedIndex.names.map((name) => [
+              name,
+              {
+                ...(check.counted!.limits?.[name] === undefined ? {} : { limits: check.counted!.limits[name] }),
+                ...(check.counted!.bounds?.[name] === undefined ? {} : { bounds: check.counted!.bounds[name] }),
+              },
+            ]),
           ),
         }),
   };

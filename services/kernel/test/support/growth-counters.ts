@@ -28,24 +28,84 @@ export type CountedViolation =
   | (CountedViolationDetails & { readonly limit: number; readonly kind: 'limit'; readonly repetition: number })
   | (CountedViolationDetails & { readonly limit: Bound; readonly kind: 'bound' });
 
+/** Capacities covering current producers (seven units, 25-byte names) with headroom. */
+export const COUNTED_UNIT_LIMITS = {
+  units: 32,
+  nameBytes: 80,
+  nameWork: 32 * 80,
+} as const;
+
+export type CountedNameIndex = {
+  readonly names: readonly string[];
+  readonly sorted: readonly string[];
+  readonly declared: ReadonlySet<string>;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function countedNames(check: CountedCheck): string[] {
-  return [...new Set([...Object.keys(check.limits ?? {}), ...Object.keys(check.bounds ?? {})])].sort();
+function countedNameBytes(name: string): number {
+  return Buffer.byteLength(name, 'utf8');
 }
 
-export function validateCountedConfig(check: CountedCheck): void {
+function admitCountedName(name: string, seen: Set<string>, work: { bytes: number }, context: string): void {
+  const bytes = countedNameBytes(name);
+  if (name && bytes > COUNTED_UNIT_LIMITS.nameBytes)
+    throw new TypeError(`Counted unit name ${context} exceeds the ${COUNTED_UNIT_LIMITS.nameBytes} byte name limit`);
+  if (name && !seen.has(name)) {
+    const nextWork = work.bytes + bytes;
+    if (nextWork > COUNTED_UNIT_LIMITS.nameWork)
+      throw new TypeError(`Counted unit names exceed the ${COUNTED_UNIT_LIMITS.nameWork} byte work limit`);
+    if (seen.size >= COUNTED_UNIT_LIMITS.units)
+      throw new TypeError(`Counted checks exceed the ${COUNTED_UNIT_LIMITS.units} unit capacity`);
+    work.bytes = nextWork;
+    seen.add(name);
+  }
+}
+
+function freezeNameIndex(seen: Set<string>): CountedNameIndex {
+  const names = Object.freeze([...seen]);
+  return { names, sorted: Object.freeze([...names].sort()), declared: seen };
+}
+
+function admitOwnKeys(value: object, seen: Set<string>, work: { bytes: number }, context: string): string[] {
+  const keys = Object.keys(value);
+  for (const name of keys) admitCountedName(name, seen, work, context);
+  return keys;
+}
+
+export function countedNameIndex(check: CountedCheck): CountedNameIndex {
+  const seen = new Set<string>();
+  const work = { bytes: 0 };
+  admitOwnKeys(check.limits ?? {}, seen, work, 'in limits');
+  admitOwnKeys(check.bounds ?? {}, seen, work, 'in bounds');
+  return freezeNameIndex(seen);
+}
+
+export function countedNames(check: CountedCheck): string[] {
+  return [...countedNameIndex(check).sorted];
+}
+
+export function validateCountedConfig(check: CountedCheck): CountedNameIndex {
   if (typeof check.read !== 'function') throw new TypeError('Counted checks require a read function');
+  const seen = new Set<string>();
+  const work = { bytes: 0 };
   for (const [name, limit] of Object.entries(check.limits ?? {})) {
+    admitCountedName(name, seen, work, `in limits`);
     if (!name || !Number.isSafeInteger(limit) || limit < 0)
       throw new TypeError(`Counted limit for ${name || '<empty>'} must be a non-negative safe integer`);
   }
-  for (const [name, bound] of Object.entries(check.bounds ?? {}))
+  for (const [name, bound] of Object.entries(check.bounds ?? {})) {
+    admitCountedName(name, seen, work, `in bounds`);
     if (!name || !['constant', 'logarithmic', 'linear'].includes(bound))
       throw new TypeError(`Unknown counted growth bound for ${name || '<empty>'}`);
+  }
+  const index = freezeNameIndex(seen);
   for (const [name, slack] of Object.entries(check.slack ?? {})) {
+    const bytes = countedNameBytes(name);
+    if (name && bytes > COUNTED_UNIT_LIMITS.nameBytes)
+      throw new TypeError(`Counted unit name in slack exceeds the ${COUNTED_UNIT_LIMITS.nameBytes} byte name limit`);
     if (
       !Number.isFinite(slack.absolute) ||
       slack.absolute < 0 ||
@@ -53,9 +113,9 @@ export function validateCountedConfig(check: CountedCheck): void {
       slack.relative < 0
     )
       throw new TypeError(`Slack for counted unit ${name} must be finite and non-negative`);
-    if (!countedNames(check).includes(name))
-      throw new TypeError(`Slack configured for undeclared counted unit ${name}`);
+    if (!index.declared.has(name)) throw new TypeError(`Slack configured for undeclared counted unit ${name}`);
   }
+  return index;
 }
 
 function validateScale(scale: number, context: string): void {
@@ -63,18 +123,28 @@ function validateScale(scale: number, context: string): void {
     throw new TypeError(`${context} must be finite, positive and no greater than 4096`);
 }
 
-export function validateCountedRun(check: CountedCheck, values: CountedValues, scale: number): CountedValues {
-  validateCountedConfig(check);
+export function validateCountedRun(
+  check: CountedCheck,
+  values: CountedValues,
+  scale: number,
+  names?: CountedNameIndex,
+): CountedValues {
+  const index = names ?? validateCountedConfig(check);
   validateScale(scale, 'Counted scale');
   if (!isRecord(values)) throw new TypeError(`Counted values at scale ${scale} must be an object`);
-  const names = countedNames(check);
-  for (const name of names)
+  for (const name of index.sorted)
     if (!Object.hasOwn(values, name)) throw new Error(`Counted unit ${name} was not reported at scale ${scale}`);
-  for (const [name, value] of Object.entries(values)) {
+  const seen = new Set(index.declared);
+  const work = { bytes: index.names.reduce((total, name) => total + countedNameBytes(name), 0) };
+  const keys = admitOwnKeys(values, seen, work, `at scale ${scale}`);
+  const admitted: Record<string, number> = {};
+  for (const name of keys) {
+    const value = values[name];
     if (!name || !Number.isSafeInteger(value) || value < 0)
       throw new TypeError(`Counted unit ${name || '<empty>'} at scale ${scale} must be a non-negative safe integer`);
+    admitted[name] = value;
   }
-  return { ...values };
+  return admitted;
 }
 
 function rawMedian(values: readonly number[], name: string): number {
@@ -94,9 +164,12 @@ function rawMedian(values: readonly number[], name: string): number {
 export function medianCounted(repetitions: readonly CountedValues[]): CountedValues {
   requireDenseArray(repetitions, 'Counted repetitions');
   if (repetitions.length === 0) return {};
-  const names = Object.keys(repetitions[0]!);
+  const first = repetitions[0];
+  if (!isRecord(first)) throw new TypeError('Counted repetition 1 must be an object');
+  const seen = new Set<string>();
+  const names = admitOwnKeys(first, seen, { bytes: 0 }, 'at repetition 1');
   if (names.some((name) => !name)) throw new TypeError('Counted unit names must not be empty');
-  const expected = new Set(names);
+  const expected = seen;
   for (let index = 0; index < repetitions.length; index += 1) {
     const run = repetitions[index];
     if (!isRecord(run)) throw new TypeError(`Counted repetition ${index + 1} must be an object`);
@@ -153,8 +226,8 @@ export function countedViolations(
   check: CountedCheck,
   samples: readonly { readonly scale: number; readonly counted: CountedSample }[],
 ): CountedViolation[] {
-  validateCountedConfig(check);
-  const names = countedNames(check);
+  const index = validateCountedConfig(check);
+  const names = index.sorted;
   if (names.length === 0) return [];
   if (!Array.isArray(samples)) throw new TypeError('Counted samples must be an array');
   requireDenseArray(samples, 'Counted samples');
@@ -163,6 +236,9 @@ export function countedViolations(
   let repetitionCount: number | undefined;
   for (const sample of samples) {
     if (!isRecord(sample.counted)) throw new TypeError(`Counted evidence at scale ${sample.scale} must be an object`);
+    const seen = new Set(index.declared);
+    const work = { bytes: index.names.reduce((total, name) => total + countedNameBytes(name), 0) };
+    admitOwnKeys(sample.counted, seen, work, `at scale ${sample.scale}`);
     for (const name of names)
       if (!Object.hasOwn(sample.counted, name))
         throw new TypeError(`Counted unit ${name} is missing at scale ${sample.scale}`);

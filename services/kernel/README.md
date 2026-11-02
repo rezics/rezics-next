@@ -551,6 +551,10 @@ attempts must have the same statement count across scales and repetitions, and a
 statements. Checks without `attempts` keep the same inclusive verdicts without the additional transaction ledger.
 Growth checks can also declare `counted` units: `read(value, scale)` extracts per-run integer counts, while `limits`
 sets a ceiling at every scale and `bounds` sets a growth rule; reports include each unit's median and measured values.
+Configuration and each callback result admit at most 32 unit names, 80 UTF-8 bytes per name and 2,560 unique name bytes
+before those dictionaries are sorted or retained; undeclared diagnostic units within that budget stay in the sample.
+The admitted name index is reused for slack membership, missing-unit checks and the report. A missing counted unit
+remains unreported.
 The harness provides `connections` as the number of distinct backend processes used by the operation when
 `includeBackends` is enabled. The filtered-list plan counts live in [Filtered lists](../../docs/filtered-lists.md#cost),
 under Cost.
