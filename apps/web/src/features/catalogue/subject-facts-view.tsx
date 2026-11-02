@@ -472,8 +472,7 @@ function FactField({
 export const SubjectFacts = catalogueEditor(SubjectFactsWorkspace);
 
 // A same-route address change can replace this workspace with a single-field editor.
-const factWorkspaceAddress = (location: AuthoringLocation) =>
-  JSON.stringify([location.pathname, location.search]);
+const factWorkspaceAddress = (location: AuthoringLocation) => JSON.stringify([location.pathname, location.search]);
 
 function SubjectFactsWorkspace(props: Parameters<typeof SubjectFactsLive>[0]) {
   if (props.profile) return <SubjectFactsLive {...props} />;
@@ -558,8 +557,7 @@ function SubjectFactsLive({
     drafts.some(
       (draft) =>
         !!draft.command &&
-        (!draft.result ||
-          (!draft.result.ok && ['uncertain', 'unavailable'].includes(draft.result.reason))),
+        (!draft.result || (!draft.result.ok && ['uncertain', 'unavailable'].includes(draft.result.reason))),
     );
   useAuthoringDeparture(
     () =>
