@@ -1,4 +1,10 @@
 {
+  "library_collection_draft_navigation_unsaved": "合集有未保存的更改。",
+  "library_collection_draft_navigation_title": "离开合集草稿？",
+  "library_collection_draft_navigation_description": "未保存的元数据、成员顺序和备注将会丢失。离开不会保存更改。",
+  "library_collection_draft_navigation_stay": "留下",
+  "library_collection_draft_navigation_leave": "离开",
+  "library_collection_draft_navigation_pending": "有命令正在处理，或结果尚不确定。请留在此页，确认现有命令的结果后再离开。",
   "configured_list_recovery_pending": "正在确认当前读者并加载此列表…",
   "configured_list_recovery_retry": "重试列表",
   "configured_list_recovery_unavailable": "此列表暂时无法使用。请重试。",

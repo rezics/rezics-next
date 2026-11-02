@@ -1,4 +1,10 @@
 {
+  "library_collection_draft_navigation_unsaved": "合集有尚未儲存的變更。",
+  "library_collection_draft_navigation_title": "離開合集草稿？",
+  "library_collection_draft_navigation_description": "尚未儲存的中繼資料、成員順序和備註將會遺失。離開不會儲存變更。",
+  "library_collection_draft_navigation_stay": "留下",
+  "library_collection_draft_navigation_leave": "離開",
+  "library_collection_draft_navigation_pending": "有命令正在處理，或結果尚未確定。請留在此頁，確認現有命令的結果後再離開。",
   "configured_list_recovery_pending": "正在確認目前的讀者並載入此清單…",
   "configured_list_recovery_retry": "重試清單",
   "configured_list_recovery_unavailable": "此清單暫時無法使用。請再試一次。",

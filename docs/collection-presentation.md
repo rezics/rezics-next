@@ -154,6 +154,8 @@ All curated editing preserves occurrence IDs, notes, added times and duplicates,
 parent CAS, replay and current grants. Consume the sole actual member lifecycle implementation once it lands;
 its selected parent revision/deletion headers and exact Undo are not evidence of current delivery.
 
+Decision: ordinary curated drafts guard page departure against the loaded edit baseline; unresolved commands offer only Stay, confirmed saves clear loss guidance even if refresh fails, and explicit editor Cancel/reload keep their existing behavior.
+
 ### Selected-publication recovery
 
 After an uncertain selected-publication response, retain the exact request, source revision and review selection

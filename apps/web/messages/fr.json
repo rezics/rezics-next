@@ -1,4 +1,10 @@
 {
+  "library_collection_draft_navigation_unsaved": "Vous avez des modifications non enregistrées dans la collection.",
+  "library_collection_draft_navigation_title": "Quitter ce brouillon de collection ?",
+  "library_collection_draft_navigation_description": "Les métadonnées, l’ordre et les notes non enregistrés seront perdus. Quitter n’enregistre aucune modification.",
+  "library_collection_draft_navigation_stay": "Rester",
+  "library_collection_draft_navigation_leave": "Quitter",
+  "library_collection_draft_navigation_pending": "Une commande est en cours ou son résultat est incertain. Restez ici et résolvez la commande existante avant de quitter.",
   "configured_list_recovery_pending": "Vérification de la session actuelle et chargement de cette liste…",
   "configured_list_recovery_retry": "Réessayer la liste",
   "configured_list_recovery_unavailable": "Cette liste est temporairement indisponible. Réessayez.",

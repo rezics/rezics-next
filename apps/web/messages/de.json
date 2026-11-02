@@ -1,4 +1,10 @@
 {
+  "library_collection_draft_navigation_unsaved": "Du hast ungespeicherte Änderungen an der Sammlung.",
+  "library_collection_draft_navigation_title": "Diesen Sammlungsentwurf verlassen?",
+  "library_collection_draft_navigation_description": "Ungespeicherte Metadaten, die Reihenfolge und Notizen gehen verloren. Beim Verlassen wird nichts gespeichert.",
+  "library_collection_draft_navigation_stay": "Bleiben",
+  "library_collection_draft_navigation_leave": "Verlassen",
+  "library_collection_draft_navigation_pending": "Ein Befehl läuft noch oder sein Ergebnis ist unklar. Bleibe hier und kläre den bestehenden Befehl vor dem Verlassen.",
   "configured_list_recovery_pending": "Der aktuelle Leser wird geprüft und diese Liste wird geladen…",
   "configured_list_recovery_retry": "Liste erneut laden",
   "configured_list_recovery_unavailable": "Diese Liste ist vorübergehend nicht verfügbar. Versuche es erneut.",

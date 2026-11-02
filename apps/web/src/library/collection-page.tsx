@@ -1,5 +1,6 @@
 import { batchRemoveCollectionMembers, transferCollectionMembers } from './collection-commands';
 import { CollectionBatchRemoveConfirmation } from './collection-batch-remove';
+import { useCollectionDraftNavigation } from './collection-draft-navigation';
 import { readCollectionDestination, type CollectionDestination } from './collection-read';
 import { CollectionAddMembers } from './collection-add-members';
 import { CollectionMemberDetails } from './collection-member-row';
@@ -328,6 +329,7 @@ function CollectionPageLifetime({
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const writeKeys = useRef(new Map<string, string>());
   const [editing, setEditing] = useState(false);
+  const [saveConfirmed, setSaveConfirmed] = useState(false);
   const [adding, setAdding] = useState(false);
   const [destinationId, setDestinationId] = useState('');
   const [destination, setDestination] = useState<CollectionDestination | null>(null);
@@ -657,6 +659,7 @@ function CollectionPageLifetime({
       setTransfer(null);
       setDestinationId('');
       setBulkUnavailable(false);
+      setSaveConfirmed(false);
       setEditing(true);
     } catch {
       if (isCurrent()) setFailure(m.error_message());
@@ -882,6 +885,7 @@ function CollectionPageLifetime({
         else setFailure(m.error_message());
         return;
       }
+      setSaveConfirmed(true);
       const refreshed = await reloadCollection(true);
       if (refreshed) resetEditor(refreshed);
     } catch {
@@ -989,8 +993,17 @@ function CollectionPageLifetime({
       visibility !== draftPage.visibility ||
       kind !== storedKind ||
       coverMediaId !== (draftPage.coverMediaId ?? null));
+  const draftNavigation = useCollectionDraftNavigation({
+    dirty: draftChanged && !saveConfirmed,
+    locked:
+      editing &&
+      !saveConfirmed &&
+      (writing || draftFrozen || (boundary !== null && ['pending', 'unknown', 'confirmed'].includes(boundary.phase))),
+    isCurrent: () => owner && isCurrent(),
+  });
   return (
     <div className="w-full min-w-0 text-foreground">
+      {draftNavigation}
       <article className="w-full min-w-0 space-y-4 sm:space-y-5">
         <header data-slot="collection-hero" className="min-w-0 space-y-3 rounded-2xl bg-card p-4 sm:p-5">
           <div className="flex min-w-0 items-start gap-3">
@@ -1509,7 +1522,7 @@ function CollectionPageLifetime({
             >
               {m.library_collection_cancel()}
             </Button>
-            {memberDraftChanged || transfer ? (
+            {!saveConfirmed && (memberDraftChanged || transfer) ? (
               <span role="status" className="text-sm text-muted-foreground">
                 {m.library_collection_unsaved_members()}
               </span>

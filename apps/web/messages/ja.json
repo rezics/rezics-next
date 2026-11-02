@@ -1,4 +1,10 @@
 {
+  "library_collection_draft_navigation_unsaved": "コレクションに未保存の変更があります。",
+  "library_collection_draft_navigation_title": "コレクションの下書きから離れますか？",
+  "library_collection_draft_navigation_description": "未保存のメタデータ、並び順、メモは失われます。離れても変更は保存されません。",
+  "library_collection_draft_navigation_stay": "このページに留まる",
+  "library_collection_draft_navigation_leave": "離れる",
+  "library_collection_draft_navigation_pending": "処理中のコマンド、または結果が不明なコマンドがあります。離れる前に、このページで既存のコマンドの結果を確認してください。",
   "configured_list_recovery_pending": "現在の閲覧者を確認してリストを読み込んでいます…",
   "configured_list_recovery_retry": "リストを再試行",
   "configured_list_recovery_unavailable": "このリストは一時的に利用できません。もう一度お試しください。",

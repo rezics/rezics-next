@@ -1,4 +1,10 @@
 {
+  "library_collection_draft_navigation_unsaved": "You have unsaved Collection changes.",
+  "library_collection_draft_navigation_title": "Leave this Collection draft?",
+  "library_collection_draft_navigation_description": "Your unsaved metadata, member order and notes will be lost. Leaving does not save any changes.",
+  "library_collection_draft_navigation_stay": "Stay",
+  "library_collection_draft_navigation_leave": "Leave",
+  "library_collection_draft_navigation_pending": "A command is pending or its outcome is uncertain. Stay here and resolve the existing command before leaving.",
   "initial_field_choice_withdrawn": "The field you chose is no longer offered. Choose a current field to add. Your existing facts and names are kept.",
   "member_window_cycle": "The list repeated a continuation. Start again to read its current entries.",
   "member_window_restart": "Start again",

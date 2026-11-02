@@ -1,4 +1,10 @@
 {
+  "library_collection_draft_navigation_unsaved": "컬렉션에 저장하지 않은 변경 사항이 있습니다.",
+  "library_collection_draft_navigation_title": "컬렉션 초안에서 나갈까요?",
+  "library_collection_draft_navigation_description": "저장하지 않은 메타데이터, 순서 및 메모가 사라집니다. 나가도 변경 사항은 저장되지 않습니다.",
+  "library_collection_draft_navigation_stay": "머무르기",
+  "library_collection_draft_navigation_leave": "나가기",
+  "library_collection_draft_navigation_pending": "명령이 처리 중이거나 결과가 불확실합니다. 나가기 전에 여기에서 기존 명령의 결과를 확인하세요.",
   "configured_list_recovery_pending": "현재 독자를 확인하고 목록을 불러오는 중…",
   "configured_list_recovery_retry": "목록 다시 시도",
   "configured_list_recovery_unavailable": "이 목록을 일시적으로 사용할 수 없습니다. 다시 시도하세요.",

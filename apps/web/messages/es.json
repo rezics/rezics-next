@@ -1,4 +1,10 @@
 {
+  "library_collection_draft_navigation_unsaved": "Tienes cambios sin guardar en la colección.",
+  "library_collection_draft_navigation_title": "¿Salir del borrador de la colección?",
+  "library_collection_draft_navigation_description": "Se perderán los metadatos, el orden y las notas sin guardar. Salir no guarda los cambios.",
+  "library_collection_draft_navigation_stay": "Quedarme",
+  "library_collection_draft_navigation_leave": "Salir",
+  "library_collection_draft_navigation_pending": "Hay una operación pendiente o su resultado es incierto. Quédate aquí y resuelve la operación existente antes de salir.",
   "configured_list_recovery_pending": "Comprobando la sesión actual y cargando esta lista…",
   "configured_list_recovery_retry": "Reintentar lista",
   "configured_list_recovery_unavailable": "Esta lista no está disponible temporalmente. Inténtalo de nuevo.",
