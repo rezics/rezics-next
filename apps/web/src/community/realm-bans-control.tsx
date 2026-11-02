@@ -351,10 +351,7 @@ function RealmBansVisit({
     return focus;
   }
 
-  useLayoutEffect(
-    () => () => pageRead.current.focus?.controller.abort(),
-    [gate],
-  );
+  useLayoutEffect(() => () => pageRead.current.focus?.controller.abort(), [gate]);
 
   useLayoutEffect(() => {
     const focus = pageRead.current.focus;

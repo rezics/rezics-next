@@ -4,7 +4,9 @@ import { act } from 'react';
 import type { BanReadState } from '../src/community/realm-bans';
 import type { RealmBansControlProps } from '../src/community/realm-bans-control';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/realms/one' });
 const globals = {
   window,
