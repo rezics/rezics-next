@@ -7,7 +7,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/shad
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { DefinitionGuideLink } from './definition-guide-view';
@@ -147,7 +147,7 @@ function CreateSubjectFormLive({
     href?: string;
     labelLanguage?: (type: string) => string | undefined;
     descriptionLanguage?: (type: string) => string | undefined;
-    fields: (type: string, disabled: boolean) => ReactNode;
+    fields: (type: string, disabled: boolean, canEdit: () => boolean) => ReactNode;
     prepare: (item: InitialSubject) => { item: InitialSubject; errors: Violation[] };
   };
   locale: string;
@@ -215,6 +215,19 @@ function CreateSubjectFormLive({
   // Retrying an uncertain command needs its original identity, even while definitions are unavailable.
   const definitionsFailed = profile?.metadata ? !profile.metadata.ready : definitions.isError;
   const definitionsBlocked = !request.current && (definitionsFailed || definitions.isFetching || types.length === 0);
+  // A producer's retained callbacks share this form's current Type and command admission.
+  const editScope = useMemo(() => ({}), [type]);
+  const profileEdit = useRef({ scope: editScope, allowed: false });
+  profileEdit.current = {
+    scope: editScope,
+    allowed: !disabled && !definitionsBlocked && !profile?.metadata?.pending && !!selectedType && !created,
+  };
+  const canEditProfile = () =>
+    lifetime.active() &&
+    profileEdit.current.scope === editScope &&
+    profileEdit.current.allowed &&
+    !running.current &&
+    request.current === null;
 
   const termControl = createSubjectControls(rows);
   const control = (pointer: string) => targets.current.get(pointer)?.id || termControl(pointer);
@@ -527,6 +540,7 @@ function CreateSubjectFormLive({
                       aria-invalid={invalid('create-type')}
                       aria-describedby={`create-grain create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
                       onChange={(event) => {
+                        profileEdit.current.allowed = false;
                         setType(event.target.value);
                         setFailure(undefined);
                       }}
@@ -583,7 +597,7 @@ function CreateSubjectFormLive({
               </Field>
               {profile && (
                 <CreateSubjectProfileDraft type={type} onDirty={setProfileDirty}>
-                  {profile.fields(type, disabled)}
+                  {profile.fields(type, disabled, canEditProfile)}
                 </CreateSubjectProfileDraft>
               )}
               {failure && (

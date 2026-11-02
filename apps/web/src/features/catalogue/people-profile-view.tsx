@@ -346,6 +346,8 @@ function PeopleCreate({
   const [created, setCreated] = useState<string>();
   const scope = useId();
   const rowIds = useRef(new Map<string, string>());
+  const metadata = useRef(read);
+  metadata.current = read;
   const sequence = useRef(0);
   function rowId(type: string, property: string) {
     const key = JSON.stringify([type, property]);
@@ -390,15 +392,32 @@ function PeopleCreate({
     }
     return results;
   }
-  function update(type: string, property: string, statement?: StatementInput) {
-    if (!statement) rowIds.current.delete(JSON.stringify([type, property]));
+  function update(
+    type: string,
+    property: string,
+    id: string | undefined,
+    canEdit: () => boolean,
+    change?: (statement: StatementInput) => StatementInput,
+  ) {
+    const key = JSON.stringify([type, property]);
+    if (!lifetime.active() || !canEdit() || rowIds.current.get(key) !== id) return;
+    if (change && !metadata.current.profiles.find((entry) => entry.id === type)?.fields.includes(property)) return;
+    if (change) rowId(type, property);
+    else rowIds.current.delete(key);
     setDrafts((previous) => {
       const fields = { ...previous[type] };
-      if (statement) fields[property] = statement;
+      if (change) fields[property] = change(fields[property]!);
       else delete fields[property];
       return { ...previous, [type]: fields };
     });
-    setFailure(undefined);
+    setFailure((previous) => {
+      if (!previous?.errors) return previous;
+      const pointer = `/statements/${property.replaceAll('~', '~0').replaceAll('/', '~1')}`;
+      const errors = previous.errors.filter(
+        (error) => error.pointer !== pointer && !error.pointer.startsWith(`${pointer}/`),
+      );
+      return errors.length === previous.errors.length ? previous : errors.length ? { ...previous, errors } : undefined;
+    });
   }
   return (
     <section className="mx-auto min-w-0 w-full max-w-3xl space-y-6 [overflow-wrap:anywhere]">
@@ -458,7 +477,7 @@ function PeopleCreate({
             setFailure(errors.length ? { ok: false, reason: 'invalid', errors } : undefined);
             return { item, errors };
           },
-          fields: (type, disabled) => {
+          fields: (type, disabled, canEdit) => {
             const profile = read.profiles.find((entry) => entry.id === type);
             const fields = drafts[type] ?? {};
             const feedback = [...corrections(type, failure?.errors ?? []).values()];
@@ -481,13 +500,13 @@ function PeopleCreate({
                             className={peopleActionTarget}
                             disabled={disabled}
                             onClick={() =>
-                              update(type, id, {
+                              update(type, id, undefined, canEdit, () => ({
                                 property: { id },
                                 value: { type: 'value', content: '' },
                                 qualifiers: [],
                                 references: [],
                                 rank: 'normal',
-                              })
+                              }))
                             }
                           >
                             <span lang={name.lang ?? undefined} className="min-w-0 [overflow-wrap:anywhere]">
@@ -507,7 +526,7 @@ function PeopleCreate({
                     const citationErrors = errors.filter((error) => error.target === `${id}-citation`);
                     return (
                       <fieldset
-                        key={property}
+                        key={id}
                         id={`people-fact-${property}`}
                         disabled={disabled}
                         className="min-w-0 max-w-full"
@@ -537,7 +556,7 @@ function PeopleCreate({
                               read={{ release: read.release, public: { related: {} } }}
                               locale={locale}
                               feedback={{ id, address: 'fact', errors }}
-                              onChange={(value) => update(type, property, { ...statement, value })}
+                              onChange={(value) => update(type, property, id, canEdit, (latest) => ({ ...latest, value }))}
                             />
                           ) : (
                             <EditorFailure reason="stale" locale={locale} />
@@ -552,8 +571,8 @@ function PeopleCreate({
                               type="url"
                               value={citation?.type === 'value' ? String(citation.content) : ''}
                               onChange={(event) =>
-                                update(type, property, {
-                                  ...statement,
+                                update(type, property, id, canEdit, (latest) => ({
+                                  ...latest,
                                   references: event.target.value.trim()
                                     ? [
                                         {
@@ -566,7 +585,7 @@ function PeopleCreate({
                                         },
                                       ]
                                     : [],
-                                })
+                                }))
                               }
                             />
                           </Field>
@@ -581,7 +600,7 @@ function PeopleCreate({
                             statement={statement}
                             disabled={disabled || !current || recovering}
                             locale={locale}
-                            onRemove={() => update(type, property)}
+                            onRemove={() => update(type, property, id, canEdit)}
                           />
                         </ContentItemFrame>
                       </fieldset>
