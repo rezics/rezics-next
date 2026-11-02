@@ -108,6 +108,21 @@ async function forceSessionError(client: InstanceType<typeof QueryClient>): Prom
     .catch(() => undefined);
 }
 
+function countCacheSubscriptions(client: InstanceType<typeof QueryClient>) {
+  const counts = { subscribed: 0, unsubscribed: 0 };
+  const cache = client.getQueryCache();
+  const originalSubscribe = cache.subscribe.bind(cache);
+  cache.subscribe = (listener) => {
+    counts.subscribed += 1;
+    const unsubscribe = originalSubscribe(listener);
+    return () => {
+      counts.unsubscribed += 1;
+      unsubscribe();
+    };
+  };
+  return counts;
+}
+
 async function createUi() {
   const host = window.document.createElement('div') as unknown as HTMLElement;
   window.document.body.append(host as unknown as Node);
@@ -176,6 +191,7 @@ test('session hydration stays private on the server and guard-seeded data become
     const markup = renderToString(serverTree);
     expect(markup).toContain('"state":"unknown"');
     expect(sessionCsrfToken()).toBeNull();
+    expect(sessionReads).toBe(1);
 
     ui.host.innerHTML = markup;
     await ui.hydrate(client, content);
@@ -211,6 +227,21 @@ test('failed retained data, recovery, transitions, malformed observations, and r
     await ui.flush();
     expect(ui.session('main')).toEqual(viewer('reader-one', 'csrf-recovered'));
     expect(await captureUploadToken()).toBe('csrf-recovered');
+
+    const backgroundResult = deferred<SessionResult>();
+    const backgroundRead = client
+      .fetchQuery({ ...sessionQuery, queryFn: () => backgroundResult.promise, staleTime: 0 })
+      .catch(() => undefined);
+    expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('success');
+    expect(ui.session('main')).toEqual(viewer('reader-one', 'csrf-recovered'));
+    expect(await captureUploadToken()).toBe('csrf-recovered');
+    backgroundResult.resolve(viewer('reader-one', 'csrf-after-background-refresh'));
+    await act(async () => {
+      await backgroundRead;
+    });
+    await ui.flush();
+    expect(ui.session('main')).toEqual(viewer('reader-one', 'csrf-after-background-refresh'));
+    expect(await captureUploadToken()).toBe('csrf-after-background-refresh');
 
     client.setQueryData(sessionQuery.queryKey, viewer('reader-two', 'csrf-two'));
     await ui.flush();
@@ -293,27 +324,43 @@ test('replacement clients, delayed old results, abandoned renders, and anonymous
   await withUi(async (ui) => {
     const oldClient = ui.client();
     const currentClient = ui.client();
+    const anonymousClient = ui.client();
+    const abandonedClient = ui.client();
+    const oldCounts = countCacheSubscriptions(oldClient);
+    const currentCounts = countCacheSubscriptions(currentClient);
+    const anonymousCounts = countCacheSubscriptions(anonymousClient);
+    const abandonedCounts = countCacheSubscriptions(abandonedClient);
+    sessionReads = 0;
     oldClient.setQueryData(sessionQuery.queryKey, viewer('old-reader', 'old-csrf'));
     const oldResult = deferred<SessionResult>();
 
     await ui.render(oldClient, createElement(SessionProbe, { name: 'main' }));
     expect(await captureUploadToken()).toBe('old-csrf');
-    const lateOldQuery = oldClient
-      .fetchQuery({ ...sessionQuery, queryFn: () => oldResult.promise, staleTime: 0 })
-      .catch(() => undefined);
+    expect(oldCounts.subscribed - oldCounts.unsubscribed).toBe(1);
+    expect(sessionReads).toBe(0);
+
+    sessionReader = () => oldResult.promise;
+    let lateOldQuery!: Promise<SessionResult | undefined>;
+    await act(async () => {
+      lateOldQuery = oldClient.fetchQuery({ ...sessionQuery, staleTime: 0 }).catch(() => undefined);
+    });
+    await ui.flush();
+    expect(sessionReads).toBe(1);
 
     const currentResult = deferred<SessionResult>();
     sessionReader = () => currentResult.promise;
     await ui.render(currentClient, createElement(SessionProbe, { name: 'main' }));
     expect(sessionCsrfToken()).toBeNull();
     expect(ui.session('main').state).toBe('unknown');
+    expect(oldCounts.subscribed - oldCounts.unsubscribed).toBe(0);
+    expect(currentCounts.subscribed - currentCounts.unsubscribed).toBe(1);
+    expect(sessionReads).toBe(2);
 
     currentResult.resolve(viewer('current-reader', 'current-csrf'));
     await ui.flush();
     expect(ui.session('main')).toEqual(viewer('current-reader', 'current-csrf'));
     expect(await captureUploadToken()).toBe('current-csrf');
 
-    const abandonedClient = ui.client();
     abandonedClient.setQueryData(sessionQuery.queryKey, viewer('abandoned', 'abandoned-csrf'));
     const abandoned = createElement(
       QueryClientProvider,
@@ -322,6 +369,8 @@ test('replacement clients, delayed old results, abandoned renders, and anonymous
     );
     expect(renderToString(abandoned)).toContain('"state":"unknown"');
     expect(sessionCsrfToken()).toBe('current-csrf');
+    expect(abandonedCounts.subscribed).toBe(0);
+    expect(sessionReads).toBe(2);
 
     oldResult.resolve(viewer('late-old-reader', 'late-old-csrf'));
     await act(async () => {
@@ -330,7 +379,6 @@ test('replacement clients, delayed old results, abandoned renders, and anonymous
     expect(oldClient.getQueryData(sessionQuery.queryKey)).toEqual(viewer('late-old-reader', 'late-old-csrf'));
     expect(await captureUploadToken()).toBe('current-csrf');
 
-    const anonymousClient = ui.client();
     sessionReader = async () => viewer('anonymous-private-reader', 'anonymous-private-csrf');
     const nested = createElement(
       Fragment,
@@ -349,6 +397,10 @@ test('replacement clients, delayed old results, abandoned renders, and anonymous
     await ui.render(currentClient, nested);
     await ui.flush();
 
+    expect(sessionReads).toBe(3);
+    expect(anonymousCounts.subscribed).toBe(0);
+    expect(anonymousCounts.unsubscribed).toBe(0);
+    expect(currentCounts.subscribed - currentCounts.unsubscribed).toBe(1);
     expect(anonymousClient.getQueryData(sessionQuery.queryKey)).toEqual(
       viewer('anonymous-private-reader', 'anonymous-private-csrf'),
     );
@@ -360,6 +412,11 @@ test('replacement clients, delayed old results, abandoned renders, and anonymous
     expect(anonymousClient.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
     expect(ui.session('anonymous').state).toBe('signed-out');
     expect(await captureUploadToken()).toBe('current-csrf');
+
+    await ui.close();
+    expect(currentCounts.subscribed - currentCounts.unsubscribed).toBe(0);
+    expect(anonymousCounts.subscribed - anonymousCounts.unsubscribed).toBe(0);
+    expect(oldCounts.subscribed - oldCounts.unsubscribed).toBe(0);
   });
 });
 

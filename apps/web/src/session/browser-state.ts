@@ -88,9 +88,10 @@ export function subscribeBrowserSession(
 ): () => void {
   const entry = entryFor(client);
   entry.references += 1;
+  const notify = () => listener();
 
   if (authoritative) {
-    entry.listeners.add(listener);
+    entry.listeners.add(notify);
     entry.authoritativeReferences += 1;
     if (entry.authoritativeReferences === 1) {
       owners.push(entry);
@@ -110,7 +111,7 @@ export function subscribeBrowserSession(
     entry.references -= 1;
 
     if (authoritative) {
-      entry.listeners.delete(listener);
+      entry.listeners.delete(notify);
       entry.authoritativeReferences -= 1;
       if (entry.authoritativeReferences === 0) {
         const ownerIndex = owners.indexOf(entry);
