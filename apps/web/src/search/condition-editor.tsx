@@ -20,6 +20,7 @@ import {
   type ConditionIssue,
   type ConditionMetadata,
 } from './condition-editor-model';
+import { conditionFieldChoices as buildConditionFieldChoices } from './condition-field-choices';
 
 type Choice = { value: string; labels: Record<string, string> };
 type EditorContext = {
@@ -250,6 +251,17 @@ function NodeEditor({
   const definition = property ? context.metadata.properties[property] : undefined;
   const range = 'statement' in value && 'range' in value.statement ? value.statement.range : undefined;
   const properties = facetProperties(context.metadata, Object.keys(context.metadata.types));
+  const fieldChoices = (ids: readonly string[], selected: string) => {
+    const choices = ids.map((id) => ({
+      value: id,
+      label: name(context.metadata.properties[id]?.labels, id),
+    }));
+    return buildConditionFieldChoices(
+      choices,
+      selected,
+      name(context.metadata.properties[selected]?.labels, selected),
+    );
+  };
   const replaceStatement = (
     next: Partial<{
       property: string;
@@ -414,12 +426,9 @@ function NodeEditor({
                 }}
               >
                 <NativeSelectOption value="">{m.refinement_choose_property()}</NativeSelectOption>
-                {property && !properties.includes(property) && (
-                  <NativeSelectOption value={property}>{name(definition?.labels, property)}</NativeSelectOption>
-                )}
-                {properties.map((property) => (
-                  <NativeSelectOption key={property} value={property}>
-                    {name(context.metadata.properties[property]?.labels, property)}
+                {fieldChoices(properties, property ?? '').map(({ value, label }) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {label}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
@@ -511,14 +520,9 @@ function NodeEditor({
                     }
                   >
                     <NativeSelectOption value="">{m.refinement_choose_property()}</NativeSelectOption>
-                    {qualifier.property && !definition?.qualifiers?.includes(qualifier.property) && (
-                      <NativeSelectOption value={qualifier.property}>
-                        {name(context.metadata.properties[qualifier.property]?.labels, qualifier.property)}
-                      </NativeSelectOption>
-                    )}
-                    {definition?.qualifiers?.map((property) => (
-                      <NativeSelectOption key={property} value={property}>
-                        {name(context.metadata.properties[property]?.labels, property)}
+                    {fieldChoices(definition?.qualifiers ?? [], qualifier.property).map(({ value, label }) => (
+                      <NativeSelectOption key={value} value={value}>
+                        {label}
                       </NativeSelectOption>
                     ))}
                   </NativeSelect>
