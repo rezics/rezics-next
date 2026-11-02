@@ -58,7 +58,9 @@ test('Game retires refused readings, privately retains exact corrections, and re
   let outcome: GameRead | Error = initial;
   let loads = 0;
   let deliver!: () => void;
-  const delivery = new Promise<void>((resolve) => { deliver = resolve; });
+  const delivery = new Promise<void>((resolve) => {
+    deliver = resolve;
+  });
   let held = true;
   const transport = {
     ...fixture.transport,
@@ -81,14 +83,23 @@ test('Game retires refused readings, privately retains exact corrections, and re
   };
   const refresh = () => within(host).getByRole('button', { name: m.game_profile_refresh() });
   const status = (message: string) => waitFor(() => expect(host.textContent).toContain(message));
-  const render = async (csrfToken = 'original-session') => act(async () => root.render(
-    <QueryClientProvider client={client}>
-      <CandidateReaderBoundary observed={{ state: 'signed-in', subject: gameId, csrfToken }} address={gameId}>
-        <GameProfile id={gameId} locale="en" session="signed-in" transport={transport}
-          search={async () => []} onNavigate={() => {}} />
-      </CandidateReaderBoundary>
-    </QueryClientProvider>,
-  ));
+  const render = async (csrfToken = 'original-session') =>
+    act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <CandidateReaderBoundary observed={{ state: 'signed-in', subject: gameId, csrfToken }} address={gameId}>
+            <GameProfile
+              id={gameId}
+              locale="en"
+              session="signed-in"
+              transport={transport}
+              search={async () => []}
+              onNavigate={() => {}}
+            />
+          </CandidateReaderBoundary>
+        </QueryClientProvider>,
+      ),
+    );
   const corrections = () => fixture.calls.filter((call) => call.method === 'POST');
   const privateOnly = () => {
     expect(host.querySelector('nav, h2, dl, input, summary, a')).toBeNull();
@@ -97,8 +108,10 @@ test('Game retires refused readings, privately retains exact corrections, and re
     expect(host.textContent).not.toContain('Recovered current Game');
     expect(host.textContent).not.toContain('The Lantern Game');
   };
-  const draftInput = () => within(host.querySelector<HTMLElement>('[data-slot="game-classification"]')!)
-    .getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement;
+  const draftInput = () =>
+    within(host.querySelector<HTMLElement>('[data-slot="game-classification"]')!).getByRole('textbox', {
+      name: m.correction_value(),
+    }) as HTMLInputElement;
   try {
     await render();
     await status(m.game_profile_current());
@@ -162,7 +175,10 @@ test('Game retires refused readings, privately retains exact corrections, and re
     expect(draftInput().value).toBe('fr');
     // The result from the retired reading cannot resolve its sealed command after recovery.
     held = false;
-    await act(async () => { deliver(); await delivery; });
+    await act(async () => {
+      deliver();
+      await delivery;
+    });
     expect(host.textContent).not.toContain(m.correction_proposed());
     expect(corrections()).toHaveLength(1);
     await click(within(summary.closest('details')!).getByRole('button', { name: m.facts_submit() }));

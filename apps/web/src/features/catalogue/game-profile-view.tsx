@@ -94,11 +94,7 @@ function GameProfileLive({
   // Existing-subject recovery retains private holders, never display authority.
   if (id)
     return (
-      <CatalogueCurrentReading
-        visible={!!admitted}
-        ready={!!admitted}
-        revision={id}
-      >
+      <CatalogueCurrentReading visible={!!admitted} ready={!!admitted} revision={id}>
         {!admitted && (
           <article className="mx-auto min-w-0 max-w-4xl space-y-5">
             <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
@@ -249,84 +245,88 @@ function GameCorrection({
   );
   return (
     <article className="mx-auto min-w-0 w-full max-w-4xl space-y-8">
-      {visible && <header className="space-y-4">
-        <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
-        <h2 className="min-w-0 font-sans text-2xl font-semibold [overflow-wrap:anywhere]">
-          <a
-            className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans text-xl underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            lang={title.lang ?? undefined}
-            href={href}
+      {visible && (
+        <header className="space-y-4">
+          <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
+          <h2 className="min-w-0 font-sans text-2xl font-semibold [overflow-wrap:anywhere]">
+            <a
+              className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans text-xl underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              lang={title.lang ?? undefined}
+              href={href}
+            >
+              {title.text || m.subject_value_unlabelled({}, o)}
+            </a>
+          </h2>
+          <p
+            className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+            lang={type.lang ?? undefined}
           >
-            {title.text || m.subject_value_unlabelled({}, o)}
-          </a>
-        </h2>
-        <p className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]" lang={type.lang ?? undefined}>
-          {type.text || m.guide_missing({}, o)}
-        </p>
-        <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
-        <p className="text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
-        <nav
-          className="flex min-w-0 max-w-full flex-wrap gap-2 [overflow-wrap:anywhere]"
-          aria-label={m.facts_other_editors({}, o)}
-        >
-          <a className={`${buttonVariants({ variant: 'outline' })} ${gameActionClass}`} href={href}>
-            {m.candidate_view_public({}, o)}
-          </a>
-          <SubjectTermsEntry id={subject.id} label={title.text} locale={locale} />
-          {read.release.types[subject.type]!.properties.some(
-            (id) => read.release.properties[id]?.datatype === 'document',
-          ) && <AuthoredFieldEntry id={subject.id} title={title.text} locale={locale} />}
-          {subject.type !== 'wd:Q20631656' && <PublicationEditorEntry work={subject.id} locale={locale} />}
-          <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: `${href}/game` }} />
-          <Button
-            className={gameActionClass}
-            type="button"
-            variant="outline"
-            disabled={refreshing}
-            onClick={() => lifetime.active() && void refresh()}
+            {type.text || m.guide_missing({}, o)}
+          </p>
+          <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
+          <p className="text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
+          <nav
+            className="flex min-w-0 max-w-full flex-wrap gap-2 [overflow-wrap:anywhere]"
+            aria-label={m.facts_other_editors({}, o)}
           >
-            {m.game_profile_refresh({}, o)}
-          </Button>
-        </nav>
-        <p role={refreshing ? 'status' : undefined} className="text-sm">
-          {refreshing
-            ? m.game_profile_refreshing({}, o)
-            : m.game_profile_current({}, o)}
-        </p>
-        <p className="text-sm text-muted-foreground">{m.game_profile_support({}, o)}</p>
-      </header>}
-      {visible && Object.entries(groups)
-        .filter(([, ids]) => ids.length)
-        .map(([group, ids]) => (
-          <section key={group} className="space-y-4">
-            <h2 className="font-sans text-xl font-semibold">{gameGroupLabel(group, locale)}</h2>
-            <dl className="divide-y divide-border rounded-xl border border-border bg-card px-4">
-              {ids.map((property) => {
-                const label = pickText(read.release.properties[property]!.labels, locale);
-                return (
-                  <div key={property} className="grid min-w-0 gap-2 py-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
-                    <dt className="text-sm font-medium" lang={label.lang ?? undefined}>
-                      {label.text}
-                    </dt>
-                    <dd className="min-w-0 space-y-3 break-words">
-                      {!subject.statements[property]?.length && (
-                        <span className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</span>
-                      )}
-                      <ol className="space-y-3">
-                        {(subject.statements[property] ?? []).map((statement) => (
-                          <GameStatement key={statement.id} statement={statement} read={read} locale={locale} />
-                        ))}
-                      </ol>
-                    </dd>
-                  </div>
-                );
-              })}
-            </dl>
-          </section>
-        ))}
+            <a className={`${buttonVariants({ variant: 'outline' })} ${gameActionClass}`} href={href}>
+              {m.candidate_view_public({}, o)}
+            </a>
+            <SubjectTermsEntry id={subject.id} label={title.text} locale={locale} />
+            {read.release.types[subject.type]!.properties.some(
+              (id) => read.release.properties[id]?.datatype === 'document',
+            ) && <AuthoredFieldEntry id={subject.id} title={title.text} locale={locale} />}
+            {subject.type !== 'wd:Q20631656' && <PublicationEditorEntry work={subject.id} locale={locale} />}
+            <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: `${href}/game` }} />
+            <Button
+              className={gameActionClass}
+              type="button"
+              variant="outline"
+              disabled={refreshing}
+              onClick={() => lifetime.active() && void refresh()}
+            >
+              {m.game_profile_refresh({}, o)}
+            </Button>
+          </nav>
+          <p role={refreshing ? 'status' : undefined} className="text-sm">
+            {refreshing ? m.game_profile_refreshing({}, o) : m.game_profile_current({}, o)}
+          </p>
+          <p className="text-sm text-muted-foreground">{m.game_profile_support({}, o)}</p>
+        </header>
+      )}
+      {visible &&
+        Object.entries(groups)
+          .filter(([, ids]) => ids.length)
+          .map(([group, ids]) => (
+            <section key={group} className="space-y-4">
+              <h2 className="font-sans text-xl font-semibold">{gameGroupLabel(group, locale)}</h2>
+              <dl className="divide-y divide-border rounded-xl border border-border bg-card px-4">
+                {ids.map((property) => {
+                  const label = pickText(read.release.properties[property]!.labels, locale);
+                  return (
+                    <div key={property} className="grid min-w-0 gap-2 py-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
+                      <dt className="text-sm font-medium" lang={label.lang ?? undefined}>
+                        {label.text}
+                      </dt>
+                      <dd className="min-w-0 space-y-3 break-words">
+                        {!subject.statements[property]?.length && (
+                          <span className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</span>
+                        )}
+                        <ol className="space-y-3">
+                          {(subject.statements[property] ?? []).map((statement) => (
+                            <GameStatement key={statement.id} statement={statement} read={read} locale={locale} />
+                          ))}
+                        </ol>
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            </section>
+          ))}
       {session !== 'signed-in' ? (
-        visible && (
-        session === 'unavailable' ? (
+        visible &&
+        (session === 'unavailable' ? (
           <div role="alert" className="space-y-3">
             <p>{m.catalogue_create_unavailable({}, o)}</p>
             <Button
@@ -340,14 +340,15 @@ function GameCorrection({
           <p role="status">
             {session === 'signed-out' ? m.relation_sign_in({}, o) : m.catalogue_create_loading({}, o)}
           </p>
-        )
-        )
+        ))
       ) : (
         <>
           <details hidden={!visible} className="min-w-0 max-w-full rounded-xl border border-border p-4">
-            {visible && <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
-              {m.game_profile_facts({}, o)}
-            </summary>}
+            {visible && (
+              <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
+                {m.game_profile_facts({}, o)}
+              </summary>
+            )}
             <SubjectFacts
               initial={{ ...read, source: null }}
               locale={locale}
@@ -357,9 +358,11 @@ function GameCorrection({
           </details>
           {!!groups.classification.length && (
             <details hidden={!visible} className="min-w-0 max-w-full space-y-4 rounded-xl border border-border p-4">
-              {visible && <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
-                {m.game_profile_classification({}, o)}
-              </summary>}
+              {visible && (
+                <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
+                  {m.game_profile_classification({}, o)}
+                </summary>
+              )}
               <GameClassifications
                 read={read}
                 locale={locale}
@@ -371,9 +374,11 @@ function GameCorrection({
           )}
           {!!fields.length && (
             <details hidden={!visible} className="min-w-0 max-w-full rounded-xl border border-border p-4">
-              {visible && <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
-                {m.game_profile_relations({}, o)}
-              </summary>}
+              {visible && (
+                <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
+                  {m.game_profile_relations({}, o)}
+                </summary>
+              )}
               <RelationEditor
                 id={subject.id}
                 locale={locale}
@@ -385,65 +390,72 @@ function GameCorrection({
           )}
         </>
       )}
-      {visible && <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
-        <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
-          {m.specialist_identity_names({}, o)}
-        </summary>
-        <dl className="mt-3 min-w-0 space-y-3">
-          {Array.from(
-            new Set([
-              ...Object.keys(subject.labels),
-              ...Object.keys(subject.descriptions),
-              ...Object.keys(subject.aliases),
-            ]),
-          ).map((language) => (
-            <div key={language} className="min-w-0">
-              <dt className="text-sm text-muted-foreground">{language}</dt>
-              <dd lang={language} className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">
-                {subject.labels[language]}
+      {visible && (
+        <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
+          <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+            {m.specialist_identity_names({}, o)}
+          </summary>
+          <dl className="mt-3 min-w-0 space-y-3">
+            {Array.from(
+              new Set([
+                ...Object.keys(subject.labels),
+                ...Object.keys(subject.descriptions),
+                ...Object.keys(subject.aliases),
+              ]),
+            ).map((language) => (
+              <div key={language} className="min-w-0">
+                <dt className="text-sm text-muted-foreground">{language}</dt>
+                <dd
+                  lang={language}
+                  className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+                >
+                  {subject.labels[language]}
+                </dd>
+                {subject.descriptions[language] && (
+                  <dd
+                    lang={language}
+                    className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm"
+                  >
+                    {subject.descriptions[language]}
+                  </dd>
+                )}
+                {!!subject.aliases[language]?.length && (
+                  <dd
+                    lang={language}
+                    className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm text-muted-foreground"
+                  >
+                    {subject.aliases[language]!.join(' · ')}
+                  </dd>
+                )}
+              </div>
+            ))}
+          </dl>
+        </details>
+      )}
+      {visible && (
+        <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
+          <summary className={gameDisclosureSummaryClass}>{m.specialist_identity_reference({}, o)}</summary>
+          <dl className="mt-3 min-w-0 space-y-3">
+            <div className="min-w-0">
+              <dt className="text-sm text-muted-foreground">{m.specialist_identity_subject_id({}, o)}</dt>
+              <dd className="min-w-0">
+                <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+                  {subject.id}
+                </code>
               </dd>
-              {subject.descriptions[language] && (
-                <dd
-                  lang={language}
-                  className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm"
-                >
-                  {subject.descriptions[language]}
-                </dd>
-              )}
-              {!!subject.aliases[language]?.length && (
-                <dd
-                  lang={language}
-                  className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm text-muted-foreground"
-                >
-                  {subject.aliases[language]!.join(' · ')}
-                </dd>
-              )}
             </div>
-          ))}
-        </dl>
-      </details>}
-      {visible && <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
-        <summary className={gameDisclosureSummaryClass}>{m.specialist_identity_reference({}, o)}</summary>
-        <dl className="mt-3 min-w-0 space-y-3">
-          <div className="min-w-0">
-            <dt className="text-sm text-muted-foreground">{m.specialist_identity_subject_id({}, o)}</dt>
-            <dd className="min-w-0">
-              <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
-                {subject.id}
-              </code>
-            </dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-sm text-muted-foreground">{m.specialist_identity_type({}, o)}</dt>
-            <dd className="min-w-0">
-              <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
-                {subject.type}
-              </code>
-            </dd>
-          </div>
-        </dl>
-        <p className="text-sm text-muted-foreground">{m.game_profile_terms_help({}, o)}</p>
-      </details>}
+            <div className="min-w-0">
+              <dt className="text-sm text-muted-foreground">{m.specialist_identity_type({}, o)}</dt>
+              <dd className="min-w-0">
+                <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+                  {subject.type}
+                </code>
+              </dd>
+            </div>
+          </dl>
+          <p className="text-sm text-muted-foreground">{m.game_profile_terms_help({}, o)}</p>
+        </details>
+      )}
     </article>
   );
 }

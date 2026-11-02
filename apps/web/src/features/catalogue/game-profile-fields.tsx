@@ -286,9 +286,9 @@ function GameClassificationsLive({
     if (!visible) {
       setAddress(undefined);
       setComparison(undefined);
-      setDrafts((rows) => rows.map((row) =>
-        row.command && !row.result ? { ...row, result: { ok: false, reason: 'uncertain' } } : row,
-      ));
+      setDrafts((rows) =>
+        rows.map((row) => (row.command && !row.result ? { ...row, result: { ok: false, reason: 'uncertain' } } : row)),
+      );
     }
   }
   async function submit() {
@@ -298,8 +298,12 @@ function GameClassificationsLive({
     const sealed = sealFacts(read.public.subject.id, read.release, drafts);
     setDrafts(sealed);
     try {
-      await sendFacts(sealed, transport.propose, (property, result) =>
-        lifetime.active() && setDrafts((rows) => rows.map((row) => (row.property === property ? { ...row, result } : row))),
+      await sendFacts(
+        sealed,
+        transport.propose,
+        (property, result) =>
+          lifetime.active() &&
+          setDrafts((rows) => rows.map((row) => (row.property === property ? { ...row, result } : row))),
       );
     } finally {
       if (!lifetime.active()) return;
@@ -401,7 +405,8 @@ function GameClassificationsLive({
                       locale={locale}
                       search={search}
                       change={(statement) =>
-                        lifetime.active() && setDrafts((rows) =>
+                        lifetime.active() &&
+                        setDrafts((rows) =>
                           rows.map((row) =>
                             row.property === property
                               ? { ...row, statement, result: undefined, command: undefined }
@@ -435,7 +440,8 @@ function GameClassificationsLive({
                       type="button"
                       variant="outline"
                       onClick={() =>
-                        lifetime.active() && setDrafts((rows) =>
+                        lifetime.active() &&
+                        setDrafts((rows) =>
                           rows.map((row) =>
                             row.property === property ? { ...row, command: undefined, result: undefined } : row,
                           ),
