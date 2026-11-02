@@ -1,5 +1,11 @@
 import { afterAll, expect, spyOn, test } from 'bun:test';
-import { createBrowserHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createBrowserHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { createElement } from 'react';
 import { button, creationFixture, dom, fill, flush, open, send } from './creation-page-fixture';
 
@@ -23,7 +29,14 @@ async function setup(fragment = firstLink) {
   const router = createRouter({ history, routeTree: root.addChildren([recovery, away]) });
   await router.load();
   const page = await open(createElement(RouterProvider, { router }), {});
-  return { ...page, router, async close() { await page.render(null); history.destroy(); } };
+  return {
+    ...page,
+    router,
+    async close() {
+      await page.render(null);
+      history.destroy();
+    },
+  };
 }
 
 const unload = () => {
@@ -54,7 +67,11 @@ test('Stay keeps the current recovery attempt; replacing or leaving retires it a
     await flush(() => send(page.host));
     await flush(() => send(page.host));
     expect(page.calls).toHaveLength(1);
-    expect(page.calls[0]!.body).toEqual({ account_id: 'first', token: 'first-token', new_password: 'a sufficiently long password' });
+    expect(page.calls[0]!.body).toEqual({
+      account_id: 'first',
+      token: 'first-token',
+      new_password: 'a sufficiently long password',
+    });
     await flush(() => page.router.navigate({ to: '/recovery', hash: secondLink.slice(1) }));
     password = page.host.querySelector<HTMLInputElement>('input[name="new_password"]')!;
     expect(password.value).toBe('');
