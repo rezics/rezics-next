@@ -1,8 +1,7 @@
 import { CONDITION_POINTER } from './condition-editor-model';
 import type { ConditionDraftNode } from './condition-tree-edit';
 
-const CONTROL_SELECTOR =
-  'select:not(:disabled), input:not([type="hidden"]):not(:disabled), button:not(:disabled)';
+const CONTROL_SELECTOR = 'select:not(:disabled), input:not([type="hidden"]):not(:disabled), button:not(:disabled)';
 
 export type ConditionEditFocusHost = {
   root(): HTMLElement | null;
@@ -26,7 +25,7 @@ export function conditionDraftNodeAt(
   if (!pointer.startsWith(prefix)) return;
   let current = node;
   const segments = pointer.slice(prefix.length).split('/');
-  for (let index = 0; index < segments.length; ) {
+  for (let index = 0; index < segments.length;) {
     const operator = segments[index];
     if (operator === 'not') {
       if (current.operator !== 'not' || !current.children[0]) return;

@@ -78,7 +78,8 @@ test('queued condition-edit focus cannot steal focus after a user move or target
     node(path).querySelector<HTMLElement>(
       'select:not(:disabled), input:not([type="hidden"]):not(:disabled), button:not(:disabled)',
     )!;
-  const action = (label: string) => [...host.querySelectorAll('button')].find((button) => button.textContent === label)!;
+  const action = (label: string) =>
+    [...host.querySelectorAll('button')].find((button) => button.textContent === label)!;
   const press = (label: string) =>
     act(() => {
       const button = action(label);

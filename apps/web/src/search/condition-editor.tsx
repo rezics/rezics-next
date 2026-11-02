@@ -31,10 +31,7 @@ import {
   changeStatementProperty,
   resolveConditionPropertyChange,
 } from './condition-property-edit';
-import {
-  conditionDraftNodeAt,
-  createConditionEditFocus,
-} from './condition-edit-focus';
+import { conditionDraftNodeAt, createConditionEditFocus } from './condition-edit-focus';
 import {
   conditionTreeCanSubmit,
   createConditionDraftNode,
