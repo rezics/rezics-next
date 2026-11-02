@@ -12,7 +12,8 @@ export type PaymentEvidence = {
   revision: number;
 };
 export type PaymentAttestationResult =
-  { kind: 'saved'; statement: PaymentEvidence } | { kind: 'uncertain' | 'denied' | 'conflict' | 'rejected' };
+  | { kind: 'saved'; statement: PaymentEvidence }
+  | { kind: 'uncertain' | 'denied' | 'conflict' | 'rejected' };
 
 export const validPaymentReference = (value: string) => value.length <= 256 && value.trim().length > 0;
 // One native write + the reader's one detail and one bounded line-page refresh.
@@ -47,8 +48,7 @@ export class CreatorPaymentAttempt {
     execute: (input: PaymentAttestationInput) => Promise<PaymentAttestationResult>,
     isCurrent: () => boolean,
   ): Promise<void> {
-    if (this.busy || !isCurrent() || this.result?.kind === 'saved' || this.result?.kind === 'conflict')
-      return;
+    if (this.busy || !isCurrent() || this.result?.kind === 'saved' || this.result?.kind === 'conflict') return;
     if (!this.request) {
       if (!validPaymentReference(reference)) return;
       this.request = Object.freeze({

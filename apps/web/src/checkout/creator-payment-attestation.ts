@@ -14,13 +14,10 @@ import {
 } from './creator-payment-attestation-state';
 
 export function paymentAttestationInput(value: unknown): PaymentAttestationInput {
-  if (!value || typeof value !== 'object' || Array.isArray(value))
-    throw new Error('Invalid payment attestation');
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid payment attestation');
   const row = value as Record<string, unknown>;
   if (
-    Object.keys(row).some(
-      (key) => !['statementId', 'subject', 'paidReference', 'idempotencyKey'].includes(key),
-    ) ||
+    Object.keys(row).some((key) => !['statementId', 'subject', 'paidReference', 'idempotencyKey'].includes(key)) ||
     typeof row.statementId !== 'string' ||
     !UUID.test(row.statementId) ||
     typeof row.subject !== 'string' ||
@@ -107,10 +104,5 @@ export const attestCreatorPayment = createServerFn({ method: 'POST' })
     setResponseHeader('cache-control', 'private, no-store');
     setResponseHeader('x-robots-tag', 'noindex, nofollow');
     // The site's existing unsafe-request middleware validates origin and current session CSRF.
-    return submitPaymentAttestation(
-      kernelClient(),
-      new Request(getRequest()),
-      env as Partial<SessionEnv>,
-      data,
-    );
+    return submitPaymentAttestation(kernelClient(), new Request(getRequest()), env as Partial<SessionEnv>, data);
   });

@@ -54,7 +54,11 @@ export function CreatorStatementCurrent({
   );
 }
 
-function StatementPresentation({ address, page, payment }: {
+function StatementPresentation({
+  address,
+  page,
+  payment,
+}: {
   address: CreatorStatementsAddress;
   page: Page;
   payment?: ReactNode;
@@ -171,19 +175,24 @@ function StatementsRead({
   }
   if (hydrated && !origin.isCurrent()) return <StatementPresentation address={address} page={{ kind: 'preparing' }} />;
   if (display.observed?.kind === 'accepted' && origin.isCurrent()) origin.workspace.read = display.observed.value;
-  const payment = address.kind === 'detail' && display.page.kind === 'ready' && 'statement' in display.page ? (
-    <CreatorPaymentAttestation
-      statement={display.page.statement}
-      subject={subject}
-      locale={address.locale}
-      guard={origin}
-      refresh={async () => {
-        const refreshed = await query.refetch();
-        return origin.isCurrent() && refreshed.data?.kind === 'accepted' &&
-          refreshed.data.value.page.kind === 'ready' && 'statement' in refreshed.data.value.page &&
-          refreshed.data.value.page.lines.kind === 'ready';
-      }}
-    />
-  ) : undefined;
+  const payment =
+    address.kind === 'detail' && display.page.kind === 'ready' && 'statement' in display.page ? (
+      <CreatorPaymentAttestation
+        statement={display.page.statement}
+        subject={subject}
+        locale={address.locale}
+        guard={origin}
+        refresh={async () => {
+          const refreshed = await query.refetch();
+          return (
+            origin.isCurrent() &&
+            refreshed.data?.kind === 'accepted' &&
+            refreshed.data.value.page.kind === 'ready' &&
+            'statement' in refreshed.data.value.page &&
+            refreshed.data.value.page.lines.kind === 'ready'
+          );
+        }}
+      />
+    ) : undefined;
   return <StatementPresentation address={address} page={display.page} payment={payment} />;
 }

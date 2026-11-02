@@ -71,9 +71,7 @@ const client = createKernelClient('https://kernel.test', {
 
 test('validate exact references and reject blank, oversized, changed identity and unadopted financial fields', () => {
   expect(paymentAttestationInput(input)).toEqual(input);
-  expect(paymentAttestationInput({ ...input, paidReference: 'x'.repeat(256) }).paidReference).toHaveLength(
-    256,
-  );
+  expect(paymentAttestationInput({ ...input, paidReference: 'x'.repeat(256) }).paidReference).toHaveLength(256);
   for (const change of [
     { paidReference: ' \n\t' },
     { paidReference: 'x'.repeat(257) },
@@ -195,9 +193,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const previous = new Map(
-  Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
-);
+const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, {
     configurable: true,
@@ -257,9 +253,7 @@ test('the actual form retries captured evidence after a paid read, confirms only
     });
     const submit = async () => {
       await act(async () => {
-        host
-          .querySelector('form')!
-          .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+        host.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
       });
     };
     await submit();
