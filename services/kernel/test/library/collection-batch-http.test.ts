@@ -1,3 +1,4 @@
+import { routeOf } from '../../src/route/route.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 let f: NativeProfileFixture;
@@ -63,4 +64,50 @@ test('selected duplicate occurrence moves across same-curator Collections with i
   expect(to.status).toBe(200);
   expect((await from.json()).members.map((m: { id: string }) => m.id)).toEqual([sibling.id]);
   expect((await to.json()).members.map((m: { id: string }) => m.id)).toEqual([first.id]);
+}, 120000);
+
+// A routed transfer never degrades to independent copy/remove commands.
+test('cross-curator move reports unsupported without changing the selected source occurrence', async () => {
+  const make = async (bearer: string) => {
+    const response = await f.send(
+      bearer,
+      'POST',
+      '/v1/collections',
+      { title: 'Move target', visibility: 'private' },
+      entryKey(),
+    );
+    expect(response.status).toBe(201);
+    return (await response.json()).collection;
+  };
+  const source = await make(owner.bearer);
+  let other = await f.identity(['collection:create']);
+  while (routeOf(other.actor.accountId) === routeOf(source.id)) other = await f.identity(['collection:create']);
+  const destination = await make(other.bearer);
+  const subjectId = await f.createSubject('game');
+  const added = await f.send(
+    owner.bearer,
+    'POST',
+    `/v1/collections/${source.id}/members`,
+    { subjectId, note: 'Retain me' },
+    entryKey(),
+  );
+  expect(added.status).toBe(201);
+  const member = (await added.json()).member;
+  const response = await f.send(
+    owner.bearer,
+    'POST',
+    `/v1/collections/${source.id}/members:move`,
+    {
+      revision: source.revision + 1,
+      memberIds: [member.id],
+      destinationCollectionId: destination.id,
+      destinationRevision: destination.revision,
+      after: null,
+    },
+    entryKey(),
+  );
+  expect(response.status).toBe(409);
+  expect((await response.json()).code).toBe('collection_move_unsupported');
+  const remaining = await f.send(owner.bearer, 'GET', `/v1/collections/${source.id}/members`);
+  expect((await remaining.json()).members).toEqual([member]);
 }, 120000);

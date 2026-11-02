@@ -18,7 +18,8 @@ export type CollectionWriteResult =
         | 'unauthorized'
         | 'unavailable'
         | 'expired'
-        | 'occupied';
+        | 'occupied'
+        | 'unsupported';
     };
 
 /** Receipt-bound deletion episode. The native restore command owns the original 720-hour deadline. */
@@ -111,6 +112,7 @@ export function fromKernel(result: LibraryFailure, id: string): CollectionWriteR
   const code = problemCode(body);
   if (code === 'member_restore_expired') return { ok: false, reason: 'expired' };
   if (code === 'member_restore_occupied') return { ok: false, reason: 'occupied' };
+  if (code === 'collection_move_unsupported') return { ok: false, reason: 'unsupported' };
   if (code === 'collection_full') return { ok: false, reason: 'full' };
   const succeeded = status === 204 || (!result.error && status !== undefined && status < 400);
   if (succeeded) return id.length > 0 ? { ok: true, id } : { ok: false, reason: 'unavailable' };

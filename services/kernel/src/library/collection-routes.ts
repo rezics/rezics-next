@@ -205,7 +205,13 @@ const failures = {
   401: problemSchema('authentication_required', 'invalid_credentials'),
   403: problemSchema('forbidden'),
   404: problemSchema('not_found'),
-  409: problemSchema('conflict', 'collection_full', 'stale_cursor', 'dynamic_membership_immutable'),
+  409: problemSchema(
+    'conflict',
+    'collection_full',
+    'stale_cursor',
+    'dynamic_membership_immutable',
+    'collection_move_unsupported',
+  ),
   422: problemSchema('idempotency_conflict', 'unsupported_query'),
   503: problemSchema(
     'semantic_not_ready',
@@ -218,7 +224,13 @@ const failures = {
 };
 const batchFailures = {
   ...failures,
-  409: problemSchema('conflict', 'collection_full', 'stale_cursor', 'dynamic_membership_immutable'),
+  409: problemSchema(
+    'conflict',
+    'collection_full',
+    'stale_cursor',
+    'dynamic_membership_immutable',
+    'collection_move_unsupported',
+  ),
 };
 const memberRestoreFailures = {
   ...failures,

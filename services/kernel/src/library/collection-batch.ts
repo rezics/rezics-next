@@ -142,7 +142,8 @@ export function createCollectionBatchCommands(
     revision(input.destinationRevision);
     if (typeof input.destinationCollectionId !== 'string' || routeOf(input.destinationCollectionId) === null) missing();
     if (collectionId === input.destinationCollectionId) invalid();
-    if (routeOf(collectionId) !== routeOf(input.destinationCollectionId)) conflict();
+    if (routeOf(collectionId) !== routeOf(input.destinationCollectionId))
+      throw new ProblemError('collection_move_unsupported');
     if (input.after !== null && (typeof input.after !== 'string' || routeOf(input.after) === null)) invalid();
     const destinationId = input.destinationCollectionId;
     let prepared = new Map<string, string>();
@@ -158,7 +159,8 @@ export function createCollectionBatchCommands(
         const parents = await lock(tx, route, [collectionId, destinationId]);
         const source = parents.find((row) => row.id === collectionId)!;
         const destination = parents.find((row) => row.id === destinationId)!;
-        if (source.curatorAccountId !== destination.curatorAccountId) conflict();
+        if (source.curatorAccountId !== destination.curatorAccountId)
+          throw new ProblemError('collection_move_unsupported');
         if (source.revision !== input.revision || destination.revision !== input.destinationRevision) conflict();
         const members = await selected(tx, route, collectionId, ids);
         if (members.some((member) => prepared.get(member.id) !== member.subjectId)) missing();
@@ -166,7 +168,7 @@ export function createCollectionBatchCommands(
           const anchor = await readMember(tx, route, destinationId, input.after);
           if (!anchor || preparedAfter !== anchor.subjectId) missing();
         }
-        if (destination.memberCount + ids.length > 2_147_483_647) throw new ProblemError('collection_full');
+        if (destination.memberCount + ids.length > 5_000) throw new ProblemError('collection_full');
         const plan = await planCollectionPlacement(
           tx,
           route,

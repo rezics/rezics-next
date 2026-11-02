@@ -2,7 +2,7 @@ import { collectionTextIssue } from './collection-text-input';
 import { batchRemoveCollectionMembers, transferCollectionMembers } from './collection-commands';
 import { CollectionBatchRemoveConfirmation } from './collection-batch-remove';
 import { useCollectionDraftNavigation } from './collection-draft-navigation';
-import { readCollectionDestination, type CollectionDestination } from './collection-read';
+import { CollectionMoveChooser, type CollectionMoveChoice } from './collection-move-chooser';
 import { CollectionAddMembers } from './collection-add-members';
 import { CollectionMemberDetails } from './collection-member-row';
 import { CollectionNoteReader } from './collection-note-reader';
@@ -222,7 +222,11 @@ function visibilityNote(visibility: CollectionVisibility): string {
 }
 
 function writeMessage(result: Extract<CollectionWriteResult, { ok: false }>): string {
-  return result.reason === 'full' ? m.library_collection_full() : m.error_message();
+  return result.reason === 'full'
+    ? m.library_collection_full()
+    : result.reason === 'unsupported'
+      ? m.library_collection_move_unsupported()
+      : m.error_message();
 }
 
 function collectionHref(id: string) {
@@ -334,12 +338,8 @@ function CollectionPageLifetime({
   const [editing, setEditing] = useState(false);
   const [saveConfirmed, setSaveConfirmed] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [destinationId, setDestinationId] = useState('');
-  const [destination, setDestination] = useState<CollectionDestination | null>(null);
-  const [destinationLoading, setDestinationLoading] = useState(false);
-  const destinationVersion = useRef(0);
-  const destinationEpisode = destinationVersion.current;
-  const [transfer, setTransfer] = useState<{ destination: CollectionDestination; memberIds: string[] } | null>(null);
+  const [moveChoice, setMoveChoice] = useState<CollectionMoveChoice | null>(null);
+  const [transfer, setTransfer] = useState<(CollectionMoveChoice & { memberIds: string[] }) | null>(null);
   const [bulkUnavailable, setBulkUnavailable] = useState(false);
   const [removalConfirmation, setRemovalConfirmation] = useState(false);
   const [batchRemovalIds, setBatchRemovalIds] = useState<ReadonlySet<string>>(new Set());
@@ -454,32 +454,6 @@ function CollectionPageLifetime({
       mounted.current = false;
     };
   }, []);
-  useEffect(() => {
-    let current = true;
-    const version = destinationVersion.current;
-    const destinationIsCurrent = () => current && version === destinationVersion.current && isCurrent();
-    setDestination(null);
-    if (!editing || !destinationId || !isCurrent()) {
-      setDestinationLoading(false);
-      return;
-    }
-    setDestinationLoading(true);
-    void readCollectionDestination({ data: destinationId })
-      .then(
-        (value) => {
-          if (destinationIsCurrent()) setDestination(value?.id === destinationId ? value : null);
-        },
-        () => {
-          if (destinationIsCurrent()) setDestination(null);
-        },
-      )
-      .finally(() => {
-        if (current && version === destinationVersion.current && admission.retained()) setDestinationLoading(false);
-      });
-    return () => {
-      current = false;
-    };
-  }, [editing, destinationId]);
   useEffect(() => {
     if (editing) {
       setConflict(true);
@@ -679,7 +653,7 @@ function CollectionPageLifetime({
       setSelectedIds(new Set());
       setBatchRemovalIds(new Set());
       setTransfer(null);
-      setDestinationId('');
+      setMoveChoice(null);
       setBulkUnavailable(false);
       setSaveConfirmed(false);
       setEditing(true);
@@ -697,7 +671,7 @@ function CollectionPageLifetime({
     setSavedNoteIds(new Set());
     setBatchRemovalIds(new Set());
     setTransfer(null);
-    setDestinationId('');
+    setMoveChoice(null);
     setBulkUnavailable(false);
     setMembers(source.members);
     setEditorMembers(null);
@@ -858,7 +832,7 @@ function CollectionPageLifetime({
           memberIds: transfer.memberIds,
           destinationCollectionId: transfer.destination.id,
           destinationRevision: transfer.destination.revision,
-          after: null,
+          after: transfer.after,
         };
         const result = await send.transferCollectionMembers({
           data: { ...data, idempotencyKey: keyFor(data) },
@@ -1013,9 +987,6 @@ function CollectionPageLifetime({
   }
 
   const visibleVisibility = page.visibility ?? page.disclosedVisibility;
-  const destinations = navigationCollections.filter(
-    (collection) => collection.id !== page.id && collection.membershipKind !== 'dynamic',
-  );
   const memberDraftChanged =
     editing &&
     buildCollectionMemberEditPlan(
@@ -1395,26 +1366,14 @@ function CollectionPageLifetime({
               >
                 {m.library_collection_remove_selected()}
               </Button>
-              <label className="min-w-0 basis-full space-y-1 sm:basis-auto">
-                <span className="text-sm">{m.library_collection_move_destination()}</span>
-                <select
-                  className={fieldClass}
-                  value={destinationId}
-                  disabled={pending || draftFrozen || conflict || transfer !== null}
-                  onChange={(event) => {
-                    if (!isCurrent('collection_member.move') || inFlight.current || saveIntent.current !== null) return;
-                    destinationVersion.current++;
-                    setDestinationId(event.target.value);
-                  }}
-                >
-                  <option value="">{m.library_collection_choose_destination()}</option>
-                  {destinations.map((collection) => (
-                    <option key={collection.id} value={collection.id}>
-                      {collection.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <CollectionMoveChooser
+                sourceId={page.id}
+                disabled={pending || draftFrozen || conflict || transfer !== null}
+                current={() => isCurrent('collection_member.transfer')}
+                onChange={(choice) => {
+                  if (isCurrent('collection_member.transfer')) setMoveChoice(choice);
+                }}
+              />
               <Button
                 type="button"
                 variant="outline"
@@ -1422,8 +1381,8 @@ function CollectionPageLifetime({
                   pending ||
                   conflict ||
                   bulkUnavailable ||
-                  destinationLoading ||
-                  !destination ||
+                  draftFrozen ||
+                  !moveChoice ||
                   selectedIds.size === 0 ||
                   memberDraftChanged ||
                   transfer !== null
@@ -1433,12 +1392,11 @@ function CollectionPageLifetime({
                     !isCurrent('collection_member.transfer') ||
                     inFlight.current ||
                     saveIntent.current !== null ||
-                    !destination ||
-                    destinationEpisode !== destinationVersion.current
+                    !moveChoice
                   )
                     return;
                   const memberIds = members.filter((member) => selectedIds.has(member.id)).map((member) => member.id);
-                  setTransfer({ destination, memberIds });
+                  setTransfer({ ...moveChoice, memberIds });
                   setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
                   setSelectedIds(new Set());
                 }}
@@ -1458,9 +1416,6 @@ function CollectionPageLifetime({
               ) : null}
               {bulkUnavailable ? (
                 <p className="basis-full text-sm text-muted-foreground">{m.library_collection_batch_unavailable()}</p>
-              ) : null}
-              {!destinationLoading && (!destinations.length || (destinationId && !destination) || bulkUnavailable) ? (
-                <p className="basis-full text-sm text-muted-foreground">{m.library_collection_move_unavailable()}</p>
               ) : null}
             </div>
           ) : null}

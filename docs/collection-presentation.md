@@ -183,6 +183,8 @@ relative order regardless of request ID order. Place the block after the destina
 when `after: null`. Respect the destination 5,000-occurrence cap and existing ordinal/respace constraints.
 One same-partition transaction owns both sides; no cross-home join/write. Cross-curator transfer returns explicit
 409 unsupported. This is neither same-Collection reorder nor silent copy+delete. Copy no scopes or grants.
+The editor offers first position or after a paged destination occurrence and keeps that anchor through Save;
+cross-curator transfer uses the explicit `collection_move_unsupported` result.
 Source/destination visibility-dependent membership, counts, public listing and fact generation effects change
 exactly once through actual native producers; rollback and receipt replay leave no partial or repeated transfer.
 

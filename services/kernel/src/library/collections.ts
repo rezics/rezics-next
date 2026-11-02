@@ -476,7 +476,8 @@ export function createCollectionCommands(config: {
               if (rows.length !== 2 || rows.some((row) => row.state !== 'active')) throw notFound();
               if (rows.some((row) => row.membershipKind !== 'curated'))
                 throw new ProblemError('dynamic_membership_immutable');
-              if (rows[0]!.curatorAccountId !== rows[1]!.curatorAccountId) throw new ProblemError('conflict');
+              if (rows[0]!.curatorAccountId !== rows[1]!.curatorAccountId)
+                throw new ProblemError('collection_move_unsupported');
               return true;
             },
           },

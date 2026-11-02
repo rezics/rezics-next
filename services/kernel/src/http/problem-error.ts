@@ -40,6 +40,11 @@ export const PROBLEMS = {
   published_log_restore_expired: { status: 409, title: 'Published Log Restore Expired', retryable: false },
   dynamic_membership_immutable: { status: 409, title: 'Dynamic Membership Immutable', retryable: false },
   collection_full: { status: 409, title: 'Collection Full', retryable: false },
+  collection_move_unsupported: {
+    status: 409,
+    title: 'Moving Between Different Curators Is Unsupported',
+    retryable: false,
+  },
   member_restore_stale: { status: 409, title: 'Collection Member Restore Stale', retryable: false },
   member_restore_occupied: { status: 409, title: 'Collection Member Placement Occupied', retryable: false },
   member_restore_expired: { status: 409, title: 'Collection Member Restore Expired', retryable: false },
