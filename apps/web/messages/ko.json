@@ -4407,5 +4407,9 @@
   "ctx_reader_property_key": "정확한 속성 키",
   "ctx_reader_no_defaults": "제공된 기본 규칙이 없습니다.",
   "library_entries_first_page": "첫 페이지",
-  "library_entries_page_empty": "이 페이지에 표시된 추적 항목이 없습니다."
+  "library_entries_page_empty": "이 페이지에 표시된 추적 항목이 없습니다.",
+  "authored_discard": "초안 버리기",
+  "authored_discard_warning": "이 필드의 아직 제출하지 않은 대체안을 버릴까요? 본문, 언어, 라이선스, 인용 출처와 창작물 선언이 지워집니다. 다른 필드의 초안과 공개된 본문은 유지됩니다.",
+  "authored_keep_draft": "계속 편집",
+  "authored_discard_confirm": "버리고 다시 작성"
 }

@@ -4407,5 +4407,9 @@
   "ctx_reader_property_key": "完整屬性鍵",
   "ctx_reader_no_defaults": "未提供預設規則。",
   "library_entries_first_page": "第一頁",
-  "library_entries_page_empty": "此頁沒有顯示任何追蹤項目。"
+  "library_entries_page_empty": "此頁沒有顯示任何追蹤項目。",
+  "authored_discard": "捨棄草稿",
+  "authored_discard_warning": "捨棄此欄位尚未提交的替換內容？正文、語言、授權、引用和原創聲明都將清空。其他欄位的草稿和公開正文將保留。",
+  "authored_keep_draft": "繼續編輯",
+  "authored_discard_confirm": "捨棄並重新撰寫"
 }

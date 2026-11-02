@@ -4407,5 +4407,9 @@
   "ctx_reader_property_key": "Clé exacte de la propriété",
   "ctx_reader_no_defaults": "Aucune règle par défaut n’est fournie.",
   "library_entries_first_page": "Première page",
-  "library_entries_page_empty": "Aucune entrée suivie ne s’affiche sur cette page."
+  "library_entries_page_empty": "Aucune entrée suivie ne s’affiche sur cette page.",
+  "authored_discard": "Abandonner le brouillon",
+  "authored_discard_warning": "Abandonner le remplacement non envoyé pour ce champ ? Le texte, la langue, la licence, la citation et la déclaration de création originale seront effacés. Les brouillons des autres champs et le texte public seront conservés.",
+  "authored_keep_draft": "Continuer à modifier",
+  "authored_discard_confirm": "Abandonner et recommencer"
 }

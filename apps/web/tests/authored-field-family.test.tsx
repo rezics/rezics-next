@@ -231,6 +231,7 @@ test('Authored uncertain, stale, current-read recovery and denied private conten
     expect(request.session).toBe(initial.ok ? initial.session : undefined);
     expect(input(host, m.authored_language()).disabled).toBe(true);
     expect(host.querySelector('fieldset')!.disabled).toBe(true);
+    expect(within(host).getByRole('button', { name: m.authored_discard() }).disabled).toBe(true);
     expect(input(host, m.authored_text()).textContent).toContain('An original frozen private draft.');
     expect(within(host).getByRole('region', { name: m.authored_selected() }).textContent).not.toContain(
       'frozen private',
@@ -239,6 +240,7 @@ test('Authored uncertain, stale, current-read recovery and denied private conten
     expect(propose.mock.calls.map(([command]) => command)).toEqual([request, request]);
     expect(host.textContent).toContain(m.authored_submitted());
     expect(host.textContent).not.toContain(m.candidate_selected());
+    expect(within(host).queryByRole('button', { name: m.authored_discard() })).toBeNull();
     await click(host, m.correction_review());
     const candidate = within(host).getByRole('region', { name: m.authored_candidate() });
     expect(candidate.textContent).toContain('An original frozen private draft.');
@@ -308,6 +310,7 @@ test('Authored uncertain, stale, current-read recovery and denied private conten
     expect(input(host, m.authored_language()).disabled).toBe(true);
     expect(within(host).getByRole('button', { name: m.correction_submit() }).disabled).toBe(true);
     expect(input(host, m.authored_text()).textContent).toContain('A draft retained for explicit stale review.');
+    expect(within(host).getByRole('button', { name: m.authored_discard() }).disabled).toBe(true);
     expect(staleReads).not.toHaveBeenCalled();
     await click(host, m.authored_review_draft());
     expect(staleReads).toHaveBeenCalledTimes(1);
@@ -432,3 +435,82 @@ test('Authored full supplied bodies, names, citations and provenance grow only w
     await view.close();
   }
 });
+
+test('discard confirms only the active unsent field, preserves another draft and public provenance, and focuses a fresh composer', async () => {
+  const view = await mountedFamily();
+  const {
+    host,
+    window,
+    render,
+    user,
+    within,
+    AuthoredField,
+    authoredFixture,
+    authoredProperty,
+    m,
+    input,
+    compose,
+    click,
+  } = view;
+  try {
+    const fixture = authoredFixture();
+    const initial = await fixture.transport.read();
+    if (!initial.ok) throw new Error('Expected authored fixture');
+    // Local two-field metadata seam: native proposal and comparison interfaces remain unchanged.
+    const other = 'test:other-authored';
+    initial.release.properties[other] = structuredClone(initial.release.properties[authoredProperty]!);
+    initial.release.types[initial.public.subject.type]!.properties.push(other);
+    const read = mock(async (property = authoredProperty) => ({ ...initial, property }));
+    await render(
+      <AuthoredField
+        initial={initial}
+        locale="en"
+        transport={{ ...fixture.transport, read }}
+        confirm={fixture.confirm}
+      />,
+    );
+    const select = within(host).getByRole('combobox');
+    const field = async (property: string) => act(async () => user.selectOptions(select, property));
+    await compose(host, 'First field retained.');
+    await field(other);
+    await compose(host, 'Second field discarded.');
+    const selected = within(host).getByRole('region', { name: m.authored_selected() });
+    const publicMarkup = selected.innerHTML;
+    const calls = structuredClone(fixture.calls);
+    await click(host, m.authored_discard());
+    expect(host.textContent).toContain(m.authored_discard_warning());
+    await click(host, m.authored_keep_draft());
+    expect(input(host, m.authored_text()).textContent).toContain('Second field discarded.');
+    expect(window.document.activeElement).toBe(within(host).getByRole('button', { name: m.authored_discard() }));
+    await click(host, m.authored_discard());
+    await click(host, m.authored_discard_confirm());
+    await act(async () => {
+      await Bun.sleep(20);
+    });
+    expect(input(host, m.authored_text()).textContent).toBe('');
+    expect(window.document.activeElement).toBe(input(host, m.authored_text()));
+    for (const name of [m.authored_language(), m.authored_licence(), m.authored_citation()])
+      expect(input(host, name).value).toBe('');
+    expect(within(host).getByRole('checkbox', { name: m.authored_original() }).getAttribute('aria-checked')).toBe(
+      'false',
+    );
+    expect(selected.innerHTML).toBe(publicMarkup);
+    expect(fixture.calls).toEqual(calls);
+    expect(read).toHaveBeenCalledTimes(1);
+    await field(authoredProperty);
+    expect(input(host, m.authored_text()).textContent).toContain('First field retained.');
+    expect(input(host, m.authored_language()).value).toBe('en');
+    expect(within(host).getByRole('checkbox', { name: m.authored_original() }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    await field(other);
+    await act(async () => user.click(within(host).getByRole('checkbox', { name: m.authored_original() })));
+    await click(host, m.authored_discard());
+    expect(host.textContent).not.toContain(m.authored_discard_warning());
+    expect(within(host).getByRole('checkbox', { name: m.authored_original() }).getAttribute('aria-checked')).toBe(
+      'false',
+    );
+  } finally {
+    await view.close();
+  }
+}, 15_000);

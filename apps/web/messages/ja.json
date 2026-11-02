@@ -4407,5 +4407,9 @@
   "ctx_reader_property_key": "正確なプロパティキー",
   "ctx_reader_no_defaults": "既定のルールは提供されていません。",
   "library_entries_first_page": "最初のページ",
-  "library_entries_page_empty": "このページに追跡中の項目は表示されていません。"
+  "library_entries_page_empty": "このページに追跡中の項目は表示されていません。",
+  "authored_discard": "下書きを破棄",
+  "authored_discard_warning": "この項目の未送信の置き換え案を破棄しますか？本文、言語、ライセンス、引用元、オリジナル作品の申告が消去されます。他の項目の下書きと公開テキストは保持されます。",
+  "authored_keep_draft": "編集を続ける",
+  "authored_discard_confirm": "破棄して書き直す"
 }

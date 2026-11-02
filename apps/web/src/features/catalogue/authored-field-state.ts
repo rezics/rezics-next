@@ -18,6 +18,7 @@ type AuthoredState = {
 };
 type Action =
   | { type: 'edit'; property: string; change: Partial<AuthoredDraft> }
+  | { type: 'discard'; property: string }
   | { type: 'submit'; command: AuthoredCommand }
   | { type: 'result'; result: ProposalResult }
   | { type: 'read'; read: AuthoredRead; reviewDraft: boolean }
@@ -42,6 +43,16 @@ export function initialAuthoredState(initial: AuthoredRead): AuthoredState {
 /** The frozen request and its notice move together. Metadata and late editor emissions cannot dismiss rejection. */
 export function authoredState(state: AuthoredState, action: Action): AuthoredState {
   switch (action.type) {
+    case 'discard':
+      if (
+        !state.drafts[action.property] ||
+        state.command ||
+        state.proposed ||
+        state.failure === 'stale' ||
+        state.failure === 'denied'
+      )
+        return state;
+      return { ...state, drafts: { ...state.drafts, [action.property]: blank() }, failure: undefined };
     case 'edit': {
       const draft = state.drafts[action.property];
       if (!draft || state.command || state.proposed || state.failure === 'denied') return state;

@@ -1,6 +1,7 @@
 import { useCandidateWork, type CandidateWork } from '../../subject/candidate-lifetime';
 import { useEffect, useId, useReducer, useRef, useState, type ComponentProps } from 'react';
 import { RichTextEditor } from '@rezics/ui';
+import { hasDocumentContent } from '@rezics/document';
 import { DocumentBody } from '../../document-body';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -128,6 +129,7 @@ function AuthoredFieldLive({
     draft: `${formId}-draft`,
     draftHint: `${formId}-draft-hint`,
     errors: `${formId}-errors`,
+    discard: `${formId}-discard`,
   };
   const o = { locale: locale as never };
   const [metadata, setMetadata] = useState(initial);
@@ -143,6 +145,10 @@ function AuthoredFieldLive({
   const [errors, setErrors] = useState<Violation[]>([]);
   const [reviewing, setReviewing] = useState(false);
   const [proposalBody, setProposalBody] = useState<AuthoredBody | null>();
+  const [discarding, setDiscarding] = useState<string>();
+  const [editorVersion, setEditorVersion] = useState(0);
+  const editorGeneration = useRef(0);
+  const discardButton = useRef<HTMLButtonElement>(null);
   const running = useRef(false);
   const session = useRef(initial.ok ? initial.session : undefined);
   const requestedProperty = useRef(initial.ok ? initial.property : '');
@@ -170,13 +176,44 @@ function AuthoredFieldLive({
         (statement.rank === 'normal' || statement.rank === 'preferred'),
     );
   const locked = busy || !!command || !!proposed || !current || failure === 'denied';
+  const canDiscard = !locked && failure !== 'stale' && !!draft;
+  const confirmingDiscard = canDiscard && discarding === property;
   const title = current ? pageText(current.public.subject.labels, locale).text : '';
   const id = current?.public.subject.id;
   const update = (change: Partial<AuthoredDraft>) => {
-    if (!work.live() || locked || running.current || !draft) return;
+    if (
+      !work.live() ||
+      locked ||
+      confirmingDiscard ||
+      running.current ||
+      !draft ||
+      editorGeneration.current !== editorVersion
+    )
+      return;
     dispatch({ type: 'edit', property, change });
     setErrors([]);
   };
+  function discard() {
+    if (!work.live() || !canDiscard || running.current) return;
+    dispatch({ type: 'discard', property });
+    setErrors([]);
+    setDiscarding(undefined);
+    // Remount the composer to clear undo history and retire delayed emissions from the discarded editor.
+    setEditorVersion(++editorGeneration.current);
+  }
+  function cancelDiscard() {
+    setDiscarding(undefined);
+    discardButton.current?.focus();
+  }
+  function requestDiscard() {
+    if (!work.live() || !canDiscard || running.current || !draft) return;
+    if (
+      hasDocumentContent(draft.document) ||
+      [draft.language, draft.licence, draft.citation].some((text) => text.trim())
+    )
+      setDiscarding(property);
+    else discard();
+  }
 
   async function refresh(
     nextProperty = property,
@@ -258,6 +295,7 @@ function AuthoredFieldLive({
       !current ||
       !draft ||
       failure === 'stale' ||
+      confirmingDiscard ||
       failure === 'denied'
     )
       return;
@@ -442,7 +480,7 @@ function AuthoredFieldLive({
               id={ids.property}
               className={selectClassName}
               value={property}
-              disabled={locked}
+              disabled={locked || confirmingDiscard}
               onChange={(event) => void refresh(event.target.value)}
             >
               {authoredProperties(current.release, current.public.subject.type).map((id) => (
@@ -468,7 +506,7 @@ function AuthoredFieldLive({
               <Button
                 variant="outline"
                 className={actionClassName}
-                disabled={busy || !!command}
+                disabled={busy || !!command || confirmingDiscard}
                 onClick={() => void refresh(property, false, true)}
               >
                 {m.authored_reload_current_text({}, o)}
@@ -491,7 +529,7 @@ function AuthoredFieldLive({
               }}
             >
               <ContentItemFrame as="div" className="min-w-0 p-4">
-                <FieldSet disabled={locked} className="min-w-0 gap-4">
+                <FieldSet disabled={locked || confirmingDiscard} className="min-w-0 gap-4">
                   <FieldLegend className="mb-0 max-w-full">
                     <ContentItemHeading id={ids.draft} className="text-lg font-semibold">
                       {m.authored_replacement({}, o)}
@@ -523,10 +561,12 @@ function AuthoredFieldLive({
                     className="min-w-0 scroll-mt-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   >
                     <RichTextEditor
+                      key={`${property}:${editorVersion}`}
+                      autoFocus={editorVersion > 0}
                       value={draft.document}
                       label={labels.document}
                       labels={editorLabels()}
-                      disabled={locked}
+                      disabled={locked || confirmingDiscard}
                       onChange={(document) => update({ document })}
                       {...(draft.language ? { lang: draft.language } : {})}
                     />
@@ -619,6 +659,49 @@ function AuthoredFieldLive({
                     </Button>
                   )}
                 </FieldSet>
+                {!proposed && (
+                  <div className="mt-4 space-y-3">
+                    <Button
+                      ref={discardButton}
+                      type="button"
+                      variant="outline"
+                      className={actionClassName}
+                      disabled={!canDiscard}
+                      onClick={requestDiscard}
+                    >
+                      {m.authored_discard({}, o)}
+                    </Button>
+                    {confirmingDiscard && (
+                      <div
+                        role="group"
+                        aria-labelledby={ids.discard}
+                        className="space-y-3"
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') {
+                            event.preventDefault();
+                            cancelDiscard();
+                          }
+                        }}
+                      >
+                        <p id={ids.discard}>{m.authored_discard_warning({}, o)}</p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={actionClassName}
+                            autoFocus
+                            onClick={cancelDiscard}
+                          >
+                            {m.authored_keep_draft({}, o)}
+                          </Button>
+                          <Button type="button" className={actionClassName} onClick={discard}>
+                            {m.authored_discard_confirm({}, o)}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </ContentItemFrame>
             </form>
           )}

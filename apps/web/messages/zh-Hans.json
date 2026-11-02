@@ -4408,5 +4408,9 @@
   "ctx_reader_property_key": "完整属性键",
   "ctx_reader_no_defaults": "未提供默认规则。",
   "library_entries_first_page": "第一页",
-  "library_entries_page_empty": "此页没有显示任何追踪项目。"
+  "library_entries_page_empty": "此页没有显示任何追踪项目。",
+  "authored_discard": "丢弃草稿",
+  "authored_discard_warning": "丢弃此字段尚未提交的替换内容？正文、语言、许可、引用和原创声明都将清空。其他字段的草稿和公开正文将保留。",
+  "authored_keep_draft": "继续编辑",
+  "authored_discard_confirm": "丢弃并重新撰写"
 }

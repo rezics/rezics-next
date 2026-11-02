@@ -4429,5 +4429,9 @@
   "ctx_reader_property_key": "Exact property key",
   "ctx_reader_no_defaults": "No default rules are supplied.",
   "library_entries_first_page": "First page",
-  "library_entries_page_empty": "No tracked entries are shown on this page."
+  "library_entries_page_empty": "No tracked entries are shown on this page.",
+  "authored_discard": "Discard draft",
+  "authored_discard_warning": "Discard the unsent replacement for this field? Its text, language, licence, citation and original-work declaration will be cleared. Other field drafts and public text are kept.",
+  "authored_keep_draft": "Keep editing",
+  "authored_discard_confirm": "Discard and start again"
 }
