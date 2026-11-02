@@ -21,7 +21,8 @@ export type Community = {
 /** A separate native fixture, leaving the Home driver's population and composition intact. */
 export async function containerGrowthFixture() {
   const system = await createNativeContentSystemWithWriteRateOverrides(
-    { databaseUrl: process.env.DATABASE_URL! }, HIGH_RATE_OVERRIDES,
+    { databaseUrl: process.env.DATABASE_URL! },
+    HIGH_RATE_OVERRIDES,
   );
   const db = await openGrowthDatabase(system.database.pool.options.connectionString!);
   configureTestReceiptKeys(db.pool);
@@ -37,24 +38,31 @@ export async function containerGrowthFixture() {
     tokens: system.tokenKeys,
     receiptKeys: testReceiptKeys(),
     writeRate: createWriteRateLimiter({
-      secret: crypto.randomUUID() + crypto.randomUUID(), overrides: HIGH_RATE_OVERRIDES,
+      secret: crypto.randomUUID() + crypto.randomUUID(),
+      overrides: HIGH_RATE_OVERRIDES,
     }),
     ratePeer: () => '127.0.0.1',
   });
   async function call<T>(
-    method: string, path: string, status: number, actor: ContentCredential | null = owner,
-    body?: unknown, head?: string,
+    method: string,
+    path: string,
+    status: number,
+    actor: ContentCredential | null = owner,
+    body?: unknown,
+    head?: string,
   ): Promise<T> {
-    const response = await kernel.handle(new Request(`https://content.test${path}`, {
-      method,
-      headers: {
-        ...(actor ? { authorization: `Bearer ${actor.bearer}` } : {}),
-        ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(crypto.randomUUID()) }),
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-        ...(head === undefined ? {} : { 'if-match': JSON.stringify(head) }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    }));
+    const response = await kernel.handle(
+      new Request(`https://content.test${path}`, {
+        method,
+        headers: {
+          ...(actor ? { authorization: `Bearer ${actor.bearer}` } : {}),
+          ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(crypto.randomUUID()) }),
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...(head === undefined ? {} : { 'if-match': JSON.stringify(head) }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
     const value: unknown = await response.json();
     expect({ status: response.status, value }).toMatchObject({ status });
     return value as T;
@@ -67,19 +75,31 @@ export async function containerGrowthFixture() {
       title: 'Fixed growth host',
     });
     const { realm } = await call<{ realm: Community['realm'] }>('POST', '/v1/realms', 201, owner, {
-      spaceId: space.spaceId, contextId: context.id, visibility, title: 'Fixed growth Realm',
+      spaceId: space.spaceId,
+      contextId: context.id,
+      visibility,
+      title: 'Fixed growth Realm',
     });
     return { space, realm };
   }
-  async function measure(name: string, selected: { space: Community['space']; realm?: Community['realm'] }, axis: Axis, operation: () => Promise<unknown>) {
+  async function measure(
+    name: string,
+    selected: { space: Community['space']; realm?: Community['realm'] },
+    axis: Axis,
+    operation: () => Promise<unknown>,
+  ) {
     const route = routeOf(selected.space.spaceId)!;
     const actor = owner.actor.accountId;
     const at = '2020-01-01T00:00:00.000Z';
     const seriesId = crypto.randomUUID();
-    const positionBase = Number((await db.admin.query('SELECT position FROM core.partition WHERE partition_no=$1', [partitionOf(route)])).rows[0].position);
+    const positionBase = Number(
+      (await db.admin.query('SELECT position FROM core.partition WHERE partition_no=$1', [partitionOf(route)])).rows[0]
+        .position,
+    );
     const population: Population = {
       name: `${name}-${axis}-${selected.space.spaceId}`,
-      hotPartition: partitionOf(route), hotShare: 1,
+      hotPartition: partitionOf(route),
+      hotShare: 1,
       rows: ({ route: neighbourRoute, ordinal }) => {
         const rowRoute = axis === 'history' ? route : neighbourRoute;
         const spaceId = axis === 'history' ? selected.space.spaceId : newId(rowRoute);
@@ -90,41 +110,121 @@ export async function containerGrowthFixture() {
         const position = positionBase + ordinal * 100 + 1;
         const response = { spaceId, revisionId: spaceRevisions.at(-1) };
         return {
-          ...(axis === 'population' ? {
-            'community.space': [{ route: rowRoute, space_id: spaceId, state: 'active',
-              head_revision_id: spaceRevisions.at(-1), created_at: at, creator: actor }],
-            'access.resource_role_grant': [{ route: rowRoute, resource_id: spaceId, subject_kind: 'identity',
-              subject_id: actor, grant_role: 'community.space.owner', valid: '(,)', transaction_id: transactionId }],
-            'community.realm': [{ route: rowRoute, realm_id: realmId, space_id: spaceId, state: 'active',
-              visibility: 'protected', context_id: GLOBAL_CONTEXT,
-              head_revision_id: realmRevisions.at(-1), created_at: at, creator: actor }],
-          } : {}),
-          'core.receipt': [{ partition_no: partitionOf(route), principal_kind: 'account', principal_id: actor,
-            command_kind: 'community.space.update', idempotency_key: `${seriesId}-${ordinal}`,
-            request_digest: Buffer.alloc(32), epoch: 1, position, transaction_id: transactionId, response }],
-          'core.outbox': [{ partition_no: partitionOf(route), position, event_seq: 0, event_count: 1, epoch: 1,
-            id: crypto.randomUUID(), type: 'com.rezics.community.space.updated.v1', subject: spaceId, data: response }],
-          'editorial.write_basis': [{ partition_no: partitionOf(route), transaction_id: transactionId, epoch: 1, position,
-            principal_kind: 'account', principal_id: actor, client_id: owner.actor.clientId, requested_by: null, recorded_at: at }],
+          ...(axis === 'population'
+            ? {
+                'community.space': [
+                  {
+                    route: rowRoute,
+                    space_id: spaceId,
+                    state: 'active',
+                    head_revision_id: spaceRevisions.at(-1),
+                    created_at: at,
+                    creator: actor,
+                  },
+                ],
+                'access.resource_role_grant': [
+                  {
+                    route: rowRoute,
+                    resource_id: spaceId,
+                    subject_kind: 'identity',
+                    subject_id: actor,
+                    grant_role: 'community.space.owner',
+                    valid: '(,)',
+                    transaction_id: transactionId,
+                  },
+                ],
+                'community.realm': [
+                  {
+                    route: rowRoute,
+                    realm_id: realmId,
+                    space_id: spaceId,
+                    state: 'active',
+                    visibility: 'protected',
+                    context_id: GLOBAL_CONTEXT,
+                    head_revision_id: realmRevisions.at(-1),
+                    created_at: at,
+                    creator: actor,
+                  },
+                ],
+              }
+            : {}),
+          'core.receipt': [
+            {
+              partition_no: partitionOf(route),
+              principal_kind: 'account',
+              principal_id: actor,
+              command_kind: 'community.space.update',
+              idempotency_key: `${seriesId}-${ordinal}`,
+              request_digest: Buffer.alloc(32),
+              epoch: 1,
+              position,
+              transaction_id: transactionId,
+              response,
+            },
+          ],
+          'core.outbox': [
+            {
+              partition_no: partitionOf(route),
+              position,
+              event_seq: 0,
+              event_count: 1,
+              epoch: 1,
+              id: crypto.randomUUID(),
+              type: 'com.rezics.community.space.updated.v1',
+              subject: spaceId,
+              data: response,
+            },
+          ],
+          'editorial.write_basis': [
+            {
+              partition_no: partitionOf(route),
+              transaction_id: transactionId,
+              epoch: 1,
+              position,
+              principal_kind: 'account',
+              principal_id: actor,
+              client_id: owner.actor.clientId,
+              requested_by: null,
+              recorded_at: at,
+            },
+          ],
           'community.space_revision': spaceRevisions.map((revision_id, index) => ({
-            route: rowRoute, space_id: spaceId, revision_id,
+            route: rowRoute,
+            space_id: spaceId,
+            revision_id,
             predecessor: index ? spaceRevisions[index - 1] : null,
-            title: 'Retained host revision', summary: '', created_at: at, author: actor,
+            title: 'Retained host revision',
+            summary: '',
+            created_at: at,
+            author: actor,
           })),
-          'community.realm_revision': realmId === undefined ? [] : realmRevisions.map((revision_id, index) => ({
-            route: rowRoute, realm_id: realmId, revision_id,
-            predecessor: index ? realmRevisions[index - 1] : null,
-            title: 'Retained Realm revision', summary: '', visibility: 'protected', context_id: GLOBAL_CONTEXT,
-            created_at: at, author: actor,
-          })),
+          'community.realm_revision':
+            realmId === undefined
+              ? []
+              : realmRevisions.map((revision_id, index) => ({
+                  route: rowRoute,
+                  realm_id: realmId,
+                  revision_id,
+                  predecessor: index ? realmRevisions[index - 1] : null,
+                  title: 'Retained Realm revision',
+                  summary: '',
+                  visibility: 'protected',
+                  context_id: GLOBAL_CONTEXT,
+                  created_at: at,
+                  author: actor,
+                })),
         };
       },
       async finish(admin) {
-        await admin.query('UPDATE core.partition SET position=(SELECT max(position) FROM core.outbox WHERE partition_no=$1) WHERE partition_no=$1', [partitionOf(route)]);
+        await admin.query(
+          'UPDATE core.partition SET position=(SELECT max(position) FROM core.outbox WHERE partition_no=$1) WHERE partition_no=$1',
+          [partitionOf(route)],
+        );
       },
     };
     const report = await checkGrowth(db, {
-      name: `${name} ${axis}`, scales,
+      name: `${name} ${axis}`,
+      scales,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(_database, scale, previous) {
         await seed(db, population, { from: previous, to: scale });
@@ -132,8 +232,11 @@ export async function containerGrowthFixture() {
         const count = await db.admin.query<{ count: number }>(
           axis === 'history'
             ? 'SELECT count(*)::integer AS count FROM community.space_revision WHERE route=$1 AND space_id=$2'
-            : "SELECT count(*)::integer AS count FROM community.realm WHERE route BETWEEN $1 AND $1+15 AND realm_id<>$2",
-          [axis === 'history' ? route : partitionOf(route) * 16, axis === 'history' ? selected.space.spaceId : selected.realm?.realmId ?? selected.space.spaceId],
+            : 'SELECT count(*)::integer AS count FROM community.realm WHERE route BETWEEN $1 AND $1+15 AND realm_id<>$2',
+          [
+            axis === 'history' ? route : partitionOf(route) * 16,
+            axis === 'history' ? selected.space.spaceId : (selected.realm?.realmId ?? selected.space.spaceId),
+          ],
         );
         expect(count.rows[0]!.count).toBeGreaterThanOrEqual(axis === 'history' ? scale * 8 : scale);
         for (const [kind, id, head] of [
@@ -158,8 +261,18 @@ export async function containerGrowthFixture() {
     }
     return report;
   }
-  return { system, db, owner, outsider, call, community, measure,
-    async close() { await db.close(); await system.close(); },
+  return {
+    system,
+    db,
+    owner,
+    outsider,
+    call,
+    community,
+    measure,
+    async close() {
+      await db.close();
+      await system.close();
+    },
   };
 }
 export type ContainerGrowthFixture = Awaited<ReturnType<typeof containerGrowthFixture>>;
