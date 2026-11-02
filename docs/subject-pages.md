@@ -484,6 +484,7 @@ Controls follow the current emitted property definition: text and value language
 precision with its declared calendar, and quantity with explicit admitted units and optional bounds. No unit,
 calendar, date precision or word-count coverage is inferred. Known, unknown and no-value remain distinct.
 Qualifiers use the property's admitted definitions. Citations retain their statement-level groups and parts.
+Explicit current keyboard additions focus the exact new part's first editing control or the empty reference's property chooser (its labelled group when no chooser exists); local identity binds this intent, and pointer use, rejected additions, moved focus and retired or replaced targets remain quiet.
 A contributor can remove a qualifier, reference group or reference part added through the current draft controls;
 removal immediately returns focus to its surviving add control (or section if no choices remain). Removing the
 last added part leaves its local reference group available for another part or explicit group removal. Parts

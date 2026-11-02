@@ -55,6 +55,7 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
   const { StatementEditor, StatementFields, PartValue, EditorFailure } =
     await import('../src/features/catalogue/statement-editor-view');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+  const { catalogueEditor, CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
   const previousLocale = getLocale;
@@ -162,7 +163,7 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     return { ...read, source: read.source };
   };
   const draftChanges: Record<string, StatementInput> = {};
-  function Fields({
+  const Fields = catalogueEditor(function Fields({
     name,
     current,
     initial,
@@ -203,7 +204,7 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
         />
       </section>
     );
-  }
+  });
   const fetch = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Supplied family must not add network reads'));
   try {
     const supplied = statementFixture('ready', 'en', 'schema:author');
@@ -437,6 +438,76 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     const replacementGroup = host.querySelectorAll('fieldset').at(-1)!;
     expect(control(replacementGroup, m.correction_url()).value).toBe('https://example.org/replacement-holder');
     expect(buttons(host, m.contribution_confirm())).toHaveLength(0);
+
+    // Shared additions orient only an explicit current keyboard intent, by local identity.
+    const FocusFields = catalogueEditor(StatementFields);
+    let focusDraft = structuredClone(original),
+      delayed = focusDraft,
+      defer = false,
+      reading = 0;
+    const focusFields = () => (
+      <CatalogueCurrentReading visible ready revision={String(reading)}>
+        <FocusFields
+          current={current}
+          draft={focusDraft}
+          locale="en"
+          change={(next) => {
+            delayed = next;
+            if (!defer) {
+              focusDraft = next;
+              show(focusFields());
+            }
+          }}
+        />
+      </CatalogueCurrentReading>
+    );
+    const activate = async (target: HTMLButtonElement, keyboard = true) =>
+      act(async () => {
+        target.focus();
+        target.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: keyboard ? 0 : 1 }));
+      });
+    const addChosen = async (chooser: HTMLInputElement | HTMLSelectElement) => {
+      await input(chooser, 'schema:position');
+      await activate(button(chooser.closest('[data-add-part]')!, m.correction_add()));
+    };
+    outside.focus();
+    await render(focusFields());
+    expect(window.document.activeElement).toBe(outside);
+    const preserved = host.querySelector('input');
+    await addChosen(control(host, m.correction_add_qualifier()));
+    const localQualifier = button(host, m.correction_remove_qualifier()).closest('[data-statement-addition]')!;
+    expect(window.document.activeElement).toBe(localQualifier.querySelector('select'));
+    expect(focusDraft.qualifiers!.slice(0, -1)).toEqual(original.qualifiers!);
+    expect(host.querySelector('input')).toBe(preserved);
+    await activate(button(host, m.correction_add_reference()));
+    const newReference = host.querySelectorAll('fieldset').at(-1)!;
+    expect(window.document.activeElement).toBe(control(newReference, m.correction_add_part()));
+    await addChosen(control(newReference, m.correction_add_part()));
+    expect(window.document.activeElement).toBe(newReference.querySelector('select'));
+    expect(focusDraft.references.slice(0, -1)).toEqual(original.references);
+    const pointerAdd = button(host, m.correction_add_reference());
+    await activate(pointerAdd, false);
+    expect(window.document.activeElement).toBe(pointerAdd);
+    defer = true;
+    await addChosen(control(host, m.correction_add_qualifier()));
+    outside.focus();
+    focusDraft = delayed;
+    await render(focusFields());
+    expect(window.document.activeElement).toBe(outside);
+    await activate(pointerAdd);
+    reading++;
+    focusDraft = delayed;
+    await render(focusFields());
+    expect(window.document.activeElement).toBe(pointerAdd);
+    await activate(pointerAdd);
+    await render(focusFields()); // Rejected draft: unrelated renders retire its intent.
+    focusDraft = delayed;
+    await render(focusFields());
+    expect(window.document.activeElement).toBe(pointerAdd);
+    await activate(pointerAdd);
+    focusDraft = { ...delayed, references: delayed.references.map((item) => structuredClone(item)) };
+    await render(focusFields()); // A replacement at the same index is never the requested holder.
+    expect(window.document.activeElement).toBe(pointerAdd);
 
     // Supplied-data growth only: 64 parts fit FOUR references of 16, never 64 references
     // or qualifiers. Native bounds stay intact. An unrelated population cannot be traversed.

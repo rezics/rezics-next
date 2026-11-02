@@ -418,7 +418,9 @@ function PartEditor({
   control,
   feedback,
   removal,
+  localKey,
 }: {
+  localKey: number;
   removal?: ReactNode;
   feedback?: ScalarFeedback | undefined;
   control?: ((part: SnakInput, change: (value: SnakInput['value']) => void) => ReactNode) | undefined;
@@ -430,6 +432,7 @@ function PartEditor({
   return (
     <ContentItemFrame
       as="div"
+      data-statement-addition={localKey}
       className="grid min-w-0 gap-3 rounded-lg border border-border bg-card p-3 [overflow-wrap:anywhere] md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:items-start"
     >
       <p className="min-w-0 font-medium leading-snug">
@@ -466,7 +469,7 @@ function AddPart({
   read: StatementFieldsRead;
   locale: string;
   label: string;
-  onAdd: (id: string) => void;
+  onAdd: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const selectId = useId();
   const [property, setProperty] = useState('');
@@ -503,8 +506,8 @@ function AddPart({
         type="button"
         variant="outline"
         disabled={!property}
-        onClick={() => {
-          onAdd(property);
+        onClick={(event) => {
+          onAdd(property, event);
           setProperty('');
         }}
       >
@@ -538,6 +541,31 @@ export function StatementFields({
 }) {
   const o = { locale: locale as never };
   const lifetime = useEditorLifetime();
+  const additionFocus = useRef<{
+    key: number;
+    scope: HTMLElement;
+    active: () => boolean;
+    cancel: () => void;
+  } | null>(null);
+  useLayoutEffect(() => () => additionFocus.current?.cancel(), []);
+  useLayoutEffect(() => {
+    const intent = additionFocus.current;
+    if (!intent) return;
+    const admitted = lifetime.active() && intent.active();
+    intent.cancel();
+    if (!admitted) return;
+    const group = intent.scope.querySelector<HTMLElement>(`[data-statement-addition="${intent.key}"]`);
+    if (!group?.isConnected || group.closest('[hidden], [inert]')) return;
+    // A scalar's state selector or custom picker is its first editing control. An empty
+    // citation starts at its property chooser, falling back to its labelled fieldset.
+    const target =
+      [...group.querySelectorAll<HTMLElement>('input:not([type="hidden"]), textarea, select, [role="combobox"]')].find(
+        (control) => !control.matches(':disabled, [aria-disabled="true"]') && !control.closest('[hidden], [inert]'),
+      ) ??
+      group.querySelector<HTMLElement>('[role="group"][tabindex="-1"]') ??
+      (group.tagName === 'FIELDSET' ? group : null);
+    target?.focus();
+  });
   const addReference = useRef<HTMLButtonElement>(null);
   const removalFocus = useRef<{ focus: () => void; isConnected: boolean } | null>(null);
   const cancelFocus = useRef<HTMLButtonElement>(null);
@@ -570,8 +598,38 @@ export function StatementFields({
     }
     return entry;
   }
-  function addition<T extends object>(value: T): T {
-    identity(value, true);
+  function addition<T extends object>(value: T, event: MouseEvent<HTMLButtonElement>): T {
+    const entry = identity(value, true);
+    additionFocus.current?.cancel();
+    const trigger = event.currentTarget;
+    const document = trigger.ownerDocument;
+    const scope = trigger.closest('section');
+    if (
+      event.detail !== 0 ||
+      !lifetime.active() ||
+      !trigger.isConnected ||
+      trigger.matches(':disabled') ||
+      document.activeElement !== trigger ||
+      !scope
+    )
+      return value;
+    const cancel = () => {
+      document.removeEventListener('focusin', cancel);
+      document.removeEventListener('pointerdown', cancel, true);
+      additionFocus.current = null;
+    };
+    document.addEventListener('focusin', cancel);
+    document.addEventListener('pointerdown', cancel, true);
+    additionFocus.current = {
+      key: entry.key,
+      scope,
+      active: () =>
+        lifetime.active() &&
+        trigger.isConnected &&
+        (document.activeElement === trigger ||
+          (trigger.matches(':disabled') && document.activeElement === document.body)),
+      cancel,
+    };
     return value;
   }
   function revision<T extends object>(previous: T, next: T): T {
@@ -746,6 +804,7 @@ export function StatementFields({
         </ContentItemHeading>
         {(draft.qualifiers ?? []).map((part, index) => (
           <PartEditor
+            localKey={identity(part).key}
             control={partControl}
             feedback={scalarFeedback(`qualifier-${index}`)}
             key={identity(part).key}
@@ -783,12 +842,12 @@ export function StatementFields({
           read={current}
           locale={locale}
           label={m.correction_add_qualifier({}, o)}
-          onAdd={(id) =>
+          onAdd={(id, event) =>
             change({
               ...draft,
               qualifiers: [
                 ...(draft.qualifiers ?? []),
-                addition({ property: { id }, value: { type: 'value', content: '' } }),
+                addition({ property: { id }, value: { type: 'value', content: '' } }, event),
               ],
             })
           }
@@ -802,6 +861,7 @@ export function StatementFields({
         {draft.references.map((reference, index) => (
           <fieldset
             key={identity(reference).key}
+            data-statement-addition={identity(reference).key}
             tabIndex={-1}
             className={`${sectionClassName} border border-border bg-card p-4`}
           >
@@ -810,6 +870,7 @@ export function StatementFields({
             </legend>
             {reference.parts.map((part, partIndex) => (
               <PartEditor
+                localKey={identity(part).key}
                 control={partControl}
                 feedback={scalarFeedback(`reference-${index}-part-${partIndex}`)}
                 key={identity(part).key}
@@ -853,14 +914,17 @@ export function StatementFields({
               read={current}
               locale={locale}
               label={m.correction_add_part({}, o)}
-              onAdd={(id) =>
+              onAdd={(id, event) =>
                 change({
                   ...draft,
                   references: draft.references.map((item, i) =>
                     i !== index
                       ? item
                       : revision(item, {
-                          parts: [...item.parts, addition({ property: { id }, value: { type: 'value', content: '' } })],
+                          parts: [
+                            ...item.parts,
+                            addition({ property: { id }, value: { type: 'value', content: '' } }, event),
+                          ],
                         }),
                   ),
                 })
@@ -887,7 +951,7 @@ export function StatementFields({
           type="button"
           variant="outline"
           disabled={draft.references.length >= 16}
-          onClick={() => change({ ...draft, references: [...draft.references, addition({ parts: [] })] })}
+          onClick={(event) => change({ ...draft, references: [...draft.references, addition({ parts: [] }, event)] })}
         >
           {m.correction_add_reference({}, o)}
         </Button>
