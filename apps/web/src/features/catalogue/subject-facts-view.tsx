@@ -288,7 +288,7 @@ function FactField({
   busy: boolean;
   canStage: boolean;
   onStage: (source: string | null) => void;
-  onChange: (draft: FactDraft) => void;
+  onChange: (draft: FactDraft, original: FactDraft) => void;
   onDiscard?: ((draft: FactDraft) => void) | undefined;
   href: string;
   editorHref?: string | undefined;
@@ -422,7 +422,9 @@ function FactField({
                   draft={draft.statement}
                   current={{ ...read, source: selected.find((item) => item.id === draft.source) ?? null }}
                   locale={locale}
-                  change={(statement) => onChange({ ...draft, statement, command: undefined, result: undefined })}
+                  change={(statement) =>
+                    onChange({ ...draft, statement, command: undefined, result: undefined }, draft)
+                  }
                   guideReturn={`${href}/edit`}
                   {...(editorHref ? { guideReturn: editorHref } : {})}
                 />
@@ -435,7 +437,7 @@ function FactField({
                   className="size-11 after:inset-0"
                   checked={draft.included}
                   disabled={busy || locked}
-                  onCheckedChange={(included) => onChange({ ...draft, included: included === true })}
+                  onCheckedChange={(included) => onChange({ ...draft, included: included === true }, draft)}
                 />
                 <FieldLabel
                   className="min-h-11 min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]"
@@ -642,11 +644,14 @@ function SubjectFactsLive({
   const excluded = drafts.filter((draft) => !admitted.has(draft.property));
   const staleDraft = !!excluded.length;
   const draftLabels = useRef(new Map<string, ReturnType<typeof pageText>>());
-  const discardState = useRef({ current, busy });
-  discardState.current = { current, busy };
-  function discard(original: FactDraft) {
+  const discardState = useRef({ current, busy, admitted });
+  discardState.current = { current, busy, admitted };
+  function editable() {
     const now = discardState.current;
-    if (!lifetime.active() || !now.current || now.current !== current || now.busy || running.current) return;
+    return lifetime.active() && !!now.current && now.current === current && !now.busy && !running.current;
+  }
+  function discard(original: FactDraft) {
+    if (!editable()) return;
     setDrafts((previous) => previous.filter((item) => item !== original || !!item.command || factLocked(item)));
   }
   const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
@@ -679,9 +684,13 @@ function SubjectFactsLive({
     undefined,
     factWorkspaceAddress,
   );
-  function change(next: FactDraft) {
-    if (!lifetime.active()) return;
-    setDrafts((previous) => previous.map((item) => (item.property === next.property ? next : item)));
+  function change(next: FactDraft, original: FactDraft) {
+    if (!editable()) return;
+    setDrafts((previous) =>
+      editable() && discardState.current.admitted.has(original.property)
+        ? previous.map((item) => (item === original && !factLocked(item) ? next : item))
+        : previous,
+    );
   }
   async function submit() {
     if (!lifetime.active()) return;

@@ -160,21 +160,31 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
     undefined,
     correctionAddress,
   );
-  const discardState = useRef({ read, disabled, ports, busy });
-  discardState.current = { read, disabled, ports, busy };
-  function discard(original: FactDraft) {
+  const discardState = useRef({ read, disabled, ports, busy, admitted });
+  discardState.current = { read, disabled, ports, busy, admitted };
+  function editable() {
     const now = discardState.current;
-    if (
-      !active() ||
-      !now.read?.public ||
-      now.read !== read ||
-      now.disabled ||
-      !now.ports ||
-      now.busy ||
-      running.current
-    )
-      return;
+    return (
+      active() &&
+      !!now.read?.public &&
+      now.read === read &&
+      !now.disabled &&
+      !!now.ports &&
+      !now.busy &&
+      !running.current
+    );
+  }
+  function discard(original: FactDraft) {
+    if (!editable()) return;
     setDrafts((previous) => previous.filter((item) => item !== original || !!item.command || factLocked(item)));
+  }
+  function change(next: FactDraft, original: FactDraft) {
+    if (!editable()) return;
+    setDrafts((previous) =>
+      editable() && discardState.current.admitted.has(original.property)
+        ? previous.map((draft) => (draft === original && !factLocked(draft) ? next : draft))
+        : previous,
+    );
   }
   async function submit() {
     if (!active() || !subject || !read || !ports || disabled || running.current || needsReconciliation) return;
@@ -336,12 +346,7 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
                       canStage={drafts.length < factLimit}
                       draft={drafts.find((draft) => draft.property === property)}
                       onDiscard={discard}
-                      onChange={(next) =>
-                        active() &&
-                        setDrafts((previous) =>
-                          previous.map((draft) => (draft.property === next.property ? next : draft)),
-                        )
-                      }
+                      onChange={change}
                       onReview={(address) => active() && setReviewing(address)}
                       onStage={(source) => {
                         if (!active()) return;
