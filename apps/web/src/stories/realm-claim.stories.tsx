@@ -79,7 +79,15 @@ function ClaimScenario({
   path?: string;
 }) {
   const adapter = useMemo(() => claimExampleAdapter(scenario), [scenario]);
-  return <ClaimPanelPage initial={initial} adapter={adapter} ready={ready} load={load} path={path} />;
+  return (
+    <ClaimPanelPage
+      initial={initial}
+      adapter={adapter}
+      ready={ready}
+      load={load}
+      {...(path === undefined ? {} : { path })}
+    />
+  );
 }
 
 const approvedReceipt: RealmClaimStatus = {
