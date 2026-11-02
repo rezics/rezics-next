@@ -92,17 +92,21 @@ function targetKey(target: CollectionBulkTarget): string {
     }
     return target.subjectId;
   }
-  if (
-    routeOf(target.collectionId) === null ||
-    routeOf(target.collectionId) !== routeOf(target.memberId)
-  )
+  if (routeOf(target.collectionId) === null || routeOf(target.collectionId) !== routeOf(target.memberId))
     throw new TypeError('Invalid occurrence expectation');
   if (target.expected) {
-    if (!/^[1-9][0-9]*$/.test(target.expected.memberRevision) ||
-      routeOf(target.expected.transactionId) === null || !Number.isFinite(Date.parse(target.expected.addedAt)))
+    if (
+      !/^[1-9][0-9]*$/.test(target.expected.memberRevision) ||
+      routeOf(target.expected.transactionId) === null ||
+      !Number.isFinite(Date.parse(target.expected.addedAt))
+    )
       throw new TypeError('Invalid native occurrence expectation');
-  } else if (routeOf(target.incarnation!) === null || !/^(0|[1-9][0-9]*)$/.test(target.admissionSequence!) ||
-    !Number.isSafeInteger(target.revision) || target.revision! < 1) {
+  } else if (
+    routeOf(target.incarnation!) === null ||
+    !/^(0|[1-9][0-9]*)$/.test(target.admissionSequence!) ||
+    !Number.isSafeInteger(target.revision) ||
+    target.revision! < 1
+  ) {
     throw new TypeError('Invalid occurrence expectation');
   }
   return `${target.collectionId}:${target.memberId}`;

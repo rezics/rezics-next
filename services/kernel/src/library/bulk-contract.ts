@@ -130,17 +130,19 @@ export type OccurrenceExpectation = Readonly<{
   transactionId: string;
   addedAt: string;
 }>;
-export type OccurrenceTarget = Readonly<{
-  kind: 'occurrence';
-  operationId: string;
-  ordinal: DecimalSequence;
-  subjectId: string;
-  collectionId: string;
-  memberId: string;
-} & (
-  | { expected: OccurrenceExpectation; incarnation?: never; admissionSequence?: never }
-  | { expected?: never; incarnation: string; admissionSequence: DecimalSequence }
-)>;
+export type OccurrenceTarget = Readonly<
+  {
+    kind: 'occurrence';
+    operationId: string;
+    ordinal: DecimalSequence;
+    subjectId: string;
+    collectionId: string;
+    memberId: string;
+  } & (
+    | { expected: OccurrenceExpectation; incarnation?: never; admissionSequence?: never }
+    | { expected?: never; incarnation: string; admissionSequence: DecimalSequence }
+  )
+>;
 export type ImmutableTarget = SubjectTarget | OccurrenceTarget;
 export type ReceiptLocator = Readonly<{
   partition: number;
