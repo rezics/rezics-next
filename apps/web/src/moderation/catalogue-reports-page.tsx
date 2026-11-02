@@ -3,10 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
-import {
-  actOnCatalogueReport,
-  type CatalogueReportCommand,
-} from './catalogue-reports-actions';
+import { actOnCatalogueReport, type CatalogueReportCommand } from './catalogue-reports-actions';
 import {
   CATALOGUE_REPORTS_LIMIT,
   loadCatalogueReports,
@@ -40,7 +37,10 @@ export type CatalogueReportsViewProps = {
 };
 
 function dateLabel(value: string) {
-  return value.replace('T', ' ').replace(/\.\d{3}Z$/u, ' UTC').replace(/Z$/u, ' UTC');
+  return value
+    .replace('T', ' ')
+    .replace(/\.\d{3}Z$/u, ' UTC')
+    .replace(/Z$/u, ' UTC');
 }
 
 function outcomeLabel(report: CatalogueReport) {
@@ -64,22 +64,36 @@ export function CatalogueReportsView({
   if (page.state !== 'loaded') {
     const content =
       page.state === 'loading' ? (
-        <p role="status" className="mt-4 text-muted-foreground">{m.moderation_queue_loading()}</p>
+        <p role="status" className="mt-4 text-muted-foreground">
+          {m.moderation_queue_loading()}
+        </p>
       ) : page.state === 'denied' ? (
-        <p role="status" className="mt-4 text-muted-foreground">{m.moderation_queue_read_denied()}</p>
+        <p role="status" className="mt-4 text-muted-foreground">
+          {m.moderation_queue_read_denied()}
+        </p>
       ) : page.state === 'stale' ? (
         <>
-          <p role="alert" className="mt-4 text-muted-foreground">{m.moderation_queue_stale()}</p>
-          <Button className="mt-4" onClick={onRestart}>{m.moderation_queue_restart()}</Button>
+          <p role="alert" className="mt-4 text-muted-foreground">
+            {m.moderation_queue_stale()}
+          </p>
+          <Button className="mt-4" onClick={onRestart}>
+            {m.moderation_queue_restart()}
+          </Button>
         </>
       ) : (
         <>
-          <p role="alert" className="mt-4 text-muted-foreground">{m.report_unavailable()}</p>
-          <Button className="mt-4" onClick={onRetryPage}>{m.moderation_queue_retry()}</Button>
+          <p role="alert" className="mt-4 text-muted-foreground">
+            {m.report_unavailable()}
+          </p>
+          <Button className="mt-4" onClick={onRetryPage}>
+            {m.moderation_queue_retry()}
+          </Button>
         </>
       );
     return (
-      <main className={`mx-auto w-full ${page.state === 'loading' ? 'max-w-6xl' : 'max-w-3xl'} px-4 py-6 sm:px-8 sm:py-10`}>
+      <main
+        className={`mx-auto w-full ${page.state === 'loading' ? 'max-w-6xl' : 'max-w-3xl'} px-4 py-6 sm:px-8 sm:py-10`}
+      >
         <h1 className="text-2xl font-semibold">{m.moderation_reports_heading()}</h1>
         {content}
       </main>
@@ -89,8 +103,7 @@ export function CatalogueReportsView({
   const selected = page.reports.find((report) => report.id === page.selectedId) ?? null;
   const locked = ['sending', 'uncertain', 'confirmed', 'failed'].includes(page.action.state);
   const canRestore =
-    page.subject.state === 'unavailable' ||
-    (page.subject.state === 'changed' && page.subject.visibility !== 'visible');
+    page.subject.state === 'unavailable' || (page.subject.state === 'changed' && page.subject.visibility !== 'visible');
   const failedText =
     page.action.state !== 'failed'
       ? null
@@ -179,20 +192,26 @@ export function CatalogueReportsView({
                 ) : page.subject.state === 'loaded' ? (
                   <div className="mt-2 break-words text-sm">
                     <p className="font-medium">{page.subject.subject.label}</p>
-                    {page.subject.subject.description ? <p className="mt-1 whitespace-pre-wrap">{page.subject.subject.description}</p> : null}
+                    {page.subject.subject.description ? (
+                      <p className="mt-1 whitespace-pre-wrap">{page.subject.subject.description}</p>
+                    ) : null}
                     <p className="text-muted-foreground">{page.subject.subject.type}</p>
                     <p className="break-all text-muted-foreground">{page.subject.subject.id}</p>
                   </div>
                 ) : page.subject.state === 'error' ? (
                   <div className="mt-2">
-                    <p role="alert" className="text-sm text-muted-foreground">{m.moderation_appeals_read_unavailable()}</p>
+                    <p role="alert" className="text-sm text-muted-foreground">
+                      {m.moderation_appeals_read_unavailable()}
+                    </p>
                     <Button className="mt-2" size="sm" variant="outline" onClick={onRetrySubject}>
                       {m.moderation_queue_retry()}
                     </Button>
                   </div>
                 ) : page.subject.state === 'changed' ? (
                   <p role="status" className="mt-2 text-sm">
-                    {m.catalogue_reports_visibility_confirmed({ visibility: visibilityLabel ?? page.subject.visibility })}
+                    {m.catalogue_reports_visibility_confirmed({
+                      visibility: visibilityLabel ?? page.subject.visibility,
+                    })}
                   </p>
                 ) : (
                   <p className="mt-2 text-sm text-muted-foreground">{m.moderation_target_unavailable()}</p>
@@ -200,7 +219,9 @@ export function CatalogueReportsView({
               </section>
               {page.action.state === 'uncertain' ? (
                 <div className="mt-5">
-                  <p role="alert" className="text-sm text-destructive">{m.moderation_queue_uncertain()}</p>
+                  <p role="alert" className="text-sm text-destructive">
+                    {m.moderation_queue_uncertain()}
+                  </p>
                   <p className="mt-1 text-sm text-muted-foreground">{m.moderation_queue_retry_hint()}</p>
                   <Button className="mt-3" onClick={onRetryAction}>
                     {m.moderation_queue_retry_action()}
@@ -209,21 +230,29 @@ export function CatalogueReportsView({
               ) : null}
               {failedText ? (
                 <div className="mt-5">
-                  <p role="alert" className="text-sm text-destructive">{failedText}</p>
+                  <p role="alert" className="text-sm text-destructive">
+                    {failedText}
+                  </p>
                   <Button className="mt-3" variant="outline" onClick={onRefresh}>
                     {m.moderation_queue_refresh()}
                   </Button>
                 </div>
               ) : null}
               {page.action.state === 'invalid' ? (
-                <p role="alert" className="mt-4 text-sm text-destructive">{m.moderation_queue_reason_invalid()}</p>
+                <p role="alert" className="mt-4 text-sm text-destructive">
+                  {m.moderation_queue_reason_invalid()}
+                </p>
               ) : null}
               {page.action.state === 'confirmed' && page.action.result.kind === 'dismissed' ? (
-                <p role="status" className="mt-5 text-sm font-medium">{m.moderation_dismissed()}</p>
+                <p role="status" className="mt-5 text-sm font-medium">
+                  {m.moderation_dismissed()}
+                </p>
               ) : null}
               {page.action.state === 'confirmed' && page.action.result.kind === 'visibility' ? (
                 <p role="status" className="mt-5 text-sm font-medium">
-                  {m.catalogue_reports_visibility_confirmed({ visibility: visibilityLabel ?? page.action.result.visibility })}
+                  {m.catalogue_reports_visibility_confirmed({
+                    visibility: visibilityLabel ?? page.action.result.visibility,
+                  })}
                 </p>
               ) : null}
               {page.action.state === 'confirmed' || page.action.state === 'failed' ? (
@@ -274,7 +303,9 @@ export function CatalogueReportsView({
         </Button>
       ) : null}
       {page.reports.length > 0 && page.next ? (
-        <p className="sr-only" aria-live="polite">{m.moderation_queue_next_hint()}</p>
+        <p className="sr-only" aria-live="polite">
+          {m.moderation_queue_next_hint()}
+        </p>
       ) : null}
     </main>
   );
@@ -347,7 +378,12 @@ export function CatalogueReportsVisit({
     setVisit(null);
     setReadError(false);
     const pageReader: CatalogueReportsReader = (input) =>
-      prepareCatalogueReportsRead(cache, input.cursor, async (data) => loadCatalogueReports({ data }), controller.signal);
+      prepareCatalogueReportsRead(
+        cache,
+        input.cursor,
+        async (data) => loadCatalogueReports({ data }),
+        controller.signal,
+      );
     void pageReader(cursor ? { cursor } : {})
       .then((initial) => {
         if (current) setVisit({ initial, readPage: pageReader });
@@ -375,8 +411,23 @@ export function CatalogueReportsVisit({
         onRestart={onRestart}
       />
     );
-  if (!visit) return <CatalogueReportsView page={loading} onSelect={() => {}} onReason={() => {}} onAct={() => {}} onRetryAction={() => {}} onRetryPage={() => {}} onRetrySubject={() => {}} onRefresh={() => {}} onNext={onNext} onRestart={onRestart} />;
-  const readSubject: CatalogueSubjectReader = (subjectId, reportId) => loadCatalogueSubject({ data: { subjectId, reportId } });
+  if (!visit)
+    return (
+      <CatalogueReportsView
+        page={loading}
+        onSelect={() => {}}
+        onReason={() => {}}
+        onAct={() => {}}
+        onRetryAction={() => {}}
+        onRetryPage={() => {}}
+        onRetrySubject={() => {}}
+        onRefresh={() => {}}
+        onNext={onNext}
+        onRestart={onRestart}
+      />
+    );
+  const readSubject: CatalogueSubjectReader = (subjectId, reportId) =>
+    loadCatalogueSubject({ data: { subjectId, reportId } });
   return (
     <CatalogueReportsCurrent
       key={visit.initial.readerBinding?.id ?? catalogueReportsReadKey(cursor)}

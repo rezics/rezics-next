@@ -5,7 +5,9 @@ import type { CatalogueReport } from '../src/moderation/catalogue-reports-read';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/moderation/catalogue' });
 for (const [key, value] of Object.entries({
   window,
@@ -26,12 +28,8 @@ const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { m } = await import('../src/paraglide/messages.js');
 const { privateReaderFingerprint } = await import('../src/moderation/private-reader-origin');
-const {
-  catalogueReportsReadKey,
-  prepareCatalogueReportsRead,
-  readCatalogueReports,
-  readCatalogueSubject,
-} = await import('../src/moderation/catalogue-reports-read');
+const { catalogueReportsReadKey, prepareCatalogueReportsRead, readCatalogueReports, readCatalogueSubject } =
+  await import('../src/moderation/catalogue-reports-read');
 const { sendCatalogueReportAction } = await import('../src/moderation/catalogue-reports-actions');
 const { CatalogueReportsCurrent } = await import('../src/moderation/catalogue-reports-page');
 const { createCatalogueReportsJourney } = await import('../src/moderation/catalogue-reports-journey');
@@ -110,7 +108,9 @@ async function mountCurrent(
   initial: Awaited<ReturnType<typeof preparedPage>>,
   options: {
     readSubject: (id: string) => Promise<Awaited<ReturnType<typeof readCatalogueSubject>>>;
-    action: (input: Parameters<typeof sendCatalogueReportAction>[1]) => Promise<Awaited<ReturnType<typeof sendCatalogueReportAction>>>;
+    action: (
+      input: Parameters<typeof sendCatalogueReportAction>[1],
+    ) => Promise<Awaited<ReturnType<typeof sendCatalogueReportAction>>>;
     next?: (cursor: string) => void;
   },
 ) {
@@ -175,7 +175,10 @@ test('Subject report submission uses the delivered native target and returns the
   });
   const receipt = await submitReport(new Request('https://site.test/en/subjects/example'), {}, draft, client);
   expect(receipt).toEqual({ ok: true, reportId });
-  expect(JSON.parse(requests[0]!.body)).toMatchObject({ target: { kind: 'subject', id: subjectId }, evidence: draft.evidence });
+  expect(JSON.parse(requests[0]!.body)).toMatchObject({
+    target: { kind: 'subject', id: subjectId },
+    evidence: draft.evidence,
+  });
   expect(requests[0]!.headers.get('idempotency-key')).toBe(JSON.stringify(idempotencyKey));
 });
 
@@ -183,21 +186,55 @@ test('catalogue and current Subject reads use native response shapes, exact cont
   const cursor = 'sealed cursor/+ with exact bytes';
   const { client, requests } = nativeClient(async (request) => {
     const url = new URL(request.url);
-    if (url.pathname === '/v1/catalogue/reports') return Response.json({ reports: [report], next: 'next-native-cursor' });
+    if (url.pathname === '/v1/catalogue/reports')
+      return Response.json({ reports: [report], next: 'next-native-cursor' });
     if (url.pathname === `/v1/subjects/${subjectId}/reports`) return Response.json({ reports: [report], next: null });
     if (url.pathname === `/v1/subjects/${subjectId}`)
-      return Response.json({ subject: { id: subjectId, type: 'schema:Thing', labels: { en: 'Current entry' }, descriptions: { en: 'Current Subject description.' }, aliases: {}, statements: {}, sourceRecords: [], revision: 1, release: 'released', context: 'global', resolution: {}, relationCounts: {} }, account: null, summary: {}, related: {} });
+      return Response.json({
+        subject: {
+          id: subjectId,
+          type: 'schema:Thing',
+          labels: { en: 'Current entry' },
+          descriptions: { en: 'Current Subject description.' },
+          aliases: {},
+          statements: {},
+          sourceRecords: [],
+          revision: 1,
+          release: 'released',
+          context: 'global',
+          resolution: {},
+          relationCounts: {},
+        },
+        account: null,
+        summary: {},
+        related: {},
+      });
     return Response.json({}, { status: 404 });
   });
   const origin = { subject: moderatorId, csrfFingerprint: 'current-reader-fingerprint' };
   const page = await readCatalogueReports(client, { cursor }, authorization, origin);
   const current = await readCatalogueSubject(client, subjectId, reportId, authorization, origin);
-  expect(page.result).toMatchObject({ state: 'loaded', reports: [{ id: reportId, evidence: report.evidence }], next: 'next-native-cursor' });
+  expect(page.result).toMatchObject({
+    state: 'loaded',
+    reports: [{ id: reportId, evidence: report.evidence }],
+    next: 'next-native-cursor',
+  });
   expect(JSON.stringify(page)).not.toContain(reporterId);
   expect(requests[0]!.url.searchParams.get('limit')).toBe('50');
   expect(requests[0]!.url.searchParams.get('cursor')).toBe(cursor);
-  expect(current.result).toMatchObject({ state: 'loaded', subject: { id: subjectId, label: 'Current entry', description: 'Current Subject description.', type: 'schema:Thing' }, report: { id: reportId, outcome: null } });
-  expect(requests.find((request) => request.url.pathname === `/v1/subjects/${subjectId}`)?.url.pathname).toBe(`/v1/subjects/${subjectId}`);
+  expect(current.result).toMatchObject({
+    state: 'loaded',
+    subject: {
+      id: subjectId,
+      label: 'Current entry',
+      description: 'Current Subject description.',
+      type: 'schema:Thing',
+    },
+    report: { id: reportId, outcome: null },
+  });
+  expect(requests.find((request) => request.url.pathname === `/v1/subjects/${subjectId}`)?.url.pathname).toBe(
+    `/v1/subjects/${subjectId}`,
+  );
   const subjectReports = requests.find((request) => request.url.pathname === `/v1/subjects/${subjectId}/reports`)!;
   expect(subjectReports.url.searchParams.get('limit')).toBe('50');
   expect(subjectReports.url.searchParams.get('order')).toBe('newest');
@@ -209,7 +246,8 @@ test('dismissal and Subject visibility adapters expose only native confirmed rec
   const { client, requests } = nativeClient(async (request) => {
     const url = new URL(request.url);
     if (url.pathname.includes(reportId)) return Response.json({ reportId, outcome: 'dismissed' });
-    if (url.pathname.includes(subjectId)) return Response.json({ subject: subjectId, visibility: 'hidden', security_revision: 2 });
+    if (url.pathname.includes(subjectId))
+      return Response.json({ subject: subjectId, visibility: 'hidden', security_revision: 2 });
     return Response.json({}, { status: 404 });
   });
   const dismissed = await sendCatalogueReportAction(
@@ -222,7 +260,11 @@ test('dismissal and Subject visibility adapters expose only native confirmed rec
     { action: 'hide', reportId, subjectId, reason: 'The public entry exposes personal data.', idempotencyKey },
     authorization,
   );
-  const lost = createKernelClient('https://kernel.test', { fetch: (async () => { throw new TypeError('Failed to fetch'); }) as typeof fetch });
+  const lost = createKernelClient('https://kernel.test', {
+    fetch: (async () => {
+      throw new TypeError('Failed to fetch');
+    }) as typeof fetch,
+  });
   const uncertain = await sendCatalogueReportAction(
     lost,
     { action: 'restore', reportId, subjectId, reason: 'The subject is safe to show again.', idempotencyKey },
@@ -247,7 +289,11 @@ test('mounted queue forwards the exact next cursor and retries an uncertain dism
   };
   let continued = '';
   const mounted = await mountCurrent(cache, initial, {
-    readSubject: async (id) => ({ subjectId: id, readerOrigin: origin, result: { state: 'loaded', subject: { id, label: 'Readable Subject', description: null, type: 'schema:Thing' } } }),
+    readSubject: async (id) => ({
+      subjectId: id,
+      readerOrigin: origin,
+      result: { state: 'loaded', subject: { id, label: 'Readable Subject', description: null, type: 'schema:Thing' } },
+    }),
     action,
     next: (cursor) => (continued = cursor),
   });
@@ -275,7 +321,11 @@ test('viewer retirement clears mounted evidence and rejects a late target read o
     return { ok: true as const, result: { kind: 'dismissed' as const, reportId, outcome: 'dismissed' as const } };
   };
   const mounted = await mountCurrent(cache, initial, {
-    readSubject: async (id) => ({ subjectId: id, readerOrigin: origin, result: { state: 'loaded', subject: { id, label: 'Current Subject', description: null, type: 'schema:Thing' } } }),
+    readSubject: async (id) => ({
+      subjectId: id,
+      readerOrigin: origin,
+      result: { state: 'loaded', subject: { id, label: 'Current Subject', description: null, type: 'schema:Thing' } },
+    }),
     action: staleButtonAction,
   });
   const oldDismissButton = button(mounted.host, m.moderation_dismiss());
@@ -315,7 +365,10 @@ test('a late current Subject response cannot restore evidence after viewer repla
       held.resolve({
         subjectId,
         readerOrigin: origin,
-        result: { state: 'loaded', subject: { id: subjectId, label: 'Late private Subject', description: null, type: 'schema:Thing' } },
+        result: {
+          state: 'loaded',
+          subject: { id: subjectId, label: 'Late private Subject', description: null, type: 'schema:Thing' },
+        },
       });
       await Promise.resolve();
     });

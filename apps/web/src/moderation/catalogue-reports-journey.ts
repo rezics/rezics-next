@@ -1,6 +1,10 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { createModerationIntent } from './command-intent';
-import type { CatalogueReportActionInput, CatalogueReportActionResult, CatalogueReportCommand } from './catalogue-reports-actions';
+import type {
+  CatalogueReportActionInput,
+  CatalogueReportActionResult,
+  CatalogueReportCommand,
+} from './catalogue-reports-actions';
 import {
   catalogueReportsReadKey,
   type CatalogueReport,
@@ -45,7 +49,13 @@ export type CatalogueReportsJourneyOptions = {
 };
 
 /** One private catalogue visit owns its report evidence, selected target, and exact pending command. */
-export function createCatalogueReportsJourney({ cache, initial, readPage, readSubject, action }: CatalogueReportsJourneyOptions) {
+export function createCatalogueReportsJourney({
+  cache,
+  initial,
+  readPage,
+  readSubject,
+  action,
+}: CatalogueReportsJourneyOptions) {
   const owner = createPrivateReaderLifetime(cache, initial, catalogueReportsReadKey(initial.cursor ?? undefined));
   let result = initial.result;
   let reports = initial.result.state === 'loaded' ? initial.result.reports : [];
@@ -230,14 +240,29 @@ export function createCatalogueReportsJourney({ cache, initial, readPage, readSu
     refresh: () => reload(initial.cursor ?? undefined),
     retrySubject: () => (selectedId ? select(selectedId) : Promise.resolve()),
     changeReason(value: string) {
-      if (retired || actionState.state === 'sending' || actionState.state === 'uncertain' || actionState.state === 'confirmed' || actionState.state === 'failed') return;
+      if (
+        retired ||
+        actionState.state === 'sending' ||
+        actionState.state === 'uncertain' ||
+        actionState.state === 'confirmed' ||
+        actionState.state === 'failed'
+      )
+        return;
       reason = value;
       identity.changed();
       actionState = { state: 'idle' };
       publish();
     },
     act(actionName: 'dismiss' | 'hide' | 'restore') {
-      if (!owner.isCurrent() || retired || actionState.state === 'sending' || actionState.state === 'uncertain' || actionState.state === 'confirmed' || actionState.state === 'failed') return;
+      if (
+        !owner.isCurrent() ||
+        retired ||
+        actionState.state === 'sending' ||
+        actionState.state === 'uncertain' ||
+        actionState.state === 'confirmed' ||
+        actionState.state === 'failed'
+      )
+        return;
       const report = reports.find((item) => item.id === selectedId);
       if (!report || (actionName !== 'restore' && report.outcome !== null)) return;
       if (actionName === 'hide' && subject.state !== 'loaded') return;

@@ -23,9 +23,7 @@ export type CatalogueReportCommand = (input: CatalogueReportActionInput) => Prom
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const reasonText = (value: unknown) =>
-  typeof value === 'string' && value.trim().length > 0 && Array.from(value.trim()).length <= 1024
-    ? value.trim()
-    : null;
+  typeof value === 'string' && value.trim().length > 0 && Array.from(value.trim()).length <= 1024 ? value.trim() : null;
 
 function failure(status: number, error: unknown): CatalogueReportActionResult {
   const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
@@ -49,7 +47,10 @@ export async function sendCatalogueReportAction(
     if (input.action === 'dismiss') {
       const result = await client.reports({ id: input.reportId }).$dismiss.post({}, { headers });
       if (!result.error && result.data?.reportId === input.reportId && result.data.outcome === 'dismissed')
-        return { ok: true, result: { kind: 'dismissed', reportId: result.data.reportId, outcome: result.data.outcome } };
+        return {
+          ok: true,
+          result: { kind: 'dismissed', reportId: result.data.reportId, outcome: result.data.outcome },
+        };
       return failure(result.status, result.error?.value);
     }
     const reason = reasonText(input.reason);

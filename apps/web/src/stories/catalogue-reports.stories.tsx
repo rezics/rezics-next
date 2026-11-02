@@ -38,7 +38,15 @@ const loaded: CatalogueReportsPageState = {
   reports,
   next: 'native-catalogue-cursor-next',
   selectedId: reports[0]!.id,
-  subject: { state: 'loaded', subject: { id: subjectId, label: 'Reported catalogue entry', description: 'A current catalogue description.', type: 'schema:Thing' } },
+  subject: {
+    state: 'loaded',
+    subject: {
+      id: subjectId,
+      label: 'Reported catalogue entry',
+      description: 'A current catalogue description.',
+      type: 'schema:Thing',
+    },
+  },
   reason: '',
   action: { state: 'idle' },
 };
@@ -58,7 +66,15 @@ function LoadedStory({ args }: { args: CatalogueReportsViewProps }) {
             : {
                 ...previous,
                 selectedId,
-                subject: { state: 'loaded', subject: { id: report.target.id, label: 'Selected current Subject', description: null, type: 'schema:Thing' } },
+                subject: {
+                  state: 'loaded',
+                  subject: {
+                    id: report.target.id,
+                    label: 'Selected current Subject',
+                    description: null,
+                    type: 'schema:Thing',
+                  },
+                },
                 action: { state: 'idle' },
               },
         );
@@ -77,15 +93,24 @@ function LoadedStory({ args }: { args: CatalogueReportsViewProps }) {
             : action === 'dismiss'
               ? {
                   ...previous,
-                  reports: previous.reports.map((item) => (item.id === report.id ? { ...item, outcome: 'dismissed' } : item)),
-                  action: { state: 'confirmed', result: { kind: 'dismissed', reportId: report.id, outcome: 'dismissed' } },
+                  reports: previous.reports.map((item) =>
+                    item.id === report.id ? { ...item, outcome: 'dismissed' } : item,
+                  ),
+                  action: {
+                    state: 'confirmed',
+                    result: { kind: 'dismissed', reportId: report.id, outcome: 'dismissed' },
+                  },
                 }
               : {
                   ...previous,
                   subject: { state: 'changed', visibility: action === 'hide' ? 'hidden' : 'visible' },
                   action: {
                     state: 'confirmed',
-                    result: { kind: 'visibility', subjectId: report.target.id, visibility: action === 'hide' ? 'hidden' : 'visible' },
+                    result: {
+                      kind: 'visibility',
+                      subjectId: report.target.id,
+                      visibility: action === 'hide' ? 'hidden' : 'visible',
+                    },
                   },
                 },
         );
@@ -140,7 +165,17 @@ export const Loaded: Story = {
 };
 
 export const Empty: Story = {
-  args: { page: { state: 'loaded', reports: [], next: null, selectedId: null, subject: { state: 'idle' }, reason: '', action: { state: 'idle' } } },
+  args: {
+    page: {
+      state: 'loaded',
+      reports: [],
+      next: null,
+      selectedId: null,
+      subject: { state: 'idle' },
+      reason: '',
+      action: { state: 'idle' },
+    },
+  },
 };
 
 export const Denied: Story = {

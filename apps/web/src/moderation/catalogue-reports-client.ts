@@ -47,7 +47,10 @@ type CatalogueReportsClient = Omit<KernelClient, 'catalogue' | 'reports' | 'subj
   };
   subjects: (input: { id: string }) => ReturnType<KernelClient['subjects']> & {
     reports: {
-      get(options: { query: SubjectReportQuery; headers: { authorization: string } }): Promise<NativeResult<CatalogueReportPage>>;
+      get(options: {
+        query: SubjectReportQuery;
+        headers: { authorization: string };
+      }): Promise<NativeResult<CatalogueReportPage>>;
     };
   };
 };

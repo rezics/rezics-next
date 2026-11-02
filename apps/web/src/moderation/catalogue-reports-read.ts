@@ -47,8 +47,11 @@ function pageFailure(status: number, error: unknown): Exclude<CatalogueReportsRe
   return 'error';
 }
 
-function emptyRead(cursor: string | undefined, readerOrigin: PrivateReaderOrigin | null, state: 'denied' | 'error' | 'stale'):
-  CatalogueReportsRead {
+function emptyRead(
+  cursor: string | undefined,
+  readerOrigin: PrivateReaderOrigin | null,
+  state: 'denied' | 'error' | 'stale',
+): CatalogueReportsRead {
   return { cursor: cursor ?? null, readerOrigin, result: { state, reports: [], next: null } };
 }
 
@@ -95,7 +98,11 @@ export async function readCatalogueReports(
 
 /** Current Subject content comes from its ordinary exact read; redirects and refusals stay unavailable. */
 export type CatalogueSubjectResult =
-  | { state: 'loaded'; subject: { id: string; label: string; description: string | null; type: string }; report?: CatalogueReport | null }
+  | {
+      state: 'loaded';
+      subject: { id: string; label: string; description: string | null; type: string };
+      report?: CatalogueReport | null;
+    }
   | { state: 'unavailable' | 'error' };
 export type CatalogueSubjectRead = PrivateReaderRead & {
   subjectId: string;
@@ -177,7 +184,9 @@ function validateCatalogueReportInput(input: unknown): CatalogueReportInput {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return { cursor: '\u0000invalid' };
   const cursor = (input as Record<string, unknown>).cursor;
   if (cursor === undefined) return {};
-  return typeof cursor === 'string' && cursor.length > 0 && cursor.length <= 4096 ? { cursor } : { cursor: '\u0000invalid' };
+  return typeof cursor === 'string' && cursor.length > 0 && cursor.length <= 4096
+    ? { cursor }
+    : { cursor: '\u0000invalid' };
 }
 
 async function catalogueReportsForRequest(data: CatalogueReportInput): Promise<CatalogueReportsRead> {
