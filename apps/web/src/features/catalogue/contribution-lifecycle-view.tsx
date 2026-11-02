@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../../paraglide/messages.js';
+import { confirmedContributionOperation } from './contribution-lifecycle';
 import type {
   ContributionAddress,
   ContributionAvailability,
@@ -48,20 +49,40 @@ function ContributionLifecycleLive({
   const pending = useRef<ContributionCommand | null>(null);
   const running = useRef(false);
   const session = useRef(address.session);
-  const operation = state === 'deleted' ? 'restore' : 'delete';
+  const terminal = useRef<'denied' | 'expired' | null>(null);
+  const operation =
+    (current && confirmedContributionOperation(current)) ?? (state === 'deleted' ? 'restore' : 'delete');
+  // Captured controls must consult the latest observation, including a retired confirmation.
+  const controls = useRef({ operation, needsRead, confirmation });
+  controls.current = { operation, needsRead, confirmation };
   const action = operation === 'delete' ? m.contribution_withdraw({}, o) : m.contribution_restore({}, o);
+
+  function observe(next: ContributionAvailability) {
+    session.current = next.session ?? session.current;
+    setCurrent(next);
+    const nextOperation = confirmedContributionOperation(next);
+    controls.current.needsRead = nextOperation === null;
+    controls.current.confirmation = null;
+    if (nextOperation) controls.current.operation = nextOperation;
+    setNeedsRead(nextOperation === null);
+    setConfirmation(null);
+    if (nextOperation && !terminal.current) setFailure(undefined);
+    return nextOperation;
+  }
 
   async function change() {
     if (!lifetime.active()) return;
-    if (running.current || needsRead || state === 'expired' || (!confirmation && !pending.current)) return;
+    const latest = controls.current;
+    if (running.current || latest.needsRead || terminal.current || (!latest.confirmation && !pending.current)) return;
     pending.current ??= {
       ...address,
-      operation: confirmation!,
+      operation: latest.confirmation!,
       key: crypto.randomUUID(),
       ...(session.current ? { session: session.current } : {}),
     };
     running.current = true;
     setBusy(true);
+    controls.current.confirmation = null;
     setConfirmation(null);
     setFailure(undefined);
     try {
@@ -73,8 +94,12 @@ function ContributionLifecycleLive({
           pending.current = null;
           setConfirmation(null);
         }
+        if (result.reason === 'expired' || result.reason === 'denied') terminal.current = result.reason;
         if (result.reason === 'expired') setState('expired');
-        if (result.reason === 'conflict') setNeedsRead(true);
+        if (result.reason === 'conflict') {
+          controls.current.needsRead = true;
+          setNeedsRead(true);
+        }
         if (result.reason === 'denied') {
           setCurrent(undefined);
           await onClear();
@@ -85,13 +110,22 @@ function ContributionLifecycleLive({
       pending.current = null;
       setConfirmation(null);
       session.current = result.session ?? session.current;
-      setCurrent(result.current);
-      setState(result.operation === 'delete' ? 'deleted' : 'restored');
+      const nextOperation = observe(result.current);
+      setState(
+        nextOperation === 'restore'
+          ? 'deleted'
+          : nextOperation === 'delete' && result.operation === 'delete'
+            ? 'active'
+            : result.operation === 'delete'
+              ? 'deleted'
+              : 'restored',
+      );
       if (result.operation === 'delete') await onClear();
       if (!lifetime.active()) return;
     } catch {
       if (!lifetime.active()) return;
-      setFailure('unavailable');
+      // Callback failures after a confirmed effect/refusal cannot turn it into an uncertain command.
+      if (pending.current) setFailure('unavailable');
     } finally {
       if (!lifetime.active()) return;
       running.current = false;
@@ -104,19 +138,20 @@ function ContributionLifecycleLive({
     if (running.current || pending.current) return;
     running.current = true;
     setBusy(true);
+    controls.current.confirmation = null;
+    setConfirmation(null);
     try {
       const next = await transport.read({ ...address, ...(session.current ? { session: session.current } : {}) });
       if (!lifetime.active()) return;
-      session.current = next.session ?? session.current;
-      setCurrent(next);
-      if (next.subject === 'available' && next.candidate !== 'unconfirmed') {
-        setNeedsRead(false);
-        setFailure(undefined);
-        if (next.candidate === 'deleted') setState('deleted');
-      }
+      const nextOperation = observe(next);
+      if (nextOperation && !terminal.current)
+        // A reread confirms availability, not that this editor performed a restoration.
+        setState((previous) =>
+          nextOperation === 'restore' ? 'deleted' : previous === 'restored' ? 'restored' : 'active',
+        );
     } catch {
       if (!lifetime.active()) return;
-      setCurrent({ subject: 'unavailable', candidate: 'unconfirmed', selected: null });
+      observe({ subject: 'unavailable', candidate: 'unconfirmed', selected: null });
     } finally {
       if (!lifetime.active()) return;
       running.current = false;
@@ -196,11 +231,12 @@ function ContributionLifecycleLive({
                 variant={operation === 'delete' ? 'destructive' : 'default'}
                 disabled={busy || needsRead}
                 onClick={() => {
-                  if (!lifetime.active() || running.current || needsRead) return;
+                  if (!lifetime.active() || running.current || controls.current.needsRead || terminal.current) return;
                   if (pending.current) void change();
                   else {
                     setFailure(undefined);
-                    setConfirmation(operation);
+                    controls.current.confirmation = controls.current.operation;
+                    setConfirmation(controls.current.operation);
                   }
                 }}
               >

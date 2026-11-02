@@ -126,10 +126,12 @@ test('missing native binding stays unavailable, and a restore acknowledgement ca
   const input = command(fixture, 'restore');
   const calls: string[] = [];
   let bound = false;
+  let malformedRead = false;
   const client = createKernelClient('https://unserved-contribution.test', {
     fetch: (async (request, init) => {
       const native = request instanceof Request ? request : new Request(String(request), init);
       calls.push(native.method);
+      if (native.method === 'GET' && malformedRead) return Response.json({ candidates: {} });
       return Response.json(
         native.method === 'POST' && bound
           ? { subject: input.id, candidate: input.candidate, deleted: false }
@@ -150,6 +152,12 @@ test('missing native binding stays unavailable, and a restore acknowledgement ca
   expect(calls).toEqual(['POST', 'POST', 'GET', 'GET']);
   expect(JSON.stringify(restored)).not.toContain('1946');
   expect(JSON.stringify(restored)).not.toContain('statement');
+  malformedRead = true;
+  expect(await changeContribution(client, 'Bearer fixture', input)).toMatchObject({
+    ok: true,
+    operation: 'restore',
+    current: { subject: 'unavailable', candidate: 'unconfirmed', selected: null },
+  });
 });
 
 test.each(['delete', 'restore'] as const)(

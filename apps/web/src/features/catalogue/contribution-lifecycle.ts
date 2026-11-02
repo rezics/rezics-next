@@ -21,6 +21,12 @@ export type ContributionTransport = {
   read: (address: ContributionAddress) => Promise<ContributionAvailability>;
 };
 
+/** Only a current, visible candidate observation can choose a new operation. */
+export function confirmedContributionOperation(current: ContributionAvailability) {
+  if (current.subject !== 'available' || current.candidate === 'unconfirmed') return null;
+  return current.candidate === 'deleted' ? 'restore' : 'delete';
+}
+
 type ContributionEndpoint = ReturnType<ReturnType<KernelClient['subjects']>['candidates']>;
 
 export function contributionAddressInput(value: unknown): ContributionAddress {
@@ -146,10 +152,16 @@ export async function changeContribution(
     // The effect is uncertain. Keep the original command/key retryable without claiming a local change.
     return { ok: false, reason: 'unavailable' };
   let session = new Headers(response.headers).get('rezics-session-token') ?? command.session;
-  const current = await readContributionAvailability(client, authorization, {
-    ...command,
-    ...(session ? { session } : {}),
-  });
+  let current: ContributionAvailability;
+  try {
+    current = await readContributionAvailability(client, authorization, {
+      ...command,
+      ...(session ? { session } : {}),
+    });
+  } catch {
+    // A validated effect remains successful even if the subsequent observation fails.
+    current = { subject: 'unavailable', candidate: 'unconfirmed', selected: null };
+  }
   session = current.session ?? session;
   return { ok: true, operation: command.operation, current, ...(session ? { session } : {}) };
 }

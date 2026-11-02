@@ -263,6 +263,11 @@ test('own-contribution family preserves independent panels, exact recovery and r
     expect(panel('second').textContent).not.toContain(m.contribution_candidate_available());
     expect(panel('second').querySelector('[data-private]')).toBeNull();
     expect(second.calls.map((call) => call.method)).toEqual(['DELETE', 'GET', 'GET', 'POST', 'GET', 'GET']);
+    expect(button(panel('second'), m.contribution_withdraw()).disabled).toBe(true);
+    await click(button(panel('second'), m.contribution_refresh()));
+    expect(button(panel('second'), m.contribution_withdraw()).disabled).toBe(true);
+    expect(panel('second').textContent).toContain(m.contribution_restored());
+    expect(second.calls.filter((call) => call.method !== 'GET')).toHaveLength(2);
     expect(first.calls).toHaveLength(9);
 
     // Conflict alone unlocks an explicit availability read; no presentation read is automatic.
@@ -290,6 +295,56 @@ test('own-contribution family preserves independent panels, exact recovery and r
     expect(panel('conflict').textContent).not.toContain(m.contribution_deleted());
     expect(button(panel('conflict'), m.contribution_withdraw()).disabled).toBe(true);
     expect(changes).toBe(1);
+
+    // A conflicting restore can discover an available candidate, not a completed restoration.
+    for (const candidate of ['available', 'deleted'] as const) {
+      const sent: ContributionCommand[] = [];
+      let observation: Awaited<ReturnType<ContributionTransport['read']>> = {
+        subject: 'available',
+        candidate: 'unconfirmed',
+        selected: false,
+      };
+      const recovery: ContributionTransport = {
+        change: async (command) => {
+          sent.push(command);
+          return sent.length === 3
+            ? { ok: false, reason: 'unavailable' }
+            : sent.length === 2
+              ? { ok: false, reason: 'conflict' }
+              : {
+                  ok: true,
+                  operation: command.operation,
+                  current: { subject: 'available', candidate: 'deleted', selected: false },
+                };
+        },
+        read: async () => observation,
+      };
+      await render(<Panel key={candidate} name="recovery" address={first.address} transport={recovery} />);
+      await confirm(panel('recovery'));
+      await confirm(panel('recovery'), m.contribution_restore());
+      await click(button(panel('recovery'), m.contribution_refresh()));
+      expect(button(panel('recovery'), m.contribution_restore()).disabled).toBe(true);
+      observation = { subject: 'unavailable', candidate, selected: null };
+      await click(button(panel('recovery'), m.contribution_refresh()));
+      expect(button(panel('recovery'), m.contribution_restore()).disabled).toBe(true);
+      observation = { subject: 'available', candidate, selected: false };
+      await click(button(panel('recovery'), m.contribution_refresh()));
+      expect(panel('recovery').textContent).not.toContain(m.contribution_restored());
+      expect(panel('recovery').textContent!.includes(m.contribution_deleted())).toBe(candidate === 'deleted');
+      await confirm(
+        panel('recovery'),
+        candidate === 'available' ? m.contribution_withdraw() : m.contribution_restore(),
+      );
+      expect(panel('recovery').textContent).not.toContain(m.contribution_refresh());
+      await click(button(panel('recovery'), m.contribution_retry()));
+      expect(sent[3]).toBe(sent[2]);
+      expect(sent.map((command) => command.operation)).toEqual([
+        'delete',
+        'restore',
+        ...Array(2).fill(candidate === 'available' ? 'delete' : 'restore'),
+      ]);
+      expect(new Set(sent.map((command) => command.key)).size).toBe(3);
+    }
 
     // Terminal refusal and invalid input remain distinct from uncertain replay.
     for (const scenario of ['denied', 'expired', 'invalid'] as const) {
@@ -320,6 +375,11 @@ test('own-contribution family preserves independent panels, exact recovery and r
         expect(fixture.calls.map((call) => call.method)).toEqual(
           scenario === 'denied' ? ['DELETE'] : ['DELETE', 'GET', 'GET', 'POST'],
         );
+      }
+      if (scenario === 'expired') {
+        await click(button(panel(scenario), m.contribution_refresh()));
+        expect(panel(scenario).textContent).not.toContain(m.contribution_restore());
+        expect(panel(scenario).querySelector('[role="alert"]')?.textContent).toBe(copy);
       }
     }
 
