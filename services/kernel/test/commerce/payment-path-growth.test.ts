@@ -189,7 +189,7 @@ async function checkAxis(
     ...(hooks.prepare === undefined ? {} : { prepare: hooks.prepare }),
     ...(hooks.warmup === undefined ? {} : { warmup: hooks.warmup }),
   });
-  expect(report.samples.map(({ scale }) => scale)).toEqual(scales);
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expect(report.samples.every(({ cost }) => cost.rows > 0 && cost.statements > 0)).toBe(true);
   return report;
 }
