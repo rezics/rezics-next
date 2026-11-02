@@ -151,8 +151,9 @@ export async function loadCreatorSales(
   sessionEnv: Partial<SessionEnv>,
   search: CreatorSalesQuery,
 ): Promise<CreatorSalesData> {
+  const query = creatorSalesSearch(search);
+  if ('kind' in query) throw notFound();
   try {
-    const query = creatorSalesSearch(search);
     const stale = await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { kind: 'denied' };

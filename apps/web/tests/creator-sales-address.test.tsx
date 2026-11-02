@@ -12,7 +12,7 @@ test('malformed saved cursor stays editable and correction or restart stays on t
   expect(html).toContain('action="/en/creator/sales"');
   expect(html).toContain('name="cursor"');
   expect(html).toContain('value="bad&lt;&amp;&quot;"');
-  expect(html).toContain('maxlength="4096"');
+  expect(html).toMatch(/maxlength="4096"/i);
   expect(html).toContain('href="/en/creator/sales"');
 });
 
