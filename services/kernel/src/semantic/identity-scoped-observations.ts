@@ -51,8 +51,11 @@ import {
 } from './identity-scoped-public-source.ts';
 import { withReadTransaction } from './read.ts';
 import { writeIdentityScopeConsumerNativeCommit } from './identity-epoch-native-commit.ts';
-import { prepayIdentityScopeNativeAssociation, bindIdentityScopeNativeAssociation,
-  recordIdentityScopeNativeAssociation } from './identity-scope-native-association.ts';
+import {
+  prepayIdentityScopeNativeAssociation,
+  bindIdentityScopeNativeAssociation,
+  recordIdentityScopeNativeAssociation,
+} from './identity-scope-native-association.ts';
 import consumerCurrent from './identity-scoped-consumer-current.sql';
 import consumerReceipt from './identity-scoped-consumer-receipt.sql';
 import consumerWork from './identity-scoped-consumer-work.sql';
@@ -987,42 +990,47 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
       if (key.source.kind === 'public') {
         const prior = row;
         const nativeAssociation1 = prepayIdentityScopeNativeAssociation(pool, deadline);
-        await withSingleCommandAttempt(() => runCommand(pool, { partition: k.partition, deadline: nativeAssociation1.deadline }, async (tx) => {
-          bindIdentityScopeNativeAssociation(tx, nativeAssociation1);
-          const locked = await head(tx, key, measured, true);
-          if (
-            !locked ||
-            locked.state === 'retiring' ||
-            locked.state === 'retired' ||
-            locked.registration !== prior.registration ||
-            locked.capture.kind !== 'public-locator' ||
-            !(await verifyPublicIdentitySourceCaptureLocator(tx, locked.capture))
-          )
-            throw unavailable();
-          const native = (
+        await withSingleCommandAttempt(() =>
+          runCommand(pool, { partition: k.partition, deadline: nativeAssociation1.deadline }, async (tx) => {
+            bindIdentityScopeNativeAssociation(tx, nativeAssociation1);
+            const locked = await head(tx, key, measured, true);
+            if (
+              !locked ||
+              locked.state === 'retiring' ||
+              locked.state === 'retired' ||
+              locked.registration !== prior.registration ||
+              locked.capture.kind !== 'public-locator' ||
+              !(await verifyPublicIdentitySourceCaptureLocator(tx, locked.capture))
+            )
+              throw unavailable();
+            const native = (
+              await query(
+                tx,
+                measured,
+                `SELECT home FROM semantic.identity_public_capture_home WHERE partition_no=$1 AND capture_id=$2 AND home=$3 AND complete`,
+                [k.partition, locked.capture_id, locked.enrollment_home],
+              )
+            ).rows[0];
+            if (!native) throw unavailable();
             await query(
               tx,
               measured,
-              `SELECT home FROM semantic.identity_public_capture_home WHERE partition_no=$1 AND capture_id=$2 AND home=$3 AND complete`,
-              [k.partition, locked.capture_id, locked.enrollment_home],
-            )
-          ).rows[0];
-          if (!native) throw unavailable();
-          await query(
-            tx,
-            measured,
-            `INSERT INTO semantic.identity_scope_forward(partition_no,source_key,scope_id,registration,dependency,dependency_home)
+              `INSERT INTO semantic.identity_scope_forward(partition_no,source_key,scope_id,registration,dependency,dependency_home)
             VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
-            [...params(key), locked.registration, `home:${String(native.home).padStart(4, '0')}`, native.home],
-          );
-          await query(
-            tx,
-            measured,
-            `UPDATE semantic.identity_scope_summary SET enrollment_home=enrollment_home+1,scan_complete=enrollment_home=4095 WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND enrollment_home=$4`,
-            [...params(key), locked.enrollment_home],
-          );
-          return { value: null, events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation1, key, 'capture')] };
-        }));
+              [...params(key), locked.registration, `home:${String(native.home).padStart(4, '0')}`, native.home],
+            );
+            await query(
+              tx,
+              measured,
+              `UPDATE semantic.identity_scope_summary SET enrollment_home=enrollment_home+1,scan_complete=enrollment_home=4095 WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND enrollment_home=$4`,
+              [...params(key), locked.enrollment_home],
+            );
+            return {
+              value: null,
+              events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation1, key, 'capture')],
+            };
+          }),
+        );
         return { status: 'pending', work: measured };
       }
       if (!allowance && row.capture.kind === 'library')
@@ -1045,64 +1053,69 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
       if (captured.status === 'unavailable') return fail('source_unready', measured);
       const prior = row;
       const nativeAssociation2 = prepayIdentityScopeNativeAssociation(pool, deadline);
-      await withSingleCommandAttempt(() => runCommand(pool, { partition: k.partition, deadline: nativeAssociation2.deadline }, async (tx) => {
-        bindIdentityScopeNativeAssociation(tx, nativeAssociation2);
-        const locked = await head(tx, key, measured, true);
-        if (
-          !locked ||
-          locked.state === 'retiring' ||
-          locked.state === 'retired' ||
-          locked.registration !== prior.registration ||
-          !same(locked.frontier ?? {}, prior.frontier ?? {})
-        )
-          throw unavailable();
-        if (captured.status === 'pending') {
-          const originals = [...new Set(captured.rows.flatMap((r) => (r.subjectId ? [r.subjectId] : [])))];
-          await query(
-            tx,
-            measured,
-            `INSERT INTO semantic.identity_scope_forward(partition_no,source_key,scope_id,registration,dependency,original)
+      await withSingleCommandAttempt(() =>
+        runCommand(pool, { partition: k.partition, deadline: nativeAssociation2.deadline }, async (tx) => {
+          bindIdentityScopeNativeAssociation(tx, nativeAssociation2);
+          const locked = await head(tx, key, measured, true);
+          if (
+            !locked ||
+            locked.state === 'retiring' ||
+            locked.state === 'retired' ||
+            locked.registration !== prior.registration ||
+            !same(locked.frontier ?? {}, prior.frontier ?? {})
+          )
+            throw unavailable();
+          if (captured.status === 'pending') {
+            const originals = [...new Set(captured.rows.flatMap((r) => (r.subjectId ? [r.subjectId] : [])))];
+            await query(
+              tx,
+              measured,
+              `INSERT INTO semantic.identity_scope_forward(partition_no,source_key,scope_id,registration,dependency,original)
             SELECT $1,$2,$3,$4,o::text,o FROM unnest($5::uuid[]) o ON CONFLICT DO NOTHING`,
-            [...params(key), row!.registration, originals],
-          );
-          await query(
-            tx,
-            measured,
-            `UPDATE semantic.identity_scope_summary SET capture_id=$4,frontier=$5 WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`,
-            [...params(key), captured.frontier.captureId, json(captured.frontier)],
-          );
-        } else {
-          // Source owner resolves the committed native capture and final writer fence on this command.
-          const held = await owner.readAndHold({
-            client: tx,
-            at: currentCommand(tx).time,
-            identity,
-            captureId: captured.capture.captureId,
-            holdId: locked.registration,
-            allowance: captureAllowance,
-            deadline,
-          });
-          charge(measured, held.work);
-          if (held.status !== 'held') throw unavailable();
-          await query(
-            tx,
-            measured,
-            `UPDATE semantic.identity_scope_summary SET scan_complete=true,state='enrolling',capture_id=$4,capture=$5
+              [...params(key), row!.registration, originals],
+            );
+            await query(
+              tx,
+              measured,
+              `UPDATE semantic.identity_scope_summary SET capture_id=$4,frontier=$5 WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`,
+              [...params(key), captured.frontier.captureId, json(captured.frontier)],
+            );
+          } else {
+            // Source owner resolves the committed native capture and final writer fence on this command.
+            const held = await owner.readAndHold({
+              client: tx,
+              at: currentCommand(tx).time,
+              identity,
+              captureId: captured.capture.captureId,
+              holdId: locked.registration,
+              allowance: captureAllowance,
+              deadline,
+            });
+            charge(measured, held.work);
+            if (held.status !== 'held') throw unavailable();
+            await query(
+              tx,
+              measured,
+              `UPDATE semantic.identity_scope_summary SET scan_complete=true,state='enrolling',capture_id=$4,capture=$5
             WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`,
-            [
-              ...params(key),
-              captured.capture.captureId,
-              json({
-                kind: 'library',
-                capture: captured.capture,
-                frontier: prior.frontier,
-                allowance: captureAllowance,
-              }),
-            ],
-          );
-        }
-        return { value: null, events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation2, key, 'capture')] };
-      }));
+              [
+                ...params(key),
+                captured.capture.captureId,
+                json({
+                  kind: 'library',
+                  capture: captured.capture,
+                  frontier: prior.frontier,
+                  allowance: captureAllowance,
+                }),
+              ],
+            );
+          }
+          return {
+            value: null,
+            events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation2, key, 'capture')],
+          };
+        }),
+      );
       return { status: 'pending', work: measured };
     }
     const dep = await withReadTransaction(
@@ -1122,64 +1135,81 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
       const ticket = await enroll(pool, key, row, dep, deadline, measured);
       if (!ticket) return { status: 'pending', work: measured };
       const nativeAssociation3 = prepayIdentityScopeNativeAssociation(pool, deadline);
-      await withSingleCommandAttempt(() => runCommand(pool, { partition: k.partition, deadline: nativeAssociation3.deadline }, async (tx) => {
-        bindIdentityScopeNativeAssociation(tx, nativeAssociation3);
-        const locked = await head(tx, key, measured, true);
-        if (
-          !locked ||
-          locked.state === 'retiring' ||
-          locked.state === 'retired' ||
-          locked.registration !== row!.registration ||
-          locked.capture_id !== row!.capture_id
-        )
-          throw unavailable();
-        const enrolled = await query(
-          tx,
-          measured,
-          `UPDATE semantic.identity_scope_forward SET ticket=$6 WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND dependency=$5 AND ticket IS NULL`,
-          [...params(key), row!.registration, dep.dependency, json(ticket)],
-        );
-        if (enrolled.rowCount === 0) return noEffect(null);
-        return { value: null, events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation3, key, 'enrollment', { dependency: dep.dependency })] };
-      }));
+      await withSingleCommandAttempt(() =>
+        runCommand(pool, { partition: k.partition, deadline: nativeAssociation3.deadline }, async (tx) => {
+          bindIdentityScopeNativeAssociation(tx, nativeAssociation3);
+          const locked = await head(tx, key, measured, true);
+          if (
+            !locked ||
+            locked.state === 'retiring' ||
+            locked.state === 'retired' ||
+            locked.registration !== row!.registration ||
+            locked.capture_id !== row!.capture_id
+          )
+            throw unavailable();
+          const enrolled = await query(
+            tx,
+            measured,
+            `UPDATE semantic.identity_scope_forward SET ticket=$6 WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND dependency=$5 AND ticket IS NULL`,
+            [...params(key), row!.registration, dep.dependency, json(ticket)],
+          );
+          if (enrolled.rowCount === 0) return noEffect(null);
+          return {
+            value: null,
+            events: [
+              recordIdentityScopeNativeAssociation(tx, nativeAssociation3, key, 'enrollment', {
+                dependency: dep.dependency,
+              }),
+            ],
+          };
+        }),
+      );
       return { status: 'pending', work: measured };
     }
     const nativeAssociation4 = prepayIdentityScopeNativeAssociation(pool, deadline);
     return (
-      await withSingleCommandAttempt(() => runCommand<S.IdentityScopeRegistrationResult>(pool, { partition: k.partition, deadline: nativeAssociation4.deadline }, async (tx) => {
-        bindIdentityScopeNativeAssociation(tx, nativeAssociation4);
-        const locked = await head(tx, key, measured, true);
-        if (
-          !locked ||
-          locked.state === 'retiring' ||
-          locked.state === 'retired' ||
-          locked.registration !== row!.registration ||
-          !locked.scan_complete ||
-          !(await proofCurrent(tx, key, locked, measured, true))
-        )
-          return noEffect(fail('source_unready', measured));
-        if (locked.active !== 0) return noEffect(fail('pending_claim', measured));
-        const unresolved = await query(
-          tx,
-          measured,
-          `SELECT 1 FROM semantic.identity_scope_forward WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND ticket IS NULL ORDER BY dependency LIMIT 1`,
-          [...params(key), locked.registration],
-        );
-        if (unresolved.rowCount) return noEffect({ status: 'pending', work: measured });
-        if (isReadyScopeState(locked.state))
-          return noEffect({ status: 'registered', observation: observation(key, locked), work: measured });
-        if (locked.state !== 'ready') {
-          await query(
-            tx,
-            measured,
-            `UPDATE semantic.identity_scope_summary SET state='ready',revision=revision+1 WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`,
-            params(key),
-          );
-          locked.revision = (BigInt(locked.revision) + 1n).toString();
-        }
-        return { value: { status: 'registered', observation: observation(key, locked), work: measured },
-          events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation4, key, 'ready')] };
-      }))
+      await withSingleCommandAttempt(() =>
+        runCommand<S.IdentityScopeRegistrationResult>(
+          pool,
+          { partition: k.partition, deadline: nativeAssociation4.deadline },
+          async (tx) => {
+            bindIdentityScopeNativeAssociation(tx, nativeAssociation4);
+            const locked = await head(tx, key, measured, true);
+            if (
+              !locked ||
+              locked.state === 'retiring' ||
+              locked.state === 'retired' ||
+              locked.registration !== row!.registration ||
+              !locked.scan_complete ||
+              !(await proofCurrent(tx, key, locked, measured, true))
+            )
+              return noEffect(fail('source_unready', measured));
+            if (locked.active !== 0) return noEffect(fail('pending_claim', measured));
+            const unresolved = await query(
+              tx,
+              measured,
+              `SELECT 1 FROM semantic.identity_scope_forward WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND ticket IS NULL ORDER BY dependency LIMIT 1`,
+              [...params(key), locked.registration],
+            );
+            if (unresolved.rowCount) return noEffect({ status: 'pending', work: measured });
+            if (isReadyScopeState(locked.state))
+              return noEffect({ status: 'registered', observation: observation(key, locked), work: measured });
+            if (locked.state !== 'ready') {
+              await query(
+                tx,
+                measured,
+                `UPDATE semantic.identity_scope_summary SET state='ready',revision=revision+1 WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`,
+                params(key),
+              );
+              locked.revision = (BigInt(locked.revision) + 1n).toString();
+            }
+            return {
+              value: { status: 'registered', observation: observation(key, locked), work: measured },
+              events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation4, key, 'ready')],
+            };
+          },
+        ),
+      )
     ).value;
   }
   async function finishScope(input: S.IdentityScopeFinishInput): Promise<S.IdentityScopeFinishResult> {
@@ -1191,36 +1221,41 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
     const nativeAssociation5 = prepayIdentityScopeNativeAssociation(pool, input.deadline);
     input = { ...input, deadline: nativeAssociation5.deadline };
     const budget = new NativeCollectionWork(input.allowance, input.deadline);
-    const snapshot = await withSingleCommandAttempt(() => runCommand(
-      pool,
-      { partition: identityScopeAddress(input.key).partition, deadline: nativeAssociation5.deadline },
-      async (tx) => {
-        bindIdentityScopeNativeAssociation(tx, nativeAssociation5);
-        const row = await head(tx, input.key, measured, true);
-        if (!row || !same(row.source, input.key.source) || row.state === 'retired') return noEffect(null);
-        const attempt = await attemptAt(tx, input.key, row, input.job, measured);
-        if (!attempt || !same(attempt.attempt, input.attempt) || attempt.state === 'cancelled')
-          return noEffect(null);
-        await query(
-          tx,
-          measured,
-          `UPDATE semantic.identity_scope_summary SET maintenance_allowance=$4
-          WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`,
-          [...params(input.key), json(input.allowance)],
-        );
-        const progress = (
+    const snapshot = await withSingleCommandAttempt(() =>
+      runCommand(
+        pool,
+        { partition: identityScopeAddress(input.key).partition, deadline: nativeAssociation5.deadline },
+        async (tx) => {
+          bindIdentityScopeNativeAssociation(tx, nativeAssociation5);
+          const row = await head(tx, input.key, measured, true);
+          if (!row || !same(row.source, input.key.source) || row.state === 'retired') return noEffect(null);
+          const attempt = await attemptAt(tx, input.key, row, input.job, measured);
+          if (!attempt || !same(attempt.attempt, input.attempt) || attempt.state === 'cancelled') return noEffect(null);
           await query(
             tx,
             measured,
-            `SELECT * FROM semantic.identity_scope_completion
+            `UPDATE semantic.identity_scope_summary SET maintenance_allowance=$4
+          WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`,
+            [...params(input.key), json(input.allowance)],
+          );
+          const progress = (
+            await query(
+              tx,
+              measured,
+              `SELECT * FROM semantic.identity_scope_completion
         WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND job_id=$5 AND job_epoch=$6`,
-            attemptParams(input.key, row, input.job),
-          )
-        ).rows[0] as Completion | undefined;
-        return { value: { row, attempt, progress },
-          events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation5, input.key, 'progress', { job: input.job })] };
-      },
-    ));
+              attemptParams(input.key, row, input.job),
+            )
+          ).rows[0] as Completion | undefined;
+          return {
+            value: { row, attempt, progress },
+            events: [
+              recordIdentityScopeNativeAssociation(tx, nativeAssociation5, input.key, 'progress', { job: input.job }),
+            ],
+          };
+        },
+      ),
+    );
     if (!snapshot.value) return fail('custody_missing', measured);
     const { row, attempt, progress } = snapshot.value;
     if (attempt.state === 'finished')
@@ -1235,41 +1270,48 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
     // The missing public effect enumeration/receiving ABI is named in the owner contract.
     if (input.key.source.kind === 'public') {
       const nativeAssociation6 = prepayIdentityScopeNativeAssociation(pool, input.deadline);
-      await withSingleCommandAttempt(() => runCommand(
-        pool,
-        { partition: identityScopeAddress(input.key).partition, deadline: nativeAssociation6.deadline },
-        async (tx) => {
-          bindIdentityScopeNativeAssociation(tx, nativeAssociation6);
-          const locked = await head(tx, input.key, measured, true);
-          if (
-            !locked ||
-            locked.registration !== row.registration ||
-            locked.capture_id !== row.capture_id ||
-            locked.capture.kind !== 'public-locator' ||
-            !same(locked.source, input.key.source) ||
-            !(await verifyPublicIdentitySourceCaptureLocator(tx, locked.capture))
-          )
-            throw unavailable();
-          const current = await attemptAt(tx, input.key, locked, input.job, measured);
-          if (!current || current.state !== 'active' || !same(current.attempt, input.attempt)) throw unavailable();
-          // Retained native public expected-state head. No Library membership or seal is stored here.
-          const stored = await query(
-            tx,
-            measured,
-            `INSERT INTO semantic.identity_scope_completion
+      await withSingleCommandAttempt(() =>
+        runCommand(
+          pool,
+          { partition: identityScopeAddress(input.key).partition, deadline: nativeAssociation6.deadline },
+          async (tx) => {
+            bindIdentityScopeNativeAssociation(tx, nativeAssociation6);
+            const locked = await head(tx, input.key, measured, true);
+            if (
+              !locked ||
+              locked.registration !== row.registration ||
+              locked.capture_id !== row.capture_id ||
+              locked.capture.kind !== 'public-locator' ||
+              !same(locked.source, input.key.source) ||
+              !(await verifyPublicIdentitySourceCaptureLocator(tx, locked.capture))
+            )
+              throw unavailable();
+            const current = await attemptAt(tx, input.key, locked, input.job, measured);
+            if (!current || current.state !== 'active' || !same(current.attempt, input.attempt)) throw unavailable();
+            // Retained native public expected-state head. No Library membership or seal is stored here.
+            const stored = await query(
+              tx,
+              measured,
+              `INSERT INTO semantic.identity_scope_completion
           (partition_no,source_key,scope_id,registration,job_id,job_epoch,source_generation,capture_id,attempt)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
-            [
-              ...attemptParams(input.key, locked, input.job),
-              locked.capture.definition,
-              locked.capture_id,
-              json(input.attempt),
-            ],
-          );
-          if (stored.rowCount === 0) return noEffect(null);
-          return { value: null, events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation6, input.key, 'progress', { job: input.job })] };
-        },
-      ));
+              [
+                ...attemptParams(input.key, locked, input.job),
+                locked.capture.definition,
+                locked.capture_id,
+                json(input.attempt),
+              ],
+            );
+            if (stored.rowCount === 0) return noEffect(null);
+            return {
+              value: null,
+              events: [
+                recordIdentityScopeNativeAssociation(tx, nativeAssociation6, input.key, 'progress', { job: input.job }),
+              ],
+            };
+          },
+        ),
+      );
       return fail('custody_missing', measured);
     }
     if (row.capture.kind !== 'library') return fail('capture_incomplete', measured);
@@ -1306,14 +1348,16 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
         (progress.seal === null && progress.after_key !== null));
     if (sealChanged) {
       const nativeAssociation7 = prepayIdentityScopeNativeAssociation(pool, input.deadline);
-      await withSingleCommandAttempt(() => runCommand(
-        pool,
-        { partition: identityScopeAddress(input.key).partition, deadline: nativeAssociation7.deadline },
-        async (tx) => {
-          bindIdentityScopeNativeAssociation(tx, nativeAssociation7);
-          const locked = await head(tx, input.key, measured, true);
-          if (!(locked?.registration === row.registration && same(locked.source, input.key.source))) return noEffect(null);
-          const reset = await query(
+      await withSingleCommandAttempt(() =>
+        runCommand(
+          pool,
+          { partition: identityScopeAddress(input.key).partition, deadline: nativeAssociation7.deadline },
+          async (tx) => {
+            bindIdentityScopeNativeAssociation(tx, nativeAssociation7);
+            const locked = await head(tx, input.key, measured, true);
+            if (!(locked?.registration === row.registration && same(locked.source, input.key.source)))
+              return noEffect(null);
+            const reset = await query(
               tx,
               measured,
               `UPDATE semantic.identity_scope_completion SET seal=NULL,after_key=NULL,complete=false,version=version+1,
@@ -1327,10 +1371,16 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
                 progress!.version,
               ],
             );
-          if (reset.rowCount === 0) return noEffect(null);
-          return { value: null, events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation7, input.key, 'progress', { job: input.job })] };
-        },
-      ));
+            if (reset.rowCount === 0) return noEffect(null);
+            return {
+              value: null,
+              events: [
+                recordIdentityScopeNativeAssociation(tx, nativeAssociation7, input.key, 'progress', { job: input.job }),
+              ],
+            };
+          },
+        ),
+      );
       return pending();
     }
     for (const selection of page.rows) {
@@ -1352,91 +1402,114 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
     if (Date.now() >= input.deadline) return fail('deadline', measured);
     const nativeAssociation8 = prepayIdentityScopeNativeAssociation(pool, input.deadline);
     return (
-      await withSingleCommandAttempt(() => runCommand<S.IdentityScopeFinishResult>(
-        pool,
-        { partition: identityScopeAddress(input.key).partition, deadline: nativeAssociation8.deadline },
-        async (tx) => {
-          bindIdentityScopeNativeAssociation(tx, nativeAssociation8);
-          const locked = await head(tx, input.key, measured, true);
-          if (
-            !locked ||
-            locked.registration !== row.registration ||
-            locked.capture_id !== row.capture_id ||
-            !same(locked.source, input.key.source) ||
-            locked.state === 'retired'
-          )
-            return noEffect(fail('source_unready', measured, 'stale'));
-          const current = await attemptAt(tx, input.key, locked, input.job, measured);
-          if (!current || !same(current.attempt, input.attempt) || current.state === 'cancelled')
-            return noEffect(fail('custody_missing', measured));
-          if (current.state === 'finished')
-            return noEffect({ status: 'finished', scope: input.key,
-              committedRevision: BigInt(current.revision), work: measured });
-          const saved = (
+      await withSingleCommandAttempt(() =>
+        runCommand<S.IdentityScopeFinishResult>(
+          pool,
+          { partition: identityScopeAddress(input.key).partition, deadline: nativeAssociation8.deadline },
+          async (tx) => {
+            bindIdentityScopeNativeAssociation(tx, nativeAssociation8);
+            const locked = await head(tx, input.key, measured, true);
+            if (
+              !locked ||
+              locked.registration !== row.registration ||
+              locked.capture_id !== row.capture_id ||
+              !same(locked.source, input.key.source) ||
+              locked.state === 'retired'
+            )
+              return noEffect(fail('source_unready', measured, 'stale'));
+            const current = await attemptAt(tx, input.key, locked, input.job, measured);
+            if (!current || !same(current.attempt, input.attempt) || current.state === 'cancelled')
+              return noEffect(fail('custody_missing', measured));
+            if (current.state === 'finished')
+              return noEffect({
+                status: 'finished',
+                scope: input.key,
+                committedRevision: BigInt(current.revision),
+                work: measured,
+              });
+            const saved = (
+              await query(
+                tx,
+                measured,
+                `SELECT version FROM semantic.identity_scope_completion
+        WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND job_id=$5 AND job_epoch=$6 FOR UPDATE`,
+                attemptParams(input.key, locked, input.job),
+              )
+            ).rows[0];
+            if ((saved?.version ?? null) !== (progress?.version ?? null)) return noEffect(pending());
+            // Revalidate retained custody, not a newly manufactured capture or effect receipt.
+            if (!(await proofCurrent(tx, input.key, locked, measured, true, budget)))
+              return noEffect(fail('source_unready', measured));
+            if (page.exhausted && !(await verifyLibraryScopeEffectsSeal(tx, nativeKey, page.seal))) {
+              const invalidated = await query(
+                tx,
+                measured,
+                `UPDATE semantic.identity_scope_completion SET seal=NULL,after_key=NULL,complete=false,version=version+1
+          WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND job_id=$5 AND job_epoch=$6`,
+                attemptParams(input.key, locked, input.job),
+              );
+              if (invalidated.rowCount === 0) return noEffect(pending());
+              return {
+                value: pending(),
+                events: [
+                  recordIdentityScopeNativeAssociation(tx, nativeAssociation8, input.key, 'progress', {
+                    job: input.job,
+                  }),
+                ],
+              };
+            }
             await query(
               tx,
               measured,
-              `SELECT version FROM semantic.identity_scope_completion
-        WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND job_id=$5 AND job_epoch=$6 FOR UPDATE`,
-              attemptParams(input.key, locked, input.job),
-            )
-          ).rows[0];
-          if ((saved?.version ?? null) !== (progress?.version ?? null)) return noEffect(pending());
-          // Revalidate retained custody, not a newly manufactured capture or effect receipt.
-          if (!(await proofCurrent(tx, input.key, locked, measured, true, budget)))
-            return noEffect(fail('source_unready', measured));
-          if (page.exhausted && !(await verifyLibraryScopeEffectsSeal(tx, nativeKey, page.seal))) {
-            const invalidated = await query(
-              tx,
-              measured,
-              `UPDATE semantic.identity_scope_completion SET seal=NULL,after_key=NULL,complete=false,version=version+1
-          WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND job_id=$5 AND job_epoch=$6`,
-              attemptParams(input.key, locked, input.job),
-            );
-            if (invalidated.rowCount === 0) return noEffect(pending());
-            return { value: pending(), events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation8, input.key, 'progress', { job: input.job })] };
-          }
-          await query(
-            tx,
-            measured,
-            `INSERT INTO semantic.identity_scope_completion
+              `INSERT INTO semantic.identity_scope_completion
         (partition_no,source_key,scope_id,registration,job_id,job_epoch,source_generation,capture_id,attempt,seal,after_key,complete)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
         ON CONFLICT(partition_no,source_key,scope_id,registration,job_id,job_epoch) DO UPDATE
         SET seal=excluded.seal,after_key=excluded.after_key,complete=excluded.complete,version=semantic.identity_scope_completion.version+1`,
-            [
-              ...attemptParams(input.key, locked, input.job),
-              identity.generation,
-              locked.capture_id,
-              json(input.attempt),
-              json(page.seal),
-              page.after ? json(page.after) : null,
-              page.exhausted,
-            ],
-          );
-          if (!page.exhausted) return { value: pending(), events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation8, input.key, 'progress', { job: input.job })] };
-          if (locked.active < 1) throw unavailable();
-          const revision = BigInt(locked.revision) + 1n;
-          await query(
-            tx,
-            measured,
-            `UPDATE semantic.identity_scope_attempt SET state='finished',revision=$7,transaction_id=$8
+              [
+                ...attemptParams(input.key, locked, input.job),
+                identity.generation,
+                locked.capture_id,
+                json(input.attempt),
+                json(page.seal),
+                page.after ? json(page.after) : null,
+                page.exhausted,
+              ],
+            );
+            if (!page.exhausted)
+              return {
+                value: pending(),
+                events: [
+                  recordIdentityScopeNativeAssociation(tx, nativeAssociation8, input.key, 'progress', {
+                    job: input.job,
+                  }),
+                ],
+              };
+            if (locked.active < 1) throw unavailable();
+            const revision = BigInt(locked.revision) + 1n;
+            await query(
+              tx,
+              measured,
+              `UPDATE semantic.identity_scope_attempt SET state='finished',revision=$7,transaction_id=$8
         WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND job_id=$5 AND job_epoch=$6 AND state='active'`,
-            [...attemptParams(input.key, locked, input.job), revision.toString(), currentCommand(tx).transactionId],
-          );
-          await query(
-            tx,
-            measured,
-            `UPDATE semantic.identity_scope_summary SET active=active-1,revision=revision+1,
+              [...attemptParams(input.key, locked, input.job), revision.toString(), currentCommand(tx).transactionId],
+            );
+            await query(
+              tx,
+              measured,
+              `UPDATE semantic.identity_scope_summary SET active=active-1,revision=revision+1,
         state=CASE WHEN state='retiring' THEN state ELSE 'repair' END WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`,
-            params(input.key),
-          );
-          return {
-            value: { status: 'finished', scope: input.key, committedRevision: revision, work: measured },
-            events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation8, input.key, 'finish', { job: input.job })],
-          };
-        },
-      ))
+              params(input.key),
+            );
+            return {
+              value: { status: 'finished', scope: input.key, committedRevision: revision, work: measured },
+              events: [
+                recordIdentityScopeNativeAssociation(tx, nativeAssociation8, input.key, 'finish', { job: input.job }),
+              ],
+            };
+          },
+        ),
+      )
     ).value;
   }
 
@@ -1602,47 +1675,51 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
         captureId = input.capture.capture.captureId;
       else return fail('source_unready', measured);
       const nativeAssociation = prepayIdentityScopeNativeAssociation(pool, input.deadline);
-      await withSingleCommandAttempt(() => runCommand(pool, { partition: k.partition, deadline: nativeAssociation.deadline }, async (tx) => {
-        bindIdentityScopeNativeAssociation(tx, nativeAssociation);
-        if (!(await ownerCurrent(tx, input.key))) throw unavailable();
-        if (capture.kind === 'public-locator' && !(await verifyPublicIdentitySourceCaptureLocator(tx, capture)))
-          throw unavailable();
-        const inserted = await query(
-          tx,
-          measured,
-          `INSERT INTO semantic.identity_scope_summary(partition_no,source_key,scope_id,source,capture_id,capture,scan_complete,state)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
-          [
-            ...params(input.key),
-            json(input.key.source),
-            captureId,
-            json(capture),
-            false,
-            capture.kind === 'public-locator' ? 'enrolling' : 'capturing',
-          ],
-        );
-        const locked = await head(tx, input.key, measured, true);
-        if (!locked || locked.state === 'retiring') throw unavailable();
-        if (locked.state === 'retired') {
-          await query(
+      await withSingleCommandAttempt(() =>
+        runCommand(pool, { partition: k.partition, deadline: nativeAssociation.deadline }, async (tx) => {
+          bindIdentityScopeNativeAssociation(tx, nativeAssociation);
+          if (!(await ownerCurrent(tx, input.key))) throw unavailable();
+          if (capture.kind === 'public-locator' && !(await verifyPublicIdentitySourceCaptureLocator(tx, capture)))
+            throw unavailable();
+          const inserted = await query(
             tx,
             measured,
-            `UPDATE semantic.identity_scope_summary SET source=$4,capture_id=$5,capture=$6,
-            registration=gen_random_uuid(),state=$7,revision=revision+1,active=0,frontier=NULL,
-            scan_complete=false,enrollment_home=0,maintenance_allowance=NULL WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`,
+            `INSERT INTO semantic.identity_scope_summary(partition_no,source_key,scope_id,source,capture_id,capture,scan_complete,state)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
             [
               ...params(input.key),
               json(input.key.source),
               captureId,
               json(capture),
+              false,
               capture.kind === 'public-locator' ? 'enrolling' : 'capturing',
             ],
           );
-        } else if (!same(locked.source, input.key.source)) throw unavailable();
-        else if (inserted.rowCount === 0) return noEffect(null);
-        return { value: null,
-          events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation, input.key, 'registration')] };
-      }));
+          const locked = await head(tx, input.key, measured, true);
+          if (!locked || locked.state === 'retiring') throw unavailable();
+          if (locked.state === 'retired') {
+            await query(
+              tx,
+              measured,
+              `UPDATE semantic.identity_scope_summary SET source=$4,capture_id=$5,capture=$6,
+            registration=gen_random_uuid(),state=$7,revision=revision+1,active=0,frontier=NULL,
+            scan_complete=false,enrollment_home=0,maintenance_allowance=NULL WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`,
+              [
+                ...params(input.key),
+                json(input.key.source),
+                captureId,
+                json(capture),
+                capture.kind === 'public-locator' ? 'enrolling' : 'capturing',
+              ],
+            );
+          } else if (!same(locked.source, input.key.source)) throw unavailable();
+          else if (inserted.rowCount === 0) return noEffect(null);
+          return {
+            value: null,
+            events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation, input.key, 'registration')],
+          };
+        }),
+      );
       return advance(
         input.key,
         nativeAssociation.deadline,

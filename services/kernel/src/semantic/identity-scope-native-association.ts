@@ -1,8 +1,11 @@
 import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
 import {
-  currentCommand, currentCommandResources, registerCommandCallback,
-  type CommandEvent, type CommandTransaction,
+  currentCommand,
+  currentCommandResources,
+  registerCommandCallback,
+  type CommandEvent,
+  type CommandTransaction,
 } from '../command/command.ts';
 import type { NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
@@ -10,7 +13,8 @@ import type { IdentityJobRef } from './identity-epoch-contract.ts';
 import type { IdentityScopeKey } from './identity-scope-types.ts';
 import { identityScopeAddress } from './identity-scoped-observations.ts';
 import {
-  activeIdentitySourceConsumerMaintenance, identitySourceConsumerLibraryWork,
+  activeIdentitySourceConsumerMaintenance,
+  identitySourceConsumerLibraryWork,
   type IdentitySourceConsumerMaintenanceContext,
 } from './identity-source-consumer-maintenance.ts';
 import { recordIdentityEpochNativeCommit, serializeIdentityValue as json } from './identity-epoch-store.ts';
@@ -25,12 +29,23 @@ type Purpose = 'identity-scope-registration' | 'identity-scope-enrollment' | 'id
 declare const admission: unique symbol;
 export type IdentityScopeNativeAssociationAdmission = Readonly<{ deadline: number; [admission]: true }>;
 type Binding = {
-  pool: Pool; context: IdentitySourceConsumerMaintenanceContext; work: NativeCollectionWork;
-  tx?: CommandTransaction; queued: boolean;
+  pool: Pool;
+  context: IdentitySourceConsumerMaintenanceContext;
+  work: NativeCollectionWork;
+  tx?: CommandTransaction;
+  queued: boolean;
 };
 const bindings = new WeakMap<IdentityScopeNativeAssociationAdmission, Binding>();
-const zero = { candidateKeys: 0, identityMetadataRows: 0, nativeRows: 0, nativePoints: 0,
-  witnessKeys: 0, statements: 0, bytes: 0, emptySeeks: 0 };
+const zero = {
+  candidateKeys: 0,
+  identityMetadataRows: 0,
+  nativeRows: 0,
+  nativePoints: 0,
+  witnessKeys: 0,
+  statements: 0,
+  bytes: 0,
+  emptySeeks: 0,
+};
 const price = (rows: number, statements: number, bytes: number): WorkDimensions =>
   Object.freeze({ ...zero, nativeRows: rows, nativePoints: rows, statements, bytes });
 
@@ -45,23 +60,33 @@ export const identityScopeNativeAssociationPrices = Object.freeze({
   event: price(2, 1, Buffer.byteLength(fence.sql) + 2048 + 64),
   // time point, checkout, BEGIN, lock timeout, two statement timeouts, COMMIT,
   // ROLLBACK. Both terminals stay charged on success as well as rollback.
-  control: Object.freeze({ ...price(1, 7, Buffer.byteLength(time.sql) +
-    Buffer.byteLength('BEGIN ISOLATION LEVEL SERIALIZABLE') +
-    Buffer.byteLength("SET LOCAL lock_timeout = '200ms'") +
-    2 * Buffer.byteLength("SET LOCAL statement_timeout = '9999999999999999ms'") +
-    Buffer.byteLength('COMMITROLLBACK') + 128), nativePoints: 2 }),
+  control: Object.freeze({
+    ...price(
+      1,
+      7,
+      Buffer.byteLength(time.sql) +
+        Buffer.byteLength('BEGIN ISOLATION LEVEL SERIALIZABLE') +
+        Buffer.byteLength("SET LOCAL lock_timeout = '200ms'") +
+        2 * Buffer.byteLength("SET LOCAL statement_timeout = '9999999999999999ms'") +
+        Buffer.byteLength('COMMITROLLBACK') +
+        128,
+    ),
+    nativePoints: 2,
+  }),
 });
 
 /** Admission from the CURRENT original only, before starting the narrow command.
  * No allowance, configuration, or caller-created work object is accepted here.
  */
 export function prepayIdentityScopeNativeAssociation(
-  pool: Pool, deadline: number,
+  pool: Pool,
+  deadline: number,
 ): IdentityScopeNativeAssociationAdmission {
   const context = activeIdentitySourceConsumerMaintenance(pool);
   const effective = Math.min(deadline, context?.deadline ?? NaN);
   const work = context && identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, effective);
-  if (!context || !work || !Number.isSafeInteger(effective) || effective <= Date.now()) throw new ProblemError('dependency_unavailable');
+  if (!context || !work || !Number.isSafeInteger(effective) || effective <= Date.now())
+    throw new ProblemError('dependency_unavailable');
   const total = { ...zero };
   for (const cost of Object.values(identityScopeNativeAssociationPrices))
     for (const axis of Object.keys(total) as (keyof WorkDimensions)[]) total[axis] += cost[axis];
@@ -77,12 +102,18 @@ export function prepayIdentityScopeNativeAssociation(
  * this debit; a callback, foreign Pool or settled original cannot escape its frame.
  */
 export function bindIdentityScopeNativeAssociation(
-  tx: CommandTransaction, token: IdentityScopeNativeAssociationAdmission,
+  tx: CommandTransaction,
+  token: IdentityScopeNativeAssociationAdmission,
 ): void {
   const b = bindings.get(token);
-  if (!b || b.work.failure || (b.tx && b.tx !== tx) ||
-      currentCommandResources(tx).pool !== b.pool || currentCommandResources(tx).deadline !== token.deadline ||
-      identitySourceConsumerLibraryWork(b.pool, b.context.identityConsumerWork, token.deadline) !== b.work)
+  if (
+    !b ||
+    b.work.failure ||
+    (b.tx && b.tx !== tx) ||
+    currentCommandResources(tx).pool !== b.pool ||
+    currentCommandResources(tx).deadline !== token.deadline ||
+    identitySourceConsumerLibraryWork(b.pool, b.context.identityConsumerWork, token.deadline) !== b.work
+  )
     throw new ProblemError('dependency_unavailable');
   // Released hooks are platform commands. An attributed command may write a
   // basis/receipt as well, which this fixed native/event package does not admit.
@@ -94,8 +125,11 @@ export function bindIdentityScopeNativeAssociation(
  * the executor's callback list. Neither the event nor this return is a receipt.
  */
 export function recordIdentityScopeNativeAssociation(
-  tx: CommandTransaction, token: IdentityScopeNativeAssociationAdmission,
-  key: IdentityScopeKey, phase: Phase, binding?: Readonly<{ job?: IdentityJobRef; dependency?: string }>,
+  tx: CommandTransaction,
+  token: IdentityScopeNativeAssociationAdmission,
+  key: IdentityScopeKey,
+  phase: Phase,
+  binding?: Readonly<{ job?: IdentityJobRef; dependency?: string }>,
 ): CommandEvent {
   bindIdentityScopeNativeAssociation(tx, token);
   const b = bindings.get(token)!;
@@ -106,19 +140,38 @@ export function recordIdentityScopeNativeAssociation(
   const address = identityScopeAddress(key);
   const command = currentCommand(tx);
   if (address.partition !== command.partition) throw new TypeError('Foreign scope association home');
-  const purpose: Purpose = phase === 'finish' ? 'identity-scope-finish' :
-    phase === 'enrollment' ? 'identity-scope-enrollment' : 'identity-scope-registration';
+  const purpose: Purpose =
+    phase === 'finish'
+      ? 'identity-scope-finish'
+      : phase === 'enrollment'
+        ? 'identity-scope-enrollment'
+        : 'identity-scope-registration';
   registerCommandCallback(tx, () => bindIdentityScopeNativeAssociation(tx, token));
   recordIdentityEpochNativeCommit(tx, purpose);
   registerCommandCallback(tx, async (transactionId) => {
     bindIdentityScopeNativeAssociation(tx, token);
     if (transactionId !== command.transactionId) throw new TypeError('Foreign scope association transaction');
-    const result = await tx.query(insert.sql, [address.partition,address.source,address.scope,
-      json(key.source),transactionId,phase,purpose,binding?.dependency ?? null,
-      binding?.job?.jobId ?? null,binding?.job?.epoch.toString() ?? null]);
+    const result = await tx.query(insert.sql, [
+      address.partition,
+      address.source,
+      address.scope,
+      json(key.source),
+      transactionId,
+      phase,
+      purpose,
+      binding?.dependency ?? null,
+      binding?.job?.jobId ?? null,
+      binding?.job?.epoch.toString() ?? null,
+    ]);
     if (result.rowCount !== 1) throw new ProblemError('dependency_unavailable');
   });
-  return { type: IDENTITY_SCOPE_NATIVE_ASSOCIATED, data: {
-    sourceKey: address.source, scope: address.scope, phase, transactionId: command.transactionId,
-  } };
+  return {
+    type: IDENTITY_SCOPE_NATIVE_ASSOCIATED,
+    data: {
+      sourceKey: address.source,
+      scope: address.scope,
+      phase,
+      transactionId: command.transactionId,
+    },
+  };
 }

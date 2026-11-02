@@ -75,12 +75,18 @@ const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const unsigned = /^(0|[1-9][0-9]{0,18})$/;
 const maxBigint = 9223372036854775807n;
 const currentLocked = current.sql + '\nFOR UPDATE OF s FOR SHARE OF p,l,a,c,r,h,fc,fa';
-const associationLocked = association.sql.replace('/* capture-lock */', 'FOR SHARE OF captured,cn') +
-  '\nFOR SHARE OF s,a,n,p';
+const associationLocked =
+  association.sql.replace('/* capture-lock */', 'FOR SHARE OF captured,cn') + '\nFOR SHARE OF s,a,n,p';
 const repairLocked = repair.sql + '\nFOR SHARE OF s,a,c,r,n,prepared';
 const zero = (): WorkDimensions => ({
-  candidateKeys: 0, identityMetadataRows: 0, nativeRows: 0, nativePoints: 0,
-  witnessKeys: 0, statements: 0, bytes: 0, emptySeeks: 0,
+  candidateKeys: 0,
+  identityMetadataRows: 0,
+  nativeRows: 0,
+  nativePoints: 0,
+  witnessKeys: 0,
+  statements: 0,
+  bytes: 0,
+  emptySeeks: 0,
 });
 
 /** Literal operation bounds, charged identically for hit, absence, repeat and failure.
@@ -104,14 +110,18 @@ export function identityScopeCommittedReceiptFootprint(
     output = 5120; // schema-bounded 4096-byte seal plus scalar envelope
   } else if (
     sql === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' ||
-    sql === 'COMMIT' || sql === 'ROLLBACK' ||
+    sql === 'COMMIT' ||
+    sql === 'ROLLBACK' ||
     /^SET LOCAL statement_timeout = '[1-9][0-9]{0,15}ms'$/.test(sql)
   ) {
     rows = 0;
     output = 0;
   } else return undefined;
   return {
-    ...zero(), nativeRows: rows, nativePoints: rows, statements: 1,
+    ...zero(),
+    nativeRows: rows,
+    nativePoints: rows,
+    statements: 1,
     bytes: Buffer.byteLength(sql) + Buffer.byteLength(json(values)) + output,
   };
 }
@@ -128,58 +138,111 @@ function nativeUuid(value: unknown): value is string {
   return typeof value === 'string' && uuid.test(value);
 }
 function nativeDecimal(value: unknown, minimum: bigint): value is string {
-  return typeof value === 'string' && unsigned.test(value) &&
-    BigInt(value) >= minimum && BigInt(value) <= maxBigint;
+  return typeof value === 'string' && unsigned.test(value) && BigInt(value) >= minimum && BigInt(value) <= maxBigint;
 }
 function nativeEpoch(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= 2147483647;
 }
 function validNative(native: IdentityNativeReceipt): boolean {
-  return !!native && Number.isInteger(native.partition) && native.partition >= 0 && native.partition <= 4095 &&
+  return (
+    !!native &&
+    Number.isInteger(native.partition) &&
+    native.partition >= 0 &&
+    native.partition <= 4095 &&
     nativeEpoch(native.epoch) &&
-    typeof native.position === 'bigint' && native.position > 0n && native.position <= maxBigint &&
-    nativeUuid(native.transactionId);
+    typeof native.position === 'bigint' &&
+    native.position > 0n &&
+    native.position <= maxBigint &&
+    nativeUuid(native.transactionId)
+  );
 }
 
 /** Account native custody only. Explicit/public output has another owner and no inherited admission. */
 function parameters(locator: IdentityScopeCommittedLocator): unknown[] | null {
-  if (!locator?.expected?.key?.source || !locator.completion ||
-      (locator.completion.kind !== 'initial' && locator.completion.kind !== 'repair')) return null;
+  if (
+    !locator?.expected?.key?.source ||
+    !locator.completion ||
+    (locator.completion.kind !== 'initial' && locator.completion.kind !== 'repair')
+  )
+    return null;
   const { expected, registration } = locator;
   const key = expected.key;
-  if (!nativeUuid(registration) || !nativeUuid(expected.captureId) || !boundedText(key.scopeId, 256) ||
-      typeof expected.committedRevision !== 'bigint' || expected.committedRevision <= 0n ||
-      expected.committedRevision > maxBigint || key.source.kind !== 'library') return null;
+  if (
+    !nativeUuid(registration) ||
+    !nativeUuid(expected.captureId) ||
+    !boundedText(key.scopeId, 256) ||
+    typeof expected.committedRevision !== 'bigint' ||
+    expected.committedRevision <= 0n ||
+    expected.committedRevision > maxBigint ||
+    key.source.kind !== 'library'
+  )
+    return null;
   const i = key.source.identity;
   if (!i || (i.scope !== 'curated' && i.scope !== 'private_builtin')) return null;
   // UUID route equality also validates the integer route domain before partitionOf.
   const collectionRoute = routeOf(i.collectionId);
   const accountRoute = routeOf(i.accountId);
-  if (collectionRoute === null || collectionRoute !== i.route || accountRoute === null ||
-      partitionOf(accountRoute) !== partitionOf(collectionRoute) || !nativeEpoch(i.ownerEpoch) ||
-      !boundedText(i.incarnation, 128) || !nativeDecimal(i.generation, 0n) ||
-      !nativeDecimal(i.receivingEpoch, 1n) || !boundedText(i.effectKey, 256)) return null;
+  if (
+    collectionRoute === null ||
+    collectionRoute !== i.route ||
+    accountRoute === null ||
+    partitionOf(accountRoute) !== partitionOf(collectionRoute) ||
+    !nativeEpoch(i.ownerEpoch) ||
+    !boundedText(i.incarnation, 128) ||
+    !nativeDecimal(i.generation, 0n) ||
+    !nativeDecimal(i.receivingEpoch, 1n) ||
+    !boundedText(i.effectKey, 256)
+  )
+    return null;
   const source = json(key.source);
   if (Buffer.byteLength(source) > 4096) return null;
   const address = identityScopeAddress(key);
   if (locator.completion.kind === 'repair') {
     const { receiving, attempt } = locator.completion;
-    if (!validNative(attempt) || !receiving?.job || !nativeUuid(receiving.directoryTransactionId) ||
-        !nativeUuid(receiving.job.jobId) || typeof receiving.job.epoch !== 'bigint' ||
-        receiving.job.epoch <= 0n || receiving.job.epoch > maxBigint ||
-        !boundedText(receiving.pageId, 256) ||
-        !Number.isSafeInteger(receiving.ordinal) || receiving.ordinal < 0 || receiving.ordinal > 2147483647)
+    if (
+      !validNative(attempt) ||
+      !receiving?.job ||
+      !nativeUuid(receiving.directoryTransactionId) ||
+      !nativeUuid(receiving.job.jobId) ||
+      typeof receiving.job.epoch !== 'bigint' ||
+      receiving.job.epoch <= 0n ||
+      receiving.job.epoch > maxBigint ||
+      !boundedText(receiving.pageId, 256) ||
+      !Number.isSafeInteger(receiving.ordinal) ||
+      receiving.ordinal < 0 ||
+      receiving.ordinal > 2147483647
+    )
       return null;
   }
-  return [address.partition, address.source, address.scope, registration, expected.captureId,
-    expected.committedRevision.toString(), source, i.ownerEpoch, i.route,
-    i.collectionId, accountRoute, i.accountId, i.incarnation, i.generation, i.scope,
-    i.receivingEpoch, i.effectKey];
+  return [
+    address.partition,
+    address.source,
+    address.scope,
+    registration,
+    expected.captureId,
+    expected.committedRevision.toString(),
+    source,
+    i.ownerEpoch,
+    i.route,
+    i.collectionId,
+    accountRoute,
+    i.accountId,
+    i.incarnation,
+    i.generation,
+    i.scope,
+    i.receivingEpoch,
+    i.effectKey,
+  ];
 }
 
 type CompletionRow = {
-  epoch: number; position: string; transaction_id: string; version: string; seal: object;
-  source_generation: string; completion_revision: string;
+  epoch: number;
+  position: string;
+  transaction_id: string;
+  version: string;
+  seal: object;
+  source_generation: string;
+  completion_revision: string;
 };
 type HeadRow = { registration: string; capture_id: string; revision: string; state: string };
 const digestSeal = (seal: object): string => createHash('sha256').update(canonicalize(seal)!).digest('hex');
@@ -201,33 +264,58 @@ async function read(
   if (!row) return null;
   // Ready is its own real native command, including after a completed repair.
   // Read-only replay never mints or repairs a historical missing association.
-  const ready = row.state === 'ready' ? (await tx.query<Pick<CompletionRow,
-    'epoch' | 'position' | 'transaction_id' | 'completion_revision'>>(
-      lock ? associationLocked : association.sql,
-      [...values.slice(0, 7), locator.completion.kind === 'initial'],
-    )).rows[0] : undefined;
+  const ready =
+    row.state === 'ready'
+      ? (
+          await tx.query<Pick<CompletionRow, 'epoch' | 'position' | 'transaction_id' | 'completion_revision'>>(
+            lock ? associationLocked : association.sql,
+            [...values.slice(0, 7), locator.completion.kind === 'initial'],
+          )
+        ).rows[0]
+      : undefined;
   if (row.state === 'ready' && !ready) return null;
   if (locator.completion.kind === 'initial') {
     if (!ready) return null;
-    return freezeTree({ locator,
-      native: { partition: Number(values[0]), epoch: ready.epoch,
-        position: BigInt(ready.position), transactionId: ready.transaction_id },
-      completionRevision: BigInt(ready.completion_revision), completionVersion: 0n,
-      sealDigest: digestSeal({ phase: 'ready', ...ready }), sourceGeneration: String(values[13]),
+    return freezeTree({
+      locator,
+      native: {
+        partition: Number(values[0]),
+        epoch: ready.epoch,
+        position: BigInt(ready.position),
+        transactionId: ready.transaction_id,
+      },
+      completionRevision: BigInt(ready.completion_revision),
+      completionVersion: 0n,
+      sealDigest: digestSeal({ phase: 'ready', ...ready }),
+      sourceGeneration: String(values[13]),
     });
   }
   const { receiving, attempt } = locator.completion;
-  const completed = (await tx.query<CompletionRow>(lock ? repairLocked : repair.sql, [
-    ...values.slice(0, 7), receiving.job.jobId, receiving.job.epoch.toString(), json(attempt),
-    receiving.directoryTransactionId, receiving.pageId, receiving.ordinal, values[13], values[7],
-  ])).rows[0];
+  const completed = (
+    await tx.query<CompletionRow>(lock ? repairLocked : repair.sql, [
+      ...values.slice(0, 7),
+      receiving.job.jobId,
+      receiving.job.epoch.toString(),
+      json(attempt),
+      receiving.directoryTransactionId,
+      receiving.pageId,
+      receiving.ordinal,
+      values[13],
+      values[7],
+    ])
+  ).rows[0];
   if (!completed) return null;
   return freezeTree({
     locator,
-    native: Object.freeze({ partition: Number(values[0]), epoch: (ready ?? completed).epoch,
-      position: BigInt((ready ?? completed).position), transactionId: (ready ?? completed).transaction_id }),
+    native: Object.freeze({
+      partition: Number(values[0]),
+      epoch: (ready ?? completed).epoch,
+      position: BigInt((ready ?? completed).position),
+      transactionId: (ready ?? completed).transaction_id,
+    }),
     completionRevision: BigInt(completed.completion_revision),
-    completionVersion: BigInt(completed.version), sealDigest: digestSeal(completed.seal),
+    completionVersion: BigInt(completed.version),
+    sealDigest: digestSeal(completed.seal),
     sourceGeneration: completed.source_generation,
   });
 }
@@ -248,10 +336,15 @@ export async function resolveCommittedIdentityScopeReceipt(
   const values = parameters(locator);
   if (!values) return refuse('source_binding', work);
   try {
-    const evidence = await instrumentNativeCollectionWork(pool, work, (sql, args) =>
-      identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) === work
-        ? identityScopeCommittedReceiptFootprint(sql, args) : undefined,
-    () => withReadTransaction(pool, (tx) => read(tx, locator, values, false), context.deadline));
+    const evidence = await instrumentNativeCollectionWork(
+      pool,
+      work,
+      (sql, args) =>
+        identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) === work
+          ? identityScopeCommittedReceiptFootprint(sql, args)
+          : undefined,
+      () => withReadTransaction(pool, (tx) => read(tx, locator, values, false), context.deadline),
+    );
     return evidence ? { status: 'observed', evidence, work: work.receipt() } : refuse('not_current', work);
   } catch (error) {
     if (work.failure || classifyUnavailability(error)) return refuse('native_unavailable', work);
@@ -259,7 +352,12 @@ export async function resolveCommittedIdentityScopeReceipt(
   }
 }
 
-function liveHome(tx: CommandTransaction, pool: Pool, locator: IdentityScopeCommittedLocator, deadline: number): boolean {
+function liveHome(
+  tx: CommandTransaction,
+  pool: Pool,
+  locator: IdentityScopeCommittedLocator,
+  deadline: number,
+): boolean {
   try {
     const time = commandTime(tx);
     if (!time) return false;
@@ -268,22 +366,41 @@ function liveHome(tx: CommandTransaction, pool: Pool, locator: IdentityScopeComm
     if (hasLiveOperationalTransaction(tx)) {
       const resources = currentOperationalResources(tx);
       const source = locator.expected.key.source;
-      return source.kind === 'library' && source.identity.scope !== 'public_output' &&
-        resources.pool === pool && resources.partition === partition && resources.mode === 'work-step' &&
-        resources.accounts.length === 1 && resources.accounts[0] === source.identity.accountId &&
-        deadline <= resources.deadline && Date.now() < deadline;
+      return (
+        source.kind === 'library' &&
+        source.identity.scope !== 'public_output' &&
+        resources.pool === pool &&
+        resources.partition === partition &&
+        resources.mode === 'work-step' &&
+        resources.accounts.length === 1 &&
+        resources.accounts[0] === source.identity.accountId &&
+        deadline <= resources.deadline &&
+        Date.now() < deadline
+      );
     }
     const command = currentCommand(tx);
     const resources = currentCommandResources(tx);
-    return resources.pool === pool && command.partition === partition &&
-      deadline <= resources.deadline && Date.now() < deadline;
-  } catch { return false; }
+    return (
+      resources.pool === pool &&
+      command.partition === partition &&
+      deadline <= resources.deadline &&
+      Date.now() < deadline
+    );
+  } catch {
+    return false;
+  }
 }
 
-const holds = new WeakMap<object, {
-  tx: CommandTransaction; pool: Pool; context: IdentitySourceConsumerMaintenanceContext; work: NativeCollectionWork;
-  locator: IdentityScopeCommittedLocator;
-}>();
+const holds = new WeakMap<
+  object,
+  {
+    tx: CommandTransaction;
+    pool: Pool;
+    context: IdentitySourceConsumerMaintenanceContext;
+    work: NativeCollectionWork;
+    locator: IdentityScopeCommittedLocator;
+  }
+>();
 
 /** Repeats resolution under actual local row locks. Locks belong to the caller's
  * genuine source-home transaction through COMMIT/ROLLBACK. No checkout or foreign IO.
@@ -300,18 +417,32 @@ export async function holdCommittedIdentityScopeReceipt(
   const values = parameters(expected.locator);
   if (!values || !liveHome(tx, pool, expected.locator, context.deadline)) return refuse('source_binding', work);
   try {
-    const evidence = await instrumentNativeCollectionWork(pool, work, (sql, args) =>
-      identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) === work &&
-      liveHome(tx, pool, expected.locator, context.deadline)
-        ? identityScopeCommittedReceiptFootprint(sql, args) : undefined,
-    () => read(tx, expected.locator, values, true), tx as PoolClient);
-    if (!evidence || !isDeepStrictEqual(evidence, expected) ||
-        !liveHome(tx, pool, expected.locator, context.deadline)) return refuse('not_current', work);
-    const result = Object.freeze({ status: 'held' as const, evidence,
+    const evidence = await instrumentNativeCollectionWork(
+      pool,
+      work,
+      (sql, args) =>
+        identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) === work &&
+        liveHome(tx, pool, expected.locator, context.deadline)
+          ? identityScopeCommittedReceiptFootprint(sql, args)
+          : undefined,
+      () => read(tx, expected.locator, values, true),
+      tx as PoolClient,
+    );
+    if (!evidence || !isDeepStrictEqual(evidence, expected) || !liveHome(tx, pool, expected.locator, context.deadline))
+      return refuse('not_current', work);
+    const result = Object.freeze({
+      status: 'held' as const,
+      evidence,
       transactionId: hasLiveOperationalTransaction(tx) ? null : currentCommand(tx).transactionId,
       work: work.receipt(),
     }) as HeldIdentityScopeCommittedReceipt;
-    holds.set(result, { tx, pool, context: Object.freeze({ ...context }), work, locator: structuredClone(evidence.locator) });
+    holds.set(result, {
+      tx,
+      pool,
+      context: Object.freeze({ ...context }),
+      work,
+      locator: structuredClone(evidence.locator),
+    });
     return result;
   } catch (error) {
     if (work.failure || classifyUnavailability(error)) return refuse('native_unavailable', work);
@@ -323,7 +454,12 @@ export async function holdCommittedIdentityScopeReceipt(
 export function isHeldCommittedIdentityScopeReceipt(tx: CommandTransaction, value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const binding = holds.get(value);
-  return !!binding && binding.tx === tx && !binding.work.failure &&
+  return (
+    !!binding &&
+    binding.tx === tx &&
+    !binding.work.failure &&
     liveHome(tx, binding.pool, binding.locator, binding.context.deadline) &&
-    identitySourceConsumerLibraryWork(binding.pool, binding.context.identityConsumerWork, binding.context.deadline) === binding.work;
+    identitySourceConsumerLibraryWork(binding.pool, binding.context.identityConsumerWork, binding.context.deadline) ===
+      binding.work
+  );
 }

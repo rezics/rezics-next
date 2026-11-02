@@ -45,16 +45,16 @@ partition. There is no migration backfill.
 
 The exported internal writer operations are:
 
-* `prepayIdentityScopeNativeAssociation(pool, deadline)` debits the genuine current
+- `prepayIdentityScopeNativeAssociation(pool, deadline)` debits the genuine current
   private Source maintenance original before starting the narrow command. It returns
   an opaque one-command admission, never receipt evidence. The effective command
   deadline is the lesser of the supplied deadline and the immutable original.
-* `bindIdentityScopeNativeAssociation(tx, admission)` checks that original's Pool,
+- `bindIdentityScopeNativeAssociation(tx, admission)` checks that original's Pool,
   live async episode/deadline and the actual executor transaction. Reuse on a second
   transaction, a copied admission or an escaped callback refuses. Attributed
   commands refuse because their extra basis/receipt writes are outside this
   platform-command package.
-* `recordIdentityScopeNativeAssociation(tx, admission, key, phase, binding?)` queues
+- `recordIdentityScopeNativeAssociation(tx, admission, key, phase, binding?)` queues
   the existing executor native component and the association in that same command.
   Its return is the genuine additive closed `IDENTITY_SCOPE_NATIVE_ASSOCIATED`
   domain event. It is not a precommit receipt. Binding carries the exact job for
@@ -98,14 +98,14 @@ nativePoints, witnessKeys, statements, bytes, emptySeeks)`. SQL hit, absence,
 repeat and dispatched failure pay the same point bound. Unrelated registrations,
 captures, revisions and jobs do not widen the keyed probes.
 
-| Resolver operation | Dimensions |
-| --- | --- |
-| Current capture, released or locked | `(0,0,12,12,0,1,B+512,0)` |
-| Ready association, released or locked | `(0,0,7,7,0,1,B+512,0)` |
-| Exact completed repair, released or locked | `(0,0,7,7,0,1,B+5120,0)` |
-| Released BEGIN, timeout SET, COMMIT, ROLLBACK, each | `(0,0,0,0,0,1,B,0)` |
-| Released checkout | `(0,0,0,1,0,0,0,0)` |
-| Missing binding/source refusal before dispatch | zero additional work |
+| Resolver operation                                  | Dimensions                |
+| --------------------------------------------------- | ------------------------- |
+| Current capture, released or locked                 | `(0,0,12,12,0,1,B+512,0)` |
+| Ready association, released or locked               | `(0,0,7,7,0,1,B+512,0)`   |
+| Exact completed repair, released or locked          | `(0,0,7,7,0,1,B+5120,0)`  |
+| Released BEGIN, timeout SET, COMMIT, ROLLBACK, each | `(0,0,0,0,0,1,B,0)`       |
+| Released checkout                                   | `(0,0,0,1,0,0,0,0)`       |
+| Missing binding/source refusal before dispatch      | zero additional work      |
 
 `B` is literal UTF-8 SQL plus serialized parameter-array bytes. Currentness has
 nine keyed rows and three one-row absence probes. Ready has four keyed rows,
@@ -120,12 +120,12 @@ charges on failure. Caller transaction controls remain the caller's responsibili
 
 `identityScopeNativeAssociationPrices` publishes additive writer bounds before IO:
 
-| Added writer operation | Dimensions |
-| --- | --- |
-| Executor native insert, partition point plus component write | `(0,0,2,2,0,1,S_native+320,0)` |
+| Added writer operation                                                                                | Dimensions                           |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Executor native insert, partition point plus component write                                          | `(0,0,2,2,0,1,S_native+320,0)`       |
 | Association, including optional exact completion/attempt/forward points, conflict/write and native FK | `(0,0,8,8,0,1,S_association+6720,0)` |
-| Event fence, partition update plus one outbox event | `(0,0,2,2,0,1,S_fence+2112,0)` |
-| Time point, checkout and seven control statements | `(0,0,1,2,0,7,C,0)` |
+| Event fence, partition update plus one outbox event                                                   | `(0,0,2,2,0,1,S_fence+2112,0)`       |
+| Time point, checkout and seven control statements                                                     | `(0,0,1,2,0,7,C,0)`                  |
 
 `S` is the corresponding imported SQL literal's byte length. Parameter/output
 maxima are included explicitly. `C` is the literal time SQL, BEGIN, lock timeout,

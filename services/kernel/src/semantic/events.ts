@@ -98,12 +98,17 @@ const publicationComponent = Type.Object(
 
 /** Closed semantic event catalogue. Envelope identity and ordering belong to the kernel. */
 export const SEMANTIC_EVENTS = {
-  [IDENTITY_SCOPE_NATIVE_ASSOCIATED]: Type.Object({
-    sourceKey: Type.String({ minLength: 1, maxLength: 256 }),
-    scope: Type.String({ minLength: 1, maxLength: 256 }),
-    phase: Type.Union(['registration', 'capture', 'enrollment', 'ready', 'progress', 'finish'].map((p) => Type.Literal(p))),
-    transactionId: UUID,
-  }, { additionalProperties: false }),
+  [IDENTITY_SCOPE_NATIVE_ASSOCIATED]: Type.Object(
+    {
+      sourceKey: Type.String({ minLength: 1, maxLength: 256 }),
+      scope: Type.String({ minLength: 1, maxLength: 256 }),
+      phase: Type.Union(
+        ['registration', 'capture', 'enrollment', 'ready', 'progress', 'finish'].map((p) => Type.Literal(p)),
+      ),
+      transactionId: UUID,
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.semantic.public-output.capture.v1': Type.Object({ captureId: UUID }, { additionalProperties: false }),
   [CATALOGUE_ARTIFACT]: Type.Object(
     {
