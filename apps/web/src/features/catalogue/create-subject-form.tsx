@@ -41,8 +41,8 @@ function CreationCorrection({
   pointer,
   locale,
 }: {
-  id?: string;
-  label?: string;
+  id: string | undefined;
+  label: string | undefined;
   pointer: string;
   locale: string;
 }) {
@@ -181,7 +181,7 @@ function CreateSubjectFormLive({
 
   const termControl = createSubjectControls(rows);
   const control = (pointer: string) => profile?.control?.(pointer) || termControl(pointer);
-  const corrections = new Map<string, { id?: string; errors: Violation[] }>();
+  const corrections = new Map<string, { id: string | undefined; errors: Violation[] }>();
   for (const error of errors) {
     const id = control(error.pointer);
     const key = id ? `control:${id}` : `pointer:${error.pointer}`;
