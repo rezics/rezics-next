@@ -1,3 +1,5 @@
+import { isNotFound } from '@tanstack/react-router';
+import { progressAddressIssue, ProgressAddressError, type ProgressAddressField } from './progress-address';
 import type { ProgressChoices, ProgressInputRules as ProfileProgressInputRules } from './progress-profile';
 import type { ProgressLabelInput } from './progress-label';
 import type { KernelClient } from '@rezics/client';
@@ -190,6 +192,7 @@ export type ProgressSessionCore = Pick<
 
 export type ProgressIndex = {
   signedIn: boolean;
+  addressIssue?: ProgressAddressField;
   subjectId: string;
   selectedSubject: LibrarySubject | null;
   progressChoices?: ProgressChoices;
@@ -363,6 +366,13 @@ function writeHeaders(authorization: string, key: string): { 'idempotency-key': 
   return { authorization, 'idempotency-key': JSON.stringify(key) } as { 'idempotency-key': string };
 }
 
+function readAddressData<T>(result: LibraryCall, field: ProgressAddressField): T {
+  const problem = callBody(result.error);
+  if (callStatus(result) === 400 && typeof problem === 'object' && problem !== null && 'code' in problem && problem.code === 'invalid_cursor')
+    throw new ProgressAddressError(field);
+  return readData<T>(result);
+}
+
 function readData<T>(result: LibraryCall): T {
   return readLibraryResult(result as { data?: T | null; error?: unknown; status?: number });
 }
@@ -393,7 +403,7 @@ async function readList(client: KernelClient, subjectId: string, authorization: 
     headers: { authorization },
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
-  return readData<{ progressSessions: RawSession[]; next: string | null }>(result);
+  return readAddressData<{ progressSessions: RawSession[]; next: string | null }>(result, 'cursor');
 }
 
 /** Resolve the one subject named by the page when no listed session embeds it. */
@@ -442,7 +452,7 @@ async function readChanges(client: KernelClient, sessionId: string, authorizatio
     headers: { authorization },
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
-  return readData<{ changes: RawChange[]; next: string | null }>(result);
+  return readAddressData<{ changes: RawChange[]; next: string | null }>(result, 'changes');
 }
 
 async function readUnits(client: KernelClient, sessionId: string, authorization: string, cursor?: string) {
@@ -451,7 +461,7 @@ async function readUnits(client: KernelClient, sessionId: string, authorization:
     headers: { authorization },
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
-  return readData<{ completedUnits: string[]; next: string | null }>(result);
+  return readAddressData<{ completedUnits: string[]; next: string | null }>(result, 'units');
 }
 
 /** The person's sessions for one subject. A missing subject id reads nothing; a closed gate stays closed. */
@@ -464,9 +474,11 @@ export async function loadProgressIndex(
   const authorization = await bearer(request, env);
   const idempotencyKey = crypto.randomUUID();
   const subjectId = input.subjectId ?? '';
-  if (!authorization || !routeId.test(subjectId)) {
+  const addressIssue = progressAddressIssue(input);
+  if (!authorization || addressIssue || !subjectId) {
     return {
       signedIn: authorization !== null,
+      ...(addressIssue ? { addressIssue } : {}),
       subjectId,
       selectedSubject: null,
       sessions: [],
@@ -479,6 +491,10 @@ export async function loadProgressIndex(
   try {
     page = await load(input.cursor);
   } catch (error) {
+    if (error instanceof ProgressAddressError || isNotFound(error)) return {
+      signedIn: true, subjectId, addressIssue: error instanceof ProgressAddressError ? error.field : 'subjectId',
+      selectedSubject: null, sessions: [], next: null, idempotencyKey,
+    };
     if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
     page = await load();
   }
@@ -490,6 +506,7 @@ export async function loadProgressIndex(
     signedIn: true,
     subjectId,
     selectedSubject,
+    ...(!selectedSubject && !sessions.length ? { addressIssue: 'subjectId' as const } : {}),
     sessions,
     next: page.next,
     idempotencyKey,
@@ -503,6 +520,8 @@ export async function loadProgressSession(
   env: Partial<SessionEnv>,
   input: { id: string; changes?: string; units?: string },
 ): Promise<ProgressSessionPage> {
+  const issue = progressAddressIssue(input);
+  if (issue) throw new ProgressAddressError(issue);
   const authorization = await bearer(request, env);
   const idempotencyKey = crypto.randomUUID();
   if (!authorization) return { signedIn: false, idempotencyKey };

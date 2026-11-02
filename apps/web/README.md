@@ -1653,6 +1653,8 @@ operands. After a definite conflict, explicit latest-progress review retains the
   1 D and 1 K carrying at most 100 unit ids. No per-unit or per-change reads.
 - **Growth check:** `tests/library-progress-cost.test.ts`: `reading progress stays within its bound as its pages and unit batches grow`
 
+Explicit empty or non-string Progress address operands are invalid; correcting one field retains every other requested field. Cursor admission uses the native 4096-character bound without decoding, and malformed addresses read no private history.
+
 ### Progress subject picker
 
 - **Touches:** One `GET /v1/subjects:suggest` per settled keystroke (250 ms pause; a newer keystroke aborts the older

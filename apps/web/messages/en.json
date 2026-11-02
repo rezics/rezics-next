@@ -4678,5 +4678,17 @@
   "library_rule_draft_navigation_title": "Leave this unsaved rule?",
   "library_rule_draft_navigation_description": "Your unsaved Collection rule will be lost. Stay to keep editing, or leave to continue. A pending save may still complete.",
   "library_rule_draft_navigation_stay": "Stay",
-  "library_rule_draft_navigation_leave": "Leave"
+  "library_rule_draft_navigation_leave": "Leave",
+  "library_progress_address_heading": "Progress address",
+  "library_progress_address_invalid": "Invalid {field}. Correct it or clear that field to continue.",
+  "library_progress_address_pending": "Loading the requested history…",
+  "library_progress_address_subject": "Subject",
+  "library_progress_address_cursor": "Sessions page position",
+  "library_progress_address_session": "Session",
+  "library_progress_address_changes": "Changes page position",
+  "library_progress_address_units": "Completed units page position",
+  "library_progress_address_logs": "Published logs page position",
+  "library_progress_address_apply": "Apply",
+  "library_progress_address_clear": "Clear",
+  "library_progress_address_choose": "Choose a subject to see its progress history."
 }

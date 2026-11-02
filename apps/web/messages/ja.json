@@ -4629,5 +4629,17 @@
   "library_rule_draft_navigation_title": "未保存のルールを離れますか？",
   "library_rule_draft_navigation_description": "未保存のコレクションルールは失われます。編集を続ける場合はこのページに留まってください。保存処理中の場合は、離れた後に完了することがあります。",
   "library_rule_draft_navigation_stay": "留まる",
-  "library_rule_draft_navigation_leave": "離れる"
+  "library_rule_draft_navigation_leave": "離れる",
+  "library_progress_address_heading": "進捗のアドレス",
+  "library_progress_address_invalid": "{field}が無効です。修正するか、この項目を消去して続けてください。",
+  "library_progress_address_pending": "指定された履歴を読み込み中…",
+  "library_progress_address_subject": "作品",
+  "library_progress_address_cursor": "セッションのページ位置",
+  "library_progress_address_session": "セッション",
+  "library_progress_address_changes": "変更履歴のページ位置",
+  "library_progress_address_units": "完了した単位のページ位置",
+  "library_progress_address_logs": "公開ログのページ位置",
+  "library_progress_address_apply": "適用",
+  "library_progress_address_clear": "消去",
+  "library_progress_address_choose": "作品を選ぶと進捗履歴が表示されます。"
 }

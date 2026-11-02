@@ -1,3 +1,5 @@
+import { progressSessionAddress, progressAddressIssue } from '../../library/progress-address';
+import { ProgressAddressCorrection } from '../../library/progress-address-correction';
 import { requireSignedIn } from '../../session/guard';
 import { prepareExposure } from '../../kernel/exposure';
 import { pageHead } from '../../shell/head';
@@ -12,19 +14,16 @@ export const Route = createFileRoute('/library/progress/$id')({
     await requireSignedIn(args);
     await prepareExposure(args.context.queryClient);
   },
-  validateSearch: (search: Record<string, unknown>) => ({
-    ...(typeof search.changes === 'string' && search.changes ? { changes: search.changes } : {}),
-    ...(typeof search.units === 'string' && search.units ? { units: search.units } : {}),
-    ...(typeof search.logs === 'string' && search.logs ? { logs: search.logs } : {}),
-  }),
+  validateSearch: (search: Record<string, unknown>) => {
+    const { id, ...positions } = progressSessionAddress(search);
+    return positions;
+  },
   loaderDeps: ({ search }) => ({ changes: search.changes, units: search.units, logs: search.logs }),
   loader: ({ params, deps }) =>
     readProgressDetail({
       data: {
         id: params.id,
-        ...(deps.changes ? { changes: deps.changes } : {}),
-        ...(deps.units ? { units: deps.units } : {}),
-        ...(deps.logs ? { logs: deps.logs } : {}),
+        ...deps,
       },
     }),
   staleTime: 0,
@@ -43,14 +42,11 @@ export const Route = createFileRoute('/library/progress/$id')({
     } catch {
       /* Invalid route is pending. */
     }
-    if (
-      requestedId !== id ||
-      (['changes', 'units', 'logs'] as const).some((key) => {
-        const value = requested.search[key];
-        return (typeof value === 'string' && value ? value : undefined) !== search[key];
-      })
-    )
-      return null;
+    const address = progressSessionAddress({ ...requested.search, id: requestedId });
+    const issue = progressAddressIssue(address);
+    const pending = requestedId !== id || (['changes', 'units', 'logs'] as const).some((key) => address[key] !== search[key]);
+    if (issue || pending) return <ProgressAddressCorrection address={address} issue={issue} pending={!issue && pending} />;
+    if (loaded.state === 'invalid') return <ProgressAddressCorrection address={address} issue={loaded.issue} />;
     return <CurrentProgressDetail loaded={loaded} address={{ id, ...search }} />;
   },
 });

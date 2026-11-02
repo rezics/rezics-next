@@ -4629,5 +4629,17 @@
   "library_rule_draft_navigation_title": "¿Salir sin guardar la regla?",
   "library_rule_draft_navigation_description": "Se perderá la regla de la colección sin guardar. Quédate para seguir editando o sal para continuar. Un guardado pendiente aún puede completarse.",
   "library_rule_draft_navigation_stay": "Quedarme",
-  "library_rule_draft_navigation_leave": "Salir"
+  "library_rule_draft_navigation_leave": "Salir",
+  "library_progress_address_heading": "Dirección del progreso",
+  "library_progress_address_invalid": "Campo no válido: {field}. Corrígelo o bórralo para continuar.",
+  "library_progress_address_pending": "Cargando el historial solicitado…",
+  "library_progress_address_subject": "Obra",
+  "library_progress_address_cursor": "Posición de página de las sesiones",
+  "library_progress_address_session": "Sesión",
+  "library_progress_address_changes": "Posición de página de los cambios",
+  "library_progress_address_units": "Posición de página de las unidades completadas",
+  "library_progress_address_logs": "Posición de página de los registros publicados",
+  "library_progress_address_apply": "Aplicar",
+  "library_progress_address_clear": "Borrar",
+  "library_progress_address_choose": "Elige una obra para ver su historial de progreso."
 }

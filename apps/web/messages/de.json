@@ -4629,5 +4629,17 @@
   "library_rule_draft_navigation_title": "Ungespeicherte Regel verlassen?",
   "library_rule_draft_navigation_description": "Deine ungespeicherte Sammlungsregel geht verloren. Bleibe zum Weiterbearbeiten oder verlasse die Seite. Ein laufender Speichervorgang kann noch abgeschlossen werden.",
   "library_rule_draft_navigation_stay": "Bleiben",
-  "library_rule_draft_navigation_leave": "Verlassen"
+  "library_rule_draft_navigation_leave": "Verlassen",
+  "library_progress_address_heading": "Fortschrittsadresse",
+  "library_progress_address_invalid": "Ungültiges Feld: {field}. Korrigiere oder leere es, um fortzufahren.",
+  "library_progress_address_pending": "Der angeforderte Verlauf wird geladen…",
+  "library_progress_address_subject": "Werk",
+  "library_progress_address_cursor": "Seitenposition der Sitzungen",
+  "library_progress_address_session": "Sitzung",
+  "library_progress_address_changes": "Seitenposition der Änderungen",
+  "library_progress_address_units": "Seitenposition abgeschlossener Einheiten",
+  "library_progress_address_logs": "Seitenposition veröffentlichter Einträge",
+  "library_progress_address_apply": "Anwenden",
+  "library_progress_address_clear": "Leeren",
+  "library_progress_address_choose": "Wähle ein Werk aus, um seinen Fortschrittsverlauf zu sehen."
 }

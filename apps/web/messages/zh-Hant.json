@@ -4629,5 +4629,17 @@
   "library_rule_draft_navigation_title": "離開尚未儲存的規則？",
   "library_rule_draft_navigation_description": "尚未儲存的收藏集規則將遺失。留在此處繼續編輯，或離開以繼續。進行中的儲存仍可能完成。",
   "library_rule_draft_navigation_stay": "留下",
-  "library_rule_draft_navigation_leave": "離開"
+  "library_rule_draft_navigation_leave": "離開",
+  "library_progress_address_heading": "進度位址",
+  "library_progress_address_invalid": "{field}無效。請修正或清除此欄位後繼續。",
+  "library_progress_address_pending": "正在載入要求的歷史紀錄…",
+  "library_progress_address_subject": "作品",
+  "library_progress_address_cursor": "進度工作階段分頁位置",
+  "library_progress_address_session": "進度工作階段",
+  "library_progress_address_changes": "變更紀錄分頁位置",
+  "library_progress_address_units": "已完成單元分頁位置",
+  "library_progress_address_logs": "已發布日誌分頁位置",
+  "library_progress_address_apply": "套用",
+  "library_progress_address_clear": "清除",
+  "library_progress_address_choose": "請選擇作品以查看進度歷史。"
 }

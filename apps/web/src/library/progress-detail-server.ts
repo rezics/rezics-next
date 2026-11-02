@@ -1,3 +1,4 @@
+import { progressSessionAddress, progressAddressIssue, ProgressAddressError, type ProgressAddressField } from './progress-address';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -14,6 +15,7 @@ import { progressSubjects } from './progress-subjects';
 export type ProgressDetailAddress = { id: string; changes?: string; units?: string; logs?: string };
 export type ProgressDetail = { address: ProgressDetailAddress } & (
   | { state: 'refused'; viewer: null }
+  | { state: 'invalid'; viewer: null; issue: ProgressAddressField }
   | {
       state: 'ready';
       viewer: string;
@@ -22,41 +24,28 @@ export type ProgressDetail = { address: ProgressDetailAddress } & (
     }
 );
 
-function optional(input: Record<string, unknown>, key: string, max: number) {
-  const value = input[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string' || !value.length || value.length > max) throw notFound();
-  return value;
-}
-
-function validateAddress(input: unknown): ProgressDetailAddress {
-  if (!input || typeof input !== 'object') throw notFound();
-  const value = input as Record<string, unknown>;
-  const id = optional(value, 'id', 128);
-  if (!id) throw notFound();
-  const changes = optional(value, 'changes', 512);
-  const units = optional(value, 'units', 512);
-  if (value.logs !== undefined && (typeof value.logs !== 'string' || value.logs.length > 4096))
-    throw new Error('Invalid published log cursor');
-  const logs = typeof value.logs === 'string' && value.logs ? value.logs : undefined;
-  return { id, ...(changes ? { changes } : {}), ...(units ? { units } : {}), ...(logs ? { logs } : {}) };
-}
-
 /** Each native reader records its own actual preparation on a distinct request. */
 export const readProgressDetail = createServerFn({ method: 'GET' })
-  .validator(validateAddress)
+  .validator(progressSessionAddress)
   .handler(async ({ data }): Promise<ProgressDetail> => {
     setResponseHeader('cache-control', 'private, no-store');
+    const issue = progressAddressIssue(data);
+    if (issue) return { state: 'invalid', viewer: null, address: data, issue };
     const request = getRequest();
     assertPublicCacheReadAllowed(request, 'session');
     const progressRequest = new Request(request);
     const logsRequest = new Request(request);
     const client = kernelClient();
     const sessionEnv = env as Partial<SessionEnv>;
-    const [progress, logs] = await Promise.all([
+    let results;
+    try { results = await Promise.all([
       loadProgressSession(client, progressRequest, sessionEnv, data),
       loadMyPublishedLogs(client, logsRequest, sessionEnv, data.logs ? { cursor: data.logs } : {}),
-    ]);
+    ]); } catch (error) {
+      if (error instanceof ProgressAddressError) return { state: 'invalid', viewer: null, address: data, issue: error.field };
+      throw error;
+    }
+    const [progress, logs] = results;
     const viewer = sessionSubject(progressRequest);
     const logsViewer = sessionSubject(logsRequest);
     // Header credentials without an actual session preparation have no owner provenance.

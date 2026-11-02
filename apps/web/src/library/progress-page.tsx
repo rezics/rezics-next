@@ -1,3 +1,5 @@
+import { progressAddressIssue } from './progress-address';
+import { ProgressAddressCorrection } from './progress-address-correction';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -93,8 +95,9 @@ export function CurrentViewerProgressIndexPage({
     () => false,
   );
   const locale = getLocale();
-  const subjectId = requested.subjectId || '';
-  const cursor = requested.cursor || null;
+  const subjectId = requested.subjectId ?? '';
+  const cursor = requested.cursor ?? null;
+  const addressIssue = progressAddressIssue(requested);
   const viewer = hydrated ? scoped.subject : loader.viewer;
   const allowed = hydrated ? progressIndexAdmission(client, 'progress_session.list', admitted) : loader.page.signedIn;
   const address = useHistoryAddress('/library/progress', requested.cursor, locale);
@@ -143,8 +146,7 @@ export function CurrentViewerProgressIndexPage({
       try {
         const result = await readCurrentViewerProgressIndex({
           data: {
-            ...(subjectId ? { subjectId } : {}),
-            ...(cursor ? { cursor } : {}),
+            ...requested,
           },
         });
         if (!currentRead()) throw new CancelledError({ silent: true, revert: true });
@@ -154,7 +156,7 @@ export function CurrentViewerProgressIndexPage({
         throw error;
       }
     },
-    enabled: personalRead.enabled && hydrated && !!viewer && allowed,
+    enabled: personalRead.enabled && hydrated && !!viewer && allowed && !addressIssue,
     // Do not duplicate the bounded loader read on hydration. Invalidations still refetch.
     initialData: loaderSource.current.origin === origin && matches(loader) ? loader : undefined,
     staleTime: Infinity,
@@ -212,6 +214,8 @@ export function CurrentViewerProgressIndexPage({
       return now.csrfToken ? { 'x-csrf-token': now.csrfToken } : null;
     },
   };
+  if (addressIssue || (matches(result) && result?.page.addressIssue))
+    return <ProgressAddressCorrection address={requested} issue={addressIssue ?? result?.page.addressIssue} />;
   if (origin.retired || source.retired || query.isError || !matches(result))
     return (
       <article className="max-w-4xl space-y-6">
@@ -219,6 +223,7 @@ export function CurrentViewerProgressIndexPage({
         {viewer && allowed ? (
           <>
             <p role="status">{m.library_progress_unavailable()}</p>
+            <ProgressAddressCorrection address={requested} pending={query.isFetching} />
             <Button
               variant="outline"
               disabled={query.isFetching}
@@ -371,6 +376,7 @@ export function ProgressIndexPage({
     }
   }
 
+  if (page.addressIssue) return <ProgressAddressCorrection address={{ subjectId: page.subjectId, ...(cursor === undefined || cursor === null ? {} : { cursor }) }} issue={page.addressIssue} />;
   const ratio = rowRatio(sessions.map((session) => session.subject));
   return (
     <article className="max-w-4xl space-y-10 text-foreground">
@@ -391,7 +397,7 @@ export function ProgressIndexPage({
           </ol>
         ) : (
           <p className="text-muted-foreground">
-            {cursor || page.next ? m.library_progress_page_empty() : m.library_progress_empty()}
+            {cursor || page.next ? m.library_progress_page_empty() : page.subjectId ? m.library_progress_empty() : m.library_progress_address_choose()}
           </p>
         )}
         {cursor || page.next ? (

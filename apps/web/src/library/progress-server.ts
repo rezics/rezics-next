@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
-import { notFound } from '@tanstack/react-router';
+import { progressIndexAddress, progressSessionAddress } from './progress-address';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { progressFormChoices, type ProgressChoices } from './progress-profile';
@@ -26,31 +26,6 @@ import {
   type ProgressStartInput,
   type ProgressStarted,
 } from './progress-reads';
-
-function optionalString(input: object, key: string, max: number): string | undefined {
-  const record = input as Record<string, unknown>;
-  if (!(key in record)) return undefined;
-  const value = record[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string' || value.length === 0 || value.length > max) throw notFound();
-  return value;
-}
-
-function validateIndexInput(input: unknown): { subjectId?: string; cursor?: string } {
-  if (!input || typeof input !== 'object') return {};
-  const subjectId = optionalString(input, 'subjectId', 128);
-  const cursor = optionalString(input, 'cursor', 512);
-  return { ...(subjectId ? { subjectId } : {}), ...(cursor ? { cursor } : {}) };
-}
-
-function validateSessionInput(input: unknown): { id: string; changes?: string; units?: string } {
-  if (!input || typeof input !== 'object') throw notFound();
-  const id = optionalString(input, 'id', 128);
-  if (!id) throw notFound();
-  const changes = optionalString(input, 'changes', 512);
-  const units = optionalString(input, 'units', 512);
-  return { id, ...(changes ? { changes } : {}), ...(units ? { units } : {}) };
-}
 
 function requiredString(value: unknown, max: number): string {
   if (typeof value !== 'string' || value.length === 0 || value.length > max)
@@ -135,7 +110,7 @@ async function presentProgressIndex(page: ProgressIndex, locale: string): Promis
 }
 
 export const readProgressIndex = createServerFn({ method: 'GET' })
-  .validator(validateIndexInput)
+  .validator(progressIndexAddress)
   .handler(async ({ data }): Promise<ProgressIndex> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
@@ -152,7 +127,7 @@ export type CurrentViewerProgressIndex = {
 
 /** The viewer comes from the preparation performed by this exact successful reader. */
 export const readCurrentViewerProgressIndex = createServerFn({ method: 'GET' })
-  .validator(validateIndexInput)
+  .validator(progressIndexAddress)
   .handler(async ({ data }): Promise<CurrentViewerProgressIndex> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
@@ -186,7 +161,7 @@ export const readCurrentViewerProgressIndex = createServerFn({ method: 'GET' })
   });
 
 export const readProgressSession = createServerFn({ method: 'GET' })
-  .validator(validateSessionInput)
+  .validator(progressSessionAddress)
   .handler(async ({ data }): Promise<ProgressSessionPage> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();

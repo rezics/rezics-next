@@ -4629,5 +4629,17 @@
   "library_rule_draft_navigation_title": "Quitter cette règle non enregistrée ?",
   "library_rule_draft_navigation_description": "La règle de collection non enregistrée sera perdue. Restez pour la modifier ou quittez pour continuer. Un enregistrement en cours peut encore aboutir.",
   "library_rule_draft_navigation_stay": "Rester",
-  "library_rule_draft_navigation_leave": "Quitter"
+  "library_rule_draft_navigation_leave": "Quitter",
+  "library_progress_address_heading": "Adresse de progression",
+  "library_progress_address_invalid": "Champ non valide : {field}. Corrigez-le ou effacez-le pour continuer.",
+  "library_progress_address_pending": "Chargement de l’historique demandé…",
+  "library_progress_address_subject": "Œuvre",
+  "library_progress_address_cursor": "Position de page des sessions",
+  "library_progress_address_session": "Session",
+  "library_progress_address_changes": "Position de page des modifications",
+  "library_progress_address_units": "Position de page des unités terminées",
+  "library_progress_address_logs": "Position de page des journaux publiés",
+  "library_progress_address_apply": "Appliquer",
+  "library_progress_address_clear": "Effacer",
+  "library_progress_address_choose": "Choisissez une œuvre pour voir son historique de progression."
 }

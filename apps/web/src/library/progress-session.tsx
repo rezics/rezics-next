@@ -1,3 +1,4 @@
+import { ProgressAddressCorrection } from './progress-address-correction';
 import * as exposure from '../kernel/exposure';
 import { useQuery } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
@@ -272,6 +273,8 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
   // A healthy same-viewer rotation pauses dispatch while its new scoped read is pending.
   // Keeping this already accepted read mounted preserves the existing publication editor.
   const healthyPause = browser && snapshot.healthyPause;
+  if (query.data?.state === 'invalid' && sameAddress(query.data.address, address) && isCurrent())
+    return <ProgressAddressCorrection address={address} issue={query.data.issue} />;
   if (!viewer || (!allowed && !healthyPause) || !detail)
     return (
       <article className="max-w-4xl space-y-6">

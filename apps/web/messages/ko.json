@@ -4629,5 +4629,17 @@
   "library_rule_draft_navigation_title": "저장하지 않은 규칙을 두고 나갈까요?",
   "library_rule_draft_navigation_description": "저장하지 않은 컬렉션 규칙이 사라집니다. 계속 편집하려면 머무르세요. 진행 중인 저장은 나간 후에도 완료될 수 있습니다.",
   "library_rule_draft_navigation_stay": "머무르기",
-  "library_rule_draft_navigation_leave": "나가기"
+  "library_rule_draft_navigation_leave": "나가기",
+  "library_progress_address_heading": "진행 상황 주소",
+  "library_progress_address_invalid": "{field} 항목이 올바르지 않습니다. 수정하거나 지운 후 계속하세요.",
+  "library_progress_address_pending": "요청한 기록을 불러오는 중…",
+  "library_progress_address_subject": "작품",
+  "library_progress_address_cursor": "세션 페이지 위치",
+  "library_progress_address_session": "세션",
+  "library_progress_address_changes": "변경 기록 페이지 위치",
+  "library_progress_address_units": "완료한 단위 페이지 위치",
+  "library_progress_address_logs": "공개 기록 페이지 위치",
+  "library_progress_address_apply": "적용",
+  "library_progress_address_clear": "지우기",
+  "library_progress_address_choose": "작품을 선택하면 진행 기록을 볼 수 있습니다."
 }
