@@ -189,14 +189,19 @@ Source and scoped journey; a declared task or point read alone does not establis
 membership. The adopted kind, Space and question selections apply as a literal conjunction to the same
 primary candidate in the existing mixed stream.
 
-Home accepts exact `spaceId` and `ratingQuestionId` request selections, but returns
-`dependency_unavailable` until their original native membership producers are composed;
-accepting parameters, point witnesses or metadata supplies no population coverage and
-never broadens the stream to unselected candidates.
+Home accepts exact `spaceId` and `ratingQuestionId` request selections. Selected Following
+uses the current disclosed board/Space for discussions and the selected Space's current
+Realm/adoption for Subjects. Collections have no Space membership. Its native horizon,
+examined positions and kind conjunction remain unchanged. Selected Discovery and Continue
+remain unavailable until their original scoped Source supplies population coverage; they
+do not enumerate public candidates first. Question selection still returns
+`dependency_unavailable` until its original native membership producer is composed.
+Decision: a ready native Following lane remains usable under Space selection independently
+of the absent scoped Discovery/Continue producer.
 
 The available default sources remain catalogue/Account discovery, recent Following and
-Continue. Public Board/Realm/discussion/Collection discovery and Space/Context membership
-are omitted, pending their original producers. Failed source lanes remain omitted; only
+Continue. Public Board/Realm/discussion/Collection discovery and Discovery/Continue
+Space/Context membership are omitted, pending their original producers. Failed source lanes remain omitted; only
 a ready lane with a native frontier enables Next, while Retry may retry a failed lane.
 
 Home Space choice reads retain the resolved Space identity on point-read failure so a failed

@@ -18,6 +18,7 @@ import { readSubjectSummaries } from '../semantic/summaries.ts';
 import { readPublication } from '../community/publication.ts';
 import { ContentNotFoundError, discloseThreads, readBoard, readPost, type ThreadView } from './reads.ts';
 import { createFeedActivityStore, feedRoute, type ActivityRef } from './feed-activity.ts';
+import { readFollowingSpaceMembership } from './feed-space.ts';
 import { decodeFeedCursor, encodeFeedCursor, feedBinding, fingerprint, type FeedPosition } from './feed-cursor.ts';
 import {
   readFeedKind,
@@ -269,11 +270,8 @@ export function createFeedReads(deps: FeedDependencies) {
             continue: personal && stream === 'home' ? null : false,
             resume: null,
           };
-      // Exact selection metadata is not candidate membership. Neither native Space membership
-      // nor question witnesses are composed yet. Refuse before reading any unselected lane;
-      // their producers will join this same reader rather than introducing another stream.
-      if (query.spaceId !== undefined || query.ratingQuestionId !== undefined)
-        throw new ProblemError('dependency_unavailable');
+      // Question point witnesses do not supply population coverage.
+      if (query.ratingQuestionId !== undefined) throw new ProblemError('dependency_unavailable');
       const sources: FeedPage['sources'] = {
         discovery: stream === 'home' ? 'ready' : 'not_requested',
         following: personal ? 'ready' : 'not_requested',
@@ -302,6 +300,10 @@ export function createFeedReads(deps: FeedDependencies) {
         names.map(async (lane) => {
           if (position[lane] === false) return;
           try {
+            // Following already has its native finite candidate population. Discovery and
+            // Continue need the original scoped Source before enumerating selected candidates.
+            if (query.spaceId !== undefined && lane !== 'following')
+              throw new ProblemError('dependency_unavailable');
             if (lane === 'discovery') {
               if (!deps.discovery) throw new ProblemError('dependency_unavailable');
               const page = await deps.discovery(
@@ -447,6 +449,18 @@ export function createFeedReads(deps: FeedDependencies) {
                   return candidate;
                 }),
               );
+              if (query.spaceId !== undefined) {
+                const membership = await readFollowingSpaceMembership(
+                  deps,
+                  actor,
+                  query.spaceId,
+                  page.activities,
+                  threads,
+                  deadline,
+                );
+                for (let index = 0; index < lanes.following.length; index++)
+                  if (!membership[index]) lanes.following[index]!.item = null;
+              }
               next.following = page.next ?? false;
             }
           } catch (error) {
