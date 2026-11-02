@@ -20,9 +20,12 @@ SELECT n.epoch,n.position::text,n.transaction_id::text,c.version::text,c.seal,
  c.source_generation,a.revision::text AS completion_revision
 FROM input i JOIN semantic.identity_scope_summary s
  ON s.partition_no=i.partition_no AND s.source_key=i.source_key AND s.scope_id=i.scope_id
-JOIN semantic.identity_scope_attempt a USING(partition_no,source_key,scope_id,registration)
-JOIN semantic.identity_scope_completion c USING(partition_no,source_key,scope_id,registration,job_id,job_epoch)
-JOIN semantic.identity_scope_prearm_receipt r USING(partition_no,source_key,scope_id,registration,job_id,job_epoch)
+JOIN semantic.identity_scope_attempt a ON a.partition_no=s.partition_no AND a.source_key=s.source_key
+ AND a.scope_id=s.scope_id AND a.registration=s.registration
+JOIN semantic.identity_scope_completion c ON c.partition_no=a.partition_no AND c.source_key=a.source_key
+ AND c.scope_id=a.scope_id AND c.registration=a.registration AND c.job_id=a.job_id AND c.job_epoch=a.job_epoch
+JOIN semantic.identity_scope_prearm_receipt r ON r.partition_no=a.partition_no AND r.source_key=a.source_key
+ AND r.scope_id=a.scope_id AND r.registration=a.registration AND r.job_id=a.job_id AND r.job_epoch=a.job_epoch
 JOIN semantic.identity_epoch_native_commit n ON n.partition_no=a.partition_no AND n.transaction_id=a.transaction_id
 JOIN semantic.identity_epoch_native_commit prepared ON prepared.partition_no=r.partition_no
  AND prepared.transaction_id=r.transaction_id
