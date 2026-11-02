@@ -89,7 +89,8 @@ export function ReportsBulkControls({
   }
   useEffect(() => {
     mounted.current = true;
-    const ownerDocument = trigger.current?.ownerDocument ?? review.current?.ownerDocument ?? results.current?.ownerDocument;
+    const ownerDocument =
+      trigger.current?.ownerDocument ?? review.current?.ownerDocument ?? results.current?.ownerDocument;
     const invalidate = () => {
       focusIntent.current = null;
     };

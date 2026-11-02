@@ -232,10 +232,14 @@ test('Bulk focus handoffs require keyboard intent and a surviving queue', async 
     const retiredGate = new Promise<void>((resolve) => {
       releaseRetired = resolve;
     });
-    const pending = { ...props, queueIdentity: 'replace-me', onAction: async () => {
-      await retiredGate;
-      return { ok: true };
-    } };
+    const pending = {
+      ...props,
+      queueIdentity: 'replace-me',
+      onAction: async () => {
+        await retiredGate;
+        return { ok: true };
+      },
+    };
     await render(<BoardReportQueue {...pending} />);
     button(host, m.moderation_bulk_select_loaded()).focus();
     await act(async () => user.keyboard('{Enter}'));
