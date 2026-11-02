@@ -1,3 +1,4 @@
+import { reviewWithin } from './request';
 import type { AccessSnapshot, AccessState, Grant, WriteResult } from './data';
 import { routedId } from './data';
 
@@ -107,12 +108,13 @@ export async function transferOwner(
   origin: string | undefined,
   authorization: string,
   input: OwnerTransfer,
-  read: (session?: string) => Promise<AccessState>,
+  read: (session?: string, signal?: AbortSignal) => Promise<AccessState>,
   fetcher: typeof fetch = fetch,
+  caller?: AbortSignal,
 ): Promise<TransferResult> {
   const current = async (session?: string): Promise<AccessState> => {
     try {
-      return await read(session);
+      return await reviewWithin((signal) => read(session, signal), caller);
     } catch {
       return { status: 'unavailable' };
     }
@@ -136,17 +138,21 @@ export async function transferOwner(
       toAccountId: input.toAccountId,
       previousValid: input.previousValid,
     };
-    const response = await fetcher(new URL('/v1/roleGrants:transferRealmOwner', origin), {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { authorization, 'content-type': 'application/json', 'idempotency-key': JSON.stringify(input.key) },
-      body: JSON.stringify(body),
-    });
-    session = response.headers.get('rezics-session-token') ?? undefined;
-    if (response.ok && isReceipt(await response.json(), input)) status = 'saved';
-    else if (response.status === 401) status = 'denied';
-    else if (response.status === 403 || response.status === 400) status = 'refused';
-    else if (response.status === 409 || response.status === 422) status = 'conflict';
+    status = await reviewWithin(async (signal): Promise<WriteResult['status']> => {
+      const response = await fetcher(new URL('/v1/roleGrants:transferRealmOwner', origin), {
+        method: 'POST',
+        signal,
+        cache: 'no-store',
+        headers: { authorization, 'content-type': 'application/json', 'idempotency-key': JSON.stringify(input.key) },
+        body: JSON.stringify(body),
+      });
+      session = response.headers.get('rezics-session-token') ?? undefined;
+      if (response.ok && isReceipt(await response.json(), input)) return 'saved';
+      if (response.status === 401) return 'denied';
+      if (response.status === 403 || response.status === 400) return 'refused';
+      if (response.status === 409 || response.status === 422) return 'conflict';
+      return 'uncertain';
+    }, caller);
   } catch {
     /* The original key and body remain pending after an ambiguous response. */
   }

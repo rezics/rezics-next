@@ -1,3 +1,4 @@
+import { reviewRequest } from '../../accounts/resource-access/request';
 import { createFileRoute } from '@tanstack/react-router';
 import {
   readResourceAccess,
@@ -15,9 +16,12 @@ import { csrfHeaders } from '../../threads/composer';
 
 export const Route = createFileRoute('/access/$resourceId')({
   beforeLoad: requireSignedIn,
-  loader: ({ params }) =>
+  loader: ({ params, abortController }) =>
     routedId(params.resourceId)
-      ? readResourceAccess({ data: { resourceId: params.resourceId } })
+      ? reviewRequest(
+          (signal) => readResourceAccess({ data: { resourceId: params.resourceId }, signal }),
+          abortController.signal,
+        )
       : { status: 'denied' as const },
   head: ({ match }) =>
     pageHead({ title: m.access_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
@@ -32,10 +36,10 @@ function AccessRoute() {
       key={resourceId}
       initial={initial}
       io={{
-        read: (cursor) => readResourceAccess({ data: { resourceId, ...(cursor ? { cursor } : {}) } }),
-        transfer: (data) => transferResourceOwner({ data, headers: csrfHeaders() }),
-        save: (data) => saveResourceAccess({ data, headers: csrfHeaders() }),
-        lookup: (handle) => findAccessIdentity({ data: { resourceId, handle } }),
+        read: (cursor, signal) => readResourceAccess({ data: { resourceId, ...(cursor ? { cursor } : {}) }, signal }),
+        transfer: (data, signal) => transferResourceOwner({ data, headers: csrfHeaders(), signal }),
+        save: (data, signal) => saveResourceAccess({ data, headers: csrfHeaders(), signal }),
+        lookup: (handle, signal) => findAccessIdentity({ data: { resourceId, handle }, signal }),
       }}
     />
   );

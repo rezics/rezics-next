@@ -1,4 +1,4 @@
-import { afterAll, afterEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import type { AccessIO, AccessSnapshot } from '../src/accounts/resource-access/data';
@@ -178,4 +178,28 @@ test('failed lookup can retry; editing and cancellation discard delayed results;
   await act(async () => s.calls[3]!.resolve(recipient));
   expect(s.cancelled()).toBe(1);
   expect(buttons(m.access_transfer_owner())[0]!.disabled).toBe(true);
+});
+
+test('stalled lookup keeps the handle and permits retry without accepting a late recipient', async () => {
+  const s = setup();
+  await s.render();
+  const schedule = globalThis.setTimeout;
+  const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((fn, ms, ...args) =>
+    schedule(fn, ms === 25_000 ? 10 : ms, ...args)) as typeof setTimeout);
+  try {
+    await start();
+    await act(async () => {
+      await new Promise((resolve) => schedule(resolve, 20));
+    });
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(host.querySelector('input')!.value).toBe('aki');
+    expect(buttons(m.access_find_account())[0]!.disabled).toBe(false);
+    await click(m.access_find_account());
+    await act(async () => s.calls[0]!.resolve(recipient));
+    expect(buttons(m.access_transfer_owner())[0]!.disabled).toBe(true);
+    await act(async () => s.calls[1]!.resolve(recipient));
+    expect(buttons(m.access_transfer_owner())[0]!.disabled).toBe(false);
+  } finally {
+    timer.mockRestore();
+  }
 });

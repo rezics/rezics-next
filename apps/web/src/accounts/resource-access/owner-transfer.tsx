@@ -1,3 +1,4 @@
+import { recipientRequest } from './request';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -107,11 +108,13 @@ function OwnerTransferReview({
   const [review, setReview] = useState<Review | null>(null);
   const active = useRef(true);
   const request = useRef(0);
+  const requestAbort = useRef<AbortController | null>(null);
   useEffect(() => {
     active.current = true;
     return () => {
       active.current = false;
       request.current++;
+      requestAbort.current?.abort();
     };
   }, []);
   const source = label(page.identities.find((item) => item.id === fromAccountId));
@@ -127,6 +130,7 @@ function OwnerTransferReview({
   ];
   const discard = () => {
     request.current++;
+    requestAbort.current?.abort();
     setRecipient(null);
     setReview(null);
     setFinding(false);
@@ -135,13 +139,15 @@ function OwnerTransferReview({
   const lookup = async () => {
     if (!active.current) return;
     const current = ++request.current;
+    requestAbort.current?.abort();
+    const caller = (requestAbort.current = new AbortController());
     const isCurrent = () => active.current && request.current === current;
     setFinding(true);
     setRecipient(null);
     setReview(null);
     setError(false);
     try {
-      const found = await io.lookup(handle);
+      const found = await recipientRequest((signal) => io.lookup(handle, signal), caller.signal);
       if (!isCurrent()) return;
       if (!found || found.state !== 'active' || found.id === fromAccountId) setError(true);
       else setRecipient({ ...found });

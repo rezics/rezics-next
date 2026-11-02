@@ -1,3 +1,4 @@
+import { reviewWithin } from './request';
 import type { OwnerTransfer, TransferResult } from './owner-transfer.ts';
 import type { KernelClient } from '@rezics/client';
 
@@ -23,11 +24,11 @@ export type Change = {
 };
 export type WriteResult = { status: 'saved' | 'denied' | 'conflict' | 'refused' | 'uncertain' | 'preparing' };
 export type AccessIO = {
-  read(cursor?: string): Promise<AccessState>;
-  save(change: Change): Promise<WriteResult>;
+  read(cursor?: string, signal?: AbortSignal): Promise<AccessState>;
+  save(change: Change, signal?: AbortSignal): Promise<WriteResult>;
   /** Null confirms no eligible recipient; unavailable reads reject for the form's retry path. */
-  lookup(handle: string): Promise<Identity | null>;
-  transfer?(input: OwnerTransfer): Promise<TransferResult>;
+  lookup(handle: string, signal?: AbortSignal): Promise<Identity | null>;
+  transfer?(input: OwnerTransfer, signal?: AbortSignal): Promise<TransferResult>;
 };
 
 export function routedId(value: unknown): value is string {
@@ -121,12 +122,18 @@ export async function loadAccess(
   resourceId: string,
   cursor?: string,
   session?: string,
+  caller?: AbortSignal,
 ): Promise<AccessState> {
   try {
-    const result = await client.grants.get({
-      query: { resourceId, ...(cursor ? { cursor } : {}) },
-      headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) },
-    });
+    const result = await reviewWithin(
+      (signal) =>
+        client.grants.get({
+          query: { resourceId, ...(cursor ? { cursor } : {}) },
+          headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) },
+          fetch: { signal },
+        }),
+      caller,
+    );
     if (!result.error && result.data) return { status: 'ready', page: result.data };
     if ([400, 401, 403, 404].includes(result.status)) return { status: 'denied' };
     return {
@@ -139,38 +146,46 @@ export async function loadAccess(
 
 /** A fresh management read supplies current type, client-scope and delegated-principal decisions.
  * The original command still reauthorizes at its own T, before receipt replay. */
-export async function writeAccess(client: KernelClient, authorization: string, change: Change): Promise<WriteResult> {
-  const current = await loadAccess(client, authorization, change.resourceId);
+export async function writeAccess(
+  client: KernelClient,
+  authorization: string,
+  change: Change,
+  caller?: AbortSignal,
+): Promise<WriteResult> {
+  const current = await loadAccess(client, authorization, change.resourceId, undefined, undefined, caller);
   if (current.status !== 'ready') return { status: current.status === 'denied' ? 'denied' : 'preparing' };
   if (current.page.mutationState !== 'ready') return { status: 'preparing' };
   const resource = { route: current.page.resource.route, id: change.resourceId };
   const subject = change.subject;
-  const options = { headers: { authorization, 'idempotency-key': change.key } };
   try {
-    let result: Result;
-    if (change.kind === 'role') {
-      const body = { resource, subject, role: change.role!, valid: change.valid };
-      result =
-        change.operation === 'create'
-          ? await client.roleGrants.post(body, options)
-          : change.operation === 'revoke'
-            ? await client.roleGrants.$revoke.post(body, options)
-            : await client.roleGrants.$change.post(
-                { ...body, previous: { role: change.previous!.role!, valid: change.previous!.valid } },
-                options,
-              );
-    } else {
-      const body = { resource, subject, actions: change.actions, valid: change.valid };
-      result =
-        change.operation === 'create'
-          ? await client.grants.post(body, options)
-          : change.operation === 'revoke'
-            ? await client.grants.$revoke.post(body, options)
-            : await client.grants.$change.post(
-                { ...body, previous: { actions: change.previous!.actions, valid: change.previous!.valid } },
-                options,
-              );
-    }
+    const result = await reviewWithin(async (signal): Promise<Result> => {
+      const options = { headers: { authorization, 'idempotency-key': change.key }, fetch: { signal } };
+      let result: Result;
+      if (change.kind === 'role') {
+        const body = { resource, subject, role: change.role!, valid: change.valid };
+        result =
+          change.operation === 'create'
+            ? await client.roleGrants.post(body, options)
+            : change.operation === 'revoke'
+              ? await client.roleGrants.$revoke.post(body, options)
+              : await client.roleGrants.$change.post(
+                  { ...body, previous: { role: change.previous!.role!, valid: change.previous!.valid } },
+                  options,
+                );
+      } else {
+        const body = { resource, subject, actions: change.actions, valid: change.valid };
+        result =
+          change.operation === 'create'
+            ? await client.grants.post(body, options)
+            : change.operation === 'revoke'
+              ? await client.grants.$revoke.post(body, options)
+              : await client.grants.$change.post(
+                  { ...body, previous: { actions: change.previous!.actions, valid: change.previous!.valid } },
+                  options,
+                );
+      }
+      return result;
+    }, caller);
     if (!result.error && result.data && result.status < 300) return { status: 'saved' };
     if (result.status === 409 || result.status === 422) return { status: 'conflict' };
     // Native grants deliberately use the same refusal for stale intervals and authorization loss.
@@ -190,21 +205,28 @@ export async function lookupAccessIdentity(
   authorization: string,
   resourceId: string,
   handle: string,
+  caller?: AbortSignal,
 ): Promise<Identity | null> {
-  const current = await loadAccess(client, authorization, resourceId);
+  const current = await loadAccess(client, authorization, resourceId, undefined, undefined, caller);
   if (current.status !== 'ready') throw new Error('Resource access unavailable');
-  return lookupIdentity(client, authorization, handle);
+  return lookupIdentity(client, authorization, handle, caller);
 }
 
 export async function lookupIdentity(
   client: KernelClient,
   authorization: string,
   handle: string,
+  caller?: AbortSignal,
 ): Promise<Identity | null> {
-  const result = await client.accounts.get({
-    query: { handle: handle.replace(/^@/, '').trim() },
-    headers: { authorization },
-  });
+  const result = await reviewWithin(
+    (signal) =>
+      client.accounts.get({
+        query: { handle: handle.replace(/^@/, '').trim() },
+        headers: { authorization },
+        fetch: { signal },
+      }),
+    caller,
+  );
   // Only a successful native read can establish an empty or ineligible result.
   // Leave transport rejections intact so both forms retain their draft and offer lookup again.
   if (result.error || result.status >= 300 || !result.data) {

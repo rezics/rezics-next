@@ -1,3 +1,4 @@
+import { reviewRequest } from './request';
 import { useEffect, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -10,15 +11,17 @@ export function ResourceAccessLink({ resourceId }: { resourceId: string }) {
   const [authorized, setAuthorized] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
+    const caller = new AbortController();
     setAuthorized(null);
     if (state === 'signed-in')
-      void readResourceAccess({ data: { resourceId } })
+      void reviewRequest((signal) => readResourceAccess({ data: { resourceId }, signal }), caller.signal)
         .then((result) => {
           if (active && result.status === 'ready') setAuthorized(resourceId);
         })
         .catch(() => {});
     return () => {
       active = false;
+      caller.abort();
     };
   }, [resourceId, state]);
   return state === 'signed-in' && authorized === resourceId ? (

@@ -1,3 +1,4 @@
+import { recipientRequest } from './request';
 import { OwnerTransferForm, resourceLabel, IdentityDetails } from './owner-transfer.tsx';
 import { transferableOwner } from './owner-transfer.ts';
 import { Menu } from '@rezics/ui/menu';
@@ -118,27 +119,32 @@ function useRecipientLookup(io: AccessIO) {
   const [finding, setFinding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
+  const requestAbort = useRef<AbortController | null>(null);
   // Cancelling or replacing a form retires both successful and failed reads.
   useLayoutEffect(
     () => () => {
       generation.current++;
+      requestAbort.current?.abort();
     },
     [],
   );
 
   const invalidate = () => {
     generation.current++;
+    requestAbort.current?.abort();
     setIdentity(null);
     setFinding(false);
     setError(null);
   };
   const lookup = async () => {
     const request = ++generation.current;
+    requestAbort.current?.abort();
+    const caller = (requestAbort.current = new AbortController());
     setFinding(true);
     setIdentity(null);
     setError(null);
     try {
-      const found = await io.lookup(handle);
+      const found = await recipientRequest((signal) => io.lookup(handle, signal), caller.signal);
       if (request !== generation.current) return;
       if (!found || (recipient === 'organization' && found.kind !== 'organization')) {
         setError(m.access_lookup_failed());

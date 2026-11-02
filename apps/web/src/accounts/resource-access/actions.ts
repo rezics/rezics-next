@@ -27,7 +27,7 @@ export const readResourceAccess = createServerFn({ method: 'GET' })
     try {
       const authorization = await viewer();
       return authorization
-        ? await loadAccess(kernelClient(), authorization, data.resourceId, data.cursor)
+        ? await loadAccess(kernelClient(), authorization, data.resourceId, data.cursor, undefined, getRequest().signal)
         : { status: 'denied' };
     } catch {
       return { status: 'unavailable' };
@@ -42,7 +42,9 @@ export const saveResourceAccess = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }) => {
     const authorization = await viewer();
-    return authorization ? writeAccess(kernelClient(), authorization, data) : { status: 'denied' as const };
+    return authorization
+      ? writeAccess(kernelClient(), authorization, data, getRequest().signal)
+      : { status: 'denied' as const };
   });
 
 export const findAccessIdentity = createServerFn({ method: 'GET' })
@@ -54,7 +56,7 @@ export const findAccessIdentity = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const authorization = await viewer();
     if (!authorization) throw new Error('Resource access unavailable');
-    return lookupAccessIdentity(kernelClient(), authorization, data.resourceId, data.handle);
+    return lookupAccessIdentity(kernelClient(), authorization, data.resourceId, data.handle, getRequest().signal);
   });
 
 export const transferResourceOwner = createServerFn({ method: 'POST' })
@@ -63,7 +65,12 @@ export const transferResourceOwner = createServerFn({ method: 'POST' })
     const authorization = await viewer();
     if (!authorization) return { status: 'denied', current: { status: 'denied' } };
     const client = kernelClient();
-    return transferOwner((env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN, authorization, data, (session) =>
-      loadAccess(client, authorization, data.resource.id, undefined, session),
+    return transferOwner(
+      (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN,
+      authorization,
+      data,
+      (session, signal) => loadAccess(client, authorization, data.resource.id, undefined, session, signal),
+      undefined,
+      getRequest().signal,
     );
   });

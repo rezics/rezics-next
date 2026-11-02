@@ -1,3 +1,4 @@
+import { reviewRequest, grantRequest, transferRequest } from './request';
 import { parseOwnerTransfer, type OwnerTransfer } from './owner-transfer.ts';
 import type { AccessIO, AccessState, Change, WriteResult } from './data';
 
@@ -14,6 +15,7 @@ export class AccessRecovery {
   private state: EditorState;
   private generation = 0;
   private active = true;
+  private request = new AbortController();
   constructor(
     page: AccessState,
     private io: AccessIO,
@@ -25,6 +27,7 @@ export class AccessRecovery {
   activate = () => {
     if (!this.active) {
       this.active = true;
+      this.request = new AbortController();
       void this.reload();
     }
     return this.dispose;
@@ -32,6 +35,7 @@ export class AccessRecovery {
   dispose = () => {
     this.active = false;
     this.generation++;
+    this.request.abort();
     // A retired write may still commit. Only explicit retry may resolve its exact command.
     this.state = {
       ...this.state,
@@ -55,7 +59,7 @@ export class AccessRecovery {
   }
   private async current(cursor?: string) {
     try {
-      return await this.io.read(cursor);
+      return await reviewRequest((signal) => this.io.read(cursor, signal), this.request.signal);
     } catch {
       return { status: 'unavailable' as const };
     }
@@ -90,10 +94,14 @@ export class AccessRecovery {
     let current: AccessState | undefined;
     try {
       if (pending.kind === 'realm-owner-transfer') {
-        const transfer = await this.io.transfer!(structuredClone(pending));
+        const transfer = await transferRequest(
+          (signal) => this.io.transfer!(structuredClone(pending), signal),
+          this.request.signal,
+        );
         result = transfer;
         current = transfer.current;
-      } else result = await this.io.save(structuredClone(pending));
+      } else
+        result = await grantRequest((signal) => this.io.save(structuredClone(pending), signal), this.request.signal);
     } catch {
       result = { status: 'uncertain' };
     }
