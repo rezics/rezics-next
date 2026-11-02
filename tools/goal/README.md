@@ -1377,8 +1377,9 @@ host's socket. The host skips the minute while the previous child is still runni
   pending retry, is cancelled through the `goal cancel` path, at most 20 per Goal per run, longest stopped first. Its
   brief is written to `failed/<task-id>.md` and its blocker and branch to `failed/<task-id>.reason`; each owner
   receives one event per run listing those tasks. Control-plane, stabilize and verification tasks are exempt.
-- **Low backlog.** A running Goal manager whose backlog holds fewer than four ready briefs receives at most one
-  event an hour asking for more.
+- **Low backlog.** A running, active Goal manager whose backlog holds fewer than eight ready briefs receives at most
+  one event an hour asking it to keep at least eight. Only non-hidden `*.md` files directly in the Goal's backlog
+  directory count as ready; at eight or more, no low-backlog event is sent.
 
 `goal backlog status [--json]` prints ready, dispatched and failed brief counts per Goal. It reads only the
 directories. The run's one-line JSON results are appended to `<state>/backlog-runner.log`.
