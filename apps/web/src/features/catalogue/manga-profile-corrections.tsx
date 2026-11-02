@@ -10,7 +10,8 @@ import { factChanged, factLimit, sealFacts, sendFacts, stageFact } from './subje
 import { FactField } from './subject-facts-view';
 import { correctionProperty } from './statement-editor';
 import { PartValue } from './statement-editor-view';
-import { mangaGroups } from './manga-profile';
+import { isMangaType, mangaGroups } from './manga-profile';
+import { CatalogueCurrentReading, useCurrentReadingActive } from './editor-lifetime';
 import { mangaGroupLabels, type MangaReady } from './manga-profile-view';
 import { DefinitionGuideLink } from './definition-guide-view';
 
@@ -46,19 +47,37 @@ function ExactReview({
     />
   );
 }
-export function MangaCorrections({
+type CorrectionProps = {
+  read: MangaReady | undefined;
+  locale: string;
+  disabled: boolean;
+  ports?: MangaCorrectionPorts | undefined;
+  revision?: string | undefined;
+  reload: () => Promise<unknown>;
+};
+
+export function MangaCorrections(props: CorrectionProps) {
+  const original = useRef<{ id: string; type: string } | undefined>(undefined);
+  const subject = props.read?.public?.subject;
+  if (!original.current && subject && isMangaType(subject.type))
+    original.current = { id: subject.id, type: subject.type };
+  const visible = !!subject && !props.disabled &&
+    subject.id === original.current?.id && subject.type === original.current?.type;
+  return (
+    <CatalogueCurrentReading visible={visible} ready={visible} revision={props.revision ?? ''}>
+      <MangaCorrectionsLive {...props} read={visible ? props.read : undefined} />
+    </CatalogueCurrentReading>
+  );
+}
+
+function MangaCorrectionsLive({
   read,
   locale,
   disabled,
   ports,
   reload,
-}: {
-  read: MangaReady | undefined;
-  locale: string;
-  disabled: boolean;
-  ports?: MangaCorrectionPorts | undefined;
-  reload: () => Promise<unknown>;
-}) {
+}: CorrectionProps) {
+  const active = useCurrentReadingActive();
   const o = { locale: locale as never };
   const [drafts, setDrafts] = useState<FactDraft[]>([]);
   const [busy, setBusy] = useState(false);
@@ -72,20 +91,35 @@ export function MangaCorrections({
   const href = subject ? subjectHref({ id: subject.id, label: label!.text }, locale).href : '';
   const groups = subject && read ? mangaGroups(read.release, subject.type, locale) : undefined;
   const labels = mangaGroupLabels(locale);
+  const authored = useRef(false);
+  if (groups?.writing.length) authored.current = true;
+  const wasCurrent = useRef(!!subject);
+  if (wasCurrent.current !== !!subject) {
+    wasCurrent.current = !!subject;
+    if (!subject) {
+      running.current = false;
+      setBusy(false);
+      setDrafts((previous) => previous.map((draft) =>
+        draft.command && !draft.result ? { ...draft, result: { ok: false, reason: 'unavailable' } } : draft,
+      ));
+    }
+  }
   const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
   async function submit() {
-    if (!subject || !read || !ports || disabled || running.current) return;
+    if (!active() || !subject || !read || !ports || disabled || running.current) return;
     const sealed = sealFacts(subject.id, read.release, drafts);
     setDrafts(sealed);
     running.current = true;
     setBusy(true);
     try {
       await sendFacts(sealed, ports.facts.propose, (property, result) =>
-        setDrafts((previous) => previous.map((draft) => (draft.property === property ? { ...draft, result } : draft))),
+        active() && setDrafts((previous) => previous.map((draft) => (draft.property === property ? { ...draft, result } : draft))),
       );
     } finally {
-      running.current = false;
-      setBusy(false);
+      if (active()) {
+        running.current = false;
+        setBusy(false);
+      }
     }
   }
   return (
@@ -209,15 +243,16 @@ export function MangaCorrections({
                       canStage={drafts.length < factLimit}
                       draft={drafts.find((draft) => draft.property === property)}
                       onChange={(next) =>
-                        setDrafts((previous) =>
+                        active() && setDrafts((previous) =>
                           previous.map((draft) => (draft.property === next.property ? next : draft)),
                         )
                       }
-                      onReview={setReviewing}
+                      onReview={(address) => active() && setReviewing(address)}
                       onStage={(source) => {
+                        if (!active()) return;
                         const next = stageFact(current, property, source);
                         if (next)
-                          setDrafts((previous) => (previous.length < factLimit ? [...previous, next] : previous));
+                          active() && setDrafts((previous) => (previous.length < factLimit ? [...previous, next] : previous));
                       }}
                     />
                   ) : (
@@ -313,7 +348,7 @@ export function MangaCorrections({
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:py-1"
                 variant="outline"
                 disabled={busy}
-                onClick={() => void reload()}
+                onClick={() => active() && void reload()}
               >
                 {m.correction_reload({}, o)}
               </Button>
@@ -325,16 +360,18 @@ export function MangaCorrections({
         </>
       )}
       {ports && (
-        <div hidden={!subject || disabled} className="space-y-6">
+        <div className="space-y-6">
           <section className="space-y-4">
-            <h2 className="font-sans text-xl font-semibold">{m.relation_title({}, o)}</h2>
-            <p className="text-muted-foreground">{m.manga_relation_help({}, o)}</p>
+            {subject && <>
+              <h2 className="font-sans text-xl font-semibold">{m.relation_title({}, o)}</h2>
+              <p className="text-muted-foreground">{m.manga_relation_help({}, o)}</p>
+            </>}
             {ports.relations}
           </section>
-          <section hidden={!groups?.writing.length} className="space-y-4">
-            <h2 className="font-sans text-xl font-semibold">{m.authored_title({}, o)}</h2>
+          {authored.current && <section className="space-y-4">
+            {subject && !!groups?.writing.length && <h2 className="font-sans text-xl font-semibold">{m.authored_title({}, o)}</h2>}
             {ports.authored}
-          </section>
+          </section>}
         </div>
       )}
     </div>

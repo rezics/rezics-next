@@ -1,3 +1,4 @@
+import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
 import { editorRequest } from './editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
@@ -87,21 +88,28 @@ function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }
 }
 
 function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
+  const visible = useCurrentReadingVisible();
+  const active = useCurrentReadingActive();
   const editorWork = useCatalogueLifetime('transport');
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
   const [open, setOpen] = useState(false);
   const o = { locale: locale as never };
   const read = async (property = 'schema:abstract', session?: string) => {
+    if (!active()) return { ok: false, reason: 'denied' } as const;
     const result = await loadAuthoredField({
       data: editorRequest({ id, property, session }, editorWork),
       headers: csrfHeaders(),
     });
-    return editorWork.live() ? result : ({ ok: false, reason: 'denied' } as const);
+    return editorWork.live() && active() ? result : ({ ok: false, reason: 'denied' } as const);
   };
   const query = useQuery({
     queryKey: ['manga-authored', id, locale, candidateWork.generation],
-    queryFn: () => (candidateWork.live() ? read() : Promise.resolve({ ok: false, reason: 'denied' } as const)),
-    enabled: open,
+    queryFn: async () => {
+      const result = await read();
+      if (!candidateWork.live() || !active()) throw new Error('Retired Manga reading');
+      return result;
+    },
+    enabled: open && visible,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -110,11 +118,11 @@ function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
   });
   return (
     <div className="space-y-4">
-      <Button variant="outline" onClick={() => candidateWork.live() && setOpen(true)}>
+      {visible && <Button variant="outline" onClick={() => candidateWork.live() && active() && setOpen(true)}>
         {m.authored_title({}, o)}
-      </Button>
-      {open && query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
-      {open && query.isError && (
+      </Button>}
+      {visible && open && query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
+      {visible && open && query.isError && (
         <>
           <EditorFailure locale={locale} reason="unavailable" />
           <Button onClick={() => candidateWork.live() && void query.refetch()}>{m.correction_reload({}, o)}</Button>

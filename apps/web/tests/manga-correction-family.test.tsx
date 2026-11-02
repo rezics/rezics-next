@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, createElement as h, type ReactNode } from 'react';
+import { useCurrentReadingVisible } from '../src/features/catalogue/editor-lifetime';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { MangaCorrectionPorts } from '../src/features/catalogue/manga-profile-corrections';
 import type { FactCommand } from '../src/features/catalogue/subject-facts';
@@ -12,6 +13,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 async function mounted(
   run: (ui: {
     host: HTMLElement;
+    client: QueryClient;
     render: (node: ReactNode) => Promise<void>;
     update: (node: ReactNode) => Promise<void>;
     input: (input: HTMLInputElement, value: string) => Promise<void>;
@@ -31,6 +33,11 @@ async function mounted(
     'HTMLSelectElement',
     'Element',
     'Node',
+    'Text',
+    'NodeFilter',
+    'DOMParser',
+    'Range',
+    'DOMRect',
     'DocumentFragment',
     'MutationObserver',
     'ResizeObserver',
@@ -60,6 +67,7 @@ async function mounted(
   try {
     await run({
       host,
+      client,
       update,
       render: async (node) => {
         generation++;
@@ -92,6 +100,9 @@ async function mounted(
       else Reflect.deleteProperty(globalThis, key);
     }
   }
+}
+function NativePort({ name }: { name: string }) {
+  return useCurrentReadingVisible() ? <button type="button">{name}</button> : null;
 }
 function button(scope: ParentNode, name: string) {
   const control = [...scope.querySelectorAll<HTMLButtonElement>('button')].find(
@@ -215,8 +226,8 @@ test('Complete Manga correction groups and deliberate submission family retains 
           },
         };
       },
-      relations: <button type="button">Native relation port</button>,
-      authored: <button type="button">Native authored port</button>,
+      relations: <NativePort name="Native relation port" />,
+      authored: <NativePort name="Native authored port" />,
     };
     const pair = (
       <>
@@ -510,7 +521,7 @@ test('Complete Manga correction groups and deliberate submission family retains 
     );
     expect(ui.host.querySelector('header')).toBeNull();
     expect(ui.host.textContent).not.toContain(m.facts_submit());
-    expect(button(ui.host, 'Native relation port').closest('[hidden]')).not.toBeNull();
+    expect(ui.host.textContent).not.toContain('Native relation port');
     for (const disabled of [true, false]) {
       await ui.render(
         <MangaCorrections
@@ -523,6 +534,10 @@ test('Complete Manga correction groups and deliberate submission family retains 
           }}
         />,
       );
+      if (disabled) {
+        expect(ui.host.querySelector('header')).toBeNull();
+        continue;
+      }
       expect(button(field(ui.host, 'number of pages'), m.facts_edit_field()).disabled).toBe(true);
       expect(button(ui.host, m.facts_submit()).disabled).toBe(true);
       expect(button(ui.host, m.correction_reload()).disabled).toBe(false);
@@ -542,7 +557,7 @@ test('Complete Manga correction groups and deliberate submission family retains 
     expect(ui.host.querySelector('h3')).toBeNull();
     heading(ui.host, 2, m.facts_selection({ count: 0, limit: factLimit }));
     expect(button(ui.host, m.facts_submit()).disabled).toBe(true);
-    expect(button(ui.host, 'Native authored port').closest('[hidden]')).not.toBeNull();
+    expect(ui.host.textContent).not.toContain('Native authored port');
 
     // Supplied-data growth only: distinct relation targets are admitted per-target slots, below
     // the 512-fact subject bound. No simulated backend scan or 64-command submission is claimed.
@@ -610,3 +625,121 @@ test('Complete Manga correction groups and deliberate submission family retains 
     expect(ui.host.textContent).toBe('Replacement workspace');
   });
 });
+
+
+test('Manga refusal retires nested readings, retains exact commands and drafts, and requires deliberate matching recovery', async () => {
+  await mounted(async (ui) => {
+    const { MangaProfileEditor } = await import('../src/features/catalogue/manga-profile-view');
+    const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+    const { RelationEditor } = await import('../src/features/catalogue/relation-editor');
+    const { AuthoredField } = await import('../src/features/catalogue/authored-field-view');
+    const { mangaFixture, mangaVolumeId } = await import('../src/kernel/fake/catalogue-manga-profile');
+    const { relationFixture } = await import('../src/kernel/fake/catalogue-relations');
+    const { authoredFixture } = await import('../src/kernel/fake/authored-field');
+    const { m } = await import('../src/paraglide/messages.js');
+    const callback = (node: Element, name: string) => Reflect.get(node,
+      Object.keys(node).find((key) => key.startsWith('__reactProps$'))!)[name];
+    for (const refusal of ['concealed', 'throw'] as const) {
+      const manga = mangaFixture();
+      const { readMangaProfile } = await import('../src/features/catalogue/manga-profile');
+      const current = await readMangaProfile(manga.client, mangaVolumeId);
+      if (!current.ok || !current.public) throw new Error('Missing Manga reading');
+      const relation = relationFixture();
+      const authored = authoredFixture();
+      const relationRead = mock(relation.transport.read);
+      const authoredRead = mock(authored.transport.read);
+      const relationInitial = await relation.transport.read(relation.slot);
+      const authoredInitial = await authored.transport.read();
+      const late = deferred<Awaited<ReturnType<typeof authored.transport.propose>>>();
+      const authoredPropose = mock((_: Parameters<typeof authored.transport.propose>[0]) =>
+        authoredPropose.mock.calls.length === 1 ? late.promise : Promise.resolve({ ok: false as const, reason: 'unavailable' as const }));
+      const relationPropose = mock(async (_: Parameters<typeof relation.transport.propose>[0]) => ({ ok: false as const, reason: 'unavailable' as const }));
+      const propose = mock(async (_: FactCommand) => ({ ok: false as const, reason: 'uncertain' as const }));
+      const ports: MangaCorrectionPorts = {
+        facts: { read: async () => { throw new Error('Unexpected scalar read'); }, propose },
+        review: () => { throw new Error('Unexpected review'); },
+        relations: <RelationEditor id={relation.id} locale="en" initial={relationInitial} search={async () => []}
+          composition={{ statement: relation.draft, slot: relation.slot, positionEditable: true }}
+          transport={{ ...relation.transport, read: relationRead, propose: relationPropose }} />,
+        authored: <AuthoredField initial={authoredInitial} locale="en" confirm={authored.confirm}
+          transport={{ ...authored.transport, read: authoredRead, propose: authoredPropose }} />,
+      };
+      let next = current;
+      let fail = false;
+      let csrfToken = 'first-session';
+      const load = async () => {
+        if (fail) {
+          if (refusal === 'throw') throw new Error('Current reading unavailable');
+          return { ok: false as const, reason: 'concealed' as const };
+        }
+        return next;
+      };
+      const page = () => <CandidateReaderBoundary address="manga" observed={{ state: 'signed-in', subject: 'viewer', csrfToken }}>
+        <MangaProfileEditor id={mangaVolumeId} locale="en" session="signed-in" search={async () => []}
+          transport={{ ...manga.transport, load }} correction={ports} />
+      </CandidateReaderBoundary>;
+      const refresh = () => act(async () => { await ui.client.refetchQueries({ queryKey: ['manga-profile', mangaVolumeId, 'en'] }); });
+      await ui.render(page());
+      await ui.until(() => !!ui.host.querySelector('form'));
+      const pages = field(ui.host, 'number of pages');
+      await ui.click(button(pages, m.facts_edit_field()));
+      await ui.input(amount(pages, m.correction_amount()), '+196');
+      const scalarSubmit = button(ui.host, m.facts_submit());
+      const staleScalarSubmit = callback(scalarSubmit, 'onClick');
+      await ui.click(scalarSubmit);
+      const relations = ui.host.querySelector(`[aria-label="${m.relation_title()}"]`)!;
+      await ui.click(button(relations, m.relation_propose()));
+      const confirmation = relations.querySelector('[role="group"]')!;
+      const relationSubmit = button(confirmation, m.relation_propose());
+      const staleRelationSubmit = callback(relationSubmit, 'onClick');
+      await ui.click(relationSubmit);
+      const form = ui.host.querySelector('form')!;
+      const input = (name: string) => form.querySelector<HTMLInputElement>(`[id="${[...form.querySelectorAll('label')].find((label) => label.textContent === name)!.htmlFor}"]`)!;
+      const editor = form.querySelector('[contenteditable="true"]')!;
+      await act(async () => {
+        editor.innerHTML = '<p>Private original Manga prose.</p>';
+        editor.dispatchEvent(new window.InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        editor.dispatchEvent(new window.FocusEvent('blur'));
+      });
+      await ui.input(input(m.authored_language()), 'en');
+      await ui.input(input(m.authored_licence()), 'CC-BY-4.0');
+      await ui.input(input(m.authored_citation()), 'https://example.org/private-notes');
+      await ui.click(form.querySelector('[role="checkbox"]')!);
+      const staleAuthoredSubmit = callback(form, 'onSubmit');
+      await ui.click(button(form, m.correction_submit()));
+      expect(authoredPropose).toHaveBeenCalledTimes(1);
+      const original = structuredClone([propose.mock.calls[0]![0], relationPropose.mock.calls[0]![0], authoredPropose.mock.calls[0]![0]]);
+      fail = true;
+      await refresh();
+      expect(ui.host.querySelector('header, a, input, form, [contenteditable]')).toBeNull();
+      expect(ui.host.innerHTML).not.toContain('Aoi Yuki');
+      expect(ui.host.innerHTML).not.toContain('An aviator');
+      await act(async () => late.resolve({ ok: true, candidate: 'retired-candidate', revision: 2 }));
+      fail = false;
+      next = structuredClone(current);
+      next.public!.subject.id = '00000000-0000-4000-8000-00000000d999';
+      await refresh();
+      expect(ui.host.querySelector('header, a, input, form')).toBeNull();
+      next = current;
+      await refresh();
+      await ui.until(() => !!ui.host.querySelector('form'));
+      expect(relationRead.mock.calls).toEqual([[relation.slot, undefined, undefined]]);
+      expect(authoredRead.mock.calls).toEqual([[authoredInitial.ok ? authoredInitial.property : '', authoredInitial.ok ? authoredInitial.session : undefined]]);
+      expect(ui.host.innerHTML).not.toContain('retired-candidate');
+      expect(ui.host.querySelector('[contenteditable]')!.textContent).toContain('Private original Manga prose.');
+      expect(amount(field(ui.host, 'number of pages'), m.correction_amount()).value).toBe('+196');
+      await act(async () => { staleScalarSubmit(); await staleRelationSubmit(); await staleAuthoredSubmit({ preventDefault() {} }); });
+      expect([propose.mock.calls.length, relationPropose.mock.calls.length, authoredPropose.mock.calls.length]).toEqual([1, 1, 1]);
+      await ui.click(button(ui.host, m.facts_submit()));
+      await ui.click(button(ui.host.querySelector('[role="group"]')!, m.relation_propose()));
+      await ui.click(button(ui.host, m.correction_retry()));
+      expect([propose.mock.calls[1]![0], relationPropose.mock.calls[1]![0], authoredPropose.mock.calls[1]![0]]).toEqual(original);
+      csrfToken = 'replacement-session';
+      await ui.update(page());
+      await ui.until(() => !!ui.host.querySelector('form'));
+      expect(ui.host.querySelector('[contenteditable]')!.textContent).not.toContain('Private original Manga prose.');
+      expect(ui.host.textContent).not.toContain(m.facts_selection({ count: 1, limit: 12 }));
+    }
+  });
+}, 20_000);

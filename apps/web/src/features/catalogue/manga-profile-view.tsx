@@ -75,7 +75,8 @@ function MangaProfileEditorLive({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const read = !query.isError && query.data?.ok ? query.data : undefined;
+  const read = !query.isError && (!id || !query.isFetching) && query.data?.ok &&
+    (!id || query.data.public?.subject.id === id) ? query.data : undefined;
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
       <ViewHeadingActions headingClassName="font-sans" label={id ? m.manga_edit({}, o) : m.manga_title({}, o)} />
@@ -110,6 +111,7 @@ function MangaProfileEditorLive({
       {id ? (
         <MangaCorrections
           read={read}
+          revision={String(query.dataUpdatedAt)}
           locale={locale}
           disabled={session !== 'signed-in'}
           ports={correction}
