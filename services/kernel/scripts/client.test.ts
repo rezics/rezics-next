@@ -50,6 +50,17 @@ if (outcomes.data) {
   const next: string | null = outcomes.data.next;
   for (const outcome of outcomes.data.outcomes) {
     const subjectId: string = outcome.subjectId;
+    const absentDeletion: typeof outcome.deletion = null;
+    const absentMemberDeletion: typeof outcome.memberDeletion = null;
+    void [absentDeletion, absentMemberDeletion];
+    if (outcome.deletion) {
+      const deletion: { deletionId: string; revision: number; restoreUntil: string } = outcome.deletion;
+      void deletion;
+    }
+    if (outcome.memberDeletion) {
+      const memberDeletion: { deletionId: string; revision: number; purgeAfter: string } = outcome.memberDeletion;
+      void memberDeletion;
+    }
   }
 }
 `,
