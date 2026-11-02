@@ -266,13 +266,14 @@ test('a 422 unsupported profile response is shown by the page without retrying o
   expect(before.copies).toHaveLength(1);
 });
 
-test('without JavaScript the page form posts both selects and the server action forwards the pair; form CSRF is scoped', async () => {
+test('without JavaScript each kind form posts its own statuses and the server action forwards the pair; form CSRF is scoped', async () => {
   const html = markup(views.CopiesFallback, { page: page(), csrfToken: 'token' });
-  expect(html).toContain('method="post"');
-  expect(options(html, 'kind')).toEqual(['print', 'digital']);
-  expect(options(html, 'status')).toEqual(['shelf', 'loan', 'available']);
+  const forms = [...html.matchAll(/<form[^>]*method="post"[^>]*>[\s\S]*?<\/form>/g)].map(([form]) => form);
+  expect(forms).toHaveLength(2);
+  expect(options(forms[0]!, 'status')).toEqual(['shelf', 'loan']);
+  expect(options(forms[1]!, 'status')).toEqual(['available']);
   const { client, calls } = transport();
-  const req = posted(html, { kind: 'digital', status: 'available' });
+  const req = posted(forms[1]!);
   expect((await actions.postCopyForm(client, req, {})).ok).toBe(true);
   expect(calls).toHaveLength(1);
   expect(calls[0]?.body).toMatchObject({ kind: 'digital', status: 'available' });
