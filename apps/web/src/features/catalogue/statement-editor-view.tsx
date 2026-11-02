@@ -53,6 +53,7 @@ import { statementDraftChanged } from './statement-editor-navigation';
 
 type Current = Extract<EditorRead, { ok: true }>;
 type ScalarRead = Pick<Current, 'release'> & { public: Pick<Current['public'], 'related'> };
+type StatementRemovalKind = 'qualifier' | 'reference' | 'part';
 /** Creation has no subject DTO or invented identity; controls need only its chosen Type and related summaries. */
 export type StatementFieldsRead = ScalarRead & {
   source: Current['source'];
@@ -539,10 +540,23 @@ export function StatementFields({
   const lifetime = useEditorLifetime();
   const addReference = useRef<HTMLButtonElement>(null);
   const removalFocus = useRef<{ focus: () => void; isConnected: boolean } | null>(null);
+  const cancelFocus = useRef<HTMLButtonElement>(null);
+  const pendingFocus = useRef<number | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<{
+    key: number;
+    kind: StatementRemovalKind;
+    trigger: HTMLButtonElement;
+  } | null>(null);
   useLayoutEffect(() => {
     const target = removalFocus.current;
     removalFocus.current = null;
-    if (lifetime.active() && target?.isConnected) target.focus();
+    if (lifetime.active() && target?.isConnected) {
+      pendingFocus.current = null;
+      target.focus();
+    } else if (pendingRemoval && pendingFocus.current !== pendingRemoval.key && pendingRemoval.trigger.isConnected) {
+      pendingFocus.current = pendingRemoval.key;
+      cancelFocus.current?.focus();
+    } else if (!pendingRemoval) pendingFocus.current = null;
   });
   // UI identity and local provenance never become native statement fields. Existing parts,
   // including unsupported values, are protected even when definitions or values change.
@@ -564,17 +578,129 @@ export function StatementFields({
     identities.set(next, identity(previous));
     return next;
   }
-  function remove(next: StatementInput, button: HTMLButtonElement, kind: 'qualifier' | 'reference' | 'part') {
-    if (!lifetime.active() || button.matches(':disabled')) return;
+  function removalTarget(button: HTMLButtonElement, kind: StatementRemovalKind) {
     const scope = button.closest<HTMLElement>(kind === 'part' ? 'fieldset' : 'section');
-    const target =
+    return (
       kind === 'reference'
         ? addReference.current
-        : ((scope?.querySelector('[data-add-part] select') as HTMLSelectElement | null) ?? scope);
+        : ((scope?.querySelector('[data-add-part] select') as HTMLSelectElement | null) ?? scope)
+    );
+  }
+  function hasContent(value: unknown): boolean {
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (typeof value === 'number' || typeof value === 'boolean') return true;
+    if (Array.isArray(value)) return value.some(hasContent);
+    if (value && typeof value === 'object') return Object.values(value).some(hasContent);
+    return false;
+  }
+  function meaningful(part: SnakInput) {
+    return part.value.type !== 'value' || hasContent(part.value.content);
+  }
+  function removeCurrent(key: number, button: HTMLButtonElement, kind: StatementRemovalKind) {
+    if (!lifetime.active() || !button.isConnected || button.matches(':disabled')) return;
+    let next: StatementInput | undefined;
+    if (kind === 'qualifier') {
+      const parts = draft.qualifiers ?? [];
+      const index = parts.findIndex((part) => {
+        const entry = identity(part);
+        return entry.key === key && entry.added;
+      });
+      if (index >= 0) next = { ...draft, qualifiers: parts.filter((_, i) => i !== index) };
+    } else if (kind === 'reference') {
+      const index = draft.references.findIndex((reference) => {
+        const entry = identity(reference);
+        return entry.key === key && entry.added;
+      });
+      if (index >= 0) next = { ...draft, references: draft.references.filter((_, i) => i !== index) };
+    } else {
+      for (let referenceIndex = 0; referenceIndex < draft.references.length; referenceIndex++) {
+        const reference = draft.references[referenceIndex]!;
+        const partIndex = reference.parts.findIndex((part) => {
+          const entry = identity(part);
+          return entry.key === key && entry.added;
+        });
+        if (partIndex < 0) continue;
+        next = {
+          ...draft,
+          references: draft.references.map((item, i) =>
+            i === referenceIndex
+              ? revision(item, { parts: item.parts.filter((_, n) => n !== partIndex) })
+              : item,
+          ),
+        };
+        break;
+      }
+    }
+    if (!next) {
+      setPendingRemoval((pending) => (pending?.key === key ? null : pending));
+      return;
+    }
     // Wait for removal to re-enable Add reference when the draft was at its group limit.
     // Stable keys keep surviving custom controls and unfinished selections mounted.
-    removalFocus.current = target ?? null;
+    removalFocus.current = removalTarget(button, kind) ?? null;
+    setPendingRemoval((pending) => (pending?.key === key ? null : pending));
     change(next);
+  }
+  function remove(button: HTMLButtonElement, holder: object, kind: StatementRemovalKind) {
+    if (!lifetime.active() || button.matches(':disabled')) return;
+    const entry = identity(holder);
+    if (!entry.added) return;
+    const requiresChoice =
+      kind === 'reference'
+        ? (holder as { parts: SnakInput[] }).parts.some(meaningful)
+        : meaningful(holder as SnakInput);
+    if (requiresChoice) setPendingRemoval({ key: entry.key, kind, trigger: button });
+    else removeCurrent(entry.key, button, kind);
+  }
+  function cancelRemoval(key: number) {
+    const pending = pendingRemoval;
+    if (pending?.key !== key) return;
+    setPendingRemoval(null);
+    if (lifetime.active() && pending.trigger.isConnected && !pending.trigger.matches(':disabled')) pending.trigger.focus();
+  }
+  function choice(key: number, kind: StatementRemovalKind) {
+    if (pendingRemoval?.key !== key || pendingRemoval.kind !== kind) return null;
+    const action =
+      kind === 'qualifier'
+        ? m.correction_remove_qualifier({}, o)
+        : kind === 'reference'
+          ? m.correction_remove_reference({}, o)
+          : m.correction_remove_reference_part({}, o);
+    const title = m.candidate_confirm_title({ action }, o);
+    return (
+      <div
+        role="group"
+        aria-label={title}
+        className="mt-2 min-w-0 space-y-2 rounded-md border border-border p-3 [overflow-wrap:anywhere]"
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return;
+          event.preventDefault();
+          event.stopPropagation();
+          cancelRemoval(key);
+        }}
+      >
+        <p>{title}</p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            ref={cancelFocus}
+            className={actionClassName}
+            type="button"
+            variant="outline"
+            onClick={() => cancelRemoval(key)}
+          >
+            {m.candidate_cancel({}, o)}
+          </Button>
+          <Button
+            className={actionClassName}
+            type="button"
+            variant="destructive"
+            onClick={() => removeCurrent(key, pendingRemoval.trigger, kind)}
+          >
+            {m.contribution_confirm({}, o)}
+          </Button>
+        </div>
+      </div>
+    );
   }
   const definition = current.release.properties[draft.property.id];
   const section = (name: string) => ({ id: feedback ? `${feedback.id}-${name}` : undefined, tabIndex: -1 });
@@ -631,20 +757,17 @@ export function StatementFields({
             locale={locale}
             removal={
               identity(part).added && (
-                <Button
-                  className={actionClassName}
-                  type="button"
-                  variant="ghost"
-                  onClick={(event) =>
-                    remove(
-                      { ...draft, qualifiers: draft.qualifiers!.filter((_, i) => i !== index) },
-                      event.currentTarget,
-                      'qualifier',
-                    )
-                  }
-                >
-                  {m.correction_remove_qualifier({}, o)}
-                </Button>
+                <>
+                  <Button
+                    className={actionClassName}
+                    type="button"
+                    variant="ghost"
+                    onClick={(event) => remove(event.currentTarget, part, 'qualifier')}
+                  >
+                    {m.correction_remove_qualifier({}, o)}
+                  </Button>
+                  {choice(identity(part).key, 'qualifier')}
+                </>
               )
             }
             onChange={(value) =>
@@ -698,29 +821,17 @@ export function StatementFields({
                 locale={locale}
                 removal={
                   identity(part).added && (
-                    <Button
-                      className={actionClassName}
-                      type="button"
-                      variant="ghost"
-                      onClick={(event) =>
-                        remove(
-                          {
-                            ...draft,
-                            references: draft.references.map((item, i) =>
-                              i !== index
-                                ? item
-                                : revision(item, {
-                                    parts: item.parts.filter((_, n) => n !== partIndex),
-                                  }),
-                            ),
-                          },
-                          event.currentTarget,
-                          'part',
-                        )
-                      }
-                    >
-                      {m.correction_remove_reference_part({}, o)}
-                    </Button>
+                    <>
+                      <Button
+                        className={actionClassName}
+                        type="button"
+                        variant="ghost"
+                        onClick={(event) => remove(event.currentTarget, part, 'part')}
+                      >
+                        {m.correction_remove_reference_part({}, o)}
+                      </Button>
+                      {choice(identity(part).key, 'part')}
+                    </>
                   )
                 }
                 onChange={(value) =>
@@ -759,20 +870,17 @@ export function StatementFields({
               }
             />
             {identity(reference).added && (
-              <Button
-                className={actionClassName}
-                type="button"
-                variant="ghost"
-                onClick={(event) =>
-                  remove(
-                    { ...draft, references: draft.references.filter((_, i) => i !== index) },
-                    event.currentTarget,
-                    'reference',
-                  )
-                }
-              >
-                {m.correction_remove_reference({}, o)}
-              </Button>
+              <>
+                <Button
+                  className={actionClassName}
+                  type="button"
+                  variant="ghost"
+                  onClick={(event) => remove(event.currentTarget, reference, 'reference')}
+                >
+                  {m.correction_remove_reference({}, o)}
+                </Button>
+                {choice(identity(reference).key, 'reference')}
+              </>
             )}
           </fieldset>
         ))}

@@ -335,7 +335,31 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     expect(button(first, m.correction_remove_qualifier()).parentElement!.querySelector('input')).toBe(survivingValue);
     expect(window.document.activeElement).toBe(addQualifier);
     await click(first, m.correction_remove_qualifier());
+    const qualifierRemove = button(first, m.correction_remove_qualifier());
+    await click(first, m.candidate_cancel());
+    expect(draftChanges.A!.qualifiers!.at(-1)!.value).toEqual({
+      type: 'value',
+      content: 'Keep this ordinal',
+    });
+    expect(button(first, m.correction_remove_qualifier()).parentElement!.querySelector('input')).toBe(survivingValue);
+    expect(window.document.activeElement).toBe(qualifierRemove);
+    await click(first, m.correction_remove_qualifier());
+    await act(async () =>
+      window.document.activeElement!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+    );
+    expect(survivingValue.value).toBe('Keep this ordinal');
+    expect(window.document.activeElement).toBe(qualifierRemove);
+    await click(first, m.correction_remove_qualifier());
+    await click(first, m.contribution_confirm());
+    expect(draftChanges.A).toEqual(original);
     await click(second, m.correction_remove_reference_part());
+    const retainedCitation = button(second, m.correction_remove_reference_part());
+    await click(second, m.candidate_cancel());
+    expect(extra.value).toBe('https://example.org/independent/third-part');
+    expect(control(second, m.correction_url(), 2)).toBe(extra);
+    expect(window.document.activeElement).toBe(retainedCitation);
+    await click(second, m.correction_remove_reference_part());
+    await click(second, m.contribution_confirm());
     expect(draftChanges.B!.references).toEqual(original.references);
     expect(draftChanges.B!.qualifiers![1]!.value).toEqual({
       type: 'value',
@@ -383,6 +407,34 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     associations(host);
     expect(control(first, m.correction_add_qualifier()).id).toBe(addQualifier.id);
     expect(supplied.calls).toHaveLength(0);
+
+    // An old choice cannot remove a replacement holder after its editor retires.
+    await click(first, m.correction_add_reference());
+    const retiredGroup = first.querySelectorAll('fieldset').at(-1)!;
+    const retiredPart = control(retiredGroup, m.correction_add_part());
+    await input(retiredPart, 'schema:url');
+    await click(retiredPart.closest('[data-slot="field"]')!.parentElement!, m.correction_add());
+    await input(control(retiredGroup, m.correction_url()), 'https://example.org/retired-holder');
+    await click(retiredGroup, m.correction_remove_reference());
+    const retiredConfirm = button(retiredGroup, m.contribution_confirm());
+    const replacement = statementInput(supplied.source);
+    replacement.references = [
+      ...replacement.references,
+      {
+        parts: [
+          {
+            property: { id: 'schema:url' },
+            value: { type: 'value', content: 'https://example.org/replacement-holder' },
+          },
+        ],
+      },
+    ];
+    await render(null);
+    await render(<Fields key="replacement" name="replacement" current={current} initial={replacement} />);
+    await act(async () => retiredConfirm.click());
+    const replacementGroup = host.querySelectorAll('fieldset').at(-1)!;
+    expect(control(replacementGroup, m.correction_url()).value).toBe('https://example.org/replacement-holder');
+    expect(buttons(host, m.contribution_confirm())).toHaveLength(0);
 
     // Supplied-data growth only: 64 parts fit FOUR references of 16, never 64 references
     // or qualifiers. Native bounds stay intact. An unrelated population cannot be traversed.
@@ -476,11 +528,16 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     const citation = 'https://example.org/complete/citation-that-is-retained-through-uncertain-replay';
     await input(control(host, m.correction_url(), 1), citation);
     expect(fixture.calls).toHaveLength(3);
+    await click(host, m.correction_remove_reference());
+    const lockedConfirmation = button(host, m.contribution_confirm());
     await submit();
     await until(() => buttons(host, m.correction_retry()).length === 1);
     expect(host.textContent).toContain(m.correction_unavailable());
     expect(year.value).toBe('1946');
     expect(year.matches(':disabled')).toBe(true);
+    await act(async () => lockedConfirmation.click());
+    expect(control(host, m.correction_url(), 1).value).toBe(citation);
+    expect(writes(fixture)).toHaveLength(1);
     expect(buttons(host, m.correction_reload())).toHaveLength(0);
     for (const label of [m.correction_remove_reference(), m.correction_remove_reference_part()]) {
       expect(button(host, label).matches(':disabled')).toBe(true);
