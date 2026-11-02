@@ -111,6 +111,57 @@ CREATE TABLE rating.erasure_page (
 
 
 --
+-- Name: identity_repair_receipt; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.identity_repair_receipt (
+    route integer NOT NULL,
+    voter_id uuid NOT NULL,
+    page_id uuid NOT NULL,
+    work_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    digest text NOT NULL,
+    transaction_id uuid NOT NULL,
+    obligation_id text,
+    mapping_digest text,
+    checkpoint jsonb,
+    terminal boolean NOT NULL,
+    mode text NOT NULL,
+    CONSTRAINT identity_repair_receipt_authority_check CHECK ((((mode = 'repair'::text) AND (obligation_id IS NOT NULL) AND (mapping_digest IS NOT NULL)) OR ((mode = 'withdrawal'::text) AND (obligation_id IS NULL) AND (mapping_digest IS NULL)))),
+    CONSTRAINT identity_repair_receipt_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_repair_receipt_generation_check CHECK ((generation > 0)),
+    CONSTRAINT identity_repair_receipt_mapping_digest_check CHECK ((mapping_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_repair_receipt_mode_check CHECK ((mode = ANY (ARRAY['repair'::text, 'withdrawal'::text]))),
+    CONSTRAINT identity_repair_receipt_obligation_id_check CHECK ((octet_length(obligation_id) <= 255)),
+    CONSTRAINT identity_repair_receipt_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT identity_repair_receipt_voter_route_check CHECK ((route = ((get_byte(uuid_send(voter_id), 10) * 256) + get_byte(uuid_send(voter_id), 11))))
+);
+
+
+--
+-- Name: identity_work_frame; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.identity_work_frame (
+    route integer NOT NULL,
+    voter_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    work_id uuid NOT NULL,
+    state text NOT NULL,
+    mode text NOT NULL,
+    cursor jsonb,
+    through_key jsonb,
+    selected jsonb,
+    CONSTRAINT identity_work_frame_generation_check CHECK ((generation > 0)),
+    CONSTRAINT identity_work_frame_mode_check CHECK ((mode = ANY (ARRAY['repair'::text, 'withdrawal'::text]))),
+    CONSTRAINT identity_work_frame_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT identity_work_frame_selected_check CHECK ((octet_length(jsonb_send(selected)) <= 65537)),
+    CONSTRAINT identity_work_frame_state_check CHECK ((state = ANY (ARRAY['active'::text, 'complete'::text, 'cancelled'::text]))),
+    CONSTRAINT identity_work_frame_voter_route_check CHECK ((route = ((get_byte(uuid_send(voter_id), 10) * 256) + get_byte(uuid_send(voter_id), 11))))
+);
+
+
+--
 -- Name: population_pending; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -492,6 +543,22 @@ ALTER TABLE ONLY rating.aggregate_component
 
 ALTER TABLE ONLY rating.erasure_page
     ADD CONSTRAINT erasure_page_pkey PRIMARY KEY (route, voter_id, page_id);
+
+
+--
+-- Name: identity_repair_receipt identity_repair_receipt_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.identity_repair_receipt
+    ADD CONSTRAINT identity_repair_receipt_pkey PRIMARY KEY (route, voter_id, page_id);
+
+
+--
+-- Name: identity_work_frame identity_work_frame_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.identity_work_frame
+    ADD CONSTRAINT identity_work_frame_pkey PRIMARY KEY (route, voter_id);
 
 
 --

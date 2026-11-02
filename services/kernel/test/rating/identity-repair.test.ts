@@ -12,23 +12,38 @@ import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 const route = 0x3a07;
 let database: GrowthDatabase;
 const at = '2026-11-03T08:00:00Z';
-beforeAll(async () => { database = await openGrowthDatabase(); });
-afterAll(async () => { await database?.close(); });
+beforeAll(async () => {
+  database = await openGrowthDatabase();
+});
+afterAll(async () => {
+  await database?.close();
+});
 const key = () => randomUUID();
 
 async function voter(): Promise<AccountActor> {
   const accountId = newId(route);
-  await database.admin.query(`INSERT INTO access.account
+  await database.admin.query(
+    `INSERT INTO access.account
     (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch)
-    VALUES ($1, $2, 'actor', 'active', $3, false, 1)`, [route, accountId, newId(route)]);
-  return { kind: 'account', accountId, scopes: ['rating:vote'], clientId: 'identity-repair-test',
-    requestedBy: null, authnEpoch: 1 };
+    VALUES ($1, $2, 'actor', 'active', $3, false, 1)`,
+    [route, accountId, newId(route)],
+  );
+  return {
+    kind: 'account',
+    accountId,
+    scopes: ['rating:vote'],
+    clientId: 'identity-repair-test',
+    requestedBy: null,
+    authnEpoch: 1,
+  };
 }
 async function seed(actor: AccountActor, targetId: string, units: number | null = 7) {
-  await database.admin.query(`INSERT INTO rating.vote
+  await database.admin.query(
+    `INSERT INTO rating.vote
     (route, voter_id, question_id, target_id, units, revision, changed_at, transaction_id)
     VALUES ($1, $2, $3, $4, $5, 1, $6, $7)`,
-  [route, actor.accountId, STANDARD_QUESTION_ID, targetId, units, at, newId(route)]);
+    [route, actor.accountId, STANDARD_QUESTION_ID, targetId, units, at, newId(route)],
+  );
 }
 function producer(destination: (original: string) => string = (id) => id) {
   let handoff = true;
@@ -39,21 +54,35 @@ function producer(destination: (original: string) => string = (id) => id) {
       expect(currentCommand(tx).transactionId).toBeTruthy();
       held.add(tx);
       if (pending) return { status: 'pending', reason: pending };
-      return { status: 'current', obligationId: 'fixture-retained-obligation',
+      return {
+        status: 'current',
+        obligationId: 'fixture-retained-obligation',
         mappings: [...new Set(page.votes.map((vote) => vote.targetId))].map((originalId) => ({
-          originalId, terminalId: destination(originalId), epoch: '1',
-        })) };
+          originalId,
+          terminalId: destination(originalId),
+          epoch: '1',
+        })),
+      };
     },
     async complete(tx, input) {
       expect(held.has(tx)).toBe(true);
       expect(currentCommand(tx).transactionId).toBe(input.transactionId);
-      const receipt = await tx.query('SELECT transaction_id FROM rating.identity_repair_receipt WHERE page_id = $1',
-        [input.page.pageId]);
+      const receipt = await tx.query('SELECT transaction_id FROM rating.identity_repair_receipt WHERE page_id = $1', [
+        input.page.pageId,
+      ]);
       expect(receipt.rows[0]?.transaction_id).toBe(input.transactionId);
       return handoff;
     },
   };
-  return { port, setHandoff: (value: boolean) => { handoff = value; }, setPending: (value: string) => { pending = value; } };
+  return {
+    port,
+    setHandoff: (value: boolean) => {
+      handoff = value;
+    },
+    setPending: (value: string) => {
+      pending = value;
+    },
+  };
 }
 type Commands = ReturnType<typeof createRatingIdentityRepairCommands>;
 async function admit(commands: Commands, actor: AccountActor): Promise<IdentityWorkRef> {
@@ -66,16 +95,29 @@ async function select(commands: Commands, actor: AccountActor, ref: IdentityWork
   if (result.status !== 'selected') throw new Error(result.reason);
   return result.page;
 }
-const binding = (page: IdentityRepairPage) => ({ workId: page.workId, generation: page.generation,
-  pageId: page.pageId, digest: page.digest });
+const binding = (page: IdentityRepairPage) => ({
+  workId: page.workId,
+  generation: page.generation,
+  pageId: page.pageId,
+  digest: page.digest,
+});
 async function rows(actor: AccountActor) {
-  return (await database.admin.query(`SELECT target_id, counted_target, units, revision, counted_revision
-    FROM rating.vote WHERE route = $1 AND voter_id = $2 ORDER BY target_id`, [route, actor.accountId])).rows;
+  return (
+    await database.admin.query(
+      `SELECT target_id, counted_target, units, revision, counted_revision
+    FROM rating.vote WHERE route = $1 AND voter_id = $2 ORDER BY target_id`,
+      [route, actor.accountId],
+    )
+  ).rows;
 }
 async function effects(actor: AccountActor) {
-  return (await database.admin.query(`SELECT data FROM core.outbox
+  return (
+    await database.admin.query(
+      `SELECT data FROM core.outbox
     WHERE subject = $1 AND type = 'com.rezics.rating.vote.changed.v1' ORDER BY position, event_seq`,
-  [actor.accountId])).rows.map((row) => row.data);
+      [actor.accountId],
+    )
+  ).rows.map((row) => row.data);
 }
 
 test('durable pages remain bounded and pending without Semantic authority, then resume through an empty terminal receipt', async () => {
@@ -86,8 +128,10 @@ test('durable pages remain bounded and pending without Semantic authority, then 
   const first = await select(unavailable, actor, ref);
   expect(first.votes).toHaveLength(64);
   expect((await select(unavailable, actor, ref)).pageId).toBe(first.pageId);
-  expect((await unavailable.commit(actor, binding(first), key())).value).toMatchObject({ status: 'pending',
-    reason: 'semantic-exact-currentness-and-held-repair-obligation-unavailable' });
+  expect((await unavailable.commit(actor, binding(first), key())).value).toMatchObject({
+    status: 'pending',
+    reason: 'semantic-exact-currentness-and-held-repair-obligation-unavailable',
+  });
   expect(await effects(actor)).toEqual([]);
   const fixture = producer();
   const commands = createRatingIdentityRepairCommands({ pool: database.pool, producer: fixture.port });
@@ -104,24 +148,31 @@ test('durable pages remain bounded and pending without Semantic authority, then 
   const last = await select(commands, actor, ref);
   expect(last.terminal).toBe(true);
   expect(last.votes).toEqual([]);
-  expect((await commands.commit(actor, binding(last), key())).value).toMatchObject({ status: 'committed',
-    receipt: { terminal: true, checkpoint: second.next } });
+  expect((await commands.commit(actor, binding(last), key())).value).toMatchObject({
+    status: 'committed',
+    receipt: { terminal: true, checkpoint: second.next },
+  });
   expect((await commands.select(actor, ref, key())).value).toMatchObject({ reason: 'stale-work' });
 });
 
 test('effects, receipt and checkpoint roll back together; lost responses replay while original votes and clears survive', async () => {
   const actor = await voter();
-  const original = newId(route), terminal = newId(route), clearedOriginal = newId(route), clearedTerminal = newId(route);
+  const original = newId(route),
+    terminal = newId(route),
+    clearedOriginal = newId(route),
+    clearedTerminal = newId(route);
   await seed(actor, original);
   await seed(actor, clearedOriginal, 9);
   await seed(actor, clearedTerminal, null);
-  const fixture = producer((id) => id === original ? terminal : id === clearedOriginal ? clearedTerminal : id);
+  const fixture = producer((id) => (id === original ? terminal : id === clearedOriginal ? clearedTerminal : id));
   const commands = createRatingIdentityRepairCommands({ pool: database.pool, producer: fixture.port });
   const ref = await admit(commands, actor);
   const page = await select(commands, actor, ref);
   const before = await rows(actor);
   fixture.setHandoff(false);
-  expect((await commands.commit(actor, binding(page), key())).value).toMatchObject({ reason: 'semantic-repair-obligation-handoff-pending' });
+  expect((await commands.commit(actor, binding(page), key())).value).toMatchObject({
+    reason: 'semantic-repair-obligation-handoff-pending',
+  });
   expect(await rows(actor)).toEqual(before);
   expect(await effects(actor)).toEqual([]);
   expect((await select(commands, actor, ref)).pageId).toBe(page.pageId);
@@ -130,11 +181,20 @@ test('effects, receipt and checkpoint roll back together; lost responses replay 
   const committed = await commands.commit(actor, binding(page), requestKey);
   expect(committed.value.status).toBe('committed');
   const after = await rows(actor);
-  expect(after.find((row) => row.target_id === original)).toMatchObject({ counted_target: terminal, units: 7, revision: 1 });
+  expect(after.find((row) => row.target_id === original)).toMatchObject({
+    counted_target: terminal,
+    units: 7,
+    revision: 1,
+  });
   expect(after.find((row) => row.target_id === clearedOriginal)).toMatchObject({ counted_target: null, units: 9 });
-  expect(after.find((row) => row.target_id === clearedTerminal)).toMatchObject({ counted_target: clearedTerminal, units: null });
+  expect(after.find((row) => row.target_id === clearedTerminal)).toMatchObject({
+    counted_target: clearedTerminal,
+    units: null,
+  });
   const emitted = await effects(actor);
-  expect(emitted.some((event) => event.targetId === original && event.aggregateTargetId === terminal && event.units === 7)).toBe(true);
+  expect(
+    emitted.some((event) => event.targetId === original && event.aggregateTargetId === terminal && event.units === 7),
+  ).toBe(true);
   expect((await commands.commit(actor, binding(page), requestKey)).value).toEqual(committed.value);
   expect((await commands.commit(actor, binding(page), key())).value).toEqual(committed.value);
   expect(await effects(actor)).toEqual(emitted);
@@ -152,7 +212,9 @@ test('changed vote admission is fenced; eligible cancellation preserves votes an
   const commands = createRatingIdentityRepairCommands({ pool: database.pool, producer: fixture.port });
   const ref = await admit(commands, actor);
   const page = await select(commands, actor, ref);
-  await database.admin.query('UPDATE rating.vote SET units = 8, revision = revision + 1 WHERE voter_id = $1', [actor.accountId]);
+  await database.admin.query('UPDATE rating.vote SET units = 8, revision = revision + 1 WHERE voter_id = $1', [
+    actor.accountId,
+  ]);
   expect((await commands.commit(actor, binding(page), key())).value).toMatchObject({ reason: 'vote-changed' });
   const refreshed = await select(commands, actor, ref);
   expect(refreshed.pageId).not.toBe(page.pageId);
@@ -160,13 +222,17 @@ test('changed vote admission is fenced; eligible cancellation preserves votes an
   await commands.cancel(actor, ref, key());
   expect(await rows(actor)).toEqual(before);
   expect((await commands.commit(actor, binding(refreshed), key())).value).toMatchObject({ reason: 'stale-work' });
-  expect((await commands.admit(actor, { workId: newId(route), expectedGeneration: null }, key())).value)
-    .toMatchObject({ reason: 'stale-admission' });
+  expect((await commands.admit(actor, { workId: newId(route), expectedGeneration: null }, key())).value).toMatchObject({
+    reason: 'stale-admission',
+  });
   const next = (await commands.admit(actor, { workId: newId(route), expectedGeneration: ref.generation }, key())).value;
   if (next.status !== 'admitted') throw new Error(next.reason);
   const replacement = { workId: next.frame.workId, generation: next.frame.generation };
-  await database.admin.query(`INSERT INTO rating.voter_state (route, voter_id, state, transition_id, purge_votes, populations)
-    VALUES ($1, $2, 'ineligible', $3, false, '{}')`, [route, actor.accountId, newId(route)]);
+  await database.admin.query(
+    `INSERT INTO rating.voter_state (route, voter_id, state, transition_id, purge_votes, populations)
+    VALUES ($1, $2, 'ineligible', $3, false, '{}')`,
+    [route, actor.accountId, newId(route)],
+  );
   await commands.cancel(actor, replacement, key());
   const withdrawal = await select(commands, actor, replacement);
   expect(withdrawal.mode).toBe('withdrawal');
@@ -182,7 +248,8 @@ test('changed vote admission is fenced; eligible cancellation preserves votes an
 
 test('repoint and rollback repair reuse original vote identity', async () => {
   const actor = await voter();
-  const original = newId(route), terminal = newId(route);
+  const original = newId(route),
+    terminal = newId(route);
   await seed(actor, original, null);
   let destination = terminal;
   const fixture = producer(() => destination);
@@ -192,9 +259,15 @@ test('repoint and rollback repair reuse original vote identity', async () => {
     destination = target;
     const page = await select(commands, actor, ref);
     await commands.commit(actor, binding(page), key());
-    expect((await rows(actor))[0]).toMatchObject({ target_id: original, counted_target: target, units: null, revision: 1 });
+    expect((await rows(actor))[0]).toMatchObject({
+      target_id: original,
+      counted_target: target,
+      units: null,
+      revision: 1,
+    });
     await commands.cancel(actor, ref, key());
-    const next = (await commands.admit(actor, { workId: newId(route), expectedGeneration: ref.generation }, key())).value;
+    const next = (await commands.admit(actor, { workId: newId(route), expectedGeneration: ref.generation }, key()))
+      .value;
     if (next.status !== 'admitted') throw new Error(next.reason);
     ref = next.frame;
   }

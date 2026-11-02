@@ -54,10 +54,22 @@ export async function readIdentityFrame(tx: CommandTransaction, voterId: string)
   return (await tx.query<IdentityWorkFrame>(readFrame.sql, [identityRoute(voterId), voterId])).rows[0] ?? null;
 }
 
-export async function saveIdentityFrame(tx: CommandTransaction, voterId: string, frame: IdentityWorkFrame): Promise<void> {
-  await tx.query(saveFrame.sql, [identityRoute(voterId), voterId, frame.generation, frame.workId, frame.state,
-    frame.mode, JSON.stringify(frame.cursor), JSON.stringify(frame.through),
-    frame.selected === null ? null : JSON.stringify(frame.selected)]);
+export async function saveIdentityFrame(
+  tx: CommandTransaction,
+  voterId: string,
+  frame: IdentityWorkFrame,
+): Promise<void> {
+  await tx.query(saveFrame.sql, [
+    identityRoute(voterId),
+    voterId,
+    frame.generation,
+    frame.workId,
+    frame.state,
+    frame.mode,
+    JSON.stringify(frame.cursor),
+    JSON.stringify(frame.through),
+    frame.selected === null ? null : JSON.stringify(frame.selected),
+  ]);
 }
 
 export async function readIdentityLimit(tx: CommandTransaction, voterId: string): Promise<IdentityVoteKey | null> {
@@ -65,18 +77,53 @@ export async function readIdentityLimit(tx: CommandTransaction, voterId: string)
 }
 
 export async function readIdentityVotes(
-  tx: CommandTransaction, voterId: string, after: IdentityVoteKey | null, through: IdentityVoteKey | null,
+  tx: CommandTransaction,
+  voterId: string,
+  after: IdentityVoteKey | null,
+  through: IdentityVoteKey | null,
 ): Promise<IdentityVote[]> {
   if (through === null) return [];
-  const rows = (await tx.query<IdentityVote>(pageVotes.sql, [identityRoute(voterId), voterId,
-    after?.questionId ?? null, after?.targetId ?? null, through.questionId, through.targetId])).rows;
-  return rows.map((row) => ({ ...row, units: row.units === null ? null : Number(row.units),
-    revision: Number(row.revision), countedRevision: Number(row.countedRevision) }));
+  const rows = (
+    await tx.query<IdentityVote>(pageVotes.sql, [
+      identityRoute(voterId),
+      voterId,
+      after?.questionId ?? null,
+      after?.targetId ?? null,
+      through.questionId,
+      through.targetId,
+    ])
+  ).rows;
+  return rows.map((row) => ({
+    ...row,
+    units: row.units === null ? null : Number(row.units),
+    revision: Number(row.revision),
+    countedRevision: Number(row.countedRevision),
+  }));
 }
 
 export function identityPageDigest(page: Omit<IdentityRepairPage, 'digest'>): string {
-  return createHash('sha256').update(JSON.stringify([page.voterId, page.workId, page.generation, page.pageId,
-    page.mode, page.after, page.through, page.next, page.terminal,
-    page.votes.map((vote) => [vote.questionId, vote.targetId, vote.units, vote.revision,
-      vote.countedTargetId, vote.countedRevision, vote.changedAt])])).digest('hex');
+  return createHash('sha256')
+    .update(
+      JSON.stringify([
+        page.voterId,
+        page.workId,
+        page.generation,
+        page.pageId,
+        page.mode,
+        page.after,
+        page.through,
+        page.next,
+        page.terminal,
+        page.votes.map((vote) => [
+          vote.questionId,
+          vote.targetId,
+          vote.units,
+          vote.revision,
+          vote.countedTargetId,
+          vote.countedRevision,
+          vote.changedAt,
+        ]),
+      ]),
+    )
+    .digest('hex');
 }
