@@ -11,6 +11,7 @@ export type HeaderSearchState = {
   suggestions: SuggestionState;
   query: string;
   result?: SuggestionResult | undefined;
+  retryAt?: number | undefined;
   activeIndex: number;
 };
 
@@ -25,7 +26,13 @@ export type HeaderSearchEvent =
   | { type: 'sync-query'; query: string }
   | { type: 'active'; index: number }
   | { type: 'invalidate' }
-  | { type: 'suggestions'; state: SuggestionState; result?: SuggestionResult | undefined };
+  | { type: 'suggestions'; state: SuggestionState; result?: SuggestionResult | undefined; retryAt?: number | undefined };
+
+function retireRetryAt(state: HeaderSearchState): HeaderSearchState {
+  const current = { ...state };
+  delete current.retryAt;
+  return current;
+}
 
 export function initialHeaderSearchState(scope?: SearchScope, query = ''): HeaderSearchState {
   return { expanded: false, phoneSheet: false, scope, query, suggestions: 'idle', activeIndex: -1 };
@@ -49,29 +56,47 @@ export function reduceHeaderSearchState(state: HeaderSearchState, event: HeaderS
       };
     case 'remove-scope':
       return {
-        ...state,
+        ...retireRetryAt(state),
         scope: undefined,
         result: undefined,
         activeIndex: -1,
         suggestions: state.query.trim() ? 'loading' : 'idle',
       };
     case 'sync-scope':
-      return { ...state, scope: event.scope, result: undefined, suggestions: 'idle', activeIndex: -1 };
+      return {
+        ...retireRetryAt(state),
+        scope: event.scope,
+        result: undefined,
+        suggestions: 'idle',
+        activeIndex: -1,
+      };
     case 'query':
       return {
-        ...state,
+        ...retireRetryAt(state),
         query: event.query,
         result: undefined,
         activeIndex: -1,
         suggestions: event.query.trim() ? 'loading' : 'idle',
       };
     case 'sync-query':
-      return { ...state, query: event.query, result: undefined, activeIndex: -1, suggestions: 'idle' };
+      return {
+        ...retireRetryAt(state),
+        query: event.query,
+        result: undefined,
+        activeIndex: -1,
+        suggestions: 'idle',
+      };
     case 'active':
       return { ...state, activeIndex: event.index };
     case 'invalidate':
-      return { ...state, result: undefined, activeIndex: -1, suggestions: 'idle' };
+      return { ...retireRetryAt(state), result: undefined, activeIndex: -1, suggestions: 'idle' };
     case 'suggestions':
-      return { ...state, suggestions: event.state, result: event.result, activeIndex: -1 };
+      return {
+        ...retireRetryAt(state),
+        suggestions: event.state,
+        result: event.result,
+        ...(event.retryAt !== undefined ? { retryAt: event.retryAt } : {}),
+        activeIndex: -1,
+      };
   }
 }

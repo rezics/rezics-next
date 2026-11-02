@@ -34,11 +34,14 @@ export const loadGlobalHeaderSuggestions: HeaderSuggestionLoader = async (query,
   );
   if (!response.ok) {
     const body = (await response.json().catch(() => undefined)) as { code?: unknown } | undefined;
-    throw problem(
+    const failure = problem(
       response.status,
       typeof body?.code === 'string' ? body.code : 'suggestions_failed',
       'Suggestions failed',
     );
+    const retryAfter = response.headers.get('retry-after');
+    if (retryAfter !== null) throw Object.assign(failure, { headers: { 'retry-after': retryAfter } });
+    throw failure;
   }
   return parseSuggestionPage(await response.json());
 };

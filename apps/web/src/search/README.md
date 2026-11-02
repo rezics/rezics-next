@@ -21,8 +21,8 @@ starts a fresh traversal. Global search accepts drafts up to 512 UTF-8 bytes; sc
 
 Header suggestions retire on an unsettled session or a change to its state, subject or CSRF observation; a settled
 session reloads the retained draft, while isolated presenters without a session observation use anonymous identity.
-Trending retries stay manual: native Retry-After disables retry until its minimum delay, without polling; session
-observations (including CSRF changes) and locale changes retire prior suggestions and pending requests.
+Trending and header-suggestion retries stay manual: native Retry-After disables retry until its minimum delay, without
+polling; session observations (including CSRF changes) and locale changes retire prior suggestions and pending requests.
 
 Filters stays at the left of the composer's second row. `HeaderSearchFilterProvider` and
 `useRegisterHeaderSearchFilters` connect it to the current route's actual editor and active count. Search owns

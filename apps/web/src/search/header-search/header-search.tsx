@@ -35,6 +35,7 @@ import { canEnterHeaderSearch } from './keyboard';
 import { isWithinGlobalSearchQueryLimit } from '../query-text-limit';
 import type { BrowserSession } from '../../session/browser-state';
 import { headerSearchSessionKey } from './session-key';
+import { useSearchRetryWait } from '../search-recovery-retry';
 
 const controlFocus =
   'focus-visible:ring-0 focus-visible:border-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-2';
@@ -124,6 +125,8 @@ export function HeaderSearchView({
   keyboardShortcut = false,
 }: ViewProps) {
   const { expanded, phoneSheet, scope, query, suggestions, result, activeIndex } = state;
+  const retryable = onRetry !== undefined && ['error', 'unavailable', 'preparing', 'restart'].includes(suggestions);
+  const retryWaiting = useSearchRetryWait(retryable ? state.retryAt : undefined);
   const action = headerSearchAction(locale, scope);
   const count = new Intl.NumberFormat(locale).format(region?.activeCount ?? 0);
   const subjects = suggestions === 'ready' ? (result?.subjects ?? []) : [];
@@ -334,8 +337,9 @@ export function HeaderSearchView({
                 {status}
               </p>
             )}
-            {onRetry && ['error', 'unavailable', 'preparing', 'restart'].includes(suggestions) && (
-              <Button type="button" variant="outline" className="mx-4 w-fit" onClick={onRetry}>
+            {retryWaiting && retryable && <p role="status" className="px-4 pb-2 text-sm text-muted-foreground">{m.settings_retry_wait()}</p>}
+            {retryable && (
+              <Button type="button" variant="outline" className="mx-4 w-fit" onClick={onRetry} disabled={retryWaiting}>
                 {m.search_facet_retry()}
               </Button>
             )}
@@ -475,7 +479,7 @@ function HeaderSearchController({
   const canSelectSuggestion = () => sessionIsCurrent() && !resultsRetired.current;
   const visibleState: HeaderSearchState = sessionMatches
     ? state
-    : { ...state, suggestions: 'idle', result: undefined, activeIndex: -1 };
+    : { ...state, suggestions: 'idle', result: undefined, retryAt: undefined, activeIndex: -1 };
   const [attempt, retry] = useReducer((value: number) => value + 1, 0);
   const [composing, setComposing] = useState(false);
   const [queryLimitError, setQueryLimitError] = useState(false);
@@ -526,8 +530,8 @@ function HeaderSearchController({
           dispatch({ type: 'suggestions', state: result.subjects.length ? 'ready' : 'empty', result });
         }
       },
-      (failure) => {
-        if (sessionIsCurrent()) dispatch({ type: 'suggestions', state: failure });
+      (failure, retryAt) => {
+        if (sessionIsCurrent()) dispatch({ type: 'suggestions', state: failure, retryAt });
       },
     );
     request.current = cancel;

@@ -2,6 +2,7 @@ import { MediaProblem } from '../media/kernel';
 import type { SuggestionResult } from './suggestions';
 import { readHeaderSuggestions, type HeaderSuggestionLoader } from './header-search/suggestions';
 import type { SearchScope } from './header-search/types';
+import { searchRetryAt } from './search-recovery-retry';
 
 /** The native prefix bound counts code points, while HTML maxlength counts UTF-16 units. */
 export function validSuggestionText(q: string): boolean {
@@ -39,7 +40,7 @@ export function startTypeahead(
   locale: string,
   scope: SearchScope | undefined,
   ready: (result: SuggestionResult) => void,
-  failed: (state: SuggestionFailure) => void,
+  failed: (state: SuggestionFailure, retryAt?: number) => void,
   delay = 200,
 ): () => void {
   const controller = new AbortController();
@@ -48,7 +49,13 @@ export function startTypeahead(
       const result = await readHeaderSuggestions(load, query, locale, controller.signal, scope);
       if (!controller.signal.aborted) ready(result);
     } catch (error) {
-      if (!controller.signal.aborted) failed(suggestionErrorState(error));
+      if (!controller.signal.aborted) {
+        const retryAt =
+          error instanceof MediaProblem
+            ? searchRetryAt(new Headers(error.headers).get('retry-after'), Date.now())
+            : undefined;
+        failed(suggestionErrorState(error), retryAt);
+      }
     }
   }, delay);
   return () => {

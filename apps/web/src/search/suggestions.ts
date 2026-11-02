@@ -41,11 +41,14 @@ export async function readSubjectSuggestions(
   signal.throwIfAborted();
   if (result.error) {
     const body = result.error.value as { code?: unknown };
-    throw problem(
+    const failure = problem(
       result.status,
       typeof body?.code === 'string' ? body.code : 'dependency_unavailable',
       'Suggestions unavailable',
     );
+    const retryAfter = new Headers(result.headers).get('retry-after');
+    if (retryAfter !== null) throw Object.assign(failure, { headers: { 'retry-after': retryAfter } });
+    throw failure;
   }
   return { ...result.data, subjects: result.data.subjects.slice(0, query.limit) };
 }
