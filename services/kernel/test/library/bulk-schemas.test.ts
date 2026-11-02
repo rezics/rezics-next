@@ -38,8 +38,9 @@ test('bulk HTTP schemas distinguish subjects occurrences and exact full type pre
 });
 
 test('bulk admission accepts up to 1,000 UUID targets within the finite body bound', () => {
-  const ids = Array.from({ length: BULK_MAX_SELECTION_IDS }, (_, i) =>
-    `019a1b2c-3d4e-7f00-8a00-${String(i).padStart(12, '0')}`,
+  const ids = Array.from(
+    { length: BULK_MAX_SELECTION_IDS },
+    (_, i) => `019a1b2c-3d4e-7f00-8a00-${String(i).padStart(12, '0')}`,
   );
   const explicit = {
     action: 'remove_from_library',
