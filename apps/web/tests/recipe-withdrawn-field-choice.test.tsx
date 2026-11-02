@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
 
-test('a withdrawn additional Recipe choice stays local until a current field is deliberately selected', async () => {
+test('additional Recipe rows orient keyboard additions by identity and reject withdrawn or retired intent', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -23,6 +23,7 @@ test('a withdrawn additional Recipe choice stays local until a current field is 
     ShadowRoot: window.ShadowRoot,
     Event: window.Event,
     MouseEvent: window.MouseEvent,
+    KeyboardEvent: window.KeyboardEvent,
     MutationObserver: window.MutationObserver,
     ResizeObserver: window.ResizeObserver,
     Range: window.Range,
@@ -38,6 +39,7 @@ test('a withdrawn additional Recipe choice stays local until a current field is 
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { RecipeEditor } = await import('../src/features/catalogue/recipe-editor-view');
+  const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { recipeFixture } = await import('../src/kernel/fake/recipe-editor');
   const { m } = await import('../src/paraglide/messages.js');
@@ -45,7 +47,8 @@ test('a withdrawn additional Recipe choice stays local until a current field is 
   const { default: userEvent } = await import(require.resolve('@testing-library/user-event'));
   const user = userEvent.setup({ document: window.document });
   const host = window.document.createElement('div') as unknown as HTMLElement;
-  window.document.body.append(host);
+  const outside = window.document.createElement('button');
+  window.document.body.append(host, outside);
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const fixture = recipeFixture();
@@ -55,11 +58,15 @@ test('a withdrawn additional Recipe choice stays local until a current field is 
   const withdrawn = initial.fields.find((field) => field !== keptField)!;
   const replacement = initial.fields.find((field) => field !== keptField && field !== withdrawn)!;
   const name = (field: string) => initial.release.properties[field]!.labels.en;
-  const show = (node: ReactNode) =>
+  const show = (node: ReactNode, ready = true) =>
     act(async () =>
       root.render(
         <QueryClientProvider client={client}>
-          <CandidateReaderBoundary>{node}</CandidateReaderBoundary>
+          <CandidateReaderBoundary>
+            <CatalogueCurrentReading visible={ready} ready={ready} revision={String(ready)}>
+              {node}
+            </CatalogueCurrentReading>
+          </CandidateReaderBoundary>
         </QueryClientProvider>,
       ),
     );
@@ -71,6 +78,19 @@ test('a withdrawn additional Recipe choice stays local until a current field is 
   const chooser = () => within(host).getByRole('combobox', { name: m.character_add_fact() }) as HTMLSelectElement;
   const click = async (name: string) => act(async () => user.click(within(host).getByRole('button', { name })));
   const select = async (field: string) => act(async () => user.selectOptions(chooser(), field));
+  const add = () => within(host).getByRole('button', { name: m.correction_add() }) as HTMLButtonElement;
+  const ingredientRows = () =>
+    within(host)
+      .getAllByRole('heading', { name: name(keptField), level: 2 })
+      .map((heading) => heading.closest('section')!);
+  const queuedAdd = () => {
+    const button = add();
+    const key = Object.keys(button).find((key) => key.startsWith('__reactProps$'))!;
+    const props = Reflect.get(button, key) as {
+      onClick: (event: { currentTarget: HTMLButtonElement; detail: number }) => void;
+    };
+    return () => props.onClick({ currentTarget: button, detail: 0 });
+  };
   try {
     await show(<RecipeEditor locale="en" session="signed-in" transport={fixture.transport} search={async () => []} />);
     await until(() => !!within(host).queryByRole('combobox', { name: m.character_add_fact() }));
@@ -87,10 +107,36 @@ test('a withdrawn additional Recipe choice stays local until a current field is 
     );
     await select(keptField);
     await click(m.correction_add());
+    expect(window.document.activeElement).toBe(add());
     await act(async () =>
       user.type(within(host).getByRole('textbox', { name: m.correction_value() }), '200 g lentils'),
     );
     await act(async () => user.type(within(host).getByRole('textbox', { name: m.correction_language() }), 'en'));
+    const callsBeforeAdd = fixture.calls.length;
+    const first = ingredientRows()[0]!;
+    for (let count = 2; count <= 3; count++) {
+      await select(keptField);
+      add().focus();
+      await act(async () => user.keyboard('[Enter]'));
+      const rows = ingredientRows();
+      expect(rows).toHaveLength(count);
+      expect(rows[count - 1]!.contains(window.document.activeElement)).toBe(true);
+      expect(window.document.activeElement?.matches('input,select,textarea,button')).toBe(true);
+      expect(first.contains(window.document.activeElement)).toBe(false);
+      expect(chooser().value).toBe('');
+    }
+    expect(within(first).getByRole('textbox', { name: m.correction_value() })).toHaveValue('200 g lentils');
+    await select(keptField);
+    const moved = queuedAdd();
+    add().focus();
+    await act(async () => {
+      moved();
+      outside.focus();
+      add().focus();
+    });
+    expect(ingredientRows()).toHaveLength(4);
+    expect(window.document.activeElement).toBe(add());
+    expect(fixture.calls).toHaveLength(callsBeforeAdd);
     await select(withdrawn);
 
     fixture.release.types['schema:Recipe']!.properties = fixture.release.types['schema:Recipe']!.properties.filter(
@@ -99,26 +145,44 @@ test('a withdrawn additional Recipe choice stays local until a current field is 
     expect(fixture.release.properties[withdrawn]).toBeTruthy();
     await act(async () => client.invalidateQueries({ queryKey: ['recipe-editor'] }));
     await until(() => host.textContent!.includes(m.correction_stale()));
+    expect(window.document.activeElement).toBe(chooser());
 
     expect(chooser().value).toBe('');
     expect([...chooser().options].some((option) => option.value === withdrawn)).toBe(false);
     const addButton = within(host).getByRole('button', { name: m.correction_add() }) as HTMLButtonElement;
     expect(addButton.disabled).toBe(true);
-    expect(within(host).getByRole('heading', { name: name(keptField), level: 2 })).toBeTruthy();
+    expect(ingredientRows()).toHaveLength(4);
     expect(within(host).queryByRole('heading', { name: name(withdrawn), level: 2 })).toBeNull();
-    expect(within(host).getByRole('textbox', { name: m.correction_value() })).toHaveValue('200 g lentils');
-    expect(within(host).getByRole('textbox', { name: m.correction_language() })).toHaveValue('en');
+    expect(within(first).getByRole('textbox', { name: m.correction_value() })).toHaveValue('200 g lentils');
+    expect(within(first).getByRole('textbox', { name: m.correction_language() })).toHaveValue('en');
     expect(within(terms).getAllByRole('group', { name: m.catalogue_create_language() })).toHaveLength(2);
     expect(within(japanese).getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('レンズ豆のスープ');
     const reactKey = Object.keys(addButton).find((key) => key.startsWith('__reactProps$'))!;
     const onClick = (Reflect.get(addButton, reactKey) as { onClick: () => void }).onClick;
     await act(async () => onClick());
     expect(within(host).queryByRole('heading', { name: name(withdrawn), level: 2 })).toBeNull();
+    expect(window.document.activeElement).toBe(chooser());
 
     await select(replacement);
     await click(m.correction_add());
     expect(within(host).getAllByRole('heading', { name: name(replacement), level: 2 })).toHaveLength(1);
     expect(chooser().value).toBe('');
+    await select(keptField);
+    add().focus();
+    const retired = queuedAdd();
+    const editor = (
+      <RecipeEditor locale="en" session="signed-in" transport={fixture.transport} search={async () => []} />
+    );
+    await act(async () => {
+      retired();
+      await show(editor, false);
+    });
+    expect(window.document.activeElement).toBe(add());
+    await show(editor);
+    expect(window.document.activeElement).toBe(add());
+    const count = ingredientRows().length;
+    await act(async () => retired());
+    expect(ingredientRows()).toHaveLength(count);
     expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(0);
   } finally {
     await show(null);

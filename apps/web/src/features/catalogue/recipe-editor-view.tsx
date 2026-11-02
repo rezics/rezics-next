@@ -224,8 +224,8 @@ function RecipeEditorLive({
     target.focus();
   }, [busy, query.isFetching, read, readUnavailable, readEpoch, lifetime]);
   const locked = busy || !!pending.current || failure?.refreshDefinitions === true;
-  const fieldAdmission = useRef({ read, locked, created, session, rows });
-  fieldAdmission.current = { read, locked, created, session, rows };
+  const fieldAdmission = useRef({ read, locked, created, session, rows, property });
+  fieldAdmission.current = { read, locked, created, session, rows, property };
   const fieldEditAllowed = (rowId: string) => {
     const current = fieldAdmission.current;
     const row = current.rows.find((entry) => entry.id === rowId);
@@ -264,6 +264,60 @@ function RecipeEditorLive({
   const offeredAdditionalFields = read ? availableAdditionalFields(read, rows) : [];
   const selectedAdditionalField = offeredAdditionalFields.includes(property) ? property : '';
   const withdrawnChoice = !!property && !selectedAdditionalField;
+  const additionFocus = useRef<
+    | {
+        row: string;
+        active: () => boolean;
+        cancel: () => void;
+      }
+    | undefined
+  >(undefined);
+  useLayoutEffect(() => () => additionFocus.current?.cancel(), []);
+  useLayoutEffect(() => {
+    const intent = additionFocus.current;
+    if (!intent) return;
+    const current = fieldAdmission.current;
+    const row = current.rows.find((entry) => entry.id === intent.row);
+    const admitted =
+      intent.active() &&
+      fieldEditAllowed(intent.row) &&
+      !!row &&
+      !!current.read &&
+      rowMatchesCurrentDefinition(row, current.read);
+    intent.cancel();
+    if (!admitted) return;
+    const root = workspace.current?.ownerDocument.getElementById(recipeRowId(termsId, intent.row));
+    if (!root?.isConnected || !workspace.current?.contains(root)) return;
+    const control = [
+      ...root.querySelectorAll<HTMLElement>(
+        'fieldset input, fieldset select, fieldset textarea, fieldset button, fieldset [contenteditable="true"]',
+      ),
+    ].find(
+      (target) =>
+        !target.matches(':disabled, [aria-disabled="true"], [type="hidden"]') && !target.closest('[hidden], [inert]'),
+    );
+    (control ?? root.querySelector<HTMLElement>('h2'))?.focus();
+  });
+  function orientAddition(row: string, opener: HTMLButtonElement, keyboard: boolean) {
+    additionFocus.current?.cancel();
+    const document = opener.ownerDocument;
+    if (!keyboard || !opener.isConnected || document.activeElement !== opener) return;
+    const cancel = () => {
+      document.removeEventListener('focusin', cancel, true);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.defaultView?.removeEventListener('blur', cancel);
+      additionFocus.current = undefined;
+    };
+    additionFocus.current = {
+      row,
+      active: () =>
+        lifetime.active() && isReadEpochCurrent(readEpoch) && opener.isConnected && document.activeElement === opener,
+      cancel,
+    };
+    document.addEventListener('focusin', cancel, true);
+    document.addEventListener('pointerdown', cancel, true);
+    document.defaultView?.addEventListener('blur', cancel);
+  }
   const currentFields = read?.public
     ? [
         ...new Set([
@@ -755,12 +809,28 @@ function RecipeEditorLive({
                 className={recipeActionClassName}
                 variant="outline"
                 disabled={locked || session !== 'signed-in' || !selectedAdditionalField}
-                onClick={() => {
-                  if (!isReadEpochCurrent(readEpoch) || !read) return;
-                  if (!availableAdditionalFields(read, rows).includes(property)) return;
-                  const definition = read.release.properties[property];
+                onClick={(event) => {
+                  const current = fieldAdmission.current;
+                  if (
+                    !lifetime.active() ||
+                    !isReadEpochCurrent(readEpoch) ||
+                    !current.read ||
+                    current.locked ||
+                    current.created ||
+                    current.session !== 'signed-in' ||
+                    running.current ||
+                    pending.current ||
+                    current.property !== property
+                  )
+                    return;
+                  if (!availableAdditionalFields(current.read, current.rows).includes(property)) return;
+                  const definition = current.read.release.properties[property];
                   if (!definition) return;
-                  setRows([...rows, newRow(property, definition)]);
+                  const row = newRow(property, definition);
+                  orientAddition(row.id, event.currentTarget, event.detail === 0);
+                  current.rows = [...current.rows, row];
+                  current.property = '';
+                  setRows((previous) => [...previous, row]);
                   setProperty('');
                 }}
               >
@@ -1093,9 +1163,9 @@ function RecipeFieldLive({
     }
   }
   return (
-    <section ref={section} className="min-w-0">
+    <section ref={section} id={fieldId} className="min-w-0">
       <ContentItemFrame as="div" className={recipePanelClassName}>
-        <ContentItemHeading id={`${fieldId}-heading`} className="font-semibold">
+        <ContentItemHeading id={`${fieldId}-heading`} tabIndex={-1} className="font-semibold">
           {label}
         </ContentItemHeading>
         <fieldset data-content-item-slot="preview" disabled={frozen} className="min-w-0 space-y-4">
