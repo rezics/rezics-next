@@ -469,8 +469,8 @@ test('author erasure preserves the complete account inbox and its seen marker', 
   );
   const seenNoticeId = newId(accountRoute);
   await fixture.reader.query(
-    `INSERT INTO content.notice_seen (route, account_id, seen_notice_id, seen_at)
-     VALUES ($1, $2, $3, now())`,
+    `INSERT INTO content.notice_seen (route, account_id, seen_notice_id, seen_created_at, seen_at)
+     VALUES ($1, $2, $3, now(), now())`,
     [accountRoute, accountId, seenNoticeId],
   );
 

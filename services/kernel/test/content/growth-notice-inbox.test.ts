@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
-import { listNoticeInbox, countUnreadNotices } from '../../src/content/notice-inbox.ts';
+import { listNoticeInbox, countUnreadNotices, markNoticesSeen } from '../../src/content/notice-inbox.ts';
+import { deleteExpiredNoticesPage } from '../../src/content/notices.ts';
 import { createContentWorkAccess } from '../../src/content/register.ts';
 import { contentNoticeEffects } from '../../src/content/relays.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -14,6 +15,14 @@ const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(33)]]) }
 test('inbox list and unread count examine constant index rows as a recipient inbox grows', async () => {
   const recipient = newId(0x6123),
     route = routeOf(recipient)!;
+  const marker = newId(route);
+  await db.admin.query(
+    `INSERT INTO content.notice(route,recipient_id,notice_id,kind,source_id,created_at)
+     VALUES ($1,$2,$3,'moderation_decision',$3,'2026-01-01')`,
+    [route, recipient, marker],
+  );
+  await markNoticesSeen(db.pool, recipient, marker);
+  expect(await deleteExpiredNoticesPage(db.pool, route, new Date('2026-01-02'))).toBe(1);
   const seen: number[] = [];
   for (const scale of [256, 1024, 4096]) {
     const ids = Array.from({ length: scale }, () => newId(route));
@@ -28,11 +37,14 @@ test('inbox list and unread count examine constant index rows as a recipient inb
       const page = await listNoticeInbox({ pool: db.pool, tokens }, recipient, { limit: 20 });
       const count = await countUnreadNotices(db.pool, recipient);
       expect(page.items).toHaveLength(20);
+      expect(page.items.every((item) => item.unread)).toBe(true);
       expect(count).toEqual({ count: 100, capped: true });
       const list = trace.records.find((record) => record.statement.includes('FROM content.notice n'))!;
       const counter = trace.records.find((record) => record.statement.includes('LIMIT 101'))!;
       expect(list.parameters.at(-1)).toBe(80);
       expect(counter.statement).toContain('LIMIT 101');
+      expect(counter.statement).toContain('(created_at,notice_id)>');
+      expect(list.statement).not.toContain('JOIN content.notice seen');
       seen.push(list.parameters.at(-1) as number);
     } finally {
       await trace.close();

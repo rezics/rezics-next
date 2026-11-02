@@ -104,8 +104,8 @@ test("account erasure deletes the account's notices and seen marker in bounded p
   const seenNoticeId = newId(route);
   const otherSeenNoticeId = newId(route);
   await db.admin.query(
-    `INSERT INTO content.notice_seen (route, account_id, seen_notice_id, seen_at)
-     VALUES ($1, $2, $3, now()), ($1, $4, $5, now())`,
+    `INSERT INTO content.notice_seen (route, account_id, seen_notice_id, seen_created_at, seen_at)
+     VALUES ($1, $2, $3, now(), now()), ($1, $4, $5, now(), now())`,
     [route, accountId, seenNoticeId, otherAccountId, otherSeenNoticeId],
   );
 

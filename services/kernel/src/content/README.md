@@ -231,6 +231,17 @@ The unread count reads at most 101 index rows and returns `{ count, capped }`: `
 `capped` is true only when more than 100 unread notices exist. Exactly 100 returns `{ count: 100, capped: false }`.
 Mark seen takes an owned notice id and advances the marker only forward in the same immutable inbox order.
 Items at or before the marker are read; marking an older item cannot make newer seen items unread again.
+The frontier stores the owned notice's immutable `(created_at, notice_id)` tuple in `notice_seen`, independently
+of that notice's lifetime. PostgreSQL compares and copies the full timestamp precision; UUID breaks exact time
+ties. List cursor keys also retain database timestamp precision. Delivery time and UUID time never substitute for
+creation time: a delayed notice at or before the frontier is read even if its UUID is newer.
+Concurrent marks atomically keep the greater tuple; replaying an equal or older mark leaves `seen_at` unchanged.
+Unknown or foreign notice points remain concealed, including a formerly owned point removed by retention.
+
+Storage transition: the migration copies timestamps only from still-present, recipient-owned notice points and
+removes legacy markers whose points are already absent (or not owned), restarting those accounts as all unread.
+Unavailable history is not recovered, inferred from UUIDs or reconstructed by scanning an inbox. This one-time
+migration changes existing rows; requests never backfill, scan history or rewrite a recipient range.
 Notices older than 180 days are deleted in bounded batches. Account deletion erases notices and the seen marker in
 the `community` participant.
 
@@ -244,7 +255,9 @@ Notification costs are bounded independently of inbox or thread size:
 - List uses one inbox index range of at most `4 × limit` notice rows and checks each distinct reply or mention target
   with native post disclosure in batches of eight. At most 200 candidates are checked; each read is bounded by the
   fixed 33-post ancestry ceiling and checks the board and Realm at their independent anchors. Count reads at most 101
-  index rows. Mark seen moves one row; no inbox scan is needed.
+  index rows after one frontier point read. Mark seen locks one owned notice point and atomically moves at most
+  one frontier row. List joins only the single frontier, never its old notice. These bounds hold after retention;
+  no inbox scan is needed.
 - Retention deletes bounded batches on recipient routes. The `community` erasure participant removes notices in
   bounded batches and the one seen marker; neither cleanup requires one transaction over an entire inbox.
 

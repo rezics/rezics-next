@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { deleteExpiredNoticesPage } from '../../src/content/notices.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { reactionFixture } from './reactions.test.ts';
@@ -95,6 +96,63 @@ test('the unread count stops at 100 and the seen marker never moves backward', a
   expect(advanced.response.status).toBe(204);
   expect((await call(`${base}:markSeen`, 'POST', { through: ids[12] })).response.status).toBe(204);
   expect((await call(`${base}/count`)).value).toEqual({ count: 21, capped: false });
+});
+
+test('retention preserves the precise seen frontier across delayed delivery and concurrent marks', async () => {
+  const ids = (await seed(105)).sort();
+  const r = routeOf(fixture.accountId)!;
+  const base = `/v1/accounts/${fixture.accountId}/notifications`;
+  const mark = (through: string) => call(`${base}:markSeen`, 'POST', { through });
+  const count = async () => (await call(`${base}/count`)).value;
+  const flags = async () => {
+    const items: Array<{ id: string; unread: boolean }> = [];
+    let cursor = '';
+    do {
+      const page = await call(`${base}?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+      expect(page.response.status).toBe(200);
+      items.push(...page.value.items.map(({ id, unread }: { id: string; unread: boolean }) => ({ id, unread })));
+      cursor = page.value.next;
+    } while (cursor);
+    return items;
+  };
+  await db.admin.query(
+    `UPDATE content.notice n SET created_at='2026-01-01T00:00:00Z'::timestamptz +
+       CASE WHEN i=105 THEN interval '999 microseconds' WHEN i=104 THEN interval '998 microseconds'
+            WHEN i=103 THEN interval '1000 microseconds' WHEN i<=2 THEN interval '1001 microseconds'
+            ELSE interval '2000 microseconds' END
+     FROM unnest($1::uuid[]) WITH ORDINALITY AS v(id,i) WHERE n.route=$2 AND n.notice_id=v.id`,
+    [ids, r],
+  );
+  expect((await mark(ids[104]!)).response.status).toBe(204);
+  const before = await flags();
+  expect(before.filter((item) => !item.unread).map((item) => item.id)).toEqual([ids[104]!, ids[103]!]);
+  expect(await count()).toEqual({ count: 100, capped: true });
+  expect(await deleteExpiredNoticesPage(db.pool, r, new Date('2026-01-01T00:00:00.001Z'))).toBe(2);
+  expect(await flags()).toEqual(before.filter((item) => item.unread));
+  const delayed = newId(r);
+  await db.admin.query(
+    `INSERT INTO content.notice(route,recipient_id,notice_id,kind,source_id,created_at)
+     VALUES ($1,$2,$3,'moderation_decision',$3,'2026-01-01T00:00:00.000998Z')`,
+    [r, fixture.accountId, delayed],
+  );
+  expect((await flags()).at(-1)).toEqual({ id: delayed, unread: false });
+  expect((await mark(ids[104]!)).response.status).toBe(404);
+  await mark(ids[0]!);
+  expect(await count()).toEqual({ count: 100, capped: true });
+  await mark(ids[1]!);
+  expect(await count()).toEqual({ count: 100, capped: false });
+  await mark(ids[102]!);
+  expect(await count()).toEqual({ count: 100, capped: false });
+  expect((await flags()).filter((item) => !item.unread).map((item) => item.id))
+    .toEqual([ids[1]!, ids[0]!, ids[102]!, delayed]);
+  await db.admin.query('DELETE FROM content.notice_seen WHERE route=$1 AND account_id=$2', [r, fixture.accountId]);
+  db.pool.options.max = 4;
+  try {
+    expect((await Promise.all([mark(ids[2]!), mark(ids[1]!)])).map((result) => result.response.status)).toEqual([204, 204]);
+    expect(await count()).toEqual({ count: 99, capped: false });
+  } finally {
+    db.pool.options.max = 1;
+  }
 });
 
 test('native inbox keeps readable public notices, hides a revoked protected notice, and omits a notice denied before send', async () => {

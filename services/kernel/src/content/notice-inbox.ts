@@ -62,12 +62,12 @@ export async function listNoticeInbox(
   }
   const rows = await withConnection(dependencies.pool, async (client) => {
     const result = await client.query(
-      `SELECT n.notice_id, n.kind, n.created_at, n.actor_id, n.thread_id, n.post_id, n.decision_id, n.report_id,
-              (s.seen_notice_id IS NULL OR CASE WHEN seen.notice_id IS NULL THEN n.notice_id > s.seen_notice_id
-                ELSE (n.created_at, n.notice_id) > (seen.created_at, s.seen_notice_id) END) AS unread
+      `SELECT n.notice_id, n.kind, n.created_at, n.created_at::text AS created_at_key,
+              n.actor_id, n.thread_id, n.post_id, n.decision_id, n.report_id,
+              (s.seen_notice_id IS NULL OR
+                (n.created_at, n.notice_id) > (s.seen_created_at, s.seen_notice_id)) AS unread
        FROM content.notice n
        LEFT JOIN content.notice_seen s ON s.route=n.route AND s.account_id=n.recipient_id
-       LEFT JOIN content.notice seen ON seen.route=s.route AND seen.notice_id=s.seen_notice_id
        WHERE n.route=$1 AND n.recipient_id=$2 AND
          (NOT $3::boolean OR (n.created_at,n.notice_id) < ($4::timestamptz,$5::uuid))
        ORDER BY n.created_at DESC,n.notice_id DESC LIMIT $6`,
@@ -139,7 +139,7 @@ export async function listNoticeInbox(
       ? await encodeListCursor(
           dependencies.tokens,
           binding,
-          { epoch: 1, after: [new Date(lastScanned.created_at).toISOString(), lastScanned.notice_id] },
+          { epoch: 1, after: [lastScanned.created_at_key, lastScanned.notice_id] },
           dependencies.now?.() ?? new Date(),
         )
       : null;
@@ -150,30 +150,29 @@ export async function countUnreadNotices(pool: Pool, accountId: string): Promise
   const accountRoute = route(accountId);
   const rows = await withConnection(pool, async (client) => {
     const marker = await client.query(
-      'SELECT seen_notice_id FROM content.notice_seen WHERE route=$1 AND account_id=$2',
+      `SELECT seen_notice_id, seen_created_at::text
+       FROM content.notice_seen
+       WHERE route=$1 AND account_id=$2`,
       [accountRoute, accountId],
     );
     if (!marker.rows.length)
       return (
         await client.query(
-          'SELECT notice_id FROM content.notice WHERE route=$1 AND recipient_id=$2 ORDER BY created_at,notice_id LIMIT 101',
+          `SELECT notice_id FROM content.notice
+           WHERE route=$1 AND recipient_id=$2
+           ORDER BY created_at,notice_id LIMIT 101`,
           [accountRoute, accountId],
         )
       ).rows;
-    const markerId = marker.rows[0]!.seen_notice_id as string;
-    const markerNotice = await client.query('SELECT created_at FROM content.notice WHERE route=$1 AND notice_id=$2', [
-      accountRoute,
-      markerId,
-    ]);
-    const query = markerNotice.rows.length
-      ? await client.query(
-          'SELECT notice_id FROM content.notice WHERE route=$1 AND recipient_id=$2 AND (created_at,notice_id)>($3::timestamptz,$4::uuid) ORDER BY created_at,notice_id LIMIT 101',
-          [accountRoute, accountId, markerNotice.rows[0]!.created_at, markerId],
-        )
-      : await client.query(
-          'SELECT notice_id FROM content.notice WHERE route=$1 AND recipient_id=$2 AND notice_id>$3::uuid ORDER BY created_at,notice_id LIMIT 101',
-          [accountRoute, accountId, markerId],
-        );
+    // Text keeps PostgreSQL timestamp precision across the driver boundary.
+    // The tuple predicate seeks the existing recipient/creation index directly.
+    const query = await client.query(
+      `SELECT notice_id FROM content.notice
+       WHERE route=$1 AND recipient_id=$2
+         AND (created_at,notice_id)>($3::timestamptz,$4::uuid)
+       ORDER BY created_at,notice_id LIMIT 101`,
+      [accountRoute, accountId, marker.rows[0]!.seen_created_at, marker.rows[0]!.seen_notice_id],
+    );
     return query.rows;
   });
   return { count: Math.min(rows.length, 100), capped: rows.length > 100 };
@@ -186,35 +185,30 @@ export async function markNoticesSeen(pool: Pool, accountId: string, noticeId: s
     await client.query('BEGIN');
     try {
       const target = await client.query(
-        'SELECT created_at FROM content.notice WHERE route=$1 AND recipient_id=$2 AND notice_id=$3 FOR SHARE',
+        `SELECT notice_id FROM content.notice
+         WHERE route=$1 AND recipient_id=$2 AND notice_id=$3
+         FOR SHARE`,
         [accountRoute, accountId, noticeId],
       );
       if (target.rowCount !== 1) throw new RangeError('Unknown notice');
-      const existing = await client.query(
-        `SELECT old.created_at, seen.seen_notice_id AS notice_id FROM content.notice_seen seen
-         LEFT JOIN content.notice old ON old.route=seen.route AND old.notice_id=seen.seen_notice_id
-         WHERE seen.route=$1 AND seen.account_id=$2 FOR UPDATE OF seen`,
-        [accountRoute, accountId],
+      // Keep the owned point alive until its exact database tuple is copied.
+      // ON CONFLICT locks the recipient's single frontier and compares against
+      // the latest committed tuple, including a simultaneous first mark.
+      // No Date conversion, historical notice lookup or UUID-only fallback is
+      // involved; retention may remove either point after this transaction.
+      await client.query(
+        `INSERT INTO content.notice_seen AS frontier
+           (route,account_id,seen_notice_id,seen_created_at,seen_at)
+         SELECT route,recipient_id,notice_id,created_at,$4
+         FROM content.notice WHERE route=$1 AND recipient_id=$2 AND notice_id=$3
+         ON CONFLICT (route,account_id) DO UPDATE
+         SET seen_notice_id=EXCLUDED.seen_notice_id,
+             seen_created_at=EXCLUDED.seen_created_at,
+             seen_at=EXCLUDED.seen_at
+         WHERE (frontier.seen_created_at,frontier.seen_notice_id)
+             < (EXCLUDED.seen_created_at,EXCLUDED.seen_notice_id)`,
+        [accountRoute, accountId, noticeId, at],
       );
-      if (
-        !existing.rows.length ||
-        (existing.rows[0]!.created_at === null
-          ? noticeId > existing.rows[0]!.notice_id
-          : new Date(target.rows[0]!.created_at).getTime() > new Date(existing.rows[0]!.created_at).getTime() ||
-            (new Date(target.rows[0]!.created_at).getTime() === new Date(existing.rows[0]!.created_at).getTime() &&
-              noticeId > existing.rows[0]!.notice_id))
-      )
-        await client.query(
-          `INSERT INTO content.notice_seen (route,account_id,seen_notice_id,seen_at) VALUES ($1,$2,$3,$4)
-           ON CONFLICT (route,account_id) DO UPDATE SET seen_notice_id=EXCLUDED.seen_notice_id,seen_at=EXCLUDED.seen_at
-           WHERE EXISTS (
-             SELECT 1 FROM content.notice target WHERE target.route=$1 AND target.notice_id=$3
-               AND (EXISTS (SELECT 1 FROM content.notice old WHERE old.route=$1 AND old.notice_id=content.notice_seen.seen_notice_id
-                            AND (old.created_at,old.notice_id) <= (target.created_at,target.notice_id))
-                    OR (NOT EXISTS (SELECT 1 FROM content.notice old WHERE old.route=$1 AND old.notice_id=content.notice_seen.seen_notice_id)
-                        AND target.notice_id > content.notice_seen.seen_notice_id)))`,
-          [accountRoute, accountId, noticeId, at],
-        );
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
