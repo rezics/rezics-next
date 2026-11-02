@@ -358,8 +358,13 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
         <Fields name="long" initial={initial} release={release} disabled />
       </div>,
     );
+    // Happy DOM's :disabled matcher omits inherited fieldset disabling. Check that
+    // native boundary directly and exercise an actual blocked Remove interaction.
     for (const control of fields('long').querySelectorAll('input, select, button'))
-      expect(control.matches(':disabled')).toBe(true);
+      expect(control.closest<HTMLFieldSetElement>('fieldset')?.disabled).toBe(true);
+    const disabledRows = observed.long;
+    await act(async () => user.click(within(fields('long')).getAllByRole('button', { name: m.relation_remove() })[0]!));
+    expect(observed.long).toBe(disabledRows);
 
     // Supplied-data growth only: released multivalued credits admit 1/8/64 statements.
     // No enumeration of the definitions population and no IO occurs while rendering supplied rows.
@@ -456,7 +461,7 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
       references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: citation } }] }],
     });
     for (const control of host.querySelectorAll('fieldset input, fieldset select, fieldset button'))
-      expect(control.matches(':disabled')).toBe(true);
+      expect(control.closest<HTMLFieldSetElement>('fieldset')?.disabled).toBe(true);
     const write = structuredClone(nativeWrites(fixture)[0]!);
     expect(write).toMatchObject({
       path: '/v1/subjects',
