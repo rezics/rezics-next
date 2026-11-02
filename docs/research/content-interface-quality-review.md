@@ -39,11 +39,11 @@ light/dark cells on the retained source, not a rendering failure. The Inbox exce
 | Appearance and publications                                  | Current authority, pending/conflict preservation and disclosure                                    | Missing                                           |
 | Membership, follow, lifecycle, bans and claims               | Independent follow/member state, protected access and lifecycle outcomes                           | Missing                                           |
 | Private My Realms                                            | Private navigation, sparse/empty/unavailable results and current identity                          | Missing                                           |
-| Subject rating and review integration                        | Web frame handoff; private vote versus population, freshness and exact citation                    | All 32 Web frame combinations unmeasured; supplied region missing          |
+| Subject rating and review integration                        | Web frame handoff; private vote versus population, freshness and exact citation                    | Shared Subject/catalogue set of 32 combinations unmeasured; region missing          |
 | Report entry and receipt                                     | Submitted reference/reason versus current target; long evidence and unavailable target             | Missing                                           |
 | Board and catalogue queues                                   | Content board Pages and Web catalogue frame; selection, sparse continuation and current disclosure | Missing; catalogue frame handoff outstanding      |
 | Decision and appeal                                          | Legible reason, independent appeal outcome, deadline and unavailable target                        | Missing; runtime appeals exports unconfirmed      |
-| Private Inbox                                                | Performance images only; private recipient, unavailable links and explicit seen retry              | 48 historical en/light images inspected below; current source missing      |
+| Private Inbox                                                | Performance images only; private recipient, unavailable links and explicit seen retry              | 48 historical en/light images inspected below; current-source images missing      |
 | Settings notification region                                 | Accounts frame and supplied region; mandatory outcomes versus optional preferences                 | Missing shared capture; no second Settings writer |
 | Mixed Home                                                   | Content capture, then provenance handoff to Web; one mixed stream and bounded controls             | Missing; no captured artifacts to hand off        |
 
@@ -314,7 +314,7 @@ inventory pass. The primary-source patterns, references and licences above remai
 
 ## Validation limits
 
-This change records historical image inspection and research prose only and changes no typed workspace or test file. There is no focused test file to
-run and no supplied landing acceptance command for this documentation outcome. Typechecking is inapplicable;
+This report records historical image inspection and changes no typed workspace or test file. There is no focused
+test file to run and no supplied landing acceptance command for this documentation outcome. Typechecking is inapplicable;
 acceptance, native, browser, screenshot and broader checks remain deferred under the launch policy. No test pass,
 completion of Content clauses 1–6, promotion or main claim is made.
