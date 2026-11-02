@@ -781,6 +781,8 @@ function AdmittedPresentationViewEditor({
 
   const { profile, selection, editors, saved } = draft;
   const templates = profileTemplates(profile);
+  const removableTemplate: KeyedTemplate | null =
+    selection.template.scope === 'generic' ? null : selection.template;
   const views = templateViewNames(profile, selection.template);
   const document = viewOf(profile, selection.template, selection.view)!;
   const editorKey = selectionKey(selection);
@@ -915,11 +917,11 @@ function AdmittedPresentationViewEditor({
                   {templateLabel(selection.template)}
                 </p>
               )}
-              {selection.template.key !== null && (
+              {removableTemplate && (
                 <Button
                   className={editorControlClass}
                   variant="outline"
-                  onClick={() => isCurrent() && setOwned(setRemoveConfirm, { ...selection.template })}
+                  onClick={() => isCurrent() && setOwned(setRemoveConfirm, { ...removableTemplate })}
                 >
                   {m.curation_remove()}
                 </Button>

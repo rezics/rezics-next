@@ -1,5 +1,5 @@
-import { selectTemplate, selectionKey, templateViewNames, type PresentationDraft } from './curate-view-editor-state';
-import type { Template } from './curate';
+import { templateViewNames, type Template } from './curate';
+import { selectTemplate, selectionKey, type PresentationDraft } from './curate-view-editor-state';
 
 export type KeyedTemplate = Exclude<Template, { scope: 'generic'; key: null }>;
 
