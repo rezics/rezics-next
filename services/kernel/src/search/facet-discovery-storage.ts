@@ -173,7 +173,14 @@ export function createFacetDiscoveryStorage(
       pool,
       meter,
       `UPDATE search.facet_generation SET state='retired'
-      WHERE partition_no=$1 AND definition=$2 AND state<>'retired' AND expires_at<=$3`,
+      WHERE partition_no=$1 AND definition=$2 AND state='building' AND expires_at<=$3`,
+      [key[0], key[1], now],
+    );
+    await sql(
+      pool,
+      meter,
+      `UPDATE search.facet_generation SET state='retired'
+      WHERE partition_no=$1 AND definition=$2 AND state='ready' AND expires_at<=$3`,
       [key[0], key[1], now],
     );
     await sql(
