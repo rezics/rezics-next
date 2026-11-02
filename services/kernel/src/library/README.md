@@ -2541,7 +2541,9 @@ physical custody or infer destination erasure.
   admitted job: admission/owner, at most two inputs plus EOF, group/bridge/directory and bounded CTE
   revisits plus the actual claim admit 16 native/identity rows, 13 points, one statement, SQL+binds+2048 bytes, four possible
   empty seeks. Seal receipt: five native rows/points, two identity metadata rows, one statement,
-  SQL+binds+256 bytes, one empty seek. Insert-plan additionally charges all three possible FK points.
+  SQL+binds+256 bytes, one empty seek. Generation insertion charges its Collection FK point;
+  insert-plan additionally charges all three possible FK points. Native mutations reserve an indexed
+  miss slot too, including failed foreign-key probes; an empty or failed dispatch never refunds it.
   Known transaction controls have zero rows/points/metadata/candidates/witnesses/seeks but one statement
   and their actual SQL bytes; native checkout charges one point. No witnesses are constructed anywhere.
   Unknown statements remain unknown. Saved job JSON first has a same-snapshot size admission before

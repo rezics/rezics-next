@@ -24,7 +24,6 @@ import mapping from '../semantic/identity-epoch-read-current.sql';
 import facts from './collection-source-native-facts.sql';
 import labels from './owner-index-native-label-originals.sql';
 
-const axes = ['candidateKeys','nativeRows','identityMetadataRows','nativePoints','witnessKeys','statements','bytes','emptySeeks'] as const;
 const bindings = new WeakMap<NativeCollectionWork, { pool?: Pool; deadline: number }>();
 const transactions = new WeakMap<CommandTransaction, NativeCollectionWork>();
 export function bindLibraryIdentityDeadline(work: NativeCollectionWork, deadline: number): NativeCollectionWork {
@@ -39,7 +38,16 @@ export function deadlineOf(work: NativeCollectionWork): number {
   return binding.deadline;
 }
 export function allowance(work: NativeCollectionWork): WorkAllowance {
-  return { reservationId: work.receipt().reservationId, remaining: Object.fromEntries(axes.map(axis => [axis, work.available(axis)])) as WorkDimensions };
+  return { reservationId: work.receipt().reservationId, remaining: {
+    candidateKeys: work.available('candidateKeys'),
+    nativeRows: work.available('nativeRows'),
+    identityMetadataRows: work.available('identityMetadataRows'),
+    nativePoints: work.available('nativePoints'),
+    witnessKeys: work.available('witnessKeys'),
+    statements: work.available('statements'),
+    bytes: work.available('bytes'),
+    emptySeeks: work.available('emptySeeks'),
+  } };
 }
 export async function withLibraryIdentityWork<T>(pool: Pool, work: NativeCollectionWork, body: () => Promise<T>): Promise<T> {
   const binding = bindings.get(work);

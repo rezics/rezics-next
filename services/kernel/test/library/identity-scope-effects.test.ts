@@ -60,7 +60,7 @@ beforeAll(async () => {
   };
   const key = randomUUID();
   const intent = {kind: 'merge' as const, redirected: original, survivor: terminal, release: release.digest};
-  const receipt = {kind: 'subject.merge', command: {actorAccountId: actor.accountId, kind: 'subject.merge', key, digest: digest(key)}};
+  const receipt = {kind: 'subject.merge' as const, command: {actorAccountId: actor.accountId, kind: 'subject.merge', key, digest: digest(key)}};
   const binding = await identityEpochStore.bindReceipt(native.pool, authority, {intent, receipt});
   job = (await runCommand(native.pool, {...authority, partition: binding.jobHome}, tx => identityEpochStore.admit(tx,{intent,receipt,binding}))).value;
   expect((await identityEpochStore.readJob(native.pool, job))?.state).toBe('pending');
