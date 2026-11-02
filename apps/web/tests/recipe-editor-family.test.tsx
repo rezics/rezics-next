@@ -329,7 +329,9 @@ test('Recipe creation and current correction share complete frames with independ
     expect(rereadDraft.querySelector('[data-content-item-slot="state"]')!.textContent).toBe(m.correction_proposed());
     await click(rereadDraft, m.correction_review());
     await until(() => !!within(rereadDraft).queryByRole('button', { name: m.candidate_accept() }));
-    const exact = [...correction.candidates.values()].find((candidate) => candidate.statement.property.id === ingredient)!.id;
+    const exact = [...correction.candidates.values()].find(
+      (candidate) => candidate.statement.property.id === ingredient,
+    )!.id;
     await click(rereadDraft, m.candidate_accept());
     const confirmation = within(rereadDraft).getByRole('region', {
       name: m.candidate_confirm_title({ action: m.candidate_accept() }),
@@ -354,9 +356,9 @@ test('Recipe creation and current correction share complete frames with independ
     await until(() => b.textContent!.includes(m.catalogue_create_invalid_field()));
     const retainedIncompatible = section(b, materialLabel, true);
     expect(retainedIncompatible.querySelector('fieldset')!.disabled).toBe(true);
-    expect((within(retainedIncompatible).getByRole('button', { name: m.correction_submit() }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(
+      (within(retainedIncompatible).getByRole('button', { name: m.correction_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect(within(retainedIncompatible).queryByRole('button', { name: m.recipe_remove_field() })).not.toBeNull();
     expect(posts(correction, '/candidates')).toHaveLength(beforeIncompatibleRefresh + 1);
 
@@ -395,9 +397,9 @@ test('Recipe creation and current correction share complete frames with independ
     expect(input(retainedMethod, m.catalogue_create_language()).value).toBe('en');
     expect(input(retainedMethod, m.subject_source_licence()).value).toBe('CC-BY-4.0');
     expect(input(retainedMethod, m.relation_citation()).value).toBe(longCitation);
-    expect((within(retainedMethod).getByRole('checkbox', { name: m.recipe_original() }) as HTMLInputElement).checked).toBe(
-      true,
-    );
+    expect(
+      (within(retainedMethod).getByRole('checkbox', { name: m.recipe_original() }) as HTMLInputElement).checked,
+    ).toBe(true);
     expect(retainedMethod.querySelector('[contenteditable]')!.textContent).toContain(
       'My original preparation, never copied from a recipe site.',
     );

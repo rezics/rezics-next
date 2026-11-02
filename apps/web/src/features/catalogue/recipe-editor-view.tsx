@@ -485,9 +485,7 @@ function RecipeEditorLive({
                 {...(review ? { review } : {})}
                 onChange={(statement, patch) =>
                   setRows((previous) =>
-                    previous.map((entry) =>
-                      entry.id === row.id ? { ...entry, ...(patch ?? {}), statement } : entry,
-                    ),
+                    previous.map((entry) => (entry.id === row.id ? { ...entry, ...(patch ?? {}), statement } : entry)),
                   )
                 }
                 onOriginal={(original) =>
@@ -654,11 +652,7 @@ function RecipeFieldLive({
     let current = '';
     for (const reference of row.statement.references)
       for (const part of reference.parts)
-        if (
-          part.property.id === 'schema:url' &&
-          part.value.type === 'value' &&
-          typeof part.value.content === 'string'
-        )
+        if (part.property.id === 'schema:url' && part.value.type === 'value' && typeof part.value.content === 'string')
           current = part.value.content;
     return current;
   });
@@ -934,7 +928,7 @@ function RecipeFieldLive({
                   disabled ||
                   busy ||
                   reviewRequired ||
-                    (result && !result.ok && result.refreshDefinitions === true) ||
+                  (result && !result.ok && result.refreshDefinitions === true) ||
                   (definition.datatype === 'document' &&
                     (!authored || !row.original || !hasDocumentContent(authored.document))) ||
                   (result && !result.ok && result.reason === 'stale')
