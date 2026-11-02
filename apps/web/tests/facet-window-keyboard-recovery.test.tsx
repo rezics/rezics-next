@@ -126,9 +126,7 @@ afterAll(() => {
 
 test('explicit facet loading and More retain useful keyboard focus through page replacement and refusal', async () => {
   let resolveMore!: (value: ReturnType<typeof ready>) => void;
-  await replace(
-    makeProps('keep', ready('one', 'cursor-a'), async () => new Promise((done) => (resolveMore = done))),
-  );
+  await replace(makeProps('keep', ready('one', 'cursor-a'), async () => new Promise((done) => (resolveMore = done))));
   const more = control(m.refinement_more_values())!;
   await press(more);
   expect(document.activeElement).toBe(more);
@@ -137,9 +135,7 @@ test('explicit facet loading and More retain useful keyboard focus through page 
   expect(document.activeElement).toBe(control(m.refinement_more_values()));
 
   let resolveFinal!: (value: ReturnType<typeof ready>) => void;
-  await replace(
-    makeProps('final', ready('one', 'cursor-a'), async () => new Promise((done) => (resolveFinal = done))),
-  );
+  await replace(makeProps('final', ready('one', 'cursor-a'), async () => new Promise((done) => (resolveFinal = done))));
   await press(control(m.refinement_more_values())!);
   await act(async () => resolveFinal(ready('two', null)));
   expect(control(m.refinement_more_values())).toBeUndefined();
@@ -162,9 +158,7 @@ test('explicit facet loading and More retain useful keyboard focus through page 
   expect(control(m.search_facet_retry())).toBeUndefined();
   expect(document.activeElement).toBe(host.querySelector('[role="alert"]'));
 
-  await replace(
-    makeProps('restart', ready('one', 'cursor-a'), async () => ready('cycle', 'cursor-a')),
-  );
+  await replace(makeProps('restart', ready('one', 'cursor-a'), async () => ready('cycle', 'cursor-a')));
   await press(control(m.refinement_more_values())!);
   expect(document.activeElement).toBe(control(m.search_facet_retry()));
 
@@ -189,9 +183,7 @@ test('explicit facet loading and More retain useful keyboard focus through page 
   outside.textContent = 'Outside';
   document.body.append(outside);
   let resolveAway!: (value: ReturnType<typeof ready>) => void;
-  await replace(
-    makeProps('away', ready('one', 'cursor-a'), async () => new Promise((done) => (resolveAway = done))),
-  );
+  await replace(makeProps('away', ready('one', 'cursor-a'), async () => new Promise((done) => (resolveAway = done))));
   await press(control(m.refinement_more_values())!);
   await act(async () => outside.focus());
   await act(async () => resolveAway(ready('two', null)));
