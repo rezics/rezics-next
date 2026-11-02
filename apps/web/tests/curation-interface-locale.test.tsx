@@ -159,11 +159,10 @@ test('both departure warnings follow the editor locale while ambient English dif
     [...host.querySelectorAll('label')].find((label) => label.textContent === name)!.control as HTMLInputElement;
   const leave = async (warning: string, ambient: string) => {
     await act(async () => {
-      const link = host.querySelector('a') as HTMLElement;
-      link.focus();
-      link.click();
+      await router.navigate({ to: '/search' });
     });
     await settle(() => !!window.document.querySelector('[role="alertdialog"]'));
+    expect(router.state.location.pathname).toBe(initialLocation);
     const dialog = window.document.querySelector('[role="alertdialog"]')!;
     expect(dialog.textContent).toContain(warning);
     expect(dialog.textContent).not.toContain(ambient);
@@ -180,7 +179,7 @@ test('both departure warnings follow the editor locale while ambient English dif
       field.dispatchEvent(new window.Event('input', { bubbles: true }));
     });
     await act(async () => button(m.curation_add({}, ja)).click());
-    await settle(() => host.textContent?.includes(m.curation_added({}, ja)) === true);
+    await settle(() => host.textContent?.includes(m.curation_unsaved({}, ja)) === true);
     const draftDialog = await leave(m.curation_leave_warning({}, ja), m.curation_leave_warning());
     await act(async () => {
       [...draftDialog.querySelectorAll('button')].find((item) => item.textContent?.trim() === m.curation_stay({}, ja))!.click();
