@@ -1,3 +1,5 @@
+import { collectionTextIssue } from './collection-text-input';
+import { CollectionTextInputHelp, collectionTextInputAttributes } from './collection-text-input-field';
 import { ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
 import { ListRow, ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
@@ -27,6 +29,7 @@ export function CollectionMetadataEditor({
   title,
   description,
   disabled,
+  textSubmitted = false,
   onTitleChange,
   onDescriptionChange,
   onSubmit,
@@ -35,6 +38,7 @@ export function CollectionMetadataEditor({
   title: string;
   description: string;
   disabled: boolean;
+  textSubmitted?: boolean;
   onTitleChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -42,6 +46,7 @@ export function CollectionMetadataEditor({
 }) {
   return (
     <form
+      noValidate
       id="collection-edit-form"
       className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-6"
       onSubmit={onSubmit}
@@ -56,19 +61,36 @@ export function CollectionMetadataEditor({
               className={fieldClass}
               onChange={(event) => onTitleChange(event.target.value)}
               required
-              maxLength={512}
+              {...collectionTextInputAttributes({
+                id: 'collection-edit-title',
+                field: 'title',
+                value: title,
+                submitted: textSubmitted,
+              })}
               value={title}
             />
+            <CollectionTextInputHelp id="collection-edit-title" field="title" value={title} submitted={textSubmitted} />
           </label>
           <label className="block max-w-3xl">
             {m.library_collection_description()}
             <textarea
               disabled={disabled}
-              maxLength={20_000}
+              {...collectionTextInputAttributes({
+                id: 'collection-edit-description',
+                field: 'description',
+                value: description,
+                submitted: textSubmitted,
+              })}
               className={fieldClass}
               onChange={(event) => onDescriptionChange(event.target.value)}
               rows={4}
               value={description}
+            />
+            <CollectionTextInputHelp
+              id="collection-edit-description"
+              field="description"
+              value={description}
+              submitted={textSubmitted}
             />
           </label>
           {children}
@@ -228,6 +250,7 @@ export function CollectionMemberList({
   editing,
   firstPage,
   busy = false,
+  textSubmitted = false,
   selectedIds = new Set(),
   savedNoteIds = new Set(),
   onSelectionChange,
@@ -246,6 +269,7 @@ export function CollectionMemberList({
   editing: boolean;
   firstPage: boolean;
   busy?: boolean;
+  textSubmitted?: boolean;
   selectedIds?: ReadonlySet<string>;
   savedNoteIds?: ReadonlySet<string>;
   onSelectionChange?: (memberId: string, selected: boolean) => void;
@@ -356,7 +380,11 @@ export function CollectionMemberList({
             </div>
             {editing && member.subject ? (
               <ListRowControl data-content-item-slot="preview" className="col-span-2 col-start-2">
-                <details className="min-w-0" data-collection-note-editor>
+                <details
+                  className="min-w-0"
+                  data-collection-note-editor
+                  open={textSubmitted && !!collectionTextIssue('note', member.note) ? true : undefined}
+                >
                   <summary
                     className="min-h-11 cursor-pointer py-2 text-sm text-primary"
                     aria-label={actionLabel(m.library_member_note())}
@@ -370,10 +398,16 @@ export function CollectionMemberList({
                       aria-label={`${m.library_member_note()}: ${title}`}
                       className="min-h-16"
                       disabled={busy}
-                      maxLength={20_000}
+                      {...collectionTextInputAttributes({
+                        id: noteId,
+                        field: 'note',
+                        value: member.note,
+                        submitted: textSubmitted,
+                      })}
                       value={member.note ?? ''}
                       onChange={(event) => onNoteChange?.(member.id, event.target.value)}
                     />
+                    <CollectionTextInputHelp id={noteId} field="note" value={member.note} submitted={textSubmitted} />
                   </Field>
                 </details>
                 {member.note ? (

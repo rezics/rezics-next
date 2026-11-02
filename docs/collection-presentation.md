@@ -154,6 +154,8 @@ All curated editing preserves occurrence IDs, notes, added times and duplicates,
 parent CAS, replay and current grants. Consume the sole actual member lifecycle implementation once it lands;
 its selected parent revision/deletion headers and exact Undo are not evidence of current delivery.
 
+Decision: Collection title/description/occurrence-note inputs explain native limits of 200/2,000/1,000 Unicode scalar values, preserve whitespace and optional empty/null meaning, and show field corrections for overflow or NUL before capturing a new command; a new multi-step Save validates all staged text before any write, while uncertain commands replay their original capture. Controls allow correction without UTF-16 truncation.
+
 Decision: ordinary curated drafts guard page departure against the loaded edit baseline; unresolved commands offer only Stay, confirmed saves clear loss guidance even if refresh fails, and explicit editor Cancel/reload keep their existing behavior.
 
 ### Selected-publication recovery

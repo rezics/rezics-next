@@ -4794,5 +4794,11 @@
   "library_subject_label_steps_conflict": "Diese Label-Aktion steht im Konflikt mit den aktuellen Labels. Prüfe die Liste, bevor du eine neue Aktion startest.",
   "library_rule_label_input_help": "Die Suche verwendet NFC und vereinheitlichte Unicode-Leerzeichen. Höchstens 100 Unicode-Skalarwerte nach der Normalisierung; eine leere Suche listet Labels auf.",
   "library_rule_label_input_correction": "Verwende nach der Normalisierung höchstens 100 Unicode-Skalarwerte, ohne Steuerzeichen oder einzelne Surrogate.",
-  "library_rule_label_input_transport": "Die unveränderte Suche darf höchstens 1.000 UTF-16-Codeeinheiten enthalten."
+  "library_rule_label_input_transport": "Die unveränderte Suche darf höchstens 1.000 UTF-16-Codeeinheiten enthalten.",
+  "library_collection_text_input_title_help": "1–200 Unicode-Zeichen. Leerraum bleibt erhalten.",
+  "library_collection_text_input_description_help": "Bis zu 2.000 Unicode-Zeichen. Leerer Text ist erlaubt.",
+  "library_collection_text_input_note_help": "Bis zu 1.000 Unicode-Zeichen. Leerer Text ist erlaubt.",
+  "library_collection_text_input_required": "Gib einen Titel ein.",
+  "library_collection_text_input_limit": "Verwende höchstens {limit} Unicode-Zeichen.",
+  "library_collection_text_input_nul": "Entferne das NUL-Zeichen."
 }

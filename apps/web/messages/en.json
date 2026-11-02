@@ -4847,5 +4847,11 @@
   "library_subject_label_steps_conflict": "This label command conflicts with the current labels. Review the list before starting a new command.",
   "library_rule_label_input_help": "Search uses NFC and collapsed Unicode whitespace. Up to 100 Unicode scalar values after normalization; an empty search lists labels.",
   "library_rule_label_input_correction": "Use at most 100 Unicode scalar values after normalization, without controls or lone surrogates.",
-  "library_rule_label_input_transport": "Keep the raw search within 1,000 UTF-16 code units."
+  "library_rule_label_input_transport": "Keep the raw search within 1,000 UTF-16 code units.",
+  "library_collection_text_input_title_help": "1–200 Unicode characters. Whitespace is kept.",
+  "library_collection_text_input_description_help": "Up to 2,000 Unicode characters. Empty text is allowed.",
+  "library_collection_text_input_note_help": "Up to 1,000 Unicode characters. Empty text is allowed.",
+  "library_collection_text_input_required": "Enter a title.",
+  "library_collection_text_input_limit": "Use at most {limit} Unicode characters.",
+  "library_collection_text_input_nul": "Remove the NUL character."
 }

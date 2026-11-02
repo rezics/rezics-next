@@ -4794,5 +4794,11 @@
   "library_subject_label_steps_conflict": "此标签操作与当前标签冲突。请先查看列表，再发起新操作。",
   "library_rule_label_input_help": "搜索使用 NFC 规范化并合并 Unicode 空白。规范化后最多 100 个 Unicode 标量值；留空可列出标签。",
   "library_rule_label_input_correction": "规范化后请勿超过 100 个 Unicode 标量值，并移除控制字符或孤立代理项。",
-  "library_rule_label_input_transport": "原始搜索输入请勿超过 1,000 个 UTF-16 代码单元。"
+  "library_rule_label_input_transport": "原始搜索输入请勿超过 1,000 个 UTF-16 代码单元。",
+  "library_collection_text_input_title_help": "1–200 个 Unicode 字符，保留空白。",
+  "library_collection_text_input_description_help": "最多 2,000 个 Unicode 字符，可以留空。",
+  "library_collection_text_input_note_help": "最多 1,000 个 Unicode 字符，可以留空。",
+  "library_collection_text_input_required": "请输入标题。",
+  "library_collection_text_input_limit": "请使用不超过 {limit} 个 Unicode 字符。",
+  "library_collection_text_input_nul": "请移除 NUL 字符。"
 }

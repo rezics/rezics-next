@@ -55,7 +55,7 @@ export function validateRuleWrite(input: unknown): RuleWrite {
   if (
     value.revision !== undefined ||
     typeof value.title !== 'string' ||
-    !value.title.trim() ||
+    !value.title ||
     value.title.length > 512 ||
     typeof value.description !== 'string' ||
     value.description.length > 20000

@@ -1,3 +1,4 @@
+import { collectionTextIssue } from './collection-text-input';
 import { batchRemoveCollectionMembers, transferCollectionMembers } from './collection-commands';
 import { CollectionBatchRemoveConfirmation } from './collection-batch-remove';
 import { useCollectionDraftNavigation } from './collection-draft-navigation';
@@ -347,6 +348,7 @@ function CollectionPageLifetime({
   const editorPage = useRef<EditableCollectionPage | null>(null);
   const draftPage = editorPage.current ?? page;
   const [title, setTitle] = useState(page.title);
+  const [textSubmitted, setTextSubmitted] = useState(false);
   const storedKind = draftPage.presentationKindSource === 'owner' ? (draftPage.presentationKind ?? null) : null;
   const [kind, setKind] = useState(storedKind);
   const [coverMediaId, setCoverMediaId] = useState(page.coverMediaId ?? null);
@@ -718,6 +720,17 @@ function CollectionPageLifetime({
   async function save(event?: FormEvent<HTMLFormElement>, confirmed = false) {
     event?.preventDefault();
     if (!isCurrent('collection.update') || !hydrated || pending || conflict || !editing || !owner) return;
+    // Validate the entire new Save before capture or any independently receipted write.
+    // An uncertain plan already owns its exact operands, sender and credential.
+    if (saveIntent.current === null) {
+      setTextSubmitted(true);
+      if (
+        collectionTextIssue('title', title) ||
+        collectionTextIssue('description', description) ||
+        members.some((member) => collectionTextIssue('note', member.note))
+      )
+        return;
+    }
     if (!confirmed && saveIntent.current === null && removalCount > 0) {
       setRemovalConfirmation(true);
       return;
@@ -1274,6 +1287,7 @@ function CollectionPageLifetime({
         ) : null}
         {editing && owner ? (
           <CollectionMetadataEditor
+            textSubmitted={textSubmitted}
             title={title}
             description={description}
             disabled={pending || draftFrozen || !isCurrent('collection.update')}
@@ -1493,6 +1507,7 @@ function CollectionPageLifetime({
             />
           ) : (
             <CollectionMemberList
+              textSubmitted={textSubmitted}
               members={members}
               typeRatios={page.typeRatios}
               listPresentations={page.listPresentations}

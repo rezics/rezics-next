@@ -172,7 +172,8 @@ test('new rule corrects native text before capture and accepts raw scalar bounda
     await ui.submit();
     expect(calls).toHaveLength(0);
     expect(ui.labelled(m.library_collection_title()).getAttribute('aria-invalid')).toBe('true');
-    const title = ' ' + '😀'.repeat(199), description = '\n' + '😀'.repeat(1999);
+    const title = ' ' + '😀'.repeat(199),
+      description = '\n' + '😀'.repeat(1999);
     await ui.fill(m.library_collection_title(), title);
     await ui.fill(m.library_collection_description(), description);
     await ui.submit();

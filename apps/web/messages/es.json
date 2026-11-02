@@ -4794,5 +4794,11 @@
   "library_subject_label_steps_conflict": "Esta operación entra en conflicto con las etiquetas actuales. Revisa la lista antes de iniciar otra operación.",
   "library_rule_label_input_help": "La búsqueda usa NFC y espacios Unicode unificados. Máximo 100 valores escalares Unicode tras normalizar; una búsqueda vacía muestra las etiquetas.",
   "library_rule_label_input_correction": "Usa como máximo 100 valores escalares Unicode tras normalizar, sin controles ni sustitutos aislados.",
-  "library_rule_label_input_transport": "Limita la búsqueda original a 1.000 unidades de código UTF-16."
+  "library_rule_label_input_transport": "Limita la búsqueda original a 1.000 unidades de código UTF-16.",
+  "library_collection_text_input_title_help": "De 1 a 200 caracteres Unicode. Se conservan los espacios en blanco.",
+  "library_collection_text_input_description_help": "Hasta 2000 caracteres Unicode. Se permite el texto vacío.",
+  "library_collection_text_input_note_help": "Hasta 1000 caracteres Unicode. Se permite el texto vacío.",
+  "library_collection_text_input_required": "Introduce un título.",
+  "library_collection_text_input_limit": "Usa como máximo {limit} caracteres Unicode.",
+  "library_collection_text_input_nul": "Elimina el carácter NUL."
 }

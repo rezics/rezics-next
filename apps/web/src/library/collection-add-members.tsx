@@ -1,3 +1,5 @@
+import { collectionTextIssue } from './collection-text-input';
+import { CollectionTextInputHelp, collectionTextInputAttributes } from './collection-text-input-field';
 import { EntityPicker, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -59,6 +61,7 @@ function CollectionAddMembersForm({
   const noteId = useId();
   const [selected, setSelected] = useState<EntityPickerSubject[]>([]);
   const [note, setNote] = useState('');
+  const [textSubmitted, setTextSubmitted] = useState(false);
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState('');
   const locked = useRef<object | null>(null);
@@ -69,6 +72,10 @@ function CollectionAddMembersForm({
   async function add(event: FormEvent) {
     event.preventDefault();
     if (!currentCsrf() || locked.current || !selected[0]) return;
+    if (!receipt.current) {
+      setTextSubmitted(true);
+      if (collectionTextIssue('note', note)) return;
+    }
     const request = {};
     locked.current = request;
     setPending(true);
@@ -148,7 +155,7 @@ function CollectionAddMembersForm({
       />
       {selected[0] ? <p className="min-w-0 whitespace-pre-wrap font-medium">{selected[0].title}</p> : null}
       {selected.length ? (
-        <details className="min-w-0">
+        <details className="min-w-0" open={textSubmitted && !!collectionTextIssue('note', note) ? true : undefined}>
           <summary className="min-h-11 cursor-pointer rounded-sm py-2 text-sm text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             {m.library_member_note()}
           </summary>
@@ -160,7 +167,7 @@ function CollectionAddMembersForm({
               id={noteId}
               className="min-w-0 max-w-full resize-y"
               value={note}
-              maxLength={20_000}
+              {...collectionTextInputAttributes({ id: noteId, field: 'note', value: note, submitted: textSubmitted })}
               disabled={!ready || pending || frozen}
               onChange={(event) => {
                 if (!currentCsrf() || locked.current || receipt.current?.accepted || receipt.current?.uncertain) return;
@@ -168,6 +175,7 @@ function CollectionAddMembersForm({
                 setNote(event.target.value);
               }}
             />
+            <CollectionTextInputHelp id={noteId} field="note" value={note} submitted={textSubmitted} />
           </Field>
         </details>
       ) : null}

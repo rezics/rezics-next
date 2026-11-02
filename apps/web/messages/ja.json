@@ -4794,5 +4794,11 @@
   "library_subject_label_steps_conflict": "この操作は現在のラベルと競合しています。新しい操作を始める前に一覧を確認してください。",
   "library_rule_label_input_help": "検索にはNFC正規化とUnicode空白の集約を適用します。正規化後はUnicodeスカラー値100個まで。空欄ではラベル一覧を表示します。",
   "library_rule_label_input_correction": "正規化後のUnicodeスカラー値を100個以内にし、制御文字や単独のサロゲートを除いてください。",
-  "library_rule_label_input_transport": "入力した検索文字列はUTF-16コード単位で1,000個以内にしてください。"
+  "library_rule_label_input_transport": "入力した検索文字列はUTF-16コード単位で1,000個以内にしてください。",
+  "library_collection_text_input_title_help": "1～200 Unicode文字。空白はそのまま保存されます。",
+  "library_collection_text_input_description_help": "最大2,000 Unicode文字。空欄も使用できます。",
+  "library_collection_text_input_note_help": "最大1,000 Unicode文字。空欄も使用できます。",
+  "library_collection_text_input_required": "タイトルを入力してください。",
+  "library_collection_text_input_limit": "{limit} Unicode文字以内で入力してください。",
+  "library_collection_text_input_nul": "NUL文字を削除してください。"
 }

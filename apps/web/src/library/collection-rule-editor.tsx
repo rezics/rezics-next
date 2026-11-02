@@ -1,3 +1,5 @@
+import { collectionTextIssue } from './collection-text-input';
+import { CollectionTextInputHelp, collectionTextInputAttributes } from './collection-text-input-field';
 import { useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { FilterDocument, OwnerLeaf } from '@rezics/filter';
 import { parseFilter } from '@rezics/filter';
@@ -475,6 +477,7 @@ function RuleForm({
   const [base, setBase] = useState(page);
   const [title, setTitle] = useState(page.state === 'ready' ? page.title : '');
   const [description, setDescription] = useState('');
+  const [textSubmitted, setTextSubmitted] = useState(false);
   const [filter, setFilter] = useState<FilterDocument | undefined>(
     page.state === 'ready' ? page.rule.filter : { and: [presence] },
   );
@@ -532,6 +535,10 @@ function RuleForm({
     event.preventDefault();
     const csrf = currentCsrf ? currentCsrf() : csrfToken;
     if (!isCurrent() || !csrf || conflict || !filter || savedId) return;
+    if (!captured.current && base.state === 'new') {
+      setTextSubmitted(true);
+      if (collectionTextIssue('title', title) || collectionTextIssue('description', description)) return;
+    }
     const operation = start(isOwnerCurrent ?? isCurrent);
     if (!operation) return;
     let parsed: FilterDocument;
@@ -696,7 +703,7 @@ function RuleForm({
     <article className="flex min-w-0 max-w-4xl flex-col gap-4 text-foreground">
       {navigation.boundary}
       <PageHeading>{base.state === 'new' ? m.library_rule_new() : m.library_rule_edit()}</PageHeading>
-      <form onSubmit={(event) => void submit(event)} className="flex min-w-0 flex-col gap-6">
+      <form noValidate onSubmit={(event) => void submit(event)} className="flex min-w-0 flex-col gap-6">
         <fieldset disabled={pending || !!intent || !!savedId} className="min-w-0">
           <FieldGroup>
             {base.state === 'new' && (
@@ -705,31 +712,47 @@ function RuleForm({
                   <FieldLabel htmlFor={`${metadataId}-title`}>{m.library_collection_title()}</FieldLabel>
                   <Input
                     id={`${metadataId}-title`}
-                    aria-describedby={`${metadataId}-title-limit`}
+                    {...collectionTextInputAttributes({
+                      id: `${metadataId}-title`,
+                      field: 'title',
+                      value: title,
+                      submitted: textSubmitted,
+                    })}
                     required
-                    maxLength={512}
                     value={title}
                     onChange={(event) => {
                       if (isCurrent() && !captured.current) setTitle(event.currentTarget.value);
                     }}
                   />
-                  <FieldDescription id={`${metadataId}-title-limit`}>{m.library_rule_title_limit()}</FieldDescription>
+                  <CollectionTextInputHelp
+                    id={`${metadataId}-title`}
+                    field="title"
+                    value={title}
+                    submitted={textSubmitted}
+                  />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor={`${metadataId}-description`}>{m.library_collection_description()}</FieldLabel>
                   <Textarea
                     id={`${metadataId}-description`}
-                    aria-describedby={`${metadataId}-description-limit`}
+                    {...collectionTextInputAttributes({
+                      id: `${metadataId}-description`,
+                      field: 'description',
+                      value: description,
+                      submitted: textSubmitted,
+                    })}
                     value={description}
-                    maxLength={20000}
                     rows={4}
                     onChange={(event) => {
                       if (isCurrent() && !captured.current) setDescription(event.currentTarget.value);
                     }}
                   />
-                  <FieldDescription id={`${metadataId}-description-limit`}>
-                    {m.library_rule_description_limit()}
-                  </FieldDescription>
+                  <CollectionTextInputHelp
+                    id={`${metadataId}-description`}
+                    field="description"
+                    value={description}
+                    submitted={textSubmitted}
+                  />
                 </Field>
               </>
             )}

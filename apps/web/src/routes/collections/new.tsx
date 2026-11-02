@@ -1,3 +1,5 @@
+import { collectionTextIssue } from '../../library/collection-text-input';
+import { CollectionTextInputHelp, collectionTextInputAttributes } from '../../library/collection-text-input-field';
 import { useOperation } from '../../kernel/exposure';
 import { requireSignedIn } from '../../session/guard';
 import { useSession } from '../../session/query';
@@ -55,6 +57,9 @@ function NewCollectionForm({ csrfToken, types }: { csrfToken: string; types: Col
   const [uncertain, setUncertain] = useState(false);
   const [kind, setKind] = useState<string | null>(null);
   const [failure, setFailure] = useState('');
+  const [textSubmitted, setTextSubmitted] = useState(false);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const lifetime = useRef({ active: false, locked: false, intent: null as CreateIntent | null });
   useLayoutEffect(() => {
     const current = { active: true, locked: false, intent: null as CreateIntent | null };
@@ -79,9 +84,13 @@ function NewCollectionForm({ csrfToken, types }: { csrfToken: string; types: Col
     try {
       if (!current.intent) {
         const form = new FormData(event.currentTarget);
+        const title = String(form.get('title') ?? '');
+        const description = String(form.get('description') ?? '');
+        setTextSubmitted(true);
+        if (collectionTextIssue('title', title) || collectionTextIssue('description', description)) return;
         current.intent = {
-          title: String(form.get('title') ?? ''),
-          description: String(form.get('description') ?? ''),
+          title,
+          description,
           visibility,
           presentationKind: kind,
           idempotencyKey,
@@ -121,16 +130,47 @@ function NewCollectionForm({ csrfToken, types }: { csrfToken: string; types: Col
   }
 
   return (
-    <form className="space-y-6" onSubmit={(event) => void create(event)}>
+    <form noValidate className="space-y-6" onSubmit={(event) => void create(event)}>
       <input name="idempotencyKey" type="hidden" value={idempotencyKey} />
       <fieldset className="space-y-6" disabled={pending || uncertain}>
         <label className="block">
           {m.library_collection_title()}
-          <input className={fieldClass} maxLength={512} name="title" required />
+          <input
+            className={fieldClass}
+            name="title"
+            required
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            {...collectionTextInputAttributes({
+              id: 'collection-new-title',
+              field: 'title',
+              value: title,
+              submitted: textSubmitted,
+            })}
+          />
+          <CollectionTextInputHelp id="collection-new-title" field="title" value={title} submitted={textSubmitted} />
         </label>
         <label className="block">
           {m.library_collection_description()}
-          <textarea className={fieldClass} name="description" rows={4} />
+          <textarea
+            className={fieldClass}
+            name="description"
+            rows={4}
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            {...collectionTextInputAttributes({
+              id: 'collection-new-description',
+              field: 'description',
+              value: description,
+              submitted: textSubmitted,
+            })}
+          />
+          <CollectionTextInputHelp
+            id="collection-new-description"
+            field="description"
+            value={description}
+            submitted={textSubmitted}
+          />
         </label>
         <CollectionPresentationFields
           types={types}
