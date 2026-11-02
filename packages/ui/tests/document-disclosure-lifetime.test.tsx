@@ -45,7 +45,7 @@ test('renderer-supported extension snapshots need no producer fallback to render
   const document: DocumentSnapshot = {
     version: 'rezics-document-v1',
     profile: 'blocks',
-    doc: { type: 'doc', content: [{ type: 'extensionBlock', attrs: { definition: 'future' } }] },
+    doc: { type: 'doc', content: [{ type: 'extensionBlock', attrs: { definition: 'future', fallback: null } }] },
   };
   expect(() => serializeDocument(document)).toThrow();
   expect(renderToStaticMarkup(createElement(DocumentBody, { document }))).toContain(
