@@ -1020,6 +1020,32 @@ export class WorkerJob implements GateOutcomeSink {
    * held elsewhere is skipped, never waited for. Short-lived commands pass `adoptRunning: false`: an orphan whose
    * worker still runs is left to the manager host, which can wait for it without blocking a command.
    */
+  /** Recovery failures already reported by this process, by task, step and first error line. */
+  private readonly recoveryFailures = new Set<string>();
+  /**
+   * One task's failure in a recovery sweep is that task's problem, not the sweep's: it is logged, reported once to the
+   * supermanager, and the sweep continues with the other tasks. Store contention affects every task and is only logged.
+   */
+  private recoveryFailed(taskId: string, step: string, error: unknown): void {
+    if (error instanceof StaleAttemptError || error instanceof LeaseHeldError) return;
+    const detail = (error instanceof Error ? `${error.name}: ${error.message}` : String(error))
+      .replace(/[\r\n]+/g, ' ')
+      .slice(0, 500);
+    console.error(`Recovery step ${step} failed for task ${taskId}: ${detail}`);
+    const key = `${taskId}\0${step}\0${detail}`;
+    if (isSqliteContention(error) || this.recoveryFailures.has(key)) return;
+    this.recoveryFailures.add(key);
+    try {
+      this.inbox.deliver({
+        managerId: this.tasks.settings.integration.supermanager,
+        taskId,
+        kind: 'environment',
+        summary: `environment: recovery step ${step} failed for task ${taskId}; the sweep continued with other tasks: ${detail}`,
+      });
+    } catch (reportError) {
+      console.error(`Recovery failure report for task ${taskId} was not delivered:`, reportError);
+    }
+  }
   /** Release held tasks whose dependencies are met; returns their ids. */
   private releaseMetDependents(): string[] {
     const store = this.tasks.store;
@@ -1033,8 +1059,8 @@ export class WorkerJob implements GateOutcomeSink {
       try {
         lease = acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', taskId));
       } catch (error) {
-        if (error instanceof LeaseHeldError) continue;
-        throw error;
+        this.recoveryFailed(taskId, 'dependency release', error);
+        continue;
       }
       try {
         const candidate = store.task(taskId);
@@ -1047,6 +1073,8 @@ export class WorkerJob implements GateOutcomeSink {
           current.state = 'ready';
         });
         released.push(taskId);
+      } catch (error) {
+        this.recoveryFailed(taskId, 'dependency release', error);
       } finally {
         lease.release();
       }
@@ -1082,7 +1110,7 @@ export class WorkerJob implements GateOutcomeSink {
       } catch (error) {
         // A task held after a stop keeps its stopped attempt current, which the attempt fence refuses; skipping its
         // notice must not fail every command and host sweep (all of them stopped on one such task on 2026-10-30).
-        if (!(error instanceof StaleAttemptError)) throw error;
+        this.recoveryFailed(task.id, 'cancelled-dependency notice', error);
       }
     }
   }
@@ -1106,15 +1134,19 @@ export class WorkerJob implements GateOutcomeSink {
     if (adoptRunning) {
       // Settled task history is not recovery work; only active permits need logical reconciliation.
       for (const run of store.activeProofReservations()) {
-        const task = store.task(run.binding.taskId);
-        if (
-          task.currentAttempt === run.binding.attempt &&
-          !['running', 'landing'].includes(task.state) &&
-          ['stopped', 'exited', 'cancelled', 'superseded'].includes(
-            store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state,
+        try {
+          const task = store.task(run.binding.taskId);
+          if (
+            task.currentAttempt === run.binding.attempt &&
+            !['running', 'landing'].includes(task.state) &&
+            ['stopped', 'exited', 'cancelled', 'superseded'].includes(
+              store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state,
+            )
           )
-        )
-          store.releaseExitedProofReservations({ taskId: task.id, attempt: task.currentAttempt });
+            store.releaseExitedProofReservations({ taskId: task.id, attempt: task.currentAttempt });
+        } catch (error) {
+          this.recoveryFailed(run.binding.taskId, 'proof reservation release', error);
+        }
       }
     }
     if (adoptRunning)
@@ -1162,8 +1194,8 @@ export class WorkerJob implements GateOutcomeSink {
         try {
           taskLease = this.acquireOrphanLease(join(this.tasks.settings.stateDirectory, 'leases', candidate.id));
         } catch (error) {
-          if (error instanceof LeaseHeldError) continue;
-          throw error;
+          this.recoveryFailed(candidate.id, 'orphaned landing', error);
+          continue;
         }
         try {
           const task = store.task(candidate.id);
@@ -1196,6 +1228,8 @@ export class WorkerJob implements GateOutcomeSink {
           } finally {
             for (const lease of trainLeases) lease.release();
           }
+        } catch (error) {
+          this.recoveryFailed(candidate.id, 'orphaned landing', error);
         } finally {
           taskLease.release();
         }
@@ -1239,39 +1273,43 @@ export class WorkerJob implements GateOutcomeSink {
       const graceMs = this.tasks.settings.startGraceMs ?? START_GRACE_MS;
       for (const attempt of store.attemptsInState('pending')) {
         await yieldSweep();
-        if (attempt.state !== 'pending' || Date.now() - Date.parse(attempt.startedAt) < graceMs) continue;
-        const task = store.task(attempt.taskId);
-        if (task.currentAttempt !== attempt.attempt || task.state !== 'ready') continue;
-        // A released `after` task must refresh its worktree base under the task lease before it starts.
-        if (task.brief.after.length && this.tasks.dependenciesMet(task, tasks)) continue;
         try {
-          acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', attempt.taskId)).release();
-        } catch (error) {
-          if (error instanceof LeaseHeldError) continue;
-          throw error;
-        }
-        if (
-          task.brief.kind === 'verification' &&
-          store.events(task.id, attempt.attempt).some((event) => event.kind === 'proof-command-ready')
-        ) {
-          // The launch may have crossed its process boundary before SQLite recorded a driver. Never replay it.
-          await this.endAsEnvironment(
-            attempt,
-            new Error(
-              'Original proof launch interrupted after command preparation; execution is unknown, no automatic replay; retain native records and request authenticated fresh retry registration',
-            ),
-            false,
-            true,
+          if (attempt.state !== 'pending' || Date.now() - Date.parse(attempt.startedAt) < graceMs) continue;
+          const task = store.task(attempt.taskId);
+          if (task.currentAttempt !== attempt.attempt || task.state !== 'ready') continue;
+          // A released `after` task must refresh its worktree base under the task lease before it starts.
+          if (task.brief.after.length && this.tasks.dependenciesMet(task, tasks)) continue;
+          try {
+            acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', attempt.taskId)).release();
+          } catch (error) {
+            this.recoveryFailed(attempt.taskId, 'pending attempt recovery', error);
+            continue;
+          }
+          if (
+            task.brief.kind === 'verification' &&
+            store.events(task.id, attempt.attempt).some((event) => event.kind === 'proof-command-ready')
+          ) {
+            // The launch may have crossed its process boundary before SQLite recorded a driver. Never replay it.
+            await this.endAsEnvironment(
+              attempt,
+              new Error(
+                'Original proof launch interrupted after command preparation; execution is unknown, no automatic replay; retain native records and request authenticated fresh retry registration',
+              ),
+              false,
+              true,
+            );
+            continue;
+          }
+          if (this.recovering.has(attempt.taskId)) continue;
+          this.recovering.add(attempt.taskId);
+          this.track(
+            this.start(attempt.taskId)
+              .catch((error) => this.recoveryFailed(attempt.taskId, 'pending attempt recovery', error))
+              .finally(() => this.recovering.delete(attempt.taskId)),
           );
-          continue;
+        } catch (error) {
+          this.recoveryFailed(attempt.taskId, 'pending attempt recovery', error);
         }
-        if (this.recovering.has(attempt.taskId)) continue;
-        this.recovering.add(attempt.taskId);
-        this.track(
-          this.start(attempt.taskId)
-            .catch((error) => console.error(error))
-            .finally(() => this.recovering.delete(attempt.taskId)),
-        );
       }
     }
     // A ready task with no attempt is started by the process that dispatched or released it. When that process is
@@ -1292,13 +1330,13 @@ export class WorkerJob implements GateOutcomeSink {
         try {
           acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', task.id)).release();
         } catch (error) {
-          if (error instanceof LeaseHeldError) continue;
-          throw error;
+          this.recoveryFailed(task.id, 'first start', error);
+          continue;
         }
         this.recovering.add(task.id);
         this.track(
           this.start(task.id, { expectedAttempt: 0 })
-            .catch((error) => console.error(error))
+            .catch((error) => this.recoveryFailed(task.id, 'first start', error))
             .finally(() => this.recovering.delete(task.id)),
         );
       }
@@ -1326,10 +1364,13 @@ export class WorkerJob implements GateOutcomeSink {
       try {
         lease = this.acquireOrphanLease(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));
       } catch (error) {
-        if (error instanceof LeaseHeldError) continue;
-        throw error;
+        this.recoveryFailed(ref.taskId, 'worker adoption', error);
+        continue;
       }
       let followed = false;
+      // An adopted worker's own failure must not reject the sweep that adopts its peers.
+      const adopt = (work: Promise<void>) =>
+        follows.push(work.catch((error) => this.recoveryFailed(ref.taskId, 'worker adoption', error)));
       try {
         if (store.task(ref.taskId).currentAttempt !== ref.attempt) continue;
         const attempt = store.attempt(ref);
@@ -1364,7 +1405,7 @@ export class WorkerJob implements GateOutcomeSink {
           });
           lease.release();
           followed = true;
-          follows.push(
+          adopt(
             this.resumeWaiting(attempt, store.task(ref.taskId), message).catch((error) =>
               this.endAsEnvironment(ref, error),
             ),
@@ -1376,7 +1417,7 @@ export class WorkerJob implements GateOutcomeSink {
         });
         lease.release();
         followed = true;
-        follows.push(
+        adopt(
           (async () => {
             try {
               // Follow at once, so the stall and start checks watch an adopted worker too; only its exit waits.
@@ -1389,6 +1430,8 @@ export class WorkerJob implements GateOutcomeSink {
             }
           })(),
         );
+      } catch (error) {
+        this.recoveryFailed(ref.taskId, 'worker adoption', error);
       } finally {
         if (!followed) lease.release();
       }

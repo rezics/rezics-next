@@ -947,6 +947,11 @@ process's lock beyond the busy timeout is retried after 0.5, 1, 2, 4 and 8 secon
 as if there had been no contention. If the lock outlasts every try, the attempt is not classified as a worker failure:
 its driver is released and the host's orphan sweep settles the same exit again.
 
+Each task's step in a recovery sweep (cancelled-dependency notice, dependency release, proof reservation release,
+orphaned landing, pending or first start, worker adoption) is isolated: its failure is logged, reported once per
+process to the supermanager with the task and step, and the sweep goes on with the other tasks. A store-wide failure,
+such as reading the task list, still fails the sweep; store contention is only logged.
+
 Process cleanup verifies the leader's PID, start time, boot and detached group before sending signals. A reused
 leader PID may settle only when the original group has no live members and the kernel confirms it is absent with
 signal zero. The replacement incarnation receives no termination signal. A vanished leader with surviving original
