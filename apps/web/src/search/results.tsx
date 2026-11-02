@@ -21,6 +21,7 @@ import { coverOf, coverSubject, type SubjectSummary } from '../media/summary';
 import { listKeyFacts } from '../media/type-presentation';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
+import { pickResultAliases } from './result-aliases';
 
 type NativeHit = Extract<
   NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>,
@@ -130,9 +131,9 @@ export function ResultRow({
     )
     .slice(0, 4);
   const badgeProperties = fallbackListFactProperties(subject.types) ?? [];
-  const aliasLanguage =
-    Object.keys(hit.aliases ?? {}).find((language) => language === locale) ?? Object.keys(hit.aliases ?? {})[0];
-  const aliases = aliasLanguage ? hit.aliases?.[aliasLanguage]?.slice(0, 3) : undefined;
+  const pickedAliases = pickResultAliases(hit.aliases, locale);
+  const aliasLanguage = pickedAliases?.language;
+  const aliases = pickedAliases?.aliases;
   return (
     <ListRow forceOverlay={hit.storyOverlay ?? false} className="flex min-w-0 items-start gap-3 py-3 sm:gap-4 sm:py-4">
       <div data-content-item-slot="visual" className="shrink-0 [&_button]:relative [&_button]:z-10">
