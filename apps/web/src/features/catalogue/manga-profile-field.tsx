@@ -89,7 +89,7 @@ export function MangaInitialField({
   const remove = () => {
     if (!editable() || !section.current?.isConnected) return;
     const root = section.current;
-    const controls = [...(root.parentElement?.querySelectorAll<HTMLElement>(
+    const controls = [...((root.closest('form') ?? root.parentElement)?.querySelectorAll<HTMLElement>(
       'button, input, select, textarea, [tabindex="0"], [contenteditable="true"]',
     ) ?? [])];
     const first = controls.findIndex((control) => root.contains(control));
@@ -269,7 +269,9 @@ export function MangaInitialField({
                   className="w-full min-w-0"
                   aria-label={m.correction_add_qualifier({}, o)}
                   value={qualifier}
-                  onChange={(event) => { if (editable()) setQualifier(event.target.value); }}
+                  onChange={(event) => {
+                    if (editable()) setQualifier(event.target.value);
+                  }}
                 >
                   <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
                   {property.qualifiers

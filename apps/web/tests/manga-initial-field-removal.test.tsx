@@ -52,7 +52,7 @@ test('Manga draft removal preserves complete rows on Cancel, removes only stable
   ];
   try {
     for (const selected of variants) {
-      rows = [selected, blank('sibling')]; disabled = false;
+      rows = [selected, { ...variants[0]!, id: 'sibling' }]; disabled = false;
       const snapshot = structuredClone(rows);
       await render();
       const sibling = region('sibling');
@@ -68,7 +68,7 @@ test('Manga draft removal preserves complete rows on Cancel, removes only stable
       expect(within(region(selected.id)).getByRole('button', { name: m.candidate_cancel() })).toBeDefined();
       await click(region(selected.id), m.recipe_remove_field());
       expect(rows).toEqual([snapshot[1]!]);
-      expect(sibling.contains(window.document.activeElement as unknown as Node)).toBe(true);
+      expect(window.document.activeElement).toBe(within(host).getByRole('button', { name: 'Add field' }));
       expect(within(host).getByRole('textbox', { name: 'Name' }).getAttribute('value')).toBe('Shared terms');
     }
     rows = [variants[0]!]; await render();
