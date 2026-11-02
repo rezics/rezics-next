@@ -3,11 +3,12 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../kernel/client';
 import { m } from '../paraglide/messages.js';
-import { suggestSubjects } from '../search/suggestions';
+import { readSubjectSuggestions, SUGGESTION_LIMIT } from '../search/suggestions';
+import { withVerificationDeadline } from './verification-request-deadline';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { requestLanguages } from '../kernel/languages';
-import { readRelease } from '../subject/definitions';
+import { readVerificationEligibility, readVerificationTitle } from './verification-core';
 import type { VerificationInput } from './verification-core';
 import { validateVerificationDraft } from './verification-validation';
 
@@ -75,24 +76,33 @@ export const readVerificationState = createServerFn({ method: 'GET' })
     const { readVerification, VerificationReadError } = await import('./verification-core');
     let verificationRequest;
     try {
-      verificationRequest = await readVerification(client, accountId, authorization);
+      verificationRequest = await readVerification(client, accountId, authorization, request.signal);
     } catch (error) {
       if (error instanceof VerificationReadError) return { ok: false as const, failure: error.failure };
       throw error;
     }
-    if (!verificationRequest)
-      return { ok: true as const, value: { accountId, verificationRequest: null, subjectTitle: null } };
-    const subject = await client
-      .subjects({ id: verificationRequest.catalogueSubjectId })
-      .get({ headers: { authorization } });
-    const labels = subject.data?.subject?.labels;
-    const languages = requestLanguages(requestLocale(request) ?? 'en');
-    const subjectTitle = labels
-      ? (languages.map((language) => labels[language]).find((label) => label !== undefined) ??
-        Object.values(labels)[0] ??
-        verificationRequest.catalogueSubjectId)
-      : verificationRequest.catalogueSubjectId;
-    return { ok: true as const, value: { accountId, verificationRequest, subjectTitle } };
+    return { ok: true as const, value: { accountId, verificationRequest, subjectTitle: null } };
+  });
+
+export const readVerificationSubjectTitle = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => {
+    const accountId = expectedAccount(input);
+    const subjectId = (input as { subjectId?: unknown }).subjectId;
+    if (typeof subjectId !== 'string' || !subjectId || subjectId.length > 256)
+      throw new Error('Invalid verification subject');
+    return { accountId, subjectId };
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const { request, authorization, accountId } = await viewer();
+    if (accountId !== data.accountId) throw new Error(m.settings_verification_identity_changed());
+    return readVerificationTitle(
+      kernelClient(),
+      data.subjectId,
+      authorization,
+      requestLanguages(requestLocale(request) ?? 'en'),
+      request.signal,
+    );
   });
 
 export const searchVerificationSubjects = createServerFn({ method: 'GET' })
@@ -106,43 +116,57 @@ export const searchVerificationSubjects = createServerFn({ method: 'GET' })
   .handler(async ({ data: query }) => {
     setResponseHeader('cache-control', 'private, no-store');
     if (!query.trim()) return [];
-    const { request } = await viewer();
+    const { request, authorization } = await viewer();
     try {
-      const result = await suggestSubjects(query, request);
-      // Native empty suggestions need no eligibility metadata.
-      if (result.subjects.length === 0) return [];
-      const release = await readRelease();
-      if (!release?.types || typeof release.types !== 'object' || Array.isArray(release.types))
-        throw new Error('Invalid eligibility metadata');
-      const resolved = new Map<string, Set<string>>();
-      const roots = (type: string, visited = new Set<string>()): Set<string> => {
-        const known = resolved.get(type);
-        if (known) return known;
-        const definition = Object.hasOwn(release.types, type) ? release.types[type] : undefined;
-        if (
-          !definition ||
-          typeof definition !== 'object' ||
-          Array.isArray(definition) ||
-          (definition.bases !== undefined &&
-            (!Array.isArray(definition.bases) || definition.bases.some((base) => typeof base !== 'string' || !base))) ||
-          visited.has(type)
-        )
+      return await withVerificationDeadline(async (signal) => {
+        const client = kernelClient();
+        const result = await readSubjectSuggestions(
+          client,
+          {
+            q: query,
+            limit: SUGGESTION_LIMIT,
+            languages: requestLanguages(requestLocale(request) ?? 'en'),
+          },
+          authorization,
+          signal,
+        );
+        // Native empty suggestions need no eligibility metadata.
+        if (result.subjects.length === 0) return [];
+        const release = await readVerificationEligibility(client, authorization, signal);
+        if (!release?.types || typeof release.types !== 'object' || Array.isArray(release.types))
           throw new Error('Invalid eligibility metadata');
-        if (type === 'schema:Person' || type === 'schema:Organization') return new Set([type]);
-        visited.add(type);
-        const result = new Set((definition.bases ?? []).flatMap((base) => [...roots(base, visited)]));
-        visited.delete(type);
-        resolved.set(type, result);
-        return result;
-      };
-      return result.subjects.flatMap((subject) => {
-        const title = subject.summary?.label?.value ?? Object.values(subject.labels)[0] ?? subject.id;
-        const baseTypes = roots(subject.type);
-        if (baseTypes.has('schema:Person')) return [{ id: subject.id, title, type: m.settings_verification_person() }];
-        if (baseTypes.has('schema:Organization'))
-          return [{ id: subject.id, title, type: m.settings_verification_organization() }];
-        return [];
-      });
+        const resolved = new Map<string, Set<string>>();
+        const roots = (type: string, visited = new Set<string>()): Set<string> => {
+          const known = resolved.get(type);
+          if (known) return known;
+          const definition = Object.hasOwn(release.types, type) ? release.types[type] : undefined;
+          if (
+            !definition ||
+            typeof definition !== 'object' ||
+            Array.isArray(definition) ||
+            (definition.bases !== undefined &&
+              (!Array.isArray(definition.bases) ||
+                definition.bases.some((base) => typeof base !== 'string' || !base))) ||
+            visited.has(type)
+          )
+            throw new Error('Invalid eligibility metadata');
+          if (type === 'schema:Person' || type === 'schema:Organization') return new Set([type]);
+          visited.add(type);
+          const result = new Set((definition.bases ?? []).flatMap((base) => [...roots(base, visited)]));
+          visited.delete(type);
+          resolved.set(type, result);
+          return result;
+        };
+        return result.subjects.flatMap((subject) => {
+          const title = subject.summary?.label?.value ?? Object.values(subject.labels)[0] ?? subject.id;
+          const baseTypes = roots(subject.type);
+          if (baseTypes.has('schema:Person'))
+            return [{ id: subject.id, title, type: m.settings_verification_person() }];
+          if (baseTypes.has('schema:Organization'))
+            return [{ id: subject.id, title, type: m.settings_verification_organization() }];
+          return [];
+        });
+      }, request.signal);
     } catch {
       // The chooser exposes only its existing failed state and explicit Retry.
       throw new Error(m.settings_verification_search_failed());
@@ -157,11 +181,11 @@ export const requestVerificationAction = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const { authorization, accountId } = await viewer();
+    const { request, authorization, accountId } = await viewer();
     if (accountId !== data.accountId)
       return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
     const { requestVerification } = await import('./verification-core');
-    return requestVerification(kernelClient(), accountId, authorization, data);
+    return requestVerification(kernelClient(), accountId, authorization, data, request.signal);
   });
 
 export const withdrawVerificationAction = createServerFn({ method: 'POST' })
@@ -172,9 +196,9 @@ export const withdrawVerificationAction = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const { authorization, accountId } = await viewer();
+    const { request, authorization, accountId } = await viewer();
     if (accountId !== data.accountId)
       return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
     const { withdrawVerification } = await import('./verification-core');
-    return withdrawVerification(kernelClient(), accountId, authorization, data.idempotencyKey);
+    return withdrawVerification(kernelClient(), accountId, authorization, data.idempotencyKey, request.signal);
   });

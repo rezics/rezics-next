@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -176,5 +176,32 @@ test('the chooser query keeps complete astral characters within its existing inp
     expect(queries.every((query) => query.isWellFormed())).toBe(true);
   } finally {
     search.setEnabled(false);
+  }
+});
+
+test('stalled chooser requests fail without empty results or replay, and explicit retry keeps the term', async () => {
+  const schedule = globalThis.setTimeout;
+  const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((callback, delay, ...args) =>
+    schedule(callback, delay === 10_000 ? 0 : delay, ...args)) as typeof setTimeout);
+  let calls = 0;
+  let signal!: AbortSignal;
+  const search = new VerificationSubjectSearch(async (_query, current) => {
+    signal = current;
+    return ++calls === 1 ? new Promise(() => {}) : [person];
+  });
+  try {
+    search.setEnabled(true);
+    search.edit('Avery');
+    await settle();
+    expect(search.snapshot()).toEqual({ query: 'Avery', phase: 'failed', subjects: [] });
+    expect(signal.aborted).toBe(true);
+    expect(calls).toBe(1);
+    search.retry();
+    await settle();
+    expect(search.current(person)).toBe(true);
+    expect(calls).toBe(2);
+  } finally {
+    search.setEnabled(false);
+    timer.mockRestore();
   }
 });

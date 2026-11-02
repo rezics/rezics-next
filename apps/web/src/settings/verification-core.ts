@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { withVerificationDeadline } from './verification-request-deadline';
 import { m } from '../paraglide/messages.js';
 import { validateVerificationDraft } from './verification-validation';
 import { settingsCommandKeyHeader } from './command-headers';
@@ -105,8 +106,16 @@ function nativeFailure(result: {
   };
 }
 
-export async function readVerification(client: KernelClient, accountId: string, authorization: string) {
-  const result = await client.accounts({ accountId }).verification.get({ headers: { authorization } });
+export async function readVerification(
+  client: KernelClient,
+  accountId: string,
+  authorization: string,
+  caller?: AbortSignal,
+) {
+  const result = await withVerificationDeadline(
+    (signal) => client.accounts({ accountId }).verification.get({ headers: { authorization }, fetch: { signal } }),
+    caller,
+  );
   if (result.error) throw new VerificationReadError(nativeFailure(result));
   if (!result.data) throw new Error(m.settings_verification_request_failed());
   const request = result.data.verificationRequest;
@@ -119,16 +128,22 @@ export async function requestVerification(
   accountId: string,
   authorization: string,
   input: VerificationInput,
+  caller?: AbortSignal,
 ): Promise<VerificationCommandResult> {
   if (validateVerificationDraft(input).length)
     return { ok: false, status: 0, message: m.settings_verification_validation(), outcome: 'refused' };
-  const result = await client.accounts({ accountId }).$requestVerification.post(
-    { subject: input.subject, statement: input.statement, links: input.links },
-    {
-      headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(input.idempotencyKey) } as {
-        'idempotency-key': string;
-      },
-    },
+  const result = await withVerificationDeadline(
+    (signal) =>
+      client.accounts({ accountId }).$requestVerification.post(
+        { subject: input.subject, statement: input.statement, links: input.links },
+        {
+          headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(input.idempotencyKey) } as {
+            'idempotency-key': string;
+          },
+          fetch: { signal },
+        },
+      ),
+    caller,
   );
   if (result.status === 201 && validRequest(result.data?.verificationRequest, accountId))
     return { ok: true, verificationRequest: result.data!.verificationRequest };
@@ -140,16 +155,60 @@ export async function withdrawVerification(
   accountId: string,
   authorization: string,
   idempotencyKey: string,
+  caller?: AbortSignal,
 ): Promise<VerificationCommandResult> {
-  const result = await client.accounts({ accountId }).$withdrawVerification.post(
-    {},
-    {
-      headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(idempotencyKey) } as {
-        'idempotency-key': string;
-      },
-    },
+  const result = await withVerificationDeadline(
+    (signal) =>
+      client.accounts({ accountId }).$withdrawVerification.post(
+        {},
+        {
+          headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(idempotencyKey) } as {
+            'idempotency-key': string;
+          },
+          fetch: { signal },
+        },
+      ),
+    caller,
   );
   if (result.status === 200 && validRequest(result.data?.verificationRequest, accountId))
     return { ok: true, verificationRequest: result.data!.verificationRequest };
   return { ok: false, ...nativeFailure(result) };
+}
+
+/** Optional display data has its own request, never part of authoritative review/readback. */
+export async function readVerificationTitle(
+  client: KernelClient,
+  subjectId: string,
+  authorization: string,
+  languages: string[],
+  caller?: AbortSignal,
+): Promise<string | null> {
+  try {
+    return await withVerificationDeadline(async (signal) => {
+      const subject = await client.subjects({ id: subjectId }).get({ headers: { authorization }, fetch: { signal } });
+      const labels = subject.error ? undefined : subject.data?.subject?.labels;
+      return labels
+        ? (languages.map((language) => labels[language]).find((label) => label !== undefined) ??
+            Object.values(labels)[0] ??
+            null)
+        : null;
+    }, caller);
+  } catch {
+    return null;
+  }
+}
+
+/** A fresh, caller-bound release read cannot inherit a stalled shared display-cache promise. */
+export async function readVerificationEligibility(client: KernelClient, authorization: string, caller?: AbortSignal) {
+  return withVerificationDeadline(async (signal) => {
+    const options = { headers: { authorization }, fetch: { signal } };
+    const active = await client.definitions.active.get(options);
+    const digest = active.data?.digest;
+    if (active.error || !digest) throw new Error('Eligibility unavailable');
+    signal.throwIfAborted();
+    const released = await client.definitions.releases({ digest }).get(options);
+    if (released.error || released.data?.digest !== digest || !released.data.release)
+      throw new Error('Eligibility unavailable');
+    return released.data.release;
+  }, caller);
 }

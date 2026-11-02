@@ -20,24 +20,33 @@ mock.module('@tanstack/react-start', () => ({
   }),
 }));
 mock.module('@tanstack/react-start/server', () => ({ getRequest: () => request, setResponseHeader: () => {} }));
-mock.module('../src/kernel/client', () => ({ kernelClient: () => ({}), requestLocale: () => 'en' }));
+mock.module('../src/kernel/client', () => ({
+  kernelClient: () => ({
+    definitions: {
+      active: { get: async () => ({ data: { digest: 'current' } }) },
+      releases: () => ({
+        get: async () => {
+          releaseReads++;
+          if (release instanceof Error) throw release;
+          return { data: { digest: 'current', release } };
+        },
+      }),
+    },
+  }),
+  requestLocale: () => 'en',
+}));
 mock.module('../src/session/request', () => ({
   prepareSession: async () => {},
   sessionSubject: () => 'alice',
   viewerCredential: () => 'Bearer private-viewer',
 }));
 mock.module('../src/search/suggestions', () => ({
-  suggestSubjects: async (query: string, currentRequest: Request) => {
-    expect(currentRequest).toBe(request);
-    queries.push(query);
+  SUGGESTION_LIMIT: 8,
+  readSubjectSuggestions: async (_client: unknown, query: { q: string }, credential: string, signal: AbortSignal) => {
+    expect(credential).toBe('Bearer private-viewer');
+    expect(signal.aborted).toBe(false);
+    queries.push(query.q);
     return { subjects };
-  },
-}));
-mock.module('../src/subject/definitions', () => ({
-  readRelease: async () => {
-    releaseReads++;
-    if (release instanceof Error) throw release;
-    return release;
   },
 }));
 const { searchVerificationSubjects } = await import('../src/settings/verification-actions');

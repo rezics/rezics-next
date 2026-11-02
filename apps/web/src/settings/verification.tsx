@@ -35,7 +35,13 @@ import {
   type VerificationSnapshot,
   type VerificationRecoveryIO,
 } from './verification-recovery';
-import { readVerificationState, requestVerificationAction, withdrawVerificationAction } from './verification-actions';
+import {
+  readVerificationState,
+  readVerificationSubjectTitle,
+  requestVerificationAction,
+  withdrawVerificationAction,
+} from './verification-actions';
+import { withVerificationDeadline } from './verification-request-deadline';
 
 import {
   SettingsSessionOwner,
@@ -91,11 +97,34 @@ function CommandDetails({ failure }: { failure: VerificationFailure }) {
 
 function VerificationState({
   verification,
-  subjectTitle,
+  subjectTitle: suppliedTitle,
 }: {
   verification: AgentVerificationRequest | null;
   subjectTitle: string | null;
 }) {
+  const accountId = verification?.accountId;
+  const subjectId = verification?.catalogueSubjectId;
+  const locale = getLocale();
+  const titleKey = JSON.stringify([accountId, subjectId, locale]);
+  const [hydrated, setHydrated] = useState<{ key: string; title: string | null } | null>(null);
+  useEffect(() => {
+    if (!accountId || !subjectId || suppliedTitle) return;
+    const request = new AbortController();
+    void withVerificationDeadline(
+      (signal) =>
+        readVerificationSubjectTitle({
+          data: { accountId, subjectId },
+          signal,
+        }),
+      request.signal,
+    )
+      .then((title) => {
+        if (!request.signal.aborted) setHydrated({ key: titleKey, title });
+      })
+      .catch(() => {});
+    return () => request.abort();
+  }, [accountId, subjectId, locale, suppliedTitle, titleKey]);
+  const subjectTitle = suppliedTitle ?? (hydrated?.key === titleKey ? hydrated.title : null);
   if (!verification) return null;
   if (verification.state === 'pending' || verification.state === 'approving')
     return (
@@ -140,14 +169,14 @@ export function verificationRecoveryIO(
   owner: SettingsSessionOwner,
   client: QueryClient,
   transport = {
-    read: (accountId: string) =>
-      readVerificationState({ data: { accountId } }).then((result) =>
+    read: (accountId: string, signal?: AbortSignal) =>
+      readVerificationState({ data: { accountId }, signal }).then((result) =>
         unwrapVerificationRead<VerificationSnapshot>(result),
       ),
-    request: (accountId: string, input: VerificationInput, token: string) =>
-      requestVerificationAction({ data: { ...input, accountId }, headers: { 'X-CSRF-Token': token } }),
-    withdraw: (accountId: string, input: { idempotencyKey: string }, token: string) =>
-      withdrawVerificationAction({ data: { ...input, accountId }, headers: { 'X-CSRF-Token': token } }),
+    request: (accountId: string, input: VerificationInput, token: string, signal?: AbortSignal) =>
+      requestVerificationAction({ data: { ...input, accountId }, signal, headers: { 'X-CSRF-Token': token } }),
+    withdraw: (accountId: string, input: { idempotencyKey: string }, token: string, signal?: AbortSignal) =>
+      withdrawVerificationAction({ data: { ...input, accountId }, signal, headers: { 'X-CSRF-Token': token } }),
   },
   isCurrent: () => boolean = owner.readCurrent,
 ): VerificationRecoveryIO {
@@ -164,15 +193,18 @@ export function verificationRecoveryIO(
     return result;
   };
   const key = verificationQueryKey(owner.subject);
+  const lifetime = new AbortController();
+  const scope = (signal?: AbortSignal) => (signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal);
   // This subscription owns only the original query, and runs synchronously on retirement.
   const release = owner.subscribe(() => {
     if (owner.readCurrent()) return;
     release();
+    lifetime.abort();
     void client.cancelQueries({ queryKey: key, exact: true });
     client.removeQueries({ queryKey: key, exact: true });
   });
   return {
-    read: (accountId) =>
+    read: (accountId, caller) =>
       readGuard(async () => {
         if (accountId !== owner.subject) throw new Error('Verification account changed');
         // A status read begun before this action cannot serve as its authoritative readback.
@@ -181,9 +213,12 @@ export function verificationRecoveryIO(
         return client.fetchQuery({
           ...personalRead,
           queryKey: key,
-          queryFn: () =>
+          queryFn: ({ signal }) =>
             readGuard(async () => {
-              const result = await transport.read(accountId);
+              const result = await withVerificationDeadline(
+                (child) => transport.read(accountId, child),
+                AbortSignal.any([signal, scope(caller)]),
+              );
               if (
                 result.accountId !== owner.subject ||
                 (result.verificationRequest && result.verificationRequest.accountId !== owner.subject)
@@ -195,15 +230,15 @@ export function verificationRecoveryIO(
           retry: false,
         });
       }),
-    request: (accountId, input) =>
+    request: (accountId, input, caller) =>
       guard((token) => {
         if (accountId !== owner.subject) throw new Error('Verification account changed');
-        return transport.request(accountId, input, token);
+        return withVerificationDeadline((signal) => transport.request(accountId, input, token, signal), scope(caller));
       }),
-    withdraw: (accountId, input) =>
+    withdraw: (accountId, input, caller) =>
       guard((token) => {
         if (accountId !== owner.subject) throw new Error('Verification account changed');
-        return transport.withdraw(accountId, input, token);
+        return withVerificationDeadline((signal) => transport.withdraw(accountId, input, token, signal), scope(caller));
       }),
   };
 }

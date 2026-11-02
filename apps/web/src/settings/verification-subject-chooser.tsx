@@ -6,6 +6,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
 import { searchVerificationSubjects } from './verification-actions';
+import { withVerificationDeadline } from './verification-request-deadline';
 
 export type VerificationSubject = { id: string; title: string; type: string };
 type Search = (query: string, signal: AbortSignal) => Promise<VerificationSubject[]>;
@@ -84,7 +85,7 @@ export class VerificationSubjectSearch {
     this.request = request;
     this.update({ query, phase: 'loading', subjects: [] });
     try {
-      const subjects = await this.load(query.trim(), request.signal);
+      const subjects = await withVerificationDeadline((signal) => this.load(query.trim(), signal), request.signal);
       if (this.request === request && !request.signal.aborted) this.update({ query, phase: 'ready', subjects });
     } catch {
       if (this.request === request && !request.signal.aborted) this.update({ query, phase: 'failed', subjects: [] });

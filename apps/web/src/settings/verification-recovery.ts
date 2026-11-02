@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { withVerificationDeadline } from './verification-request-deadline';
 import {
   VerificationReadError,
   type AgentVerificationRequest,
@@ -29,9 +30,13 @@ export type VerificationRecoveryState = {
   retryAt: number;
 };
 export type VerificationRecoveryIO = {
-  read: (accountId: string) => Promise<VerificationSnapshot>;
-  request: (accountId: string, input: VerificationInput) => Promise<VerificationCommandResult>;
-  withdraw: (accountId: string, input: { idempotencyKey: string }) => Promise<VerificationCommandResult>;
+  read: (accountId: string, signal?: AbortSignal) => Promise<VerificationSnapshot>;
+  request: (accountId: string, input: VerificationInput, signal?: AbortSignal) => Promise<VerificationCommandResult>;
+  withdraw: (
+    accountId: string,
+    input: { idempotencyKey: string },
+    signal?: AbortSignal,
+  ) => Promise<VerificationCommandResult>;
 };
 
 export function verificationQueryKey(accountId: string | null | undefined) {
@@ -81,6 +86,7 @@ export class VerificationRecovery {
   private listeners = new Set<() => void>();
   private epoch = 0;
   private active = true;
+  private lifetime = new AbortController();
   // Keep only ordering metadata while a fresh read hides the previous private snapshot.
   private latest: Pick<AgentVerificationRequest, 'id' | 'createdAt' | 'updatedAt'> | null = null;
   constructor(
@@ -100,11 +106,13 @@ export class VerificationRecovery {
     if (this.active) return;
     if (!this.isCurrent()) return;
     this.active = true;
+    this.lifetime = new AbortController();
     if (this.busy()) this.update({ phase: this.state.attempt ? 'uncertain' : 'loading', readStatus: 'idle' });
   }
   deactivate() {
     this.active = false;
     this.epoch++;
+    this.lifetime.abort();
   }
   private live(epoch: number) {
     return this.active && this.isCurrent() && epoch === this.epoch;
@@ -180,10 +188,13 @@ export class VerificationRecovery {
     this.update({ phase: 'sending', readStatus: 'idle', current: null, failure: undefined, retryAt: 0 });
     let result: VerificationCommandResult;
     try {
-      result =
-        attempt.kind === 'request'
-          ? await this.io.request(this.accountId, attempt.input)
-          : await this.io.withdraw(this.accountId, attempt.input);
+      result = await withVerificationDeadline(
+        (signal) =>
+          attempt.kind === 'request'
+            ? this.io.request(this.accountId, attempt.input, signal)
+            : this.io.withdraw(this.accountId, attempt.input, signal),
+        this.lifetime.signal,
+      );
     } catch {
       if (this.live(epoch)) this.update({ phase: 'uncertain' });
       return;
@@ -238,7 +249,7 @@ export class VerificationRecovery {
     this.update({ phase: 'reading', readStatus: 'reading', current: null, failure: undefined, retryAt: 0 });
     let current: VerificationSnapshot;
     try {
-      current = await this.io.read(this.accountId);
+      current = await withVerificationDeadline((signal) => this.io.read(this.accountId, signal), this.lifetime.signal);
       if (
         current.accountId !== this.accountId ||
         (current.verificationRequest && current.verificationRequest.accountId !== this.accountId)
