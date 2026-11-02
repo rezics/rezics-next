@@ -42,11 +42,7 @@ export function CreateNavigationGuard(props: CreateNavigationProps) {
   return router ? <RouterCreateNavigationGuard latest={latest} /> : null;
 }
 
-function RouterCreateNavigationGuard({
-  latest,
-}: {
-  latest: MutableRefObject<CreateNavigationProps>;
-}) {
+function RouterCreateNavigationGuard({ latest }: { latest: MutableRefObject<CreateNavigationProps> }) {
   const resolved = useRef(false);
   const needsDecision = shouldBlock(latest.current);
   const blocker = useBlocker({
@@ -67,26 +63,23 @@ function RouterCreateNavigationGuard({
       blocker.reset();
     }
   }, [blocker, needsDecision]);
-  useEffect(
-    () => {
-      latest.current.clearBlockedDeparture.current = () => {
-        const pending = blockerRef.current;
-        if (pending.status === 'blocked' && !resolved.current) {
-          resolved.current = true;
-          pending.reset();
-        }
-      };
-      return () => {
-        latest.current.clearBlockedDeparture.current = null;
-        const pending = blockerRef.current;
-        if (pending.status === 'blocked' && !resolved.current) {
-          resolved.current = true;
-          pending.reset();
-        }
-      };
-    },
-    [],
-  );
+  useEffect(() => {
+    latest.current.clearBlockedDeparture.current = () => {
+      const pending = blockerRef.current;
+      if (pending.status === 'blocked' && !resolved.current) {
+        resolved.current = true;
+        pending.reset();
+      }
+    };
+    return () => {
+      latest.current.clearBlockedDeparture.current = null;
+      const pending = blockerRef.current;
+      if (pending.status === 'blocked' && !resolved.current) {
+        resolved.current = true;
+        pending.reset();
+      }
+    };
+  }, []);
 
   function resolve(leave: boolean) {
     if (blocker.status !== 'blocked' || resolved.current) return;
