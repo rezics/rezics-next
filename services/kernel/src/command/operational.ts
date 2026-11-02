@@ -23,7 +23,12 @@ import {
   finishOperationalHistoryAttempt,
   operationalHistoryEnqueueCapture,
 } from '../history/operational-work.ts';
-import { openOperationalWorkOriginal, debitOperationalWorkAttempt } from '../history/operational-work-budget.ts';
+import {
+  openOperationalWorkOriginal,
+  claimOperationalWorkOriginal,
+  debitOperationalWorkAttempt,
+  type OperationalWorkOriginal,
+} from '../history/operational-work-budget.ts';
 
 import {
   openSelectedOperationalPhase,
@@ -46,7 +51,7 @@ type CommonOptions = {
   /** Trusted service configuration only. */
   clock?: () => Date;
   /** Separate native History producer admission. Existing callers keep their ordinary behaviour. */
-  operationalHistory?: true;
+  operationalHistory?: true | OperationalWorkOriginal;
   /** Private phase capability issued only by the authentic selected invocation runner. */
   selectedRuntime?: SelectedOperationalPhase;
 };
@@ -177,7 +182,14 @@ export async function runOperationalTransaction<T>(
   const attemptLimit = options.attemptLimit ?? Number.MAX_SAFE_INTEGER;
   if (!Number.isSafeInteger(attemptLimit) || attemptLimit < 1) throw new TypeError(`Invalid attempt limit for ${kind}`);
   // One original, Pool, absolute deadline and cumulative local balance across contention.
-  const historyOriginal = options.operationalHistory ? openOperationalWorkOriginal(pool, deadline) : undefined;
+  const historyOriginal = options.operationalHistory
+    ? claimOperationalWorkOriginal(
+        options.operationalHistory === true ? openOperationalWorkOriginal(pool, deadline) : options.operationalHistory,
+        pool,
+        options.workClient,
+        deadline,
+      )
+    : undefined;
   let contentionAttempts = 0;
   let lastAccessContention: AccessUnavailableError | undefined;
   let attempts = 0;

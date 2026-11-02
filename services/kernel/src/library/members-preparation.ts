@@ -21,6 +21,12 @@ import { readRelease } from '../semantic/definitions.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
+import {
+  registerPositionedOperationalHistoryWork,
+  reserveOperationalWorkTransfer,
+  type OperationalWorkRegistration,
+} from '../history/operational-work.ts';
+import type { OperationalWorkOriginal, OperationalWorkTransfer } from '../history/operational-work-budget.ts';
 
 const LIVE_LIMIT = 32;
 const IDLE_MS = 24 * 60 * 60 * 1000;
@@ -95,14 +101,28 @@ export type PreparingEpisode = Readonly<{
   locator: PreparationLocator;
   workflowId: string;
 }>;
+export type MembersPreparationHistory = Readonly<{
+  registration: OperationalWorkRegistration;
+  resolve: OperationalWorkTransfer;
+  verify: OperationalWorkTransfer;
+  receive: OperationalWorkTransfer;
+  replay: OperationalWorkTransfer;
+  retirement: OperationalWorkTransfer;
+}>;
 export interface MembersPreparation {
   /** One Collection's distinct definitions, bounded by the common-page read authority. */
   reserve(
     actor: Actor,
     collectionId: string,
     definitions: readonly PreparationDefinition[],
-    options?: { deadline?: number },
-  ): Promise<Readonly<{ episodes: readonly PreparingEpisode[]; intent: PreparationIntent | null }>>;
+    options?: { deadline?: number; history?: OperationalWorkOriginal },
+  ): Promise<
+    Readonly<{
+      episodes: readonly PreparingEpisode[];
+      intent: PreparationIntent | null;
+      history?: MembersPreparationHistory;
+    }>
+  >;
   /** Only the admitted reader calls this after an actual read; duplicate preparation does not touch LRU. */
   touch(actor: Actor, locator: PreparationLocator, options?: { deadline?: number }): Promise<boolean>;
   /** Called inside the registered step's fenced operational transaction; locks survive to its commit. */
@@ -287,7 +307,7 @@ export function createMembersPreparation(config: {
         return key;
       });
 
-      const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+      const deadline = options.deadline ?? options.history?.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
       const authorization = await accessCommandAuthorization(
         config.access,
         actor,
@@ -302,12 +322,13 @@ export function createMembersPreparation(config: {
           mode: 'request',
           ...identity,
           partition: partitionOf(route),
-          kind: 'library.membersPreparation.reserve',
+          kind: options.history ? 'library.membersPreparation' : 'library.membersPreparation.reserve',
           accounts: [identity.principal.id],
           workClient: config.workClient,
           authorization,
           deadline,
           clock,
+          ...(options.history ? { operationalHistory: options.history } : {}),
         },
         async (tx) => {
           const nowToken = commandTime(tx);
@@ -473,6 +494,39 @@ export function createMembersPreparation(config: {
             workflowId: workflowId!,
             input,
           });
+          if (options.history) {
+            // Register the actual newly retained bytes and the same native enqueue. Reservation metadata
+            // remains preparing; History provenance neither captures Source nor authorizes a result.
+            const registration = await registerPositionedOperationalHistoryWork(
+              tx,
+              {
+                route,
+                ownerAccountId: actor.accountId,
+                collectionId,
+                episodes: newKeys
+                  .map((key) => ({
+                    collectionId,
+                    episodeId: ids.get(key)!,
+                    reservedIncarnation: collection.incarnation,
+                    reservedGeneration: collection.generation,
+                    canonicalBasis: byBasis.get(key)!.basis,
+                    basisDigest: key,
+                  }))
+                  .sort((a, b) => a.episodeId.localeCompare(b.episodeId)),
+                retired: input.cleanup,
+              },
+              intent,
+            );
+            const history: MembersPreparationHistory = Object.freeze({
+              registration,
+              resolve: reserveOperationalWorkTransfer(tx, 'resolve'),
+              verify: reserveOperationalWorkTransfer(tx, 'verify'),
+              receive: reserveOperationalWorkTransfer(tx, 'receive'),
+              replay: reserveOperationalWorkTransfer(tx, 'replay'),
+              retirement: reserveOperationalWorkTransfer(tx, 'retirement'),
+            });
+            return { episodes, intent, history };
+          }
           await enqueueIntent(tx, intent);
           return { episodes, intent };
         },

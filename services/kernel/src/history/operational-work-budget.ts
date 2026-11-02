@@ -1,5 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { currentOperationalResources, type OperationalTransaction } from '../command/operational.ts';
+import type { NativeCollectionWork } from '../library/collection-source-work.ts';
+import type { WorkClient } from '../work/client.ts';
 
 /** The eight native axes. This allocation belongs only to the operational History producer. */
 export const OPERATIONAL_WORK_AXES = [
@@ -25,11 +27,16 @@ const cost = (nativeRows: number, nativePoints: number, statements: number, byte
     bytes,
   });
 export function sumOperationalWork(...parts: readonly OperationalWorkCost[]): OperationalWorkCost {
-  return Object.freeze(
+  if (parts.some((part) => OPERATIONAL_WORK_AXES.some((axis) => !Number.isSafeInteger(part[axis]) || part[axis] < 0)))
+    throw new TypeError('Invalid operational work declaration');
+  const total = Object.freeze(
     Object.fromEntries(
       OPERATIONAL_WORK_AXES.map((axis) => [axis, parts.reduce((total, part) => total + part[axis], 0)]),
     ),
   ) as OperationalWorkCost;
+  if (OPERATIONAL_WORK_AXES.some((axis) => !Number.isSafeInteger(total[axis])))
+    throw new TypeError('Operational work declaration overflow');
+  return total;
 }
 const times = (n: number, part: OperationalWorkCost) => sumOperationalWork(...Array.from({ length: n }, () => part));
 
@@ -161,8 +168,8 @@ export function operationalWorkDeadlineClient(client: PoolClient, deadline: numb
     }),
   };
 }
-export type OperationalWorkOriginal = Readonly<{ pool: Pool; deadline: number }>;
-type Balance = { remaining: OperationalWorkCost; attempts: number };
+export type OperationalWorkOriginal = Readonly<{ pool: Pool; deadline: number; workClient?: WorkClient }>;
+type Balance = { remaining: OperationalWorkCost; attempts: number; claimed: boolean };
 const originals = new WeakMap<OperationalWorkOriginal, Balance>();
 const transactionOriginals = new WeakMap<OperationalTransaction, OperationalWorkOriginal>();
 export function attachOperationalWorkOriginal(tx: OperationalTransaction, original: OperationalWorkOriginal): void {
@@ -171,14 +178,53 @@ export function attachOperationalWorkOriginal(tx: OperationalTransaction, origin
     transactionOriginals.has(tx) ||
     resources.pool !== original.pool ||
     resources.deadline !== original.deadline ||
-    !originals.has(original)
+    (original.workClient !== undefined && resources.workClient !== original.workClient) ||
+    !originals.get(original)?.claimed
   )
     throw new TypeError('Foreign or repeated operational History original');
   transactionOriginals.set(tx, original);
 }
 export function openOperationalWorkOriginal(pool: Pool, deadline: number): OperationalWorkOriginal {
+  if (!Number.isFinite(deadline) || Date.now() >= deadline)
+    throw new OperationalWorkUnavailable('operational-work-deadline');
   const original = Object.freeze({ pool, deadline });
-  originals.set(original, { remaining: OPERATIONAL_WORK_LOCAL_DECLARATION, attempts: 0 });
+  originals.set(original, { remaining: OPERATIONAL_WORK_LOCAL_DECLARATION, attempts: 0, claimed: false });
+  return original;
+}
+/** Trusted parent composition: the complete History child, including retries, transfers and rollback,
+ * is charged before dispatch. A failed or unused child never returns this allocation to its parent. */
+export function fundOperationalWorkOriginal(
+  parent: NativeCollectionWork,
+  pool: Pool,
+  workClient: WorkClient,
+  deadline: number,
+): OperationalWorkOriginal {
+  if (parent.deadlineAt !== deadline) throw new TypeError('Foreign operational History deadline');
+  const reservation = parent.reserve(OPERATIONAL_WORK_LOCAL_DECLARATION);
+  reservation.dispatch();
+  reservation.settle();
+  const original = Object.freeze({ pool, workClient, deadline });
+  originals.set(original, { remaining: OPERATIONAL_WORK_LOCAL_DECLARATION, attempts: 0, claimed: false });
+  return original;
+}
+/** Executor entry, before time, Access, checkout or BEGIN. Contention retains this same original. */
+export function claimOperationalWorkOriginal(
+  original: OperationalWorkOriginal,
+  pool: Pool,
+  workClient: WorkClient,
+  deadline: number,
+): OperationalWorkOriginal {
+  const balance = originals.get(original);
+  if (
+    !balance ||
+    balance.claimed ||
+    original.pool !== pool ||
+    original.deadline !== deadline ||
+    (original.workClient !== undefined && original.workClient !== workClient) ||
+    Date.now() >= deadline
+  )
+    throw new OperationalWorkUnavailable('operational-work-original-unavailable');
+  balance.claimed = true;
   return original;
 }
 export function debitOperationalWork(original: OperationalWorkOriginal, amount: OperationalWorkCost): void {

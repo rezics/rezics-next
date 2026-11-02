@@ -1,4 +1,13 @@
 import { expect, spyOn, test } from 'bun:test';
+import type { Pool } from 'pg';
+import type { WorkClient } from '../../src/work/client.ts';
+import {
+  claimOperationalWorkOriginal,
+  debitOperationalWorkAttempt,
+  fundOperationalWorkOriginal,
+  OPERATIONAL_WORK_LOCAL_DECLARATION,
+  sumOperationalWork,
+} from '../../src/history/operational-work-budget.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import type { WorkDimensions } from '../../src/library/collection-source.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
@@ -33,6 +42,59 @@ const declarations = (): MembersPreparationDeclarations =>
   Object.fromEntries(MEMBERS_PREPARATION_CHILDREN.map((name) => [name, cost(2)])) as MembersPreparationDeclarations;
 const parent = (amount = MEMBERS_PREPARATION_CHILDREN.length * 2, deadline = Date.now() + 60000) =>
   new NativeCollectionWork({ reservationId: 'one-c3-parent', remaining: cost(amount) }, deadline);
+
+test('History uses one transferred parent allocation across bounded attempts without borrowing cleanup', () => {
+  const pool = {} as Pool;
+  const work = {} as WorkClient;
+  const original = new NativeCollectionWork(
+    {
+      reservationId: 'funded-history-parent',
+      remaining: sumOperationalWork(OPERATIONAL_WORK_LOCAL_DECLARATION, cost(2)),
+    },
+    Date.now() + 60_000,
+  );
+  const funded = original.transferChildren({ history: OPERATIONAL_WORK_LOCAL_DECLARATION, cleanup: cost(2) });
+  const history = fundOperationalWorkOriginal(funded.children.history, pool, work, original.deadlineAt);
+  expect(funded.children.history.receipt().used).toEqual(OPERATIONAL_WORK_LOCAL_DECLARATION);
+  expect(funded.children.cleanup.available('statements')).toBe(2);
+  expect(() => fundOperationalWorkOriginal(funded.children.history, pool, work, original.deadlineAt)).toThrow();
+  claimOperationalWorkOriginal(history, pool, work, original.deadlineAt);
+  for (let attempt = 0; attempt < 3; attempt++) debitOperationalWorkAttempt(history);
+  expect(() => debitOperationalWorkAttempt(history)).toThrow('attempt-bound');
+  expect(funded.finish().used).toEqual(OPERATIONAL_WORK_LOCAL_DECLARATION);
+});
+
+test('History refuses underfunded axes and binds its single-use original to the exact executor resources', () => {
+  const pool = {} as Pool;
+  const work = {} as WorkClient;
+  const deadline = Date.now() + 60_000;
+  for (const axis of axes) {
+    const remaining = { ...OPERATIONAL_WORK_LOCAL_DECLARATION, [axis]: OPERATIONAL_WORK_LOCAL_DECLARATION[axis] - 1 };
+    // History declares no candidate/identity/witness keys; negative budgets cannot be constructed.
+    if (remaining[axis] < 0) continue;
+    const original = new NativeCollectionWork({ reservationId: 'underfunded-history', remaining }, deadline);
+    expect(() => fundOperationalWorkOriginal(original, pool, work, deadline)).toThrow();
+    expect(original.receipt().used).toEqual(cost(0));
+  }
+  const original = new NativeCollectionWork(
+    {
+      reservationId: 'history-binding',
+      remaining: OPERATIONAL_WORK_LOCAL_DECLARATION,
+    },
+    deadline,
+  );
+  expect(() => fundOperationalWorkOriginal(original, pool, work, deadline + 1)).toThrow('deadline');
+  const history = fundOperationalWorkOriginal(original, pool, work, deadline);
+  for (const [p, w, d, token] of [
+    [{} as Pool, work, deadline, history],
+    [pool, {} as WorkClient, deadline, history],
+    [pool, work, deadline + 1, history],
+    [pool, work, deadline, { ...history }],
+  ] as const)
+    expect(() => claimOperationalWorkOriginal(token, p, w, d)).toThrow('original-unavailable');
+  expect(claimOperationalWorkOriginal(history, pool, work, deadline)).toBe(history);
+  expect(() => claimOperationalWorkOriginal(history, pool, work, deadline)).toThrow('original-unavailable');
+});
 function dispatch(work: NativeCollectionWork, amount: number) {
   const reserved = work.reserve(cost(amount));
   reserved.dispatch();

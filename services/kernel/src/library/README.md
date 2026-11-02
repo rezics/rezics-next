@@ -2580,6 +2580,30 @@ disjoint Accounts local, all reached Source/History, all reached Library and tra
 IO, preserving original/position/Pool/WorkClient/SDK/registry/deadline and live callback. That complete parent
 price remains unknown; this native declaration supplies no guessed zero or replacement foreign producer.
 
+### Members preparation funding
+
+`members-preparation-budget.ts` retains the existing complete parent declaration and child-transfer protocol.
+Members, Core, Access, Source, executor controls, retries, rollback and cleanup must all have explicit declarations
+before any child receives funding. Missing Source prices remain unavailable. Engine execution still needs its
+own owner's declaration; this native composition grants no engine allowance.
+
+Decision: prepay the complete operational History child once and bind its single-use original to the parent's
+Pool, WorkClient and absolute deadline; retries and committed transfers share that allocation.
+
+Fund that original from an existing `NativeCollectionWork` allocation with the complete History declaration.
+Disjoint cleanup and other children retain their original reservations; no replacement parent is constructed.
+
+The trusted `reserve` option `history` passes that original to Core. Only new native reservations register their
+exact canonical bytes and locator-only intent through the positioned History producer, replacing their existing
+enqueue in the same transaction. Resolve, verify, receive, replay and retirement transfers activate only after
+Core's actual COMMIT. Duplicate admission produces no new registration. Calls without this option retain the
+reservation protocol and its existing statement schedule.
+
+This is an integration seam, not a mounted funded worker. It supplies neither current Source observations nor
+physical execution authority. Receiving remains pending Source currentness, results remain preparing, and
+retirement cannot claim Source completion. Source capture, native completion, result reads and deletion cleanup
+must be connected before prepared/direct dispatch is mounted.
+
 ### Retained Kind controls
 
 Collection presentation no longer invokes automatic Kind admission, consent, raw input, Type evidence or
