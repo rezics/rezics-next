@@ -322,79 +322,86 @@ test.each(['occupied', 'stale', 'expired'] as const)(
   },
 );
 
-test.each([false, true])('script-free removal with restore admission %s preserves the native receipt', async (restoreAdmitted) => {
-  const { createKernelClient } = await import('@rezics/client');
-  const { createRecordedKernelFetch, setFakeAdmitted } = await import('../src/kernel/fake');
-  const { libraryEntryFormResponse } = await import('../src/library/entry-form');
-  setFakeAdmitted(['personal_library', 'library_entry.delete', ...(restoreAdmitted ? ['library_entry.restore'] : [])]);
-  const calls: Request[] = [];
-  const fake = createRecordedKernelFetch({});
-  const client = createKernelClient('https://kernel.test', {
-    fetch: (async (input, init) => {
-      const captured = new Request(input, init);
-      calls.push(captured.clone());
-      return fake(captured);
-    }) as typeof fetch,
-  });
-  for (const returnTo of ['/en/library', '/en/subjects/book-one/a-book']) {
-    calls.length = 0;
-    const send = (body: URLSearchParams) =>
-      libraryEntryFormResponse(
-        new Request('https://rezics.test/library/entry', {
-          method: 'POST',
-          headers: { authorization: 'Bearer reader' },
-          body,
-        }),
-        {},
-        client,
-      );
-    const removed = await send(
-      new URLSearchParams({
-        intent: 'remove',
-        subjectId,
-        revision: '7',
-        locale: 'en',
-        returnTo,
-        idempotencyKey: '0192f3a0-6c1e-7b2a-9d4e-000000000002',
-      }),
-    );
-    expect(removed.status).toBe(200);
-    expect(removed.headers.get('cache-control')).toBe('private, no-store');
-    const html = await removed.text();
-    if (!restoreAdmitted) {
-      expect(html).toContain('Removed');
-      expect(html).not.toContain('name="intent" value="restore"');
-      expect(html).not.toContain('name="deletionId"');
-      expect(calls.filter((call) => call.method === 'DELETE')).toHaveLength(1);
-      continue;
-    }
-    expect(html).toContain('method="post"');
-    expect(html).toContain('action="/library/entry"');
-    expect(html).not.toContain('<script');
-    const fields = new URLSearchParams();
-    for (const match of html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g))
-      fields.set(match[1]!, match[2]!);
-    expect(fields.get('deletionId')).toBe('undo-ok');
-    expect(fields.get('revision')).toBe('12');
-    const response = await send(fields);
-    expect(response.status).toBe(200);
-    const restored = await response.text();
-    expect(restored).toContain('data-restored-entry');
-    expect(restored).toContain('data-entry-revision="7"');
-    expect(restored).toContain('A book');
-    expect(restored).toContain('Planned');
-    expect(restored).toContain(`href="${returnTo}"`);
-    expect(restored).not.toContain('name="deletionId"');
-    const writes = calls.filter((call) => new URL(call.url).pathname.startsWith('/v1/libraryEntries'));
-    expect(writes.map((call) => [call.method, new URL(call.url).pathname])).toEqual([
-      ['DELETE', `/v1/libraryEntries/${subjectId}`],
-      ['POST', `/v1/libraryEntries/${subjectId}:restore`],
+test.each([false, true])(
+  'script-free removal with restore admission %s preserves the native receipt',
+  async (restoreAdmitted) => {
+    const { createKernelClient } = await import('@rezics/client');
+    const { createRecordedKernelFetch, setFakeAdmitted } = await import('../src/kernel/fake');
+    const { libraryEntryFormResponse } = await import('../src/library/entry-form');
+    setFakeAdmitted([
+      'personal_library',
+      'library_entry.delete',
+      ...(restoreAdmitted ? ['library_entry.restore'] : []),
     ]);
-    expect(await writes[1]!.json()).toEqual({ deletionId: 'undo-ok', revision: 12 });
-    expect(writes.every((call) => call.headers.get('authorization') === 'Bearer reader')).toBe(true);
-  }
-  setFakeAdmitted([]);
-});
+    const calls: Request[] = [];
+    const fake = createRecordedKernelFetch({});
+    const client = createKernelClient('https://kernel.test', {
+      fetch: (async (input, init) => {
+        const captured = new Request(input, init);
+        calls.push(captured.clone());
+        return fake(captured);
+      }) as typeof fetch,
+    });
+    for (const returnTo of ['/en/library', '/en/subjects/book-one/a-book']) {
+      calls.length = 0;
+      const send = (body: URLSearchParams) =>
+        libraryEntryFormResponse(
+          new Request('https://rezics.test/library/entry', {
+            method: 'POST',
+            headers: { authorization: 'Bearer reader' },
+            body,
+          }),
+          {},
+          client,
+        );
+      const removed = await send(
+        new URLSearchParams({
+          intent: 'remove',
+          subjectId,
+          revision: '7',
+          locale: 'en',
+          returnTo,
+          idempotencyKey: '0192f3a0-6c1e-7b2a-9d4e-000000000002',
+        }),
+      );
+      expect(removed.status).toBe(200);
+      expect(removed.headers.get('cache-control')).toBe('private, no-store');
+      const html = await removed.text();
+      if (!restoreAdmitted) {
+        expect(html).toContain('Removed');
+        expect(html).not.toContain('name="intent" value="restore"');
+        expect(html).not.toContain('name="deletionId"');
+        expect(calls.filter((call) => call.method === 'DELETE')).toHaveLength(1);
+        continue;
+      }
+      expect(html).toContain('method="post"');
+      expect(html).toContain('action="/library/entry"');
+      expect(html).not.toContain('<script');
+      const fields = new URLSearchParams();
+      for (const match of html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g))
+        fields.set(match[1]!, match[2]!);
+      expect(fields.get('deletionId')).toBe('undo-ok');
+      expect(fields.get('revision')).toBe('12');
+      const response = await send(fields);
+      expect(response.status).toBe(200);
+      const restored = await response.text();
+      expect(restored).toContain('data-restored-entry');
+      expect(restored).toContain('data-entry-revision="7"');
+      expect(restored).toContain('A book');
+      expect(restored).toContain('Planned');
+      expect(restored).toContain(`href="${returnTo}"`);
+      expect(restored).not.toContain('name="deletionId"');
+      const writes = calls.filter((call) => new URL(call.url).pathname.startsWith('/v1/libraryEntries'));
+      expect(writes.map((call) => [call.method, new URL(call.url).pathname])).toEqual([
+        ['DELETE', `/v1/libraryEntries/${subjectId}`],
+        ['POST', `/v1/libraryEntries/${subjectId}:restore`],
+      ]);
+      expect(await writes[1]!.json()).toEqual({ deletionId: 'undo-ok', revision: 12 });
+      expect(writes.every((call) => call.headers.get('authorization') === 'Bearer reader')).toBe(true);
+    }
+    setFakeAdmitted([]);
+  },
+);
 
 test('the new form endpoint validates cookie CSRF and requires each intent admission', async () => {
   const { createKernelClient } = await import('@rezics/client');
@@ -482,9 +489,16 @@ test.each([
   const client = new QueryClient();
   client.setQueryData(['exposure', 'anonymous'], admitted);
   const html = renderToStaticMarkup(
-    createElement(QueryClientProvider, { client }, createElement(EntryRemoveForm, {
-      locale: 'en', subjectId, revision: 7, idempotencyKey: deletionId,
-    })),
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(EntryRemoveForm, {
+        locale: 'en',
+        subjectId,
+        revision: 7,
+        idempotencyKey: deletionId,
+      }),
+    ),
   );
   expect(html.includes('name="intent" value="remove"')).toBe(visible);
   client.clear();

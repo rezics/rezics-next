@@ -70,9 +70,7 @@ export function EntryRemoveForm({
         <input type="hidden" name="intent" value="remove" />
         <input type="hidden" name="subjectId" value={subjectId} />
         <input type="hidden" name="revision" value={revision} />
-        {typeof incarnationId === 'string' ? (
-          <input type="hidden" name="incarnationId" value={incarnationId} />
-        ) : null}
+        {typeof incarnationId === 'string' ? <input type="hidden" name="incarnationId" value={incarnationId} /> : null}
         <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
         <button className={entryActionClassName} type="submit">
           {m.library_remove_from_library()}
