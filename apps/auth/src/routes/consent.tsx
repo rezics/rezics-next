@@ -3,8 +3,7 @@ import { AuthButton as Button } from '../button';
 import { useEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
-import { authPost, failureMessage } from '../api';
-import { approvedScopes, createConsentReview, type Consent } from '../consent';
+import { createConsentDecision, type ConsentDecision } from '../consent';
 import { ErrorAlert } from '../alert';
 import { PermissionLimits, RequestedPermission } from '../permission-view';
 
@@ -21,71 +20,58 @@ function ConsentPage() {
   return <ConsentRequest key={JSON.stringify([client_id, scope])} clientId={client_id} scope={scope} />;
 }
 
-type State = 'loading' | 'ready' | 'signed-out' | 'not-found' | 'failed' | 'approved' | 'declined';
-
 function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }) {
-  const [state, setState] = useState<State>(clientId ? 'loading' : 'not-found');
-  const [consent, setConsent] = useState<Consent | null>(null);
-  const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState('');
-  const submitting = useRef(false);
-  const reader = useRef<ReturnType<typeof createConsentReview> | null>(null);
+  const [{ state, consent, pending, message, uncertain }, setDecision] = useState<ConsentDecision>({
+    state: clientId ? 'loading' : 'not-found',
+    pending: false,
+    uncertain: false,
+  });
+  const decision = useRef<ReturnType<typeof createConsentDecision> | null>(null);
   const alert = useRef<HTMLDivElement>(null);
   const requested = [...new Set(scope.split(/\s+/).filter(Boolean))];
 
   useEffect(() => {
-    const review = createConsentReview(clientId, (result) => {
-      setConsent(result.consent ?? null);
-      setMessage(result.message ?? '');
-      setState(result.state);
-    });
-    reader.current = review;
-    void review.load();
+    const visit = createConsentDecision(clientId, scope, setDecision);
+    decision.current = visit;
+    visit.restore();
+    window.addEventListener('pagehide', visit.suspend);
+    window.addEventListener('pageshow', visit.restore);
     return () => {
-      review.dispose();
-      reader.current = null;
+      window.removeEventListener('pagehide', visit.suspend);
+      window.removeEventListener('pageshow', visit.restore);
+      visit.dispose();
+      decision.current = null;
     };
-  }, [clientId]);
+  }, [clientId, scope]);
 
   useEffect(() => {
     if (message) alert.current?.focus();
   }, [message]);
 
-  async function approve() {
-    if (!consent || state !== 'ready' || submitting.current) return;
-    submitting.current = true;
-    setPending(true);
-    setMessage('');
-    const result = await authPost('/consent', {
-      client_id: consent.client_id,
-      scope: approvedScopes(consent, requested),
-    });
-    submitting.current = false;
-    setPending(false);
-    if (result.ok) setState('approved');
-    else if (result.status === 401) setState('signed-out');
-    else if (result.status === 404) setState('not-found');
-    else setMessage(failureMessage(result.status, result.code, result.retryAfter));
-  }
+  const returnTo = `/consent?${new URLSearchParams({ client_id: clientId, scope })}`;
+  const signIn = `/login?${new URLSearchParams({ return_to: returnTo })}`;
 
   return (
     <AuthPage heading={m.auth_consent_heading()}>
       <div className="auth-login-form">
         {state === 'loading' ? <p role="status">{m.auth_consent_loading()}</p> : null}
         {state === 'failed' ? (
-          <Button type="button" onClick={() => void reader.current?.load()}>
+          <Button type="button" onClick={() => decision.current?.load()}>
             {m.auth_security_retry_action()}
           </Button>
         ) : null}
         {state === 'signed-out' ? (
           <>
             <p>{m.auth_consent_sign_in_required()}</p>
-            <a href="/login">{m.auth_login_heading()}</a>
+            <a href={signIn}>{m.auth_login_heading()}</a>
           </>
         ) : null}
         {state === 'not-found' ? <p>{m.auth_consent_not_found()}</p> : null}
         {state === 'approved' ? <p role="status">{m.auth_consent_approved()}</p> : null}
-        {state === 'declined' ? <p role="status">{m.auth_consent_declined()}</p> : null}
+        {uncertain ? <p role="status">{m.auth_consent_submission_unknown()}</p> : null}
+        {state === 'declined' ? (
+          <p role="status">{uncertain ? m.auth_consent_declined_after_submission() : m.auth_consent_declined()}</p>
+        ) : null}
         {state === 'ready' && consent ? (
           <>
             <div>
@@ -106,20 +92,15 @@ function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }
             ) : (
               <p>{m.auth_consent_empty()}</p>
             )}
-            <Button type="button" onClick={approve} disabled={pending} aria-busy={pending}>
-              {m.auth_consent_approve()}
-            </Button>
             <Button
               type="button"
-              variant="outline"
+              onClick={() => void decision.current?.approve()}
               disabled={pending}
-              onClick={() => {
-                if (!submitting.current) {
-                  setMessage('');
-                  setState('declined');
-                }
-              }}
+              aria-busy={pending}
             >
+              {m.auth_consent_approve()}
+            </Button>
+            <Button type="button" variant="outline" disabled={pending} onClick={() => decision.current?.decline()}>
               {m.auth_consent_decline()}
             </Button>
           </>

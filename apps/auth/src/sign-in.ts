@@ -55,6 +55,20 @@ export function signInTarget(query: string, origin: string): string {
     target.search = parameters.toString();
     return target.href;
   }
+  // Consent recovery is a fixed local page with exactly its two review inputs.
+  // Rebuild the query so URL syntax inside either value cannot change the target.
+  if (returnTo?.startsWith('/consent?') && !returnTo.includes('#')) {
+    const request = new URLSearchParams(returnTo.slice('/consent?'.length));
+    if (request.size === 2 && request.get('client_id') && request.has('scope')) {
+      return new URL(
+        `/consent?${new URLSearchParams({
+          client_id: request.get('client_id')!,
+          scope: request.get('scope')!,
+        })}`,
+        origin,
+      ).href;
+    }
+  }
   // Only a listed path is honoured, so return_to can never name another origin or an arbitrary page.
   return new URL(STEP_UP_RETURN_PATHS.find((path) => path === returnTo) ?? DEFAULT_RETURN_PATH, origin).href;
 }

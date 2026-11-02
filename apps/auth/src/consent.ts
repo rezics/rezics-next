@@ -1,4 +1,4 @@
-import { failureMessage, type AuthPostResult } from './api';
+import { authPost, failureMessage, type AuthPostResult } from './api';
 
 export type Consent = {
   client_id: string;
@@ -11,6 +11,97 @@ export type ConsentReview =
   | { state: 'loading' | 'signed-out' | 'not-found'; consent?: never; message?: never }
   | { state: 'ready'; consent: Consent; message?: never }
   | { state: 'failed'; consent?: never; message: string };
+
+export type ConsentDecision = {
+  state: ConsentReview['state'] | 'approved' | 'declined';
+  consent?: Consent;
+  message?: string;
+  pending: boolean;
+  uncertain: boolean;
+};
+
+// A visit owns its reads and writes. Storage carries only an uncertainty marker,
+// never a cached review or an instruction to repeat a submission.
+export function createConsentDecision(clientId: string, scope: string, publish: (value: ConsentDecision) => void) {
+  const key = `auth.consent.pending:${JSON.stringify([clientId, scope])}`;
+  let uncertain = false;
+  try {
+    uncertain = window.sessionStorage.getItem(key) === 'pending';
+  } catch {
+    // The mounted visit still protects results when browser storage is unavailable.
+  }
+  let current: ConsentDecision = { state: 'loading', pending: false, uncertain };
+  let reader: ReturnType<typeof createConsentReview> | undefined;
+  let disposed = false;
+  function update(value: Omit<ConsentDecision, 'uncertain'>) {
+    current = { ...value, uncertain };
+    publish(current);
+  }
+  function remember(pending: boolean) {
+    try {
+      if (pending) window.sessionStorage.setItem(key, 'pending');
+      else window.sessionStorage.removeItem(key);
+    } catch {
+      // Storage is optional; never let it prevent review or a deliberate decision.
+    }
+  }
+  function restore() {
+    if (disposed || reader) return;
+    reader = createConsentReview(clientId, (review) => update({ ...review, pending: false }));
+    void reader.load();
+  }
+  function suspend() {
+    reader?.dispose();
+    reader = undefined;
+    if (current.pending) uncertain = true;
+    update({ state: 'loading', pending: false });
+  }
+  return {
+    restore,
+    suspend,
+    load() {
+      if (!current.pending) void reader?.load();
+    },
+    async approve() {
+      if (!reader || current.state !== 'ready' || !current.consent || current.pending) return;
+      const owner = reader;
+      const consent = current.consent;
+      remember(true);
+      update({ state: 'ready', consent, pending: true });
+      const result = await authPost('/consent', {
+        client_id: consent.client_id,
+        scope: approvedScopes(consent, scope.split(/\s+/).filter(Boolean)),
+      });
+      if (disposed || owner !== reader) return;
+      if (result.ok) {
+        uncertain = false;
+        remember(false);
+        update({ state: 'approved', pending: false });
+      } else {
+        // A lost response or server failure cannot establish whether the write committed.
+        uncertain ||= result.status >= 500;
+        remember(uncertain);
+        if (result.status === 401) update({ state: 'signed-out', pending: false });
+        else if (result.status === 404) update({ state: 'not-found', pending: false });
+        else
+          update({
+            state: 'ready',
+            consent,
+            pending: false,
+            message: failureMessage(result.status, result.code, result.retryAfter),
+          });
+      }
+    },
+    decline() {
+      if (reader && current.state === 'ready' && !current.pending) update({ state: 'declined', pending: false });
+    },
+    dispose() {
+      disposed = true;
+      reader?.dispose();
+      reader = undefined;
+    },
+  };
+}
 
 // Each mounted request owns one reader. Retrying keeps that owner and its exact client;
 // disposing it makes every outstanding result inert, including on a scope-only remount.

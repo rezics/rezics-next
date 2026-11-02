@@ -25,7 +25,8 @@ failures become an unavailable result.
 After successful sign-in, the browser navigates to `/authorize` with the received query, preserving repeated and empty
 parameters and removing every `sig`, `exp`, `prompt` and `return_to`. It keeps `max_age`. Without a remaining query it
 navigates to `/security`, or to the `return_to` path when it is on the fixed list of Auth page paths (now only
-`/security`); it is never forwarded to `/authorize` and never an absolute URL or another origin. The response body never
+`/security`, `/account/delete` and `/organizations/new`, plus `/consent` with exactly one nonempty `client_id` and one `scope`);
+it is never forwarded to `/authorize` and never an absolute URL or another origin. The response body never
 supplies a navigation target. Recovery links to `/recovery`; sign-up preserves the login query.
 
 Where the browser has WebAuthn, the page also offers passkeys. `src/passkeys.ts` holds every WebAuthn call, using
@@ -116,13 +117,17 @@ Unregistered requested scopes are never sent. Declining writes nothing and confi
 After approval the person can return to the client. Neither query parameters nor response bodies supply a return
 target, and the page never redirects.
 
-Signed-out visitors get a link to `/login`. Unknown and first-party clients show a localized not-found message.
+Signed-out visitors get a link to `/login` with the exact client and scope request in the supported local consent
+`return_to` target; sign-in returns to a fresh review. Unknown and first-party clients show a localized not-found message.
 Other failures use the shared status-and-code messages, including valid `Retry-After` seconds; Auth body text is
 never displayed. Pending approval disables both buttons, and a failure permits retrying.
 Failed review reads reuse the localized "Try this action again" button for the same client and requested scopes.
 While that read is pending,
 duplicate activation cannot start another read or enable approval. Changing either request parameter or leaving
 the page discards the old reader's results. Retrying the review never submits approval.
+Departure also invalidates approval results; browser restoration always reads a fresh review before enabling decisions.
+Decision: retain a per-request uncertainty marker in tab storage across departure, never replay approval, and let a fresh
+review enable an explicit approval or decline; declining cannot claim that an earlier uncertain approval had no effect.
 
 Page paths render only for GET and HEAD. Other methods, including `POST /consent` and `POST /signup`, pass the
 original request through to Auth at the issuer origin in production, or through the existing `AUTH_ORIGIN` proxy in

@@ -273,7 +273,12 @@ test(
     const { page } = await open(requestPath(), false);
     try {
       await page.getByRole('link', { name: 'Sign in', exact: true }).waitFor();
-      expect(await page.getByRole('link', { name: 'Sign in', exact: true }).getAttribute('href')).toBe('/login');
+      const login = new URL(
+        await page.getByRole('link', { name: 'Sign in', exact: true }).getAttribute('href')!,
+        'https://auth.test',
+      );
+      expect(login.pathname).toBe('/login');
+      expect(login.searchParams.get('return_to')).toBe(requestPath().replace(/&return_to=.*$/, ''));
       expect(await page.getByRole('button', { name: 'Approve', exact: true }).count()).toBe(0);
     } finally {
       await page.context().close();

@@ -25,6 +25,7 @@ for (const [key, value] of Object.entries({
 const { createRoot } = await import('react-dom/client');
 const { createRootRoute, createRouter, createMemoryHistory, RouterProvider } = await import('@tanstack/react-router');
 const { Route } = await import('../src/routes/consent');
+const { signInTarget } = await import('../src/sign-in');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 overwriteGetLocale(() => 'en');
 afterAll(async () => {
@@ -35,7 +36,7 @@ afterAll(async () => {
   await dom.happyDOM.close();
 });
 
-test('retry preserves the review, serializes reads and retires results on request changes or departure', async () => {
+test('consent reviews and decisions belong to the current visit and survive sign-in for fresh review', async () => {
   const calls: { url: string; init?: RequestInit; resolve: (response: Response) => void }[] = [];
   globalThis.fetch = ((input, init) =>
     new Promise<Response>((resolve) => calls.push({ url: String(input), init, resolve }))) as typeof fetch;
@@ -99,15 +100,80 @@ test('retry preserves the review, serializes reads and retires results on reques
     expect(host.textContent).toContain('Client not found.');
     await navigate(path());
     await answer(5, 401);
-    expect(host.querySelector('a[href="/login"]')).not.toBeNull();
+    const login = new URL((host.querySelector('a[href^="/login?"]') as HTMLAnchorElement).href);
+    const recovered = signInTarget(login.search, 'https://auth.test');
+    expect(recovered).toBe(`https://auth.test${path()}`);
     expect(button('Approve')).toBeUndefined();
-    await navigate(path(body.client_id, 'library:read'));
-    await flush(() => root.unmount());
-    expect(calls[6]!.init?.signal?.aborted).toBe(true);
+    await flush(() => void window.dispatchEvent(new dom.Event('pagehide')));
+    await navigate(recovered.replace('https://auth.test', ''));
+    await flush(() => void window.dispatchEvent(new dom.Event('pageshow')));
     await answer(6);
+    await flush(() => button('Approve')!.click());
+    await navigate(path(body.client_id, 'library:read'));
+    await answer(7);
+    expect(host.textContent).not.toContain('Access approved.');
+    await answer(8);
+    await flush(() => {
+      button('Approve')!.click();
+      button('Approve')!.click();
+    });
+    expect(calls).toHaveLength(10);
+    await flush(() => void window.dispatchEvent(new dom.Event('pagehide')));
+    expect(button('Approve')).toBeUndefined();
+    await flush(() => void window.dispatchEvent(new dom.Event('pageshow')));
+    expect(calls).toHaveLength(11);
+    await answer(9);
+    expect(host.textContent).not.toContain('Access approved.');
+    expect(button('Approve')).toBeUndefined();
+    await answer(10);
+    expect(host.textContent).toContain('The approval result is unknown');
+    await flush(() => button('Decline')!.click());
+    expect(host.textContent).toContain('An earlier approval may still have taken effect.');
+    expect(calls).toHaveLength(11);
+    await navigate(path('unknown'));
+    await navigate(path(body.client_id, 'library:read'));
+    await answer(11);
+    expect(button('Approve')).toBeUndefined();
+    await answer(12);
+    expect(host.textContent).toContain('The approval result is unknown');
+    await flush(() => button('Approve')!.click());
+    await answer(13, 503);
+    expect(host.textContent).toContain('The approval result is unknown');
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    await flush(() => button('Approve')!.click());
+    await answer(14);
+    expect(host.textContent).toContain('Access approved.');
+    await flush(() => void window.dispatchEvent(new dom.Event('pagehide')));
+    await flush(() => void window.dispatchEvent(new dom.Event('pageshow')));
+    expect(host.textContent).not.toContain('Access approved.');
+    expect(button('Approve')).toBeUndefined();
+    await answer(15);
+    expect(host.textContent).not.toContain('The approval result is unknown');
+    await navigate(path('unknown'));
+    await flush(() => root.unmount());
+    expect(calls[16]!.init?.signal?.aborted).toBe(true);
+    await answer(16);
     expect(host.textContent).toBe('');
   } finally {
     await flush(() => root.unmount());
     host.remove();
+  }
+});
+
+test('consent sign-in recovery only accepts the fixed review target and exact inputs', () => {
+  const request = `/consent?${new URLSearchParams({ client_id: 'reader+client /?#', scope: ' openid  unknown ' })}`;
+  expect(signInTarget(new URLSearchParams({ return_to: request }).toString(), 'https://auth.test')).toBe(
+    `https://auth.test${request}`,
+  );
+  for (const return_to of [
+    'https://evil.test/consent?client_id=x&scope=y',
+    '//evil.test',
+    '/consent?client_id=x&scope=y&redirect_uri=evil',
+    '/consent?client_id=x&client_id=y',
+    '/consent?client_id=x&scope=y#other',
+  ]) {
+    expect(signInTarget(new URLSearchParams({ return_to }).toString(), 'https://auth.test')).toBe(
+      'https://auth.test/security',
+    );
   }
 });
