@@ -5,7 +5,8 @@ const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const window = new Window({ url: 'https://site.test/en/spaces/shelf' });
-const names = 'document navigator location HTMLElement HTMLInputElement Element Node Document DocumentFragment HTMLButtonElement HTMLFormElement MutationObserver ResizeObserver KeyboardEvent Event';
+const names =
+  'document navigator location HTMLElement HTMLInputElement Element Node Document DocumentFragment HTMLButtonElement HTMLFormElement MutationObserver ResizeObserver KeyboardEvent Event';
 const globals = {
   ...Object.fromEntries(names.split(' ').map((key) => [key, window[key as keyof typeof window]])),
   window,
