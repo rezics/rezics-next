@@ -99,6 +99,9 @@ function StatementConsentPageLive({
   const ownershipId = useId();
   const actionButtons = useRef<Partial<Record<ConsentCommand['operation'], HTMLButtonElement | null>>>({});
   const readFocusTarget = useRef<HTMLElement | null>(null);
+  const setReadFocusTarget = useCallback((node: HTMLElement | null) => {
+    readFocusTarget.current = node;
+  }, []);
   const continuedRead = useRef(false);
   const pendingReadFocus = useRef(false);
   const returnFocus = useRef<ConsentCommand['operation'] | undefined>(undefined);
@@ -304,7 +307,7 @@ function StatementConsentPageLive({
       )}
       {(failure || (read && !read.ok)) && (
         <section
-          ref={readFocusTarget}
+          ref={setReadFocusTarget}
           tabIndex={-1}
           className="focus:outline-2 focus:outline-offset-2 focus:outline-ring"
           aria-label={recoveryLabel}
@@ -336,7 +339,7 @@ function StatementConsentPageLive({
       {terminal ? (
         <ContentItemFrame as="div" data-consent-part="terminal" className="p-4 sm:p-6">
           <p
-            ref={readFocusTarget}
+            ref={setReadFocusTarget}
             tabIndex={-1}
             className="focus:outline-2 focus:outline-offset-2 focus:outline-ring"
             role="status"
@@ -349,7 +352,7 @@ function StatementConsentPageLive({
           {current && !candidate && (
             <ContentItemFrame as="div" data-consent-part="empty" className="flex min-w-0 flex-col gap-3 p-4 sm:p-6">
               <p
-                ref={readFocusTarget}
+                ref={setReadFocusTarget}
                 tabIndex={-1}
                 className="focus:outline-2 focus:outline-offset-2 focus:outline-ring"
               >
@@ -369,7 +372,7 @@ function StatementConsentPageLive({
           )}
           {candidate && current && (
             <section
-              ref={readFocusTarget}
+              ref={setReadFocusTarget}
               tabIndex={-1}
               className="focus:outline-2 focus:outline-offset-2 focus:outline-ring"
               aria-label={pickText(current.field, locale).text || m.subject_value_unlabelled({}, options)}
