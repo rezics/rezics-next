@@ -394,9 +394,7 @@ function GrantForm({
 export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: AccessIO }) {
   // A loader's resource and complete acting authority own all controller and form state.
   const scope =
-    initial.status === 'ready'
-      ? JSON.stringify([initial.page.resource, initial.page.authority])
-      : initial.status;
+    initial.status === 'ready' ? JSON.stringify([initial.page.resource, initial.page.authority]) : initial.status;
   return <ResourceAccessEditor key={scope} initial={initial} io={io} />;
 }
 
