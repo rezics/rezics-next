@@ -1256,8 +1256,8 @@ CREATE TABLE content.notice_seen (
     route integer NOT NULL,
     account_id uuid NOT NULL,
     seen_notice_id uuid NOT NULL,
-    seen_created_at timestamp with time zone NOT NULL,
     seen_at timestamp with time zone NOT NULL,
+    seen_created_at timestamp with time zone NOT NULL,
     CONSTRAINT notice_seen_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT notice_seen_check1 CHECK ((route = ((get_byte(uuid_send(seen_notice_id), 10) * 256) + get_byte(uuid_send(seen_notice_id), 11)))),
     CONSTRAINT notice_seen_route_check CHECK (((route >= 0) AND (route <= 65535)))
