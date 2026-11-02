@@ -258,9 +258,7 @@ export function subjectPageType(page: SubjectPageData): string | undefined {
 }
 
 function subjectPageRealm(page: SubjectPageData): string | undefined {
-  return (
-    page.requestedRealm ?? (page.context?.population.kind === 'realm' ? page.context.population.id : undefined)
-  );
+  return page.requestedRealm ?? (page.context?.population.kind === 'realm' ? page.context.population.id : undefined);
 }
 
 export function subjectPageJsonLd(
