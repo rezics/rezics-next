@@ -4383,5 +4383,12 @@
   "access_identity_principal_id": "Delegating principal ID",
   "access_identity_from_id": "Current owner account ID",
   "access_identity_to_id": "New owner account ID",
-  "access_identity_valid": "Exact grant validity"
+  "access_identity_valid": "Exact grant validity",
+  "ctx_reader_settings_selected": "A settings configuration is selected for this Context.",
+  "ctx_reader_settings_details": "Settings technical details",
+  "ctx_reader_defaults": "Default rules",
+  "ctx_reader_rule": "Rule {number}",
+  "ctx_reader_rule_reference": "Technical reference for rule {number}",
+  "ctx_reader_property_key": "Exact property key",
+  "ctx_reader_no_defaults": "No default rules are supplied."
 }

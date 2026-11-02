@@ -4382,5 +4382,12 @@
   "access_identity_principal_id": "Identifiant du mandant",
   "access_identity_from_id": "Identifiant du compte du propriétaire actuel",
   "access_identity_to_id": "Identifiant du compte du nouveau propriétaire",
-  "access_identity_valid": "Période exacte de validité du droit"
+  "access_identity_valid": "Période exacte de validité du droit",
+  "ctx_reader_settings_selected": "Une configuration est sélectionnée pour ce Context.",
+  "ctx_reader_settings_details": "Détails techniques des paramètres",
+  "ctx_reader_defaults": "Règles par défaut",
+  "ctx_reader_rule": "Règle {number}",
+  "ctx_reader_rule_reference": "Référence technique de la règle {number}",
+  "ctx_reader_property_key": "Clé exacte de la propriété",
+  "ctx_reader_no_defaults": "Aucune règle par défaut n’est fournie."
 }

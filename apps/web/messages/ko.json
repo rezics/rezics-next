@@ -4382,5 +4382,12 @@
   "access_identity_principal_id": "위임 주체 ID",
   "access_identity_from_id": "현재 소유자 계정 ID",
   "access_identity_to_id": "새 소유자 계정 ID",
-  "access_identity_valid": "정확한 권한 유효 기간"
+  "access_identity_valid": "정확한 권한 유효 기간",
+  "ctx_reader_settings_selected": "이 Context에 설정 구성이 선택되어 있습니다.",
+  "ctx_reader_settings_details": "설정 기술 세부 정보",
+  "ctx_reader_defaults": "기본 규칙",
+  "ctx_reader_rule": "규칙 {number}",
+  "ctx_reader_rule_reference": "규칙 {number}의 기술 참조",
+  "ctx_reader_property_key": "정확한 속성 키",
+  "ctx_reader_no_defaults": "제공된 기본 규칙이 없습니다."
 }

@@ -238,3 +238,123 @@ export const ConfirmedRereadUnavailable: Story = {
     expect(within(canvasElement).queryByText('Readers’ selections')).toBeNull();
   },
 };
+
+// Illustrative supplied references only; these examples do not claim native or visual acceptance.
+const longSettingsId = `illustrative:settings/${'long-reference-'.repeat(24)}`;
+const longRelease = `illustrative-release-${'abcdef0123456789'.repeat(24)}`;
+function ReaderExample({
+  empty,
+  pair = false,
+  rtl = false,
+}: {
+  empty?: 'settings' | 'defaults';
+  pair?: boolean;
+  rtl?: boolean;
+}) {
+  const fixture = useMemo(() => contextFixture('read-only'), []);
+  const data = useMemo(() => {
+    const supplied = fixture.initialDetail();
+    if (supplied.kind === 'ready' && supplied.value.context) {
+      supplied.value.context.settings = empty === 'settings' ? null : { id: longSettingsId, release: longRelease };
+      supplied.value.context.defaults =
+        empty === 'defaults'
+          ? {}
+          : Object.fromEntries(
+              Array.from({ length: 64 }, (_, index) => [
+                `illustrative:property/${64 - index}/${'long-key-'.repeat(24)}`,
+                index % 2 === 0 ? 'inherit' : 'suppress',
+              ]),
+            );
+    }
+    return supplied;
+  }, [fixture, empty]);
+  const locale = getLocale();
+  return (
+    <PatternStory path={`/my/contexts/${fixture.id}`} visitor="Signed In">
+      <AppShell navigation={contextsNavigation}>
+        <div dir={rtl ? 'rtl' : 'ltr'} className="space-y-10">
+          <ContextDetailView
+            id={fixture.id}
+            locale={locale}
+            data={data}
+            submit={fixture.api.submit}
+            reload={async () => {}}
+          />
+          {pair ? (
+            <ContextDetailView
+              id={fixture.id}
+              locale={locale}
+              data={data}
+              submit={fixture.api.submit}
+              reload={async () => {}}
+            />
+          ) : null}
+        </div>
+      </AppShell>
+    </PatternStory>
+  );
+}
+async function readTechnicalDetails({ canvasElement }: { canvasElement: HTMLElement }) {
+  const canvas = within(canvasElement);
+  await expect(canvas.getAllByText(m.ctx_reader_settings_selected())[0]).toBeVisible();
+  const summary = canvas.getAllByText(m.ctx_reader_settings_details())[0]!;
+  const details = summary.closest('details')!;
+  await expect(details).not.toHaveAttribute('open');
+  await expect(within(details).getByText(longSettingsId)).not.toBeVisible();
+  summary.focus();
+  await expect(summary).toHaveFocus();
+  await userEvent.keyboard('{Enter}');
+  await expect(within(details).getByText(longSettingsId)).toBeVisible();
+  await expect(within(details).getByText(longRelease)).toBeVisible();
+  await userEvent.keyboard(' ');
+  await expect(details).not.toHaveAttribute('open');
+  await userEvent.tab();
+  const rule = canvas.getAllByText(m.ctx_reader_rule_reference({ number: 1 }))[0]!;
+  await expect(rule).toHaveFocus();
+  await userEvent.keyboard('{Enter}');
+  await expect(within(rule.closest('details')!).getByText(m.ctx_reader_property_key())).toBeVisible();
+}
+function readerStory(locale: string, viewport: 'phone390' | 'desktop1280', theme: 'light' | 'dark'): Story {
+  return {
+    render: () => <ReaderExample />,
+    globals: { locale, theme, viewport: { value: viewport, isRotated: false } },
+    play: readTechnicalDetails,
+  };
+}
+export const ReaderEnglishPhone = readerStory('en', 'phone390', 'light');
+export const ReaderEnglishDesktop = readerStory('en', 'desktop1280', 'dark');
+export const ReaderTraditionalChinesePhone = readerStory('zh-Hant', 'phone390', 'dark');
+export const ReaderTraditionalChineseDesktop = readerStory('zh-Hant', 'desktop1280', 'light');
+export const ReaderSimplifiedChinesePhone = readerStory('zh-Hans', 'phone390', 'light');
+export const ReaderSimplifiedChineseDesktop = readerStory('zh-Hans', 'desktop1280', 'dark');
+export const ReaderJapanesePhone = readerStory('ja', 'phone390', 'dark');
+export const ReaderJapaneseDesktop = readerStory('ja', 'desktop1280', 'light');
+export const ReaderKoreanPhone = readerStory('ko', 'phone390', 'light');
+export const ReaderKoreanDesktop = readerStory('ko', 'desktop1280', 'dark');
+export const ReaderGermanPhone = readerStory('de', 'phone390', 'dark');
+export const ReaderGermanDesktop = readerStory('de', 'desktop1280', 'light');
+export const ReaderFrenchPhone = readerStory('fr', 'phone390', 'light');
+export const ReaderFrenchDesktop = readerStory('fr', 'desktop1280', 'dark');
+export const ReaderSpanishPhone = readerStory('es', 'phone390', 'dark');
+export const ReaderSpanishDesktop = readerStory('es', 'desktop1280', 'light');
+export const ReaderRtlPhone: Story = {
+  ...readerStory('en', 'phone390', 'dark'),
+  render: () => <ReaderExample rtl />,
+};
+export const ReaderRtlDesktop: Story = {
+  ...readerStory('en', 'desktop1280', 'light'),
+  render: () => <ReaderExample rtl />,
+};
+export const ReaderNoSettings: Story = { render: () => <ReaderExample empty="settings" /> };
+export const ReaderNoDefaults: Story = { render: () => <ReaderExample empty="defaults" /> };
+export const IndependentReaders: Story = {
+  render: () => <ReaderExample pair />,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async (context) => {
+    await readTechnicalDetails(context);
+    const panels = context.canvasElement.querySelectorAll('article');
+    await expect(panels).toHaveLength(2);
+    await expect(panels[0]!.querySelectorAll('details[open]')).toHaveLength(1);
+    await expect(panels[1]!.querySelectorAll('details[open]')).toHaveLength(0);
+  },
+};

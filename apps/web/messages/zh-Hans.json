@@ -4383,5 +4383,12 @@
   "access_identity_principal_id": "委托主体 ID",
   "access_identity_from_id": "当前所有者账户 ID",
   "access_identity_to_id": "新所有者账户 ID",
-  "access_identity_valid": "授权的完整有效期"
+  "access_identity_valid": "授权的完整有效期",
+  "ctx_reader_settings_selected": "此 Context 已选用设置配置。",
+  "ctx_reader_settings_details": "设置技术详情",
+  "ctx_reader_defaults": "默认规则",
+  "ctx_reader_rule": "规则 {number}",
+  "ctx_reader_rule_reference": "规则 {number} 的技术引用",
+  "ctx_reader_property_key": "完整属性键",
+  "ctx_reader_no_defaults": "未提供默认规则。"
 }

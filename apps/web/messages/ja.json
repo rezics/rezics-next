@@ -4382,5 +4382,12 @@
   "access_identity_principal_id": "委任元の主体ID",
   "access_identity_from_id": "現在の所有者のアカウントID",
   "access_identity_to_id": "新しい所有者のアカウントID",
-  "access_identity_valid": "権限の正確な有効期間"
+  "access_identity_valid": "権限の正確な有効期間",
+  "ctx_reader_settings_selected": "この Context には設定が選択されています。",
+  "ctx_reader_settings_details": "設定の技術詳細",
+  "ctx_reader_defaults": "既定のルール",
+  "ctx_reader_rule": "ルール {number}",
+  "ctx_reader_rule_reference": "ルール {number} の技術参照",
+  "ctx_reader_property_key": "正確なプロパティキー",
+  "ctx_reader_no_defaults": "既定のルールは提供されていません。"
 }

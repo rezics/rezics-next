@@ -4382,5 +4382,12 @@
   "access_identity_principal_id": "委託主體 ID",
   "access_identity_from_id": "目前擁有者帳戶 ID",
   "access_identity_to_id": "新擁有者帳戶 ID",
-  "access_identity_valid": "授權的完整有效期間"
+  "access_identity_valid": "授權的完整有效期間",
+  "ctx_reader_settings_selected": "此 Context 已選用設定組態。",
+  "ctx_reader_settings_details": "設定技術詳細資料",
+  "ctx_reader_defaults": "預設規則",
+  "ctx_reader_rule": "規則 {number}",
+  "ctx_reader_rule_reference": "規則 {number} 的技術參照",
+  "ctx_reader_property_key": "完整屬性鍵",
+  "ctx_reader_no_defaults": "未提供預設規則。"
 }

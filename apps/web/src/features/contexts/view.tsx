@@ -1,6 +1,7 @@
 import { useId, useState, type RefObject } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -40,7 +41,13 @@ import {
   type Workspace,
 } from './model';
 
-const width = 'mx-auto w-full min-w-0 max-w-4xl space-y-6';
+const width = 'mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]';
+const actionClassName = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]';
+const linkClassName =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md py-2 underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+// Preserve native list-item display so the disclosure marker and keyboard behavior remain available.
+const summaryClassName =
+  'min-h-11 min-w-11 cursor-pointer content-center py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const options = (locale: string) => ({ locale: locale as never });
 function failureText(kind: Failure['kind'], locale: string) {
   const o = options(locale);
@@ -68,12 +75,12 @@ export function ContextFeedback({ failure, locale, retry }: { failure: Failure; 
     <div role="alert" className="space-y-3">
       <p>{failureText(failure.kind, locale)}</p>
       {retry ? (
-        <Button variant="outline" onClick={retry}>
+        <Button className={actionClassName} variant="outline" onClick={retry}>
           {m.ctxw_reread({}, options(locale))}
         </Button>
       ) : null}
       {failure.kind === 'signed-out' ? (
-        <a className="underline" href={`/auth/sign-in?return_to=${encodeURIComponent(directoryHref(locale))}`}>
+        <a className={linkClassName} href={`/auth/sign-in?return_to=${encodeURIComponent(directoryHref(locale))}`}>
           {m.account_sign_in({}, options(locale))}
         </a>
       ) : null}
@@ -109,15 +116,17 @@ function MutationFeedback({ intent, locale }: { intent: ReturnType<typeof useCon
         <ContextFeedback failure={result.current} locale={locale} />
       ) : null}
       {result.kind === 'unknown' && intent.pending ? (
-        <Button onClick={() => void intent.submit(intent.pending)}>{m.ctxw_retry_same({}, o)}</Button>
+        <Button className={actionClassName} onClick={() => void intent.submit(intent.pending)}>
+          {m.ctxw_retry_same({}, o)}
+        </Button>
       ) : null}
       {intent.pending ? (
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => void intent.refresh()}>
+          <Button className={actionClassName} variant="outline" onClick={() => void intent.refresh()}>
             {m.ctxw_reread({}, o)}
           </Button>
           {result.kind !== 'unknown' ? (
-            <Button variant="outline" onClick={() => void intent.refresh(true)}>
+            <Button className={actionClassName} variant="outline" onClick={() => void intent.refresh(true)}>
               {m.ctxw_review_request({}, o)}
             </Button>
           ) : null}
@@ -147,24 +156,26 @@ export function ContextDirectoryView({
         <PageHeading>{m.ctxw_title({}, o)}</PageHeading>
         <p className="max-w-prose text-muted-foreground">{m.ctxw_intro({}, o)}</p>
         {canCreate ? (
-          <a className={buttonVariants()} href={`${directoryHref(locale)}/new`}>
+          <a className={cn(buttonVariants(), actionClassName)} href={`${directoryHref(locale)}/new`}>
             {m.ctxw_create({}, o)}
           </a>
         ) : (
-          <Button disabled>{m.ctxw_create({}, o)}</Button>
+          <Button className={actionClassName} disabled>
+            {m.ctxw_create({}, o)}
+          </Button>
         )}
         <Permission actions={data?.creation ?? null} locale={locale} />
       </header>
       <nav aria-label={m.ctxw_views({}, o)} className="flex flex-wrap gap-4">
         <a
-          className="underline"
+          className={linkClassName}
           aria-current={!input.deleted ? 'page' : undefined}
           href={directoryHref(locale, { query: input.query })}
         >
           {m.ctxw_active({}, o)}
         </a>
         <a
-          className="underline"
+          className={linkClassName}
           aria-current={input.deleted ? 'page' : undefined}
           href={directoryHref(locale, { query: input.query, deleted: true })}
         >
@@ -177,7 +188,7 @@ export function ContextDirectoryView({
           <Input id={searchId} name="query" type="search" defaultValue={input.query ?? ''} />
         </Field>
         {input.deleted ? <input type="hidden" name="deleted" value="true" /> : null}
-        <Button type="submit" variant="outline">
+        <Button className={actionClassName} type="submit" variant="outline">
           {m.ctxw_search_action({}, o)}
         </Button>
       </form>
@@ -215,14 +226,14 @@ export function ContextDirectoryView({
       )}
       {page?.kind === 'ready' && page.value.next ? (
         <a
-          className={buttonVariants({ variant: 'outline' })}
+          className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
           href={directoryHref(locale, { ...input, cursor: page.value.next })}
         >
           {m.ctxw_next({}, o)}
         </a>
       ) : null}
       {input.cursor ? (
-        <a className="block underline" href={directoryHref(locale, { ...input, cursor: undefined })}>
+        <a className={linkClassName} href={directoryHref(locale, { ...input, cursor: undefined })}>
           {m.ctxw_restart({}, o)}
         </a>
       ) : null}
@@ -251,7 +262,7 @@ export function ContextCreateView({
   const created = intent.result?.kind === 'confirmed' ? intent.result : null;
   return (
     <article className={width}>
-      <a className="underline" href={directoryHref(locale)}>
+      <a className={linkClassName} href={directoryHref(locale)}>
         {m.ctxw_title({}, o)}
       </a>
       <header className="space-y-3">
@@ -260,7 +271,7 @@ export function ContextCreateView({
       </header>
       <MutationFeedback intent={intent} locale={locale} />
       {created ? (
-        <a className={buttonVariants()} href={detailHref(locale, created.id)}>
+        <a className={cn(buttonVariants(), actionClassName)} href={detailHref(locale, created.id)}>
           {m.ctxw_open({}, o)}
         </a>
       ) : (
@@ -314,10 +325,20 @@ export function ContextCreateView({
           <Permission actions={actions} locale={locale} />
           {actions?.kind === 'ready' && !admits(actions, 'create') ? <p role="status">{m.ctxw_denied({}, o)}</p> : null}
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={locked || !actions || !admits(actions, 'create')}>
+            <Button
+              className={actionClassName}
+              type="submit"
+              disabled={locked || !actions || !admits(actions, 'create')}
+            >
               {m.ctxw_create({}, o)}
             </Button>
-            <Button type="button" variant="outline" disabled={intent.busy} onClick={() => void intent.refresh()}>
+            <Button
+              className={actionClassName}
+              type="button"
+              variant="outline"
+              disabled={intent.busy}
+              onClick={() => void intent.refresh()}
+            >
               {m.ctxw_reread({}, o)}
             </Button>
           </div>
@@ -358,7 +379,7 @@ function SubjectJourney({ id, locale, search }: { id: string; locale: string; se
       ) : null}
       {subject ? (
         <a
-          className={buttonVariants({ variant: 'outline' })}
+          className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
           href={`${subjectHref({ id: subject.id, label: subject.title }, locale).href}/context-review?${new URLSearchParams({ context: id })}`}
         >
           {m.ctxw_review_subject({}, o)}
@@ -394,7 +415,7 @@ export function ContextDetailView({
   const restoring = current?.lifecycle?.state === 'deleted';
   return (
     <article className={width} aria-busy={intent.busy || !data}>
-      <a className="underline" href={directoryHref(locale)}>
+      <a className={linkClassName} href={directoryHref(locale)}>
         {m.ctxw_title({}, o)}
       </a>
       <PageHeading className="[overflow-wrap:anywhere]">
@@ -406,7 +427,12 @@ export function ContextDetailView({
       ) : visible && data.kind !== 'ready' ? (
         <ContextFeedback failure={data} locale={locale} />
       ) : null}
-      <Button variant="outline" disabled={intent.busy} onClick={() => void intent.refresh()}>
+      <Button
+        className={actionClassName}
+        variant="outline"
+        disabled={intent.busy}
+        onClick={() => void intent.refresh()}
+      >
         {m.ctxw_reread({}, o)}
       </Button>
       {current && resource ? (
@@ -445,25 +471,57 @@ export function ContextDetailView({
                 <h2 className="text-xl font-semibold">{m.ctxw_settings({}, o)}</h2>
                 <p className="text-sm text-muted-foreground">{m.ctxw_settings_help({}, o)}</p>
                 {current.context.settings ? (
-                  <dl className="space-y-2 text-sm">
-                    <dt>{m.ctxw_setting({}, o)}</dt>
-                    <dd className="break-words">{current.context.settings.id}</dd>
-                    <dt>{m.ctxw_release({}, o)}</dt>
-                    <dd className="break-all">{current.context.settings.release}</dd>
-                  </dl>
+                  <div className="space-y-2">
+                    <p className="font-medium">{m.ctx_reader_settings_selected({}, o)}</p>
+                    <details className="min-w-0 rounded-lg border border-border px-3 text-sm">
+                      <summary className={summaryClassName}>{m.ctx_reader_settings_details({}, o)}</summary>
+                      <dl className="space-y-3 pb-3">
+                        <div>
+                          <dt className="text-muted-foreground">{m.ctxw_setting({}, o)}</dt>
+                          <dd className="select-text font-mono [overflow-wrap:anywhere]" dir="auto">
+                            {current.context.settings.id}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">{m.ctxw_release({}, o)}</dt>
+                          <dd className="select-text font-mono [overflow-wrap:anywhere]" dir="auto">
+                            {current.context.settings.release}
+                          </dd>
+                        </div>
+                      </dl>
+                    </details>
+                  </div>
                 ) : (
                   <p>{m.ctxw_no_settings({}, o)}</p>
                 )}
                 {Object.keys(current.context.defaults).length ? (
-                  <dl className="space-y-2">
-                    {Object.entries(current.context.defaults).map(([property, mode]) => (
-                      <div key={property} className="grid gap-1 sm:grid-cols-2">
-                        <dt className="break-all text-sm">{property}</dt>
-                        <dd>{mode === 'suppress' ? m.ctxw_suppress({}, o) : m.ctxw_inherit({}, o)}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                ) : null}
+                  <div className="space-y-3">
+                    <h3 className="font-semibold">{m.ctx_reader_defaults({}, o)}</h3>
+                    <dl className="space-y-3">
+                      {Object.entries(current.context.defaults).map(([property, mode], index) => (
+                        <div key={property} className="min-w-0 space-y-1 rounded-lg border border-border p-3">
+                          <dt className="font-medium">{m.ctx_reader_rule({ number: index + 1 }, o)}</dt>
+                          <dd className="space-y-1">
+                            <p>{mode === 'suppress' ? m.ctxw_suppress({}, o) : m.ctxw_inherit({}, o)}</p>
+                            <details className="min-w-0 text-sm">
+                              <summary className={summaryClassName}>
+                                {m.ctx_reader_rule_reference({ number: index + 1 }, o)}
+                              </summary>
+                              <dl className="space-y-1 pb-2">
+                                <dt className="text-muted-foreground">{m.ctx_reader_property_key({}, o)}</dt>
+                                <dd className="select-text font-mono [overflow-wrap:anywhere]" dir="auto">
+                                  {property}
+                                </dd>
+                              </dl>
+                            </details>
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{m.ctx_reader_no_defaults({}, o)}</p>
+                )}
               </section>
               <SubjectJourney key={`${id}:${locale}`} id={id} locale={locale} {...(search ? { search } : {})} />
             </>
@@ -485,6 +543,7 @@ export function ContextDetailView({
                 <AlertDialogTrigger
                   render={
                     <Button
+                      className={actionClassName}
                       variant={operation === 'delete' ? 'destructive' : 'outline'}
                       disabled={!allowed || intent.busy || !!intent.pending}
                     />
@@ -500,8 +559,9 @@ export function ContextDetailView({
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>{m.ctxw_cancel({}, o)}</AlertDialogCancel>
+                    <AlertDialogCancel className={actionClassName}>{m.ctxw_cancel({}, o)}</AlertDialogCancel>
                     <AlertDialogAction
+                      className={actionClassName}
                       variant={operation === 'delete' ? 'destructive' : 'default'}
                       disabled={!allowed || !!intent.pending}
                       onClick={() => {

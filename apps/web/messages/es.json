@@ -4382,5 +4382,12 @@
   "access_identity_principal_id": "ID del principal que delega",
   "access_identity_from_id": "ID de la cuenta del propietario actual",
   "access_identity_to_id": "ID de la cuenta del nuevo propietario",
-  "access_identity_valid": "Vigencia exacta del permiso"
+  "access_identity_valid": "Vigencia exacta del permiso",
+  "ctx_reader_settings_selected": "Este Context tiene seleccionada una configuración.",
+  "ctx_reader_settings_details": "Detalles técnicos de la configuración",
+  "ctx_reader_defaults": "Reglas predeterminadas",
+  "ctx_reader_rule": "Regla {number}",
+  "ctx_reader_rule_reference": "Referencia técnica de la regla {number}",
+  "ctx_reader_property_key": "Clave exacta de la propiedad",
+  "ctx_reader_no_defaults": "No se han proporcionado reglas predeterminadas."
 }
