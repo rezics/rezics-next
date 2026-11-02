@@ -682,7 +682,6 @@ test('clear confirms an unsupported finished session, retries its exact operands
   }
 });
 
-
 test('decimal corrections explain invalid operands before review and retain exact drafts and retries', async () => {
   for (const mode of ['scalar_amount', 'cursor_position'] as const) {
     const initial = page('decimal', 'record', mode);
@@ -698,8 +697,13 @@ test('decimal corrections explain invalid operands before review and retain exac
         expect(h.body.queryByRole('button', { name: m.library_progress_confirm_correction() })).toBeNull();
         expect(h.field(label).value).toBe(invalid);
         expect(h.field(label).getAttribute('aria-invalid')).toBe('true');
-        expect(h.field(label).getAttribute('aria-describedby')?.split(' ').some((id) =>
-          window.document.getElementById(id)?.getAttribute('role') === 'alert')).toBe(true);
+        expect(
+          h
+            .field(label)
+            .getAttribute('aria-describedby')
+            ?.split(' ')
+            .some((id) => window.document.getElementById(id)?.getAttribute('role') === 'alert'),
+        ).toBe(true);
       }
       await h.escape();
       expect(h.body.getAllByRole('alertdialog')).toHaveLength(1);
@@ -716,12 +720,16 @@ test('decimal corrections explain invalid operands before review and retain exac
         await h.fill(m.library_progress_locator(), ' '); // Opaque native locator; do not trim it.
       }
       await h.click(m.library_progress_record());
-      expect(h.body.getByRole('region', { name: m.library_progress_review() }).textContent).toContain('999999999999.123456');
+      expect(h.body.getByRole('region', { name: m.library_progress_review() }).textContent).toContain(
+        '999999999999.123456',
+      );
       await h.click(m.library_progress_confirm_correction());
       const original = commands[0]!;
-      expect(original.data).toMatchObject(mode === 'scalar_amount'
-        ? { amount: '999999999999.123456' }
-        : { locator: ' ', position: '999999999999.123456' });
+      expect(original.data).toMatchObject(
+        mode === 'scalar_amount'
+          ? { amount: '999999999999.123456' }
+          : { locator: ' ', position: '999999999999.123456' },
+      );
       await settle(() => original.work.resolve({ ok: false, reason: 'unavailable' }));
       await h.fill(label, '1e3');
       await h.submit('record');

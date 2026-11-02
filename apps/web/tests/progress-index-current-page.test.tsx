@@ -544,18 +544,30 @@ test('Current row complete and abandon keep native CAS and uncertain keys, then 
   }
 });
 
-
 test('start validates required fixed decimals before capture, omits empty optional totals and retries original operands', async () => {
   for (const policy of ['required', 'optional', 'forbidden'] as const) {
     const initial = page();
-    initial.progressChoices = [{ mode: 'scalar_amount', units: [{
-      id: 'pages', label: 'pages', total: policy, min: '0.25', max: '999999999999.123456', step: '0.000001',
-    }] }];
+    initial.progressChoices = [
+      {
+        mode: 'scalar_amount',
+        units: [
+          {
+            id: 'pages',
+            label: 'pages',
+            total: policy,
+            min: '0.25',
+            max: '999999999999.123456',
+            step: '0.000001',
+          },
+        ],
+      },
+    ];
     const h = await mount(initial);
-    const fill = async (value: string) => act(async () => {
-      await h.user.clear(h.total());
-      if (value) await h.user.type(h.total(), value);
-    });
+    const fill = async (value: string) =>
+      act(async () => {
+        await h.user.clear(h.total());
+        if (value) await h.user.type(h.total(), value);
+      });
     try {
       if (policy !== 'forbidden') {
         for (const invalid of [...(policy === 'required' ? [''] : []), '1e3', '0.249999', '999999999999.123457']) {
@@ -564,7 +576,9 @@ test('start validates required fixed decimals before capture, omits empty option
           expect(commands).toHaveLength(0);
           expect(h.total().value).toBe(invalid);
           expect(h.total().getAttribute('aria-invalid')).toBe('true');
-          expect(window.document.getElementById(h.total().getAttribute('aria-describedby')!)?.getAttribute('role')).toBe('alert');
+          expect(
+            window.document.getElementById(h.total().getAttribute('aria-describedby')!)?.getAttribute('role'),
+          ).toBe('alert');
         }
         await fill(policy === 'required' ? '999999999999.123456' : '');
       }

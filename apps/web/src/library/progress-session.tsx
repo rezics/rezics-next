@@ -1022,7 +1022,9 @@ function SessionEditor({
                   {m.library_progress_current_total({ value: currentAmount ?? m.library_progress_unrecorded() })}
                 </p>
                 <div className="space-y-1">
-                  <label htmlFor={amountId} className="text-sm font-medium">{m.library_progress_amount()}</label>
+                  <label htmlFor={amountId} className="text-sm font-medium">
+                    {m.library_progress_amount()}
+                  </label>
                   <ProgressDecimalInput
                     id={amountId}
                     rules={session.inputRules}
@@ -1050,7 +1052,9 @@ function SessionEditor({
             ) : (
               <>
                 <div className="space-y-1">
-                  <label htmlFor={locatorId} className="text-sm font-medium">{m.library_progress_locator()}</label>
+                  <label htmlFor={locatorId} className="text-sm font-medium">
+                    {m.library_progress_locator()}
+                  </label>
                   <Input
                     id={locatorId}
                     value={locator}
@@ -1062,7 +1066,9 @@ function SessionEditor({
                   <ProgressInputError id={locatorError} issue={locatorIssue} />
                 </div>
                 <div className="space-y-1">
-                  <label htmlFor={positionId} className="text-sm font-medium">{m.library_progress_position()}</label>
+                  <label htmlFor={positionId} className="text-sm font-medium">
+                    {m.library_progress_position()}
+                  </label>
                   <ProgressDecimalInput
                     id={positionId}
                     rules={session.inputRules}

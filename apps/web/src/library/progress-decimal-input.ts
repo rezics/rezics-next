@@ -27,8 +27,7 @@ export function progressDecimalIssue(
   if (!value) return required ? 'required' : null;
   if (!progressDecimalPattern.test(value)) return 'syntax';
   const { min, max, step } = rules;
-  if (step && step !== 'any' && (value.split('.')[1]?.length ?? 0) > progressDecimalPlaces(step))
-    return 'precision';
+  if (step && step !== 'any' && (value.split('.')[1]?.length ?? 0) > progressDecimalPlaces(step)) return 'precision';
   const digits = comparable(value);
   if (min !== undefined && digits < comparable(min)) return 'min';
   if (max !== undefined && digits > comparable(max)) return 'max';
