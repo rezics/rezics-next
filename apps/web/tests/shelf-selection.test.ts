@@ -360,9 +360,15 @@ test('the selected shelf reviews a persisted native status operation, confirms i
     expect(host.querySelectorAll('[data-bulk-status-outcome="denied"]')).toHaveLength(1);
     expect(host.querySelectorAll('[data-bulk-status-outcome="no_effect"]')).toHaveLength(1);
     expect(host.querySelectorAll('[data-bulk-status-outcome="failed"]')).toHaveLength(1);
-    expect(host.textContent).toContain(m.library_bulk_status_result_count({ status: m.library_bulk_status_applied(), count: 1 }));
-    expect(host.textContent).toContain(m.library_bulk_status_result_count({ status: m.library_bulk_status_conflict(), count: 1 }));
-    expect(host.textContent).toContain(m.library_bulk_status_result_count({ status: m.library_bulk_status_skipped(), count: 1 }));
+    expect(host.textContent).toContain(
+      m.library_bulk_status_result_count({ status: m.library_bulk_status_applied(), count: 1 }),
+    );
+    expect(host.textContent).toContain(
+      m.library_bulk_status_result_count({ status: m.library_bulk_status_conflict(), count: 1 }),
+    );
+    expect(host.textContent).toContain(
+      m.library_bulk_status_result_count({ status: m.library_bulk_status_skipped(), count: 1 }),
+    );
     expect(stateCalls).toHaveLength(0);
     expect(initial.map(({ state }) => state)).toEqual([before, before, before, chosen, before, before]);
 

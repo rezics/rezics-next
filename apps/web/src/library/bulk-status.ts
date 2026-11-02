@@ -106,7 +106,11 @@ export function bulkStatusReviewMatches(
   currentLocale: string,
   current: boolean,
 ): boolean {
-  return current && reviewLocale === currentLocale && expectedSignature === bulkStatusSelectionSignature(items, requestedState);
+  return (
+    current &&
+    reviewLocale === currentLocale &&
+    expectedSignature === bulkStatusSelectionSignature(items, requestedState)
+  );
 }
 
 export type BulkStatusOutcomeGroups = Readonly<{
@@ -199,10 +203,9 @@ const previewNativeBulkStatus = createServerFn({ method: 'POST', strict: false }
   .validator((data: BulkStatusPreviewCall) => data)
   .handler(async ({ data }) => {
     const { client } = await nativeClient(data.headers);
-    const result = await client.libraryOperations.post(
-      JSON.parse(data.body) as NativePreviewRequest,
-      { headers: { 'idempotency-key': data.idempotencyKey } },
-    );
+    const result = await client.libraryOperations.post(JSON.parse(data.body) as NativePreviewRequest, {
+      headers: { 'idempotency-key': data.idempotencyKey },
+    });
     return responseData(result).operation as BulkStatusOperation;
   });
 
@@ -229,9 +232,7 @@ const readNativeBulkStatus = createServerFn({ method: 'GET', strict: false })
     do {
       const query = cursor ? { limit: 100, cursor } : { limit: 100 };
       const page = responseData(
-        await client
-          .libraryOperations({ operationId: data.operationId })
-          .outcomes.get({ query }),
+        await client.libraryOperations({ operationId: data.operationId }).outcomes.get({ query }),
       );
       outcomes.push(...page.outcomes);
       cursor = page.next;

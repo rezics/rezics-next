@@ -247,12 +247,7 @@ function selectionProps(entry: PersonalLibraryEntry, controls: Controls) {
 function SelectionBar({ controls }: { controls: Controls }) {
   const [chosen, setChosen] = useState('');
   const selectedState = controls.commonStates.some((option) => option.id === chosen) ? chosen : '';
-  if (
-    !controls.bulkStatusWriteAdmitted &&
-    !controls.labelWriteAdmitted &&
-    !controls.labelRemoveAdmitted
-  )
-    return null;
+  if (!controls.bulkStatusWriteAdmitted && !controls.labelWriteAdmitted && !controls.labelRemoveAdmitted) return null;
   const eligible = controls.rows.some((row) => controls.selectable(row.entry));
   if (!controls.selected.length)
     return eligible ? (
@@ -302,7 +297,9 @@ function SelectionBar({ controls }: { controls: Controls }) {
             </select>
           </label>
           <Button
-            disabled={controls.pending || controls.selectionBlocked || !selectedState || !controls.bulkStatusWriteAdmitted}
+            disabled={
+              controls.pending || controls.selectionBlocked || !selectedState || !controls.bulkStatusWriteAdmitted
+            }
             onClick={() => void controls.previewSelectedState(selectedState)}
           >
             {controls.pending ? m.library_bulk_status_previewing() : m.library_bulk_status_review()}
@@ -393,10 +390,7 @@ function BulkStatusReview({ controls }: { controls: Controls }) {
                 </h3>
                 <ul className="max-h-48 space-y-1 overflow-y-auto">
                   {outcomes.map((outcome) => (
-                    <li
-                      key={`${outcome.ordinal}:${outcome.subjectId}`}
-                      data-bulk-status-outcome={outcome.state}
-                    >
+                    <li key={`${outcome.ordinal}:${outcome.subjectId}`} data-bulk-status-outcome={outcome.state}>
                       {targetTitle(outcome.subjectId)}: {label(outcome.state)}
                     </li>
                   ))}

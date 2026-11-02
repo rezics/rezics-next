@@ -165,13 +165,19 @@ export function useShelfRows(
     setBulkStatusReviewChanged(announce && hadReview);
     setBulkStatusError(null);
   }, []);
-  const setSelected = useCallback((change: string[] | ((value: string[]) => string[])) => {
-    const next = typeof change === 'function' ? change(currentSelection.current) : change;
-    if (next.length !== currentSelection.current.length || next.some((id, index) => id !== currentSelection.current[index]))
-      invalidateBulkStatusReview();
-    currentSelection.current = next;
-    setSelectedState(next);
-  }, [invalidateBulkStatusReview]);
+  const setSelected = useCallback(
+    (change: string[] | ((value: string[]) => string[])) => {
+      const next = typeof change === 'function' ? change(currentSelection.current) : change;
+      if (
+        next.length !== currentSelection.current.length ||
+        next.some((id, index) => id !== currentSelection.current[index])
+      )
+        invalidateBulkStatusReview();
+      currentSelection.current = next;
+      setSelectedState(next);
+    },
+    [invalidateBulkStatusReview],
+  );
   const labelOperation = useRef<{ id: string; running: boolean } | null>(null);
   const [outcomes, setOutcomes] = useState<ShelfOutcome[]>([]);
   const stateCommands = useRef(
@@ -553,7 +559,8 @@ export function useShelfRows(
       release();
     }
   };
-  const selectedBulkRows = () => currentRows.current.filter((row) => currentSelection.current.includes(row.entry.subjectId));
+  const selectedBulkRows = () =>
+    currentRows.current.filter((row) => currentSelection.current.includes(row.entry.subjectId));
   const bulkSignature = (state: string) =>
     bulkStatusSelectionSignature(bulkStatusItems(currentRows.current, currentSelection.current), state);
   const bulkReviewIsCurrent = (review: BulkStatusReview) =>
@@ -576,7 +583,10 @@ export function useShelfRows(
       !hasMutationCredential()
     )
       return;
-    const captured = captureBulkStatusPreview(targets.map((row) => row.entry), value);
+    const captured = captureBulkStatusPreview(
+      targets.map((row) => row.entry),
+      value,
+    );
     if (!captured.ok) {
       setBulkStatusError('preview');
       return;
@@ -620,12 +630,7 @@ export function useShelfRows(
   };
   const retryBulkStatusPreview = async () => {
     const review = bulkStatusReview.current;
-    if (
-      !review ||
-      review.phase !== 'preview-uncertain' ||
-      !bulkReviewIsCurrent(review) ||
-      !bulkPreviewCurrent()
-    )
+    if (!review || review.phase !== 'preview-uncertain' || !bulkReviewIsCurrent(review) || !bulkPreviewCurrent())
       return;
     const release = lock(bulkPreviewCurrent);
     if (!release) return;
@@ -1008,8 +1013,7 @@ export function useShelfRows(
     selected: selectedRows.map((row) => row.entry.subjectId),
     commonStates,
     outcomes,
-    bulkStatusReview:
-      bulkStatusReviewState?.locale === locale && isCurrent() ? bulkStatusReviewState : null,
+    bulkStatusReview: bulkStatusReviewState?.locale === locale && isCurrent() ? bulkStatusReviewState : null,
     bulkStatusReviewChanged,
     bulkStatusError,
     bulkStatusWriteAdmitted: bulkWriteCurrent() && hasMutationCredential(),

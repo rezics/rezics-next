@@ -170,10 +170,8 @@ test('selected loaded entries use ordinary paged label search and serialized ass
     if (req.method === 'GET') {
       reads.push(url);
       if (url.pathname === '/v1/libraryEntries') return Response.json({ libraryEntries: source, next: 'entry-next' });
-      if (url.pathname === '/v1/libraryOperations/bulk-1')
-        return Response.json({ operation: operation('preview') });
-      if (url.pathname === '/v1/libraryOperations/bulk-1/outcomes')
-        return Response.json({ outcomes: [], next: null });
+      if (url.pathname === '/v1/libraryOperations/bulk-1') return Response.json({ operation: operation('preview') });
+      if (url.pathname === '/v1/libraryOperations/bulk-1/outcomes') return Response.json({ outcomes: [], next: null });
       if (url.pathname === '/v1/libraryLabels') {
         expect(req.headers.get('authorization')).toBe(`Bearer ${owner}`);
         expect(url.searchParams.get('limit')).toBe('20');

@@ -91,8 +91,7 @@ test('an uncertain confirmation reuses the retained sender, headers, body, and i
     { authorization: 'Bearer owner', cookie: 'session=owner', 'x-csrf-token': 'csrf-owner' },
     sender,
   );
-  const confirm = () =>
-    manifest.sender.confirm({ ...manifest.confirm, operationId: 'operation-1' });
+  const confirm = () => manifest.sender.confirm({ ...manifest.confirm, operationId: 'operation-1' });
 
   await expect(confirm()).rejects.toThrow('response lost');
   await confirm();
