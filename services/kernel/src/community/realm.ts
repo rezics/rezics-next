@@ -210,15 +210,17 @@ export async function readRealm(
       return current ? record(current) : null;
     });
   } catch (error) {
-    if (error instanceof RealmReadDeniedError) return null;
+    if (error instanceof Error && realmReadDenials.has(error)) return null;
     throw error;
   }
 }
 
-class RealmReadDeniedError extends ProblemError {
-  constructor() {
-    super('not_found');
-  }
+// Access and HTTP problem mapping share this module graph; construct the error only during a read.
+const realmReadDenials = new WeakSet<Error>();
+function realmReadDeniedError(): ProblemError {
+  const error = new ProblemError('not_found');
+  realmReadDenials.add(error);
+  return error;
 }
 
 function readEligibility(identity: Resource, observe?: (row: RealmRow | null) => void): ResourceEligibility {
@@ -249,7 +251,7 @@ function readEligibility(identity: Resource, observe?: (row: RealmRow | null) =>
         const binding = { ...resource, at, subject: null };
         const current = await dispatch(native.bindingPlan, binding, () => bindingRead.run(client, binding));
         if (!row || !current || canonicalize(current) !== canonicalize(evidence.binding))
-          throw new RealmReadDeniedError();
+          throw realmReadDeniedError();
         if (row?.visibility === 'protected' && actor.kind === 'account') {
           // Auth/Access validates the assignment reference. Its principal is a
           // second fixed identity, never an expansion of grants or memberships.
@@ -257,7 +259,7 @@ function readEligibility(identity: Resource, observe?: (row: RealmRow | null) =>
           const ban = { route: resource.route, realm_id: resource.id, account_ids: accountIds, at };
           if (await dispatch(native.banPlan(accountIds.length), ban, () => currentReadBan.run(client, ban)))
             // A false floor alone would leave independent grants available.
-            throw new RealmReadDeniedError();
+            throw realmReadDeniedError();
         }
         observe?.(row);
         return row?.visibility === 'public';
