@@ -107,7 +107,7 @@ function RelationEditorLive({
   const request = useRef<RelationProposal | RelationConfirmation | undefined>(undefined);
   const pageCursor = useRef<string | undefined>(undefined);
   // Keep the attempted address before I/O, independently of the last successful page.
-  const reading = useRef<{ slot?: RelationSlot; cursor?: string; session?: string } | undefined>(undefined);
+  const reading = useRef<{ slot: RelationSlot | undefined; cursor: string | undefined; session: string | undefined } | undefined>(undefined);
   const readGeneration = useRef(0);
   const running = useRef(false);
   const proposedCandidate = useRef<string | undefined>(undefined);
