@@ -26,9 +26,7 @@ export function completeWorkerSourceBaseline(value: unknown): WorkerSourceBaseli
 }
 
 export function canonicalConflictPaths(paths: readonly string[]): string[] {
-  return [...new Set(paths.filter(Boolean))].sort((left, right) =>
-    left < right ? -1 : left > right ? 1 : 0,
-  );
+  return [...new Set(paths.filter(Boolean))].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
 }
 
 /** Build only a complete context from the values captured at the actual Git conflict. */
