@@ -387,7 +387,7 @@ CREATE FUNCTION content.guard_reaction_count() RETURNS trigger
 BEGIN
   IF ROW(NEW.route, NEW.target_id, NEW.source_partition, NEW.kind)
        IS DISTINCT FROM ROW(OLD.route, OLD.target_id, OLD.source_partition, OLD.kind)
-     OR ROW(NEW.source_epoch, NEW.source_position) <= ROW(OLD.source_epoch, OLD.source_position) THEN
+     OR ROW(NEW.source_epoch, NEW.source_position) < ROW(OLD.source_epoch, OLD.source_position) THEN
     RAISE EXCEPTION 'Reaction count identity and source watermark cannot regress' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
@@ -957,6 +957,56 @@ CREATE TABLE content.erasure_fence (
 
 
 --
+-- Name: feed_activity; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.feed_activity (
+    route integer NOT NULL,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    target_type text NOT NULL,
+    target_id uuid NOT NULL,
+    activity_id text NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    activity jsonb NOT NULL,
+    CONSTRAINT feed_activity_activity_id_check CHECK ((octet_length(activity_id) <= 512)),
+    CONSTRAINT feed_activity_check CHECK ((route = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
+    CONSTRAINT feed_activity_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT feed_activity_target_type_check CHECK ((target_type = ANY (ARRAY['subject'::text, 'collection'::text, 'space'::text])))
+);
+
+
+--
+-- Name: TABLE feed_activity; Type: COMMENT; Schema: content; Owner: -
+--
+
+COMMENT ON TABLE content.feed_activity IS 'Body-free retained candidate references. The original owner and current follow authorize every read.';
+
+
+--
+-- Name: feed_inbox; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.feed_inbox (
+    route integer NOT NULL,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    account_id uuid NOT NULL,
+    activity_id text NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    activity jsonb NOT NULL,
+    CONSTRAINT feed_inbox_activity_id_check CHECK ((octet_length(activity_id) <= 512)),
+    CONSTRAINT feed_inbox_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT feed_inbox_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: TABLE feed_inbox; Type: COMMENT; Schema: content; Owner: -
+--
+
+COMMENT ON TABLE content.feed_inbox IS 'Private recent candidate inbox, capped at 2000 references and read only within 30 days. No discovery authority.';
+
+
+--
 -- Name: imported_field; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -1356,6 +1406,25 @@ CREATE TABLE content.reaction (
 
 
 --
+-- Name: reaction_contribution; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.reaction_contribution (
+    route integer NOT NULL,
+    target_id uuid NOT NULL,
+    actor_account_id uuid NOT NULL,
+    kind text,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    CONSTRAINT reaction_contribution_check CHECK ((route = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
+    CONSTRAINT reaction_contribution_kind_check CHECK ((kind = ANY (ARRAY['upvote'::text, 'downvote'::text, 'like'::text, 'love'::text, 'laugh'::text, 'insightful'::text, 'sad'::text]))),
+    CONSTRAINT reaction_contribution_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT reaction_contribution_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT reaction_contribution_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
 -- Name: reaction_count; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -1388,6 +1457,20 @@ CREATE TABLE content.reaction_liked_version (
     CONSTRAINT reaction_liked_version_check CHECK ((route = ((get_byte(uuid_send(actor_account_id), 10) * 256) + get_byte(uuid_send(actor_account_id), 11)))),
     CONSTRAINT reaction_liked_version_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT reaction_liked_version_version_check CHECK ((version > 0))
+);
+
+
+--
+-- Name: reaction_projection_baseline; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.reaction_projection_baseline (
+    source_partition integer NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    CONSTRAINT reaction_projection_baseline_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT reaction_projection_baseline_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095))),
+    CONSTRAINT reaction_projection_baseline_source_position_check CHECK ((source_position >= 0))
 );
 
 
@@ -1823,6 +1906,22 @@ ALTER TABLE ONLY content.erasure_fence
 
 
 --
+-- Name: feed_activity feed_activity_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.feed_activity
+    ADD CONSTRAINT feed_activity_pkey PRIMARY KEY (route, target_type, target_id, activity_id);
+
+
+--
+-- Name: feed_inbox feed_inbox_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.feed_inbox
+    ADD CONSTRAINT feed_inbox_pkey PRIMARY KEY (route, account_id, activity_id);
+
+
+--
 -- Name: imported_field imported_field_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -1975,6 +2074,14 @@ ALTER TABLE ONLY content.post
 
 
 --
+-- Name: reaction_contribution reaction_contribution_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.reaction_contribution
+    ADD CONSTRAINT reaction_contribution_pkey PRIMARY KEY (route, target_id, actor_account_id);
+
+
+--
 -- Name: reaction_count reaction_count_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -1996,6 +2103,14 @@ ALTER TABLE ONLY content.reaction_liked_version
 
 ALTER TABLE ONLY content.reaction
     ADD CONSTRAINT reaction_pkey PRIMARY KEY (route, actor_account_id, target_id);
+
+
+--
+-- Name: reaction_projection_baseline reaction_projection_baseline_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.reaction_projection_baseline
+    ADD CONSTRAINT reaction_projection_baseline_pkey PRIMARY KEY (source_partition);
 
 
 --
@@ -2185,6 +2300,34 @@ CREATE INDEX board_thread_page_idx ON content.board_thread USING btree (route, b
 --
 
 CREATE INDEX board_thread_rank_refresh_idx ON content.board_thread USING btree (route, rank_refreshed_at, board_id, thread_id) WHERE (active_rank <> (0)::double precision);
+
+
+--
+-- Name: feed_activity_expiry; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX feed_activity_expiry ON content.feed_activity USING btree (partition_no, occurred_at, route, target_type, target_id, activity_id);
+
+
+--
+-- Name: feed_activity_recent; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX feed_activity_recent ON content.feed_activity USING btree (route, target_type, target_id, occurred_at DESC, activity_id DESC);
+
+
+--
+-- Name: feed_inbox_expiry; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX feed_inbox_expiry ON content.feed_inbox USING btree (partition_no, occurred_at, route, account_id, activity_id);
+
+
+--
+-- Name: feed_inbox_recent; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX feed_inbox_recent ON content.feed_inbox USING btree (route, account_id, occurred_at DESC, activity_id DESC);
 
 
 --
