@@ -17,6 +17,27 @@ import { readPublicRealms } from './read';
 
 export type AccountView = View | 'realms';
 
+/** A different account view starts a different list; other query selections keep their original bytes. */
+function overviewFallback(
+  locale: string,
+  handle: string,
+  search = '',
+): string {
+  const href = agentPath(locale, handle);
+  if (!search) return href;
+  const fragmentAt = search.indexOf('#');
+  const query = fragmentAt < 0 ? search : search.slice(0, fragmentAt);
+  const fragment = fragmentAt < 0 ? '' : search.slice(fragmentAt);
+  const parameters = query.replace(/^\?/, '').split('&');
+  const retained: string[] = [];
+  for (const parameter of parameters) {
+    // Decode names as URL query parameters, including escaped names and duplicate cursors.
+    // Keep retained parameters verbatim so unrelated selections are not normalized.
+    if (!new URLSearchParams(parameter).has('cursor')) retained.push(parameter);
+  }
+  return keepSearch(href, retained.join('&'), fragment);
+}
+
 export function pageProfile(page: SubjectPageData) {
   const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
   for (const [key, read] of Object.entries(plan.reads)) {
@@ -51,7 +72,7 @@ export async function loadPublicAccountJourney(
       if (view && overview?.kind === 'page')
         return {
           kind: 'redirect' as const,
-          redirectTo: keepSearch(agentPath(locale, overview.page.account.handle), search),
+          redirectTo: overviewFallback(locale, overview.page.account.handle, search),
         };
       return { kind: 'missing' as const };
     }
@@ -68,13 +89,13 @@ export async function loadPublicAccountJourney(
     )
       return {
         kind: 'redirect' as const,
-        redirectTo: keepSearch(agentPath(locale, shown.page.account.handle), search),
+        redirectTo: overviewFallback(locale, shown.page.account.handle, search),
       };
     // An absent/malformed public projection cannot opt into membership publication.
     if (view === 'realms' && !profile?.publicViews.realms)
       return {
         kind: 'redirect' as const,
-        redirectTo: agentPath(locale, shown.page.account.handle),
+        redirectTo: overviewFallback(locale, shown.page.account.handle, search),
       };
     const identities = profile?.operatorId ? await readPageAuthors(client, [profile.operatorId]) : null;
     const identity = profile?.operatorId ? identities?.[profile.operatorId] : undefined;
