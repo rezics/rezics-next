@@ -24,10 +24,7 @@ function siblingDirs(source: string): string[] {
 }
 
 /** Return the tracked sibling tests present in the landing candidate for changed source files. */
-export function siblingTestFiles(
-  changedPaths: readonly string[],
-  candidate: string | ReadonlySet<string>,
-): string[] {
+export function siblingTestFiles(changedPaths: readonly string[], candidate: string | ReadonlySet<string>): string[] {
   const present =
     typeof candidate === 'string'
       ? (path: string) => existsSync(join(candidate, path))
