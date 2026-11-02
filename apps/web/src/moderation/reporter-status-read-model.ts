@@ -85,6 +85,31 @@ export function createReporterStatusJourney(
     return result;
   };
   if (initial.readerOrigin && !own(initial)) owner.retire();
+  // Both explicit actions keep the initial scope and observation; loading replaces private fields immediately.
+  async function reread(from: 'loaded' | 'unavailable') {
+    if (!owner.isCurrent() || busy || snapshot().state !== from) return;
+    busy = true;
+    const attempt = ++generation;
+    const ticket = owner.ticket();
+    const requestGeneration = crypto.randomUUID();
+    publish({ state: 'loading' });
+    try {
+      const next = await read({ id: initial.id, generation: requestGeneration });
+      if (!owner.owns(ticket) || attempt !== generation) return;
+      if (next.id !== initial.id || next.generation !== requestGeneration || !own(next)) return owner.retire();
+      if (!next.readerOrigin && next.result.state === 'unavailable') publish(unavailable);
+      else if (await owner.accepts(next)) {
+        if (owner.owns(ticket) && attempt === generation) {
+          resultOrigin = next.readerOrigin;
+          publish(next.result);
+        }
+      } else owner.retire();
+    } catch {
+      if (owner.owns(ticket) && attempt === generation) publish(unavailable);
+    } finally {
+      if (owner.owns(ticket) && attempt === generation) busy = false;
+    }
+  }
   return {
     retire: owner.retire,
     snapshot,
@@ -103,29 +128,7 @@ export function createReporterStatusJourney(
     },
     isConnected: owner.isCurrent,
     isCurrent: () => owner.isCurrent() && owner.available() && snapshot().state === 'loaded',
-    async retry() {
-      if (!owner.isCurrent() || busy || snapshot().state !== 'unavailable') return;
-      busy = true;
-      const attempt = ++generation;
-      const ticket = owner.ticket();
-      const requestGeneration = crypto.randomUUID();
-      publish({ state: 'loading' });
-      try {
-        const next = await read({ id: initial.id, generation: requestGeneration });
-        if (!owner.owns(ticket) || attempt !== generation) return;
-        if (next.id !== initial.id || next.generation !== requestGeneration || !own(next)) return owner.retire();
-        if (!next.readerOrigin && next.result.state === 'unavailable') publish(unavailable);
-        else if (await owner.accepts(next)) {
-          if (owner.owns(ticket) && attempt === generation) {
-            resultOrigin = next.readerOrigin;
-            publish(next.result);
-          }
-        } else owner.retire();
-      } catch {
-        if (owner.owns(ticket) && attempt === generation) publish(unavailable);
-      } finally {
-        if (owner.owns(ticket) && attempt === generation) busy = false;
-      }
-    },
+    retry: () => reread('unavailable'),
+    refresh: () => reread('loaded'),
   };
 }

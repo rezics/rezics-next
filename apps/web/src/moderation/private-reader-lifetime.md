@@ -38,6 +38,8 @@ observation. Decision's explicit recovery after retirement creates a new prepara
 outage has no actual origin: recovery UI can belong to an observation without tagging private data with that browser's
 expected identity. There is no automatic retry, refetch loop, extra session/native identity read or page expansion.
 
+Reporter Status offers explicit refresh for every loaded outcome using that same original reader; loading hides the prior submission and unavailable results reuse retry recovery.
+
 Reports retain individual and sequential bulk controllers, loaded-only maximum 20, immutable payloads/keys and confirmed
 receipts. Appeals passes its original-current command callback to AppealResolution before freeze/retry/send/settlement.
 Decision retains its immutable uncertain appeal retry and drafts through current transient recovery. Reporter Status

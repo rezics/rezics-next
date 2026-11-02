@@ -228,8 +228,7 @@ test('actual submitted report page resolves its owned source and renders exactly
   }
 });
 
-// Authored for integration; intentionally UNRUN under this worker's typing-only execution policy.
-test('The default private reporter-status journey retires submitted evidence and late reads on viewer or browser-session replacement and offers explicit recovery for a transient current read', async () => {
+test('the default private reporter-status journey refreshes outcomes, retries failures and retires private evidence and late reads on session replacement', async () => {
   const { dirname } = await import('node:path');
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -263,6 +262,8 @@ test('The default private reporter-status journey retires submitted evidence and
   const original = { state: 'signed-in' as const, subject: submission.reporterId, csrfToken: 'first-browser-session' };
   let browser = original;
   let status = 200;
+  let outcome: ReporterStatus['outcome'] = null;
+  let closed = false;
   let release: (() => void) | undefined;
   let gate: Promise<void> | undefined;
   const calls: string[] = [];
@@ -272,14 +273,24 @@ test('The default private reporter-status journey retires submitted evidence and
       calls.push(`${request.method} ${new URL(request.url).pathname}`);
       expect(request.headers.get('authorization')).toBe(`Bearer ${browser.subject}`);
       const responseStatus = status;
-      const responseReport = { ...report, reporterId: browser.subject };
+      const responseReport = {
+        ...report,
+        reporterId: browser.subject,
+        outcome,
+        resolvedAt: outcome ? '2026-10-31T10:00:00.000Z' : null,
+      };
       if (gate) await gate;
       return Response.json(
         responseStatus === 200
           ? { report: responseReport }
           : {
-              code:
-                responseStatus === 404 ? 'not_found' : responseStatus === 403 ? 'forbidden' : 'dependency_unavailable',
+              code: closed
+                ? 'platform_closed'
+                : responseStatus === 404
+                  ? 'not_found'
+                  : responseStatus === 403
+                    ? 'forbidden'
+                    : 'dependency_unavailable',
               detail: 'Private infrastructure diagnostics',
             },
         { status: responseStatus },
@@ -340,14 +351,19 @@ test('The default private reporter-status journey retires submitted evidence and
       ),
     );
   };
-  const retry = async () => {
-    const button = [...host.querySelectorAll('button')].find((item) => item.textContent?.includes(m.sources_retry()));
+  const clickRead = async (label: string) => {
+    const buttons = [...host.querySelectorAll('button')].filter((item) => item.textContent?.includes(label));
+    expect(buttons).toHaveLength(1);
+    const button = buttons[0];
     expect(button).toBeDefined();
     await act(async () => {
+      button!.click();
       button!.click();
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
   };
+  const retry = () => clickRead(m.sources_retry());
+  const refresh = () => clickRead(m.reporter_status_refresh());
   const absent = () => {
     for (const bytes of [report.evidence!, report.revisionId!, report.target.id, 'Private infrastructure diagnostics'])
       expect(host.textContent).not.toContain(bytes);
@@ -358,6 +374,27 @@ test('The default private reporter-status journey retires submitted evidence and
     await mount();
     expect(host.textContent).toContain(report.evidence!);
     expect(host.textContent).toContain(m.moderation_target_unavailable());
+    for (const next of ['actioned', 'dismissed'] as const) {
+      outcome = null;
+      await mount();
+      expect(host.textContent).toContain(m.reporter_status_pending());
+      const before = calls.length;
+      await flush();
+      expect(calls).toHaveLength(before);
+      outcome = next;
+      gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      await refresh();
+      expect(calls).toHaveLength(before + 1);
+      expect(host.textContent).toContain(m.reporter_status_read_loading());
+      absent();
+      release!();
+      await flush();
+      gate = undefined;
+      expect(host.textContent).toContain(next === 'actioned' ? m.moderation_actioned() : m.moderation_dismissed());
+      expect(host.textContent).toContain(report.evidence!);
+    }
     // A real cache replacement for the same account retires the loaded report and pending clipboard settlement.
     let copied!: () => void;
     Object.defineProperty(window.navigator, 'clipboard', {
@@ -391,8 +428,9 @@ test('The default private reporter-status journey retires submitted evidence and
     expect(host.textContent).not.toContain(m.reporter_status_copied());
 
     // A current native transient failure offers exactly one explicit read per click and no automatic retry.
-    status = 503;
     await mount();
+    status = 503;
+    await refresh();
     expect(host.textContent).toContain(m.reporter_status_unavailable());
     absent();
     const before = calls.length;
@@ -417,29 +455,35 @@ test('The default private reporter-status journey retires submitted evidence and
     expect(late.result.state).toBe('concealed');
     gate = undefined;
 
-    // The default retry path also rejects a late response across account replacement.
-    status = 503;
-    await mount();
-    status = 200;
-    gate = new Promise((resolve) => {
-      release = resolve;
-    });
-    await retry();
-    expect(host.textContent).toContain(m.reporter_status_read_loading());
-    await setSession({ ...original, subject: 'different-reporter' });
-    await setSession(original);
-    release!();
-    await flush();
-    absent();
-    gate = undefined;
-
-    for (const denial of [403, 404]) {
-      status = denial;
+    // Neither retry nor refresh can undo account replacement.
+    for (const action of [retry, refresh]) {
+      status = action === retry ? 503 : 200;
       await mount();
-      expect(host.textContent).toContain(m.reporter_status_read_concealed());
+      status = 200;
+      gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      await action();
+      expect(host.textContent).toContain(m.reporter_status_read_loading());
+      await setSession({ ...original, subject: 'different-reporter' });
+      await setSession(original);
+      release!();
+      await flush();
+      absent();
+      gate = undefined;
+    }
+
+    for (const denial of [403, 404, 'closed'] as const) {
+      status = 200;
+      await mount();
+      closed = denial === 'closed';
+      status = typeof denial === 'number' ? denial : 403;
+      await refresh();
+      expect(host.textContent).toContain(closed ? m.reporter_status_read_closed() : m.reporter_status_read_concealed());
       expect(host.querySelector('button')).toBeNull();
       absent();
     }
+    closed = false;
     status = 200;
     await mount();
     await setSession({ state: 'signed-out', subject: null, csrfToken: null });

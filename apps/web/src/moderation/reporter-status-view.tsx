@@ -1,7 +1,7 @@
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
-import { ArrowLeft, Check, CircleCheck, CircleMinus, Clock3, Copy, LoaderCircle } from 'lucide-react';
+import { ArrowLeft, Check, CircleCheck, CircleMinus, Clock3, Copy, LoaderCircle, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -20,7 +20,7 @@ type Retry = () => void | Promise<void>;
 /** The served page and its stories share this composition within the site's AppShell. */
 export function ReporterStatusPage(
   props:
-    | { report: ReporterStatus; isCurrent?: () => boolean }
+    | { report: ReporterStatus; isCurrent?: () => boolean; onRefresh?: Retry }
     | { onRetry: Retry }
     | { state: 'loading' | 'concealed' | 'closed' },
 ) {
@@ -34,7 +34,7 @@ export function ReporterStatusPage(
         {m.reporter_status_back()}
       </a>
       {'report' in props ? (
-        <ReporterStatusView report={props.report} {...(props.isCurrent ? { isCurrent: props.isCurrent } : {})} />
+        <ReporterStatusView {...props} />
       ) : 'onRetry' in props ? (
         <ReporterStatusFailure onRetry={props.onRetry} />
       ) : (
@@ -79,7 +79,12 @@ function ReporterStatusVisit({
         if ((event.target as Element).closest('a') && !journey.isConnected()) event.preventDefault();
       }}
     >
-      <ReporterStatusResultPage result={result} onRetry={() => journey.retry()} isCurrent={journey.isCurrent} />
+      <ReporterStatusResultPage
+        result={result}
+        onRetry={() => journey.retry()}
+        onRefresh={() => journey.refresh()}
+        isCurrent={journey.isCurrent}
+      />
     </div>
   );
 }
@@ -87,14 +92,22 @@ function ReporterStatusVisit({
 export function ReporterStatusResultPage({
   result,
   onRetry,
+  onRefresh,
   isCurrent,
 }: {
   result: ReporterStatusResult;
   onRetry: Retry;
+  onRefresh?: Retry;
   isCurrent?: () => boolean;
 }) {
   if (result.state === 'loaded')
-    return <ReporterStatusPage report={result.report} {...(isCurrent ? { isCurrent } : {})} />;
+    return (
+      <ReporterStatusPage
+        report={result.report}
+        {...(onRefresh ? { onRefresh } : {})}
+        {...(isCurrent ? { isCurrent } : {})}
+      />
+    );
   if (result.state === 'unavailable') return <ReporterStatusPage onRetry={onRetry} />;
   return <ReporterStatusPage state={result.state} />;
 }
@@ -118,7 +131,15 @@ export function ReporterStatusReadState({ state }: { state: 'loading' | 'conceal
 
 /** Own-submission presentation has no shadcn equivalent; it composes existing controls.
  * Available is an annotation, never permission or a link to the target. */
-export function ReporterStatusView({ report, isCurrent }: { report: ReporterStatus; isCurrent?: () => boolean }) {
+export function ReporterStatusView({
+  report,
+  isCurrent,
+  onRefresh,
+}: {
+  report: ReporterStatus;
+  isCurrent?: () => boolean;
+  onRefresh?: Retry;
+}) {
   const reason = {
     off_topic: m.report_off_topic,
     inappropriate: m.report_inappropriate,
@@ -152,6 +173,12 @@ export function ReporterStatusView({ report, isCurrent }: { report: ReporterStat
           {status.label}
         </Badge>
         <p className="max-w-prose text-base leading-7 text-muted-foreground">{status.explanation}</p>
+        {onRefresh ? (
+          <Button variant="outline" className="min-h-11" onClick={() => void onRefresh()}>
+            <RefreshCw className="size-4" aria-hidden="true" />
+            {m.reporter_status_refresh()}
+          </Button>
+        ) : null}
       </header>
       <section aria-labelledby="reporter-status-timeline" className="space-y-4">
         <ContentItemHeading id="reporter-status-timeline" level={2} className="text-xl font-semibold">

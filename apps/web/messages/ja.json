@@ -2398,6 +2398,7 @@
   "reporter_status_copy": "参照情報をコピー",
   "reporter_status_copied": "参照情報をコピーしました。",
   "reporter_status_copy_failed": "コピーできませんでした。上の参照情報を選択してコピーできます。",
+  "reporter_status_refresh": "対応結果を更新",
   "reporter_status_retrying": "再試行中…",
   "reporter_status_pending_explanation": "報告を受け付けました。確認をお待ちください。",
   "reporter_status_actioned_explanation": "報告を確認し、措置を講じました。これは報告への対応結果であり、その後の異議申し立てでは変わりません。",

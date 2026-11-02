@@ -2398,6 +2398,7 @@
   "reporter_status_copy": "复制引用",
   "reporter_status_copied": "已复制引用。",
   "reporter_status_copy_failed": "无法复制。你可以选中并复制上方的引用。",
+  "reporter_status_refresh": "刷新处理结果",
   "reporter_status_retrying": "正在重试…",
   "reporter_status_pending_explanation": "你的举报已收到，正在等待审核。",
   "reporter_status_actioned_explanation": "你的举报已审核并采取了措施。这是举报的处理结果，之后的申诉不会改变该结果。",

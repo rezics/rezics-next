@@ -2398,6 +2398,7 @@
   "reporter_status_copy": "Copier la référence",
   "reporter_status_copied": "Référence copiée.",
   "reporter_status_copy_failed": "Échec de la copie. Vous pouvez sélectionner et copier la référence ci-dessus.",
+  "reporter_status_refresh": "Actualiser le résultat",
   "reporter_status_retrying": "Nouvelle tentative…",
   "reporter_status_pending_explanation": "Votre signalement a été reçu et attend d’être examiné.",
   "reporter_status_actioned_explanation": "Votre signalement a été examiné et des mesures ont été prises. C’est le résultat du signalement ; un recours ultérieur ne le modifie pas.",

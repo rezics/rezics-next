@@ -2390,6 +2390,7 @@
   "reporter_status_copy": "Copy reference",
   "reporter_status_copied": "Reference copied.",
   "reporter_status_copy_failed": "Could not copy. You can select and copy the reference above.",
+  "reporter_status_refresh": "Refresh outcome",
   "reporter_status_retrying": "Retrying…",
   "reporter_status_pending_explanation": "Your report was received and is waiting for review.",
   "reporter_status_actioned_explanation": "Your report was reviewed and action was taken. This is the report’s outcome; a later appeal does not change it.",

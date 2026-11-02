@@ -2398,6 +2398,7 @@
   "reporter_status_copy": "Referenz kopieren",
   "reporter_status_copied": "Referenz kopiert.",
   "reporter_status_copy_failed": "Kopieren fehlgeschlagen. Du kannst die Referenz oben auswählen und kopieren.",
+  "reporter_status_refresh": "Ergebnis aktualisieren",
   "reporter_status_retrying": "Erneuter Versuch…",
   "reporter_status_pending_explanation": "Deine Meldung ist eingegangen und wartet auf Prüfung.",
   "reporter_status_actioned_explanation": "Deine Meldung wurde geprüft und es wurden Maßnahmen ergriffen. Dies ist das Ergebnis der Meldung; ein späterer Einspruch ändert es nicht.",

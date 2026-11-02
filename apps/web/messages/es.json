@@ -2398,6 +2398,7 @@
   "reporter_status_copy": "Copiar referencia",
   "reporter_status_copied": "Referencia copiada.",
   "reporter_status_copy_failed": "No se pudo copiar. Puedes seleccionar y copiar la referencia de arriba.",
+  "reporter_status_refresh": "Actualizar resultado",
   "reporter_status_retrying": "Reintentando…",
   "reporter_status_pending_explanation": "Hemos recibido tu denuncia y está pendiente de revisión.",
   "reporter_status_actioned_explanation": "Tu denuncia se revisó y se tomaron medidas. Este es el resultado de la denuncia; una apelación posterior no lo cambia.",

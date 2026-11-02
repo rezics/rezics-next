@@ -2398,6 +2398,7 @@
   "reporter_status_copy": "複製參照",
   "reporter_status_copied": "已複製參照。",
   "reporter_status_copy_failed": "無法複製。你可以選取並複製上方的參照。",
+  "reporter_status_refresh": "重新整理處理結果",
   "reporter_status_retrying": "正在重試…",
   "reporter_status_pending_explanation": "已收到你的檢舉，正在等待審核。",
   "reporter_status_actioned_explanation": "你的檢舉已審核並採取措施。這是檢舉的處理結果，之後的申訴不會改變此結果。",
