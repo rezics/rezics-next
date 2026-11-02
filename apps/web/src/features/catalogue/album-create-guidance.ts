@@ -116,7 +116,7 @@ export function albumCreateCorrections(
     ) {
       const index = Number(tail[1]);
       const qualifier = row.statement.qualifiers?.[index];
-      if (qualifier)
+      if (qualifier?.value.type === 'value' && typeof qualifier.value.content === 'string')
         return result(
           `${id}-qualifier-${index}`,
           `${m.relation_qualifier({}, o)} · ${pickText(release.properties[qualifier.property.id]?.labels ?? {}, locale).text}`,

@@ -158,7 +158,7 @@ function AlbumProfileCreateLive({
                   className={actionClassName}
                   disabled={busy}
                   onClick={async () => {
-                    if (running.current) return;
+                    if (!lifetime.active() || running.current) return;
                     running.current = true;
                     setBusy(true);
                     try {
@@ -350,7 +350,7 @@ function AlbumProfileCreateLive({
             variant="outline"
             disabled={busy}
             onClick={async () => {
-              if (running.current) return;
+              if (!lifetime.active() || running.current) return;
               running.current = true;
               setBusy(true);
               try {
@@ -406,6 +406,7 @@ function AlbumProfileCreateLive({
                   href={`#${correction.target}`}
                   onClick={(event) => {
                     event.preventDefault();
+                    if (!lifetime.active()) return;
                     // Following an invalid-field correction explicitly reviews a new command.
                     if (failure.reason === 'invalid' && !busy && !metadataFailure) {
                       flushSync(() => {
