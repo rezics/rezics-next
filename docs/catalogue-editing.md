@@ -205,6 +205,8 @@ remain visible. Missing controls confer no additional native capability.
 Withdrawn scalar drafts in the shared generic and profile editors retain a bounded private assertion and original
 label outside the disabled admitted fields; cancellable local removal preserves siblings, while commands and locked
 results require exact recovery through matching definitions.
+Game classification drafts keep their prior release definitions privately for read-only inspection while withdrawn;
+fresh proposals and exact replays wait until current admission returns.
 
 Names and descriptions link the existing terms adapter. Its generated native binding is integrated.
 Native authority and deduplication remain Semantic-owned; this profile never substitutes `schema:name` proposals
