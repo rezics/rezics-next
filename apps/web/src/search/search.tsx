@@ -54,6 +54,7 @@ import {
   type SearchProblem,
 } from './condition-editor-model';
 import { createFilterDraft, resetFilterDraft } from './filter-draft-reset';
+import { useFilterSurfaceFocus } from './filter-surface-focus';
 type SearchResult = LegacySearchPage;
 type SearchParams = {
   query: string;
@@ -430,7 +431,6 @@ export function SearchPage({
   const [filterSurface, setFilterSurface] = useState<'desktop' | 'mobile' | undefined>();
   const router = useRouter({ warn: false });
   const typeControlId = useId();
-  const filterOpener = useRef<HTMLElement | null>(null);
   const locale = localeProp ?? getLocale();
   const options = messageOptions(locale);
   const type = data?.type;
@@ -447,6 +447,7 @@ export function SearchPage({
   const stateKey = JSON.stringify(committedState);
   const latestStateKey = useRef(stateKey);
   latestStateKey.current = stateKey;
+  const filterFocus = useFilterSurfaceFocus(stateKey);
   const [rangeDraftState, setRangeDraftState] = useState(() => createRangeDraftState(stateKey));
   if (rangeDraftState.key !== stateKey) setRangeDraftState(createRangeDraftState(stateKey));
   const baseline = { condition: data?.condition, languages: committedState.languages };
@@ -544,23 +545,46 @@ export function SearchPage({
   useEffect(() => setHydrated(true), []);
   const desktopPanel = useRef<HTMLDivElement>(null);
   const openFilters = useCallback(() => {
-    filterOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const owner = latestStateKey.current;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const desktop = window.matchMedia('(min-width: 1024px)').matches;
-    setFilterSurface(desktop ? 'desktop' : 'mobile');
-    if (desktop) requestAnimationFrame(() => desktopPanel.current?.focus());
-  }, []);
+    const surface = desktop ? 'desktop' : 'mobile';
+    const id = filterFocus.begin({
+      owner,
+      kind: 'open',
+      surface,
+      opener,
+      document,
+      ...(desktop ? { resolveDestination: () => desktopPanel.current } : {}),
+    });
+    setFilterSurface(surface);
+    if (desktop) filterFocus.schedule(id, owner);
+  }, [filterFocus]);
   const closeFilters = useCallback(() => {
+    const owner = latestStateKey.current;
+    const surfaceRoot = desktopPanel.current ?? document.querySelector<HTMLElement>('[role="dialog"]');
+    const id = filterFocus.begin({
+      owner,
+      kind: 'close',
+      document,
+      ...(surfaceRoot ? { surfaceRoot } : {}),
+    });
     setFilterSurface(undefined);
-    requestAnimationFrame(() => filterOpener.current?.focus());
-  }, []);
+    filterFocus.schedule(id, owner);
+  }, [filterFocus]);
   useEffect(() => {
-    if (filterSurface === 'desktop') desktopPanel.current?.focus();
+    if (filterSurface === 'desktop') filterFocus.restoreOpen(latestStateKey.current, 'desktop');
     if (!filterSurface) return;
     const media = window.matchMedia('(min-width: 1024px)');
-    const resize = () => setFilterSurface(media.matches ? 'desktop' : 'mobile');
+    const resize = () => {
+      const next = media.matches ? 'desktop' : 'mobile';
+      if (next === filterSurface) return;
+      filterFocus.retire();
+      setFilterSurface(next);
+    };
     media.addEventListener('change', resize);
     return () => media.removeEventListener('change', resize);
-  }, [filterSurface]);
+  }, [filterFocus, filterSurface]);
   useEffect(() => {
     if (initiallyOpen) openFilters();
   }, [initiallyOpen, openFilters]);

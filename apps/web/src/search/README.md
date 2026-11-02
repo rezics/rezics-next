@@ -48,7 +48,10 @@ so a repeated query repeats that display, and each delivered `{query, display}` 
 Filters stays at the left of the composer's second row. `HeaderSearchFilterProvider` and
 `useRegisterHeaderSearchFilters` connect it to the current route's actual editor and active count. Search owns
 result filters; Collection's dialog remains a separate delivery slice. No new filter state or backend operation
-is introduced here. Scope labels require a supported scoped action and suggestion loader; otherwise they remain
+is introduced here. Opening or closing Filters restores keyboard focus only for the current surface transition,
+to a still-connected captured owner. Reopen, desktop/phone replacement, a new committed search, unmount, and a
+reader who has moved retire the request. Desktop entry and Escape/Close use that rule; the phone sheet keeps
+BottomSheet's own focus lifecycle. Scope labels require a supported scoped action and suggestion loader; otherwise they remain
 explicitly unavailable until removed, without falling back to global search.
 
 Filters edits result-language preferences as an ordered list of at most eight: add from supported locales, preserve
