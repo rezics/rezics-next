@@ -1813,6 +1813,8 @@ conflict and read-only states, with shared locale/theme/viewport globals and the
 
 ### Catalogue moderation reports (`/moderation/catalogue`)
 
+Decision: the shell shows signed-in readers a link to this route; native Global authority admits every queue read and command, and denied reads reveal no report evidence.
+
 Decision: use one private catalogue queue at `/moderation/catalogue`; `/moderation/reports/<id>` remains the
 reporter's own receipt. This is the consumer of Content's Subject-report contract, not another native producer.
 The existing native Subject-report owner supplies `subject_report.list` and `catalogue_report.list`; the

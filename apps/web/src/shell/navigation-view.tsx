@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { House, Inbox, Library, ReceiptText, Search } from 'lucide-react';
+import { House, Inbox, Library, ReceiptText, Search, ShieldCheck } from 'lucide-react';
 import { useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import {
@@ -66,6 +66,17 @@ export const defaultNavigation = createNavigation([
     match: 'prefix',
     signedIn: true,
     desktopOnly: true,
+  },
+  {
+    id: 'shell.catalogue-moderation',
+    kind: 'navigation',
+    group: 'personal',
+    order: 30,
+    href: '/moderation/catalogue',
+    label: ({ locale }) => m.moderation_reports_heading({}, { locale }),
+    icon: ShieldCheck,
+    match: 'prefix',
+    signedIn: true,
   },
 ]);
 const NavigationContextValue = createContext(defaultNavigation);

@@ -5,7 +5,7 @@ import { prepareSession, viewerCredential } from '../session/request';
 
 type KernelReport = Parameters<KernelClient['reports']['post']>[0];
 export type ReportDraft = Omit<KernelReport, 'target'> & {
-  target: { kind: KernelReport['target']['kind'] | 'subject'; id: string };
+  target: KernelReport['target'];
   idempotencyKey: string;
 };
 export type ReportResult =
@@ -56,9 +56,7 @@ export async function submitReport(
   const authorization = viewerCredential(request);
   const { idempotencyKey, ...body } = data;
   try {
-    // The kernel's report targets name the subject kind only once its report contract admits it. Until then it
-    // refuses the report and the dialog says so.
-    const result = await client.reports.post(body as KernelReport, {
+    const result = await client.reports.post(body, {
       headers: { 'idempotency-key': JSON.stringify(idempotencyKey), ...(authorization ? { authorization } : {}) },
     });
     if (!result.error) return { ok: true, reportId: result.data.reportId };
