@@ -167,11 +167,7 @@ function ScreenProfileLive({
   if (!id && query.data?.ok) retained.current = query.data;
   const read = query.data?.ok ? query.data : retained.current;
   const admitted =
-    !retired &&
-    !query.isFetching &&
-    !query.isError &&
-    query.data?.ok &&
-    query.data.public?.subject.id === id
+    !retired && !query.isFetching && !query.isError && query.data?.ok && query.data.public?.subject.id === id
       ? query.data
       : undefined;
   const reload = () => {
