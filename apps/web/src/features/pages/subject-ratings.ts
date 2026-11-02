@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
+import { decodeOwnRatingValue } from './subject-own-rating-value';
 
 export const GLOBAL = '00000000-0000-8000-8000-000000000000';
 export const QUESTION = '00000000-0000-7000-8000-000000000001';
@@ -196,7 +197,10 @@ export async function readOwnRating(
       .subjects({ id })
       .ratings({ questionId: QUESTION })
       .vote.get({ headers: { authorization } });
-    if (result.status === 200) return { reader, kind: 'ready', units: result.data?.units ?? null };
+    if (result.status === 200) {
+      const value = decodeOwnRatingValue(result.data);
+      return value ? { reader, kind: 'ready', units: value.units } : { reader, kind: 'unavailable' };
+    }
     if (result.status === 404) return { reader, kind: 'ready', units: null };
     return { reader, kind: 'unavailable' };
   } catch {
