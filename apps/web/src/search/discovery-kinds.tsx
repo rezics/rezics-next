@@ -45,7 +45,7 @@ export function DiscoveryKinds({
     moved: boolean;
     complete: boolean;
     onFocusIn: (event: FocusEvent) => void;
-  }>();
+  } | undefined>(undefined);
   function clearFocusAction(action: NonNullable<typeof focusAction.current>) {
     action.document.removeEventListener('focusin', action.onFocusIn, true);
     if (focusAction.current === action) focusAction.current = undefined;
