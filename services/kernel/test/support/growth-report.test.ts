@@ -186,15 +186,9 @@ test('byte-growth failures distinguish measured byte totals from SQL row attribu
   expect(afterRequest).toContain('SELECT growing | 1: 100, 8: 800 | Seq Scan t');
 
   const mixed = formatStatementAttribution(samples, ['rows', 'blocks', 'statements', 'responseBytes']);
-  expect(mixed).toContain(
-    'Statements growing most for rows:\n  SELECT growing | 1: 100, 8: 800 | Seq Scan t',
-  );
-  expect(mixed).toContain(
-    'Statements growing most for blocks:\n  SELECT growing | 1: 2, 8: 16 | Seq Scan t',
-  );
-  expect(mixed).toContain(
-    'Statements growing most for statements:\n  SELECT growing | 1: 1, 8: 1 | Seq Scan t',
-  );
+  expect(mixed).toContain('Statements growing most for rows:\n  SELECT growing | 1: 100, 8: 800 | Seq Scan t');
+  expect(mixed).toContain('Statements growing most for blocks:\n  SELECT growing | 1: 2, 8: 16 | Seq Scan t');
+  expect(mixed).toContain('Statements growing most for statements:\n  SELECT growing | 1: 1, 8: 1 | Seq Scan t');
   expect(mixed).toContain('Measured responseBytes totals by scale: 1: 12, 8: 96');
   expect(mixed).toContain('Per-statement responseBytes attribution is unavailable');
   expect(mixed).not.toContain('Statements growing most for responseBytes:');
