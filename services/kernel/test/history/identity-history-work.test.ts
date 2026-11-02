@@ -318,7 +318,7 @@ function originalEnvelope(): Envelope {
 
 test('Identity fx wrapper rejects wrong native position/epoch/partition before association IO', () => {
   const envelope = originalEnvelope();
-  expect(validateIdentityOriginalEvent(envelope, 0)).toEqual(envelope.events[0]!.data);
+  expect<unknown>(validateIdentityOriginalEvent(envelope, 0)).toEqual(envelope.events[0]!.data);
   for (const altered of [{ ...envelope, position: 2n }, { ...envelope, epoch: 2 },
     { ...envelope, partition: 2514 }, { ...envelope, epoch: Number.MAX_SAFE_INTEGER + 1 }]) {
     expect(() => validateIdentityOriginalEvent(altered, 0)).toThrow(IdentityOriginalUnavailable);
