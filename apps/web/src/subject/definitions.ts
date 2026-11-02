@@ -1,4 +1,3 @@
-import { pickText } from '@rezics/composition';
 import type { LibraryProfile, LibraryProfileReference, TypeDefinition } from '@rezics/definitions';
 import type { FilterRelease } from '@rezics/filter';
 import { parseCoverRatio, type CoverRatio } from '@rezics/ui/cover';
@@ -7,6 +6,7 @@ import { requestLocale } from '../kernel/client.ts';
 import { relationDefinitions, type RelationDefinition } from './relations.ts';
 import type { KernelClient } from '@rezics/client';
 import { fetchGuideRelease, type GuideRelease } from '../features/catalogue/definition-guide';
+import { readTypeDescriptor, readTypeDescriptors } from '../features/catalogue/type-directory';
 
 export type Release = FilterRelease & {
   digest?: string;
@@ -167,52 +167,37 @@ export async function refreshRelease(): Promise<Release> {
   return readRelease();
 }
 
-/** The definition release's name for each of these types in the reader's language chain; a type it has no name for is absent. */
+/** Current released names for only the requested Types, including Types from other active Releases. */
 export async function typeNames(types: Iterable<string>, locale: string): Promise<Map<string, string>> {
-  const names = new Map<string, string>();
-  const wanted = new Set(types);
-  if (wanted.size === 0) return names;
-  let release: Release;
-  try {
-    release = await readRelease();
-  } catch {
-    return names;
-  }
-  for (const type of wanted) {
-    const definition = Object.hasOwn(release.types, type) ? release.types[type] : undefined;
-    const label = definition?.labels ? pickText(definition.labels, locale).text : '';
-    if (label) names.set(type, label);
-  }
-  return names;
+  const descriptors = await readTypeDescriptors(types, locale);
+  return new Map(
+    [...descriptors].flatMap(([type, descriptor]) =>
+      descriptor.label
+        ? [[type, displayTypeLabel(descriptor.label, descriptor.language ?? locale)] as const]
+        : [],
+    ),
+  );
 }
 
-/**
- * The type's name in the reader's language and the cover frame its definition declares, taken from the nearest type
- * of its own bases that declares one. Current catalogue defaults are portrait 5:7 for every kind; an explicit
- * valid configured ratio remains supported. A type the release does not know leaves Cover's default in control.
- */
+/** Effective cover inheritance is compiled into the exact descriptor; schema metadata is explicit only. */
 export async function typeFrame(
   type: string,
   locale: string,
 ): Promise<{ label?: string; ratio?: CoverRatio; schemaOrgType?: string }> {
-  let release: Release;
-  try {
-    release = await readRelease();
-  } catch {
-    return {};
-  }
-  const definition = Object.hasOwn(release.types, type) ? release.types[type] : undefined;
-  if (!definition) return {};
-  const label = definition.labels ? pickText(definition.labels, locale).text : '';
-  const metadata = definition.schemaOrgType?.startsWith('https://schema.org/')
-    ? { schemaOrgType: definition.schemaOrgType }
-    : {};
-  for (const name of [type, ...(definition.bases ?? [])]) {
-    const ratio = Object.hasOwn(release.types, name) ? release.types[name]?.coverRatio : undefined;
-    const parsed = ratio === undefined ? undefined : parseCoverRatio(ratio);
-    if (parsed !== undefined) return { ...(label ? { label } : {}), ...metadata, ratio: parsed };
-  }
-  return { ...(label ? { label } : {}), ...metadata };
+  const result = await readTypeDescriptor(type, locale);
+  if (!result.ok) return {};
+  const { label, language, definition } = result.descriptor;
+  const ratio = typeof definition.coverRatio === 'string' ? parseCoverRatio(definition.coverRatio) : undefined;
+  const schemaOrgType =
+    typeof definition.schemaOrgType === 'string' &&
+    /^https:\/\/schema\.org\/[A-Za-z0-9_-]+$(?![\s\S])/u.test(definition.schemaOrgType)
+      ? definition.schemaOrgType
+      : undefined;
+  return {
+    ...(label ? { label: displayTypeLabel(label, language ?? locale) } : {}),
+    ...(ratio === undefined ? {} : { ratio }),
+    ...(schemaOrgType === undefined ? {} : { schemaOrgType }),
+  };
 }
 
 /** Names each subject's type in the reader's language, in place; a type with no name keeps none and is not shown. */
@@ -227,6 +212,7 @@ export async function nameSubjectTypes(
   for (const subject of present) {
     const name = names.get(subject.type);
     if (name !== undefined) subject.typeLabel = name;
+    else delete subject.typeLabel;
   }
 }
 

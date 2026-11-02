@@ -11,6 +11,25 @@ views are organised. Mechanisms live with their owners: covers in [Cover](../pac
 This page spans those modules because a reader experiences one page; splitting its rules across owners would let
 each owner ship a correct part and the page still fail.
 
+## Reader Type display
+
+Reader labels, cover proportions and explicit Schema.org hints come from the shared Web Type-directory
+adapter's exact descriptors for the Types actually present, including Types in other active Releases. The native
+descriptor selects the label using the existing language fallback; Web uppercases its first Unicode character
+in the selected language and preserves the remainder. Effective cover inheritance is already compiled into that
+single descriptor. Web validates cover ratios and explicit `https://schema.org/Term` hints, reads no ancestors,
+and never infers visibility, authority or Schema.org metadata from a parent.
+
+Decision: deduplicate within each finite caller page, allow four concurrent exact reads, and retain no descriptor
+cache between calls; missing, retired or unavailable Types omit optional display metadata and can recover on the
+next read. This also clears a previously attached Type label when current metadata is unavailable.
+
+For N supplied subject/Type slots, U distinct Types require at most U descriptor requests, U ≤ N; there are no
+registry, release or ancestor reads. Existing page limits bound N (for example Space's 12 publication slots or
+the shelf chooser's 20 Type slots); a subject frame needs one descriptor. Each descriptor retains the native
+1,024-Type/4 MiB Release bounds and at most 64 property points. Whole-release consumers and historical pinned
+readers keep their existing contracts, as do subject access, session/no-store handling, rendering and links.
+
 ## Create a catalogue subject
 
 `/{locale}/catalogue/new` is the generic initial-terms form, discoverable in the ordinary subject header's

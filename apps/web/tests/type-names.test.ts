@@ -1,3 +1,4 @@
+import { pickText } from '@rezics/composition';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -90,6 +91,13 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/v1/definitionTypes/')) {
+      const typeId = decodeURIComponent(url.pathname.slice('/v1/definitionTypes/'.length));
+      const definition = release.types[typeId as keyof typeof release.types];
+      if (!definition) return json(problem(404, 'not_found'), 404);
+      const label = pickText(definition.labels, url.searchParams.get('locale') ?? 'en');
+      return json({ typeId, releaseDigest: digest, label: label.text, language: label.lang, definition });
+    }
     if (url.pathname === '/v1/definitions/active') return json({ digest });
     if (url.pathname === `/v1/definitions/releases/${digest}`) return json({ digest, release });
     if (url.pathname === '/v1/pages:read' && request.method === 'POST') {

@@ -193,6 +193,13 @@ test('Whole Shelf type chooser binds actual same-read viewer and cursor provenan
   const transport = spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const call = new Request(input, init);
     const path = new URL(call.url).pathname;
+    if (path.startsWith('/v1/definitionTypes/')) {
+      if (namesFail) return new Response(null, { status: 503 });
+      const typeId = decodeURIComponent(path.slice('/v1/definitionTypes/'.length));
+      const definition = definitions.release.types[typeId as keyof typeof definitions.release.types];
+      if (!definition) return new Response(null, { status: 404 });
+      return Response.json({ typeId, releaseDigest: definitions.digest, label: definition.labels.en, language: 'en', definition });
+    }
     if (path === '/v1/definitions/active')
       return namesFail ? new Response(null, { status: 503 }) : Response.json({ digest: definitions.digest });
     if (path.startsWith('/v1/definitions/releases/')) return Response.json(definitions);

@@ -6,17 +6,22 @@ import type { CreateType, TypeDescriptorRead, TypeDirectoryPage, TypeDirectoryQu
 type TypeDirectorySummary = {
   typeId: string;
   label: string;
-  language: string;
+  language: string | null;
   description: string | null;
   descriptionLanguage: string | null;
 };
+/** The native descriptor contains effective released hints; ancestors need no separate reads. */
+export type TypeDirectoryDescriptor = TypeDirectorySummary & { definition: Record<string, unknown> };
+type DescriptorRead =
+  | { ok: true; descriptor: TypeDirectoryDescriptor }
+  | { ok: false; reason: 'missing' | 'unavailable' };
 type ApiResult<T> = { data?: T; error?: unknown };
 type DefinitionTypesApi = {
   get(input: {
     query: { locale: string; query?: string; typeId?: string; cursor?: string; limit: number };
   }): Promise<ApiResult<{ types: TypeDirectorySummary[]; next: string | null }>>;
   (input: { typeId: string }): {
-    get(input: { query: { locale: string } }): Promise<ApiResult<TypeDirectorySummary>>;
+    get(input: { query: { locale: string } }): Promise<ApiResult<TypeDirectoryDescriptor>>;
   };
 };
 
@@ -34,17 +39,62 @@ function definitionTypes(locale: string) {
 function createType(summary: {
   typeId: string;
   label: string;
-  language: string;
+  language: string | null;
   description: string | null;
   descriptionLanguage: string | null;
 }): CreateType {
   return {
     id: summary.typeId,
     label: summary.label,
-    labelLanguage: summary.language,
+    ...(summary.language ? { labelLanguage: summary.language } : {}),
     description: summary.description ?? '',
     ...(summary.descriptionLanguage ? { descriptionLanguage: summary.descriptionLanguage } : {}),
   };
+}
+
+/** A fresh caller-aware read every time: no descriptor survives authority or catalogue changes. */
+export async function readTypeDescriptor(typeId: string, locale: string): Promise<DescriptorRead> {
+  if (typeof typeId !== 'string' || typeId.length === 0 || typeId.length > 4_194_304)
+    return { ok: false, reason: 'missing' };
+  try {
+    const response = await definitionTypes(locale)({ typeId }).get({ query: { locale } });
+    if (response.error)
+      return { ok: false, reason: httpStatus(response.error) === 404 ? 'missing' : 'unavailable' };
+    const descriptor = response.data;
+    if (
+      !descriptor ||
+      descriptor.typeId !== typeId ||
+      typeof descriptor.label !== 'string' ||
+      (descriptor.language !== null && typeof descriptor.language !== 'string') ||
+      !descriptor.definition ||
+      typeof descriptor.definition !== 'object' ||
+      Array.isArray(descriptor.definition)
+    )
+      return { ok: false, reason: 'unavailable' };
+    return { ok: true, descriptor };
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
+/** U exact reads for U distinct Types in the caller's finite page, with at most four in flight. */
+export async function readTypeDescriptors(
+  types: Iterable<string>,
+  locale: string,
+): Promise<Map<string, TypeDirectoryDescriptor>> {
+  const wanted = [...new Set(types)];
+  const descriptors = new Map<string, TypeDirectoryDescriptor>();
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(4, wanted.length) }, async () => {
+      while (next < wanted.length) {
+        const type = wanted[next++]!;
+        const result = await readTypeDescriptor(type, locale);
+        if (result.ok) descriptors.set(type, result.descriptor);
+      }
+    }),
+  );
+  return descriptors;
 }
 
 export const readCreateTypePage = createServerFn({ method: 'GET' })
@@ -91,12 +141,6 @@ export const readCreateTypeDescriptor = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<TypeDescriptorRead> => {
     setResponseHeader('cache-control', 'private, no-store');
     const locale = requestLocale() ?? 'en';
-    try {
-      const response = await definitionTypes(locale)({ typeId: data }).get({ query: { locale } });
-      if (response.error) return { ok: false, reason: httpStatus(response.error) === 404 ? 'missing' : 'unavailable' };
-      if (!response.data) return { ok: false, reason: 'unavailable' };
-      return { ok: true, type: createType(response.data) };
-    } catch {
-      return { ok: false, reason: 'unavailable' };
-    }
+    const result = await readTypeDescriptor(data, locale);
+    return result.ok ? { ok: true, type: createType(result.descriptor) } : result;
   });

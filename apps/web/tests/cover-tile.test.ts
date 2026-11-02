@@ -1,3 +1,4 @@
+import { createKernelClient } from '@rezics/client';
 import { afterAll, expect, mock, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -11,7 +12,10 @@ import { Cover, coverRatio, sharedRatio, type CoverRatio } from '@rezics/ui/cove
 
 const workerEnv: { KERNEL_ORIGIN: string } = { KERNEL_ORIGIN: 'https://definitions-cover-test.invalid' };
 const app = join(import.meta.dir, '..');
-mock.module('../src/kernel/client.ts', () => ({ requestLocale: () => 'en' }));
+mock.module('../src/kernel/client.ts', () => ({
+  requestLocale: () => 'en',
+  kernelClient: () => createKernelClient(workerEnv.KERNEL_ORIGIN),
+}));
 mock.module('cloudflare:workers', () => ({ env: workerEnv }));
 const { typeFrame } = await import('../src/subject/definitions.ts');
 
@@ -245,8 +249,10 @@ test('definition ratios reach Cover unchanged and invalid ratios use the subject
   let digest = '';
   globalThis.fetch = async (input) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
-    if (url.pathname === '/v1/definitions/active') return Response.json({ digest });
-    if (url.pathname === `/v1/definitions/releases/${digest}`) return Response.json({ digest, release });
+    const typeId = decodeURIComponent(url.pathname.slice('/v1/definitionTypes/'.length));
+    const definition = release.types[typeId];
+    if (url.pathname.startsWith('/v1/definitionTypes/') && definition)
+      return Response.json({ typeId, releaseDigest: digest, label: 'poster', language: 'en', definition });
     return new Response(null, { status: 404 });
   };
 

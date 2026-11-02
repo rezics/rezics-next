@@ -1,3 +1,4 @@
+import { createKernelClient } from '@rezics/client';
 import { expect, mock, test } from 'bun:test';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import active from '../src/kernel/recorded/definitions-active.json';
@@ -8,7 +9,10 @@ const workerEnv: { KERNEL_ORIGIN: string } = { KERNEL_ORIGIN: kernelOrigin };
 const recordingMessage =
   'Definitions recordings are generated output. Run `bun apps/web/scripts/record.ts definitions-active definitions-release` in the same change as the bundled release update; see the recordings section in apps/web/README.md.';
 
-mock.module('../src/kernel/client.ts', () => ({ requestLocale: () => 'en' }));
+mock.module('../src/kernel/client.ts', () => ({
+  requestLocale: () => 'en',
+  kernelClient: () => createKernelClient(workerEnv.KERNEL_ORIGIN),
+}));
 mock.module('cloudflare:workers', () => ({ env: workerEnv }));
 const { typeFrame } = await import('../src/subject/definitions.ts');
 
@@ -49,9 +53,10 @@ test('recorded release frames work descendants, people, music and recipes throug
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = new URL(input instanceof Request ? input.url : input.toString());
     if (url.origin !== kernelOrigin) return originalFetch(input);
-    if (url.pathname === '/v1/definitions/active') return Response.json(active);
-    if (url.pathname === `/v1/definitions/releases/${encodeURIComponent(active.digest)}`)
-      return Response.json(recorded);
+    const typeId = decodeURIComponent(url.pathname.slice('/v1/definitionTypes/'.length));
+    const definition = release.types[typeId];
+    if (url.pathname.startsWith('/v1/definitionTypes/') && definition)
+      return Response.json({ typeId, releaseDigest: active.digest, label: '', language: null, definition });
     return new Response(null, { status: 404 });
   }) as typeof fetch;
 
