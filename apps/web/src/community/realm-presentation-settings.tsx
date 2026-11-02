@@ -27,7 +27,7 @@ function ImagePreview({
   image: RealmPresentationOptional<RealmPresentationImage>;
   title: string;
   banner?: boolean;
-  pending?: string;
+  pending?: string | undefined;
 }) {
   const src = realmImageSource(image);
   const [failed, setFailed] = useState(false);
