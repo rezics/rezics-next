@@ -10,7 +10,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 async function mounted(
   run: (page: {
     host: HTMLElement;
-    render: (node: ReactNode) => Promise<void>;
+    render: (node: ReactNode, remount?: boolean) => Promise<void>;
     choose: (select: HTMLSelectElement, value: string) => Promise<void>;
     enter: (input: HTMLInputElement, value: string) => Promise<void>;
   }) => Promise<void>,
@@ -57,8 +57,9 @@ async function mounted(
   try {
     await run({
       host,
-      render: async (node) => {
-        await act(async () => root.render(h('div', { key: ++generation }, node)));
+      render: async (node, remount = true) => {
+        if (remount) generation++;
+        await act(async () => root.render(h('div', { key: generation }, node)));
       },
       choose: async (select, value) => {
         await act(async () => {
@@ -93,6 +94,72 @@ const property = 'schema:keywords';
 const concept = '00000000-0000-4000-8000-00000000d101';
 const replacement = '00000000-0000-4000-8000-00000000d102';
 const evidence = 'https://archive.example/character/' + 'original-source-'.repeat(12) + '?record=A%2Fb#evidence';
+
+test('shared Character and StoryArc classification keyboard openings focus only the requested admitted draft', async () => {
+  await mounted(async ({ host, render, choose, enter }) => {
+    const { CharacterClassifications } = await import('../src/features/catalogue/character-profile-classification');
+    const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
+    const { m } = await import('../src/paraglide/messages.js');
+    const setup = await supplied(2);
+    const props = { ...setup, properties: [property], locale: 'en', search: async () => [] };
+    const view = (ready = true) => (
+      <CatalogueCurrentReading visible ready={ready} revision={ready ? 'current' : 'retired'}>
+        <CharacterClassifications {...props} />
+        <CharacterClassifications {...props} />
+      </CatalogueCurrentReading>
+    );
+    await render(view());
+    const [first, sibling] = [...host.querySelectorAll('section')];
+    const document = host.ownerDocument;
+    expect(document.activeElement).toBe(document.body);
+    await choose(sibling!.querySelector('select')!, setup.read.public.subject.statements[property]![0]!.id);
+    await act(async () => button(sibling!, m.facts_edit_field()).click());
+    const siblingUrl = sibling!.querySelector<HTMLInputElement>('input[type="url"]')!;
+    await enter(siblingUrl, evidence + 'private');
+    const source = setup.read.public.subject.statements[property]![1]!;
+    await choose(first!.querySelector('select')!, source.id);
+    const activate = async (name: string, detail = 0, move = false) => {
+      if (name === m.facts_edit_field()) await choose(first!.querySelector('select')!, source.id);
+      await act(async () => {
+        const opener = button(first!, name);
+        opener.focus();
+        opener.dispatchEvent(new document.defaultView!.MouseEvent('click', { bubbles: true, detail }));
+        if (move) siblingUrl.focus();
+      });
+    };
+    const picker = () => first!.querySelector<HTMLInputElement>('[role="combobox"]')!;
+    await activate(m.facts_edit_field());
+    expect(document.activeElement).toBe(picker());
+    expect(picker().value).toBe(setup.read.public.related[replacement]!.labels.en!);
+    expect(first!.querySelector<HTMLInputElement>('input[type="url"]')!.value).toBe(evidence);
+    await act(async () => button(first!, m.curation_view_discard()).click());
+    await activate(m.facts_add_value());
+    expect(document.activeElement).toBe(picker());
+    expect(picker().value).toBe('');
+    await act(async () => button(first!, m.curation_view_discard()).click());
+    await activate(m.facts_edit_field(), 1);
+    expect(document.activeElement).not.toBe(picker());
+    await act(async () => button(first!, m.curation_view_discard()).click());
+    await choose(first!.querySelector('select')!, source.id);
+    const opener = button(first!, m.facts_edit_field());
+    const key = Object.keys(opener).find((key) => key.startsWith('__reactProps'))!;
+    const stale = Reflect.get(opener, key).onClick;
+    await render(view(false), false);
+    await act(async () => {
+      opener.focus();
+      stale({ currentTarget: opener, detail: 0 });
+    });
+    expect(document.activeElement).toBe(opener);
+    expect(picker()).toBeNull();
+    await render(view(), false);
+    expect(document.activeElement).toBe(opener);
+    await activate(m.facts_edit_field(), 0, true);
+    expect(document.activeElement).toBe(siblingUrl);
+    expect(sibling!.querySelector('input[type="url"]')).toBe(siblingUrl);
+    expect(siblingUrl.value).toBe(evidence + 'private');
+    expect(setup.commands).toEqual([]);
+  });
+});
 
 test('discard changes locally, choose another source, and keep its pending or uncertain command for exact retry', async () => {
   await mounted(async ({ host, render, choose, enter }) => {

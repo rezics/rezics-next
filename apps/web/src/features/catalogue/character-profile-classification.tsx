@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -135,6 +135,31 @@ export function CharacterClassification({
     );
   }
   const chooser = useRef<HTMLDivElement>(null);
+  const editor = useRef<HTMLFieldSetElement>(null);
+  const openingFocus = useRef<{
+    draft: FactDraft;
+    opener: HTMLButtonElement;
+    active: () => boolean;
+    cancel: () => void;
+  } | undefined>(undefined);
+  const focusScope = useMemo(() => ({}), [property, locale, read.public.subject.id]);
+  const latestFocusScope = useRef(focusScope);
+  latestFocusScope.current = focusScope;
+  useLayoutEffect(() => () => openingFocus.current?.cancel(), []);
+  useLayoutEffect(() => {
+    const intent = openingFocus.current;
+    if (!intent) return;
+    const document = intent.opener.ownerDocument;
+    const focused = document.activeElement;
+    const admitted =
+      intent.active() &&
+      draft === intent.draft &&
+      currentDraft.current === intent.draft &&
+      (focused === intent.opener || (!intent.opener.isConnected && (!focused || focused === document.body)));
+    intent.cancel();
+    const target = editor.current?.querySelector<HTMLInputElement>('input[role="combobox"]:not(:disabled)');
+    if (admitted && target?.isConnected && !target.closest('[hidden]')) target.focus();
+  });
   const discardTrigger = useRef<HTMLButtonElement>(null);
   const cancelConfirmation = useRef<HTMLButtonElement>(null);
   const restoreDiscardFocus = useRef(false);
@@ -200,7 +225,8 @@ export function CharacterClassification({
     ? pageText(definition.labels, locale)
     : (rememberedLabel.current ?? { text: property, lang: undefined });
   const current = selected.find((statement) => statement.id === draft?.source);
-  const stage = (id: string | null) => {
+  const stage = (id: string | null, event: MouseEvent<HTMLButtonElement>) => {
+    openingFocus.current?.cancel();
     if (!usable() || !admitted) return;
     if (currentDraft.current !== draft) return;
     if (running.current || (draft && factLocked(draft))) return;
@@ -219,7 +245,7 @@ export function CharacterClassification({
     setConfirmation(undefined);
     setPicked([]);
     setReviewing(false);
-    setDraft({
+    const next: FactDraft = {
       property,
       source: id,
       baseline,
@@ -233,7 +259,34 @@ export function CharacterClassification({
             references: [],
             rank: 'normal',
           },
-    });
+    };
+    const opener = event.currentTarget;
+    const document = opener.ownerDocument;
+    // Capture only an admitted keyboard opening, before its chooser leaves the DOM.
+    if (event.detail === 0 && document.activeElement === opener && opener.isConnected) {
+      const cancel = () => {
+        document.removeEventListener('focusin', moved, true);
+        document.removeEventListener('pointerdown', cancel, true);
+        document.removeEventListener('keydown', tabbed, true);
+        if (openingFocus.current?.cancel === cancel) openingFocus.current = undefined;
+      };
+      const moved = (event: FocusEvent) => {
+        if (event.target !== opener) cancel();
+      };
+      const tabbed = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') cancel();
+      };
+      openingFocus.current = {
+        draft: next,
+        opener,
+        active: () => usable() && latestFocusScope.current === focusScope,
+        cancel,
+      };
+      document.addEventListener('focusin', moved, true);
+      document.addEventListener('pointerdown', cancel, true);
+      document.addEventListener('keydown', tabbed, true);
+    }
+    setDraft(next);
   };
   const closeDraft = (original: FactDraft, pending?: { draft: FactDraft; active: () => boolean }) => {
     const latest = latestState.current;
@@ -346,12 +399,12 @@ export function CharacterClassification({
               className={actionClassName}
               variant="outline"
               disabled={!!selected.length && !sourceChoice}
-              onClick={() => stage(sourceChoice || null)}
+              onClick={(event) => stage(sourceChoice || null, event)}
             >
               {m.facts_edit_field({}, o)}
             </Button>
             {definition?.multivalued && !!selected.length && (
-              <Button className={actionClassName} variant="outline" onClick={() => stage(null)}>
+              <Button className={actionClassName} variant="outline" onClick={(event) => stage(null, event)}>
                 {m.facts_add_value({}, o)}
               </Button>
             )}
@@ -365,7 +418,7 @@ export function CharacterClassification({
               </pre>
             )}
             {admitted && !result?.ok && (
-              <fieldset disabled={busy || factLocked(draft)} className="min-w-0 space-y-4">
+              <fieldset ref={editor} disabled={busy || factLocked(draft)} className="min-w-0 space-y-4">
                 <EntityPicker
                   label={label.text}
                   disabled={busy || factLocked(draft)}
