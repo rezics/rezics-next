@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -18,11 +18,14 @@ import {
 import { readContainerLifecycle, changeContainerLifecycle, readContainerLifecycleDestination } from './space-actions';
 import { lifecycleCommandSchema } from './container-lifecycle-native';
 import { useCommunityManagementAdmission } from './community-management';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
 import {
   useDefaultContainerLifecycleCaller,
   useInjectedContainerLifecycleCaller,
   type ContainerLifecycleCallerLifetime,
 } from './container-lifecycle-caller-lifetime';
+
+const useLifecycleLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 function createLiveLifecycleAdapter(csrfToken: string): ContainerLifecycleAdapter {
   return {
@@ -79,7 +82,13 @@ function LifecycleControlsView({
     [target.kind, target.id, adapter, caller.lifetime],
   );
   const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
+  const reasonBaseline = useRef({ control, value: state.reason });
+  if (reasonBaseline.current.control !== control) reasonBaseline.current = { control, value: state.reason };
   const [confirmation, setConfirmation] = useState<LifecycleAction | null>(null);
+  useLifecycleLayoutEffect(() => {
+    if (state.outcome === 'confirmed' && state.intent?.action === 'remove')
+      reasonBaseline.current.value = state.intent.reason;
+  }, [control, state.outcome, state.intent]);
   const presentation = lifecycleControlsPresentation(state);
   const visible = useCommunityManagementAdmission(
     target.kind === 'space' ? 'space-lifecycle' : 'realm-lifecycle',
@@ -107,6 +116,35 @@ function LifecycleControlsView({
   const readOnly = presentation.readOnly;
   const problem = state.problem ?? (state.read.kind === 'refused' ? state.read : null);
   const locked = state.busy || state.intent !== null;
+  const reasonCanBeSubmitted =
+    state.read.kind === 'ready' &&
+    state.read.snapshot.state === 'active' &&
+    state.read.snapshot.actions.includes('remove');
+  const changedReason = state.reason !== reasonBaseline.current.value;
+  const reasonDraft =
+    changedReason && (state.read.kind !== 'ready' || reasonCanBeSubmitted);
+  const reviewedConfirmation =
+    confirmation !== null &&
+    state.read.kind === 'ready' &&
+    state.read.snapshot.state !== 'orphaned' &&
+    state.read.snapshot.actions.includes(confirmation);
+  const unresolvedIntent = state.intent !== null && (state.outcome === 'sending' || state.outcome === 'uncertain');
+  const acknowledgement = state.outcome === 'confirmed' ? (state.intent?.idempotencyKey ?? '') : '';
+  const departureActive = caller.ready && caller.lifetime.current();
+  useAuthoringDeparture(
+    departureActive &&
+      (reasonDraft || reviewedConfirmation || unresolvedIntent),
+    departureActive && unresolvedIntent,
+    JSON.stringify([target.kind, target.id, caller.lifetime.id, acknowledgement]),
+    undefined,
+    caller.lifetime.retire,
+    'container-lifecycle',
+    {
+      title: m.container_lifecycle_leave_title(),
+      unsaved: m.container_lifecycle_leave_unsaved(),
+      pending: m.container_lifecycle_leave_pending(),
+    },
+  );
   if (!visible || !caller.ready || !caller.lifetime.current()) return null;
   return (
     <section aria-labelledby={`${id}-heading`}>
@@ -127,7 +165,7 @@ function LifecycleControlsView({
             <Textarea
               id={`${id}-reason`}
               value={state.reason}
-              readOnly={locked}
+              readOnly={locked || !reasonCanBeSubmitted}
               aria-describedby={`${id}-reason-help`}
               onChange={(event) => control.setReason(event.target.value)}
             />
@@ -272,10 +310,10 @@ function InjectedLifecycleControls(props: ContainerLifecycleControlsProps & { ad
 
 /** Default callers bind credentials and cache revision; injected adapters keep their isolated fixture contract. */
 export function ContainerLifecycleControls(props: ContainerLifecycleControlsProps) {
-  return props.adapter ? (
-    <InjectedLifecycleControls {...props} adapter={props.adapter} />
-  ) : (
-    <DefaultLifecycleControls {...props} />
+  return (
+    <AuthoringDepartureBoundary sessionBound={false}>
+      {props.adapter ? <InjectedLifecycleControls {...props} adapter={props.adapter} /> : <DefaultLifecycleControls {...props} />}
+    </AuthoringDepartureBoundary>
   );
 }
 

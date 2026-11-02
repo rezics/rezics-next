@@ -25,12 +25,13 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { sessionQuery } from '../session/query';
 
-type DepartureKind = 'realm-claim' | 'realm-ban';
+type DepartureKind = 'realm-claim' | 'realm-ban' | 'container-lifecycle';
 type Draft = {
   needsDecision: () => boolean;
   unresolved: () => boolean;
   discard: () => void;
   leave?: () => void;
+  messages?: () => NavigationMessages | undefined;
   kind?: DepartureKind | undefined;
 };
 type Decision = { kind: 'navigation'; resolve: (stay: boolean) => void } | { kind: 'discard'; draftId: number };
@@ -80,6 +81,18 @@ export class AuthoringDepartureState {
     this.active && [...this.drafts.values()].some((draft) => draft.kind === 'realm-claim' && draft.needsDecision());
   hasRealmBan = () =>
     this.active && [...this.drafts.values()].some((draft) => draft.kind === 'realm-ban' && draft.needsDecision());
+  get promptMessages() {
+    const selected = this.decision?.kind === 'discard' ? this.drafts.get(this.decision.draftId) : undefined;
+    const candidates = selected
+      ? [selected].filter((draft): draft is Draft => draft.needsDecision())
+      : [...this.drafts.values()].filter((draft) => draft.needsDecision());
+    const draft =
+      candidates.find((candidate) => candidate.kind === 'container-lifecycle' && candidate.unresolved()) ??
+      candidates.find((candidate) => candidate.unresolved()) ??
+      candidates.find((candidate) => candidate.kind === 'container-lifecycle') ??
+      candidates[0];
+    return draft?.messages?.();
+  }
   unresolved = () => {
     const id = this.decision?.kind === 'discard' ? this.decision.draftId : undefined;
     return (
@@ -325,6 +338,7 @@ function DepartureDialog({
   const recovery = navigation.unresolved();
   const claim = !discard && navigation.hasRealmClaim();
   const ban = !discard && !claim && navigation.hasRealmBan();
+  const promptMessages = messages ?? navigation.promptMessages;
   return (
     <AlertDialogContent
       className="min-w-0 max-w-lg grid-cols-[minmax(0,1fr)] gap-6 p-5 text-start sm:max-w-xl sm:p-6"
@@ -345,7 +359,7 @@ function DepartureDialog({
               ? m.realm_claim_leave_title()
               : ban
                 ? m.realm_bans_leave_title()
-                : (messages?.title ?? m.thread_authoring_leave_title())}
+                : (promptMessages?.title ?? m.thread_authoring_leave_title())}
         </AlertDialogTitle>
         <AlertDialogDescription className="min-w-0 text-base leading-relaxed text-pretty [overflow-wrap:anywhere]">
           {claim
@@ -415,9 +429,10 @@ export function useAuthoringDeparture(
   onDiscard?: () => void,
   onLeave?: () => void,
   kind?: DepartureKind,
+  messages?: NavigationMessages,
 ) {
   const navigation = useContext(DepartureContext);
-  const latest = useRef({ needsDecision, unresolved, signature, onDiscard, onLeave, kind, released: false });
+  const latest = useRef({ needsDecision, unresolved, signature, onDiscard, onLeave, kind, messages, released: false });
   if (latest.current.signature !== signature) latest.current.released = false;
   latest.current.needsDecision = needsDecision;
   latest.current.unresolved = unresolved;
@@ -425,6 +440,7 @@ export function useAuthoringDeparture(
   latest.current.onDiscard = onDiscard;
   latest.current.onLeave = onLeave;
   latest.current.kind = kind;
+  latest.current.messages = messages;
   const needsProtection = protectedNow(needsDecision);
   const pending = protectedNow(unresolved);
   const registration = useRef<{ owner: AuthoringDepartureState; id: number; remove: () => void } | null>(null);
@@ -435,6 +451,7 @@ export function useAuthoringDeparture(
       needsDecision: () => !latest.current.released && protectedNow(latest.current.needsDecision),
       unresolved: () => protectedNow(latest.current.unresolved),
       discard: () => latest.current.onDiscard?.(),
+      messages: () => latest.current.messages,
       kind: latest.current.kind,
       leave: () => {
         latest.current.released = true;

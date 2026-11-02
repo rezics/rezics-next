@@ -18,3 +18,5 @@ target, locale and mounted-connection lifetime without requiring a browser sessi
 
 The browser caller owns this binding; the native lifecycle reader, command and independent destination reader remain
 the authorities. The lifetime adds no request, poll or sweep.
+
+A validated removal acknowledgement immediately marks its exact submitted reason as the saved baseline, and explicit page Leave retires every lifecycle caller before independent follow-up reads can publish, even after acknowledgement releases departure protection.

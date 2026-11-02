@@ -42,10 +42,16 @@ const destinations: Array<
     data: { target: ContainerTarget; contextId: string | null };
   }
 > = [];
+type Blocker = (attempt: { current: { pathname: string }; next: { pathname: string } }) => boolean | Promise<boolean>;
+const departureBlockers: Blocker[] = [];
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('@tanstack/react-router', () => ({
+  useBlocker: ({ shouldBlockFn }: { shouldBlockFn: Blocker }) => { departureBlockers.push(shouldBlockFn); },
+  useRouter: () => ({}),
+}));
 mock.module('../src/community/space-actions', () => ({
   readContainerLifecycle: ({ data }: { data: { target: ContainerTarget; contextId?: string | null } }) => {
     const call = deferred<LifecycleRead>();
@@ -96,6 +102,7 @@ const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { sessionQuery } = await import('../src/session/query');
 const { ContainerLifecyclePanel } = await import('../src/community/container-lifecycle-controls');
+const { AuthoringDepartureState } = await import('../src/threads/authoring-departure');
 const { containerLifecycleSessionSource, createContainerLifecycleCallerLifetime } =
   await import('../src/community/container-lifecycle-caller-lifetime');
 const { createContainerLifecycle } = await import('../src/community/container-lifecycle');
@@ -161,6 +168,16 @@ async function paint() {
   await flush();
 }
 
+async function requestDeparture() {
+  let decision: boolean | Promise<boolean> = false;
+  await act(async () => {
+    decision = departureBlockers.at(-1)!({ current: { pathname: '/en/current' }, next: { pathname: '/en/next' } });
+    await Promise.resolve();
+  });
+  await flush();
+  return decision;
+}
+
 async function settle<T>(call: Deferred<T>, value: T) {
   await act(async () => {
     call.resolve(value);
@@ -197,6 +214,7 @@ beforeEach(() => {
   reads.length = 0;
   changes.length = 0;
   destinations.length = 0;
+  departureBlockers.length = 0;
   target = realmTarget;
   title = 'Quiet reading room';
   strictMode = false;
@@ -365,6 +383,72 @@ test('StrictMode replay and healthy rerender keep one caller usable; uncertain r
   await settle(reads[1]!, ready(realmTarget, 'removed', ['restore']));
   expect(reads).toHaveLength(2);
   expect(destinations).toHaveLength(0);
+});
+
+for (const scenario of [
+  { name: 'Realm removal', target: realmTarget, state: 'active' as const, action: 'remove' as const, reason: 'Reviewed reason' },
+  { name: 'Space restoration', target: spaceTarget, state: 'removed' as const, action: 'restore' as const, reason: '' },
+]) {
+  test(`${scenario.name} shares Stay and Leave protection with lifecycle controls`, async () => {
+    target = scenario.target;
+    await paint();
+    await settle(reads[0]!, ready(target, scenario.state, [scenario.action]));
+    expect(await requestDeparture()).toBe(false);
+    const actionLabel = scenario.action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore();
+    if (scenario.reason) await fillReason(scenario.reason);
+    await click(actionLabel);
+    const confirmation = scenario.action === 'remove'
+      ? m.container_lifecycle_confirm_remove({ title })
+      : m.container_lifecycle_confirm_restore({ title });
+    const reviewed = await requestDeparture();
+    expect(host.textContent).toContain(m.container_lifecycle_leave_title());
+    expect(host.textContent).toContain(m.container_lifecycle_leave_unsaved());
+    expect(host.textContent).toContain(confirmation);
+    await click(m.thread_authoring_stay());
+    expect(await reviewed).toBe(true);
+    if (scenario.reason) expect(host.querySelector('textarea')?.value).toBe(scenario.reason);
+    await click(m.container_lifecycle_confirm());
+    const intent = changes[0]!.data;
+    expect(intent).toMatchObject({ target, action: scenario.action, expectedHead: head, expectedVersion: '7', reason: scenario.reason, contextId });
+    let pending = await requestDeparture();
+    expect(host.textContent).toContain(m.container_lifecycle_leave_pending());
+    await click(m.thread_authoring_stay());
+    expect(await pending).toBe(true);
+    expect(changes[0]!.data).toBe(intent);
+
+    if (scenario.action === 'remove') {
+      await settle(changes[0]!, { kind: 'unavailable' });
+      pending = await requestDeparture();
+      expect(host.textContent).toContain(m.container_lifecycle_leave_pending());
+      await click(m.thread_authoring_stay());
+      expect(await pending).toBe(true);
+      await click(m.container_lifecycle_retry());
+      expect(changes).toHaveLength(2);
+      expect(changes[1]!.data).toEqual(intent);
+      await settle(changes[1]!, confirmed(intent));
+      expect(reads).toHaveLength(2);
+      expect(await requestDeparture()).toBe(false);
+      await settle(reads[1]!, ready(target, 'removed', ['restore']));
+      expect(await requestDeparture()).toBe(false);
+    } else {
+      const leaving = await requestDeparture();
+      await click(m.thread_authoring_leave());
+      expect(await leaving).toBe(false);
+      expect(host.querySelector('section')).toBeNull();
+      await settle(changes[0]!, confirmed(intent));
+      expect(reads).toHaveLength(1);
+    }
+  });
+}
+
+test('shared Leave retires lifecycle callers even when another draft opens the prompt', async () => {
+  const owner = new AuthoringDepartureState(); let retired = false;
+  owner.register({ kind: 'container-lifecycle', needsDecision: () => false, unresolved: () => false, discard: () => {}, leave: () => { retired = true; } });
+  owner.register({ needsDecision: () => true, unresolved: () => false, discard: () => {} });
+  const blocked = owner.block('/space', '/other', null);
+  owner.leave();
+  expect(retired).toBe(true);
+  expect(await blocked).toBe(false);
 });
 
 test('unmount and remount retire old promises while a fresh default Panel reads again', async () => {
