@@ -135,9 +135,20 @@ const readPublicSummaryDocument = createServerFn({ method: 'GET' })
       const result = await kernelClient(data.locale).documents({ id: data.documentId }).get({
         fetch: { redirect: 'manual' },
       });
-      return result.status === 200 && result.data
-        ? { kind: 'read' as const, document: result.data.document }
-        : { kind: 'failed' as const };
+      if (result.status !== 200 || !result.data) return { kind: 'failed' as const };
+      const document = result.data.document;
+      return {
+        kind: 'read' as const,
+        document: {
+          id: document.id,
+          subjectId: document.subjectId,
+          candidateId: document.candidateId,
+          digest: document.digest,
+          language: document.language,
+          availability: document.availability,
+          body: document.body,
+        },
+      };
     } catch {
       return { kind: 'failed' as const };
     }
