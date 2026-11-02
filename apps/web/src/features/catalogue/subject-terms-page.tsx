@@ -77,6 +77,7 @@ function SubjectTermsPageLive({
   const [language, setLanguage] = useState(locale);
   const [newLanguage, setNewLanguage] = useState('');
   const [languageError, setLanguageError] = useState(false);
+  const [addedLanguages, setAddedLanguages] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<TermsDraft>({});
   const [failure, setFailure] = useState<TermsFailure>();
   const [comparison, setComparison] = useState<TermsRead>();
@@ -122,6 +123,22 @@ function SubjectTermsPageLive({
       return { ...previous, [language]: { ...current, [field]: { ...current[field], ...edit } } };
     });
     setFailure(undefined);
+  }
+
+  function discardLanguage(remove = false) {
+    if (!lifetime.active() || !base || locked || running.current) return;
+    // Stored terms can only be removed through an explicit field change and submission.
+    if (remove && termFields.some((field) => Object.hasOwn(base.subject[field], language))) return;
+    setDrafts((previous) => {
+      const next = { ...previous };
+      delete next[language];
+      return next;
+    });
+    setFailure(undefined);
+    if (remove) {
+      setAddedLanguages((previous) => previous.filter((tag) => tag !== language));
+      setLanguage(locale);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>, confirmed?: TermsSnapshot) {
@@ -215,11 +232,17 @@ function SubjectTermsPageLive({
     ...new Set([
       locale,
       language,
+      ...addedLanguages,
       ...Object.keys(drafts),
       ...termFields.flatMap((field) => Object.keys(base?.subject[field] ?? {})),
     ]),
   ];
   const row = base ? (drafts[language] ?? languageDraft(base.subject, language)) : undefined;
+  // Explicit field choices are the edits that will enter the submitted patch.
+  const editedLanguages = Object.keys(drafts).filter((tag) =>
+    termFields.some((field) => drafts[tag]![field].mode !== 'keep'),
+  );
+  const storedLanguage = !!base && termFields.some((field) => Object.hasOwn(base.subject[field], language));
   const typeLabel = base ? typeLabels?.[base.subject.type] : undefined;
   const errors = failure?.errors ?? [];
   const guidance = (field: TermField) => (row ? termsFieldGuidance(errors, field, language, row[field], locale) : []);
@@ -370,6 +393,9 @@ function SubjectTermsPageLive({
                         setLanguageError(true);
                         return;
                       }
+                      if (!languages.includes(newLanguage)) {
+                        setAddedLanguages((previous) => [...previous, newLanguage]);
+                      }
                       setLanguage(newLanguage);
                       setNewLanguage('');
                     }}
@@ -378,9 +404,29 @@ function SubjectTermsPageLive({
                   </Button>
                 </div>
               </FieldGroup>
-              {!termFields.some((field) => Object.hasOwn(base.subject[field], language)) && (
-                <p role="status">{m.catalogue_terms_empty({}, options)}</p>
-              )}
+              {!storedLanguage && <p role="status">{m.catalogue_terms_empty({}, options)}</p>}
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <Button
+                  className={actionClassName}
+                  type="button"
+                  variant="outline"
+                  disabled={locked || !Object.hasOwn(drafts, language)}
+                  onClick={() => discardLanguage()}
+                >
+                  {m.catalogue_terms_discard_language({ language }, options)}
+                </Button>
+                {!storedLanguage && addedLanguages.includes(language) && (
+                  <Button
+                    className={actionClassName}
+                    type="button"
+                    variant="outline"
+                    disabled={locked}
+                    onClick={() => discardLanguage(true)}
+                  >
+                    {m.catalogue_create_remove_language({}, options)}
+                  </Button>
+                )}
+              </div>
               <ContentItemHeading className="font-semibold">{m.creator_editions_draft({}, options)}</ContentItemHeading>
               <FieldGroup>
                 {termFields.map((field) => {
@@ -515,6 +561,31 @@ function SubjectTermsPageLive({
                   )}
                 </ContentItemFrame>
               )}
+              <section aria-labelledby={domId('unsaved')} className="flex min-w-0 flex-col gap-2">
+                <ContentItemHeading id={domId('unsaved')} className="font-semibold">
+                  {m.catalogue_terms_unsaved_languages({}, options)}
+                </ContentItemHeading>
+                {editedLanguages.length ? (
+                  <ul className="flex min-w-0 flex-wrap gap-2">
+                    {editedLanguages.map((tag) => (
+                      <li key={tag}>
+                        <Button
+                          className={actionClassName}
+                          type="button"
+                          variant="outline"
+                          disabled={busy}
+                          aria-pressed={language === tag}
+                          onClick={() => setLanguage(tag)}
+                        >
+                          {tag}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>{m.catalogue_terms_no_edits({}, options)}</p>
+                )}
+              </section>
               <Button
                 className={actionClassName}
                 type="submit"
