@@ -367,6 +367,8 @@ export function attemptEnvironment(
     // Fedora's /etc/profile.d/debuginfod.sh exports an absolute certificate path into every login shell unless the
     // variable is already non-empty; Web checks refuse absolute host paths, so give it an inert relative value.
     DEBUGINFOD_IMA_CERT_PATH: 'none',
+    // Fedora's gmpopenh264 profile appends to this one, so a relative head keeps the whole value relative.
+    MOZ_GMP_PATH: 'none',
     ...remoteCheckEnvironment(stateDirectory),
     // The worker check wrapper appends its full wait here, in milliseconds per line; the class limit adds it back.
     ...(stateDirectory

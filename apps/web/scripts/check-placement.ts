@@ -112,10 +112,10 @@ export function webCheckEnvironment(env: NodeJS.ProcessEnv, workspace: string, c
       const path = workspacePath(workspace, resolve(cwd, value));
       semantic[name] = relative(cwd, resolve(workspace, path)) || '.';
     } else {
-      if (
-        (/(?:_FILE|_DIR|_PATH|_ROOT)$/.test(name) && isAbsolute(value)) ||
-        (['NODE_OPTIONS', 'BUN_OPTIONS'].includes(name) && value)
-      )
+      // Login profiles export host paths (Fedora's debuginfod and Mozilla plugin paths, nvm); they mean nothing on a
+      // check host, so drop them instead of refusing the check.
+      if (/(?:_FILE|_DIR|_PATH|_ROOT)$/.test(name) && isAbsolute(value)) continue;
+      if (['NODE_OPTIONS', 'BUN_OPTIONS'].includes(name) && value)
         throw new Error(`Web check unavailable: unsupported host-path environment setting ${name}`);
       semantic[name] = value;
     }

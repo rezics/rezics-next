@@ -966,11 +966,9 @@ test('ambient Nix trust path stays out of the remote overlay while semantics, ar
   expect(argv.slice(argv.indexOf('--') + 1)).toEqual(command);
 });
 
-test('Nix certificate classification leaves unrelated absolute settings and option refusals intact', async () => {
+test('absolute host-path settings are dropped while runtime option refusals stay intact', async () => {
   const certificatePath = '/nix/store/host-cacerts/etc/ssl/certs/ca-bundle.crt';
   const unsupported = [
-    ['SSL_CERT_FILE', '/nix/store/another-cacerts/etc/ssl/certs/ca-bundle.crt'],
-    ['APP_CONFIG_PATH', '/nix/store/app-config/config.json'],
     ['NODE_OPTIONS', '--require=/nix/store/node-hook/register.cjs'],
     ['BUN_OPTIONS', '--preload=/nix/store/bun-hook/register.ts'],
   ] as const;
@@ -992,7 +990,9 @@ test('Nix certificate classification leaves unrelated absolute settings and opti
 test('unsupported host dependencies and destinations fail before a driver or native process starts', async () => {
   expect(() => workspacePath(root, '/outside/screenshots')).toThrow('inside the candidate workspace');
   expect(() => webCheckEnvironment({ WEB_TEST_STATE_DIR: '/outside/state' }, root, app)).toThrow();
-  expect(() => webCheckEnvironment({ NATIVE_CONFIG_FILE: '/outside/config' }, root, app)).toThrow('NATIVE_CONFIG_FILE');
+  expect(webCheckEnvironment({ NATIVE_CONFIG_FILE: '/outside/config' }, root, app)).not.toHaveProperty(
+    'NATIVE_CONFIG_FILE',
+  );
   const f = fixture();
   await expect(
     routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['bun', 'test', '/outside/test.ts'] }), {}, f.adapter),
