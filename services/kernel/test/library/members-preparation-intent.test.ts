@@ -311,6 +311,27 @@ test('trusted idle expiry creates a distinct native episode and workflow; old co
   expect(await f.store.touch(f.actor, old.locator)).toBe(false);
 });
 
+test('a changed Collection source retires the old episode before reserving the same filter again', async () => {
+  const f = await native.fixture();
+  const old = (await f.store.reserve(f.actor, f.collectionId, [definition()])).episodes[0]!;
+  await native.db.admin.query(
+    'UPDATE library.collection SET source_generation=source_generation+1 WHERE collection_id=$1 AND curator_account_id=$2',
+    [f.collectionId, f.owner.accountId],
+  );
+
+  const successor = await f.store.reserve(f.actor, f.collectionId, [definition()]);
+  expect(successor.episodes).toHaveLength(1);
+  expect(successor.episodes[0]!.locator.episodeId).not.toBe(old.locator.episodeId);
+  expect(successor.episodes[0]!.workflowId).not.toBe(old.workflowId);
+  expect(successor.intent!.input.cleanup).toContainEqual({
+    collectionId: f.collectionId,
+    episodeId: old.locator.episodeId,
+  });
+  const rows = await native.rows(f.owner);
+  expect(rows.find((row) => row.episode_id === old.locator.episodeId)?.state).toBe('retired');
+  expect(rows.find((row) => row.episode_id === successor.episodes[0]!.locator.episodeId)?.state).toBe('live');
+});
+
 test('a native work-step admission boundary refuses an absent episode without creating it', async () => {
   const f = await native.fixture();
   const locator = native.locator(f.owner, f.collectionId);

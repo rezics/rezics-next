@@ -324,12 +324,18 @@ export function createMembersPreparation(config: {
             found.set(Buffer.from(row.basis_digest).toString('hex'), row);
           }
 
-          const expiredIds = [...found.entries()]
-            .filter(([, row]) => expired(row, now))
+          const obsoleteIds = [...found.entries()]
+            .filter(
+              ([, row]) =>
+                expired(row, now) ||
+                row.reserved_incarnation !== collection.incarnation ||
+                row.reserved_generation !== collection.generation,
+            )
             .map(([, row]) => row.episode_id);
-          const cleanups: Retired[] = await retireHeaders(tx, route, actor.accountId, expiredIds);
+          const cleanups: Retired[] = await retireHeaders(tx, route, actor.accountId, obsoleteIds);
           liveCount -= cleanups.length;
-          for (const [key, row] of found) if (expiredIds.includes(row.episode_id)) found.delete(key);
+          const obsolete = new Set(obsoleteIds);
+          for (const [key, row] of found) if (obsolete.has(row.episode_id)) found.delete(key);
 
           const newKeys = requestOrder.filter((key) => !found.has(key));
           const need = Math.max(0, liveCount + newKeys.length - LIVE_LIMIT);

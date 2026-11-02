@@ -12,6 +12,13 @@ This slice does not establish Source currentness, result readiness, or disclosur
 available. `readWorkDefinition` therefore returns `null` for these reservations, and the registered producer
 continues to fail with a typed unavailable outcome. This is not native result acceptance or a successful empty page.
 
+# Members preparation
+
+The native reservation schema, request operations and exact step-admission boundary are present. The registered
+producer's worker body and prepared-result readback remain unavailable; reservation metadata never establishes a
+ready member result.
+Contract review and native fixture evidence precede the independent bounded producer.
+
 The authorities are [owner predicates](../../../../docs/library-owner-queries.md), the [Members GET
 exception](../../../../docs/dynamic-collections.md#model-and-identity), [filtered lists](../../../../docs/filtered-lists.md)
 and [deletion](../../../../docs/deletion.md). Their numeric ceilings are authoritative; the numbers in acceptance
@@ -93,13 +100,15 @@ source/subject/foreign/tuple/identity safety checks, including exclusions and or
 
 ## Episode, intent and quota lifecycle
 
-The proposed native header relation is `library.members_preparation`. Its route-leading primary key is
+The native header relation is `library.members_preparation`. Its route-leading primary key is
 `(route, owner_account_id, collection_id, episode_id)`. episode_id is a newly allocated routed native UUID on
 insertion, an opaque generation identity, never a semantic epoch or time-derived reuse key. Header fields include
 exact canonical_basis, basis_digest, state (`live` or `retired`), last_read_at and workflow_id. The live digest
 unique key is `(route, owner_account_id, basis_digest) WHERE state='live'`, with exact-byte equality required
 after the hit. A collision refuses admission rather than aliasing definitions. Expired headers are retired before
 replacement. Retired payload remains retained cleanup work; it is not implicitly erased by changing state.
+An episode may be reused only while its reserved Collection incarnation and source generation still match; a
+changed Source retires the old episode and reserves a new one under the same filter basis.
 
 One indexed `library.members_preparation_owner` control row keyed by `(route,owner_account_id)`, with `live_count`, serializes live
 quota and the LRU order. Its live count is maintained atomically, never reconstructed from all result/history rows.
