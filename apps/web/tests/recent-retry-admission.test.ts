@@ -6,15 +6,8 @@ import {
   recentBucket,
   type RecentStorage,
 } from '../src/search/recent-history';
-import {
-  createRecentSearchSyncAdapter,
-  RecentSyncError,
-  type RecentSearchTransport,
-} from '../src/search/recent-sync';
-import {
-  admitRecentRetryHeaders,
-  recentRetryDeadlineBlocks,
-} from '../src/search/recent-retry-admission';
+import { createRecentSearchSyncAdapter, RecentSyncError, type RecentSearchTransport } from '../src/search/recent-sync';
+import { admitRecentRetryHeaders, recentRetryDeadlineBlocks } from '../src/search/recent-retry-admission';
 
 const accountId = '019f0000-0000-7000-8000-734100000001';
 const bucket = recentBucket('signed-in', accountId)!;
@@ -88,7 +81,8 @@ test('Native Recent Retry-After prevents early reads and writes through sync, re
     expect(reads).toBe(blocked.reads);
     expect(writeCalls).toBe(blocked.writeCalls);
     expect(readRecentDocument(storage, bucket).entries.map((e) => e.query)).toEqual(['local only', 'queued visit']);
-    const pending = (readRecentDocument(storage, bucket).native as { pending: typeof attempted.pending[] }).pending[0];
+    const pending = (readRecentDocument(storage, bucket).native as { pending: (typeof attempted.pending)[] })
+      .pending[0];
     expect(pending).toMatchObject({
       key: attempted.pending.key,
       expectedRevision: 4,
