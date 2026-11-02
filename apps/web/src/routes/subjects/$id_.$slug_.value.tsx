@@ -43,12 +43,5 @@ function ValueRoute() {
   const search = Route.useSearch();
   const initial = Route.useLoaderData();
   const locale = getLocale();
-  return (
-    <ValueExplanationSession
-      id={id}
-      address={search}
-      locale={locale}
-      episode={initial}
-    />
-  );
+  return <ValueExplanationSession id={id} address={search} locale={locale} episode={initial} />;
 }

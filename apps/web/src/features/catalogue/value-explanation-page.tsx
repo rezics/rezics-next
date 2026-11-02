@@ -312,8 +312,7 @@ export function ValueExplanation({
   episode?: unknown;
 }) {
   const previous = useRef({ episode, version: 0 });
-  if (previous.current.episode !== episode)
-    previous.current = { episode, version: previous.current.version + 1 };
+  if (previous.current.episode !== episode) previous.current = { episode, version: previous.current.version + 1 };
   const work = useCatalogueLifetime(JSON.stringify(['value-explanation', locale, previous.current.version]));
   return <ValueEpisode key={work.generation} {...{ transport, locale, initial, work }} />;
 }
@@ -342,7 +341,9 @@ function ValueEpisode({
     const version = ++generation.current;
     setBusy(true);
     setResult(undefined);
-    const next = await currentTransport.current(cursor, session.current).catch((): ValueRead => ({ kind: 'unavailable' }));
+    const next = await currentTransport
+      .current(cursor, session.current)
+      .catch((): ValueRead => ({ kind: 'unavailable' }));
     if (!work.active() || version !== generation.current) return;
     session.current = next.kind === 'ready' ? next.session : undefined;
     setResult(next);
