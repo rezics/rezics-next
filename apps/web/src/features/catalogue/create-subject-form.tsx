@@ -6,7 +6,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/shad
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { useRef, useState, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { DefinitionGuideLink } from './definition-guide-view';
@@ -21,7 +21,7 @@ import { ScreenProfileEntry } from './screen-profile-entry';
 import { MangaProfileEntry } from './manga-profile-entry';
 import { PeopleProfileEntry } from './people-profile-entry';
 import { AlbumProfileEntry } from './album-profile-entry';
-import { createSubjectGuidance } from './create-subject-guidance';
+import { createSubjectControls, createSubjectGuidance } from './create-subject-guidance';
 import {
   initialTerms,
   type CreateFailure,
@@ -33,6 +33,91 @@ import {
 
 type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
 type Created = Extract<CreateResult, { ok: true }>;
+
+/** Read the producer's current label after commit; no property meaning is inferred from an endpoint or ID. */
+function CreationCorrection({
+  id,
+  label,
+  pointer,
+  locale,
+}: {
+  id?: string;
+  label?: string;
+  pointer: string;
+  locale: string;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [current, setCurrent] = useState({ label: '', language: undefined as string | undefined, available: false });
+  useLayoutEffect(() => {
+    const form = ref.current?.closest('form');
+    const target = id ? ref.current?.ownerDocument.getElementById(id) : undefined;
+    const mapped = !!target && !!form?.contains(target);
+    const available = mapped && !target.closest('[hidden]');
+    const labelledBy = mapped ? target.getAttribute('aria-labelledby')?.split(/\s+/) : undefined;
+    const heading = mapped ? target.querySelector<HTMLElement>(':scope > legend, :scope > h2, :scope > h3') : undefined;
+    const labels = mapped && 'labels' in target ? (target as HTMLInputElement).labels : undefined;
+    const source = labelledBy
+      ?.map((key) => target!.ownerDocument.getElementById(key))
+      .filter((node) => node && form?.contains(node));
+    const named =
+      label?.trim() ||
+      source
+        ?.map((node) => node!.textContent)
+        .join(' ')
+        .trim() ||
+      (mapped ? target.getAttribute('aria-label')?.trim() : '') ||
+      (labels
+        ? Array.from(labels, (node) => node.textContent)
+            .join(' ')
+            .trim()
+        : '') ||
+      heading?.textContent?.trim() ||
+      '';
+    const property = pointer.startsWith('/statements/')
+      ? pointer.split('/')[2]?.replaceAll('~1', '/').replaceAll('~0', '~')
+      : undefined;
+    const text = named === id || named === pointer || named === property ? '' : named;
+    const language = label
+      ? undefined
+      : ((source?.[0] ?? labels?.[0] ?? heading ?? target)?.closest('[lang]')?.getAttribute('lang') ?? undefined);
+    if (text !== current.label || language !== current.language || available !== current.available)
+      setCurrent({ label: text, language, available });
+  });
+  return (
+    <span ref={ref}>
+      {current.available ? (
+        <a
+          className="inline-flex min-h-11 max-w-full items-center whitespace-normal underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          href={`#${encodeURIComponent(id ?? '')}`}
+          lang={current.label ? current.language : locale}
+          onClick={(event) => {
+            const target = id ? event.currentTarget.ownerDocument.getElementById(id) : null;
+            if (!target || !event.currentTarget.closest('form')?.contains(target)) return;
+            // Profile mappings can point to a named field group rather than its inner input.
+            for (let parent = target.parentElement; parent; parent = parent.parentElement)
+              if (parent.tagName === 'DETAILS') (parent as HTMLDetailsElement).open = true;
+            const focus = target.matches('input, select, textarea, button, [tabindex]')
+              ? target
+              : target.querySelector<HTMLElement>(
+                  'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])',
+                );
+            if (focus) focus.focus();
+            else {
+              target.setAttribute('tabindex', '-1');
+              target.focus();
+            }
+          }}
+        >
+          {current.label || m.catalogue_creation_field_unknown({}, { locale: locale as never })}
+        </a>
+      ) : (
+        <span lang={current.label ? current.language : locale}>
+          {current.label || m.catalogue_creation_field_unknown({}, { locale: locale as never })}
+        </span>
+      )}
+    </span>
+  );
+}
 
 /** The same small initial-terms form is used by the route and its request-backed stories. */
 export const CreateSubjectForm = catalogueEditor(CreateSubjectFormLive);
@@ -84,6 +169,9 @@ function CreateSubjectFormLive({
   const types = definitions.data?.ok
     ? definitions.data.types.filter((entry) => !profile?.type || entry.id === profile.type)
     : [];
+  const selectedType = types.find((entry) => entry.id === type);
+  const selectedTypeName = selectedType?.label.trim();
+  const hasTypeName = !!selectedTypeName && selectedTypeName !== type;
   const uncertain =
     (failure?.reason === 'unavailable' && request.current !== null) || (!!profile && unresolvedProfile.current);
   const locked = busy || uncertain || failure?.reason === 'conflict';
@@ -91,35 +179,25 @@ function CreateSubjectFormLive({
   const errors = failure?.errors ?? [];
   const readOnlyType = !!profile?.type && profile.readOnlyType;
 
-  function control(pointer: string): string {
-    const profileControl = profile?.control?.(pointer);
-    if (profileControl) return profileControl;
-    const [kind, escaped] = pointer.slice(1).split('/');
-    if (kind === 'type') return 'create-type';
-    const language = escaped?.replaceAll('~1', '/').replaceAll('~0', '~');
-    const matches = rows.flatMap((row, index) => (row.language.trim() === language ? [index] : []));
-    const index = matches.at(-1) ?? 0;
-    const field =
-      matches.length > 1 || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(rows[index]?.language.trim() ?? '')
-        ? 'language'
-        : kind === 'descriptions'
-          ? 'description'
-          : kind === 'aliases'
-            ? 'aliases'
-            : 'label';
-    return `create-${field}-${index}`;
+  const termControl = createSubjectControls(rows);
+  const control = (pointer: string) => profile?.control?.(pointer) || termControl(pointer);
+  const corrections = new Map<string, { id?: string; errors: Violation[] }>();
+  for (const error of errors) {
+    const id = control(error.pointer);
+    const key = id ? `control:${id}` : `pointer:${error.pointer}`;
+    const group = corrections.get(key) ?? { id, errors: [] as Violation[] };
+    group.errors.push(error);
+    corrections.set(key, group);
   }
-  const invalid = (id: string) => errors.some((error) => control(error.pointer) === id);
+  const invalid = (id: string) => corrections.has(`control:${id}`);
   function guidance(id: string, field: keyof TermDraft | 'type', index?: number) {
     return [
       ...new Set(
-        errors
-          .filter((error) => control(error.pointer) === id)
-          .map((error) =>
-            profile?.control?.(error.pointer)
-              ? m.catalogue_create_invalid_field({}, options)
-              : createSubjectGuidance(error, field, { type, rows, index: index ?? 0 }, locale),
-          ),
+        (corrections.get(`control:${id}`)?.errors ?? []).map((error) =>
+          profile?.control?.(error.pointer)
+            ? m.catalogue_create_invalid_field({}, options)
+            : createSubjectGuidance(error, field, { type, rows, index: index ?? 0 }, locale),
+        ),
       ),
     ].join(' ');
   }
@@ -202,7 +280,7 @@ function CreateSubjectFormLive({
   }
 
   return (
-    <article className="mx-auto w-full max-w-3xl space-y-6 text-foreground">
+    <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
       {!profile?.hideHeading && (
         <header className="space-y-3">
           {profile ? (
@@ -369,11 +447,15 @@ function CreateSubjectFormLive({
                   <div
                     id="create-type"
                     tabIndex={-1}
+                    aria-labelledby="create-type-label"
+                    aria-invalid={invalid('create-type')}
                     aria-describedby={`create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
                   >
-                    <p className="text-sm font-medium">{m.catalogue_create_type({}, options)}</p>
-                    <p lang={profile?.labelLanguage?.(type)}>
-                      {types.find((entry) => entry.id === type)?.label} <code>{type}</code>
+                    <p id="create-type-label" className="text-sm font-medium">
+                      {m.catalogue_create_type({}, options)}
+                    </p>
+                    <p lang={hasTypeName ? profile?.labelLanguage?.(type) : locale}>
+                      {hasTypeName ? selectedTypeName : m.catalogue_creation_type_unlabelled({}, options)}
                     </p>
                   </div>
                 ) : (
@@ -397,8 +479,16 @@ function CreateSubjectFormLive({
                         </NativeSelectOption>
                       )}
                       {types.map((entry) => (
-                        <NativeSelectOption key={entry.id} value={entry.id} lang={profile?.labelLanguage?.(entry.id)}>
-                          {entry.label}
+                        <NativeSelectOption
+                          key={entry.id}
+                          value={entry.id}
+                          lang={
+                            entry.label.trim() && entry.label !== entry.id ? profile?.labelLanguage?.(entry.id) : locale
+                          }
+                        >
+                          {entry.label.trim() && entry.label !== entry.id
+                            ? entry.label
+                            : m.catalogue_creation_type_unlabelled({}, options)}
                         </NativeSelectOption>
                       ))}
                     </NativeSelect>
@@ -408,12 +498,25 @@ function CreateSubjectFormLive({
                 <FieldDescription id="create-type-help">
                   {type && (
                     <DefinitionMeaning
-                      text={types.find((entry) => entry.id === type)?.description}
+                      text={selectedType?.description}
                       language={profile?.descriptionLanguage?.(type)}
                       locale={locale}
                     />
                   )}
                 </FieldDescription>
+                {type ? (
+                  <details className="min-w-0 text-sm">
+                    <summary className="min-h-11 cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                      {m.catalogue_creation_technical_details({}, options)}
+                    </summary>
+                    <dl className="flex min-w-0 flex-col gap-1 py-2">
+                      <dt>{m.catalogue_creation_type_id({}, options)}</dt>
+                      <dd>
+                        <code className="select-all break-all">{type}</code>
+                      </dd>
+                    </dl>
+                  </details>
+                ) : null}
                 <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/new` }} />
                 {invalid('create-type') && (
                   <FieldError id="create-type-error">{guidance('create-type', 'type')}</FieldError>
@@ -442,32 +545,34 @@ function CreateSubjectFormLive({
                     </a>
                   )}
                   {errors.length > 0 && (
-                    <ul className="list-inside list-disc">
-                      {[...new Set(errors.map((error) => control(error.pointer)))].map((id) => (
-                        <li key={id}>
-                          {profile?.errorLabel?.(id) ? (
-                            <a className="underline" href={`#${id}`}>
-                              {profile.errorLabel(id)}
-                            </a>
-                          ) : (
-                            <>
-                              <a className="underline" href={`#${id}`}>
-                                {profile?.control?.(
-                                  errors.find((error) => control(error.pointer) === id)?.pointer ?? '',
-                                )
-                                  ? errors.find((error) => control(error.pointer) === id)?.pointer
-                                  : id === 'create-type'
-                                    ? m.catalogue_create_type({}, options)
-                                    : id.includes('-language-')
-                                      ? m.catalogue_create_language({}, options)
-                                      : id.includes('-description-')
-                                        ? m.catalogue_create_description({}, options)
-                                        : id.includes('-aliases-')
-                                          ? m.catalogue_create_aliases({}, options)
-                                          : m.catalogue_create_label({}, options)}
-                              </a>
-                            </>
-                          )}
+                    <ul className="flex min-w-0 list-inside list-disc flex-col gap-2">
+                      {[...corrections].map(([key, { id, errors: fieldErrors }]) => (
+                        <li key={key}>
+                          <CreationCorrection
+                            id={id}
+                            label={id ? profile?.errorLabel?.(id) : undefined}
+                            pointer={fieldErrors[0]!.pointer}
+                            locale={locale}
+                          />
+                          <details className="min-w-0 text-sm">
+                            <summary className="min-h-11 cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                              {m.catalogue_creation_technical_details({}, options)}
+                            </summary>
+                            {fieldErrors.map((error, index) => (
+                              <dl key={index} className="flex min-w-0 flex-col gap-1 py-2">
+                                <dt>{m.catalogue_creation_pointer({}, options)}</dt>
+                                <dd>
+                                  <code className="select-all break-all">
+                                    {error.pointer === '' ? '""' : error.pointer}
+                                  </code>
+                                </dd>
+                                <dt>{m.catalogue_creation_error_code({}, options)}</dt>
+                                <dd>
+                                  <code className="select-all break-all">{error.code}</code>
+                                </dd>
+                              </dl>
+                            ))}
+                          </details>
                         </li>
                       ))}
                     </ul>

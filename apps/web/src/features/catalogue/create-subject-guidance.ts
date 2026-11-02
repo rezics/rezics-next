@@ -2,6 +2,35 @@ import type { Violation } from '@rezics/definitions/validate';
 import { m } from '../../paraglide/messages.js';
 import type { TermDraft } from './create-subject';
 
+/** Resolve only the term fields actually present in this draft, preserving duplicate-language correction. */
+export function createSubjectControls(rows: readonly TermDraft[]) {
+  const languages = new Map<string, { index: number; duplicate: boolean }>();
+  rows.forEach((row, index) => {
+    const language = row.language.trim();
+    languages.set(language, { index, duplicate: languages.has(language) });
+  });
+  return (pointer: string): string | undefined => {
+    if (pointer === '/type') return 'create-type';
+    if (!pointer.startsWith('/')) return undefined;
+    const [kind, escaped, entry, ...rest] = pointer.slice(1).split('/');
+    if (!['labels', 'descriptions', 'aliases'].includes(kind ?? '') || rest.length) return undefined;
+    if (entry !== undefined && (kind !== 'aliases' || !/^(0|[1-9][0-9]*)$/.test(entry))) return undefined;
+    const language = escaped?.replaceAll('~1', '/').replaceAll('~0', '~');
+    const row =
+      language === undefined ? (rows.length ? { index: 0, duplicate: false } : undefined) : languages.get(language);
+    if (!row) return undefined;
+    const field =
+      language !== undefined && (row.duplicate || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(language))
+        ? 'language'
+        : kind === 'descriptions'
+          ? 'description'
+          : kind === 'aliases'
+            ? 'aliases'
+            : 'label';
+    return `create-${field}-${row.index}`;
+  };
+}
+
 /** Explain reported violations only, using the same trimmed values creation validates. */
 export function createSubjectGuidance(
   error: Violation,

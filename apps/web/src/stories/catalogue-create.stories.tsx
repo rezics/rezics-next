@@ -206,6 +206,13 @@ export const InvalidFields: Story = {
       expect(canvas.getByText(m.catalogue_create_validation_name_required())).toBeVisible();
       expect(canvas.getByText(m.catalogue_create_validation_type_required())).toBeVisible();
       expect(create).toBeEnabled();
+      const alert = canvas.getByRole('alert');
+      expect(
+        within(alert)
+          .getAllByRole('link')
+          .map((link) => link.textContent),
+      ).toEqual([m.catalogue_create_label(), m.catalogue_create_type()]);
+      expect(Array.from(alert.querySelectorAll('details')).every((details) => !details.open)).toBe(true);
     });
   },
 };
@@ -215,6 +222,20 @@ export const RejectedValuesRefreshTypes: Story = {
     const canvas = await submit(canvasElement);
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_create_refresh());
     expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveAttribute('aria-invalid', 'true');
+    const alert = canvas.getByRole('alert');
+    const correction = within(alert).getByRole('link', { name: m.catalogue_create_label() });
+    expect(correction).toHaveAttribute('href', '#create-label-0');
+    expect(correction).not.toHaveTextContent('/labels/en');
+    await userEvent.click(correction);
+    expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveFocus();
+    const details = alert.querySelector('details')!;
+    expect(details.open).toBe(false);
+    await userEvent.click(within(details).getByText(m.catalogue_creation_technical_details()));
+    expect(details.open).toBe(true);
+    expect(within(details).getByText('/labels/en')).toBeVisible();
+    expect(within(details).getByText('invalid_format')).toBeVisible();
+    expect(within(details).getByText(m.catalogue_creation_pointer())).toBeVisible();
+    expect(within(details).getByText(m.catalogue_creation_error_code())).toBeVisible();
   },
 };
 export const Conflict: Story = {

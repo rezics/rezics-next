@@ -173,3 +173,379 @@ test('A contributor starts the actual creation task before alternative editors a
     }
   }
 });
+
+// Authored production-form regressions; native/browser/SSR and visual acceptance remain separate.
+test('Creation corrections lead with current human fields, disclose exact failures, and retain recovery authority', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/catalogue/new' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
+  const { within, waitFor } = await import(Bun.resolveSync('@testing-library/dom', storybook));
+  const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const { CreateSubjectForm } = await import('../src/features/catalogue/create-subject-form');
+  const { ScreenProfile } = await import('../src/features/catalogue/screen-profile-view');
+  const { screenFactId } = await import('../src/features/catalogue/screen-profile');
+  const { screenProfileFixture } = await import('../src/kernel/fake/catalogue-screen-profile');
+  const { catalogueCreateFixture } = await import('../src/kernel/fake/catalogue-create');
+  const { m } = await import('../src/paraglide/messages.js');
+  const { setLocale } = await import('../src/paraglide/runtime.js');
+  setLocale('en', { reload: false });
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const canvas = within(host as unknown as HTMLElement);
+  const user = userEvent.setup({ document: window.document });
+  let generation = 0;
+  const mount = async (element: Parameters<typeof root.render>[0]) => {
+    await act(async () => root.render(createElement(QueryClientProvider, { client, key: ++generation }, element)));
+    await waitFor(async () => {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      if (!host.querySelector('#create-label-0')) throw new Error('Waiting for the production creation form');
+    });
+  };
+  const fill = async () => {
+    await act(async () => {
+      await user.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'A new film');
+      const select = canvas.queryByRole('combobox', { name: m.catalogue_create_type() });
+      if (select) await user.selectOptions(select, 'schema:Movie');
+    });
+  };
+  const submit = async () => {
+    await act(async () => {
+      await user.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
+    });
+  };
+  const codes = (region: Element) => Array.from(region.querySelectorAll('code'), (node) => node.textContent);
+  try {
+    const fixture = catalogueCreateFixture();
+    const definitions = await fixture.transport.definitions();
+    if (!definitions.ok) throw new Error('Expected the admitted creation definitions');
+    const typeLabel = definitions.types.find((type) => type.id === 'schema:Movie')!.label;
+    await mount(
+      createElement(CreateSubjectForm, {
+        locale: 'en',
+        session: 'signed-in',
+        transport: fixture.transport,
+        onNavigate() {},
+        profile: {
+          scope: 'readonly-correction',
+          title: 'Create film',
+          type: 'schema:Movie',
+          readOnlyType: true,
+          fields: () => null,
+          prepare: (item) => ({ item, errors: [] }),
+        },
+      }),
+    );
+    const type = host.querySelector('#create-type')!;
+    expect(type.textContent).toContain(typeLabel);
+    expect(type.textContent).not.toContain('schema:Movie');
+    expect(type.getAttribute('aria-labelledby')).toBe('create-type-label');
+    const typeDetails = host.querySelector('code')!.closest('details')!;
+    expect(typeDetails.open).toBe(false);
+    expect(typeDetails.querySelector('summary')!.textContent).toBe(m.catalogue_creation_technical_details());
+    expect(codes(typeDetails)).toEqual(['schema:Movie']);
+    expect(typeDetails.querySelector('dt')!.textContent).toBe(m.catalogue_creation_type_id());
+    await submit();
+    const alert = canvas.getByRole('alert');
+    const link = within(alert).getByRole('link', { name: m.catalogue_create_label() });
+    expect(link.getAttribute('href')).toBe('#create-label-0');
+    const name = canvas.getByRole('textbox', { name: m.catalogue_create_label() });
+    expect(name.getAttribute('aria-describedby')).toContain('create-label-0-error');
+    expect(name.getAttribute('aria-invalid')).toBe('true');
+    await act(async () => {
+      await user.click(link);
+    });
+    expect(window.document.activeElement).toBe(name);
+    await waitFor(() => expect(window.location.hash).toBe('#create-label-0'));
+    const failureDetails = alert.querySelector('details')!;
+    expect(failureDetails.open).toBe(false);
+    expect(codes(failureDetails)).toEqual(['/labels/en', 'invalid_format']);
+    expect(Array.from(failureDetails.querySelectorAll('dt'), (node) => node.textContent)).toEqual([
+      m.catalogue_creation_pointer(),
+      m.catalogue_creation_error_code(),
+    ]);
+    await act(async () => {
+      await user.click(failureDetails.querySelector('summary')!);
+    });
+    expect(failureDetails.open).toBe(true);
+    expect(failureDetails.querySelector('code')!.classList.contains('select-all')).toBe(true);
+    expect(fixture.calls).toEqual([]);
+
+    await mount(
+      createElement(CreateSubjectForm, {
+        locale: 'en',
+        session: 'signed-in',
+        onNavigate() {},
+        transport: {
+          ...fixture.transport,
+          definitions: async () => ({
+            ok: true as const,
+            types: [{ id: 'schema:Movie', label: 'schema:Movie', description: '' }],
+          }),
+        },
+        profile: {
+          scope: 'type-name-unavailable',
+          title: 'Create film',
+          type: 'schema:Movie',
+          readOnlyType: true,
+          fields: () => null,
+          prepare: (item) => ({ item, errors: [] }),
+        },
+      }),
+    );
+    expect(host.querySelector('#create-type')!.textContent).toContain(m.catalogue_creation_type_unlabelled());
+    expect(host.querySelector('#create-type')!.textContent).not.toContain('schema:Movie');
+    expect(codes(host)).toEqual(['schema:Movie']);
+
+    // The real Screen producer has Profile.control, no errorLabel, and heading text from its admitted definition.
+    const screen = screenProfileFixture();
+    const read = await screen.transport.load();
+    if (!read.ok) throw new Error('Expected the screen profile definitions');
+    const longLabel = '上映時間・収録時間と特別版に含まれる映像の長さ'.repeat(5);
+    read.release.properties['schema:duration']!.labels = { ja: longLabel };
+    let current = read;
+    await mount(
+      createElement(ScreenProfile, {
+        locale: 'en',
+        session: 'signed-in',
+        search: async () => [],
+        onNavigate() {},
+        transport: { ...screen.transport, load: async () => current },
+      }),
+    );
+    await fill();
+    await act(async () => {
+      await user.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:duration');
+      await user.click(canvas.getByRole('button', { name: m.correction_add() }));
+    });
+    await submit();
+    const screenAlert = canvas.getByRole('alert');
+    const correction = within(screenAlert).getByRole('link', { name: longLabel });
+    expect(correction.getAttribute('href')).toBe(`#${encodeURIComponent(screenFactId('schema:duration'))}`);
+    expect(correction.getAttribute('lang')).toBe('ja');
+    expect(correction.classList.contains('[overflow-wrap:anywhere]')).toBe(true);
+    expect(correction.textContent).not.toContain('/statements/');
+    await act(async () => {
+      await user.click(correction);
+    });
+    const field = host.querySelector(`#${screenFactId('schema:duration').replaceAll('%', '\\%')}`)!;
+    expect(field.contains(window.document.activeElement)).toBe(true);
+    await waitFor(() =>
+      expect(decodeURIComponent(window.location.hash.slice(1))).toBe(screenFactId('schema:duration')),
+    );
+    expect(screen.creation.calls).toEqual([]);
+    expect(codes(screenAlert).some((value) => value?.startsWith('/statements/schema:duration/'))).toBe(true);
+    expect(Array.from(screenAlert.querySelectorAll('details')).every((details) => !details.open)).toBe(true);
+    const updatedLabel = 'Current running time';
+    current = { ...read, release: structuredClone(read.release) };
+    current.release.properties['schema:duration']!.labels = { en: updatedLabel };
+    await act(async () => {
+      await user.click(canvas.getByRole('button', { name: m.correction_retry() }));
+    });
+    await waitFor(() => within(screenAlert).getByRole('link', { name: updatedLabel }));
+    expect(within(screenAlert).queryByRole('link', { name: longLabel })).toBeNull();
+    expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() }).value).toBe('A new film');
+    // This producer falls back to a property ID when its label is absent; that ID cannot lead the correction.
+    current = { ...current, release: structuredClone(current.release) };
+    current.release.properties['schema:duration']!.labels = {};
+    await act(async () => {
+      await user.click(canvas.getByRole('button', { name: m.correction_retry() }));
+    });
+    await waitFor(() => within(screenAlert).getByRole('link', { name: m.catalogue_creation_field_unknown() }));
+    expect(within(screenAlert).queryByRole('link', { name: 'schema:duration' })).toBeNull();
+
+    // Unknown pointers and unavailable mappings never pretend to identify the Name field.
+    for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] as const) {
+      const o = { locale };
+      const unknown = [
+        { pointer: '/future/value~1with~0escapes', code: 'unsupported' as const },
+        { pointer: '/labels/zz', code: 'required' as const },
+        { pointer: '/statements/future:field/0/value', code: 'out_of_range' as const },
+      ];
+      await mount(
+        createElement(CreateSubjectForm, {
+          locale,
+          session: 'signed-in',
+          onNavigate() {},
+          transport: {
+            ...fixture.transport,
+            submit: async () => ({ ok: false as const, reason: 'invalid' as const, errors: unknown }),
+          },
+          profile: {
+            scope: `unknown-${locale}`,
+            title: 'Create',
+            control: (pointer) => (pointer.startsWith('/statements/') ? 'missing-control' : undefined),
+            fields: () => null,
+            prepare: (item) => ({ item, errors: [] }),
+          },
+        }),
+      );
+      // The UI locale does not silently change the language in the user's retained terms.
+      const formName = canvas.getByRole('textbox', { name: m.catalogue_create_label({}, o) });
+      await act(async () => {
+        await user.type(formName, '映画 — A film');
+        await user.selectOptions(
+          canvas.getByRole('combobox', { name: m.catalogue_create_type({}, o) }),
+          'schema:Movie',
+        );
+        await user.click(canvas.getByRole('button', { name: m.catalogue_create_submit({}, o) }));
+      });
+      const unknownAlert = canvas.getByRole('alert');
+      expect(unknownAlert.textContent).toContain(m.catalogue_create_invalid({}, o));
+      expect(within(unknownAlert).queryAllByRole('link')).toHaveLength(0);
+      expect(within(unknownAlert).getAllByText(m.catalogue_creation_field_unknown({}, o))).toHaveLength(3);
+      expect(codes(unknownAlert)).toEqual(unknown.flatMap((error) => [error.pointer, error.code]));
+      expect(Array.from(unknownAlert.querySelectorAll('summary'), (node) => node.textContent)).toEqual(
+        unknown.map(() => m.catalogue_creation_technical_details({}, o)),
+      );
+      expect(formName.getAttribute('aria-invalid')).toBe('false');
+      expect(formName.value).toBe('映画 — A film');
+    }
+
+    const uncertain = catalogueCreateFixture('uncertain');
+    await mount(
+      createElement(CreateSubjectForm, {
+        locale: 'en',
+        session: 'signed-in',
+        transport: uncertain.transport,
+        onNavigate() {},
+      }),
+    );
+    await fill();
+    await submit();
+    expect(canvas.getByRole('alert').textContent).toContain(m.catalogue_create_uncertain());
+    expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() }).disabled).toBe(true);
+    const original = structuredClone(uncertain.calls[0]);
+    await act(async () => {
+      await user.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
+    });
+    expect(uncertain.calls[1]).toEqual(original);
+    expect(uncertain.receipts.size).toBe(1);
+    expect(canvas.getByRole('link', { name: m.catalogue_create_open() })).toBeDefined();
+
+    const conflict = catalogueCreateFixture('conflict');
+    await mount(
+      createElement(CreateSubjectForm, {
+        locale: 'en',
+        session: 'signed-in',
+        transport: conflict.transport,
+        onNavigate() {},
+      }),
+    );
+    await fill();
+    await submit();
+    expect(canvas.getByRole('alert').textContent).toContain(m.catalogue_create_conflict());
+    expect(canvas.getByRole('button', { name: m.catalogue_create_submit() }).disabled).toBe(true);
+    const failedKey = conflict.calls[0]!.key;
+    await act(async () => {
+      await user.click(canvas.getByRole('button', { name: m.catalogue_create_review_new() }));
+    });
+    expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() }).value).toBe('A new film');
+    conflict.setScenario('ready');
+    await submit();
+    expect(conflict.calls[1]!.key).not.toBe(failedKey);
+    expect(conflict.calls[1]!.body).toEqual(conflict.calls[0]!.body);
+
+    const profileUncertain = catalogueCreateFixture('uncertain');
+    await mount(
+      createElement(CreateSubjectForm, {
+        locale: 'en',
+        session: 'signed-in',
+        transport: profileUncertain.transport,
+        onNavigate() {},
+        profile: {
+          scope: 'retained-profile-command',
+          title: 'Create film',
+          type: 'schema:Movie',
+          fields: () => null,
+          prepare: (item) => ({ item, errors: [] }),
+        },
+      }),
+    );
+    await fill();
+    await submit();
+    profileUncertain.setScenario('conflict');
+    await act(async () => {
+      await user.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
+    });
+    expect(profileUncertain.calls[1]).toEqual(profileUncertain.calls[0]);
+    expect(canvas.queryByRole('button', { name: m.catalogue_create_review_new() })).toBeNull();
+    expect(canvas.getByRole('button', { name: m.catalogue_create_retry() }).disabled).toBe(true);
+    expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() }).value).toBe('A new film');
+
+    for (const scenario of ['denied', 'signed-out', 'invalid', 'reader-unavailable', 'concealed'] as const) {
+      const recovery = catalogueCreateFixture(scenario);
+      await mount(
+        createElement(CreateSubjectForm, {
+          locale: 'en',
+          session: 'signed-in',
+          transport: recovery.transport,
+          onNavigate() {},
+        }),
+      );
+      await fill();
+      await submit();
+      if (scenario === 'invalid') {
+        expect(recovery.refreshes).toBe(1);
+        expect(canvas.getByRole('alert').textContent).toContain(m.catalogue_create_refresh());
+        expect(canvas.getByRole('combobox', { name: m.catalogue_create_type() }).value).toBe('schema:Movie');
+        const name = canvas.getByRole('textbox', { name: m.catalogue_create_label() });
+        expect(name.value).toBe('A new film');
+        const failedKey = recovery.calls[0]!.key;
+        await act(async () => {
+          await user.type(name, ' corrected');
+        });
+        expect(name.getAttribute('aria-invalid')).toBe('false');
+        recovery.setScenario('ready');
+        await submit();
+        expect(recovery.calls[1]!.key).not.toBe(failedKey);
+        expect(recovery.calls[1]!.body.labels.en).toBe('A new film corrected');
+      } else if (scenario === 'denied' || scenario === 'signed-out') {
+        expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() }).value).toBe('A new film');
+        expect(canvas.getByRole('alert').textContent).toContain(
+          scenario === 'denied' ? m.catalogue_create_denied() : m.catalogue_create_signed_out(),
+        );
+        if (scenario === 'signed-out')
+          expect(canvas.getByRole('link', { name: m.account_sign_in() }).getAttribute('href')).toContain('return_to=');
+      } else {
+        expect(canvas.queryByRole('link', { name: m.catalogue_create_open() })).toBeNull();
+        expect(canvas.getByRole('status').textContent).toContain(m.catalogue_create_created());
+        recovery.setScenario('ready');
+        await act(async () => {
+          await user.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
+        });
+        expect(canvas.getByRole('link', { name: m.catalogue_create_open() })).toBeDefined();
+        expect(recovery.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+      }
+    }
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    host.remove();
+    await window.happyDOM.close();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});

@@ -149,3 +149,32 @@ test('refused, invalid, conflicting, concealed and unreadable outcomes retain ho
     ).toBe(true);
   }
 });
+
+test('Creation corrections map only actual draft fields, including escaped and duplicate language rows', async () => {
+  const { createSubjectControls } = await import('../src/features/catalogue/create-subject-guidance');
+  const rows = [
+    { language: ' en ', label: 'A film', description: '', aliases: '' },
+    { language: 'ja', label: '映画', description: '', aliases: '' },
+    { language: 'en', label: 'Another name', description: '', aliases: '' },
+    { language: 'en/~', label: 'A name', description: '', aliases: '' },
+  ];
+  const control = createSubjectControls(rows);
+  expect(control('/type')).toBe('create-type');
+  expect(control('/labels')).toBe('create-label-0');
+  expect(control('/labels/en')).toBe('create-language-2');
+  expect(control('/descriptions/ja')).toBe('create-description-1');
+  expect(control('/aliases/ja/31')).toBe('create-aliases-1');
+  expect(control('/labels/en~1~0')).toBe('create-language-3');
+  for (const pointer of [
+    '',
+    '/future',
+    '/type/future',
+    '/labels/fr',
+    '/labels/ja/future',
+    '/aliases/ja/not-an-index',
+    '/statements/schema:duration/0/value',
+  ])
+    expect(control(pointer)).toBeUndefined();
+  expect(createSubjectControls([])('/labels')).toBeUndefined();
+  expect(rows[0]!.language).toBe(' en ');
+});
