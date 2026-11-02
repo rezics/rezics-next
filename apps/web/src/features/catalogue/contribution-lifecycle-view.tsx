@@ -109,11 +109,7 @@ function ContributionLifecycleLive({
       // A fresh read replaces old action assumptions. Only a confirmed command
       // can report restoration; availability alone says nothing about selection.
       setState(
-        effect === 'restore'
-          ? 'restored'
-          : effect === 'delete' || nextOperation === 'restore'
-            ? 'deleted'
-            : 'active',
+        effect === 'restore' ? 'restored' : effect === 'delete' || nextOperation === 'restore' ? 'deleted' : 'active',
       );
     }
   }

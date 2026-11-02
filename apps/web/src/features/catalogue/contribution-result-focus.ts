@@ -61,7 +61,8 @@ export function useContributionResultFocus() {
         if (
           (event.target === document.body || event.target === document.documentElement) &&
           (!source.isConnected || source.disabled)
-        ) return;
+        )
+          return;
         intent.cancel();
       };
       const blurred = (event: FocusEvent) => {

@@ -381,7 +381,9 @@ test('own-contribution family preserves independent panels, exact recovery and r
     // Command completion belongs only to the explicit current keyboard action and surviving holder.
     const keyboard = (node: HTMLButtonElement) => {
       node.focus();
-      return act(async () => { node.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 0 })); });
+      return act(async () => {
+        node.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 0 }));
+      });
     };
     for (const mode of ['success', 'restore', 'pointer', 'moved', 'retired', 'throws', 'denied', 'retry'] as const) {
       let release!: (value: ContributionResult) => void;
@@ -389,17 +391,28 @@ test('own-contribution family preserves independent panels, exact recovery and r
       const transport: ContributionTransport = {
         change: (command) => {
           sent.push(command);
-          return new Promise((resolve) => { release = resolve; });
+          return new Promise((resolve) => {
+            release = resolve;
+          });
         },
-        read: async () => { throw new Error('No completion read'); },
+        read: async () => {
+          throw new Error('No completion read');
+        },
       };
       function Holder() {
         const [retired, retire] = useState(false);
-        return retired ? <input aria-label="Replacement draft" /> : (
-          <ContributionLifecycle address={first.address} locale="en" transport={transport} onClear={() => {
-            if (mode === 'retired') retire(true);
-            if (mode === 'throws') throw new Error('Clear failed after confirmation');
-          }} />
+        return retired ? (
+          <input aria-label="Replacement draft" />
+        ) : (
+          <ContributionLifecycle
+            address={first.address}
+            locale="en"
+            transport={transport}
+            onClear={() => {
+              if (mode === 'retired') retire(true);
+              if (mode === 'throws') throw new Error('Clear failed after confirmation');
+            }}
+          />
         );
       }
       await render(<Holder key={`handoff-${mode}`} />);
@@ -414,7 +427,9 @@ test('own-contribution family preserves independent panels, exact recovery and r
       const confirmation = button(dialog(), m.contribution_confirm());
       if (mode === 'pointer') {
         confirmation.focus();
-        await act(async () => { confirmation.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 1 })); });
+        await act(async () => {
+          confirmation.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 1 }));
+        });
       } else await keyboard(confirmation);
       await until(() => !dialog());
       if (mode === 'moved') {
@@ -423,13 +438,22 @@ test('own-contribution family preserves independent panels, exact recovery and r
         button(host, m.contribution_retry()).focus();
       }
       const success: ContributionResult = {
-        ok: true, operation: 'delete',
+        ok: true,
+        operation: 'delete',
         current: { subject: 'available', candidate: 'deleted', selected: false },
       };
-      await act(async () => release(mode === 'denied' ? { ok: false, reason: 'denied' }
-        : mode === 'retry' ? { ok: false, reason: 'unavailable' } : success));
+      await act(async () =>
+        release(
+          mode === 'denied'
+            ? { ok: false, reason: 'denied' }
+            : mode === 'retry'
+              ? { ok: false, reason: 'unavailable' }
+              : success,
+        ),
+      );
       await settle();
-      const boundary = host.querySelector<HTMLElement>('[role="alert"]') ??
+      const boundary =
+        host.querySelector<HTMLElement>('[role="alert"]') ??
         host.querySelector<HTMLElement>('[role="status"][tabindex="-1"]');
       if (['pointer', 'moved', 'retired'].includes(mode)) {
         expect(boundary === null || document.activeElement !== boundary).toBe(true);
@@ -437,8 +461,13 @@ test('own-contribution family preserves independent panels, exact recovery and r
         if (mode === 'retired') expect(document.activeElement).not.toBe(host.querySelector('input'));
       } else {
         expect(document.activeElement).toBe(boundary);
-        expect(boundary?.textContent).toBe(mode === 'denied' ? m.contribution_denied()
-          : mode === 'retry' ? m.contribution_unavailable() : m.contribution_deleted());
+        expect(boundary?.textContent).toBe(
+          mode === 'denied'
+            ? m.contribution_denied()
+            : mode === 'retry'
+              ? m.contribution_unavailable()
+              : m.contribution_deleted(),
+        );
       }
       if (mode === 'throws') expect(host.textContent).not.toContain(m.contribution_unavailable());
       if (mode === 'restore') {
@@ -446,8 +475,13 @@ test('own-contribution family preserves independent panels, exact recovery and r
         await until(() => !!dialog());
         await keyboard(button(dialog(), m.contribution_confirm()));
         await until(() => !dialog());
-        await act(async () => release({ ...success, operation: 'restore',
-          current: { subject: 'available', candidate: 'available', selected: false } }));
+        await act(async () =>
+          release({
+            ...success,
+            operation: 'restore',
+            current: { subject: 'available', candidate: 'available', selected: false },
+          }),
+        );
         expect(document.activeElement?.textContent).toBe(m.contribution_restored());
       }
       if (mode === 'retry') {
