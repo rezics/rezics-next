@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'bun:test';
-import { fromMarkdown } from '@rezics/document';
+import { documentText, fromMarkdown } from '@rezics/document';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { statementDocument } from '../src/features/pages/documents';
 
@@ -25,7 +25,9 @@ test('a successful empty public document remains distinct from a failed read', (
     },
   };
 
-  expect(statementDocument('public-subject', statement, filled)).toEqual(fromMarkdown(''));
+  const empty = statementDocument('public-subject', statement, filled);
+  expect(empty).toBeDefined();
+  expect(documentText(empty!)).toBe('');
   expect(statementDocument('public-subject', statement, undefined)).toBeUndefined();
 });
 
