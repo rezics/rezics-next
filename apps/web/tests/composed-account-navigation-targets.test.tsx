@@ -29,7 +29,7 @@ const value = { locale: 'en', subject: null, reader: { suitability: 'blur' }, la
 const ui = <QueryClientProvider client={client}><OverviewContext.Provider value={value}><AccountIdentity id="identity" /></OverviewContext.Provider></QueryClientProvider>;
 const host = window.document.createElement('main') as HTMLElement;
 const links = () => [...host.querySelectorAll('[data-slot="account-management-links"] a')].map((link) => link.getAttribute('href'));
-const settle = async (action: () => void) => act(async () => { action(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+const settle = async (action: () => void) => act(async () => { action(); await new Promise((resolve) => setTimeout(resolve, 5)); });
 const step = async (action: () => void, expected: string[] = []) => { await settle(action); expect(links()).toEqual(expected); };
 const session = (subject: string) => ({ state: 'signed-in', subject, csrfToken: 'same-token' });
 const ready = (...operations: string[]): AccountViewerActions => ({ state: 'ready', actions: ['account:read', 'account:update', 'account:manage'].map((action) => ({ action, operations })), securityHref: 'https://auth.test/security' });
