@@ -49,8 +49,7 @@ function test(name: string, operation: LifetimeTestOperation, timeoutMs?: number
           cause: primary,
         });
       if (failed) throw primary;
-      if (cleanupErrors.length > 0)
-        throw new AggregateError(cleanupErrors, `${name} browser context cleanup failed`);
+      if (cleanupErrors.length > 0) throw new AggregateError(cleanupErrors, `${name} browser context cleanup failed`);
     },
     timeoutMs,
   );
@@ -59,9 +58,7 @@ function test(name: string, operation: LifetimeTestOperation, timeoutMs?: number
 function closeContextAttempt(context: BrowserContext): Promise<void> {
   let closing = contextClosures.get(context);
   if (!closing) {
-    closing = cleanupAll([
-      { label: 'browser context', run: () => context.close(), timeoutMs: 5000 },
-    ]);
+    closing = cleanupAll([{ label: 'browser context', run: () => context.close(), timeoutMs: 5000 }]);
     contextClosures.set(context, closing);
     void closing.catch(() => {});
   }
@@ -74,9 +71,7 @@ async function closeContext(context: BrowserContext): Promise<void> {
 }
 
 function closeBrowserHandle(instance: Browser): Promise<void> {
-  browserClosing ??= cleanupAll([
-    { label: 'Playwright browser', run: () => instance.close(), timeoutMs: 5000 },
-  ]);
+  browserClosing ??= cleanupAll([{ label: 'Playwright browser', run: () => instance.close(), timeoutMs: 5000 }]);
   void browserClosing.catch(() => {});
   return browserClosing;
 }
@@ -101,25 +96,22 @@ async function withBrowserContext<T>(
 ): Promise<{ context: BrowserContext; value: T }> {
   let context: BrowserContext | undefined;
   let complete = false;
-  const operation = withCleanup(
-    async () => {
-      const instance = await launchBrowser();
-      context = await instance.newContext(options);
-      ownedContexts.add(context);
-      if (teardownStarted) throw new Error('Browser context opened after suite teardown began');
-      const value = await prepare(context);
-      if (teardownStarted) throw new Error('Browser context setup completed after suite teardown began');
-      complete = true;
-      return { context, value };
+  const operation = withCleanup(async () => {
+    const instance = await launchBrowser();
+    context = await instance.newContext(options);
+    ownedContexts.add(context);
+    if (teardownStarted) throw new Error('Browser context opened after suite teardown began');
+    const value = await prepare(context);
+    if (teardownStarted) throw new Error('Browser context setup completed after suite teardown began');
+    complete = true;
+    return { context, value };
+  }, [
+    {
+      label: 'partial browser context setup',
+      run: () => (complete || !context ? undefined : closeContextAttempt(context)),
+      timeoutMs: 6000,
     },
-    [
-      {
-        label: 'partial browser context setup',
-        run: () => (complete || !context ? undefined : closeContextAttempt(context)),
-        timeoutMs: 6000,
-      },
-    ],
-  );
+  ]);
   pendingContextSetups.add(operation);
   try {
     return await operation;
@@ -498,7 +490,6 @@ function freePort(): Promise<number> {
   });
 }
 
-
 // The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
   started ??= (async () => {
@@ -534,7 +525,8 @@ function site(): Promise<string> {
     const deadline = Date.now() + 150_000;
     try {
       for (;;) {
-        if (spawnError) throw new Error(`dev server spawn failed: ${spawnError.message}\n${output}`, { cause: spawnError });
+        if (spawnError)
+          throw new Error(`dev server spawn failed: ${spawnError.message}\n${output}`, { cause: spawnError });
         if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
         try {
           const response = await fetch(`${origin}/en`, {
@@ -549,12 +541,9 @@ function site(): Promise<string> {
         await Bun.sleep(500);
       }
     } catch (error) {
-      return await withCleanup(
-        () => {
-          throw error;
-        },
-        [{ label: 'Vite startup process group', run: () => serverCustody!.close(), timeoutMs: 8000 }],
-      );
+      return await withCleanup(() => {
+        throw error;
+      }, [{ label: 'Vite startup process group', run: () => serverCustody!.close(), timeoutMs: 8000 }]);
     }
   })();
   return started;
@@ -673,17 +662,14 @@ async function open(path: string, cookie: string): Promise<Page> {
 }
 async function accountMenuHtml(path: string, cookie: string): Promise<string> {
   const page = await open(path, cookie);
-  return withCleanup(
-    async () => {
-      await openAccountMenu(page);
-      await page.locator('#account-menu input[name="csrf_token"]').waitFor({ state: 'attached' });
-      return await page.locator('#account-menu').innerHTML();
-    },
-    [
-      { label: 'account menu', run: () => closeAccountMenu(page), timeoutMs: 5000 },
-      { label: 'account page context', run: () => closeContextAttempt(page.context()), timeoutMs: 6000 },
-    ],
-  );
+  return withCleanup(async () => {
+    await openAccountMenu(page);
+    await page.locator('#account-menu input[name="csrf_token"]').waitFor({ state: 'attached' });
+    return await page.locator('#account-menu').innerHTML();
+  }, [
+    { label: 'account menu', run: () => closeAccountMenu(page), timeoutMs: 5000 },
+    { label: 'account page context', run: () => closeContextAttempt(page.context()), timeoutMs: 6000 },
+  ]);
 }
 async function eventually(check: () => boolean | Promise<boolean>) {
   const deadline = Date.now() + 20_000;

@@ -387,7 +387,8 @@ function site(): Promise<string> {
     const deadline = Date.now() + 150_000;
     try {
       for (;;) {
-        if (spawnError) throw new Error(`dev server spawn failed: ${spawnError.message}\n${output}`, { cause: spawnError });
+        if (spawnError)
+          throw new Error(`dev server spawn failed: ${spawnError.message}\n${output}`, { cause: spawnError });
         if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
         try {
           const response = await fetch(`${origin}/en`, {
@@ -402,12 +403,9 @@ function site(): Promise<string> {
         await Bun.sleep(500);
       }
     } catch (error) {
-      return await withCleanup(
-        () => {
-          throw error;
-        },
-        [{ label: 'Vite startup process group', run: () => serverCustody!.close(), timeoutMs: 8000 }],
-      );
+      return await withCleanup(() => {
+        throw error;
+      }, [{ label: 'Vite startup process group', run: () => serverCustody!.close(), timeoutMs: 8000 }]);
     }
   })();
   return started;
