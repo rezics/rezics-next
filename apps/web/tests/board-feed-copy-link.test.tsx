@@ -66,7 +66,11 @@ function button(text: string) {
 }
 async function copy() {
   await act(async () => button(m.thread_content_more_actions()).click());
-  await act(async () => button(m.thread_content_copy_link()).click());
+  await act(async () => {
+    const item = button(m.thread_content_copy_link());
+    item.focus();
+    item.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
 }
 async function replace(patch: Partial<Props>) {
   props = { ...props, ...patch };
