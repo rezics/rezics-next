@@ -31,10 +31,11 @@ CSRF observation also retires results; a settled session reloads the retained dr
 a session observation use anonymous identity. Trending and header-suggestion retries stay manual: native Retry-After
 disables retry until its minimum delay, without polling; session observations (including CSRF changes) and locale
 changes retire prior suggestions and pending requests.
-Native Trending may repeat a query when distinct sources share a public label; `literalQuery` is the quoted display,
-so a repeated query repeats that display, and each delivered `{query, display}` occurrence keeps its own row identity.
 A successful manual retry keeps keyboard focus on Retry when that control remains, otherwise the first term or the named
 trending region, using the request's currentness callback and without stealing focus if the reader moved away.
+
+Native Trending may repeat a query when distinct sources share a public label; `literalQuery` is the quoted display,
+so a repeated query repeats that display, and each delivered `{query, display}` occurrence keeps its own row identity.
 
 Filters stays at the left of the composer's second row. `HeaderSearchFilterProvider` and
 `useRegisterHeaderSearchFilters` connect it to the current route's actual editor and active count. Search owns
