@@ -218,7 +218,8 @@ test('activation validation, rate limits and unavailability retain the original 
     await publication.inspect();
     expect(publication.getSnapshot().readFailure).toEqual({ ok: false, reason: 'unavailable' });
     await publication.retry();
-    expect(seen).toEqual([original!, original!]);
+    const input = { profile: original!.profile, expectedHead: original!.expectedHead, keys: original!.keys };
+    expect(seen).toEqual([input, input]);
     expect(draft).toEqual(profile());
     expect(publication.getSnapshot().intent).toBe(original);
     expect(publication.getSnapshot().result).toEqual(failure);

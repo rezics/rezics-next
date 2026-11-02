@@ -36,18 +36,18 @@ export function CurationFailureNotice({
       {failure.reason === 'invalid' && failure.phase === 'activate' ? null : (
         <p>
           {failure.reason === 'invalid'
-          ? m.curation_invalid()
-          : failure.reason === 'stale'
-            ? m.curation_stale()
-            : failure.reason === 'signed-out'
-              ? m.curation_signed_out()
-              : failure.reason === 'forbidden'
-                ? m.curation_forbidden()
-                : failure.reason === 'rate-limited'
-                  ? m.curation_limited()
-                  : failure.reason === 'unavailable' && failure.outcome === 'unknown'
-                    ? m.curation_unknown()
-                    : m.curation_unavailable()}
+            ? m.curation_invalid()
+            : failure.reason === 'stale'
+              ? m.curation_stale()
+              : failure.reason === 'signed-out'
+                ? m.curation_signed_out()
+                : failure.reason === 'forbidden'
+                  ? m.curation_forbidden()
+                  : failure.reason === 'rate-limited'
+                    ? m.curation_limited()
+                    : failure.reason === 'unavailable' && failure.outcome === 'unknown'
+                      ? m.curation_unknown()
+                      : m.curation_unavailable()}
         </p>
       )}
       {'phase' in failure && failure.phase === 'activate' ? <p>{m.curation_partial()}</p> : null}
