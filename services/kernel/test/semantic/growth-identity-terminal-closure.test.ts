@@ -17,7 +17,11 @@ for (const edges of [101, 205, 409]) {
         const homes = [...new Set([...ids].reverse().map(home))];
         const generations = new Map<number, bigint>();
         const receipts = new Set<string>();
-        let maxRows = 0, maxPoints = 0, maxStatements = 0, maxBytes = 0, maxEngineRequests = 0;
+        let maxRows = 0,
+          maxPoints = 0,
+          maxStatements = 0,
+          maxBytes = 0,
+          maxEngineRequests = 0;
         let observed = (await readIdentityMappings(db.pool, [ids[0]!]))[0]!;
         let steps = 0;
         // A test watchdog is not a production hop cap or a guessed terminal.
@@ -44,10 +48,20 @@ for (const edges of [101, 205, 409]) {
         expect(steps).toBeGreaterThan(1);
         expect(receipts.size).toBeGreaterThan(1);
         expect([...generations.values()].some((generation) => generation > 1n)).toBe(true);
-        console.info('native terminal closure growth', JSON.stringify({
-          edges, population, steps, receipts: receipts.size,
-          maxRows, maxPoints, maxStatements, maxBytes, maxEngineRequests,
-        }));
+        console.info(
+          'native terminal closure growth',
+          JSON.stringify({
+            edges,
+            population,
+            steps,
+            receipts: receipts.size,
+            maxRows,
+            maxPoints,
+            maxStatements,
+            maxBytes,
+            maxEngineRequests,
+          }),
+        );
       } finally {
         await db.close();
       }
@@ -70,23 +84,44 @@ for (const homes of [1, 3]) {
       await db.install();
       const all = [...ids, ...branches];
       expect((await settle(db, all, ids[0]!, 2048)).observed).toMatchObject({
-        state: 'mapped', original: ids[0], terminal: ids.at(-1),
+        state: 'mapped',
+        original: ids[0],
+        terminal: ids.at(-1),
       });
-      for (const original of branches) expect((await settle(db, all, original, 2048)).observed).toMatchObject({
-        state: 'mapped', original, terminal: ids.at(-1),
-      });
-      const memberships = (await db.admin.query(`SELECT count(*)::integer n,
+      for (const original of branches)
+        expect((await settle(db, all, original, 2048)).observed).toMatchObject({
+          state: 'mapped',
+          original,
+          terminal: ids.at(-1),
+        });
+      const memberships = (
+        await db.admin.query(
+          `SELECT count(*)::integer n,
         count(DISTINCT original)::integer originals FROM semantic.identity_epoch_original
-        WHERE terminal=$1`, [ids.at(-1)])).rows[0]!;
+        WHERE terminal=$1`,
+          [ids.at(-1)],
+        )
+      ).rows[0]!;
       expect(memberships).toEqual({ n: all.length, originals: all.length });
-      expect((await db.admin.query(`SELECT count(*)::integer n FROM semantic.identity_epoch_mapping
-        WHERE original=ANY($1::uuid[])`, [all])).rows).toEqual([{ n: all.length }]);
-      const ledger = (await db.admin.query(`SELECT partition_no,count(*)::integer slots,
-        sum(closure_copies)::integer copies FROM semantic.identity_epoch_mapping_generation GROUP BY partition_no`)).rows;
+      expect(
+        (
+          await db.admin.query(
+            `SELECT count(*)::integer n FROM semantic.identity_epoch_mapping
+        WHERE original=ANY($1::uuid[])`,
+            [all],
+          )
+        ).rows,
+      ).toEqual([{ n: all.length }]);
+      const ledger = (
+        await db.admin.query(`SELECT partition_no,count(*)::integer slots,
+        sum(closure_copies)::integer copies FROM semantic.identity_epoch_mapping_generation GROUP BY partition_no`)
+      ).rows;
       for (const home of ledger) {
         expect(home.slots).toBeLessThanOrEqual(4);
         expect(home.copies).toBeLessThanOrEqual(16384);
       }
-    } finally { await db.close(); }
+    } finally {
+      await db.close();
+    }
   });
 }

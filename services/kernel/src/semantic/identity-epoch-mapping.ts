@@ -712,7 +712,8 @@ async function reserveGeneration(
   measured: Work,
   closure = false,
 ) {
-  if (!closure && (
+  if (
+    !closure &&
     (
       await query(
         tx,
@@ -721,9 +722,10 @@ async function reserveGeneration(
         [home],
       )
     ).rowCount
-  ))
+  )
     throw unavailable('Bootstrap export custody must be settled before allocating an output generation');
-  if (!closure && (
+  if (
+    !closure &&
     (
       await query(
         tx,
@@ -732,7 +734,7 @@ async function reserveGeneration(
         [home, job.jobId],
       )
     ).rowCount
-  ))
+  )
     throw unavailable('Prior native generation awaits minimizer and empty-range custody');
   const existing = (
     await query(
@@ -1677,8 +1679,13 @@ export async function reserveIdentityTerminalClosure(
 }
 
 async function reserveClosureCopies(
-  tx: CommandTransaction, partition: number, transactionId: string, reservation: string,
-  terminal: string, copies: number, coalesce: boolean,
+  tx: CommandTransaction,
+  partition: number,
+  transactionId: string,
+  reservation: string,
+  terminal: string,
+  copies: number,
+  coalesce: boolean,
 ): Promise<string> {
   if (!Number.isInteger(copies) || copies < 0 || copies > 4096) throw new RangeError('Closure copy bound');
   const measured: Work = { rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 0 };
@@ -1687,10 +1694,14 @@ async function reserveClosureCopies(
   // slot per export before its later terminal seed can be scanned.
   let allocation = reservation;
   if (coalesce) {
-    const shared = (await tx.query(`SELECT generation,erasure_key FROM semantic.identity_epoch_mapping_generation
+    const shared = (
+      await tx.query(
+        `SELECT generation,erasure_key FROM semantic.identity_epoch_mapping_generation
       WHERE partition_no=$1 AND closure_source_pool AND closure_copies+$2<=4096 ORDER BY slot LIMIT 1 FOR UPDATE`,
-    [partition, copies])).rows[0];
-      allocation = shared?.generation ?? transactionId;
+        [partition, copies],
+      )
+    ).rows[0];
+    allocation = shared?.generation ?? transactionId;
   }
   await reserveGeneration(tx, { jobId: allocation, epoch: 1n }, partition, terminal, allocation, measured, true);
   const allocated = await tx.query(

@@ -296,19 +296,23 @@ export async function ensureAccountAgent(
   const agentId = accountAgentId(account);
   const agentRoute = routeOf(agentId)!;
   try {
-    const outcome = await runIdentityTerminalCommand(pool, { partition: partitionOf(agentRoute) }, async (tx, { transactionId }) => {
-      await recordSemanticProducerRole(tx, transactionId, accountIdOf(options.account), 'subject');
-      const state = await tx.query(
-        'SELECT state,authn_fenced AS fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE',
-        [routeOf(account), account],
-      );
-      // An old producer input is never authority to restore the display name after native account T.
-      const effective =
-        state.rows[0]?.state === 'deleted' || state.rows[0]?.fenced ? { ...options, name: null } : options;
-      const result = await ensureInTransaction(tx, transactionId, effective);
-      if (!result.changed) throw new NoAgentChange(result.value);
-      return { value: result.value, events: result.events };
-    });
+    const outcome = await runIdentityTerminalCommand(
+      pool,
+      { partition: partitionOf(agentRoute) },
+      async (tx, { transactionId }) => {
+        await recordSemanticProducerRole(tx, transactionId, accountIdOf(options.account), 'subject');
+        const state = await tx.query(
+          'SELECT state,authn_fenced AS fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE',
+          [routeOf(account), account],
+        );
+        // An old producer input is never authority to restore the display name after native account T.
+        const effective =
+          state.rows[0]?.state === 'deleted' || state.rows[0]?.fenced ? { ...options, name: null } : options;
+        const result = await ensureInTransaction(tx, transactionId, effective);
+        if (!result.changed) throw new NoAgentChange(result.value);
+        return { value: result.value, events: result.events };
+      },
+    );
     return outcome.value;
   } catch (error) {
     if (error instanceof NoAgentChange) return error.value;

@@ -2,7 +2,10 @@ import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { runCommand } from '../../../src/command/command.ts';
-import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from '../../../src/semantic/identity-terminal-closure-command.ts';
+import {
+  admitIdentityTerminalCapture,
+  runIdentityTerminalCommand,
+} from '../../../src/semantic/identity-terminal-closure-command.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { routeOf } from '../../../src/route/route.ts';
 import { IDENTITY_EPOCH_PROGRESS } from '../../../src/semantic/events.ts';
@@ -12,9 +15,16 @@ import { readIdentityMappings } from '../../../src/semantic/identity-epoch-read.
 import { home, identityEpochDatabase, seedLegacyRoot } from './identity-epoch.ts';
 
 export type Deployment = Awaited<ReturnType<typeof identityEpochDatabase>>;
-export type Boundary = 'export' | 'hold' | 'receive' | 'install' | 'promote' | 'ack' | 'withdraw'
-  | 'close' | 'claim-release'
-;
+export type Boundary =
+  | 'export'
+  | 'hold'
+  | 'receive'
+  | 'install'
+  | 'promote'
+  | 'ack'
+  | 'withdraw'
+  | 'close'
+  | 'claim-release';
 const boundarySQL: Record<Boundary, RegExp> = {
   export: /INSERT INTO semantic\.identity_epoch_bootstrap_page\b/,
   hold: /SET closure_successor_ticket=\$3/,
@@ -25,14 +35,12 @@ const boundarySQL: Record<Boundary, RegExp> = {
   withdraw: /SET source_revision=\$5,closure_state='withdrawn'/,
   close: /SET closure_state='closing',closure_claim=/,
   'claim-release': /SET closure_claim=NULL,closure_mutation_xid=NULL/,
-
 };
 
 /** Historical input only: no mapping, ready bit, source ACK or custody is seeded. */
 export async function seedChain(db: Deployment, length: number, firstRoute = 0x7100, homes = 3) {
   const ids: string[] = [];
-  for (let index = 0; index <= length; index++)
-    ids.push(await seedLegacyRoot(db, firstRoute + (index % homes) * 16));
+  for (let index = 0; index <= length; index++) ids.push(await seedLegacyRoot(db, firstRoute + (index % homes) * 16));
   for (let index = 0; index < length; index++) await historicalEdge(db, ids[index]!, ids[index + 1]!);
   return ids;
 }
@@ -113,10 +121,15 @@ export async function assertRetained(db: Deployment, original: string) {
   expect(page).toBeDefined();
   // Transport ACK can transfer a page to its native source header without
   // acknowledging h. Either retained body must own this unfinished original.
-  const custody = (await db.admin.query(`SELECT 1 FROM semantic.identity_epoch_bootstrap_row
+  const custody = (
+    await db.admin.query(
+      `SELECT 1 FROM semantic.identity_epoch_bootstrap_row
     WHERE partition_no=$1 AND original=$2 UNION ALL
     SELECT 1 FROM semantic.identity_epoch_mapping WHERE route/16=$1 AND original=$2
-      AND closure_state IN ('exporting','installed','withdrawn')`, [home(original), original])).rows;
+      AND closure_state IN ('exporting','installed','withdrawn')`,
+      [home(original), original],
+    )
+  ).rows;
   expect(custody.length).toBeGreaterThan(0);
   expect((await readIdentityMappings(db.pool, [original]))[0]?.state).not.toBe('mapped');
   return page!;
@@ -157,12 +170,19 @@ export async function atBoundary<T>(
     saved.set(client, query);
     let matched = false;
     client.query = async function (...args: unknown[]) {
-      const sql = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string })?.text ?? '';
+      const sql = typeof args[0] === 'string' ? args[0] : ((args[0] as { text?: string })?.text ?? '');
       if (/^BEGIN\b/.test(sql)) matched = false;
       const parameters = args[1] as unknown[] | undefined;
-      const nativePartition = boundary === 'install' || boundary === 'ack' || boundary === 'hold' || boundary === 'withdraw' || boundary === 'claim-release'
-        ? Math.floor(Number(parameters?.[0]) / 16) : parameters?.[0];
-      const matchesSource = (sourcePartition === undefined || nativePartition === sourcePartition) &&
+      const nativePartition =
+        boundary === 'install' ||
+        boundary === 'ack' ||
+        boundary === 'hold' ||
+        boundary === 'withdraw' ||
+        boundary === 'claim-release'
+          ? Math.floor(Number(parameters?.[0]) / 16)
+          : parameters?.[0];
+      const matchesSource =
+        (sourcePartition === undefined || nativePartition === sourcePartition) &&
         (original === undefined || parameters?.includes(original));
       if (!fired && matchesSource && boundarySQL[boundary].test(sql)) {
         matched = true;
@@ -204,7 +224,7 @@ export async function isolatedDeployment() {
     saved.set(client, query);
     let bound = false;
     client.query = async function (...args: unknown[]) {
-      const sql = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string })?.text ?? '';
+      const sql = typeof args[0] === 'string' ? args[0] : ((args[0] as { text?: string })?.text ?? '');
       if (/^BEGIN\b/.test(sql)) bound = false;
       if (!bound && /(?:core\.partition|semantic\.identity_epoch_)/.test(sql)) {
         const parameters = args[1] as unknown[] | undefined;

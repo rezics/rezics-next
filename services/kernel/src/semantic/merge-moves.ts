@@ -370,65 +370,69 @@ export async function moveMergePage(
       return { value: null, events: [projected(id)] };
     });
   }
-  const applied = await runIdentityTerminalCommand(pool, { partition: partitionOf(route) }, async (tx, { transactionId }) => {
-    await admitIdentityTerminalCapture(tx, [survivor]);
-    const redirect = await redirectOf(tx, survivor);
-    if (redirect) return { value: redirect, events: [projected(survivor)] };
-    const current = (await readMember.run(tx, { route, subject_id: survivor, member_id: id })) as Move;
-    if (JSON.stringify(current) !== JSON.stringify(state)) return { value: null, events: [projected(survivor)] };
-    if (page.value.links.length)
-      await upsertByContext(
-        tx,
-        {
+  const applied = await runIdentityTerminalCommand(
+    pool,
+    { partition: partitionOf(route) },
+    async (tx, { transactionId }) => {
+      await admitIdentityTerminalCapture(tx, [survivor]);
+      const redirect = await redirectOf(tx, survivor);
+      if (redirect) return { value: redirect, events: [projected(survivor)] };
+      const current = (await readMember.run(tx, { route, subject_id: survivor, member_id: id })) as Move;
+      if (JSON.stringify(current) !== JSON.stringify(state)) return { value: null, events: [projected(survivor)] };
+      if (page.value.links.length)
+        await upsertByContext(
+          tx,
+          {
+            route,
+            transaction_id: transactionId,
+            changes: page.value.links.map((link) => ({ ...link, subject_id: survivor })),
+          },
+          'inbound',
+        );
+      if (verification && page.value.links.length) {
+        await recordMovedAgentLinks.run(tx as PoolClient, {
           route,
-          transaction_id: transactionId,
-          changes: page.value.links.map((link) => ({ ...link, subject_id: survivor })),
-        },
-        'inbound',
-      );
-    if (verification && page.value.links.length) {
-      await recordMovedAgentLinks.run(tx as PoolClient, {
-        route,
-        receipt_id: verification.receipt,
-        account_id: verification.account,
-        survivor,
-        moved_from: id,
-        links: page.value.links.map((link) => ({
           receipt_id: verification.receipt,
           account_id: verification.account,
-          context_id: link.context_id,
-          statement_id: link.statement_id,
-          property: link.property,
-          source_subject_id: link.source_subject_id,
-          filter_value: link.filter_value,
-        })),
+          survivor,
+          moved_from: id,
+          links: page.value.links.map((link) => ({
+            receipt_id: verification.receipt,
+            account_id: verification.account,
+            context_id: link.context_id,
+            statement_id: link.statement_id,
+            property: link.property,
+            source_subject_id: link.source_subject_id,
+            filter_value: link.filter_value,
+          })),
+        });
+      }
+      await enqueueSubjectPageRepair(tx, {
+        subject: { route, id: survivor },
+        cause: 'continuation',
+        delivery: {
+          owner: { kind: 'subject', route: routeOf(id)!, key: id },
+          changeId: state.publication_origin?.changeId ?? `legacy:merge:${id}`,
+          eventId: `merge:${id}:${state.phase}:${JSON.stringify(state.cursor)}`,
+          time: state.publication_origin?.time ?? { effectiveAt: null, evidence: 'missing' },
+        },
       });
-    }
-    await enqueueSubjectPageRepair(tx, {
-      subject: { route, id: survivor },
-      cause: 'continuation',
-      delivery: {
-        owner: { kind: 'subject', route: routeOf(id)!, key: id },
-        changeId: state.publication_origin?.changeId ?? `legacy:merge:${id}`,
-        eventId: `merge:${id}:${state.phase}:${JSON.stringify(state.cursor)}`,
-        time: state.publication_origin?.time ?? { effectiveAt: null, evidence: 'missing' },
-      },
-    });
-    await updateMember.run(tx, {
-      route,
-      subject_id: survivor,
-      member_id: id,
-      phase: page.value.next.phase,
-      cursor: page.value.next.cursor,
-    });
-    return {
-      value: null,
-      events:
-        page.value.next.phase === 'done'
-          ? [projected(survivor)]
-          : [moving(id, survivor, page.value.next, verification)],
-    };
-  });
+      await updateMember.run(tx, {
+        route,
+        subject_id: survivor,
+        member_id: id,
+        phase: page.value.next.phase,
+        cursor: page.value.next.cursor,
+      });
+      return {
+        value: null,
+        events:
+          page.value.next.phase === 'done'
+            ? [projected(survivor)]
+            : [moving(id, survivor, page.value.next, verification)],
+      };
+    },
+  );
   if (applied.value) return moveMergePage(pool, id, applied.value, undefined, verification);
   return true;
 }
@@ -452,22 +456,26 @@ export async function reverseAccountAgentLinks(
     context: NIL,
   };
   for (;;) {
-    const page = await runIdentityTerminalCommand<ReversalLink[]>(pool, { partition: partitionOf(route) }, async (tx) => {
-      await tx.query('SET LOCAL enable_seqscan = off');
-      const links = (await pageMovedAgentLinks.run(tx, {
-        route,
-        receipt_id: options.receipt,
-        account_id: options.account,
-        survivor: options.survivor,
-        moved_from: options.movedFrom,
-        after_property: after.property,
-        after_source: after.source,
-        after_statement: after.statement,
-        after_filter: after.filter,
-        after_context: after.context,
-      })) as ReversalLink[];
-      return { value: links, events: [projected(options.survivor)] };
-    });
+    const page = await runIdentityTerminalCommand<ReversalLink[]>(
+      pool,
+      { partition: partitionOf(route) },
+      async (tx) => {
+        await tx.query('SET LOCAL enable_seqscan = off');
+        const links = (await pageMovedAgentLinks.run(tx, {
+          route,
+          receipt_id: options.receipt,
+          account_id: options.account,
+          survivor: options.survivor,
+          moved_from: options.movedFrom,
+          after_property: after.property,
+          after_source: after.source,
+          after_statement: after.statement,
+          after_filter: after.filter,
+          after_context: after.context,
+        })) as ReversalLink[];
+        return { value: links, events: [projected(options.survivor)] };
+      },
+    );
     if (!page.value.length) return;
 
     const restored = page.value.filter(

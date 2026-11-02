@@ -1,4 +1,9 @@
-import { stepIdentityTerminalClosure, retireIdentityTerminalPage, recoverIdentityTerminalClosure, advanceIdentityTerminalClosures } from './identity-terminal-closure.ts';
+import {
+  stepIdentityTerminalClosure,
+  retireIdentityTerminalPage,
+  recoverIdentityTerminalClosure,
+  advanceIdentityTerminalClosures,
+} from './identity-terminal-closure.ts';
 import { reserveIdentityTerminalClosure } from './identity-epoch-mapping.ts';
 import { runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import selectFrontier from './identity-epoch-bootstrap-select-frontier.sql';
@@ -212,8 +217,11 @@ async function stepBootstrapHome(
           caughtUp,
         ]);
         if (allocation) {
-          await tx.query(`UPDATE semantic.identity_epoch_bootstrap_page SET closure_page_reservation=$3
-            WHERE partition_no=$1 AND transaction_id=$2`, [partition, transactionId, allocation]);
+          await tx.query(
+            `UPDATE semantic.identity_epoch_bootstrap_page SET closure_page_reservation=$3
+            WHERE partition_no=$1 AND transaction_id=$2`,
+            [partition, transactionId, allocation],
+          );
         }
         await query(tx, bootstrapInsertBootstrapRow.sql, [partition, transactionId, JSON.stringify(rows)]);
       });
@@ -420,16 +428,29 @@ async function stepBootstrapHome(
     }
     const owner = await readPartition(tx, partition);
     if (!owner || owner.writeState !== 'active' || owner.epoch !== retained.native.epoch) throw fail();
-    if (identityPage && (await tx.query(`SELECT 1 FROM semantic.identity_epoch_bootstrap_row
+    if (
+      identityPage &&
+      (
+        await tx.query(
+          `SELECT 1 FROM semantic.identity_epoch_bootstrap_row
       WHERE partition_no=$1 AND transaction_id=$2 AND NOT closure_complete AND NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_mapping m
         WHERE m.route=identity_epoch_bootstrap_row.route AND m.original=identity_epoch_bootstrap_row.original
           AND m.source_revision=identity_epoch_bootstrap_row.source_revision
           AND m.owner_epoch=$3 AND m.closure_state IN ('exporting','installed','active')) LIMIT 1`,
-    [partition, retained.native.transactionId, retained.native.epoch])).rowCount) throw fail();
+          [partition, retained.native.transactionId, retained.native.epoch],
+        )
+      ).rowCount
+    )
+      throw fail();
     const data = JSON.stringify(
       retained.rows.map((row) => {
         const mapping_epoch = mappingEpochs.get(row.original);
-        if (!identityPage && row.present && (retained.phase === 'subjects' || retained.phase === 'dirty') && !mapping_epoch)
+        if (
+          !identityPage &&
+          row.present &&
+          (retained.phase === 'subjects' || retained.phase === 'dirty') &&
+          !mapping_epoch
+        )
           throw fail();
         return { ...row, mapping_epoch };
       }),
@@ -437,9 +458,13 @@ async function stepBootstrapHome(
     if (retained.phase === 'subjects' || retained.phase === 'dirty') {
       // The directory handshake installed and acknowledged the exact terminal.
       // Reapplying the historical one-hop payload here would erase that proof.
-      const disposed = (await tx.query(`SELECT route,original,source_revision FROM semantic.identity_epoch_bootstrap_row
+      const disposed = (
+        await tx.query(
+          `SELECT route,original,source_revision FROM semantic.identity_epoch_bootstrap_row
         WHERE partition_no=$1 AND transaction_id=$2 AND closure_complete ORDER BY route,original LIMIT 100`,
-      [partition, retained.native.transactionId])).rows;
+          [partition, retained.native.transactionId],
+        )
+      ).rows;
       await query(tx, bootstrapUpdateDirty.sql, [JSON.stringify(disposed)]);
     } else {
       await query(tx, bootstrapUpdateMemberDirty.sql, [data]);

@@ -422,8 +422,10 @@ export async function loadAccountIdentitySource(pool: Pool, receipt: AccountRece
   return withRequestDeadline(deadline, async () => {
     const load = async () =>
       (
-        await runIdentityTerminalCommand(pool, { partition: partitionOf(accountRoute(receipt)), deadline }, async (tx) =>
-          noEffect(await readAccountIdentitySource(tx, receipt)),
+        await runIdentityTerminalCommand(
+          pool,
+          { partition: partitionOf(accountRoute(receipt)), deadline },
+          async (tx) => noEffect(await readAccountIdentitySource(tx, receipt)),
         )
       ).value;
     try {
