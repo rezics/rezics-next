@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -34,6 +34,12 @@ export function SetupBoardPicker({
   const pager = useMemo(() => new BoardChoicePager(setPage), []);
   const resultRegion = useRef<HTMLDivElement>(null);
   const keyboardPosition = useRef<(BoardChoiceScope & { version: number }) | null>(null);
+  const keyboardPositionCleanup = useRef<(() => void) | null>(null);
+  const cancelKeyboardPosition = useCallback(() => {
+    keyboardPosition.current = null;
+    keyboardPositionCleanup.current?.();
+    keyboardPositionCleanup.current = null;
+  }, []);
   const scope: BoardChoiceScope = { source, query, schemeId, kind };
   const expected = { ...scope, version: pager.version() };
   // Mask a previous source/query immediately, before the new effect has started.
@@ -53,7 +59,13 @@ export function SetupBoardPicker({
     if (!disabled) pager.search({ source, kind, schemeId, query });
     else pager.cancel();
   }, [pager, source, kind, schemeId, query, disabled]);
-  useLayoutEffect(() => () => pager.cancel(), [pager]);
+  useLayoutEffect(
+    () => () => {
+      cancelKeyboardPosition();
+      pager.cancel();
+    },
+    [cancelKeyboardPosition, pager],
+  );
   useLayoutEffect(() => {
     const pending = keyboardPosition.current;
     if (!pending) return;
@@ -66,20 +78,29 @@ export function SetupBoardPicker({
       pending.query !== query ||
       pending.version !== pager.version()
     ) {
-      keyboardPosition.current = null;
+      cancelKeyboardPosition();
       return;
     }
     if (page.status !== 'loading') {
+      cancelKeyboardPosition();
       resultRegion.current?.focus();
-      keyboardPosition.current = null;
     }
-  }, [current, disabled, kind, page, pager, query, schemeId, source]);
+  }, [cancelKeyboardPosition, current, disabled, kind, page, pager, query, schemeId, source]);
   const shown: BoardChoicePage = current ? page : { status: 'loading', choices: [], next: null };
   const label = kind === 'scheme' ? m.space_setup_scheme_label() : m.space_setup_concept_label();
   const pageAction = (detail: number, accepted: boolean, action: () => void) => {
+    cancelKeyboardPosition();
     const pending =
       detail === 0 && accepted && pager.version() === expected.version ? { ...scope, version: expected.version } : null;
     keyboardPosition.current = pending;
+    if (pending) {
+      document.addEventListener('focusin', cancelKeyboardPosition, true);
+      document.addEventListener('pointerdown', cancelKeyboardPosition, true);
+      keyboardPositionCleanup.current = () => {
+        document.removeEventListener('focusin', cancelKeyboardPosition, true);
+        document.removeEventListener('pointerdown', cancelKeyboardPosition, true);
+      };
+    }
     action();
     if (pending) pending.version = pager.version();
   };
