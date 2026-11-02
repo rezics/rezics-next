@@ -6,6 +6,12 @@ import { WORK_QUEUES, type WorkQueueName } from './queues.ts';
 export const DBOS_SCHEMA = 'dbos';
 export const WORK_APPLICATION = 'rezics-kernel';
 export type WorkClient = DBOSClient & { close(): Promise<void> };
+const selectedClientPools = new WeakMap<DBOSClient, Pool>();
+/** Private service composition binding. Matching URLs or a structural client do not enroll. */
+export function assertSelectedWorkClient(client: WorkClient, pool: Pool): void {
+  if (!(client instanceof DBOSClient) || selectedClientPools.get(client) !== pool)
+    throw new TypeError('Selected runtime requires the original shared WorkClient/Pool');
+}
 
 export type WorkIntent = Readonly<{
   queue: WorkQueueName;
@@ -91,6 +97,7 @@ export async function createWorkClient(databaseUrl: string, pool?: Pool): Promis
     ...(pool === undefined ? {} : { systemDatabasePool: pool }),
     logger: { info() {}, debug() {}, warn: console.warn, error: console.error },
   });
+  if (pool) selectedClientPools.set(client, pool);
   const listWorkflowSteps = client.listWorkflowSteps.bind(client);
   let lookupPool: Pool | undefined;
   let closing: Promise<void> | undefined;
@@ -125,6 +132,7 @@ export async function createWorkClient(databaseUrl: string, pool?: Pool): Promis
     close: () =>
       (closing ??= (async () => {
         try {
+          selectedClientPools.delete(client);
           await client.destroy();
         } finally {
           await lookupPool?.end();

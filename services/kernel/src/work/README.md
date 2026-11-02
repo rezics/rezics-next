@@ -271,3 +271,126 @@ This composes only the private Auth enrollment leg. Source invalidation and
 verification, Library adoption and restore fences, and native consent-erasure
 receiving remain with their original owners; an enrollment reference does not
 establish currentness or authorize those operations.
+
+## Selected execution producer
+
+`selected-runtime.ts` adds an opt-in server-only producer. Existing registration and operational callers retain
+one ordinary enqueue. Commerce's installed Members specification stub is unchanged. This source delivery does
+not install a Commerce caller or establish native acceptance.
+
+The exact consumer ABI is `WorkContext.getSelectedRuntime?(): SelectedRuntime`, then
+`registerMembersStep<R>(body: (invocation: SelectedInvocation, locator: SelectedLocator) => Promise<R>,
+children?: SelectedChildren): (locator: SelectedLocator) => Promise<R>`. Registration must happen in trusted Work
+composition before launch. The returned function is the actual registered `library.membersPreparation.step`.
+The actual registered workflow remains `library.membersPreparation`. A locator contains `route`, `ownerAccountId`,
+`collectionId`, `episodeId`; workflow names, deterministic IDs and `accounts:[owner]` carry no authority.
+
+`SelectedInvocation` has one immutable `deadline`, `select(locator): Promise<SelectedEpisode>`,
+`source<T>((deadline) => Promise<T>): Promise<T>`, and `apply(episode, body)` / `failure(episode, body)` returning
+`Promise<SelectedOutcome>`. Each body receives the genuine `OperationalTransaction`; it returns
+`{kind:'continue'|'failure'|'obsolete'|'complete', version:string, continuation?:string}`. A complete outcome currently
+refuses `selected-runtime-final-source-physical-authority-unavailable`. Commerce owns real Source, conditional
+native update, subject/exhaustion checks, failure and continuation SQL. No synthetic Source observation is accepted
+as final authority by this producer. A selected episode is opaque and private to its original invocation. Replay
+exposes only its committed `result` data. It cannot restart Source or apply.
+
+The intended sequence is `select` (native first transaction), `source` (after that transaction releases), `apply`
+(second native transaction). A reached failed apply may use `failure` in a third transaction on the same balance
+and deadline. The complete Source child must be declared before registration and must use its own authentic Source
+port with this absolute deadline. `SelectedChildren.native` enumerates exact literal SQL, finite invocation-wide
+multiplicity (1..64), and complete nine-field child costs; up to 64 distinct statements are supported. `source`
+is a complete child cost including its reached cleanup. These declarations describe dispatch; they grant no
+Source or user authority. Unknown SQL, unknown Source cost and repeated phases refuse before dispatch. Native SQL
+cannot consume an exempt local string: local queries require the same private identity recorded by the executor.
+
+The pinned SDK patch adds `DBOS.registerSelectedStep(func, config, lifecycle)` and `DBOS.getSelectedExecution()`;
+`DBOSClient.selectedExecutionIdentity(selection,pool)`, `consumeSelectedExecutionAdmission(selection,pool)` and
+`checkSelectedExecutionInTransaction(rawClient,pool,selection)`. The `SelectedExecution` type is opaque. Only the
+private executor body site in `callStepFunctionAt`, after completed-output replay, constructs its value. It binds
+the real function registration, actual owner token, committed workflow/input, function index, argument bytes,
+private attempt generation, restore UUID and deadline. A completed step replay never opens the lifecycle. Calls
+outside genuine selected execution supply no capability. All completion/error/abort paths revoke escaped values.
+Work's private original pairs this issuance with the exact `createWorkClient(url,pool)` enrollment. Matching URLs,
+a copied object, another client pool, sharded/dynamic homes and a structural query object are refused. The native
+held check also requires the actual pg PoolClient enrolled in that Pool; operational.ts alone checks it out and
+constructs/live-registers the transaction. No other-home checkout happens while that client is held.
+
+The append-only SDK migration is `20261102110241_selected_step_execution`, after all existing migration positions.
+It adds `selected_step_executions`, `select_step_execution`, `hold_selected_execution`,
+`consume_selected_execution`, `release_selected_execution`, and ALWAYS admission-preservation guards. Issuance
+locks restore domain SHARE, actual workflow status SHARE, permanent writer fence UPDATE, then completed output/input
+and the selected attempt. Held validation uses domain SHARE -> status SHARE -> permanent fence UPDATE -> attempt
+SHARE, and compares the locked current records. Queue recovery/replacement changes `owner_xid` by updating status;
+that update conflicts with SHARE until the operational COMMIT. Retirement's unchanged status-before-fence ordering
+also conflicts with that lock. Restore's domain UPDATE conflicts with domain SHARE. Reissuance advances the selected
+attempt and conflicts with its held SHARE. A second held validation occurs before each COMMIT. Existing permanent
+writer-state APIs retain their original meaning and are not selected execution proof.
+
+Before the first operational transaction, native `consume_selected_execution` commits a once-only admission bit.
+It never refunds on rollback, recovery or uncertain commit. Recovered execution may reconcile an actual committed
+Accounts result; a pending/missing association with a spent bit refuses. Reissuance cannot clear the bit. This
+chooses safe poisoning over a new allowance when the preceding commit outcome cannot be established. The local
+prepaid original starts at actual body execution with a fixed five-second deadline, following the existing private
+operational-original allocation convention. A selection claim identifies execution and does not fund foreign work.
+No request capability, original deadline or postcommit transfer is reused or renewed. In-process operations drain
+before SDK release, and no private live map or heap committed flag is evidence of native COMMIT.
+
+### Selected local declarations
+
+Every row below also has `candidateKeys=identityMetadataRows=witnessKeys=engineRequests=0` and
+`emptySeeks=nativePoints`. These are literal LOCAL bounds, not whole Members, Source, Access or physical prices.
+They are prepaid cumulatively; misses, collisions, failed prefixes, SQL exceptions and poison never refund.
+
+| Local dispatch | nativeRows | nativePoints | statements | bytes |
+| --- | ---: | ---: | ---: | ---: |
+| issue | 8 | 9 | 8 | 24576 |
+| release | 2 | 2 | 2 | 4096 |
+| durable consume | 8 | 8 | 7 | 8192 |
+| continuation lookup/association | 10 | 12 | 7 | 49152 |
+| SDK enqueue with exact-input capture | 10 | 10 | 9 | 18432 |
+| held native check | 6 | 6 | 5 | 8192 |
+| operational controls/fences | 7 | 3 | 12 | 1024 |
+| reserved two rollbacks | 0 | 0 | 2 | 128 |
+| immutable original verification | 5 | 5 | 5 | 2097152 |
+| actual native tuple verification | 4 | 4 | 3 | 6291456 |
+| durable selection association | 6 | 8 | 5 | 6291456 |
+| conditional result | 2 | 4 | 2 | 49152 |
+
+`SELECTED_LOCAL_DECLARATION` is issue + consume + enqueue + four continuation branches + three times
+(controls + two held checks + original + two tuple verifications + association + result) + cleanup.
+Its full axes in the order candidateKeys/nativeRows/identityMetadataRows/nativePoints/witnessKeys/statements/bytes/
+emptySeeks/engineRequests are **0/188/0/197/0/180/63366528/197/0**. Disjoint cleanup is release + three two-rollback
+partitions: **0/2/0/2/0/8/4480/2/0**, removed from usable balance before any IO. Three phases is an absolute bound,
+not three new grants. Foreign declarations are summed with checked safe-integer arithmetic at registration, never
+inferred from an example or a measured parent. Missing foreign declarations close their dispatch.
+
+Rows/points include full-key probes, negative seeks, insert/conflict/update index operations and FK checks.
+Statements count outer function calls and nested SQL, both transaction BEGINs, time/settings, partition/account
+fences, held checks, final setting, COMMIT and the separately reserved time/native ROLLBACK paths. Catalog lookup
+and exact Collection/episode locks are counted in tuple verification. Continuation includes SDK status/input,
+its insert, both FKs and deferred parent result validation. Release includes its outer call and UPDATE; native
+functions bound lock waits to 200 ms. Issuance includes bounded input (8192), registration projection (4096),
+step arguments (4096) and their serialization. The original declaration allows its existing bounded 262144-byte
+projection, <=196608-byte canonical binding and repeated validation/digest projections within 2 MiB. Tuple basis
+is bounded by that same original input limit before projection; JSON escaping plus fixed scalars, checkpoint and
+observation fit 2 MiB. Three copies (projection/serialization/comparison) give 6 MiB for each tuple/association
+partition. These generous byte partitions include empty/replay/collision branches; they are not measurements.
+
+The native fixture covers actual issuance, completed-step fork replay, real cross-Pool/copied-client rejection,
+owner-update lock contention through sequential COMMIT/ROLLBACK, attempt replacement, restore, permanent spending
+and escaped-capability rejection. Source fixtures pin issuance and native lock interaction. All new native/unit/
+source/growth/full acceptance remains UNRUN at delivery; the controller owns integration and acceptance.
+
+Remaining receiving prerequisites: current Commerce native episode schema/body and its complete literal SQL prices;
+genuine complete Source child and currentness/physical operands; bounded repair with changed incarnation/generation;
+and separately authentic selected cleanup authority/admission. Neither autonomous idle cleanup funding nor final
+physical/retention acknowledgment is supplied. Selected control/association records must be preserved across restore;
+the new retained selected records are not an all-copy absence receipt or a substitute for owner physical accounting.
+Existing Source refusal remains closed. Installing the updated dependency patch and applying the forward core
+migration belong to receiving integration; this source edit does not mutate the shared installed dependency.
+
+Source read for this surface: pinned installed 5.5.3-preview `dbos`, `dbos-executor`, `client`, `decorators`,
+`system_database`, `serialization`, and SDK migration sources; existing patch; reference
+`.reference/search-worker-outcome-harness/dbos-transact-ts/src/{client,dbos,dbos-executor,system_database}.ts`.
+The reference is context only; the pinned installed package determines this port. Retained Members work/native
+SQL/migration were read with git show only as receiving operands, never composed into this worker.

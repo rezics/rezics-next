@@ -201,3 +201,42 @@ The recovery writer is suppressed inside an active Semantic Source maintenance f
 Source/History aggregate is funded. Five existing current verifier entries alone require 696320 bytes against the
 unchanged 630784-byte allowance. The previous 11588/9856/2731/6843136/0 selected consumer body is not the final
 aggregate. The current implementation does not alter prices, configured limits, or any unrelated owner budget.
+
+## Private selected operational association
+
+`operational-work-selected.ts` is the Accounts half of the opt-in Work selected invocation ABI described in
+[Work](../work/README.md#selected-execution-producer). Its `SelectedLocator`, opaque `SelectedEpisode` and
+`SelectedOutcome` types are server-only. Exported association helpers require the exact private identity attached
+to a genuine live selected `OperationalTransaction`; structural identities and synthetic transactions refuse
+before SQL. Native transaction construction and live maps remain exclusively in `command/operational.ts`.
+
+`core.operational_work_selection` records a bounded once-only selected identity and immutable original/episode
+binding, observed tuple, attempt/domain/deadline and conditional result. `core.operational_work_selected_continuation`
+binds a newly transactionally enqueued workflow to that same original and parent selection. Both tables have native
+FKs and ALWAYS immutable/no-delete/no-truncate guards. A deferred constraint checks that the continuation and
+parent result commit together. Recovery reads the actual result before requiring an episode still to be live;
+missing or pending results after durable spend refuse. No durable outcome is inferred from a successful callback.
+
+Selection rereads actual positioned operational-work/v1 original/episode, current home epoch/domain/head and exact
+SDK creator/input digest. The original remains immutable provenance, even when its request deadline expired; it
+never funds selected work. The first native tuple acquisition locks Collection SHARE and episode UPDATE, verifies
+active curated/current curator, <=24-hour live episode, exact basis/digest and reserved/current incarnation/generation,
+then records that actual tuple. Source reading occurs after release. Apply/failure takes a new genuine transaction,
+holds current SDK owner, rereads original and native tuple and compares all observed fields, including version,
+checkpoint, stored observation, prepared generation and completion. Conditional result follows the native version
+transition in that same COMMIT. Failure requires the same observed version and a reached native failure field.
+Unknown native SQL is refused; foreign update prices and real Source authority remain caller-owned.
+
+The first lock is never carried as evidence into the second transaction. A copied episode, changed tuple, moved home,
+restored domain, changed incarnation/generation or new version refuses. Supported ordinary continuation requires
+its exact step/version ID, genuine new SDK transactional enqueue and exact committed argument mapping. Changed-
+generation repair and cleanup are unavailable until their separate complete authority/prices exist. `complete`
+explicitly refuses missing final Source/physical authority. No new Source enrollment, legal erasure or all-copy ACK
+is inferred from selection. Existing operational-work/v1 registration/enqueue and transfer expiry guards are unchanged.
+
+The current installed Library Members body/schema is absent; the producer checks native table presence before
+attempting that dependent read and refuses `selected-runtime-commerce-native-episode-absent`. It never imports
+retained code as an installed prerequisite. Core migration/snapshot live at `db/migrations/` and `db/schema.sql`
+(the repository's current core placement); no `db/core` migration tree is introduced. Native and full verification
+remain deferred. New fixtures preserve expired-transfer, immutable binding, recovery, copied context, owner/restore
+and no-refill refusal oracles; they do not claim an implemented Commerce caller.

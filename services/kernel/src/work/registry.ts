@@ -12,6 +12,8 @@ import { bindIdentityOriginalEffect, IDENTITY_FX_EFFECT } from '../history/ident
 import { readAuthConsentConfig } from '../access/auth-consent.ts';
 import { createKindConsentParticipantTransport } from './kind-consent-transport.ts';
 
+import { composeSelectedRuntime, type SelectedRuntime } from './selected-runtime.ts';
+
 export type WorkService = { stop(): Promise<void> };
 
 export type WorkContext = {
@@ -22,6 +24,7 @@ export type WorkContext = {
   readonly clock: KernelClock;
   readonly history?: HistoryRegistry;
   getAuthorization(): WorkerAuthorization;
+  getSelectedRuntime?(): SelectedRuntime;
   getKindConsentParticipant?(deadline: number): KindConsentParticipant | undefined;
   addEffects(effects: Effect[]): void;
   addNativeEffects?(effects: NativeEffect[]): void;
@@ -73,6 +76,7 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
   const started: WorkService[] = [];
   let accepting = true;
   let authorization: WorkerAuthorization | undefined;
+  let selectedRuntime: SelectedRuntime | undefined;
   const context: WorkContext = Object.freeze({
     pool: options.pool,
     queues: WORK_QUEUES,
@@ -80,6 +84,9 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     env,
     clock,
     history,
+    getSelectedRuntime() {
+      return (selectedRuntime ??= composeSelectedRuntime(options.pool, options.client));
+    },
     getAuthorization() {
       return (authorization ??= createWorkerAuthorization({
         pool: options.pool,

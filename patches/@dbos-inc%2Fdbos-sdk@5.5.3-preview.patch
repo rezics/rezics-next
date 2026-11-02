@@ -4,21 +4,27 @@
 # durable closure receipts and supported retire/read APIs covering old executors.
 # Reproducer/acceptance: services/kernel/test/work/sdk-retirement-fence.test.ts.
 # Preserve the fence migration array positions; the SDK records positional versions.
+# Additive selected execution authority: actual registered body only; native owner/domain locks through COMMIT.
+# Reproducer: services/kernel/test/work/selected-runtime-native.test.ts (deferred native execution).
 diff --git a/dist/src/client.d.ts b/dist/src/client.d.ts
-index 8a0fee52be..fce02f8263 100644
+index 8a0fee52be..b69659f7e3 100644
 --- a/dist/src/client.d.ts
 +++ b/dist/src/client.d.ts
-@@ -1,3 +1,4 @@
+@@ -1,3 +1,5 @@
++import type { SelectedExecution, SelectedExecutionIdentity } from './selected_execution';
 +import type { WorkflowWriterState, WorkflowWriterFence } from './workflow_retirement';
  import { type SystemDatabase, type DuplicationPolicy, type VersionInfo, type ApplicationRowCounts, type DebounceParams, type DebounceResult } from './system_database';
  import { DLogger } from './telemetry/logs';
  import { type GetWorkflowsInput, type StepInfo, type ListWorkflowStepsOptions, type WorkflowHandle, WorkflowSerializationFormat, type WorkflowStatus } from './workflow';
-@@ -221,6 +222,19 @@ export declare class DBOSClient {
+@@ -221,6 +223,22 @@ export declare class DBOSClient {
      }): Promise<WorkflowHandle<Awaited<T>>[]>;
      setWorkflowPriority(workflowID: string, priority: number, options?: ShardKeyOptions): Promise<void>;
      setWorkflowDelay(workflowID: string, options: number | SetWorkflowDelayOptions): Promise<void>;
 +    /** Permanently fence this actual workflow ID. No cancellation or deletion. */
 +    /** Exactly one funded owner attempt; exact shared Pool/domain, no automatic retry or children. */
++    consumeSelectedExecutionAdmission(selection: SelectedExecution, pool: Pool): Promise<boolean>;
++    selectedExecutionIdentity(selection: SelectedExecution, pool: Pool): SelectedExecutionIdentity;
++    checkSelectedExecutionInTransaction(client: Pick<ClientBase, 'query'>, pool: Pool, selection: SelectedExecution): Promise<void>;
 +    maintainWorkflowOnce(pool: Pool, expected: WorkflowWriterState, action: 'retire' | 'delete', deadline: number,
 +        reserve: (dispatch: string) => Promise<void>): Promise<WorkflowWriterFence | null>;
 +    retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
@@ -34,13 +40,22 @@ index 8a0fee52be..fce02f8263 100644
      deleteWorkflows(workflowIDs: string[], deleteChildren?: boolean, options?: ShardKeyOptions): Promise<void>;
      forkWorkflow(workflowID: string, startStep: number, options?: {
 diff --git a/dist/src/client.js b/dist/src/client.js
-index 7a6d950117..fbba7624bf 100644
+index 7a6d950117..25798282c5 100644
 --- a/dist/src/client.js
 +++ b/dist/src/client.js
-@@ -368,6 +368,24 @@ class DBOSClient {
+@@ -368,6 +368,33 @@ class DBOSClient {
          const shardKey = typeof options === 'object' ? options.shardKey : undefined;
          return await (0, shard_keys_1.bindShardKeys)([[workflowID, shardKey]], () => this.systemDatabase.setWorkflowDelay(workflowID, delayUntilEpochMS));
      }
++    consumeSelectedExecutionAdmission(selection, pool) {
++        return require('./dbos-executor').DBOSExecutor.globalInstance.consumeSelectedExecutionAdmission(selection, pool, this.systemDatabase);
++    }
++    selectedExecutionIdentity(selection, pool) {
++        return require('./dbos-executor').DBOSExecutor.globalInstance.selectedExecutionIdentity(selection, pool, this.systemDatabase);
++    }
++    checkSelectedExecutionInTransaction(client, pool, selection) {
++        return require('./dbos-executor').DBOSExecutor.globalInstance.checkSelectedExecutionInTransaction(client, pool, selection, this.systemDatabase);
++    }
 +    maintainWorkflowOnce(pool, expected, action, deadline, reserve) {
 +        return this.systemDatabase.maintainWorkflowOnce(pool, expected, action, deadline, reserve);
 +    }
@@ -62,16 +77,123 @@ index 7a6d950117..fbba7624bf 100644
      deleteWorkflow(workflowID, deleteChildren = false, options) {
          return this.deleteWorkflows([workflowID], deleteChildren, options);
      }
+diff --git a/dist/src/dbos-executor.js b/dist/src/dbos-executor.js
+index 8355716c2b..1c001646bb 100644
+--- a/dist/src/dbos-executor.js
++++ b/dist/src/dbos-executor.js
+@@ -53,6 +53,88 @@ exports.OperationType = {
+     STEP: 'step',
+ };
+ class DBOSExecutor {
++    #selectedExecutions = new WeakMap();
++    #selectedContext = new (require('node:async_hooks').AsyncLocalStorage)();
++    currentSelectedExecution() {
++        const selection = this.#selectedContext.getStore();
++        return selection && this.#selectedExecutions.get(selection)?.live ? selection : undefined;
++    }
++    #selectedState(selection, pool, consumer) {
++        const state = this.#selectedExecutions.get(selection);
++        const native = this.systemDatabase;
++        if (!state?.live || Date.now() >= state.deadline || pool !== native.pool ||
++            consumer.pool !== native.pool || consumer.schemaName !== native.schemaName ||
++            consumer.appName !== native.appName)
++            throw new Error('DBOS selected execution is unavailable or foreign');
++        return state;
++    }
++    selectedExecutionIdentity(selection, pool, consumer) {
++        const state = this.#selectedState(selection, pool, consumer);
++        return Object.freeze({ ...state.identity });
++    }
++    async consumeSelectedExecutionAdmission(selection, pool, consumer) {
++        const state = this.#selectedState(selection, pool, consumer);
++        const i=state.identity;
++        const s='"'+this.systemDatabase.schemaName.replace(/"/g,'""')+'"';
++        const result=await this.systemDatabase.pool.query(`SELECT ${s}.consume_selected_execution($1,$2,$3,$4,$5,$6) AS fresh`,
++            [i.workflowID,i.functionID,state.ownerXid,i.attemptGeneration,i.restoreGeneration,i.stepName]);
++        this.#selectedState(selection,pool,consumer);
++        return result.rows[0].fresh;
++    }
++    async checkSelectedExecutionInTransaction(client, pool, selection, consumer) {
++        const state = this.#selectedState(selection, pool, consumer);
++        if (!Array.isArray(pool._clients) || !pool._clients.includes(client))
++            throw new Error('DBOS selected execution requires its native checked-out PoolClient');
++        const i = state.identity;
++        const s = '"' + this.systemDatabase.schemaName.replace(/"/g, '""') + '"';
++        // No checkout/BEGIN/COMMIT/retry: all four native locks survive the caller's COMMIT.
++        await client.query(`SELECT ${s}.hold_selected_execution($1,$2,$3,$4,$5,$6)`,
++            [i.workflowID, i.functionID, state.ownerXid, i.attemptGeneration, i.restoreGeneration, i.stepName]);
++        this.#selectedState(selection, pool, consumer);
++    }
++    async #runSelectedStep(reg, lctx, functionID, stepName, args, signals, body) {
++        // Only this private method at callStepFunctionAt's actual body site can mint a capability.
++        const admission = await reg.selectedExecutionLifecycle.open();
++        const s = '"' + this.systemDatabase.schemaName.replace(/"/g, '""') + '"';
++        let selection;
++        let identity;
++        let state;
++        const revoke = () => { if (state) state.live = false; };
++        try {
++            await admission.reserve('issue');
++            if (Date.now() >= admission.deadline || signals.some(signal => signal?.aborted))
++                throw new Error('DBOS selected execution expired before issuance');
++            const encodedArgs = JSON.stringify(args);
++            if (!Number.isInteger(functionID) || functionID < 0 || functionID > 63 || !encodedArgs || Buffer.byteLength(encodedArgs) > 4096) throw new Error('Selected step arguments exceed bound');
++            const result = await this.systemDatabase.pool.query(
++                `SELECT * FROM ${s}.select_step_execution($1,$2,$3,$4,$5,$6)`,
++                [lctx.workflowId, lctx.ownerXid, functionID, stepName, encodedArgs, admission.deadline]);
++            const row = result.rows[0];
++            identity = Object.freeze({ workflowID: lctx.workflowId, functionID, stepName,
++                attemptGeneration: row.attempt_generation, restoreGeneration: row.restore_generation,
++                workflowName: row.name, queueName: row.queue_name, creatorXid: row.creator_xid,
++                serialization: row.serialization, inputs: row.inputs, stepArguments: encodedArgs,
++                deadline: admission.deadline, schema: this.systemDatabase.schemaName });
++            selection = Object.freeze({});
++            state = { identity, ownerXid: lctx.ownerXid, deadline: admission.deadline, live: true };
++            this.#selectedExecutions.set(selection, state);
++            for (const signal of signals) signal?.addEventListener('abort', revoke, { once: true });
++            if (signals.some(signal => signal?.aborted)) revoke();
++            if (!state.live) throw new Error('DBOS selected execution was aborted');
++            return await admission.run(() => this.#selectedContext.run(selection, body));
++        } finally {
++            revoke();
++            for (const signal of signals) signal?.removeEventListener('abort', revoke);
++            // The trusted lifecycle drains its native transaction before SDK checkout for release.
++            await admission.close();
++            if (identity) {
++                await admission.reserve('release');
++                await this.systemDatabase.pool.query(
++                    `SELECT ${s}.release_selected_execution($1,$2,$3,$4)`,
++                    [identity.workflowID, functionID, identity.attemptGeneration, lctx.ownerXid]);
++            }
++        }
++    }
+     config;
+     initialized;
+     conductor = undefined;
+@@ -653,7 +735,11 @@ class DBOSExecutor {
+                 };
+                 await (0, context_1.runInStepContext)(lctx, funcID, attempt, async () => {
+                     const sf = stepFn;
+-                    cresult = await sf.call(clsInst, ...args);
++                    const reg = (0, decorators_1.getFunctionRegistration)(sf);
++                    cresult = reg?.registeredFunction === sf && reg.selectedExecutionLifecycle
++                        ? await this.#runSelectedStep(reg, lctx, funcID, stepFnName, args,
++                            [timeoutAbort?.signal, cancelWatch.signal], () => sf.call(clsInst, ...args))
++                        : await sf.call(clsInst, ...args);
+                 });
+             });
+             if (timeoutMS === undefined) {
 diff --git a/dist/src/dbos.d.ts b/dist/src/dbos.d.ts
-index dd663ff7a8..4d0c393e45 100644
+index dd663ff7a8..56d801b663 100644
 --- a/dist/src/dbos.d.ts
 +++ b/dist/src/dbos.d.ts
-@@ -1,3 +1,4 @@
+@@ -1,3 +1,5 @@
++import type { SelectedExecution, SelectedExecutionLifecycle } from './selected_execution';
 +import type { WorkflowWriterFence } from './workflow_retirement';
  import { StepStatus, DBOSLocalCtx } from './context';
  import { DBOSConfig, DBOSExecutor } from './dbos-executor';
  import { DBOSSpan, Tracer } from './telemetry/traces';
-@@ -440,6 +441,10 @@ export declare class DBOS {
+@@ -440,6 +442,10 @@ export declare class DBOS {
       * @param workflowID - ID of the workflow to delete
       * @param deleteChildren - If true, also delete all child workflows recursively (default: false)
       */
@@ -82,8 +204,17 @@ index dd663ff7a8..4d0c393e45 100644
      static deleteWorkflow(workflowID: string, deleteChildren?: boolean, options?: ShardKeyOptions): Promise<void>;
      /**
       * Delete multiple workflows and optionally all their child workflows.
+@@ -714,6 +720,8 @@ export declare class DBOS {
+      * @param func - The function to register as a step
+      * @param config - Configuration information for the step, particularly the retry policy and name
+      */
++    static registerSelectedStep<This, Args extends unknown[], Return>(func: (this: This, ...args: Args) => Promise<Return>, config: StepConfig & FunctionName, lifecycle: SelectedExecutionLifecycle): (this: This, ...args: Args) => Promise<Return>;
++    static getSelectedExecution(): SelectedExecution | undefined;
+     static registerStep<This, Args extends unknown[], Return>(func: (this: This, ...args: Args) => Promise<Return>, config?: StepConfig & FunctionName): (this: This, ...args: Args) => Promise<Return>;
+     /**
+      * Run the enclosed `callback` as a checkpointed step within a DBOS workflow
 diff --git a/dist/src/dbos.js b/dist/src/dbos.js
-index 370a89e439..bb5a25e650 100644
+index 370a89e439..daab99e672 100644
 --- a/dist/src/dbos.js
 +++ b/dist/src/dbos.js
 @@ -909,6 +909,15 @@ class DBOS {
@@ -102,17 +233,52 @@ index 370a89e439..bb5a25e650 100644
      static async deleteWorkflow(workflowID, deleteChildren = false, options) {
          return this.deleteWorkflows([workflowID], deleteChildren, options);
      }
+@@ -1637,6 +1646,16 @@ class DBOS {
+      * @param func - The function to register as a step
+      * @param config - Configuration information for the step, particularly the retry policy and name
+      */
++    static registerSelectedStep(func, config, lifecycle) {
++        if (!lifecycle || typeof lifecycle.open !== 'function') throw new TypeError('Selected step lifecycle required');
++        const wrapped = DBOS.registerStep(func, config);
++        const reg = (0, decorators_1.getFunctionRegistration)(wrapped);
++        reg.selectedExecutionLifecycle = lifecycle;
++        return wrapped;
++    }
++    static getSelectedExecution() {
++        return dbos_executor_1.DBOSExecutor.globalInstance?.currentSelectedExecution();
++    }
+     static registerStep(func, config = {}) {
+         const name = config.name ?? func.name;
+         (0, step_1.validateStepConfig)(config, name);
 diff --git a/dist/src/index.d.ts b/dist/src/index.d.ts
-index 5d56b40172..5096c0f10d 100644
+index 5d56b40172..88167541b0 100644
 --- a/dist/src/index.d.ts
 +++ b/dist/src/index.d.ts
-@@ -1,3 +1,4 @@
+@@ -1,3 +1,5 @@
++export type { SelectedExecution, SelectedExecutionIdentity, SelectedExecutionLifecycle } from './selected_execution';
 +export type { WorkflowWriterState, WorkflowWriterFence } from './workflow_retirement';
  export { DBOS, RecvOptions, SleepOptions, GetEventOptions, GetResultOptions, PollingOptions, WaitFirstOptions, WaitAllOptions, SetWorkflowDelayOptions, ReadStreamOptions, ReadStreamOffsetOptions, ShardKeyOptions, } from './dbos';
  export type { StepReservation } from './dbos';
  export { DBOSClient } from './client';
+diff --git a/dist/src/selected_execution.d.ts b/dist/src/selected_execution.d.ts
+new file mode 100644
+index 0000000000..9fb11a30c8
+--- /dev/null
++++ b/dist/src/selected_execution.d.ts
+@@ -0,0 +1,11 @@
++import type { Pool, ClientBase } from 'pg';
++export interface SelectedExecution { readonly __selectedExecution: unique symbol }
++export interface SelectedExecutionIdentity {
++ readonly workflowID: string; readonly functionID: number; readonly stepName: string;
++ readonly attemptGeneration: string; readonly restoreGeneration: string; readonly workflowName: string;
++ readonly queueName: string | null; readonly creatorXid: string | null; readonly serialization: string | null;
++ readonly inputs: string; readonly stepArguments: string; readonly deadline: number; readonly schema: string;
++}
++export interface SelectedExecutionLifecycle {
++ open(): Promise<{ deadline: number; reserve(dispatch: 'issue' | 'release'): Promise<void>; close(): Promise<void>; run<T>(body: () => Promise<T>): Promise<T> }>;
++}
 diff --git a/dist/src/sysdb_migrations/internal/migrations.js b/dist/src/sysdb_migrations/internal/migrations.js
-index 7f21387b27..554201b720 100644
+index 7f21387b27..86e49bd724 100644
 --- a/dist/src/sysdb_migrations/internal/migrations.js
 +++ b/dist/src/sysdb_migrations/internal/migrations.js
 @@ -1,6 +1,7 @@
@@ -133,15 +299,123 @@ index 7f21387b27..554201b720 100644
          // Topic a SUSPENDED recv waits on.
          {
              name: '126_workflow_status_suspend_key',
-@@ -1232,6 +1236,7 @@ $$ LANGUAGE plpgsql;`,
+@@ -1232,6 +1236,9 @@ $$ LANGUAGE plpgsql;`,
                      ]),
              ],
          },
 +        workflowWriterFenceTransactionMigration(schemaName),
++        // Append only: never move any applied positional migration.
++        require('./selected_step_execution').selectedStepExecutionMigration(schemaName),
      ];
  }
  //# sourceMappingURL=migrations.js.map
 \ No newline at end of file
+diff --git a/dist/src/sysdb_migrations/internal/selected_step_execution.js b/dist/src/sysdb_migrations/internal/selected_step_execution.js
+new file mode 100644
+index 0000000000..c90205a1e1
+--- /dev/null
++++ b/dist/src/sysdb_migrations/internal/selected_step_execution.js
+@@ -0,0 +1,100 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++function selectedStepExecutionMigration(schemaName) {
++    const s = '"' + schemaName.replace(/"/g, '""') + '"';
++    return { name: '20261102110241_selected_step_execution', pg: [
++        `CREATE TABLE ${s}.selected_step_executions (
++            workflow_uuid TEXT NOT NULL CHECK(octet_length(workflow_uuid)<=1024),
++            function_id INTEGER NOT NULL CHECK(function_id>=0),
++            step_name TEXT NOT NULL CHECK(octet_length(step_name)<=255),
++            owner_xid TEXT NOT NULL,
++            attempt_generation BIGINT NOT NULL CHECK(attempt_generation>0),
++            restore_generation UUID NOT NULL,
++            step_arguments TEXT NOT NULL CHECK(octet_length(step_arguments)<=4096),
++            deadline BIGINT NOT NULL CHECK(deadline>0),
++            live BOOLEAN NOT NULL,
++            admission_spent BOOLEAN NOT NULL DEFAULT false,
++            PRIMARY KEY(workflow_uuid,function_id)
++        )`,
++        `CREATE FUNCTION ${s}.select_step_execution(id TEXT, owner_token TEXT, fid INTEGER, step TEXT, arguments TEXT, cutoff BIGINT)
++         RETURNS TABLE(attempt_generation TEXT,restore_generation UUID,name TEXT,queue_name TEXT,creator_xid TEXT,serialization TEXT,inputs TEXT)
++         LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp SET lock_timeout='200ms' AS $$
++         DECLARE domain UUID; w ${s}.workflow_status%ROWTYPE; f ${s}.workflow_writer_fences%ROWTYPE;
++                 a ${s}.selected_step_executions%ROWTYPE; input_value TEXT;
++         BEGIN
++            SELECT d.restore_generation INTO STRICT domain FROM ${s}.workflow_writer_fence_domain d WHERE singleton FOR SHARE;
++            -- Same status-before-writer order as retirement and original owner checks.
++            SELECT * INTO w FROM ${s}.workflow_status WHERE workflow_uuid=id FOR SHARE;
++            IF NOT FOUND OR w.status<>'PENDING' OR w.owner_xid IS DISTINCT FROM owner_token OR owner_token IS NULL THEN
++                RAISE EXCEPTION 'DBOS selected workflow owner changed'; END IF;
++            SELECT * INTO f FROM ${s}.workflow_writer_fences WHERE workflow_uuid=id FOR UPDATE;
++            IF NOT FOUND OR f.generation<>1 OR f.closed_at IS NOT NULL THEN
++                RAISE EXCEPTION 'DBOS selected workflow writer closed'; END IF;
++            IF EXISTS(SELECT 1 FROM ${s}.operation_outputs WHERE workflow_uuid=id AND function_id=fid) THEN
++                RAISE EXCEPTION 'DBOS selected step already completed'; END IF;
++            SELECT i.inputs INTO input_value FROM ${s}.workflow_input i WHERE i.workflow_uuid=id AND octet_length(i.inputs)<=8192 FOR SHARE;
++            IF NOT FOUND OR octet_length(jsonb_build_array(w.name,w.queue_name,w.creator_xid,w.serialization)::text)>4096 OR
++               cutoff<=(EXTRACT(EPOCH FROM clock_timestamp())*1000)::BIGINT THEN
++                RAISE EXCEPTION 'DBOS selected registration unavailable'; END IF;
++            INSERT INTO ${s}.selected_step_executions AS old
++                VALUES(id,fid,step,owner_token,1,domain,arguments,cutoff,true,false)
++                ON CONFLICT(workflow_uuid,function_id) DO UPDATE SET owner_xid=EXCLUDED.owner_xid,
++                    attempt_generation=old.attempt_generation+1,restore_generation=EXCLUDED.restore_generation,
++                    deadline=EXCLUDED.deadline,live=true
++                WHERE old.step_name=EXCLUDED.step_name AND old.step_arguments=EXCLUDED.step_arguments
++                RETURNING * INTO a;
++            IF NOT FOUND THEN RAISE EXCEPTION 'DBOS selected step binding changed'; END IF;
++            RETURN QUERY SELECT a.attempt_generation::TEXT,domain,w.name,w.queue_name,w.creator_xid,w.serialization,input_value;
++         END $$`,
++        `CREATE FUNCTION ${s}.hold_selected_execution(id TEXT,fid INTEGER,owner_token TEXT,attempt BIGINT,restore UUID,step TEXT)
++         RETURNS VOID LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp SET lock_timeout='200ms' AS $$
++         DECLARE domain UUID; w ${s}.workflow_status%ROWTYPE; f ${s}.workflow_writer_fences%ROWTYPE;
++                 a ${s}.selected_step_executions%ROWTYPE;
++         BEGIN
++            SELECT d.restore_generation INTO domain FROM ${s}.workflow_writer_fence_domain d WHERE singleton FOR SHARE;
++            IF domain IS DISTINCT FROM restore THEN RAISE EXCEPTION 'DBOS selected restore generation changed'; END IF;
++            SELECT * INTO w FROM ${s}.workflow_status WHERE workflow_uuid=id FOR SHARE;
++            IF NOT FOUND OR w.status<>'PENDING' OR w.owner_xid IS DISTINCT FROM owner_token THEN
++                RAISE EXCEPTION 'DBOS selected workflow owner changed'; END IF;
++            SELECT * INTO f FROM ${s}.workflow_writer_fences WHERE workflow_uuid=id FOR UPDATE;
++            IF NOT FOUND OR f.generation<>1 OR f.closed_at IS NOT NULL THEN
++                RAISE EXCEPTION 'DBOS selected workflow writer closed'; END IF;
++            SELECT * INTO a FROM ${s}.selected_step_executions WHERE workflow_uuid=id AND function_id=fid FOR SHARE;
++            IF NOT FOUND OR NOT a.live OR a.owner_xid IS DISTINCT FROM owner_token OR
++               a.attempt_generation IS DISTINCT FROM attempt OR a.restore_generation IS DISTINCT FROM restore OR
++               a.step_name IS DISTINCT FROM step OR a.deadline<=(EXTRACT(EPOCH FROM clock_timestamp())*1000)::BIGINT THEN
++                RAISE EXCEPTION 'DBOS selected step attempt changed'; END IF;
++         END $$`
++        ,`CREATE FUNCTION ${s}.consume_selected_execution(id TEXT,fid INTEGER,owner_token TEXT,attempt BIGINT,restore UUID,step TEXT)
++          RETURNS BOOLEAN LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp SET lock_timeout='200ms' AS $$
++          BEGIN
++            PERFORM ${s}.hold_selected_execution(id,fid,owner_token,attempt,restore,step);
++            UPDATE ${s}.selected_step_executions SET admission_spent=true
++              WHERE workflow_uuid=id AND function_id=fid AND NOT admission_spent;
++            RETURN FOUND;
++          END $$`,
++        `CREATE FUNCTION ${s}.release_selected_execution(id TEXT,fid INTEGER,attempt BIGINT,owner_token TEXT)
++          RETURNS VOID LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp SET lock_timeout='200ms' AS $$
++          BEGIN
++            UPDATE ${s}.selected_step_executions SET live=false
++              WHERE workflow_uuid=id AND function_id=fid AND attempt_generation=attempt AND owner_xid=owner_token;
++          END $$`,
++        `CREATE FUNCTION ${s}.preserve_selected_admission() RETURNS TRIGGER
++          LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp SET lock_timeout='200ms' AS $$
++          BEGIN
++            IF TG_OP IN ('DELETE','TRUNCATE') THEN RAISE EXCEPTION 'DBOS selected admission is permanent'; END IF;
++            IF (OLD.workflow_uuid,OLD.function_id,OLD.step_name,OLD.step_arguments) IS DISTINCT FROM
++               (NEW.workflow_uuid,NEW.function_id,NEW.step_name,NEW.step_arguments) OR
++               (OLD.admission_spent AND NOT NEW.admission_spent) OR NEW.attempt_generation<OLD.attempt_generation THEN
++                RAISE EXCEPTION 'DBOS selected admission cannot reopen'; END IF;
++            RETURN NEW;
++          END $$`,
++        `CREATE TRIGGER preserve_selected_admission BEFORE UPDATE OR DELETE ON ${s}.selected_step_executions
++          FOR EACH ROW EXECUTE FUNCTION ${s}.preserve_selected_admission()`,
++        `CREATE TRIGGER preserve_selected_admission_truncate BEFORE TRUNCATE ON ${s}.selected_step_executions
++          FOR EACH STATEMENT EXECUTE FUNCTION ${s}.preserve_selected_admission()`,
++        `ALTER TABLE ${s}.selected_step_executions ENABLE ALWAYS TRIGGER preserve_selected_admission`,
++        `ALTER TABLE ${s}.selected_step_executions ENABLE ALWAYS TRIGGER preserve_selected_admission_truncate`
++    ] };
++}
++exports.selectedStepExecutionMigration = selectedStepExecutionMigration;
 diff --git a/dist/src/sysdb_migrations/internal/workflow_writer_fence.js b/dist/src/sysdb_migrations/internal/workflow_writer_fence.js
 new file mode 100644
 index 0000000000..59a4b3fcd2

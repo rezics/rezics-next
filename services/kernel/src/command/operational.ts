@@ -25,6 +25,9 @@ import {
 } from '../history/operational-work.ts';
 import { openOperationalWorkOriginal, debitOperationalWorkAttempt } from '../history/operational-work-budget.ts';
 
+import { openSelectedOperationalPhase, selectedOperationalEnqueue,
+  type SelectedOperationalPhase } from '../work/selected-runtime.ts';
+
 declare const operational: unique symbol;
 export type OperationalTransaction = Pick<PoolClient, 'query'> & { readonly [operational]: true };
 type CommonOptions = {
@@ -37,6 +40,8 @@ type CommonOptions = {
   clock?: () => Date;
   /** Separate native History producer admission. Existing callers keep their ordinary behaviour. */
   operationalHistory?: true;
+  /** Private phase capability issued only by the authentic selected invocation runner. */
+  selectedRuntime?: SelectedOperationalPhase;
 };
 export type OperationalOptions = CommonOptions &
   (
@@ -88,7 +93,13 @@ export async function enqueueIntent(tx: OperationalTransaction, intent: WorkInte
     [...intent.input.accounts].sort().some((id, index) => id !== state.accounts[index])
   )
     throw new TypeError('Operational intent must name exactly its fenced accounts');
-  await enqueueWorkIntent(state.workClient, state.client, intent, operationalHistoryEnqueueCapture(tx, intent));
+  const selectedCapture = selectedOperationalEnqueue(tx, intent);
+  const historyCapture = operationalHistoryEnqueueCapture(tx, intent);
+  const capture = selectedCapture || historyCapture ? (created: boolean) => {
+    historyCapture?.(created);
+    selectedCapture?.(created);
+  } : undefined;
+  await enqueueWorkIntent(state.workClient, state.client, intent, capture);
 }
 
 const remaining = (deadline: number) => Math.max(1, Math.floor(deadline - Date.now()));
@@ -137,7 +148,8 @@ export async function runOperationalTransaction<T>(
           requestedBy: options.basis.requestedBy,
         })
       : null;
-  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  const selected = options.selectedRuntime ? openSelectedOperationalPhase(pool, options) : undefined;
+  const deadline = selected?.deadline ?? options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   // One original, Pool, absolute deadline and cumulative local balance across contention.
   const historyOriginal = options.operationalHistory ? openOperationalWorkOriginal(pool, deadline) : undefined;
   let contentionAttempts = 0;
@@ -171,6 +183,7 @@ export async function runOperationalTransaction<T>(
             apply(target, _receiver, args) {
               if (!active) throw new TypeError('No live operational transaction');
               if (Date.now() >= deadline) throw unavailable('deadline');
+              selected?.query(args[0]);
               return Reflect.apply(target, client, args);
             },
           });
@@ -195,15 +208,19 @@ export async function runOperationalTransaction<T>(
                 mode: options.mode,
                 kind,
               });
+              if (selected) await selected.hold(tx, client);
               if (historyOriginal) beginOperationalHistoryAttempt(tx, historyOriginal);
               for (const id of accounts) await fenceOperationalAccount(tx, id);
+              selected?.guardBody();
               const value = await body(tx);
               await authorization?.finalize?.(tx, attempt, evidence);
               if (Date.now() >= deadline) throw unavailable('deadline');
+              if (selected) await selected.hold(tx, client);
               await finalizeOperationalHistoryAttempt(tx);
               live.delete(tx);
               active = false;
               await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
+              selected?.assertLive();
               await client.query('COMMIT');
               finishOperationalHistoryAttempt(tx, true);
               return value;
@@ -215,6 +232,7 @@ export async function runOperationalTransaction<T>(
             active = false;
             live.delete(tx);
             finishOperationalHistoryAttempt(tx, false);
+            selected?.finish();
           }
         });
       } finally {
@@ -222,6 +240,8 @@ export async function runOperationalTransaction<T>(
       }
     } catch (error) {
       if (error instanceof Error && Object.isExtensible(error)) Object.assign(error, { operationKind: kind });
+      // A selected invocation owns one prepaid attempt per phase; never retry/refill here.
+      if (selected) { selected.finish(); throw error; }
       if (error instanceof CommandUnavailableError) throw error;
       const reason = classifyUnavailability(error);
       lastAccessContention = error instanceof AccessUnavailableError && reason === 'contention' ? error : undefined;
