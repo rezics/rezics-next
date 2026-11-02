@@ -416,6 +416,7 @@ test('workspace sync reports ancestry failures and preserves merge errors when a
   const marker = join(bin, 'seen-ancestry');
   const merges = join(bin, 'merges');
   const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+  const fakePath = [bin, originalPath].filter(Boolean).join(delimiter);
   writeFileSync(
     join(bin, 'git'),
     `#!/bin/sh
@@ -431,8 +432,15 @@ exec ${quote(realGit)} "$@"
 `,
     { mode: 0o755 },
   );
-  process.env.PATH = [bin, originalPath].filter(Boolean).join(delimiter);
-  const sync = () => h.controller.withLaunch('library', () => h.controller.syncIdle('library'));
+  const sync = () => {
+    process.env.PATH = fakePath;
+    try {
+      return h.controller.withLaunch('library', () => h.controller.syncIdle('library'));
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+    }
+  };
   try {
     await expect(sync()).rejects.toThrow(
       'git merge-base --is-ancestor refs/heads/dev HEAD failed: injected ancestry failure',
