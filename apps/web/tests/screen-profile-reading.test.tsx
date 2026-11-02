@@ -102,7 +102,7 @@ test('Screen refresh keeps corrections and exact uncertain requests; recovery re
       await user.type(year, '2027');
     });
     await click(m.facts_submit());
-    expect(host.textContent).toContain(m.facts_uncertain());
+    expect(year.disabled).toBe(true);
     next = { ok: false, reason: 'unavailable' };
     await click(m.candidate_reload());
     expect(host.textContent).toContain(m.screen_refresh_failed());
