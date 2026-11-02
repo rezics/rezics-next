@@ -21,7 +21,15 @@ function stringBytes(value: string, limit: number): number | undefined {
   for (let index = 0; index < value.length; index++) {
     const code = value.charCodeAt(index);
     let extra: number;
-    if (code === 0x22 || code === 0x5c || code === 0x08 || code === 0x09 || code === 0x0a || code === 0x0c || code === 0x0d)
+    if (
+      code === 0x22 ||
+      code === 0x5c ||
+      code === 0x08 ||
+      code === 0x09 ||
+      code === 0x0a ||
+      code === 0x0c ||
+      code === 0x0d
+    )
       extra = 2;
     else if (code < 0x20) extra = 6;
     else if (code >= 0xd800 && code <= 0xdbff && index + 1 < value.length) {

@@ -1,11 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
-import {
-  SEED_BATCH_BYTE_LIMIT,
-  SEED_BATCH_ROW_LIMIT,
-  seedBulkRows,
-  type SeedRow,
-} from './growth-seed-batches.ts';
+import { SEED_BATCH_BYTE_LIMIT, SEED_BATCH_ROW_LIMIT, seedBulkRows, type SeedRow } from './growth-seed-batches.ts';
 
 type Insert = { readonly table: string; readonly rows: SeedRow[] };
 
@@ -51,7 +46,9 @@ test('splits by total rows and preserves placement, table order, and supported e
     (ordinal) => ({ ordinal, route: 12 }),
     ({ ordinal, route }) => ({
       'growth.parent': Array.from({ length: SEED_BATCH_ROW_LIMIT + 1 }, (_, id) => ({ route, id: ordinal * 501 + id })),
-      'growth.child': [{ route, id: 900n + BigInt(ordinal), created, bytes: new Uint8Array([0, 255]), values: [undefined, null] }],
+      'growth.child': [
+        { route, id: 900n + BigInt(ordinal), created, bytes: new Uint8Array([0, 255]), values: [undefined, null] },
+      ],
     }),
   );
 
@@ -75,11 +72,20 @@ test('splits by total rows and preserves placement, table order, and supported e
 test('keeps total encoded payload bytes within each batch below the row limit', async () => {
   const database = recordingPool();
   const largeValue = 'x'.repeat(400_000);
-  await seedBulkRows(database.admin, 0, 1, () => 0, () => ({ 'growth.payload': [0, 1, 2].map((id) => ({ id, value: largeValue })) }));
+  await seedBulkRows(
+    database.admin,
+    0,
+    1,
+    () => 0,
+    () => ({ 'growth.payload': [0, 1, 2].map((id) => ({ id, value: largeValue })) }),
+  );
 
   expect(database.transactions).toHaveLength(2);
   for (const transaction of database.transactions) {
-    const payloadBytes = transaction.reduce((total, insert) => total + Buffer.byteLength(JSON.stringify(insert.rows)), 0);
+    const payloadBytes = transaction.reduce(
+      (total, insert) => total + Buffer.byteLength(JSON.stringify(insert.rows)),
+      0,
+    );
     expect(payloadBytes).toBeLessThanOrEqual(SEED_BATCH_BYTE_LIMIT);
   }
   expect(database.transactions.map((transaction) => transaction[0]!.rows.length)).toEqual([2, 1]);
@@ -90,7 +96,13 @@ test('rejects one oversized row before acquiring a connection', async () => {
   const oversized = 'x'.repeat(SEED_BATCH_BYTE_LIMIT);
 
   await expect(
-    seedBulkRows(database.admin, 0, 1, () => 0, () => ({ 'growth.large': [{ value: oversized }] })),
+    seedBulkRows(
+      database.admin,
+      0,
+      1,
+      () => 0,
+      () => ({ 'growth.large': [{ value: oversized }] }),
+    ),
   ).rejects.toThrow(/growth\.large at ordinal 0.*1,048,576-byte/);
   expect(database.connections()).toBe(0);
 });
@@ -101,7 +113,13 @@ test('preserves an insert failure when rollback fails and discards the damaged c
   const database = recordingPool({ insertFailure, rollbackFailure });
 
   await expect(
-    seedBulkRows(database.admin, 0, 1, () => 0, () => ({ 'growth.parent': [{ id: 1 }] })),
+    seedBulkRows(
+      database.admin,
+      0,
+      1,
+      () => 0,
+      () => ({ 'growth.parent': [{ id: 1 }] }),
+    ),
   ).rejects.toBe(insertFailure);
   expect(database.calls).toEqual(['BEGIN', expect.stringContaining('INSERT INTO'), 'ROLLBACK']);
   expect(database.releases).toEqual([rollbackFailure]);
