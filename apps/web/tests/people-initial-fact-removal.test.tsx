@@ -169,19 +169,6 @@ test('People removal retains scalar, citation and sibling correction identities 
     expect(row('schema:url')).toBe(sibling);
     metadata = true;
     await refresh();
-    await click(within(sibling).getByRole('button', { name: m.candidate_cancel() }));
-    await act(async () => user.type(inputs[0]!, 'https://example.org/restored'));
-    await click(remove('schema:url'));
-    pending = true;
-    await submit();
-    expect(remove('schema:url').disabled).toBe(true);
-    await act(async () => finish({ ok: false, reason: 'unavailable' }));
-    expect(remove('schema:url').disabled).toBe(true);
-    await act(async () => remove('schema:url').dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
-    expect(row('schema:url')).toBe(sibling);
-    await submit();
-    expect(commands.at(-1)).toEqual(commands.at(-2));
-    await act(async () => finish({ ok: false, reason: 'invalid', errors: [] }));
     unsupported = true;
     await refresh();
     await click(remove('schema:url'));
@@ -189,7 +176,37 @@ test('People removal retains scalar, citation and sibling correction identities 
     await add('schema:sameAs');
     await click(remove('schema:sameAs'));
     expect(row('schema:sameAs')).toBeNull();
-    expect(host.contains(window.document.activeElement as Node)).toBe(true);
+    expect(window.document.activeElement?.textContent).toBe(
+      m.people_profile_add_fact({
+        field: fixture.release.properties['wdt:P648']!.labels.en!,
+      }),
+    );
+    unsupported = false;
+    await refresh();
+    await add('schema:url');
+    await act(async () => {
+      await user.type(
+        within(row('schema:url')).getByRole('textbox', { name: m.correction_url() }),
+        'https://example.org/restored',
+      );
+      await user.type(
+        within(row('schema:url')).getByRole('textbox', { name: m.relation_citation() }),
+        'https://example.org/source',
+      );
+    });
+    await click(remove('schema:url'));
+    const sealed = row('schema:url');
+    pending = true;
+    await submit();
+    expect(remove('schema:url').disabled).toBe(true);
+    await act(async () => finish({ ok: false, reason: 'unavailable' }));
+    expect(remove('schema:url').disabled).toBe(true);
+    await act(async () => remove('schema:url').dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+    expect(row('schema:url')).toBe(sealed);
+    const command = structuredClone(commands.at(-1));
+    await click(canvas().getByRole('button', { name: m.catalogue_create_retry() }));
+    expect(commands.at(-1)).toEqual(command);
+    await act(async () => finish({ ok: false, reason: 'unavailable' }));
   } finally {
     await act(async () => root.unmount());
     client.clear();
