@@ -5,11 +5,7 @@ import { createKernelClient } from '@rezics/client';
 import { PAGE_GLOBAL_CONTEXT, planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { OverviewValue, Section } from '../src/features/pages/overview';
 import { readMemberList, type MemberListRequest } from '../src/features/pages/member-list-query';
-import {
-  admitMemberRetry,
-  admitMemberRetryAfter,
-  memberRetryAt,
-} from '../src/features/pages/member-retry-admission';
+import { admitMemberRetry, admitMemberRetryAfter, memberRetryAt } from '../src/features/pages/member-retry-admission';
 import { m } from '../src/paraglide/messages.js';
 
 const subject = '00000000-0000-8000-8000-000000000001';

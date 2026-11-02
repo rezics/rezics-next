@@ -477,10 +477,10 @@ export function MemberList({
             : failed?.status === 202
               ? m.collection_filter_preparing({}, options)
               : completion
-              ? completion.exhausted
-                ? m.subject_relation_completed_end({ label: title, count: completion.added }, options)
-                : m.subject_relation_completed_more({ label: title, count: completion.added }, options)
-              : null}
+                ? completion.exhausted
+                  ? m.subject_relation_completed_end({ label: title, count: completion.added }, options)
+                  : m.subject_relation_completed_more({ label: title, count: completion.added }, options)
+                : null}
       </p>
       {completion?.exhausted && (
         <p
