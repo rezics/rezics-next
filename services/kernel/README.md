@@ -646,10 +646,10 @@ relation owners, and (when the admin role can create `pg_visibility`) non-visibl
 `pg_check_visible` results. The default horizon wait is 30 seconds. A direct call to `settle()` still throws
 `GrowthSettleInfrastructureError`. A failing VACUUM reports the physical database from the held connection or the
 admin URL and the target relation, without another admin checkout or a `current_database` query; the original error
-is the cause, and a later client release failure stays subordinate. Settle also disables autovacuum on every table, including tables created since the
+is the cause, and a later client release failure stays subordinate. Opening a growth database, and settle with omitted targets, disable autovacuum on every non-catalog table, including tables created since the
 database opened. Before each measured repetition, the harness captures each warm-up, prepare hook, or preceding run's
 ModifyTable targets, including nested trigger and foreign-key statements, and settles those relations without ANALYZE
-in every database that run measured. It also settles `dbos.workflow_status` when present. The optional `prepare(db,
+in every database that run measured. Explicit settle targets inspect autovacuum and TOAST options only for those relations and ALTER only tables that still require it. An empty target list still rejects a measured transaction left open and does not inspect or write unrelated relation metadata. A missing explicit target still fails at VACUUM with database and relation context. It also settles `dbos.workflow_status` when present. The optional `prepare(db,
 scale, repetition)` hook runs as unmeasured capture after that settle and before every measured repetition, never
 before warm-ups. Nested captures inside it inherit that custody. The harness tracks its writes and open transactions,
 including on other instrumented databases, and settles the same boundary before measuring; prepare SQL is not product

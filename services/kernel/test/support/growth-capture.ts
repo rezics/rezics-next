@@ -1183,33 +1183,61 @@ function quoteIdentifier(value: string): string {
 }
 
 function qualifiedIdentifier(value: string): string {
-  const split = value.indexOf('.');
-  if (split < 1) throw new TypeError(`Expected schema-qualified relation: ${value}`);
-  return `${quoteIdentifier(value.slice(0, split))}.${quoteIdentifier(value.slice(split + 1))}`;
+  const { schema, name } = qualifiedName(value);
+  return `${quoteIdentifier(schema)}.${quoteIdentifier(name)}`;
 }
 
-async function tableNames(
+type RelationMaintenance = {
+  schema: string;
+  name: string;
+  kind: string;
+  options: string[] | null;
+  toast_disabled: boolean;
+};
+
+function qualifiedName(value: string): { schema: string; name: string } {
+  const split = value.indexOf('.');
+  if (split < 1) throw new TypeError(`Expected schema-qualified relation: ${value}`);
+  return { schema: value.slice(0, split), name: value.slice(split + 1) };
+}
+
+async function relationMaintenance(
   database: GrowthDatabase,
-): Promise<{ schema: string; name: string; kind: string; options: string[] | null; toast_disabled: boolean }[]> {
-  const result = await database.admin.query<{
-    schema: string;
-    name: string;
-    kind: string;
-    options: string[] | null;
-    toast_disabled: boolean;
-  }>(
-    `SELECT n.nspname AS schema, c.relname AS name,c.relkind AS kind,c.reloptions AS options,
+  relations?: readonly string[],
+): Promise<RelationMaintenance[]> {
+  if (relations && relations.length === 0) return [];
+  const wanted = relations?.map(qualifiedName);
+  const from = `SELECT n.nspname AS schema, c.relname AS name,c.relkind AS kind,c.reloptions AS options,
             c.reltoastrelid=0 OR COALESCE(t.reloptions @> ARRAY['autovacuum_enabled=false'],false) AS toast_disabled
        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-       LEFT JOIN pg_class t ON t.oid=c.reltoastrelid
-      WHERE c.relkind IN ('r','m') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname !~ '^pg_'
+       LEFT JOIN pg_class t ON t.oid=c.reltoastrelid`;
+  const catalog = `c.relkind IN ('r','m') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname !~ '^pg_'`;
+  const result = wanted
+    ? await database.admin.query<RelationMaintenance>(
+        `${from}
+       JOIN unnest($1::text[], $2::text[]) AS wanted(schema, name)
+         ON n.nspname=wanted.schema AND c.relname=wanted.name
+      WHERE ${catalog}
       ORDER BY n.nspname,c.relname`,
-  );
+        [wanted.map((row) => row.schema), wanted.map((row) => row.name)],
+      )
+    : await database.admin.query<RelationMaintenance>(
+        `${from}
+      WHERE ${catalog}
+      ORDER BY n.nspname,c.relname`,
+      );
   return result.rows;
 }
 
-async function disableAutovacuum(database: GrowthDatabase): Promise<void> {
-  for (const { schema, name, kind, options, toast_disabled } of await tableNames(database)) {
+async function disableAutovacuum(database: GrowthDatabase, relations?: readonly string[]): Promise<void> {
+  await disableAutovacuumOn(database, await relationMaintenance(database, relations));
+}
+
+async function disableAutovacuumOn(
+  database: GrowthDatabase,
+  relations: readonly RelationMaintenance[],
+): Promise<void> {
+  for (const { schema, name, kind, options, toast_disabled } of relations) {
     if (kind !== 'r') continue;
     if (options?.includes('autovacuum_enabled=false') && toast_disabled) continue;
     await database.admin.query(
@@ -1263,8 +1291,9 @@ export async function settle(
 ): Promise<number> {
   const started = performance.now();
   await assertMeasuredTransactionsSettled(database, options.operationBackends);
-  await disableAutovacuum(database);
-  const names = options.relations ?? (await tableNames(database)).map(({ schema, name }) => `${schema}.${name}`);
+  const metadata = await relationMaintenance(database, options.relations);
+  await disableAutovacuumOn(database, metadata);
+  const names = options.relations ?? metadata.map(({ schema, name }) => `${schema}.${name}`);
   if (names.length > 0) {
     const client = await database.admin.connect();
     const physicalName = connectedDatabase(client) ?? poolDatabaseName(database.admin) ?? databaseName(database);

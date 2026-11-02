@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient, QueryConfig } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
-import { capture, captureMeasuredRun, openGrowthDatabase, trackGrow, type GrowthDatabase } from './growth-capture.ts';
+import { capture, captureMeasuredRun, openGrowthDatabase, settle, trackGrow, type GrowthDatabase } from './growth-capture.ts';
 import type { Capture } from './growth-cost.ts';
 import { statementOccurrences } from './growth-report.ts';
 import { checkGrowth } from './growth.ts';
@@ -888,6 +888,106 @@ test('fails at open when the database cannot report plans', async () => {
     );
   } finally {
     await database.admin.query(`DROP ROLE "${role}"`);
+  }
+});
+
+function recordAdminQueries(database: GrowthDatabase) {
+  const originalQuery = database.admin.query.bind(database.admin);
+  const statements: { text: string; values: unknown }[] = [];
+  database.admin.query = ((...args: Parameters<typeof database.admin.query>) => {
+    const query = args[0] as string | QueryConfig;
+    statements.push(
+      typeof query === 'string'
+        ? { text: query, values: args[1] }
+        : { text: query.text, values: query.values ?? args[1] },
+    );
+    return originalQuery(...args);
+  }) as typeof database.admin.query;
+  return {
+    statements,
+    restore() {
+      database.admin.query = originalQuery;
+    },
+  };
+}
+
+async function relationAutovacuum(database: GrowthDatabase, relation: string) {
+  const result = await database.admin.query<{ reloptions: string[] | null; toast_reloptions: string[] | null }>(
+    `SELECT base.reloptions, toast.reloptions AS toast_reloptions
+       FROM pg_class base LEFT JOIN pg_class toast ON toast.oid=base.reltoastrelid
+      WHERE base.oid=$1::regclass`,
+    [relation],
+  );
+  return result.rows[0]!;
+}
+
+test('targeted settle inspects and alters only requested relations', async () => {
+  const database = db!;
+  const target = 'growth_capture_test.settle_target';
+  const unrelated = 'growth_capture_test.settle_unrelated';
+  await database.admin.query(`CREATE TABLE ${target} (id integer, body text)`);
+  await database.admin.query(`CREATE TABLE ${unrelated} (id integer, body text)`);
+  const recorded = recordAdminQueries(database);
+  try {
+    await settle(database, { relations: [target] });
+  } finally {
+    recorded.restore();
+  }
+
+  const maintenance = recorded.statements.filter(({ text }) => /pg_class/i.test(text) && /reloptions/i.test(text));
+  expect(maintenance).toHaveLength(1);
+  expect(maintenance[0]!.text).toMatch(/unnest\(\$1::text\[\],\s*\$2::text\[\]\)/);
+  expect(maintenance[0]!.values).toEqual([['growth_capture_test'], ['settle_target']]);
+  const alters = recorded.statements.filter(({ text }) => /^\s*ALTER TABLE\b/i.test(text));
+  expect(alters).toHaveLength(1);
+  expect(alters[0]!.text).toContain('"growth_capture_test"."settle_target"');
+  expect(alters[0]!.text).not.toContain('settle_unrelated');
+
+  const targetOptions = await relationAutovacuum(database, target);
+  expect(targetOptions.reloptions).toContain('autovacuum_enabled=false');
+  expect(targetOptions.toast_reloptions).toContain('autovacuum_enabled=false');
+  const unrelatedOptions = await relationAutovacuum(database, unrelated);
+  expect(
+    unrelatedOptions.reloptions === null || !unrelatedOptions.reloptions.includes('autovacuum_enabled=false'),
+  ).toBe(true);
+});
+
+test('empty settle targets close measured transactions without relation metadata writes', async () => {
+  const database = db!;
+  await database.admin.query('CREATE TABLE growth_capture_test.settle_empty (id integer PRIMARY KEY)');
+  const recorded = recordAdminQueries(database);
+  try {
+    await settle(database, { relations: [] });
+    expect(recorded.statements.filter(({ text }) => /pg_class|ALTER TABLE/i.test(text))).toEqual([]);
+  } finally {
+    recorded.restore();
+  }
+
+  const client: PoolClient = await database.pool.connect();
+  try {
+    const measured = await captureMeasuredRun(() =>
+      capture(
+        database,
+        async () => {
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+          await client.query('SELECT 1');
+        },
+        { includeBackends: true },
+      ),
+    );
+    const whileOpen = recordAdminQueries(database);
+    try {
+      await expect(settle(database, { relations: [], operationBackends: measured.backends })).rejects.toMatchObject({
+        name: 'GrowthSettleInfrastructureError',
+        message: expect.stringContaining('keeps a transaction open'),
+      });
+      expect(whileOpen.statements.some(({ text }) => /pg_class|ALTER TABLE/i.test(text))).toBe(false);
+    } finally {
+      whileOpen.restore();
+    }
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
   }
 });
 
