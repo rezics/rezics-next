@@ -143,7 +143,6 @@ function render(data: LoadedPage, retire = false) {
 function region(canvasElement: HTMLElement, kind: 'changes' | 'units') {
   return within(canvasElement).getByRole('region', {
     name: kind === 'changes' ? m.library_progress_changes() : m.library_progress_units(),
-    exact: true,
   });
 }
 
@@ -220,8 +219,8 @@ export const LaterEmptyIndependentRecovery: Story = {
             : m.library_progress_history_reader_units_page_empty(),
         ),
       ).toBeVisible();
-      const first = await view.findByRole('link', { name: m.library_collections_first_page(), exact: true });
-      const next = view.getByRole('link', { name: m.library_progress_more(), exact: true });
+      const first = await view.findByRole('link', { name: m.library_collections_first_page() });
+      const next = view.getByRole('link', { name: m.library_progress_more() });
       for (const link of [first, next]) {
         const url = new URL(link.getAttribute('href')!, window.location.href);
         const other = kind === 'changes' ? 'units' : 'changes';

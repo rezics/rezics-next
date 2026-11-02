@@ -158,7 +158,6 @@ async function mount(initial: LoadedPage, originating?: ProgressDetailOrigin) {
   const region = (kind: 'changes' | 'units') =>
     view.getByRole('region', {
       name: kind === 'changes' ? m.library_progress_changes() : m.library_progress_units(),
-      exact: true,
     });
   return {
     host,
@@ -340,8 +339,8 @@ test('First/later empty pages are honest and each first/next link preserves the 
               : m.library_progress_history_reader_units_page_empty();
           expect(region.textContent).toContain(cursor || next ? pageEmpty : empty);
           if (cursor || next) expect(region.textContent).not.toContain(empty);
-          const first = within(region).queryByRole('link', { name: m.library_collections_first_page(), exact: true });
-          const more = within(region).queryByRole('link', { name: m.library_progress_more(), exact: true });
+          const first = within(region).queryByRole('link', { name: m.library_collections_first_page() });
+          const more = within(region).queryByRole('link', { name: m.library_progress_more() });
           expect(!!first).toBe(cursor);
           expect(!!more).toBe(next);
           for (const link of [first, more].filter((value) => value !== null)) {
@@ -417,7 +416,7 @@ test('Admitted first-page recovery navigates independently for changes and units
     const initial = { ...page(), changesCursor: cursors.changes, unitsCursor: cursors.units };
     const h = await mount(initial);
     try {
-      const first = within(h.region(kind)).getByRole('link', { name: m.library_collections_first_page(), exact: true });
+      const first = within(h.region(kind)).getByRole('link', { name: m.library_collections_first_page() });
       await act(async () => h.user.click(first));
       expect(h.router.state.location.pathname).toBe(`/library/progress/${initial.session.id}`);
       expect(h.router.state.location.search).toEqual({
