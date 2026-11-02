@@ -3330,7 +3330,8 @@ Source contracts: the Commerce owner README's financial-evidence and recorded-di
 the generated payout client and existing statement fixtures/pages. No external reference source applies.
 Focused recovery acceptance lives in `tests/creator-statement-current-read.test.ts` and `tests/creator-statements.test.ts`.
 
-Decision: statement recovery uses the [shared creator read and command admission contract](#creator-read-and-command-admission); healthy reads require
+Decision: statement recovery uses the
+[shared creator read and command admission contract](#creator-read-and-command-admission); healthy reads require
 no CSRF, and payment mutations retain their original credential, operands and request identity.
 
 ### Creator statement addresses
