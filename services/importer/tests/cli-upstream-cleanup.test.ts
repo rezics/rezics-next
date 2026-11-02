@@ -39,6 +39,23 @@ async function fixture() {
   }) as typeof fetch;
   const invoke = (stdin: AsyncIterable<Uint8Array>, signal?: AbortSignal) =>
     runImportCli(args, { stdin, ...(signal ? { signal } : {}), fetch: fetchBoundary });
+  const baseline = () =>
+    runImportCli(args, {
+      stdin: completeIgnoredInput(),
+      fetch: (async (input, init) => {
+        const { origin, pathname } = new URL(input instanceof Request ? input.url : String(input));
+        const method = input instanceof Request ? input.method : (init?.method ?? 'GET');
+        if (origin === 'https://auth.rezics.test' && method === 'POST') {
+          if (pathname === '/signin/key')
+            return Response.json({}, { headers: { 'set-cookie': 'session=fixture; Secure; HttpOnly' } });
+          if (pathname === '/token')
+            return Response.json({ access_token: 'fixture', token_type: 'Bearer', expires_in: 300 });
+        }
+        if (origin === 'https://api.rezics.test' && pathname === '/v1/sourceFences:check' && method === 'GET')
+          return Response.json({ fenced: false, securityRevision: null });
+        throw new Error('Only Auth and fence reads are allowed while establishing the baseline');
+      }) as typeof fetch,
+    });
   const snapshot = () => {
     const db = new Database(state, { readonly: true });
     try {
@@ -53,7 +70,7 @@ async function fixture() {
       db.close();
     }
   };
-  return { dir, invoke, snapshot, requests: () => requests };
+  return { dir, invoke, baseline, snapshot, requests: () => requests };
 }
 
 function completeIgnoredInput(): AsyncIterable<Uint8Array> {
@@ -99,8 +116,8 @@ for (const cleanup of ['never settles', 'rejects late', 'queued generator return
       },
     };
     try {
-      // A complete ignored source member establishes a real local baseline without HTTP replies.
-      expect((await f.invoke(completeIgnoredInput())).code).toBe(0);
+      // Complete ignored members still require public fence reads; interrupted acquisition forbids all HTTP.
+      expect((await f.baseline()).code).toBe(0);
       const before = f.snapshot();
       expect(before.members).toHaveLength(1);
       const run = f.invoke(stdin, controller.signal);
@@ -115,7 +132,7 @@ for (const cleanup of ['never settles', 'rejects late', 'queued generator return
       await new Promise<void>((resolve) => setImmediate(resolve));
       if (cleanup === 'queued generator return') expect(generatorClosed).toBe(true);
       // The same source guard can be acquired normally in this same process.
-      expect((await f.invoke(completeIgnoredInput())).code).toBe(0);
+      expect((await f.baseline()).code).toBe(0);
       expect(f.snapshot().members).toEqual(before.members);
       expect(f.snapshot().owners).toEqual([]);
       expect(f.requests()).toBe(0);
