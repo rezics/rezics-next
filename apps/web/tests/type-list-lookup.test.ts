@@ -19,9 +19,15 @@ test('lookup skips malformed and unsupported structure while keeping supported l
     { type: 'Stack', props: { id: 'broken', children: hidden } },
     { type: 'Stack', props: { id: 'empty' } },
     { type: 'Stack', props: { id: 'ok', gap: 'sm', children: [null, kept, list('later')] } },
+    {
+      type: 'Columns',
+      props: { id: 'cols', split: 'even', start: [list('from-start')], end: [list('from-end')] },
+    },
   ]);
   expect(findTypeList(document, 'kept')).toEqual(kept);
   expect(findTypeList(document, 'later')?.props.id).toBe('later');
+  expect(findTypeList(document, 'from-start')?.props.id).toBe('from-start');
+  expect(findTypeList(document, 'from-end')?.props.id).toBe('from-end');
   expect(findTypeList(document, 'hidden')).toBeUndefined();
   expect(findTypeList(page({ type: 'TypeList', props: { id: 'root' } }), 'root')).toBeUndefined();
 });

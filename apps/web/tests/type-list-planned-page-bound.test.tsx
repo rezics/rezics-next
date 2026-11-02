@@ -36,14 +36,17 @@ function hrefInHtml(href: string) {
   return href.replaceAll('&', '&amp;');
 }
 
-function renderList(body: unknown, options: { limit: number; full?: boolean; target: TypeListTarget }) {
+function renderList(
+  body: unknown,
+  options: { limit: number; full?: boolean; target: TypeListTarget; read?: unknown },
+) {
   const value = {
     locale: 'en',
     subject: null,
     unlabelled: 'Unlabelled subject',
     reader: { suitability: 'blur' },
     labels: { cover: 'Cover' },
-    sections: new Map([[node, { ok: true, read: plannedRead(options.limit), body }]]),
+    sections: new Map([[node, { ok: true, read: options.read ?? plannedRead(options.limit), body }]]),
   };
   return renderToString(
     createElement(
@@ -108,4 +111,21 @@ test('exactly-at-limit and sparse TypeList pages retain order, labels, targets a
     expect(empty).not.toContain('role="alert"');
     expect(empty).not.toContain('data-slot="next-page"');
   }
+});
+
+test('a non-search descriptor makes the TypeList unavailable as a whole before slicing or continuation', () => {
+  const cursor = 'non-search-cursor';
+  const body = { subjects: [hit(0, 'Native first'), hit(1, 'Native last')], next: cursor };
+  const html = renderList(body, {
+    limit: 2,
+    target: routeTarget,
+    read: { kind: 'links', id: ids[0], property: 'schema:author', limit: 2 },
+  });
+  expect(html).toContain('role="alert"');
+  expect(html).toContain(hrefInHtml(typeListHref('en', routeTarget, node)));
+  expect(html).not.toContain('Native first');
+  expect(html).not.toContain('Native last');
+  expect(html).not.toContain('role="status"');
+  expect(html).not.toContain('data-slot="next-page"');
+  expect(html).not.toContain(cursor);
 });

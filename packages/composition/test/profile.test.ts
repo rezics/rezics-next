@@ -12,6 +12,7 @@ import {
   resolveTemplate,
   validateProfile,
 } from '../src/index.ts';
+import platform from '../profiles/platform.json' with { type: 'json' };
 
 const page = (id: string, text: string) => ({
   root: { props: {} },
@@ -192,4 +193,23 @@ test('templates resolve by route, then type, then structural bases nearest first
   expect(pick({ type: 'schema:Person' })).toEqual({ scope: 'generic', key: null, id: 'generic' });
   expect(pick({ route: '/unknown' })).toEqual({ scope: 'generic', key: null, id: 'generic' });
   expect(pick({})).toEqual({ scope: 'generic', key: null, id: 'generic' });
+});
+
+test('the shipped platform profile validates against the shared registry and lists each launch vertical', () => {
+  const value = platform as PresentationProfile;
+  expect(validateProfile(platformRegistry, value)).toEqual([]);
+  const home = resolveTemplate(value, { route: '/' });
+  expect(home).toMatchObject({ scope: 'route', key: '/' });
+  expect(
+    home.document.content
+      .filter((node) => node.type === 'TypeList')
+      .map((node) => [node.props.id, node.props.types, node.props.limit]),
+  ).toEqual([
+    ['books', ['schema:Book'], 12],
+    ['anime', ['schema:TVSeries', 'schema:Movie'], 12],
+    ['visual-novels', ['wd:Q689445'], 12],
+    ['recipes', ['schema:Recipe'], 12],
+  ]);
+  expect(resolveTemplate(value, { type: 'schema:Recipe' }).scope).toBe('type');
+  expect(resolveTemplate(value, { type: 'schema:Book', bases: ['schema:CreativeWork'] }).scope).toBe('base');
 });
