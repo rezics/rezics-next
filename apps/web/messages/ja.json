@@ -563,7 +563,7 @@
   "library_following": "フォロー中",
   "library_following_collections": "コレクション",
   "library_following_empty": "ここにはフォロー中の項目は表示されていません。",
-  "library_following_page_empty": "このページにはフォロー中の項目は表示されていません。次のページに他のフォローがある可能性があります。",
+  "library_following_page_empty": "このページにはフォロー中の項目は表示されていません。",
   "library_following_heading": "フォロー中",
   "library_following_kind_collection": "コレクション",
   "library_following_kind_space": "スペース",

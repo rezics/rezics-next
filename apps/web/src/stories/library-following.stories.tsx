@@ -75,7 +75,11 @@ export const AfterLastUnfollow: Story = {
       body.getByRole('button', { name: m.library_follow_unfollow() });
     await userEvent.click(remove);
     await expect(canvas.getByText(m.library_follow_removed())).toBeVisible();
-    await expect(canvas.getByText(m.library_following_empty())).toBeVisible();
+    await expect(canvas.getByText(m.library_following_page_empty())).toBeVisible();
+    await expect(canvas.getByRole('link', { name: m.library_collections_first_page() })).toHaveAttribute(
+      'href',
+      /\/library\/following$/,
+    );
     await expect(canvas.getByRole('link', { name: m.search_heading() })).toHaveAttribute('href', /\/search$/);
     await expect(canvas.queryByRole('link', { name: 'Kokoro' })).toBeNull();
   },

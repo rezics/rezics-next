@@ -26,6 +26,8 @@ export type MineFollowingPage = {
   signedIn: boolean;
   follows: MineFollow[];
   next: string | null;
+  /** A successful native stale-cursor fallback; the requested address remains unchanged. */
+  cursorReset?: true;
 };
 
 function present(follow: RawFollow): MineFollow {
@@ -59,13 +61,20 @@ export async function loadMineFollowingPage(
     return readLibraryResult(result);
   };
   let page: FollowRead;
+  let cursorReset = false;
   try {
     page = await read(input.cursor);
   } catch (error) {
     if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
     page = await read();
+    cursorReset = true;
   }
-  return { signedIn: true, follows: page.follows.map(present), next: page.next };
+  return {
+    signedIn: true,
+    follows: page.follows.map(present),
+    next: page.next,
+    ...(cursorReset ? { cursorReset: true } : {}),
+  };
 }
 
 /** Applies one unfollow after the session's CSRF token and bearer credential have been checked. */

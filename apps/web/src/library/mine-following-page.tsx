@@ -131,6 +131,7 @@ export function CurrentViewerMineFollowingPage({
     <div hidden={origin.hydrated && !origin.allowed[0]}>
       <MineFollowingPageView
         page={page}
+        cursor={address.cursor}
         origin={rowOrigin}
         status={status}
         onRetry={
@@ -147,19 +148,23 @@ export function CurrentViewerMineFollowingPage({
 
 export function MineFollowingPageView({
   page,
+  cursor,
   origin,
   status,
   onRetry,
 }: {
   page: MineFollowingPage;
+  cursor?: string | null | undefined;
   origin?: HistoryOrigin;
   status?: 'unavailable' | 'preparing' | undefined;
   onRetry?: (() => void) | undefined;
 }) {
+  const requestedCursor = cursor && cursor.length <= 2048 ? cursor : null;
   // A meaningful row/page replacement retires local removal callbacks during render. Equivalent
   // refetches (including freshly issued keys) preserve the native control's uncertain intent.
   const lifetime = JSON.stringify({
     ...page,
+    cursor: requestedCursor,
     follows: page.follows.map(({ idempotencyKey: _key, ...follow }) => follow),
   });
   const ref = useRef({
@@ -184,16 +189,27 @@ export function MineFollowingPageView({
     lifetime: row,
     isCurrent: () => row.active && row.mounted && (origin?.isCurrent() ?? true),
   };
-  return <MineFollowingPageState key={row.id} page={page} origin={originating} status={status} onRetry={onRetry} />;
+  return (
+    <MineFollowingPageState
+      key={row.id}
+      page={page}
+      cursor={requestedCursor}
+      origin={originating}
+      status={status}
+      onRetry={onRetry}
+    />
+  );
 }
 
 function MineFollowingPageState({
   page,
+  cursor,
   origin,
   status,
   onRetry,
 }: {
   page: MineFollowingPage;
+  cursor: string | null;
   origin: HistoryOrigin;
   status?: 'unavailable' | 'preparing' | undefined;
   onRetry?: (() => void) | undefined;
@@ -204,6 +220,8 @@ function MineFollowingPageState({
   const [removed, setRemoved] = useState(false);
 
   const active = page.signedIn ? follows.filter((follow) => follow.state === 'following') : [];
+  const restart = !!cursor || !!page.cursorReset || removed;
+  const firstPageEmpty = !restart && !page.next;
   const groups = [
     { type: 'subject' as const, label: m.library_following_subjects() },
     { type: 'collection' as const, label: m.library_following_collections() },
@@ -225,6 +243,7 @@ function MineFollowingPageState({
           ) : null}
         </div>
       ) : null}
+      {page.signedIn && page.cursorReset ? <p role="status">{m.library_collections_cursor_reset()}</p> : null}
       {page.signedIn && removed ? <p role="status">{m.library_follow_removed()}</p> : null}
       {active.length ? (
         <div className="space-y-8">
@@ -301,7 +320,7 @@ function MineFollowingPageState({
         <Empty>
           <EmptyHeader>
             <EmptyDescription>
-              {page.next ? m.library_following_page_empty() : m.library_following_empty()}
+              {firstPageEmpty ? m.library_following_empty() : m.library_following_page_empty()}
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
@@ -311,19 +330,33 @@ function MineFollowingPageState({
           </EmptyContent>
         </Empty>
       ) : null}
-      {page.signedIn && page.next ? (
+      {page.signedIn && (page.next || restart) ? (
         <Exposure operation="follow.list">
-          <nav aria-label={m.library_following_heading()}>
-            <Link
-              to="/library/following"
-              search={{ cursor: page.next }}
-              onClick={(event) => {
-                if (!origin.isCurrent()) event.preventDefault();
-              }}
-              className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
-            >
-              {m.library_collection_more()}
-            </Link>
+          <nav aria-label={m.library_following_heading()} className="flex flex-wrap items-center gap-3">
+            {page.next ? (
+              <Link
+                to="/library/following"
+                search={{ cursor: page.next }}
+                onClick={(event) => {
+                  if (!origin.isCurrent()) event.preventDefault();
+                }}
+                className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+              >
+                {m.library_collection_more()}
+              </Link>
+            ) : null}
+            {restart ? (
+              <Link
+                to="/library/following"
+                search={{}}
+                onClick={(event) => {
+                  if (!origin.isCurrent()) event.preventDefault();
+                }}
+                className={buttonVariants({ variant: 'outline' })}
+              >
+                {m.library_collections_first_page()}
+              </Link>
+            ) : null}
           </nav>
         </Exposure>
       ) : null}

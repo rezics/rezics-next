@@ -404,3 +404,71 @@ test('Following management has a genuine discovery destination after the last un
     }
   }
 });
+
+// Authored recovery acceptance is intentionally UNRUN in this source-only attempt.
+test('a terminal later Following page is one bounded read without reset metadata or a whole-list count', async () => {
+  const calls: Request[] = [];
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: async (input, init) => {
+      const call = new Request(input, init);
+      calls.push(call);
+      return Response.json({ follows: [], next: null });
+    },
+  });
+  const page = await loadMineFollowingPage(client, pageRequest('/en/library/following'), sessionEnv(), {
+    cursor: 'terminal/page+',
+  });
+  expect(page).toEqual({ signedIn: true, follows: [], next: null });
+  expect(calls).toHaveLength(1);
+  expect(Object.fromEntries(new URL(calls[0]!.url).searchParams)).toEqual({
+    view: 'FULL',
+    limit: '100',
+    cursor: 'terminal/page+',
+  });
+  expect(calls[0]!.headers.get('authorization')).toBe('Bearer alice-page-token');
+  expect(calls[0]!.cache).toBe('no-store');
+  expect(calls[0]!.redirect).toBe('manual');
+});
+
+test('Following marks only a successful single stale-cursor fallback and never retries the fallback or unrelated errors', async () => {
+  for (const fallbackStatus of [200, 409, 503]) {
+    const calls: Request[] = [];
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: async (input, init) => {
+        const call = new Request(input, init);
+        calls.push(call);
+        if (new URL(call.url).searchParams.has('cursor'))
+          return Response.json({ code: 'stale_cursor' }, { status: 409 });
+        return fallbackStatus === 200
+          ? Response.json({ follows: [], next: 'new/next+' })
+          : Response.json(
+              { code: fallbackStatus === 409 ? 'stale_cursor' : 'unavailable' },
+              { status: fallbackStatus },
+            );
+      },
+    });
+    const result = loadMineFollowingPage(client, pageRequest('/en/library/following'), sessionEnv(), {
+      cursor: 'expired/page+',
+    });
+    if (fallbackStatus === 200)
+      expect(await result).toEqual({ signedIn: true, follows: [], next: 'new/next+', cursorReset: true });
+    else await expect(result).rejects.toThrow();
+    expect(calls.map((call) => new URL(call.url).searchParams.get('cursor'))).toEqual(['expired/page+', null]);
+    expect(calls.every((call) => call.headers.get('authorization') === 'Bearer alice-page-token')).toBe(true);
+    expect(calls.every((call) => call.cache === 'no-store' && call.redirect === 'manual')).toBe(true);
+    expect(calls.every((call) => new URL(call.url).searchParams.get('limit') === '100')).toBe(true);
+  }
+  for (const [cursor, status] of [[undefined, 409], ['current/page+', 503]] as const) {
+    let calls = 0;
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: async () => {
+        calls++;
+        return Response.json({ code: status === 409 ? 'stale_cursor' : 'unavailable' }, { status });
+      },
+    });
+    await expect(
+      loadMineFollowingPage(client, pageRequest('/en/library/following'), sessionEnv(), { cursor }),
+    ).rejects.toThrow();
+    expect(calls).toBe(1);
+  }
+});

@@ -414,3 +414,278 @@ test('the mounted default Following composition retires viewer, cursor and row l
     }
   }
 });
+
+test('the actual Following reset envelope preserves the originating prepared viewer and normalized requested address', async () => {
+  current.status = 'active';
+  current.subject = 'reset-owner';
+  current.token = 'reset-owner-token';
+  actualRequest = request();
+  const calls: Request[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const call = new Request(input, init);
+      calls.push(call);
+      current.subject = 'another-viewer-if-reprepared';
+      return new URL(call.url).searchParams.has('cursor')
+        ? Response.json({ code: 'stale_cursor' }, { status: 409 })
+        : Response.json({ follows: [], next: null });
+    },
+  });
+  const transport = spyOn(kernel, 'kernelClient').mockReturnValue(client);
+  try {
+    const before = current.preparations;
+    const result = await actions.readMineFollowingForViewer({ data: { cursor: 'expired/original+address=' } });
+    expect(result).toEqual({
+      subject: 'reset-owner',
+      cursor: 'expired/original+address=',
+      locale: 'en',
+      page: { signedIn: true, follows: [], next: null, cursorReset: true },
+    });
+    expect(current.preparations - before).toBe(1);
+    expect(calls.map((call) => new URL(call.url).searchParams.get('cursor'))).toEqual([
+      'expired/original+address=',
+      null,
+    ]);
+    expect(calls.every((call) => call.headers.get('authorization') === 'Bearer reset-owner-token')).toBe(true);
+    expect(calls.every((call) => call.cache === 'no-store' && call.redirect === 'manual')).toBe(true);
+    expect(responseHeaders.get('cache-control')).toBe('private, no-store');
+    const normal = await actions.readMineFollowingForViewer({ data: { cursor: '' } });
+    expect(normal.cursor).toBeNull();
+    expect(normal.page.cursorReset).toBeUndefined();
+    expect(calls).toHaveLength(3);
+    expect(() => actions.readMineFollowingForViewer({ data: { cursor: 'x'.repeat(2049) } })).toThrow(
+      'Invalid follows cursor',
+    );
+    expect(calls).toHaveLength(3);
+  } finally {
+    transport.mockRestore();
+  }
+});
+
+test('Following recovery stays page-local through terminal pages, last-row removal, stale reset and origin retirement', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: `${origin}/en/library/following`, width: 1280, height: 900 });
+  window.document.documentElement.lang = 'en';
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    Element: window.Element,
+    Node: window.Node,
+    NodeFilter: window.NodeFilter,
+    Document: window.Document,
+    ShadowRoot: window.ShadowRoot,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    Event: window.Event,
+    MouseEvent: window.MouseEvent,
+    PointerEvent: window.PointerEvent,
+    scrollTo: window.scrollTo.bind(window),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
+    await import('@tanstack/react-router');
+  const { sessionQuery, exposureQuery } = await import('../src/session/query');
+  const { mineFollowingQuery } = await import('../src/library/mine-following-page');
+  const { Route } = await import('../src/routes/library/following');
+  const followActions = await import('../src/library/follow-actions');
+  const { m } = await import('../src/paraglide/messages.js');
+  const { getLocale } = await import('../src/paraglide/runtime.js');
+  const reads: (ReturnType<typeof deferred<MineFollowingRead>> & { cursor?: string })[] = [];
+  const writes: ReturnType<typeof deferred<FollowWriteResult>>[] = [];
+  const read = spyOn(actions, 'readMineFollowingForViewer').mockImplementation(({ data }) => {
+    const call = { ...deferred<MineFollowingRead>(), cursor: data.cursor };
+    reads.push(call);
+    return call.promise;
+  });
+  const write = spyOn(followActions, 'setFollow').mockImplementation(() => {
+    const call = deferred<FollowWriteResult>();
+    writes.push(call);
+    return call.promise;
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const viewer = (subject: string) => ({ state: 'signed-in', subject, csrfToken: 'current-csrf' });
+  client.setQueryData(sessionQuery.queryKey, viewer('A'));
+  client.setQueryData(exposureQuery.queryKey, ['personal_library']);
+  const initial = loaded('A', 'terminal/page+', 'Last visible row', null);
+  const retainedLoader = spyOn(Route, 'useLoaderData').mockReturnValue(initial);
+  const rootRoute = createRootRoute();
+  const route = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/library/following',
+    component: Route.options.component!,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([route]),
+    history: createMemoryHistory({ initialEntries: ['/library/following?cursor=terminal%2Fpage%2B'] }),
+  });
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
+  const settle = <T,>(call: ReturnType<typeof deferred<T>>, result: T) =>
+    act(async () => {
+      call.resolve(result);
+      await tick();
+    });
+  const restart = () =>
+    [...host.querySelectorAll<HTMLAnchorElement>('nav a')].find(
+      (link) => link.textContent === m.library_collections_first_page(),
+    );
+  const expectPageEmpty = () => {
+    expect(host.querySelector('[data-slot="list-row"]')).toBeNull();
+    expect(host.textContent).toContain(m.library_following_page_empty());
+    expect(host.textContent).not.toContain(m.library_following_empty());
+    expect(host.querySelector('[data-slot="empty"] a')?.getAttribute('href')).toBe('/en/search');
+    expect(new URL(restart()!.href).pathname).toBe('/library/following');
+    expect(new URL(restart()!.href).searchParams.has('cursor')).toBe(false);
+  };
+  const expectRetired = () => {
+    expect(host.querySelector('[data-slot="list-row"], [data-slot="follow-control"], nav')).toBeNull();
+    expect(host.textContent).not.toContain(m.library_collections_cursor_reset());
+    expect(host.textContent).not.toContain(m.library_follow_removed());
+    expect(host.textContent).not.toContain(m.library_following_empty());
+    expect(host.textContent).not.toContain(m.library_following_page_empty());
+  };
+  const navigate = (cursor: string) =>
+    act(async () => {
+      await router.navigate({ to: '/library/following', search: { cursor } });
+      await tick();
+    });
+  const refetch = (subject: string, cursor: string) =>
+    act(async () => {
+      void client.refetchQueries({ queryKey: mineFollowingQuery(subject, cursor, getLocale()).queryKey });
+      await tick();
+    });
+  const remove = async () => {
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click();
+      await tick();
+    });
+    const action = window.document.querySelector<HTMLElement>('[role="menuitem"]');
+    expect(action?.textContent).toBe(m.library_follow_unfollow());
+    await act(async () => {
+      action!.click();
+      await tick();
+    });
+  };
+  try {
+    await router.load();
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+      await tick();
+    });
+    expect(reads).toHaveLength(1);
+    await settle(reads[0]!, initial);
+    expect(host.textContent).toContain('Last visible row');
+    expect(restart()).toBeDefined(); // Populated later pages also have a way back.
+    const beforeRemoval = reads.length;
+    await remove();
+    await settle(writes[0]!, { ok: true, following: false });
+    expectPageEmpty();
+    expect(host.textContent).toContain(m.library_follow_removed());
+    expect(reads).toHaveLength(beforeRemoval); // No discovery of other pages after a local removal.
+
+    await act(async () => {
+      restart()!.click();
+      await tick();
+    });
+    expect(router.state.location.search).toEqual({});
+    expectRetired();
+    expect(reads.at(-1)!.cursor).toBeUndefined();
+    const firstEmpty = loaded('A', null, 'Unused', null);
+    firstEmpty.page.follows = [];
+    await settle(reads.at(-1)!, firstEmpty);
+    expect(host.textContent).toContain(m.library_following_empty());
+    expect(host.textContent).not.toContain(m.library_following_page_empty());
+    expect(restart()).toBeUndefined();
+
+    await navigate('empty/terminal+');
+    const terminal = loaded('A', 'empty/terminal+', 'Unused', null);
+    terminal.page.follows = [];
+    await settle(reads.at(-1)!, terminal);
+    expectPageEmpty();
+    expect(host.textContent).not.toContain(m.library_follow_removed());
+    expect(host.textContent).not.toContain(m.library_collections_cursor_reset());
+
+    await navigate('expired/page+');
+    const reset = loaded('A', 'expired/page+', 'Reset first-page row', 'bounded/next+');
+    reset.page.cursorReset = true;
+    await settle(reads.at(-1)!, reset);
+    expect(host.textContent).toContain(m.library_collections_cursor_reset());
+    expect(host.textContent).toContain('Reset first-page row');
+    expect(router.state.location.search).toEqual({ cursor: 'expired/page+' });
+    const oldRestart = restart()!;
+    const oldNext = host.querySelector<HTMLAnchorElement>('nav a')!;
+    expect(new URL(oldNext.href).searchParams.get('cursor')).toBe('bounded/next+');
+    await remove();
+    const oldRemoval = writes.at(-1)!;
+    await refetch('A', 'expired/page+');
+    const oldRead = reads.at(-1)!;
+    const beforeRetirement = reads.length;
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, viewer('B'));
+      // Exercise still-connected old handlers before React replaces the retired page.
+      oldRestart.click();
+      oldNext.click();
+      await tick();
+    });
+    expectRetired();
+    expect(router.state.location.search).toEqual({ cursor: 'expired/page+' });
+    expect(reads).toHaveLength(beforeRetirement + 1);
+    const bRead = reads.at(-1)!;
+    await settle(oldRead, reset);
+    await settle(oldRemoval, { ok: true, following: false });
+    expectRetired();
+    await settle(bRead, reset); // A reset is presentation metadata, never authority for another viewer.
+    expectRetired();
+    expect(host.textContent).toContain(m.library_follow_unavailable());
+    await refetch('B', 'expired/page+');
+    const wrongAddress = loaded('B', null, 'Wrong reset address', null);
+    wrongAddress.page.cursorReset = true;
+    await settle(reads.at(-1)!, wrongAddress);
+    expectRetired();
+    expect(host.textContent).not.toContain('Wrong reset address');
+    await refetch('B', 'expired/page+');
+    const currentReset = loaded('B', 'expired/page+', 'Unused', null);
+    currentReset.page.follows = [];
+    currentReset.page.cursorReset = true;
+    await settle(reads.at(-1)!, currentReset);
+    expectPageEmpty();
+    expect(host.textContent).toContain(m.library_collections_cursor_reset());
+    expect(host.textContent).not.toContain(m.library_follow_removed());
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
+      await tick();
+    });
+    expectRetired();
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    read.mockRestore();
+    write.mockRestore();
+    retainedLoader.mockRestore();
+    await window.happyDOM.close();
+    for (const [name, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else Reflect.deleteProperty(globalThis, name);
+    }
+  }
+});
