@@ -3903,7 +3903,7 @@
   "screen_title": "Film, television and episode editor",
   "screen_edit": "Edit film, television or episode",
   "screen_previous_reading": "Previously loaded reading",
-  "screen_refresh_failed": "The current reading could not be refreshed. The previously loaded facts may be out of date. Your local corrections and pending requests are kept. Retry to read the current facts.",
+  "screen_refresh_failed": "The current reading is unavailable. Your private corrections and pending requests are kept. Retry to read the current facts before continuing.",
   "screen_intro": "Choose the actual film, series, season or episode. An independently identified publication belongs in the separate edition or release editor. Credits stay with the object they describe.",
   "screen_native_help": "Use the offered date precision and exact duration unit. Episode position describes the work, separate from personal viewing progress. Only released fields are offered.",
   "screen_credits": "Creators and cast",

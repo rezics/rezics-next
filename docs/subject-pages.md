@@ -353,6 +353,7 @@ unavailable and uncertain delivery. Failed drafts remain available; uncertain/un
 and retain their exact body/key for retry. Definite failures can be edited into a new explicit intent. Later submits
 retry only unresolved included fields and never replay a confirmed success. Refresh preserves drafts and keys;
 current concealment or failure hides the workspace until a readable response is available again.
+Screen correction also retains only private editor holders across refusal, including concealment; only a fresh matching read restores identity, selected evidence, nested editors and explicit sealed retries.
 Literary creation retains metadata only for its drafts; a refused or unavailable page or scalar current subject read removes identity, facts and editor markup, permanently retires old callbacks/results, and retains private drafts and exact sealed retries until a fresh matching read restores editing; relation and authored holders reread their original addresses before resuming.
 
 A successful field offers its exact returned candidate at

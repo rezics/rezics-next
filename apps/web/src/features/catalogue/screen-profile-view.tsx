@@ -1,6 +1,11 @@
-import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import {
+  CatalogueCurrentReading,
+  catalogueEditor,
+  useEditorLifetime,
+  useCurrentReadingActive,
+} from './editor-lifetime';
 import { useMemo, useRef, useState, type ComponentProps } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -19,6 +24,7 @@ import { SubjectFacts } from './subject-facts-view';
 import type { FactsTransport } from './subject-facts';
 import { RelationEditor } from './relation-editor';
 import { EditorFailure } from './statement-editor-view';
+import type { EditorRead } from './statement-editor';
 import { ScreenInitialFields, screenCreationControl, screenGroupLabel, type ScreenRow } from './screen-profile-fields';
 import {
   screenCreateTypes,
@@ -140,8 +146,10 @@ function ScreenProfileLive({
 }) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
+  const client = useQueryClient();
+  const queryKey = ['screen-profile', id, locale, lifetime.generation];
   const query = useQuery({
-    queryKey: [...['screen-profile', id, locale], lifetime.generation],
+    queryKey,
     queryFn: transport.load,
     retry: false,
     refetchOnWindowFocus: false,
@@ -151,25 +159,41 @@ function ScreenProfileLive({
   });
   const [drafts, setDrafts] = useState<Record<string, ScreenRow[]>>({});
   const retained = useRef<Extract<ScreenRead, { ok: true }>>(undefined);
-  if (query.data?.ok) retained.current = query.data;
-  else if (id && query.data && query.data.reason !== 'unavailable') retained.current = undefined;
-  // A failed creation metadata refresh must not unmount the term/fact drafts or their frozen request.
-  // Existing readers also retain local work on transient failure; concealment retires that reading.
+  // Creation metadata is private draft scaffolding, never an existing subject's authority.
+  if (!id && query.data?.ok) retained.current = query.data;
   const read = query.data?.ok ? query.data : retained.current;
-  const refreshFailed = !!id && (query.isError || query.data?.ok === false);
-  const current = useMemo(
-    () => (read?.public ? { ok: true as const, release: read.release, public: read.public, source: null } : null),
-    [read],
-  );
-  const subject = read?.public?.subject;
-  const label = pickText(subject?.labels ?? {}, locale);
-  const href = subject ? subjectHref({ id: subject.id, label: label.text }, locale).href : '';
+  const admitted = !query.isError && query.data?.ok && query.data.public?.subject.id === id ? query.data : undefined;
   const intro = (
     <div className="space-y-2 text-sm text-muted-foreground">
       <p>{m.screen_intro({}, o)}</p>
       <p>{m.screen_native_help({}, o)}</p>
     </div>
   );
+  if (id)
+    return (
+      <ScreenCorrection
+        id={id}
+        locale={locale}
+        session={session}
+        transport={transport}
+        search={search}
+        read={admitted}
+        pending={query.isPending}
+        fetching={query.isFetching}
+        failure={query.data && !query.data.ok ? query.data.reason : 'unavailable'}
+        reload={() => lifetime.active() && void query.refetch({ cancelRefetch: false })}
+        intro={intro}
+        observe={(next) => {
+          if (lifetime.active())
+            client.setQueryData<ScreenRead>(
+              queryKey,
+              next.ok && next.public.subject.id === id
+                ? { ok: true, release: next.release, public: next.public }
+                : { ok: false, reason: !next.ok && next.reason === 'denied' ? 'concealed' : 'unavailable' },
+            );
+        }}
+      />
+    );
   if (!read)
     return (
       <article className="mx-auto w-full max-w-4xl min-w-0 space-y-5 p-4 sm:p-6">
@@ -248,136 +272,223 @@ function ScreenProfileLive({
         />
       </div>
     );
-  if (!subject || !current) return <EditorFailure locale={locale} reason="unavailable" />;
-  const readingTitle = refreshFailed ? m.screen_previous_reading({}, o) : m.candidate_current({}, o);
+}
+
+/** Keep only the private holders mounted across refusal, with no retained public display authority. */
+function ScreenCorrection({
+  id,
+  locale,
+  session,
+  transport,
+  search,
+  read,
+  pending,
+  fetching,
+  failure,
+  reload,
+  intro,
+  observe,
+}: {
+  id: string;
+  locale: string;
+  session: string;
+  transport: ScreenTransport;
+  search: EntityPickerSearch;
+  read: Extract<ScreenRead, { ok: true }> | undefined;
+  pending: boolean;
+  fetching: boolean;
+  failure: Extract<ScreenRead, { ok: false }>['reason'];
+  reload: () => void;
+  intro: React.ReactNode;
+  observe: (next: EditorRead) => void;
+}) {
+  const o = { locale: locale as never };
+  const current = useMemo(
+    () => (read?.public ? { ok: true as const, release: read.release, public: read.public, source: null } : null),
+    [read],
+  );
+  const retained = useRef<NonNullable<typeof current>>(undefined);
+  if (current) retained.current = current;
+  const privateCurrent = retained.current;
+  const subject = current?.public.subject;
+  const label = pickText(subject?.labels ?? {}, locale);
+  const href = subject ? subjectHref({ id: subject.id, label: label.text }, locale).href : '';
+  const visible = !!current && session === 'signed-in';
+  const readingTitle = m.candidate_current({}, o);
   return (
-    <article className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6 [&_h2]:font-sans [&_h3]:font-sans">
-      <ViewHeadingActions label={m.screen_edit({}, o)} headingClassName="font-sans" />
-      <div className="min-w-0 space-y-2" aria-busy={query.isFetching}>
-        {refreshFailed && <p role="alert">{m.screen_refresh_failed({}, o)}</p>}
-        {query.isFetching && <p role="status">{m.candidate_loading({}, o)}</p>}
-        <Button
-          className={screenActionClassName}
-          disabled={query.isFetching}
-          onClick={() => void query.refetch({ cancelRefetch: false })}
-        >
-          {refreshFailed ? m.correction_retry({}, o) : m.candidate_reload({}, o)}
-        </Button>
-      </div>
-      <header className="min-w-0 space-y-3">
-        <a
-          href={href}
-          lang={label.lang ?? undefined}
-          className="inline-flex min-h-11 min-w-11 max-w-full items-center [overflow-wrap:anywhere] py-1 font-sans text-2xl font-semibold underline md:pointer-fine:min-h-8"
-        >
-          {label.text || m.subject_value_unlabelled({}, o)}
-        </a>
-        <p
-          lang={pickText(read.release.types[subject.type]?.labels ?? {}, locale).lang ?? undefined}
-          className="min-w-0 max-w-full [overflow-wrap:anywhere]"
-        >
-          {pickText(read.release.types[subject.type]?.labels ?? {}, locale).text}
-        </p>
-        {intro}
-        <nav
-          className="flex min-w-0 flex-wrap items-start gap-2 [&>a]:h-auto [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:py-2 [&>a]:[overflow-wrap:anywhere] md:pointer-fine:[&>a]:min-h-8 md:pointer-fine:[&>a]:py-1"
-          aria-label={m.facts_other_editors({}, o)}
-        >
-          <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={href}>
-            {m.candidate_view_public({}, o)}
-          </a>
-          <SubjectTermsEntry id={id} label={label.text} locale={locale} />
-          <PublicationEditorEntry work={id} locale={locale} />
-        </nav>
-      </header>
-      <section className="min-w-0 space-y-5" aria-label={readingTitle}>
-        <h2 className="text-xl font-semibold">{readingTitle}</h2>
-        {Object.entries(readingGroups(current))
-          .filter(([, fields]) => fields.length)
-          .map(([group, fields]) => (
-            <section key={group} className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
-              <h3 className="min-w-0 max-w-full text-lg font-semibold [overflow-wrap:anywhere]">
-                {screenGroupLabel(group as ScreenGroup, locale)}
-              </h3>
-              <dl className="min-w-0 space-y-4">
-                {fields.map((property) => (
-                  <div key={property} className="min-w-0 space-y-2">
-                    <dt
-                      lang={readingName(current, property, locale).lang ?? undefined}
-                      className="min-w-0 max-w-full font-medium [overflow-wrap:anywhere]"
-                    >
-                      {readingName(current, property, locale).text}
-                    </dt>
-                    <dd className="min-w-0 max-w-full space-y-3 text-sm [overflow-wrap:anywhere]">
-                      {!subject.statements[property]?.length && (
-                        <p className="text-muted-foreground">{m.facts_no_value({}, o)}</p>
-                      )}
-                      {(subject.statements[property] ?? []).map((statement, index) => (
-                        <div key={statement.id} className="min-w-0 space-y-2">
-                          <p className="font-medium">{m.facts_selected_value({ number: index + 1 }, o)}</p>
-                          <p className="text-muted-foreground">
-                            {m.candidate_rank({}, o)}:{' '}
-                            {statement.rank === 'preferred'
-                              ? m.candidate_rank_preferred({}, o)
-                              : statement.rank === 'deprecated'
-                                ? m.changes_rank_deprecated({}, o)
-                                : m.candidate_rank_normal({}, o)}
-                          </p>
-                          <ScreenPart part={statement} read={current} locale={locale} />
-                          <ScreenParts parts={statement.qualifiers} read={current} locale={locale} />
-                          <ol className="min-w-0 space-y-2">
-                            {statement.references.map((reference, index) => (
-                              <li key={index} className="min-w-0 max-w-full border-s-2 ps-3 [overflow-wrap:anywhere]">
+    <CatalogueCurrentReading visible={visible} ready={visible} revision={id}>
+      <article className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6 [&_h2]:font-sans [&_h3]:font-sans">
+        <ViewHeadingActions label={m.screen_edit({}, o)} headingClassName="font-sans" />
+        <div className="min-w-0 space-y-2" aria-busy={fetching}>
+          {!current && !pending && (
+            <>
+              <p role="alert">{m.screen_refresh_failed({}, o)}</p>
+              {failure === 'concealed' ? (
+                <p role="alert">{m.catalogue_create_concealed({}, o)}</p>
+              ) : (
+                <EditorFailure locale={locale} reason={failure} />
+              )}
+            </>
+          )}
+          {(pending || fetching) && <p role="status">{m.candidate_loading({}, o)}</p>}
+          <Button className={screenActionClassName} disabled={fetching} onClick={reload}>
+            {current ? m.candidate_reload({}, o) : m.correction_retry({}, o)}
+          </Button>
+        </div>
+        {subject && current && read && (
+          <>
+            <header className="min-w-0 space-y-3">
+              <a
+                href={href}
+                lang={label.lang ?? undefined}
+                className="inline-flex min-h-11 min-w-11 max-w-full items-center [overflow-wrap:anywhere] py-1 font-sans text-2xl font-semibold underline md:pointer-fine:min-h-8"
+              >
+                {label.text || m.subject_value_unlabelled({}, o)}
+              </a>
+              <p
+                lang={pickText(read.release.types[subject.type]?.labels ?? {}, locale).lang ?? undefined}
+                className="min-w-0 max-w-full [overflow-wrap:anywhere]"
+              >
+                {pickText(read.release.types[subject.type]?.labels ?? {}, locale).text}
+              </p>
+              {intro}
+              <nav
+                className="flex min-w-0 flex-wrap items-start gap-2 [&>a]:h-auto [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:py-2 [&>a]:[overflow-wrap:anywhere] md:pointer-fine:[&>a]:min-h-8 md:pointer-fine:[&>a]:py-1"
+                aria-label={m.facts_other_editors({}, o)}
+              >
+                <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={href}>
+                  {m.candidate_view_public({}, o)}
+                </a>
+                <SubjectTermsEntry id={id} label={label.text} locale={locale} />
+                <PublicationEditorEntry work={id} locale={locale} />
+              </nav>
+            </header>
+            <section className="min-w-0 space-y-5" aria-label={readingTitle}>
+              <h2 className="text-xl font-semibold">{readingTitle}</h2>
+              {Object.entries(readingGroups(current))
+                .filter(([, fields]) => fields.length)
+                .map(([group, fields]) => (
+                  <section key={group} className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
+                    <h3 className="min-w-0 max-w-full text-lg font-semibold [overflow-wrap:anywhere]">
+                      {screenGroupLabel(group as ScreenGroup, locale)}
+                    </h3>
+                    <dl className="min-w-0 space-y-4">
+                      {fields.map((property) => (
+                        <div key={property} className="min-w-0 space-y-2">
+                          <dt
+                            lang={readingName(current, property, locale).lang ?? undefined}
+                            className="min-w-0 max-w-full font-medium [overflow-wrap:anywhere]"
+                          >
+                            {readingName(current, property, locale).text}
+                          </dt>
+                          <dd className="min-w-0 max-w-full space-y-3 text-sm [overflow-wrap:anywhere]">
+                            {!subject.statements[property]?.length && (
+                              <p className="text-muted-foreground">{m.facts_no_value({}, o)}</p>
+                            )}
+                            {(subject.statements[property] ?? []).map((statement, index) => (
+                              <div key={statement.id} className="min-w-0 space-y-2">
+                                <p className="font-medium">{m.facts_selected_value({ number: index + 1 }, o)}</p>
                                 <p className="text-muted-foreground">
-                                  {m.correction_references({}, o)} {index + 1}
+                                  {m.candidate_rank({}, o)}:{' '}
+                                  {statement.rank === 'preferred'
+                                    ? m.candidate_rank_preferred({}, o)
+                                    : statement.rank === 'deprecated'
+                                      ? m.changes_rank_deprecated({}, o)
+                                      : m.candidate_rank_normal({}, o)}
                                 </p>
-                                <ScreenParts parts={reference.parts} read={current} locale={locale} />
-                              </li>
+                                <ScreenPart part={statement} read={current} locale={locale} />
+                                <ScreenParts parts={statement.qualifiers} read={current} locale={locale} />
+                                <ol className="min-w-0 space-y-2">
+                                  {statement.references.map((reference, index) => (
+                                    <li
+                                      key={index}
+                                      className="min-w-0 max-w-full border-s-2 ps-3 [overflow-wrap:anywhere]"
+                                    >
+                                      <p className="text-muted-foreground">
+                                        {m.correction_references({}, o)} {index + 1}
+                                      </p>
+                                      <ScreenParts parts={reference.parts} read={current} locale={locale} />
+                                    </li>
+                                  ))}
+                                </ol>
+                              </div>
                             ))}
-                          </ol>
+                          </dd>
                         </div>
                       ))}
-                    </dd>
-                  </div>
+                    </dl>
+                    {group === 'classification' && (
+                      <p className="text-sm text-muted-foreground">{m.screen_classification_pending({}, o)}</p>
+                    )}
+                    {group === 'authored' && <AuthoredFieldEntry id={id} title={label.text} locale={locale} />}
+                  </section>
                 ))}
-              </dl>
-              {group === 'classification' && (
-                <p className="text-sm text-muted-foreground">{m.screen_classification_pending({}, o)}</p>
-              )}
-              {group === 'authored' && <AuthoredFieldEntry id={id} title={label.text} locale={locale} />}
             </section>
-          ))}
-      </section>
-      {session !== 'signed-in' ? (
-        <p role="status">
-          {session === 'signed-out'
-            ? m.catalogue_create_signed_out({}, o)
-            : session === 'unavailable'
-              ? m.candidate_unavailable({}, o)
-              : m.candidate_loading({}, o)}
-        </p>
-      ) : (
-        <>
-          {transport.facts && transport.review && (
-            <details className="min-w-0 rounded-xl border border-border p-4" open>
-              <summary className={screenSummaryClassName}>{m.facts_title({}, o)}</summary>
-              <SubjectFacts
-                embedded
-                initial={current}
-                locale={locale}
-                transport={transport.facts}
-                review={transport.review}
-              />
-            </details>
-          )}
-          {transport.relations && (
-            <details className="min-w-0 space-y-4 rounded-xl border border-border p-4">
-              <summary className={screenSummaryClassName}>{m.screen_credits_parts({}, o)}</summary>
-              <RelationEditor embedded id={id} locale={locale} search={search} transport={transport.relations} />
-            </details>
-          )}
-        </>
-      )}
-    </article>
+          </>
+        )}
+        {session !== 'signed-in' ? (
+          <p role="status">
+            {session === 'signed-out'
+              ? m.catalogue_create_signed_out({}, o)
+              : session === 'unavailable'
+                ? m.candidate_unavailable({}, o)
+                : m.candidate_loading({}, o)}
+          </p>
+        ) : (
+          <>
+            {privateCurrent && transport.facts && transport.review && (
+              <details className="min-w-0 rounded-xl border border-border p-4" open>
+                {visible && <summary className={screenSummaryClassName}>{m.facts_title({}, o)}</summary>}
+                <ScreenFacts
+                  observe={observe}
+                  embedded
+                  initial={privateCurrent}
+                  locale={locale}
+                  transport={transport.facts}
+                  review={transport.review}
+                />
+              </details>
+            )}
+            {privateCurrent && transport.relations && (
+              <details className="min-w-0 space-y-4 rounded-xl border border-border p-4">
+                {visible && <summary className={screenSummaryClassName}>{m.screen_credits_parts({}, o)}</summary>}
+                <RelationEditor embedded id={id} locale={locale} search={search} transport={transport.relations} />
+              </details>
+            )}
+          </>
+        )}
+      </article>
+    </CatalogueCurrentReading>
+  );
+}
+
+// An embedded scalar reread observes the same page authority without a second public request.
+function ScreenFacts({
+  transport,
+  observe,
+  ...props
+}: ComponentProps<typeof SubjectFacts> & {
+  observe: (next: EditorRead) => void;
+}) {
+  const active = useCurrentReadingActive();
+  return (
+    <SubjectFacts
+      {...props}
+      transport={{
+        ...transport,
+        read: async () => {
+          if (!active()) throw new Error('Retired catalogue editor');
+          let next: EditorRead;
+          try {
+            next = await transport.read();
+          } catch {
+            next = { ok: false, reason: 'unavailable' };
+          }
+          if (!active()) throw new Error('Retired catalogue editor');
+          observe(next);
+          return next;
+        },
+      }}
+    />
   );
 }
