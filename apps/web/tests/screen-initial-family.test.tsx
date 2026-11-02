@@ -208,8 +208,11 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
   const citation = `https://example.org/original/${'complete-citation-'.repeat(16)}?page=24#director`;
   const longScalar = '0.5000000000000000000000000000000000000000000000000000000000000000000001';
   const queuedSubmit = () => {
-    const form = host.querySelector('form')!;
-    const key = Object.keys(form).find((key) => key.startsWith('__reactProps$'))!;
+    const submit = within(host).getByRole('button', { name: m.catalogue_create_submit() });
+    const form = submit.closest('form')!;
+    // A form's named-property proxy need not enumerate React's expando keys.
+    // Its submit button exposes the same renderer key for the queued callback.
+    const key = Object.keys(submit).find((key) => key.startsWith('__reactProps$'))!;
     const callback = Reflect.get(form, key).onSubmit as (event: unknown) => void;
     return () => callback({ currentTarget: form, preventDefault() {} });
   };
