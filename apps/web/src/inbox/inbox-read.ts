@@ -13,6 +13,8 @@ import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
 
 export const INBOX_PAGE_SIZE = 20;
+/** One private list read, one batched author read, and at most one target read per notice. */
+export const INBOX_PAGE_KERNEL_READ_CEILING = 2 + INBOX_PAGE_SIZE;
 
 type NoticeRead = Awaited<ReturnType<ReturnType<KernelClient['accounts']>['notifications']['get']>>;
 type NoticePage = NonNullable<NoticeRead['data']>;

@@ -83,8 +83,8 @@ export function nextInboxPage(state: InboxPagination): InboxPagination {
   return { cursor: page.next, earlier: page, current: null, result: undefined };
 }
 
-/** A failed continuation can be abandoned only by a deliberate first-page request. */
+/** A continuation can be retired by a deliberate first-page refresh after success or failure. */
 export function restartInboxPage(state: InboxPagination): InboxPagination {
-  if (state.cursor === undefined || !state.result?.signedIn || state.result.state === 'ready') return state;
+  if (state.cursor === undefined || !state.result?.signedIn) return state;
   return emptyInboxPagination;
 }

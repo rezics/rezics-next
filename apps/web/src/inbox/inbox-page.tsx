@@ -325,7 +325,8 @@ export function ViewerInboxPage({
     if (!active.current || pageQuery.isFetching || accessPending.current || waiting || !viewer.isCurrent()) return;
     const first = restartInboxPage(received);
     if (first === received) return;
-    // Discard cached pages and cancel their responses before observing the same native first-page query.
+    // Retire cached pages and any stale responses before observing the native first-page query.
+    void queryClient.cancelQueries({ queryKey: inboxViewerQueryKey(viewer) });
     queryClient.removeQueries({ queryKey: inboxViewerQueryKey(viewer) });
     setPagination(first);
   };
@@ -502,6 +503,17 @@ export function ViewerInboxPage({
                   {m.inbox_triage_filter_unread()}
                 </Button>
               </div>
+              {cursor !== undefined && !failed && page ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                  onClick={startAtFirstPage}
+                  disabled={pageQuery.isFetching || checkingAccess || waiting}
+                >
+                  {m.inbox_start_first_page()}
+                </Button>
+              ) : null}
               <p className="text-sm text-muted-foreground">{m.inbox_triage_scope()}</p>
               {hasUnreadLoaded && !seenFailure && readable.items[0]?.id !== markedThrough.current ? (
                 <div className="space-y-2">
