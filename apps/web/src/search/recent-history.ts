@@ -171,13 +171,14 @@ export function readRecentDocument(storage: RecentStorage, bucket: string): Rece
   const entries = readRecentHistory(storage, bucket);
   try {
     const raw = JSON.parse(storage.getItem(recentHistoryKey(bucket)) ?? '[]');
+    const hasNative = raw !== null && typeof raw === 'object' && !Array.isArray(raw) && Object.hasOwn(raw, 'native');
     return {
       entries,
       removed: Array.isArray(raw?.removed)
         ? raw.removed.filter((id: unknown) => typeof id === 'string').slice(0, 100)
         : [],
       ...(typeof raw?.clear === 'string' ? { clear: raw.clear } : {}),
-      ...(raw?.native ? { native: raw.native } : {}),
+      ...(hasNative ? { native: raw.native } : {}),
     };
   } catch {
     return { entries, removed: [] };

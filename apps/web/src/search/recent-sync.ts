@@ -11,6 +11,7 @@ import {
 } from './recent-history';
 import { createRecentPageProgress, RECENT_HISTORY_READ_PAGE_LIMIT } from './recent-page-progress';
 import type { RecentEntry as NativeEntry, RecentItem, RecentPage, Pending } from './recent';
+import { admitRecentJournal, freshRecentJournal, type RecentJournal } from './recent-journal';
 
 export class RecentSyncError extends Error {
   constructor(readonly code: 'unavailable' | 'conflict') {
@@ -43,16 +44,7 @@ export type RecentSearchSyncOptions = {
   onRemote?(entries: readonly RecentEntry[]): void;
   transport?: RecentSearchTransport;
 };
-type Queued = Pending & { localId?: string; visitedAt?: number; expectedRevision?: number };
-type Journal = {
-  revision: number | null;
-  observed: Record<string, number>;
-  rows: Record<string, { id: string; visitedAt: number; entry?: NativeEntry }>;
-  pending: Queued[];
-  conflict?: boolean;
-};
 const lifetime = 90 * 86400000;
-const fresh = (): Journal => ({ revision: null, observed: {}, rows: {}, pending: [] });
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Browser labels, links and avatars are never part of a native command. */
 export function nativeRecentEntry(entry: RecentEntry): NativeEntry | undefined {
@@ -100,21 +92,11 @@ export function localRecentEntry(item: RecentItem): RecentEntry {
     visitedAt: Date.parse(item.lastUsed),
   };
 }
-function journalOf(document: RecentDocument): Journal {
-  const j = document.native as Journal | undefined;
-  if (!j) return fresh();
-  if (
-    (j.revision !== null && (!Number.isInteger(j.revision) || j.revision < 0)) ||
-    !j.observed ||
-    !j.rows ||
-    !Array.isArray(j.pending) ||
-    j.pending.length > 100 ||
-    Object.keys(j.rows).length > 100 ||
-    Object.keys(j.observed).length > RECENT_HISTORY_LIMIT ||
-    j.pending.some((p) => !p || typeof p.key !== 'string' || !p.change || !Number.isFinite(Date.parse(p.queuedAt)))
-  )
-    throw new RecentSyncError('unavailable');
-  return j;
+function journalOf(document: RecentDocument): RecentJournal {
+  if (document.native === undefined) return freshRecentJournal();
+  const journal = admitRecentJournal(document.native);
+  if (!journal) throw new RecentSyncError('unavailable');
+  return journal;
 }
 const transport: RecentSearchTransport = {
   async read(cursor, signal) {
@@ -170,9 +152,9 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
       entry.kind === 'query' ? (entry.languages ?? null) : null,
     ]);
   };
-  const save = (document: RecentDocument, journal: Journal) =>
+  const save = (document: RecentDocument, journal: RecentJournal) =>
     writeRecentDocument(storage, bucket, { ...document, native: journal });
-  function reconcile(snapshot?: readonly RecentEntry[]): { document: RecentDocument; journal: Journal } {
+  function reconcile(snapshot?: readonly RecentEntry[]): { document: RecentDocument; journal: RecentJournal } {
     const document = load(),
       journal = journalOf(document);
     if (
@@ -184,7 +166,7 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
     )
       document.entries = [...snapshot];
     journal.pending = journal.pending.filter((p) => Date.parse(p.queuedAt) > Date.now() - lifetime);
-    const push = (change: Queued['change'], extra: Partial<Queued> = {}) => {
+    const push = (change: Pending['change'], extra: Partial<RecentJournal['pending'][number]> = {}) => {
       if (journal.pending.length >= 100) throw new RecentSyncError('unavailable');
       journal.pending.push({ key: crypto.randomUUID(), change, queuedAt: new Date().toISOString(), ...extra });
     };
@@ -278,7 +260,7 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
       let { document, journal } = reconcile(input);
       if (journal.conflict) {
         if (!retry) throw new RecentSyncError('conflict');
-        journal = fresh();
+        journal = freshRecentJournal();
         document = { entries: document.entries.filter((e) => !nativeRecentEntry(e)), removed: [] };
         save(document, journal);
         onRemote?.(document.entries);

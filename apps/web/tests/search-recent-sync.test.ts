@@ -275,6 +275,7 @@ test('offline visits keep query and supported scope references, replay the same 
   });
   fail = false;
   await adapter.retry(entries, signal());
+  expect(writes[1]!.pending).toEqual(failed.pending);
   expect(writes[1]!.pending.key).toBe(failed.pending.key);
   expect(writes[1]!.expectedRevision).toBe(7);
   expect(writes[2]!.pending.change.kind).toBe('remove');
