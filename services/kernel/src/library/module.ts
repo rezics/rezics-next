@@ -45,3 +45,14 @@ export function createLibraryIdentityNativePlanner({ pool }: { pool: Pool }): Li
 export { libraryIdentityFootprint } from './identity-native-planner-work.ts';
 
 export { createCollectionBulkOperations } from './collection-bulk-operation.ts';
+export { readLibraryScopeEffectsPageWithWork } from './identity-scope-effects.ts';
+export { nextLibraryIdentityNativePlanWithWork } from './identity-native-planner.ts';
+export {
+  declareLibraryIdentityStatement,
+  assembleLibraryIdentityOriginalComponents,
+  LIBRARY_IDENTITY_CHECKOUT_WORK,
+  LIBRARY_IDENTITY_ORIGINAL_MISSING_OPERANDS,
+  assembleLibraryIdentitySelectedBodies,
+  LIBRARY_IDENTITY_SELECTED_MULTIPLICITIES,
+  LIBRARY_IDENTITY_SELECTED_MISSING_OPERANDS,
+} from './identity-original-work.ts';

@@ -43,6 +43,7 @@ import storeInsertGroup from './identity-epoch-store-insert-group.sql';
 import storeInsertOriginal from './identity-epoch-store-insert-original.sql';
 import storeUpdateDirty from './identity-epoch-store-update-dirty.sql';
 import storeSelectJob4 from './identity-epoch-store-select-job-4.sql';
+import libraryTransform from './identity-epoch-store-library-transform.sql';
 import storeSelectInput from './identity-epoch-store-select-input.sql';
 import storeSelectOriginal from './identity-epoch-store-select-original.sql';
 import storeSelectHomeGate from './identity-epoch-store-select-home-gate.sql';
@@ -286,9 +287,90 @@ export function identityEpochChangeTerminal(
   original: string,
   previous: string,
 ): string {
+  return libraryChangeTerminal(intent, remainder, original, previous);
+}
+
+function libraryChangeTerminal(
+  intent: IdentityEpochLibraryTransform,
+  remainder: string | null,
+  original: string,
+  previous: string,
+): string {
   if (intent.kind === 'merge') return intent.survivor;
   if (original === intent.original) return intent.kind === 'unmerge' ? intent.original : intent.terminal;
   return previous === intent.original && remainder !== null ? remainder : previous;
+}
+
+/** Only the constant fields consumed by pageChanges; unrelated immutable intent data stays native. */
+export type IdentityEpochLibraryTransform =
+  | Readonly<{ kind: 'merge'; survivor: string }>
+  | Readonly<{ kind: 'unmerge'; original: string }>
+  | Readonly<{ kind: 'repoint'; original: string; terminal: string }>;
+
+// The third row is a paid rejection sentinel, never a silently truncated input generation.
+export const identityEpochLibraryInputsSQL =
+  'SELECT generation,terminal,control_partition FROM semantic.identity_epoch_input WHERE partition_no=$1 AND job_id=$2 ORDER BY terminal LIMIT 3';
+
+/** Library-only bounded projection of the ordinary pageChanges algorithm, on the caller's RR snapshot.
+ * This neither admits a job nor changes the ordinary store API. Every output ID is native UUID width.
+ */
+export async function pageLibraryIdentityEpochChanges(
+  tx: CommandTransaction,
+  job: IdentityJobRef,
+  after: string | null,
+): Promise<{ changes: IdentityChange[]; next: string | null }> {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  if (!uuid.test(job.jobId) || typeof job.epoch !== 'bigint' || job.epoch <= 0n ||
+      job.epoch > 9223372036854775807n || (after !== null && !uuid.test(after)))
+    throw new TypeError('Invalid Library native transform locator');
+  const partition = identityJobPartition(job);
+  const saved = (await tx.query<{
+    kind: 'merge' | 'unmerge' | 'repoint' | null;
+    survivor: string | null; original: string | null; terminal: string | null; remainder_terminal: string | null;
+  }>(libraryTransform.sql, [partition, job.jobId, job.epoch.toString()])).rows[0];
+  if (!saved) throw unavailable();
+  const id = (value: string | null): value is string => typeof value === 'string' && uuid.test(value);
+  let transform: IdentityEpochLibraryTransform;
+  if (saved.kind === 'merge' && id(saved.survivor) && saved.remainder_terminal === null)
+    transform = { kind: saved.kind, survivor: saved.survivor };
+  else if (saved.kind === 'unmerge' && id(saved.original))
+    transform = { kind: saved.kind, original: saved.original };
+  else if (saved.kind === 'repoint' && id(saved.original) && id(saved.terminal))
+    transform = { kind: saved.kind, original: saved.original, terminal: saved.terminal };
+  else throw unavailable();
+  if (saved.remainder_terminal !== null &&
+      (!id(saved.remainder_terminal) || (transform.kind !== 'merge' && saved.remainder_terminal === transform.original)))
+    throw unavailable();
+  const inputs = (await tx.query<{ generation: string; terminal: string; control_partition: number }>(
+    identityEpochLibraryInputsSQL, [partition, job.jobId],
+  )).rows;
+  if (inputs.length < 1 || inputs.length > 2 || inputs.some((input) =>
+    !id(input.generation) || !id(input.terminal) || input.control_partition !== partition,
+  )) throw unavailable();
+  const limit = inputs.length === 1 ? 100 : 50;
+  const pages: Array<Array<{ original: string; terminal: string }>> = [];
+  for (const input of inputs) {
+    const page = (await tx.query<{ original: string; terminal: string }>(storeSelectOriginal.sql, [
+      input.generation, after, limit, input.terminal, input.control_partition,
+    ])).rows;
+    if (page.length > limit || page.some((row, index) => !id(row.original) || !id(row.terminal) ||
+      (after !== null && row.original <= after) || (index > 0 && page[index - 1]!.original >= row.original)))
+      throw unavailable();
+    pages.push(page);
+  }
+  const cutoff = pages.filter((page) => page.length === limit).map((page) => page.at(-1)!.original).sort()[0];
+  const originals = new Map<string, string>();
+  for (const row of pages.flat()) {
+    if (cutoff && row.original > cutoff) continue;
+    const previous = originals.get(row.original);
+    if (previous !== undefined && previous !== row.terminal) throw unavailable();
+    originals.set(row.original, row.terminal);
+  }
+  const changes = [...originals].sort(([a], [b]) => a.localeCompare(b)).map(([original, previousTerminal]) => ({
+    original, previousTerminal,
+    terminal: libraryChangeTerminal(transform, saved.remainder_terminal, original, previousTerminal),
+  }));
+  return { changes, next: cutoff ? changes.at(-1)!.original : null };
 }
 
 /** Native source mappings and partition-scoped admission. Participant completion is never inferred. */

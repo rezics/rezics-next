@@ -19,6 +19,7 @@ import {
   type NativeSourceFrontier,
 } from '../library/native-source-custody.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from '../library/collection-source-work.ts';
+import { libraryIdentityFootprint } from '../library/identity-native-planner-work.ts';
 import {
   readLibraryScopeEffectsPage,
   verifyLibraryScopeEffectsSeal,
@@ -56,6 +57,9 @@ import {
   bindIdentityScopeNativeAssociation,
   recordIdentityScopeNativeAssociation,
 } from './identity-scope-native-association.ts';
+import receivingSelectionRead from './identity-receiving-selection-read.sql';
+import receivingLookup from './identity-epoch-store-receiving-lookup.sql';
+import receivingPlan from './identity-epoch-store-receiving-plan.sql';
 import consumerCurrent from './identity-scoped-consumer-current.sql';
 import consumerReceipt from './identity-scoped-consumer-receipt.sql';
 import consumerWork from './identity-scoped-consumer-work.sql';
@@ -68,7 +72,18 @@ import commandNoEffect from '../command/no-effect-fence.sql';
 import partitionRead from '../partition/read.sql';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { identitySourceConsumerLibraryWork } from './identity-source-consumer-maintenance.ts';
+import {
+  identitySourceConsumerLibraryWork,
+  currentIdentitySourceConsumerMaintenance,
+  currentIdentitySourceConsumerLibraryRemainder,
+  isPrepaidIdentitySourceConsumerMaintenance,
+  claimIdentitySourceScheduledCall,
+  claimIdentitySourceLibraryCall,
+  withIdentitySourceNoEffectCommand,
+  reserveIdentitySourceConsumerNativeWork,
+  isLiveIdentitySourceConsumerMaintenance,
+  IdentitySourceOriginalUnavailable,
+} from './identity-source-consumer-maintenance.ts';
 import type {
   IdentitySourceConsumerContext,
   IdentitySourceScopeConsumerWork,
@@ -88,17 +103,32 @@ export async function readIdentityScopeConsumerWork(
   const source = ticket.scope.source;
   if (source.kind !== 'library' || source.identity.scope === 'public_output') return null;
   const values = scopeConsumerValues(ticket);
+  const prepaid = isPrepaidIdentitySourceConsumerMaintenance(pool);
+  claimIdentitySourceScheduledCall(pool, 'scopeAdmission');
   return withRequestDeadline(context.deadline, async () => {
     try {
-      const current = await instrumentNativeCollectionWork(pool, budget, scopeConsumerFootprint, () =>
+      const current = prepaid ? (await withIdentitySourceNoEffectCommand(pool, context.deadline, () =>
+        runCommand(pool, { partition: identityScopeAddress(ticket.scope).partition, deadline: context.deadline }, async (tx) => {
+          const cost = scopeConsumerFootprint(consumerWork.sql, values);
+          if (!context.identityConsumerWork || !cost ||
+              !reserveIdentitySourceConsumerNativeWork(pool, context.identityConsumerWork, {
+                rows: cost.nativeRows, points: cost.nativePoints, statements: cost.statements,
+                bytes: cost.bytes, engineRequests: 0,
+              }, cost)) throw new IdentitySourceOriginalUnavailable('identity-source-scope-admission-literal-unavailable');
+          const row = (await tx.query<{ source_generation: string }>(consumerWork.sql, values)).rows[0];
+          if (!isLiveIdentitySourceConsumerMaintenance(pool, context.identityConsumerWork, context.deadline))
+            throw new IdentitySourceOriginalUnavailable('identity-source-scope-admission-ended');
+          return noEffect(row);
+        }),
+      )).value : await instrumentNativeCollectionWork(pool, budget, scopeConsumerFootprint, () =>
         withReadTransaction(
           pool,
           async (tx) => (await tx.query<{ source_generation: string }>(consumerWork.sql, values)).rows[0],
         ),
       );
       if (!current || current.source_generation !== source.identity.generation) return null;
-      // This immutable ceiling describes the same ledger. Source's compose transfers
-      // work and settles the real owner's receipt; no second allocation is created.
+      // This immutable ceiling describes the same ledger. The consumer binds it once
+      // across page transfer, receiving, both verifications and the durable fence.
       const remaining: WorkDimensions = Object.freeze({
         candidateKeys: budget.available('candidateKeys'),
         identityMetadataRows: budget.available('identityMetadataRows'),
@@ -111,7 +141,8 @@ export async function readIdentityScopeConsumerWork(
       });
       return Object.freeze({
         allowance: Object.freeze({ reservationId: budget.receipt().reservationId, remaining }),
-        footprint: scopeConsumerFootprint,
+        footprint: (sql: string, values: readonly unknown[]) =>
+          libraryIdentityFootprint(sql, values, budget) ?? scopeConsumerFootprint(sql, values),
       });
     } catch (error) {
       // The instrumenter charges dispatched failures and poisons its SAME ledger.
@@ -143,33 +174,102 @@ function scopeConsumerValues(ticket: IdentityPrearmTicketData): unknown[] {
  * SQL remains undefined and is refused by NativeCollectionWork before dispatch.
  * Each native projection below is fixed or schema-bounded (seal <=4096 bytes).
  */
-function scopeConsumerFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined {
+export function scopeConsumerFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined {
+  // Exact positional operands are part of the proof. Reject extra, unbounded or
+  // structurally different parameters before a connection can dispatch this SQL.
+  const text = (max: number) => (v: unknown) => typeof v === 'string' && Buffer.byteLength(v) <= max;
+  const positive = (v: unknown) => typeof v === 'string' && /^[1-9][0-9]{0,18}$/.test(v) && BigInt(v) <= 9223372036854775807n;
+  const integer = (max: number, min = 0) => (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= min && v <= max;
+  const id = (v: unknown) => typeof v === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(v);
+  const hash = (v: unknown) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
+  const document = (max: number) => (v: unknown) => {
+    if (!text(max)(v)) return false;
+    try { const parsed: unknown = JSON.parse(v as string); return !!parsed && typeof parsed === 'object'; } catch { return false; }
+  };
+  const home = integer(4095);
+  const epoch = integer(2147483647, 1);
+  const scope = (v: unknown) => text(256)(v) && (v as string).length > 0;
+  let operands: readonly ((v: unknown) => boolean)[];
   let rows: number;
   let outputBytes: number;
+  let statements = 1;
+  let emptySeeks = 1;
   if (sql === consumerCurrent.sql || sql === consumerWork.sql) {
+    operands = [home, hash, scope, id, id, id, positive, document(1024), document(4096), epoch, id, id, integer(2147483647)];
     rows = 7;
+    // Both projections return only these two bigint strings, the <=256-byte
+    // generation and <=4096-byte native JSON seal. Six bytes per generation byte
+    // covers JSON escaping; no arbitrary capture or maintenance allowance leaves.
+    outputBytes = Buffer.byteLength(JSON.stringify([{ revision: '9'.repeat(19), version: '9'.repeat(19),
+      source_generation: 'f'.repeat(256), seal: null }])) + 5 * 256 + 4096;
+  } else if (sql === receivingSelectionRead.sql) {
+    operands = [home, id, positive, scope, id, id];
+    rows = 2; // One unique receiving record and its exact native commit.
+    outputBytes = 128;
+  } else if (sql === receivingLookup.sql) {
+    operands = [home, id, positive, scope, id, id, epoch, positive];
+    // Record, original commit, current partition, gate, effect, effect commit,
+    // and its exact step. The original writer bounds binding to 4096 and
+    // frontier to 2048; fixed receipt locators and scalar fields fit the rest.
+    rows = 7;
+    outputBytes = 8192;
+  } else if (sql === receivingPlan.sql) {
+    operands = [home, id, positive, scope];
+    rows = 3;
     outputBytes = 6144;
+  } else if (
+    sql ===
+    `SELECT pending_job,pending_epoch FROM semantic.identity_epoch_receiving_gate
+    WHERE partition_no=$1 AND owner_id=$2 AND original=$3 AND owner_epoch=$4 FOR UPDATE`
+  ) {
+    operands = [home, id, id, epoch];
+    rows = 1;
+    outputBytes = 128;
+  } else if (
+    sql ===
+    `SELECT native_partition,native_epoch,native_position,native_transaction_id
+      FROM semantic.identity_epoch_effect_receipt WHERE partition_no=$1 AND job_id=$2 AND step=$3 AND effect_key=$4 FOR UPDATE`
+  ) {
+    operands = [home, id, (v) => v === 'library-private-follow-counts', scope];
+    rows = 1;
+    outputBytes = 128;
+  } else if (
+    sql ===
+    `SELECT c.transaction_id,c.epoch,c.position FROM semantic.identity_epoch_native_commit c
+        JOIN semantic.identity_epoch_receiving_custody a ON (a.partition_no,a.transaction_id)=(c.partition_no,c.transaction_id)
+        WHERE a.partition_no=$1 AND a.job_id=$2 AND a.effect_key=$3 AND c.purpose='identity-receiving-custody' AND c.xmin=a.xmin`
+  ) {
+    operands = [home, id, scope];
+    rows = 2;
+    outputBytes = 128;
   } else if (sql === consumerReceipt.sql) {
+    operands = [home, hash, scope, id, id, positive, hash, id];
     rows = 3;
     outputBytes = 2048;
-  } else if (
-    sql === consumerConflict.sql ||
-    sql === consumerNative.sql ||
-    sql === partitionRead.sql ||
-    sql === commandNoEffect.sql
-  ) {
+  } else if (sql === consumerConflict.sql || sql === consumerNative.sql || sql === partitionRead.sql || sql === commandNoEffect.sql) {
+    operands = sql === consumerConflict.sql ? [home, hash, scope, id, id, positive]
+      : sql === consumerNative.sql ? [home, id]
+      : sql === partitionRead.sql ? [home]
+      : [home, id, (v) => v === null]; // A receipt write is a different native command.
     rows = 1;
     outputBytes = 1024;
   } else if (sql === commandTime.sql) {
+    operands = [text(128)];
     rows = 0;
+    emptySeeks = 0;
     outputBytes = 128;
   } else if (sql === insertNativeCommit.sql) {
+    operands = [home, id, (v) => v === 'identity-scope-finish'];
     rows = 2;
+    emptySeeks = 0;
     outputBytes = 128;
   } else if (sql === consumerInsert.sql) {
+    operands = [home, hash, scope, id, id, id, positive, document(1024), scope, positive, hash, epoch, positive, id];
     // One insert, two FK points and seven exact-key rows in the deferred native
     // fence constraint. None of these charges depends on returned row counts.
     rows = 1 + 2 + 7;
+    statements = 1 + 2 + 1; // INSERT, two FK checks, deferred seven-key query.
+    emptySeeks = 1; // The deferred EXISTS can refuse even an inserted row.
     outputBytes = 0;
   } else if (
     sql === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' ||
@@ -177,23 +277,28 @@ function scopeConsumerFootprint(sql: string, values: readonly unknown[]): WorkDi
     sql === 'COMMIT' ||
     sql === 'ROLLBACK' ||
     sql === "SET LOCAL lock_timeout = '200ms'" ||
-    /^SET LOCAL statement_timeout = '[1-9][0-9]{0,15}ms'$/.test(sql)
+    /^SET LOCAL statement_timeout = '[1-9][0-9]{0,3}ms'$/.test(sql)
   ) {
+    operands = [];
     rows = 0;
+    emptySeeks = 0;
     outputBytes = 0;
   } else {
     return undefined;
   }
-  return {
+  if (values.length !== operands.length || operands.some((accept, i) => !accept(values[i]))) return undefined;
+  return Object.freeze({
+    // These exact bodies enumerate no candidates, read no Semantic basis metadata,
+    // and expand no listing witnesses. Native indexed joins are charged below.
     candidateKeys: 0,
     identityMetadataRows: 0,
     nativeRows: rows,
     nativePoints: rows,
     witnessKeys: 0,
-    statements: 1,
+    statements,
     bytes: Buffer.byteLength(sql) + Buffer.byteLength(json(values)) + outputBytes,
-    emptySeeks: 0,
-  };
+    emptySeeks,
+  });
 }
 
 type Work = { -readonly [K in keyof S.IdentityScopeWork]: S.IdentityScopeWork[K] };
@@ -2077,7 +2182,37 @@ export async function retainIdentityScopeConsumerFence(
   ticket: IdentityPrearmTicketData,
   seal: LibraryScopeEffectSeal,
 ): Promise<IdentityNativeReceipt | null> {
+  const resources = currentCommandResources(tx);
+  const budget = currentIdentitySourceConsumerLibraryRemainder(resources.pool, resources.deadline);
+  if (!budget) return null;
+  claimIdentitySourceLibraryCall(resources.pool, 'exhaustedPageRechecks');
+  if (isPrepaidIdentitySourceConsumerMaintenance(resources.pool))
+    return retainCurrentIdentityScopeConsumerFence(tx, ticket, seal);
+  return instrumentNativeCollectionWork(resources.pool, budget,
+    (sql, values) => libraryIdentityFootprint(sql, values, budget) ?? scopeConsumerFootprint(sql, values), () =>
+    retainCurrentIdentityScopeConsumerFence(tx, ticket, seal),
+  );
+}
+
+async function retainCurrentIdentityScopeConsumerFence(
+  tx: CommandTransaction,
+  ticket: IdentityPrearmTicketData,
+  seal: LibraryScopeEffectSeal,
+): Promise<IdentityNativeReceipt | null> {
   const command = currentCommand(tx);
+  const resources = currentCommandResources(tx);
+  const prepaid = isPrepaidIdentitySourceConsumerMaintenance(resources.pool);
+  const token = prepaid ? currentIdentitySourceConsumerMaintenance(resources.pool, resources.deadline) : null;
+  // Source body statements are disjoint from Library's two exact verifier
+  // invocations. Debit each original bind/projection before its corresponding IO.
+  const reserve = (sql: string, values: readonly unknown[]) => {
+    if (!prepaid) return;
+    const cost = scopeConsumerFootprint(sql, values);
+    if (!token || !cost || !reserveIdentitySourceConsumerNativeWork(resources.pool, token, {
+      rows: cost.nativeRows, points: cost.nativePoints, statements: cost.statements,
+      bytes: cost.bytes, engineRequests: 0,
+    }, cost)) throw new IdentitySourceOriginalUnavailable('identity-source-fence-native-body-declaration-unavailable');
+  };
   if (command.basis !== null || Date.now() >= currentCommandResources(tx).deadline) return null;
   const source = ticket.scope.source;
   // The public planner and public-output custody are independent owner branches.
@@ -2090,6 +2225,7 @@ export async function retainIdentityScopeConsumerFence(
     scope: ticket.scope.scopeId,
   };
   if (!seal?.key || !same(seal.key, key) || !(await verifyLibraryScopeEffectsSeal(tx, key, seal))) return null;
+  reserve(consumerCurrent.sql, scopeConsumerValues(ticket));
   const current = (
     await tx.query<{ revision: string; version: string; source_generation: string; seal: object }>(
       consumerCurrent.sql,
@@ -2106,6 +2242,7 @@ export async function retainIdentityScopeConsumerFence(
     sealDigest,
     command.transactionId,
   ];
+  reserve(consumerReceipt.sql, receiptValues);
   const prior = (
     await tx.query<{
       epoch: number;
@@ -2135,10 +2272,16 @@ export async function retainIdentityScopeConsumerFence(
   }
   // Check the natural key before any write; a different seal cannot replace an
   // immutable retained obligation. The summary lock also serializes all writers.
+  reserve(consumerConflict.sql, receiptValues.slice(0, 6));
   const conflict = await tx.query(consumerConflict.sql, receiptValues.slice(0, 6));
   if (conflict.rows.length) return null;
+  // This existing native helper dispatches precisely read/insert/read on this
+  // transaction; reserve all three original operands before entering it.
+  reserve(consumerNative.sql, [command.partition, command.transactionId]);
+  reserve(insertNativeCommit.sql, [command.partition, command.transactionId, 'identity-scope-finish']);
+  reserve(consumerNative.sql, [command.partition, command.transactionId]);
   const receipt = await writeIdentityScopeConsumerNativeCommit(tx);
-  await tx.query(consumerInsert.sql, [
+  const insertValues = [
     ...params(ticket.scope),
     ticket.registration,
     ticket.captureId,
@@ -2151,6 +2294,8 @@ export async function retainIdentityScopeConsumerFence(
     receipt.epoch,
     receipt.position.toString(),
     receipt.transactionId,
-  ]);
+  ];
+  reserve(consumerInsert.sql, insertValues);
+  await tx.query(consumerInsert.sql, insertValues);
   return receipt;
 }

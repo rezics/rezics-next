@@ -1,10 +1,10 @@
 import { ProblemError } from '../http/problem.ts';
-import { libraryIdentitySQL } from './identity-native-planner-statements.ts';
 import type { Pool } from 'pg';
-import { currentCommand, noEffect, type CommandTransaction } from '../command/command.ts';
+import { currentCommand, currentCommandResources, noEffect, type CommandTransaction } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
 import { identityJobPartition } from '../semantic/identity-epoch-store.ts';
+import { isPrepaidIdentitySourceConsumerMaintenance } from '../semantic/identity-source-consumer-maintenance.ts';
 import {
   currentLibraryIdentityPlan,
   equalLibraryIdentityValue,
@@ -14,11 +14,16 @@ import {
 } from './identity-native-planner.ts';
 import type { LibraryIdentityPlan } from './identity-native-planner-types.ts';
 import {
+  allowance as remainingAllowance,
+  bindLibraryIdentityPrepaidWork,
   bindLibraryIdentityDeadline,
   currentLibraryIdentityWork,
+  libraryIdentityFootprint,
   withLibraryIdentityWork,
+  consumeLibraryIdentitySelectedCall,
 } from './identity-native-planner-work.ts';
 import sealRead from './identity-scope-effects-seal.sql';
+import { libraryIdentityBoundedEffectPageSQL } from './identity-native-planner-projection.ts';
 import type { IdentityJobRef, IdentityFrontier, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type {
   IdentityReceivingSelection,
@@ -93,15 +98,57 @@ export async function readLibraryScopeEffectsPage(
       deadline: number;
     }>,
 ): Promise<LibraryScopeEffectsPage> {
+  if (isPrepaidIdentitySourceConsumerMaintenance(pool))
+    throw new TypeError('Selected Library original requires readLibraryScopeEffectsPageWithWork');
+  const work = bindLibraryIdentityDeadline(new NativeCollectionWork(input.allowance, input.deadline), input.deadline);
+  return executePage(pool, input, work);
+}
+
+export type LibraryScopeEffectsPageInput<Source extends NativeSourceIdentity = NativeSourceIdentity> =
+  LibraryScopeEffectsKey & Readonly<{
+    sourceIdentity: Source;
+    after: LibraryExpectedEffectAfter | null;
+    limit: number;
+    deadline: number;
+  }>;
+export type LibraryScopeEffectsPageFor<Source extends NativeSourceIdentity> =
+  | Exclude<LibraryScopeEffectsPage, { status: 'sealed' }>
+  | (Extract<LibraryScopeEffectsPage, { status: 'sealed' }> & Readonly<{
+      seal: LibraryScopeEffectSeal & Readonly<{
+        key: LibraryScopeEffectsKey & Readonly<{ sourceIdentity: Source }>;
+      }>;
+    }>);
+
+/** Use the live owner's exact prepaid ledger. The input carries no funding authority. */
+export function readLibraryScopeEffectsPageWithWork<Source extends NativeSourceIdentity>(
+  pool: Pool,
+  input: LibraryScopeEffectsPageInput<Source>,
+  work: NativeCollectionWork,
+): Promise<LibraryScopeEffectsPageFor<Source>>;
+export async function readLibraryScopeEffectsPageWithWork(
+  pool: Pool,
+  input: LibraryScopeEffectsPageInput,
+  work: NativeCollectionWork,
+): Promise<LibraryScopeEffectsPage> {
+  bindLibraryIdentityPrepaidWork(pool, work, input.deadline);
+  consumeLibraryIdentitySelectedCall(pool, work, 'effectPages');
+  if (isPrepaidIdentitySourceConsumerMaintenance(pool) && input.limit !== 1)
+    throw new TypeError('Selected Library original requires limit1');
+  return executePage(pool, { ...input, allowance: remainingAllowance(work) }, work);
+}
+async function executePage(
+  pool: Pool,
+  input: LibraryScopeEffectsPageInput & { allowance: WorkAllowance },
+  work: NativeCollectionWork,
+): Promise<LibraryScopeEffectsPage> {
   if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
     throw new TypeError('Library expected-effects pages require a limit from 1 to 100');
-  const l = bindLibraryIdentityDeadline(new NativeCollectionWork(input.allowance, input.deadline), input.deadline);
   try {
-    return await withLibraryIdentityWork(pool, l, () => readPage(pool, input, l));
+    return await withLibraryIdentityWork(pool, work, () => readPage(pool, input, work));
   } catch (error) {
     if (error instanceof ProblemError && error.code === 'dependency_unavailable')
-      return { status: 'unavailable', work: l.receipt() };
-    if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => l.receipt(), configurable: true });
+      return { status: 'unavailable', work: work.receipt() };
+    if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
     throw error;
   }
 }
@@ -146,7 +193,7 @@ async function readPage(
     if (!receipt) return noEffect(null);
     const rows = (
       await tx.query<{ effect_key: string; disposition: IdentityReceivingDisposition; original: string }>(
-        libraryIdentitySQL.effectPage,
+        libraryIdentityBoundedEffectPageSQL,
         [
           plan.route,
           plan.collection_id,
@@ -157,6 +204,8 @@ async function readPage(
         ],
       )
     ).rows;
+    if (rows.some((row) => typeof row.effect_key !== 'string' || !/^library-native:[0-9a-f]{64}$/.test(row.effect_key)))
+      throw new TypeError('Invalid native Library effect key projection');
     const selected: IdentityReceivingSelection[] = rows.map((row) => ({
       job: input.job,
       original: row.original,
@@ -216,6 +265,16 @@ export async function verifyLibraryScopeEffectsSeal(
     return false;
   const ledger = currentLibraryIdentityWork(tx);
   if (!ledger) return false;
+  const resources = currentCommandResources(tx);
+  consumeLibraryIdentitySelectedCall(resources.pool, ledger, 'verification');
+  return withLibraryIdentityWork(resources.pool, ledger, () => instrumentNativeCollectionWork(
+    resources.pool, ledger, (sql, values) => libraryIdentityFootprint(sql, values, ledger),
+    () => verifyCurrentSeal(tx, key, seal, ledger), tx,
+  ));
+}
+async function verifyCurrentSeal(
+  tx: CommandTransaction, key: LibraryScopeEffectsKey, seal: LibraryScopeEffectSeal, ledger: NativeCollectionWork,
+): Promise<boolean> {
   const plan = await readLibraryIdentityPlan(tx, key, true);
   if (
     !plan ||

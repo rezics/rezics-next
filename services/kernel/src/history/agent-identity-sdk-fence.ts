@@ -20,6 +20,7 @@ import {
 } from '../work/sdk-retirement-fence.ts';
 import type { AgentIdentityWorkSource } from './agent-identity-source.ts';
 import type { AgentIdentityRetirementStage } from './agent-identity-retirement.ts';
+import { partitionOf } from '../route/route.ts';
 import { encodeLocator } from './locator.ts';
 import { historyDeadline, lockHistoryBarrier, type HistoryReceivingContext } from './receiving.ts';
 import type { HistoryArtifact, HistoryBarrier } from './registry.ts';
@@ -55,7 +56,38 @@ const same = (a: unknown, b: unknown) => canonicalize(a) === canonicalize(b);
 /** A released check or copied SDK receipt cannot authorize native History readiness. */
 export const IDENTITY_HISTORY_HANDOFF_UNAVAILABLE = 'identity-source-history-durable-handoff-unavailable';
 
-export const AGENT_IDENTITY_SDK_OBSERVATION_COST = IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.sdkWriterObservation;
+export const AGENT_IDENTITY_SDK_OBSERVATION_COST = Object.freeze({
+  rows: 3,
+  points: 2,
+  statements: 1,
+  bytes: 8192,
+  engineRequests: 0,
+});
+
+// Original mapping's three point reads and the full LIMIT65 physical role union.
+// This is additional to the command controls and to each reached receiving validator.
+export const AGENT_IDENTITY_RECEIVING_ARTIFACT_COST = Object.freeze({
+  rows: 69,
+  points: 69,
+  statements: 4,
+  bytes: 24576,
+  engineRequests: 0,
+});
+
+/** Released physical inventory observation. Pay its complete local body before acquiring
+ * the receiving checkout; the returned address and roles still confer no cleanup custody. */
+export async function readAgentIdentityReceivingArtifact(
+  pool: Pool,
+  custodyId: string,
+  context: HistoryReceivingContext,
+): Promise<HistoryArtifact | null> {
+  historyDeadline(context, 0);
+  const { identityHistoryCommand, reserveIdentityHistoryWork } =
+    await import('./agent-identity-inventory-work.ts');
+  await reserveIdentityHistoryWork(pool, AGENT_IDENTITY_RECEIVING_ARTIFACT_COST, context);
+  return identityHistoryCommand(pool, context, (tx) => lockAgentIdentityReceivingArtifact(tx, custodyId));
+}
+
 export type AgentIdentitySDKWriterObservation = Pending | Readonly<{ state: 'observed'; writer: SdkWriterState }>;
 
 /** Released observation, independently funded in the SAME live Source frame. This never
@@ -75,11 +107,11 @@ export async function readAgentIdentitySDKWriterState(
   const { currentIdentitySourceConsumerMaintenance, reserveIdentitySourceConsumerNativeWork } =
     await import('../semantic/identity-source-consumer-maintenance.ts');
   const work = currentIdentitySourceConsumerMaintenance(pool, context.deadline);
-  if (!work) return pending('identity-sdk-current-fence-funding-unavailable');
-  if (history.currentAgentIdentityHistoryUnit()?.prepaid) {
-    const { reserveIdentityHistoryWork } = await import('./agent-identity-inventory-work.ts');
-    await reserveIdentityHistoryWork(pool, AGENT_IDENTITY_SDK_OBSERVATION_COST, context);
-  } else if (!reserveIdentitySourceConsumerNativeWork(pool, work, AGENT_IDENTITY_SDK_OBSERVATION_COST))
+  if (
+    !work ||
+    (context.identityConsumerWork !== undefined && context.identityConsumerWork !== work) ||
+    !reserveIdentitySourceConsumerNativeWork(pool, work, AGENT_IDENTITY_SDK_OBSERVATION_COST)
+  )
     return pending('identity-sdk-current-fence-funding-unavailable');
   history.assertAgentIdentityHistoryUnit(pool, context, client);
   const writer = await readSdkWorkflowWriterState(workflowId, client);
@@ -149,6 +181,8 @@ export async function readAgentIdentitySDKReceivingBinding(
     throw new TypeError('Identity SDK fence requires its SAME receiving home');
   if (artifact.partition !== 0 || artifact.locator.artifactType !== 'durable-work/v1')
     return pending('identity-sdk-receiving-home-mismatch');
+  // No receiving checkout can carry the live Account fence from a foreign home.
+  if (partitionOf(barrier.accountRoute) !== 0) return pending('agent-identity-source-barrier-home-unavailable');
   const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
   const mapping = await resolveAgentIdentitySDKWork(tx, artifact.locator.workId);
   if (!mapping || mapping.gap) return pending(mapping?.gap ?? 'identity-sdk-native-binding-unavailable');
@@ -249,34 +283,24 @@ async function receivingBinding(
 ): Promise<AgentIdentitySDKReceivingObservation> {
   historyDeadline(context, 0);
   const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
-  const { identityHistoryCommand, reserveIdentityHistoryWork } = await import('./agent-identity-inventory-work.ts');
-  await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.sdkReceiving, context);
+  const { identityHistoryCommand, reserveIdentityHistoryWork, nativeWork } =
+    await import('./agent-identity-inventory-work.ts');
+  // A Source reference describes its roles, not the SDK copy's physical inventory.
+  // Resolve that copy's complete current role union in this same receiving command.
+  // This additional lookup is independent of the existing R reservation below.
+  await reserveIdentityHistoryWork(pool, AGENT_IDENTITY_RECEIVING_ARTIFACT_COST, context);
+  await reserveIdentityHistoryWork(pool, nativeWork(160, 80, 6, 131072), context);
+  const read = async (tx: CommandTransaction): Promise<AgentIdentitySDKReceivingObservation> => {
+    const artifact = await lockAgentIdentityReceivingArtifact(tx, binding.custodyId);
+    if (!artifact) return pending('identity-sdk-physical-inventory-unavailable');
+    return readAgentIdentitySDKReceivingBinding(tx, artifact, binding.barrier);
+  };
   if (owner.currentIdentitySourceConsumerMaintenance(pool, context.deadline)) {
-    return identityHistoryCommand(pool, context, (tx) =>
-      readAgentIdentitySDKReceivingBinding(
-        tx,
-        {
-          partition: 0,
-          locator: { artifactType: 'durable-work/v1', workId: binding.custodyId },
-          accounts: binding.source.accounts,
-        },
-        binding.barrier,
-      ),
-    );
+    return identityHistoryCommand(pool, context, read);
   }
   return (
     await runCommand(pool, { partition: 0, deadline: context.deadline }, async (tx) =>
-      noEffect(
-        await readAgentIdentitySDKReceivingBinding(
-          tx,
-          {
-            partition: 0,
-            locator: { artifactType: 'durable-work/v1', workId: binding.custodyId },
-            accounts: binding.source.accounts,
-          },
-          binding.barrier,
-        ),
-      ),
+      noEffect(await read(tx)),
     )
   ).value;
 }
@@ -300,25 +324,12 @@ export async function readAgentIdentitySDKFence(
   if (before.state === 'pending') return before;
   if (!same(before.binding, fixed.binding)) return pending('identity-sdk-retirement-receiving-binding-changed');
   historyDeadline(context, 0);
-  const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
-  const work = owner.currentIdentitySourceConsumerMaintenance(pool, context.deadline);
-  if (history.currentAgentIdentityHistoryUnit()?.prepaid) {
-    const { reserveIdentityHistoryWork } = await import('./agent-identity-inventory-work.ts');
-    await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.sdkFenceObservation, context);
-  } else if (
-    work &&
-    !owner.reserveIdentitySourceConsumerNativeWork(pool, work, {
-      rows: 1,
-      points: 1,
-      statements: 1,
-      bytes: 8192,
-      engineRequests: 0,
-    })
-  )
-    return pending('identity-sdk-current-fence-funding-unavailable');
-  history.assertAgentIdentityHistoryUnit(pool, context, client);
+  const { reserveIdentityHistoryWork, nativeWork } = await import('./agent-identity-inventory-work.ts');
+  // Preserve inherited/explicit provenance across the released receiving await.
+  // An ended frame is not an independently admitted SDK observation.
+  await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 8192), context);
   const fence = await readSdkWorkflowRetirement(fixed.binding.workflowId, client);
-  history.assertAgentIdentityHistoryUnit(pool, context, client);
+  historyDeadline(context, 0);
   if (!validFence(fence, fixed.binding.workflowId) || !same(fence, fixed.fence))
     return pending('identity-sdk-native-receipt-changed');
   const after = await receivingBinding(pool, fixed.binding, context);
@@ -498,35 +509,14 @@ export async function retireAgentIdentitySDKWork(
 /** Native expected address returned by the original Source producer. It is persisted
  * only after that producer has reconstructed and locked it, and re-resolved by the
  * original native function on every later History transition. */
-export type AgentIdentityHistoryAuthority = Readonly<Record<string, unknown>>;
+export type AgentIdentityHistoryAuthority =
+  import('../semantic/identity-source-consumer-custody.ts').IdentitySourceHistoryAuthority;
 export type AgentIdentityHistoryReadiness = Readonly<{
   binding: AgentIdentitySDKReceivingBinding;
   writer: SdkWriterState;
 }>;
 
-type SourceHistoryOwner = {
-  lockIdentitySourceHistoryHandoff(
-    tx: CommandTransaction,
-    stage: AgentIdentityRetirementStage,
-    binding: AgentIdentitySDKReceivingBinding,
-    expected: SdkWriterState,
-    phase: 'readiness' | 'closure',
-    sdk: DBOSClient,
-  ): Promise<
-    | Pending
-    | Readonly<{
-        state: 'guarded';
-        handoff: Readonly<{
-          sourceAuthority: AgentIdentityHistoryAuthority;
-          binding: AgentIdentitySDKReceivingBinding;
-          writer: SdkWriterState;
-        }>;
-      }>
-  >;
-};
-
-/** Agreed producer port, removed from optional admission when Source is installed.
- * An uninstalled producer is refused before History SQL, never emulated locally. */
+/** Delegate to the installed Source producer's native handoff and authority type. */
 export async function lockAgentIdentityHistoryHandoff(
   tx: CommandTransaction,
   client: WorkClient,
@@ -535,15 +525,12 @@ export async function lockAgentIdentityHistoryHandoff(
   writer: SdkWriterState,
   phase: 'readiness' | 'closure',
 ) {
-  const { assertAgentIdentityHistoryUnit } = await import('./agent-identity-retirement.ts');
-  assertAgentIdentityHistoryUnit(currentCommandResources(tx).pool, currentCommandResources(tx), client);
-  const owner =
-    (await import('../semantic/identity-source-consumer-custody.ts')) as unknown as Partial<SourceHistoryOwner>;
-  if (!owner.lockIdentitySourceHistoryHandoff) return pending('identity-source-history-owner-not-installed');
+  const history = await import('./agent-identity-retirement.ts');
+  const owner = await import('../semantic/identity-source-consumer-custody.ts');
   if (!nativeClient(client)) return pending('identity-sdk-native-client-unavailable');
-  assertAgentIdentityHistoryUnit(currentCommandResources(tx).pool, currentCommandResources(tx), client);
+  history.assertAgentIdentityHistoryUnit(currentCommandResources(tx).pool, currentCommandResources(tx), client);
   const answer = await owner.lockIdentitySourceHistoryHandoff(tx, stage, binding, writer, phase, client);
-  assertAgentIdentityHistoryUnit(currentCommandResources(tx).pool, currentCommandResources(tx), client);
+  history.assertAgentIdentityHistoryUnit(currentCommandResources(tx).pool, currentCommandResources(tx), client);
   return answer;
 }
 
@@ -570,7 +557,7 @@ export async function lockRecordedAgentIdentityHistory(
 ): Promise<
   Pending | Readonly<{ state: 'guarded'; receipt: AgentIdentitySDKRetirementReceipt; writer: SdkWriterState }>
 > {
-  const { reserveIdentityHistoryWork, addNativeWork } = await import('./agent-identity-inventory-work.ts');
+  const { reserveIdentityHistoryWork, nativeWork, addNativeWork } = await import('./agent-identity-inventory-work.ts');
   const { pool, deadline } = currentCommandResources(tx);
   const { assertAgentIdentityHistoryUnit } = await import('./agent-identity-retirement.ts');
   assertAgentIdentityHistoryUnit(pool, context, client);

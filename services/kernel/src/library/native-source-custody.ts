@@ -1,3 +1,4 @@
+import { nativeIdentityPartitionQuery, isNativeIdentitySourceBasisSQL, nativeIdentitySourceBasisFootprint } from './identity-native-planner-selected-pricing.ts';
 import type { Pool, QueryResultRow } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import {
@@ -12,8 +13,9 @@ import { currentOperationalResources, hasLiveOperationalTransaction } from '../c
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
-import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
+import { assertLibraryIdentityResources, revalidateBoundLibraryIdentityWork, withLibraryIdentityWork } from './identity-native-planner-work.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
 
 import type { NativePublicOutputIdentity } from './native-source-output-types.ts';
 export type { NativeOutputActivation, NativePublicOutputIdentity } from './native-source-output-types.ts';
@@ -214,6 +216,9 @@ const rawQueries = {
 const zeroId = '00000000-0000-0000-0000-000000000000';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Query = { sql: string; params: readonly string[] };
+// Identity capture only consumes the move target's nullness. Keep that native fact
+// under the same row lock without projecting an unbounded node address.
+const identityPartitionQuery = nativeIdentityPartitionQuery;
 type Parameters = Record<string, unknown>;
 type State = NativeSourceIdentity &
   NativeSourceFrontier & { collectionFence: string; accountFence: string; complete: boolean };
@@ -285,6 +290,8 @@ function validate(identity: NativeSourceIdentity): asserts identity is AccountSo
     throw new Refused('binding');
   }
 }
+/** Structural native bind validation only; this grants no Source or original authority. */
+export function validateNativeIdentitySource(identity: NativeSourceIdentity): void { validate(identity); }
 function parameters(identity: NativeSourceIdentity): Parameters {
   validate(identity);
   return {
@@ -313,13 +320,52 @@ function footprint(text: string, values: unknown[], rows: number, points: number
     identityMetadataRows: metadata,
     witnessKeys: 0,
     statements: 1,
-    bytes: Buffer.byteLength(text) + Buffer.byteLength(JSON.stringify(values)) + 4096 + keys * 1024,
+    bytes: Buffer.byteLength(text) + Buffer.byteLength(JSON.stringify(values)) + (rows || points ? 4096 : 0) + keys * 1024,
     // Native point probes can miss even without a returned raw key. Keep these
     // admitted slots inclusive; a positive outer join result cannot measure inner misses.
     emptySeeks: keys ? 1 : points,
   };
 }
-function executor(client: CommandTransaction, work: NativeCollectionWork, deadline: number) {
+const sameSQL = (sql: string) => sql.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim().replace(/;$/, '');
+const boundId = 'f'.repeat(36), boundDecimal = '9'.repeat(20), boundText = String.fromCharCode(1);
+const captureProjectionBytes = Buffer.byteLength(JSON.stringify({
+  route: 65535, captureId: boundId, collectionId: boundId, accountId: boundId,
+  incarnation: boundText.repeat(128), generation: boundDecimal, scope: 'active_explicit_output',
+  ownerEpoch: 2147483647, receivingEpoch: boundDecimal, effectKey: boundText.repeat(256),
+  outputGeneration: boundId, publicationTransactionId: boundId, publicationPosition: boundDecimal,
+  collectionFence: boundDecimal, accountFence: boundDecimal, driver: 'entry_deleted',
+  after: boundText.repeat(512), tie: boundText.repeat(64), sessionId: boundId,
+  scanned: boundDecimal, version: 2147483647, complete: false,
+}));
+/** Literal reached capture/basis declarations; no table-prefix or arbitrary observer callback. */
+export function nativeSourceCustodyFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined {
+  const text = sameSQL(sql);
+  if (isNativeIdentitySourceBasisSQL(sql)) return nativeIdentitySourceBasisFootprint(sql, values);
+  if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(text)) return footprint(sql, [...values], 0, 0);
+  for (const [query, rows, points, metadata] of [
+    [identityPartitionQuery, 16, 1, 1], [accountQuery, 16, 1, 0], [sourceQuery, 16, 1, 0],
+    [outputQuery, 56, 7, 1], [ensureQuery, 32, 2, 0], [fencesQuery, 32, 2, 0],
+    [readQuery, 16, 1, 0], [startQuery, 32, 1, 0], [advanceQuery, 32, 1, 0],
+    [identityCapture, 32, 1, 0], [proofQuery, 64, 3, 1], [finishQuery, 80, 3, 1],
+  ] as const) {
+    if (sameSQL(query.sql) === text && query.params.length === values.length) {
+      const work = footprint(sql, [...values], rows, points, 0, metadata);
+      const projection = query === readQuery ? captureProjectionBytes : undefined;
+      if (projection !== undefined) work.bytes += projection - 4096;
+      return work;
+    }
+  }
+  for (const query of [...Object.values(rawQueries), rawExplicitOutput]) {
+    if (sameSQL(query.sql) !== text || query.params.length !== values.length) continue;
+    const n = values[query.params.indexOf('limit')];
+    if (typeof n !== 'number' || !Number.isSafeInteger(n) || n < 1 || n > 100) return undefined;
+    return footprint(sql, [...values], 16 * n + 32, 1, n);
+  }
+  return undefined;
+}
+
+export { declareNativeIdentitySourceBasisStatements } from './identity-native-planner-selected-pricing.ts';
+function executor(client: CommandTransaction, work: NativeCollectionWork, deadline: number, strict = false) {
   return async <R extends QueryResultRow = QueryResultRow>(
     query: Query,
     values: Parameters,
@@ -327,19 +373,27 @@ function executor(client: CommandTransaction, work: NativeCollectionWork, deadli
     points = 1,
     keys = 0,
   ): Promise<R[]> => {
+    revalidateBoundLibraryIdentityWork(work);
     if (Date.now() >= deadline) throw new Refused('allowance');
+    if (strict && query === partitionQuery) query = identityPartitionQuery;
     const args = query.params.map((name) => values[name]);
     const metadata =
       query === partitionQuery || query === finishQuery || query === proofQuery || query === outputQuery ? 1 : 0;
-    const admitted = work.reserve(footprint(query.sql, args, rows, points, keys, metadata));
+    // Shared original descendants can only dispatch the owner's recognized literals.
+    // The explicit reservation suppresses duplicate observation, never unknown SQL.
+    const admitted = work.reserve(strict
+      ? nativeSourceCustodyFootprint(query.sql, args)
+      : footprint(query.sql, args, rows, points, keys, metadata));
     admitted.dispatch();
     try {
       const config = {
         text: query.sql,
         values: args,
-        query_timeout: Math.max(1, deadline - Date.now()),
+        // A shared genuine CommandTransaction owns its immutable deadline and query surface.
+        ...(!strict ? { query_timeout: Math.max(1, deadline - Date.now()) } : {}),
       };
       const result = await admitted.query(() => client.query<R>(config));
+      revalidateBoundLibraryIdentityWork(work);
       // Dispatched native bounds, including possible inner misses, are never repriced from output.
       admitted.settle();
       return result.rows;
@@ -447,20 +501,27 @@ function compareOutputCount(state: State, fences: { outputMembers?: string }): v
 }
 
 /** Existing-owner raw dependency capture. No identity, canonical Source, permission or destination authority. */
-export function createNativeLibrarySourceCustody({
-  pool,
-  clock: _clock,
-}: {
-  pool: Pool;
-  clock?: KernelClock;
-}): NativeLibrarySourceCustody {
+export function createNativeLibrarySourceCustody(options: { pool: Pool; clock?: KernelClock }): NativeLibrarySourceCustody {
+  return nativeLibrarySourceCustody(options);
+}
+export function createNativeLibrarySourceCustodyWithWork(pool: Pool, work: NativeCollectionWork): NativeLibrarySourceCustody {
+  revalidateBoundLibraryIdentityWork(work);
+  return nativeLibrarySourceCustody({ pool }, work);
+}
+function nativeLibrarySourceCustody(
+  { pool, clock: _clock }: { pool: Pool; clock?: KernelClock },
+  sharedWork?: NativeCollectionWork,
+): NativeLibrarySourceCustody {
   async function account<T>(
     input: NativeSourceCaptureWork,
     operation: (work: NativeCollectionWork) => Promise<T>,
   ): Promise<T | Unavailable> {
-    const work = new NativeCollectionWork(input.allowance, input.deadline);
+    const work = sharedWork ?? new NativeCollectionWork(input.allowance, input.deadline);
     try {
-      return await operation(work);
+      if (sharedWork) assertLibraryIdentityResources(pool, work, input.deadline);
+      return sharedWork
+        ? await withLibraryIdentityWork(pool, work, () => operation(work))
+        : await operation(work);
     } catch (error) {
       if (error instanceof Refused) return { status: 'unavailable', reason: error.reason, work: work.receipt() };
       if (error instanceof ProblemError && error.code === 'dependency_unavailable')
@@ -475,65 +536,56 @@ export function createNativeLibrarySourceCustody({
     work: NativeCollectionWork,
     operation: (run: Execute) => Promise<T>,
   ): Promise<T> {
-    // Reserve cleanup before checkout/BEGIN. A depleted call can still roll back without extending its deadline.
-    const terminal = work.reserve(footprint('ROLLBACK', [], 0, 0), true);
-    let terminalUsed = false;
-    const checkout = work.reserve({ ...footprint('', [], 0, 1), statements: 0, bytes: 0, emptySeeks: 0 });
-    checkout.dispatch();
-    checkout.settle();
+    // Both terminal slots precede checkout. A rejected COMMIT never consumes rollback's slot.
+    const commit = work.reserve(footprint('COMMIT', [], 0, 0), true);
+    let rollback: ReturnType<NativeCollectionWork['reserve']>;
+    try { rollback = work.reserve(footprint('ROLLBACK', [], 0, 0), true); }
+    catch (error) { commit.cancel(); throw error; }
+    let committed = false, rolledBack = false;
     try {
-      return await withConnection(pool, async (client) => {
-        const run = executor(client, work, input.deadline);
+      return await instrumentNativeCollectionWork(pool, work, (sql, values) => {
+        revalidateBoundLibraryIdentityWork(work);
+        return nativeSourceCustodyFootprint(sql, values);
+      }, () => withConnection(pool, async (client) => {
+        revalidateBoundLibraryIdentityWork(work);
+        const run = executor(client, work, input.deadline, sharedWork !== undefined);
         let begun = false;
         try {
           await run({ sql: 'BEGIN', params: [] }, {}, 0, 0);
           begun = true;
           const result = await operation(run);
+          revalidateBoundLibraryIdentityWork(work);
           if (Date.now() >= input.deadline) throw new Refused('allowance');
-          terminalUsed = true;
-          terminal.dispatch();
+          commit.dispatch();
+          committed = true;
           try {
-            const commit = { text: 'COMMIT', query_timeout: Math.max(1, input.deadline - Date.now()) };
-            await client.query(commit);
-            terminal.settle();
-            begun = false;
-          } catch (error) {
-            terminal.settle();
-            discardConnection(client, error instanceof Error ? error : new Error('Native source commit failed'));
-            begun = false;
-            throw error;
-          }
+            const request = { text: 'COMMIT', query_timeout: Math.max(1, input.deadline - Date.now()) };
+            await commit.query(() => client.query(request));
+          } finally { commit.settle(); }
+          begun = false;
+          revalidateBoundLibraryIdentityWork(work);
           return result;
         } catch (error) {
           if (begun) {
-            terminalUsed = true;
-            terminal.dispatch();
             try {
-              await client.query('ROLLBACK');
-            } catch (cleanup) {
-              discardConnection(
-                client,
-                cleanup instanceof Error ? cleanup : new Error('Native source rollback failed'),
-              );
-              throw cleanup;
-            } finally {
-              terminal.settle();
+              rollback.dispatch();
+              rolledBack = true;
+              await rollback.query(() => client.query('ROLLBACK'));
             }
-          } else if (!terminalUsed) {
-            terminalUsed = true;
-            terminal.cancel();
+            catch (cleanup) {
+              discardConnection(client, cleanup instanceof Error ? cleanup : new Error('Native source rollback failed'));
+              throw cleanup;
+            } finally { if (rolledBack) rollback.settle(); }
           }
           throw error;
         }
-      });
-    } catch (error) {
-      if (!terminalUsed) {
-        terminalUsed = true;
-        terminal.cancel();
-      }
-      throw error;
+      }));
+    } finally {
+      if (!committed) commit.cancel();
+      if (!rolledBack) rollback.cancel();
     }
   }
+
   function live(input: { client: CommandTransaction; at: AuthoritativeTime; identity: NativeSourceIdentity }): void {
     validate(input.identity);
     if (commandTime(input.client) !== input.at) throw new Refused('binding');
@@ -966,8 +1018,9 @@ export async function readNativeIdentitySourceBasis(
 > {
   const work = sharedWork ?? new NativeCollectionWork(input.allowance, input.deadline);
   try {
+    if (sharedWork) assertLibraryIdentityResources(currentCommandResources(tx).pool, work, input.deadline);
     if (currentCommand(tx).partition !== partitionOf(identity.route)) throw new Refused('binding');
-    const run = executor(tx, work, input.deadline);
+    const run = executor(tx, work, input.deadline, sharedWork !== undefined);
     const fences = await bindOwner(run, identity, false);
     const [capture] = await run<
       NativeSourceFrontier & {

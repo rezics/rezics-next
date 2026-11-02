@@ -3936,9 +3936,10 @@ ordinary delayed scheduling path when its own reservation can be admitted.
 The supported positive body is the fresh preserved source0/barrier0/receiver0 path on the actual SAME configured
 SDK Pool. Matching URLs do not prove pool identity. Missing/moved physical homes, missing original association,
 unsupported restore, lost permanent fences, changed receiving custody and absent real Source handoff remain precise
-pending branches. The current snapshot lacks the agreed Source handoff export; it refuses
-`identity-source-history-owner-not-installed` before attempting that dispatch. Library's exhaustive page/current
-seal and Semantic's matching Source SQL footprint and adopted aggregate must land with their owners. Unknown SQL
+pending branches. The installed `semantic/identity-source-consumer-custody.ts` exports
+`lockIdentitySourceHistoryAuthority` and `lockIdentitySourceHistoryHandoff`; History delegates directly to those
+native bodies and uses their exact `IdentitySourceHistoryAuthority` type. Library's exhaustive page/current
+seal and Semantic's final body-derived parent allocation remain with their owners. Unknown SQL
 and exhausted reservations continue to refuse. This consumer does not install foreign bodies or raise budgets.
 Account-root, all roles/copies, Source discharge, public/routing exceptions and later source minimization remain
 independent. No native or whole-Goal success follows from this source implementation or typing.
@@ -3960,7 +3961,7 @@ callable and the one forward History migration; Source and SDK function bodies r
 | `readOriginalAccountAgentIdentity`                 | 86/80/59/205920/0               | Three independently released one-attempt commands and six RR snapshots at most for unmerge, including controls and failure slots                                                                   |
 | Local `readAgentIdentityRetirementStage`           | 73/71/26/82176/0                | Includes C, current Account source/technical fallback and source-association/partition/domain statement; released                                                                                  |
 | Initial `verifyAgentIdentityRetirementStage`       | 71/71/19/82048/0 + C            | Local source/barrier; Source's own current verification reserves its nested allowance independently                                                                                                |
-| R: later receiving binding                         | 160/80/6/131072/0 + C           | Before retirement and each side of each independent SDK fence observation                                                                                                                          |
+| R: later receiving binding                         | 160/80/6/131072/0 + C + 69/69/4/24576/0 | Before retirement and each side of each independent SDK fence observation; the additional full physical locator union is resolved independently of Source metadata                              |
 | H: genuine Source composed handoff                 | 377/293/57/507904/0             | Existing producer-owned composed subject handoff; includes its Account/current custody, Library seal, Source expected address and SDK lock; this consumer never charges its children a second time |
 | G: `core.check_agent_identity_history` nested body | 92/87/11/40960/0                | Association1, receiver/domain2, original work1, role LIMIT65+aggregate1, barrier1, standalone Source function17/15/2/32768, SDK4/2/4/8192; same tx through commit                                  |
 | L: `lockRecordedAgentIdentityHistory`              | H + G + 2/1/2/123136/0          | Original four capped JSON fields (122880) and outer native guard SELECT (256); same tx                                                                                                             |
@@ -4000,10 +4001,31 @@ the three commands inside the accepted-original lookup; the latter's controls ar
 staging and its Library/current checks retain the producer's own separate reservations. Account settlement read
 64/64/20/65536 and EACH current verify64/64/15/65536 remain in that owner composition; they are never replaced by a
 fixed assumption of two checks. Each additional invocation of a receiving read or verification reserves again.
-The released `readHistoryReceivingReceipt` reserves 76/75/17/132000 + G + A; its same-command verifier reserves
+The released `readHistoryReceivingReceipt` reserves C + 76/75/13/131872 + G + A; its same-command verifier reserves
 76/75/13/131872 + G + A, excluding its caller's already funded controls. The released receiving byte bound
 is the sum of M16384, authority/readiness/closure106496, roles8192, barrier128, partition64, digest32, physical64,
-two outer native void results512 and settings128 = 132000; the same-command verifier excludes settings128.
+two outer native void results512 = 131872. Released observation now uses the actual one-attempt command runner,
+so its C separately reserves BEGIN, two initial settings, time, final setting, native no-effect fence, COMMIT and
+the failure ROLLBACK slot, with control bytes256. Its total is 79/76/21/132128 + G + A. A plain operational
+PoolClient cannot supply the command resources required by the recovery and SDK owners. The checkout is released
+before returning the observation; the later source command still rechecks every current fence.
+Every R now resolves its durable artifact through `lockAgentIdentityReceivingArtifact` on that SAME receiving
+command before checking the receiving binding. The extra 69/69/4/24576/0 reservation precedes checkout and repeats
+for every actual R. It is additional to the retained 160/80/6/131072/0 body and C, rather than paid from a presumed
+remainder. `binding.source.accounts` remains Source metadata; it is never substituted for the physical locator
+union. A foreign Account barrier refuses before mapping or barrier SQL. The released SDK writer observation also
+checks an explicitly supplied token against the original live frame before reserving or reading the SDK.
+The receiving proof writer also refuses a foreign barrier before its root read, and both proof writer and custody
+verifier refuse an artifact home different from their actual native command before custody SQL. These exact
+`history-receiving-barrier-home-unavailable` and `history-receiving-artifact-home-unavailable` paths add no SQL;
+the enclosing already dispatched command controls remain spent.
+The independent `history/work.ts` → `sharedHistoryWorkModule` → `advanceSharedHistory` proof writer still owns
+an operational cursor transaction, without native command resources or Source allocation. Its call to
+`recordHistoryReceivingProof` therefore returns `history-receiving-command-resources-unavailable` before custody
+SQL instead of throwing from `currentCommandResources`. A selected-job lease cannot grant that missing handoff.
+The independent owner must supply genuine command admission and its literal allocation before this branch can
+install original receiving proofs; this consumer adds neither a payer nor a permissive guard. This refusal itself
+dispatches no SQL and adds 0/0/0/0/0; the caller's previously dispatched prefix and rollback remain charged.
 Inventory's released mapping-only snapshot reserves 6/5/8/16640, and its complete saved SDK receipt/work/mapping
 snapshot reserves 7/6/8/33024 whenever either enters this existing frame; subsequent fence and receiving calls
 reserve separately as above. Outside a Source callback their independent inventory admission remains unchanged.
@@ -4183,14 +4205,57 @@ fields, historical handles/reservations, verification pointers and timestamps wh
 authentication floor and the current fence/transaction needed for refusal. Only this terminal page can remove the
 immutable creation timestamp. Successful independent phases cannot bypass a pending terminal-proof consumer.
 
-The Access participant remains incomplete. Approval and opening acceptance can precede their effects; current
-source provides no exact discharged-consumer proof for all those records or credential floors. Those selected
-rows retain respectively `approval-consumer-proof-unavailable`, `opening-consumer-proof-unavailable` or
-`credential-consumer-proof-unavailable`. Historical suspension/unfence work and cursor-bearing operator pages
+The Access participant remains incomplete. Historical suspension/unfence work and cursor-bearing operator pages
 retain their own continuation/page consumer reason; an Auth deletion witness does not discharge them. Realm
 membership terminal proofs retain their actual source consumer dependency. Current foreign operator relationships
 retain the existing transition protocol. These are individual durable blocked pages, not a blanket substitution
 for independent native cleanup. The Realm deletion-entry/publication producer remains its owner's responsibility.
+
+#### Auth-dependent authorization witnesses
+
+Decision: retire only consumed own-human credential approvals, consumed session or narrowed credential openings
+for the erased subject, and that subject's credential floors, in the actual account/source native partition, after
+both historical copy completion and independently current receiving custody; keep all other consumers pending.
+
+`erasure-auth-consumers.ts` prepares the original opaque `CurrentAuthReceivingClosure` with every checkout
+released before the purge transaction. The existing native engine still locks progress, validates the saved raw
+page, and checks every selected row before its first mutation. The consumer locks each full source key and calls
+`verifyCurrentAuthReceivingClosure` in that transaction. `auth_consumer_retirement_ready` additionally checks the
+selected role, exact saved page key, immutable erasure root and actual same-partition binding. The destructive
+DELETE repeats this native predicate against its actual source row. Both calls lock the original current closure
+and matching `copies-erased` phase through COMMIT. Absence and the destructive checkpoint still commit together;
+scheduling positions, page bounds and blocked-page rotation are unchanged. There is no caller readiness flag,
+Auth database read under a source checkout, foreign-home proof or participant acknowledgement.
+
+Own-human credential approvals have a closed subject/purpose descriptor. Session openings and narrowed
+credential-management openings are inputs to the subject's Auth session, consent or credential consumers. Complete
+subject custody closes those readers; erasing only a surviving subject's operator, acting human or delegate does
+not. Other approvals can precede registration, membership, deletion or other native business effects and retain
+`approval-consumer-proof-unavailable`. Unconsumed openings, unsupported bindings and surviving subjects retain
+`opening-consumer-proof-unavailable`; unavailable floor custody retains `credential-consumer-proof-unavailable`.
+The original source bytes, keys, current authorization and ordinary approval/credential replay semantics remain
+intact until the exact prerequisite holds. No source metadata is recreated.
+
+The later Auth-local `copies-erased` publication requires native role/phase coverage, the original consent cutoff,
+real source discharge and actual SDK writer retirement plus physical copy absence. Its account/version/T alone
+cannot distinguish a restored Auth image retaining a historical publication. The integrated original receiving
+reader now supplies released preparation and same-transaction verification of database identity, incarnation,
+restore generation, Source ownership and writer/custody fences. An early `native-consumed` phase or a historical
+`copies-erased` row alone never permits these deletions, including after receiving quarantine or replacement.
+
+Independent physical-owner installation and per-obligation physical/receiving custody remain parked under
+[Current Auth receiving controls](#current-auth-receiving-controls). Registration cannot activate them. Without
+those original operands preparation returns null and every present witness keeps its precise existing consumer
+reason. The default native retirement path is implemented against the original owner seam; genuine positive
+native acceptance still requires those independent operands and is not established by source typing.
+
+Each selected key adds only fixed primary-key probes: selected source; native progress, root and saved discovery
+page; original current locator (nine keyed visits); and the historical copy phase. Preparation adds one root read
+and the original released locator once per nonempty same-home page. Verification adds the original three client
+statements per present key; readiness and DELETE each repeat the fixed native locator and manifest checks. This is
+O(k log N) for the original k <= 100, with no account-global collection, history scan or changed raw-page allowance.
+`test/erasure-native-consumers.test.ts` retains its genuine consumer/copy positive oracle and now requires current
+receiving preparation before the positive purge, with mismatched barriers refused. That native proof is deferred.
 
 The supported shared-history producer-closure handoff for Access receipts, events and actual DBOS copies is still
 missing. No recorder/minimizer or Context-role publication bridge is invented here. If all native phases finish,
@@ -4336,8 +4401,9 @@ Root version/time, terminal fenced Account, active owner incarnation, original s
 are checked in the initial command and locked again through the final command COMMIT. Foreign barriers return
 `native-erasure-source-home-root-custody-unavailable` before a foreign root read. Missing originals, unavailable
 accepted jobs, moved/restored owners, stale roots, unknown copies and mismatched pools refuse with their precise
-owner gaps. Recovery originals have additional serializers outside the finite native cut; their missing copy
-inventory remains `native-source-recovery-copies-unavailable`, rather than an inferred empty inventory.
+owner gaps. Recovery originals have their own installed finite receipt/outbox cut and current receiving reader.
+They remain pending at `agent-identity-recovery-discovery-owner-unavailable` until the actual Search owner can
+supply current enrollment and its same-home handoff; a finite recovery cut is not that authority.
 
 The original accepted job is resolved by `readOriginalAccountAgentIdentity` after an undo-only native source read.
 Verification uses its original accepted claim; unverify uses its own accepted job, never its prior `undoJob` as the
@@ -4348,19 +4414,32 @@ requester and decider require transferred technical custody. Every current Sourc
 independently required by the original Source verifier.
 
 The default entry uses `withAgentIdentityHistoryUnit` to retain ONE original Source callback frame across released
-observations and final COMMIT. An existing unit reuses its actual context; an unrelated live Source frame refuses
-rather than nesting or replacing it. The old Pool-only entry can prepare/refuse but cannot mutate. Deadline and
+observations and final COMMIT. An existing unit reuses its actual context. When Source already owns the callback,
+the History unit validates and reuses that exact live token and its remaining balance; it never opens a nested
+Source frame. A shorter caller deadline stays shorter. Foreign-Pool, expired/settled or explicit mismatched tokens
+refuse before dispatch. The old Pool-only entry can prepare/refuse but cannot mutate; when invoked inside Source
+it prepays C + B(k) before its sole command and cannot retry or silently escape that allocation. Deadline and
 native reservations are inherited without refund or replacement. The installed selected retirement engine remains
 the sole writer of readiness, generation-2 closure, physical deletion and receiving proof; this minimizer consumes
 its actual committed result and creates no parallel engine.
 
 `shared-history-agent-identity.ts` stages the original point lookup, complete finite native inventory and original
-`lookupAgentIdentityReceivingCopies` artifact. The final verifier re-reads the complete native cut, every role union,
+`lookupAgentIdentityReceivingCopies` address. It then resolves the actual immutable mapping and complete locator
+union using `lockAgentIdentityReceivingArtifact` in a released native command; lookup/source metadata cannot supply
+the artifact's accounts. The released SDK retirement reader uses the same physical resolver before its receiving
+observation. The final verifier re-reads the complete native cut, every role union,
 current restore/owner generations, exact source-local obligation, every receiving receipt and receipt/outbox physical
 row. It invokes `lockRecordedAgentIdentityHistory` with the actual stage and WorkClient, then the existing native
 receiving validator for the original durable artifact. Durable work must actually be retired with physical absence,
 cleared request/scope, generation-2 closure and the later matching receiving COMMIT. A successful current result
 replaces a stale snapshot gap; null never falls back to that stale gap.
+
+The native inventory requires the original source epoch to remain the active owner epoch as well as matching the
+receiver epoch. Same-command inventory checks spend their declared costs even without an SDK stage; absence of
+that stage never exempts an inherited Source frame from accounting. Point/copy staging likewise reserves its own
+lookup costs for deadline-only callers inside an inherited frame. Released receiving returns no receipt for a
+foreign barrier home before reading that root. Source handoff staging uses one command attempt, including when
+called outside a History unit, so its fixed control/failure reservation cannot silently fund a retry.
 
 For outbox consumers, `historyReceivingGap` locks all runtime fanout rows (LIMIT33, overflow refuses; runtime maximum
 32). Each retained consumer must be completed/transferred and resolve through the unique original workflow mapping,
@@ -4391,30 +4470,39 @@ engineRequests zero for the additions. Each listed bound is reserved before its 
 failed dispatch and rollback prefixes. No subtraction on early return, cached success, replacement frame or local
 ledger is permitted. SQL recognition and smaller configured/remainder caps stay unchanged.
 
-| Literal SQL / export identity                                                    | Home and locked footprint                                                                                                                                                     | Reservation per invocation                                                          |
-| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `identityHistoryCommand` in `history/agent-identity-inventory-work.ts`           | home0, one attempt; BEGIN, local deadline/config/time, no-effect native fence, COMMIT and failure ROLLBACK slot                                                               | C = 3/1/8/256/0                                                                     |
-| `prepareNativeRetention` initial and final root/source SELECTs                   | exact erasure, Account, active partition, repeated partition and k source keys FOR UPDATE; k <= 8                                                                             | B(k) = (4+k)/(4+k)/(4+k)/16384/0, twice, each plus C                                |
-| `consumerReference` native undo-only `readAccountIdentitySource`                 | original source command, technical fallback/role inventory and native command controls                                                                                        | 70/68/25/73984/0                                                                    |
-| `readOriginalAccountAgentIdentity`                                               | original accepted claim/undo job; bounded three command attempts and six RR snapshots including controls/failure slots                                                        | 86/80/59/205920/0                                                                   |
-| `readAgentIdentityRetirementStage`                                               | native `sourceHandoff`, original component/role/restore reads, then released Source custody read                                                                              | 73/71/26/82176/0 plus original Source reader's own reservations                     |
-| `readAgentIdentityCopyReceiving` point lookup, excluding its receiving validator | released RR; native cut (three LIMIT65 unions), one exact candidate, one complete role union, BEGIN/config/COMMIT/ROLLBACK                                                    | 270/270/12/90112/0                                                                  |
-| `readAgentIdentityNativeInventory`                                               | released RR, exact sealed inventory/partition/domain, LIMIT4 original copies, three LIMIT65 unions, controls/rollback                                                         | 203/202/9/65664/0                                                                   |
-| `readHistoryReceivingReceipt` receipt/outbox                                     | released RR: barrier, sealed copy gate, LIMIT65 scope, active partition, exact receiving point and physical point, controls/rollback                                          | 76/75/12/24576/0, for each actual probe                                             |
-| `lookupAgentIdentityReceivingCopies`                                             | released original native source command, immutable source declaration and exact mapped History work/partition/domain                                                          | 80/80/12/32768/0                                                                    |
-| `verifyAgentIdentityCopyRetention` point validator                               | current barrier/copy gate, LIMIT65 scope, partition/receiving/physical points                                                                                                 | 72/72/12/20480/0                                                                    |
-| `verifyAgentIdentityInventory` current cut                                       | same final command; exact native cut and three complete LIMIT65 unions                                                                                                        | 202/202/5/65536/0                                                                   |
-| Current native inventory receiving/physical join                                 | each of at most three copies; exact receipt/outbox component; receiving/seal/locator FOR SHARE                                                                                | 4/4/3/1024/0 per copy; outbox receiving expansion below additional                  |
-| Current `core.agent_identity_sdk_obligation` SELECT                              | full original key FOR SHARE                                                                                                                                                   | 1/1/1/1024/0                                                                        |
-| `lockRecordedAgentIdentityHistory`                                               | original mapped row, current Source/SDK H, saved authority comparison and native G closure SELECT                                                                             | 1/1/1/122880/0 + H + 1/0/1/256/0 + G; H's internal reservations are not added twice |
-| `verifyCurrentHistoryReceiving` original durable artifact                        | same final command; current mapping, root, full roles, exact receiving proof, native closure and physical absence                                                             | Rcurrent = 76/75/13/131872/0 + G + A                                                |
-| `historyReceivingGap` outbox consumer SELECT                                     | same local home; complete fanout LIMIT33 FOR SHARE                                                                                                                            | 33/33/1/65536/0                                                                     |
-| Original outbox receiving association SQL in `history/receiving.ts`              | each consumer: unique workflow -> full obligation key, exact outbox/receipt, original source declaration, exact native inventory and full original receipt key; all FOR SHARE | 8/8/1/16384/0                                                                       |
-| `lockAgentIdentityReceivingArtifact`                                             | original mapping/work/partition/domain then native LIMIT65 role union                                                                                                         | 69/69/4/24576/0 per associated consumer                                             |
-| Associated consumer `nativeReceipt`                                              | full durable receiving validation, never a completion flag                                                                                                                    | Rcurrent per actual consumer invocation                                             |
-| Recovery preflight SELECT                                                        | exact original key FOR SHARE in final command                                                                                                                                 | 1/1/1/0/0                                                                           |
-| `check_agent_identity_recovery_retention`                                        | six fixed reads, LIMIT33 effect consumer, LIMIT3 serializer copies, two LIMIT65 role unions and receiving proofs; no Search population query                                  | 174/174/12/65536/0 per guard                                                        |
-| Role UPDATE and native retention trigger                                         | fixed original key; complete SQL in the forward migration, four LIMIT65 unions, two LIMIT33 outbox consumer sets, native physical points, G and A                             | M = 460/460/50/180224/0 + G + A = 561/556/70/221184/0                               |
+| Literal SQL / export identity                                                                                         | Home and locked footprint                                                                                                                                                     | Reservation per invocation                                                          |
+| --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `identityHistoryCommand` in `history/agent-identity-inventory-work.ts`                                                | home0, one attempt; BEGIN, local deadline/config/time, no-effect native fence, COMMIT and failure ROLLBACK slot                                                               | C = 3/1/8/256/0                                                                     |
+| `prepareNativeRetention` initial and final root/source SELECTs                                                        | exact erasure, Account, active partition, repeated partition and k source keys FOR UPDATE; k <= 8                                                                             | B(k) = (4+k)/(4+k)/(4+k)/16384/0, twice, each plus C                                |
+| `consumerReference` native undo-only `readAccountIdentitySource`                                                      | original source command, technical fallback/role inventory and native command controls                                                                                        | 70/68/25/73984/0                                                                    |
+| `readOriginalAccountAgentIdentity`                                                                                    | original accepted claim/undo job; bounded three command attempts and six RR snapshots including controls/failure slots                                                        | 86/80/59/205920/0                                                                   |
+| `readAgentIdentityRetirementStage`                                                                                    | native `sourceHandoff`, original component/role/restore reads, then released Source custody read                                                                              | 73/71/26/82176/0 plus original Source reader's own reservations                     |
+| `readAgentIdentityCopyReceiving` point lookup, excluding its receiving validator                                      | released RR; native cut (three LIMIT65 unions), one exact candidate, one complete role union, BEGIN/config/COMMIT/ROLLBACK                                                    | 270/270/12/90112/0                                                                  |
+| `readAgentIdentityNativeInventory`                                                                                    | released RR, exact sealed inventory/partition/domain, LIMIT4 original copies, three LIMIT65 unions, controls/rollback                                                         | 203/202/9/65664/0                                                                   |
+| `readHistoryReceivingReceipt` receipt/outbox                                                                          | released native command: barrier, sealed copy gate, LIMIT65 scope, active partition, exact receiving point and physical point; C includes controls/rollback                   | C + 76/75/8/24448/0 = 79/76/16/24704/0, for each actual probe                       |
+| `lookupAgentIdentityReceivingCopies`                                                                                  | released original native source command, immutable source declaration and exact mapped History work/partition/domain                                                          | 80/80/12/32768/0                                                                    |
+| `verifyAgentIdentityCopyRetention` point validator                                                                    | current barrier/copy gate, LIMIT65 scope, partition/receiving/physical points                                                                                                 | 72/72/12/20480/0                                                                    |
+| `verifyAgentIdentityInventory` current cut                                                                            | same final command; exact native cut and three complete LIMIT65 unions                                                                                                        | 202/202/5/65536/0                                                                   |
+| Current native inventory receiving/physical join                                                                      | each of at most three copies; exact receipt/outbox component; receiving/seal/locator FOR SHARE                                                                                | 4/4/3/1024/0 per copy; outbox receiving expansion below additional                  |
+| Current `core.agent_identity_sdk_obligation` SELECT                                                                   | full original key FOR SHARE                                                                                                                                                   | 1/1/1/1024/0                                                                        |
+| `lockRecordedAgentIdentityHistory`                                                                                    | original mapped row, current Source/SDK H, saved authority comparison and native G closure SELECT                                                                             | 1/1/1/122880/0 + H + 1/0/1/256/0 + G; H's internal reservations are not added twice |
+| `verifyCurrentHistoryReceiving` original durable artifact                                                             | same final command; current mapping, root, full roles, exact receiving proof, native closure and physical absence                                                             | Rcurrent = 76/75/13/131872/0 + G + A                                                |
+| `historyReceivingGap` outbox consumer SELECT                                                                          | same local home; complete fanout LIMIT33 FOR SHARE                                                                                                                            | 33/33/1/65536/0                                                                     |
+| Original outbox receiving association SQL in `history/receiving.ts`                                                   | each consumer: unique workflow -> full obligation key, exact outbox/receipt, original source declaration, exact native inventory and full original receipt key; all FOR SHARE | 8/8/1/16384/0                                                                       |
+| `lockAgentIdentityReceivingArtifact`                                                                                  | original mapping/work/partition/domain then native LIMIT65 role union                                                                                                         | 69/69/4/24576/0 per associated consumer                                             |
+| Released durable physical artifact lookup in `prepareAgentIdentityCopyRetention` and `readAgentIdentitySDKRetirement` | native home0 command, original custody ID only; same resolver and full physical LIMIT65 union; no metadata reconstruction                                                     | C + 69/69/4/24576/0 = 72/70/12/24832/0 each                                         |
+| Associated consumer `nativeReceipt`                                                                                   | full durable receiving validation, never a completion flag                                                                                                                    | Rcurrent per actual consumer invocation                                             |
+| Recovery preflight SELECT                                                                                             | exact original key FOR SHARE in final command                                                                                                                                 | 1/1/1/0/0                                                                           |
+| `check_agent_identity_recovery_retention`                                                                             | six fixed reads, LIMIT33 effect consumer, LIMIT3 serializer copies, two LIMIT65 role unions and receiving proofs; no Search population query                                  | 174/174/12/65536/0 per guard                                                        |
+| Role UPDATE and native retention trigger                                                                              | fixed original key; complete SQL in the forward migration, four LIMIT65 unions, two LIMIT33 outbox consumer sets, native physical points, G and A                             | M = 460/460/50/180224/0 + G + A = 561/556/70/221184/0                               |
+
+The public `prepareAgentIdentityRetention` validator independently charges B(k) before its root/owner/key SQL
+when reached directly in an inherited frame. Its caller retains command-control responsibility. The minimizer's
+two private preparation calls retain their existing two B(k) reservations; they do not call the public wrapper
+or pay it twice. Released retirement staging always validates and charges its local 73/71/26/82176/0 bound,
+including when the supplied token has ended. Receiver owner readiness likewise charges its 74/74/7/49152/0 body
+in an inherited Source frame even when no History unit adapter is active. Neither path can silently become
+independent execution when Source provenance is present.
 
 The original role-trigger base includes the UPDATE and both trigger/function mapping reads, root/Account join,
 recovery, inventory, obligation, domain and four copy cuts, per-copy aggregate/digest and receiving/seal/locator
@@ -4427,7 +4515,7 @@ body; linked TypeScript function names identify the dispatch sites. No caller se
 is added.
 
 The reused full `readAgentIdentitySDKRetirementGap` additionally spends its original mapped RR observation,
-pre/post actual SDK fence observations and released durable receiving Rread = 76/75/17/132000/0 + G + A; its existing
+pre/post actual SDK fence observations and released durable receiving Rread = C + 76/75/13/131872/0 + G + A; its existing
 entry reservations remain in their original functions. Source read/verify entries remain independently reserved:
 current verifier 100/100/22/139264/0 and reached Account 64/64/15/65536/0. The direct final Source verify and H's
 Source verify both execute and each spends again. H remains 377/293/57/507904/0; G remains
@@ -4436,6 +4524,25 @@ receiving guards, including released point/native reads and final point/inventor
 c actual associated consumers, that expansion is q*(33/33/1/65536/0) +
 c*(8/8/1/16384/0 + 69/69/4/24576/0 + Rcurrent), with q <= 2 and c <= 64 per complete native cut.
 It is additional to each enclosing validator's own rows/control cost.
+
+Each released receiving command replaces the former four operational controls (BEGIN, timeout setting, COMMIT,
+failure ROLLBACK) with the eight C controls; it adds 3/1/4/128/0 to that observation's former reservation.
+No current verifier or physical bound is reduced. Original receipt/outbox observations also invoke
+`readAgentIdentityRecoveryArtifactInTransaction`'s exact copy/recovery association SELECT: its existing
+2/2/1/512/0 reservation is additional on every actual invocation, including an absent recovery association.
+An actual recovery then prepays the existing 135/135/6/32768/0 finite cut and
+100/100/36/24576/0 current readiness body; missing Search current-enrollment authority still refuses, and no
+Source or SDK result substitutes for that owner. `readAgentIdentityRetirementStage` now also reserves its
+73/71/26/82176/0 local command before dispatch whenever an ambient Source frame exists, including calls outside
+the History scheduling callback. That provenance is funding only; only the registered callback dispatches Source.
+
+The original effect wrapper is another independent retained execution: `events/effects.ts:registerEffects`
+persists `fx:…` workflow IDs and the `effect.run` input, while the reversal writer maps the distinct original
+`accounts.agent-verification-reversal:…` workflow. The installed original association resolver cannot certify
+that wrapper's physical copies or permanent writer closure. Its exact receiving branch remains pending; a
+completed wrapper, derived workflow name or child receiving result cannot supply its missing native association.
+The final-frame owner must include this missing actual child body before adopting a complete parent; it is not
+zero work. The existing 11588/9856/2731/6843136/0 selected-consumer declaration stays a separate body envelope.
 
 For k <= 8 keys the two native commands spend 2*C + 2*B(k); each staged key then spends every reached row above.
 A refusal before staging still spends its command/root prefix. Staging refusal, SQL failure and rollback spend all
@@ -4449,6 +4556,22 @@ smaller remainder/configuration caps and the native 100-row ceiling. Semantic mu
 Account and Library's literal nested/fence costs before final funding; unknown-SQL refusal stays enabled.
 
 The focused default positive/refusal regression is authored in `agent-verification-reversal.test.ts` and is UNRUN.
+Additional unrun assertions cover original released receipt receiving and current barrier/role rejection, plus
+actual inherited-frame reuse, cumulative balance and foreign/ended-frame refusal without dispatch.
+The released recovery inventory snapshot separately prepays its BEGIN, timeout setting, COMMIT and failure
+ROLLBACK: 1/0/4/128/0 in addition to the in-transaction 135/135/6/32768/0 cut. The exported
+`AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST` and `AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST` distinguish
+these two actual dispatches; the released total is 136/135/10/32896/0, paid before checkout. This does not change
+the same-command recovery cut reservation. Additional unrun cases cover this prepayment, direct preparation's
+inherited debit, explicit ended SDK tokens and foreign-barrier refusal. The original selected-body
+11588/9856/2731/6843136/0 declaration remains unchanged and is not a full aggregate: the new R physical reads,
+initial/repeated inventory/receiving and recovery snapshot controls remain additional reached work for the
+Source owner's final declaration. No child or parent cap is enlarged here.
+The released `readAgentIdentityReceivingArtifact` entry prepays
+`AGENT_IDENTITY_RECEIVING_ARTIFACT_COST` (69/69/4/24576/0) before acquiring its native checkout, then pays C
+before command entry. Both Account copy staging and SDK retirement observation use this entry. The same-command
+`lockAgentIdentityReceivingArtifact` remains the physical resolver; this wrapper adds neither custody nor funding.
+Its focused insufficient-funding/no-checkout case is authored in the same existing fixture and is UNRUN.
 It requires genuine lifecycle T, accepted verify/reversal, actual same-Pool SDK admission, the installed selected
 History engine and all receiving copies before default native minimization. It checks refusal before closure,
 surviving decider attribution, retained technical undo and retry. Original acceptance/native/browser proof and full

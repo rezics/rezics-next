@@ -93,8 +93,9 @@ retainIdentityScopeConsumerFence(tx: CommandTransaction, ticket: IdentityPrearmT
 `read` resolves the original retained registration/capture with the same live
 `context.identityConsumerWork` frame and charges its probes before dispatch. It returns
 the child ceiling and native SQL footprint, including all failed/native/control work.
-The returned allowance is current planning data; Source transfers work through its
-one frame-owned Library ledger's `compose`, preserving the parent reservation identity.
+The returned allowance is current planning data. Independent maintenance transfers
+work through its frame-owned Library ledger's `compose`; prepaid receiving uses
+the exact Accounts-owned original Library ledger directly, preserving its reservation identity.
 Neither retained capture funds nor a new ledger supply this work.
 The footprint is accounting only; unknown SQL is refused before dispatch by the
 existing NativeCollectionWork instrumenter. It cannot provide discharge authority. It must not allocate
@@ -217,6 +218,192 @@ discharge can commit. Requester/decider transfer remains gated on actual Account
 acceptance and same-source verification. Public-catalogue/public-output custody and missing
 History artifact associations remain pending. Account current-root and all-copy proof are
 separate requirements and are never inferred from this Source receipt.
+
+## Current consumer composition and positive retirement preflight
+
+This section distinguishes installed consumer plumbing from a complete native retirement
+journey. The aggregate in Cost and evidence is the authorized **original-body** allocation, not funding
+of the later Source/History/SDK composition. Exported interfaces and submitted source
+are not evidence of installed producers or positive native execution.
+
+### One page plan and one live frame
+
+`readIdentityScopeConsumerWork` charges its retained registration/capture lookup and
+returns the actual frame ledger's reservation identity and current remaining dimensions.
+`advanceConsumers` binds that remainder once with
+`withIdentitySourceConsumerLibraryRemainder`. `NativeCollectionWork.withinAllowance`
+limits the same ledger's cumulative used **and held** dimensions. It creates no second
+ledger, receipt or funding. The limit covers producer transfers, checkout points,
+receiving work, nested and repeated verification, control statements, failed dispatches
+and reserved terminal cleanup. It survives until the continuation has completed its
+checkpoint or terminal Source command. A smaller plan cannot borrow the enclosing
+ledger's larger remaining balance. Foreign reservation identities and ended callback
+contexts refuse. Re-entering a helper never resets previously spent work.
+
+An independent page keeps the existing `compose` transfer under that ceiling and
+returns the sole producer's receipt with the same reservation identity. An incomplete
+or throwing transferred child spends its whole ceiling and poisons its parent ledger.
+A prepaid page instead runs under the existing original ledger's observation without
+transferring its capacity to a second ledger. A sealed page must return that SAME
+ledger's cumulative receipt. A nested replacement ledger has no transfer authority.
+The literal policy and observation span the whole continuation, including checkpoint
+and final commands; an undeclared reached statement refuses before transport.
+Known subsequent SQL reserves before dispatch; failed SQL retains its charge.
+The former per-statement comparison against a fixed post-page snapshot is removed.
+The Source native commands keep their independent `NativeStepWork` reservations on
+that same frame. Library and native dimensions are not converted or added as new funds.
+
+`requireNativeCollectionFootprint` keeps the Source statement policy active even when
+a transferred page installs its own local instrumentation. An unmatched statement is
+refused before the underlying query, including inside a nested producer. This admission
+policy is not another allowance. A previously funded transaction terminal remains
+available for cleanup after refusal. `retainIdentityScopeConsumerFence` itself requires
+the current page remainder and instruments its native queries on the same ledger.
+The per-page seal check and the separate check inside the exhausted-page fence remain
+independent calls on the same Source-home transaction, including sealed zero. Neither
+check is replaced by a receipt or a cached verdict. Receiving selections still require
+the exact original/job/effect/owner/source/scope/disposition/capture and applied native
+receipt. Changed seals restart the scope; invalid directory continuations restart
+native enumeration. Durable fences, checkpoints, terminal discharge/transfer and
+post-commit Account verification retain their original semantics.
+
+The current exact Source statement accounting remains:
+
+| Exact SQL import or control                                                          | Native rows / points | Statements | Returned-byte ceiling |
+| ------------------------------------------------------------------------------------ | -------------------: | ---------: | --------------------: |
+| scoped consumer current / work                                                       |                7 / 7 |          1 | closed projection below |
+| scoped consumer receipt                                                              |                3 / 3 |          1 |                  2048 |
+| scoped consumer conflict / native, partition read, command no-effect fence           |                1 / 1 |          1 |                  1024 |
+| command time                                                                         |                0 / 0 |          1 |                   128 |
+| native commit insert                                                                 |                2 / 2 |          1 |                   128 |
+| scoped consumer insert, including two FK points and seven deferred constraint inputs |              10 / 10 |          4 |                     0 |
+| existing literal BEGIN modes, COMMIT, ROLLBACK and bounded timeout configuration     |                0 / 0 |          1 |                     0 |
+
+Each byte reservation additionally includes the actual SQL and serialized parameter
+bytes; a checkout separately costs one native point. Cleanup is held before BEGIN.
+No engine request or MVCC-visibility accounting is introduced. These are only the
+already declared Source statements, not a whitelist inferred from a paid Library body.
+
+### Actual default entry and remaining owner transitions
+
+The current default entry is `access/shared-history.ts`'s selected durable-work unit.
+Its selection/locator transaction releases its checkout before calling
+`minimizeHistoryWork` in `history/durable.ts`. For an agent-identity association,
+`minimizeIdentitySDKWork` invokes `advanceAgentIdentityConsumerMaintenance` when
+readiness or the SDK retirement receipt is missing. That function opens the original
+Source callback, then performs the released receiving binding, original Account Source,
+accepted-job lookup and `readAgentIdentityRetirementStage` reads. The stage consumes
+`readIdentitySourceConsumerCustody`: retained original claim, directory page, Library
+page, exact receiving reconciliation, both same-home seal checks, durable scope fence,
+final directory cut and the original Source terminal command. Subject retirement needs
+Account reversal settlement and discharge; requester/decider retirement needs actual
+technical receiver acceptance and transfer. After commit, `verifiedTerminal` independently
+revalidates the native Source and current Account state. None of these gates implies
+History/root/all-copy closure.
+
+Inside that callback the existing `retireAgentIdentitySDKWork` repeats the Source stage
+check, resolves the genuine receiving binding, invokes the SDK owner, reads the durable
+SDK fence and receiving binding again, repeats the Source check, then enters a receiving
+command. This checkout's body does not implement the adopted durable readiness/closure
+guards. In particular a released Source check or terminal Source receipt cannot authorize
+readiness, SDK retirement or a later receiving write. The original History owner must
+install its staged body rather than relying on this baseline ordering.
+
+After `advanceAgentIdentityConsumerMaintenance` returns, the current Source frame has
+already closed. `history/durable.ts` subsequently reads saved readiness, runs
+`prepareIdentitySDKWorkRetirement`, checks retired state and cleared request/scope,
+observes the SDK fence, inspects eight physical SDK tables, calls supported
+`deleteWorkflows([exactWorkflowId], false)`, observes the fence again and inspects physical
+absence. Its later absence/locator transaction locks the current barrier and native
+association before writing `absence_verified` and minimizing the locator. Finally
+`access/shared-history.ts` opens a distinct transaction for the receiving-copy proof,
+selected cursor and progress, through COMMIT. Extending the SAME original callback
+across those actual commands, with fresh original Source and generation-2 SDK locks at
+each guarded transition, belongs to History. This consumer does not create another
+frame to cover that gap. Inventory's before/after SDK, Source and receiving checks,
+Account current-root, every History role and all-copy obligations remain independent.
+
+Physical inspection retains status/input/output limits 1/1/1, operations/events/history
+64/8/64, notifications/streams 0/0, the limit-plus-one refusal, 139 admitted rows and
+less than 10 MiB stored data. Stored payload limits do not establish returned protocol
+bytes or Source point charges. Bounded SDK retry/deletion, triggers, physical queries
+and all later transaction controls need the original owner's actual cost declaration.
+
+### Physical placement and authority still required
+
+The installed Work exports are `readSdkWorkflowWriterState` and
+`lockSdkWorkflowWriterState` in `work/sdk-retirement-fence.ts`. The former is a released
+observation; the latter uses the caller's `CommandTransaction` and its actual configured
+Pool through commit. Generation 1 serializes readiness only; generation 2 binds the
+exact permanent closure. The SDK client must share that very Pool. Matching connection
+strings, colocated tables or support for a shared-pool capability do not prove actual
+configuration. This source review supplies no runtime placement evidence.
+
+The retained original Source producer interface, reviewed separately from installed code,
+is `lockIdentitySourceHistoryAuthority(tx, reference, expected)` and
+`lockIdentitySourceHistoryHandoff(tx, stage, binding, writer, phase, sdk)`, backed by
+`semantic.lock_identity_source_history_handoff(reference, expected)`. It resolves actual
+original custody, terminal/disposition, role, claim, barrier, replay/undo/restore and
+native commit addresses. History must re-resolve the returned address in its own native
+guard at every readiness, closure, retirement, absence and receiving transition. Equal
+JSON or a previously successful result is not durable authority. These original Source exports and the native SQL function are installed. The consumer
+prices the standalone guard from that actual body; the enclosing History/SDK branches
+still need their complete eight-axis declarations and actual invocation multiplicities.
+
+The agreed supported path is Source home 0 / barrier home 0 / receiver home 0 and the
+actual identical SDK Pool, with preserved permanent SDK fences/domain and original
+Source custody. Moved or cross-database Source, lost custody and restore that discards
+permanent fences stay pending without an original-owner bridge. Readiness, permanent
+SDK technical closure, legal History cleanup, receiving recording, current Account
+settlement, root and all-copy proof are distinct obligations.
+
+The Library module in this checkout still returns `unavailable` / `false`. The paid
+producer review identifies the locked `identity-native-planner-read.sql` query, the
+native seal receipt read, `currentLibraryIdentityPlan` and nested
+`readNativeIdentitySourceBasis` work. Its planner module/SQL and final original-owner
+statement declarations are absent here. The precise missing handoff is **every actual
+page/verifier/nested-current-plan SQL literal and defensible per-axis dispatch bound**,
+including repeated and failed work, local-ledger interaction and receiving/fence controls.
+The consumer refuses the first unmatched dispatch; it does not import the provisional
+paid SQL into its whitelist. A producer's fixed local verifier ledger supplies no
+additional Source funding. No creator-sales or live-copy adapter supplies this seal.
+
+### Funding decision pending complete bodies
+
+The fixed native default and maximum remain 577 rows / 577 points / 173 statements /
+630784 bytes / 0 engine requests for the original documented body only. Directory planning
+independently remains 100 / 200 / 36 / 229376 / 0, split into children
+50 / 100 / 18 / 114688 / 0, with smaller configured and current remainder limits preserved.
+Every current Account settlement read costs 64 / 64 / 20 / 65536 / 0; each independent
+same-home verification costs 64 / 64 / 15 / 65536 / 0. The actual final History body must
+supply their repetition counts rather than assuming two calls.
+
+Known additional owner inputs, in rows / points / statements / bytes / engine units:
+
+| Per actual dispatch                                                                        | Cost                        |
+| ------------------------------------------------------------------------------------------ | --------------------------- |
+| SDK released writer observation                                                            | 3 / 2 / 1 / 8192 / 0        |
+| SDK current same-command lock                                                              | 4 / 2 / 4 / 8192 / 0        |
+| Original Source expected-address standalone guard                                          | 17 / 15 / 2 / 32768 / 0     |
+| That Source function nested inside a History guard, excluding its outer statement/triggers | 16 / 15 / 1 / 32768 / 0     |
+| Reviewed complete composed subject Source handoff, including documented children           | 377 / 293 / 57 / 507904 / 0 |
+
+Two added SDK locks alone give 585 / 581 / 181 / 647168 / 0. The conditional original
+baseline 441 / 441 / 131 / 483328 / 0 plus two reviewed composed calls and one SDK
+observation gives 1198 / 1029 / 246 / 1507328 / 0. Neither subtotal funds the final body:
+released observations, repeated checks, actual History native guards/recording, physical
+cleanup, receiving COMMIT and complete Library statement costs must be reconciled from
+the delivered owner bodies. Each failure/repetition reserves again before dispatch;
+no refund or estimated multiplier repairs an absent declaration. Semantic must adopt
+an explicit full fixed per-axis funding decision before any defaults or maxima change.
+A conservative sum alone proves neither mathematical minimality nor positive execution.
+
+Authored regressions cover cumulative page/receiving/repeated-check work, held cleanup,
+dispatched failure charges, nested unknown-SQL refusal, reservation identity and callback
+lifetime. They manufacture no native seal or receiving authority. Original native,
+browser and acceptance execution remains deferred. Workspace typing can establish only
+source compatibility; the absent whole-child declarations and prepaid History
+receiving/frame body prevent claiming the complete positive default journey.
 
 ## Cost and evidence
 
@@ -641,3 +828,338 @@ migration; retained original Source SQL/implementation and prior attempt evidenc
 and `search-worker-outcome-harness/dbos-transact-ts/src/client.ts` in the indexed
 reference directory for actual shared-Pool construction and deletion APIs. No foreign
 History/SDK/Library body or upstream reference code is copied or changed by this owner.
+
+## Original-funded consumer receiving
+
+This section controls consumer accounting and admission. The native Source locks and
+History handoff described above retain their own authority and physical obligations.
+
+The selected History route cannot use the independent configured Source admission.
+The production receiving entry is:
+
+```ts
+withPrepaidIdentitySourceConsumerMaintenance<T>(
+  deps: HistoryOriginalDependencies,
+  parent: IdentityOriginalSourceContext,
+  body: (funded: IdentitySourceConsumerMaintenanceContext) => Promise<T>,
+): Promise<T>
+```
+
+Accounts calls it through its own prepaid History adapter **inside** the existing
+`withIdentityOriginalSourceTransfer` callback. Source does not consume the original,
+enter that transfer again, acquire a replacement job, or settle Account movement.
+The installed producer owns immutable additive local/Source/Library/transfer partitions,
+the pre-dispatch durable debit and eventual settlement. The local allocation is already
+fully spent and cannot pay for either child.
+
+`identityOriginalLibraryWork`, `currentIdentityOriginalTransfer` and
+`identityOriginalRemainder` authenticate the private live grant, exact Pool/WorkClient/
+registry, job, original identity, position object, native partition object, SAME Library
+object and unchanged absolute five-second deadline. A private grant is one-shot within
+Source, including callback failure. Copies of its opaque token, changed positions or
+allocations, wrong dependencies, expired/ended/foreign async ancestry and nested receiving
+refuse before IO. Copying context fields does not invent another private grant or capacity.
+
+Each prepaid native reservation requires an explicit eight-axis declaration and calls
+`reserveIdentityOriginalSourceWork` before IO. A five-axis legacy envelope is insufficient.
+`IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION` prices the installed standalone native guard:
+0 candidates, 17 native rows, 0 identity metadata rows, 15 native points, 0 witnesses,
+2 statements, 1 empty seek. Bytes include the exact SQL plus a worst-case JSON-escaped
+2048-byte reference and 4096-byte expected address (six bytes per input byte, seven
+array/string punctuation bytes) plus the existing 32768-byte result bound. Actual calls
+charge their smaller actual serialized input size. No foreign History/SDK body inherits
+these zeros or this price.
+
+The producer's guarded Library object intentionally exposes no `withinAllowance` or
+`close` method. `withNativeCollectionWorkAllowance` resolves an authentic receipt to its
+existing private target solely to add the cumulative plan. All callbacks still receive
+the exact producer object and its live checks. `bindNativeCollectionWorkLifetime` adds
+Source callback lifetime to that target without replacing or closing it. Original
+counters remain owned by Accounts. A Source end closes dispatch, not the counter snapshot;
+independent non-History frames continue to close their own ledger. Receipt snapshots
+precede child settlement; later counter changes cannot change a returned receipt.
+
+Nested plans/instrumentation retain all ancestors. Escaped callbacks, held/query handles,
+unreleased checkout/query methods and plans cannot dispatch after their Source or
+ancestor callback ends. A manually held query retains its exact literal policy, admits
+only one SQL dispatch covered by its full held vector, and cannot acquire a checkout. A failed plan
+poisons the ledger. No helper refills work or extends the original deadline. The legacy
+job-only receiving entry refuses because it has no delivered private child context.
+
+`requireNativeCollectionFootprint` retains the Source parent's literal policy through
+a producer's nested instrumentation. A permissive child cannot hide unknown SQL.
+The current-dev dual COMMIT/ROLLBACK reservations and transaction-wrapper observation
+remain: failed COMMIT retains its separately held ROLLBACK. Only undispatched controls
+are cancelled. Failed/rejected/rolled-back transferred children retain their entire
+prepaid partition, and dispatched SQL is charged before transport. Successful receipts
+are snapshotted and validated before settlement; mutation cannot change the held
+partition, reservation identity or receipt counters. Pool and Core transaction identity
+are unchanged. This accounting is not currentness, discharge or physical proof.
+
+A manually metered custody query suppresses observation only when the active observer
+belongs to that same ledger. A local custody cap cannot hide dispatch from an enclosing
+Source ledger; that enclosing observer still charges its literal footprint. This also
+applies when the local cap has more spare work than the original planned remainder.
+
+### Literal Source-side eight-axis costs
+
+The exported `scopeConsumerFootprint` recognizes exact imported SQL or an exact literal,
+not a query name, comment, prefix or arbitrary producer declaration. For the following
+local SQL, candidateKeys=0 (no candidate enumeration), identityMetadataRows=0 (no
+Semantic basis sweep), and witnessKeys=0 (no listing-witness expansion). Native rows
+and points count admitted indexed work, including joins and constraints; they never
+use returned rowCount or engine MVCC work. Engine requests are separately zero and
+nonzero engine reservations are refused. Each read reserves one emptySeek, including
+an expected successful zero; controls and the native commit INSERT reserve zero.
+Bytes are exactly the SQL UTF-8 bytes plus serialized parameter bytes plus the stated
+bounded result envelope. Repeated invocations repeat the whole declaration.
+
+| Exact SQL                                                      | nativeRows | nativePoints | statements | Result bytes | emptySeeks |
+| -------------------------------------------------------------- | ---------: | -----------: | ---------: | -----------: | ---------: |
+| scoped consumer work/current                                   |          7 |            7 |          1 | closed projection below |          1 |
+| scoped consumer receipt                                        |          3 |            3 |          1 |         2048 |          1 |
+| scoped conflict/native, partition read, no-effect fence        |          1 |            1 |          1 |         1024 |          1 |
+| command time                                                   |          0 |            0 |          1 |          128 |          0 |
+| native commit INSERT/partition SELECT                          |          2 |            2 |          1 |          128 |          0 |
+| consumer fence INSERT, two FK probes, deferred seven-key fence |         10 |           10 |          4 |            0 |          1 |
+| receiving selection/native commit                              |          2 |            2 |          1 |          128 |          1 |
+| receiving lookup, including effect commit and exact step       |          7 |            7 |          1 |         8192 |          1 |
+| receiving plan/current commit/partition                        |          3 |            3 |          1 |         6144 |          1 |
+| exact receiving gate or expected-effect receipt                |          1 |            1 |          1 |          128 |          1 |
+| exact receiving custody/native commit                          |          2 |            2 |          1 |          128 |          1 |
+| BEGIN, settings, COMMIT, ROLLBACK                              |          0 |            0 |          1 |            0 |          0 |
+
+For receiving lookup, binding is limited to 4096 bytes, the actual writer constructs
+plan/source-hold as fixed native receipt locators, and the effect frontier is limited
+to 2048 bytes. It is not a reservation for arbitrary source payloads. The successful
+new Source fence path, excluding its independent Library verifier and enclosing
+command, reaches current + receipt + conflict + native SELECT + native INSERT +
+native SELECT + fence INSERT: 25 rows, 25 points, 10 statements, 11392 result bytes,
+6 emptySeeks, plus each literal's actual SQL/parameter bytes; its other three axes
+are explicitly zero as classified above. Replay reaches current + receipt: 10 rows,
+10 points, 2 statements, 8192 result bytes, 2 emptySeeks, plus SQL/parameters.
+
+The released planning command reserves checkout (one nativePoint), BEGIN, timeout,
+consumer-work and both terminal alternatives: 7 rows, 8 points, at most 5 dispatched
+statements including failed COMMIT followed by ROLLBACK, one emptySeek, the closed work/current result
+projection plus the five actual SQL/parameter bounds. This is a local term, not a page or
+parent price. Nested native Source hold/release, role/outbox expansion, whole History
+and real Library planner/verifier statements require their complete owner declarations;
+unknown or incompletely bounded literals stay undefined before dispatch. In particular
+the installed positive Library page/verifier does not supply this consumer with a
+compatible complete literal declaration. `identity-native-planner-read` remains
+refused; Source cannot adopt its permissive normalized-SQL classifier.
+
+### Disjoint whole-parent composition and remaining operands
+
+`composeIdentitySourceOriginalCosts` is arithmetic for adoption, never an
+admission or funding parameter. It requires all eight explicit axes for every part,
+rejects legacy five-vector substitution/overflow, and returns total=null with named
+missing terms. A `total:null` disposition is never a successful installed declaration.
+`composeIdentitySourceReachedCosts` additionally requires each named subdeclaration's
+positive bounded invocation count and separate zero engine-request declaration. It
+checks overflow before returning a complete eight-axis sum; missing children return
+only `state:missing` with exact term names.
+
+`readIdentitySourceOriginalCostDisposition()` publishes the callable local footprint
+and guard declarations, the installed Accounts local/transfer-control operands,
+the disjoint whole-parent missing disposition, and the missing reached terms: Source preparation/checkpoint/
+terminal erasure-role, commit, event and binding child work; current binding and Account
+receiver/reversal; native directory population/preparePlan; History staging, repeated
+H/G/A, inventory, receiving, outbox and role mutations; prepaid History/SDK and the
+same-work Library entry plus its complete declarations. Consequently Source exports no successful
+`IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION`. Accounts admits no usable Source child
+from this absence; independent receiving/accounting remains installed.
+
+The whole parent before first discovery/control IO is exactly:
+
+    AccountsLocalControl + SourceHistoryNativeAllReachedCalls
+      + LibraryAllReachedCalls + AdditionalOriginalTransferControl
+
+The retained Accounts declaration has these explicit local terms, in the order
+candidateKeys/nativeRows/identityMetadataRows/nativePoints/witnessKeys/statements/
+bytes/emptySeeks:
+
+| Original local term              | Eight-axis declaration                |
+| -------------------------------- | ------------------------------------- |
+| selection                        | 0 / 10 / 0 / 8 / 0 / 15 / 10816 / 5   |
+| validation                       | 0 / 7 / 0 / 5 / 0 / 12 / 6656 / 4     |
+| settlement                       | 0 / 6 / 0 / 4 / 0 / 11 / 2304 / 1     |
+| selected local alternatives      | 0 / 63 / 0 / 56 / 0 / 41 / 17152 / 10 |
+| complete prepaid local allowance | 0 / 86 / 0 / 73 / 0 / 79 / 36928 / 20 |
+
+These are body-derived local declarations, not spare funds. All eight native child
+axes remain mandatory; native five-axis envelopes cannot implicitly supply the missing
+classification. The existing History envelope 11588/9856/2731/6843136/0 is a separate
+conditional native term and excludes initial staging/current verification and the
+additional inventory/receiving call sites. Each actual H=377/293/57/507904/0, G=92/87/
+11/40960/0, A=9/9/9/0/0, Source verify=100/100/22/139264/0 and Account verify=64/64/
+15/65536/0 repeats at its real caller; included children are not added twice.
+The two command/root prefixes, original-source/accepted/stage reads, released point
+and inventory, receiving probes, copy lookup, current cut, up to three current copies,
+SDK obligation, q<=2/c<=64 outbox expansions, recovery transitions and role mutations
+remain the actual owner's independent reached terms. Their local controls do not
+fund Source or Library. No single cached receiving probe replaces them.
+
+Accounts' additive allocation/control/private grant and fixed child integration are
+installed. A complete numeric parent remains unavailable: the actual History module
+has no `withPrepaidAgentIdentityHistoryUnit` export; History/SDK reached bodies do not
+publish compatible eight-axis child declarations and repetition counts; Library has no
+the `readLibraryScopeEffectsPageWithWork` entry or
+`IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION`. Its positive native page and
+current/seal/planner bodies are present; those bodies alone do not establish
+compatible eight-axis bounds for this selected original. Search recovery enrollment and the
+physical owner's receiving/writer closure remain independent foreign prerequisites.
+Source cannot classify invented foreign SQL, promote null to a grant, or count an absent
+declaration as successful zero child work. The exact local formulas above are the available
+composition, not an assertion of complete-parent sufficiency.
+
+All existing native and Library defaults/ceilings remain unchanged, including the
+100-row/200-point/36-statement/229376-byte directory envelope and its smaller split
+children and configured limits. Old 577/577/173/630784 is not the whole parent. Same-home
+Library verification remains mandatory on every page AND inside the exhausted-page
+fence, even for zero effects. A changed seal restarts the checkpoint, never reuses
+an earlier checked prefix. Final Source discharge/transfer, Account reversal receiver,
+History generation-1 readiness versus generation-2 closure, same configured Pool/held
+locks through receiving COMMIT, SDK permanent non-revival, root and all physical
+copies remain independent requirements.
+
+Accounting transport regressions are authored in the existing custody test file;
+they are not native proof or manufactured Library evidence. Original native, unit,
+growth, browser, default-retirement and full acceptance remain unrun under the current
+execution boundary. Kernel typing is reported separately from these obligations.
+
+
+### Selected original: one irreversible custody advancement
+
+The authentic receiver and whole-parent admission remain separate. Inside the
+installed Accounts transfer, `claimIdentitySourceCustodyAdvancement` consumes one
+private in-memory step bound to the genuine original, immutable job/position,
+Account barrier, configured Pool, exact Library object and original deadline.
+Accounts has already durably committed `child_entered` on its spent original
+before that grant exists. This closes process restart and new-callback replay;
+the Source claim closes sequential/concurrent public attempts inside the callback.
+No Source durable ledger, caller UUID, environment option or refreshed deadline is
+introduced. An unavailable answer, failure or rollback never cancels the claim.
+The ordinary independent maintenance entry retains its configured behavior.
+
+`IDENTITY_SOURCE_ORIGINAL_SCHEDULE` exposes the executable closed operation names.
+One directory item and one effect page use limit one. The Library maxima, in the
+owner's field order, are:
+
+| discovery | plannerSteps | effectPages | currentVerifications | exhaustedPageRechecks | finalFences |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 0 | 1 | 1 | 1 | 0 |
+
+`claimIdentitySourceLibraryCall` and `claimIdentitySourceScheduledCall` spend the
+operation slot before awaiting. Zero entries cannot dispatch. The exhausted-page
+recheck is the existing second verifier inside the Source fence, including empty
+pages; it is never a third Library final-fence call. There is no inline plan repair,
+discovery or ordinary Library finishScope on this selected route. A pending plan
+stays pending. Exhausted receiving uses the installed single-source-fence profile
+with both current checks in the same genuine transaction; a released currentness
+read cannot stand in for that fence.
+`identitySourceConsumerScheduleReceipt` returns an immutable counter snapshot,
+which supplies neither admission nor a claim.
+
+The prepaid page adapter resolves only the installed
+`readLibraryScopeEffectsPageWithWork(pool, input, work)` entry, passes the exact
+Accounts-owned `identityOriginalLibraryWork` object, and requires its installed
+whole-child declaration. It rejects limit changes, replaced ledger identity,
+changed deadline and noncumulative receipts. It never calls the ordinary entry
+that constructs its own ledger. Missing entry/declaration is a named pre-IO gap.
+The strict ancestor literal policy remains mandatory; a permissive normalized-SQL
+producer callback cannot hide foreign or unknown SQL. This snapshot has positive
+native Library execution but lacks that same-work entry and whole-child quote.
+
+### Local literal components and genuine Core dispatch
+
+`IDENTITY_SOURCE_LOCAL_SQL` and `IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS` publish
+closed literal bodies, exact maximum operands and full projected-result bounds.
+`identitySourceCustodyFootprint` recognizes byte-for-byte literals with validated
+positional arguments. It rejects comments, extra operands and the ordinary
+unbounded published-job SQL. The selected accepted-claim query compares the exact
+closed receipt in PostgreSQL and projects no arbitrary intent or source array.
+Selected claim and publication literals explicitly bound scope_digest to 128 bytes
+before projection. No truncation, schema change or foreign producer edit occurs.
+
+Every local read declares candidateKeys=identityMetadataRows=witnessKeys=0 because
+these bodies perform fixed native key joins, with no candidate enumeration, basis
+metadata sweep or witness expansion. engineRequests is separately zero. The other
+axes are:
+
+| Local read | nativeRows | nativePoints | statements | emptySeeks | bytes |
+| --- | --- | --- | --- | --- | --- |
+| retained custody | 6 | 6 | 1 | 1 | UTF8(literal) + bounded 13 binds + five-scalar result |
+| latest progress | 3 | 3 | 1 | 1 | UTF8(literal) + bounded two binds + scalar result + 2048-byte cursor JSON |
+| selected accepted binding | 5 | 5 | 1 | 1 | UTF8(literal) + bounded six binds + generation/digest/home/transaction result |
+| selected published state | 4 | 4 | 1 | 1 | UTF8(literal) + bounded three binds + bounded digest result |
+
+The scoped work/current result bound is the UTF8 JSON projection of two
+19-digit bigint strings, a 256-byte generation, a null seal placeholder, plus
+5*256 bytes of generation escaping and 4096 bytes of actual native seal. This
+replaces the historical rounded 6144-byte result estimate.
+
+The actual SQL includes locks, while reads fire no write/FK triggers. The key paths
+are respectively custody/current-binding/claim/claim-commit/source-commit/partition;
+latest custody sequence/source-commit/partition; accepted binding/claim/claim-commit/
+admission/partition; and job/admission/partition/control. Bounds include failed
+indexed seeks. UTF8 binds use the actual immutable serialized values at dispatch;
+declarations include maximum text escaping. The original Source history authority
+function separately publishes its fifteen indexed inputs, two statements, outer
+result and closed native JSON construction, including bounded receipt/timestamp/
+bigints. Its prepaid bytes use that actual projection instead of the old 32768
+independent envelope. Repeated authority/handoff entries have closed schedule slots.
+
+`IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS` publishes only the disjoint INSERT
+body work and names every FK/default/trigger child still requiring composition.
+The two custody FKs and three terminal FKs are exact schema keys, not fabricated
+zero-byte successful subdeclarations. Default erasure sequence, deferred erasure
+capture, terminal binding fence, native source association, role/outbox and event
+work stay separate reached terms. `IDENTITY_SOURCE_LOCAL_CALLS` names the local
+read/mutation repetitions and foreign children of each real Source operation;
+none is a successful whole command by itself.
+
+`withIdentitySourceNoEffectCommand` supplies the genuine private grant to Core's
+installed `withCommandDispatchLifetime`, with synchronous authentication and the
+unchanged Pool/deadline. Core atomically reserves effect plus disjoint cleanup
+from the SAME Source native partition before checkout. In the eight-axis field
+order, the delivered total is:
+
+    0 / 2 / 0 / 1 / 0 / 8 / 169 / 1 ; engineRequests=0
+
+This includes the held ROLLBACK after failed COMMIT and is not added to the old
+historical command aggregate. Source body SQL reserves its own complete literal
+price before IO. Library bodies use the original Library object; the Core controls
+are outside that Library observer. Scope admission similarly charges the exact
+consumer-work literal on Source and returns the unchanged Library remainder.
+
+Compatible retained discovery, accepted binding, bounded publication, progress
+and currentness commands use this real adapter. Exhausted receiving instead binds
+the actual single-source-fence profile to the same private original and immutable
+barrier account, reserving its complete effect plus cleanup from Source. Its native
+body SQL is charged separately on Source; both Library checks use the exact Library
+ledger, and SEMANTIC_ERASURE_PROGRESS is preserved. Preparation, checkpoint and
+finalization include other events/callbacks. Their wider-profile gaps refuse
+before unsupported dispatch, preserve the event semantics and yield pending without
+claiming closure. Intermediate compatible currentness can run without publishing a
+fence or advancing a checkpoint. Positive receiving-selection hold/reconcile also
+requires the actual native hold/role/control child declarations before dispatch.
+
+`readIdentitySourceOriginalCostDisposition` now reports immutable local reads,
+mutation components, closed callsites/schedule, actual Core controls, actual
+installed History local/SDK components when present, and actual callable/declaration
+presence independently. Whole composition still requires every reached History
+caller's enforced multiplicities, bindings, original Account reader/technical and
+reversal children, native directory and receiving/native-hold declarations, Library
+same-work literal composition and wider Core executor profiles. The installed
+History private callback/command adapter and Library selected declaration resolve
+those specific operands; they do not fill the other missing whole Source terms. No successful whole Source
+declaration is exported and Accounts' fully spent local allowance is not reused.
+
+The additional fixture cases cover genuine one-original/two-attempt/overlap/reentry,
+unavailable/failure and real Core rollback, exact counter/ledger/deadline behavior,
+zero/one-effect verifier guard arithmetic, strict literal rejection and disjoint
+component/profile disposition. Guard arithmetic deliberately does not manufacture a
+native seal. All focused and native tests remain UNRUN. The required single Kernel
+compiler invocation is separate and cannot establish native journey completion.

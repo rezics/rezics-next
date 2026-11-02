@@ -7,6 +7,7 @@ import { readAuthNativeConsumption } from './shared-history-auth.ts';
 import { publishedAccountIdentityUndo } from './agent-verification-identity.ts';
 import { IdentityEpochStoreError } from '../semantic/identity-epoch-store.ts';
 import type { NativeStoreBlocker } from './erasure-native-stores.ts';
+import { authConsumerBlocker, isAuthConsumerStore, type AuthConsumerRetirement } from './erasure-auth-consumers.ts';
 
 /** Read only the fixed Auth-native phase, anchored to the original source. An
  * accepted obligation, absent Auth row or later global ACK cannot satisfy it. */
@@ -64,6 +65,7 @@ export async function terminalStoreBlocker(
   progressId: string,
   phase = -1,
   forwardComplete = true,
+  authRetirement: AuthConsumerRetirement | null = null,
 ): Promise<NativeStoreBlocker | null> {
   if (store === 'membership_inverse') {
     const row = await tx.query(
@@ -118,22 +120,8 @@ export async function terminalStoreBlocker(
     );
     if (row.rowCount) return 'native-terminal-consumer';
   }
-  if (store === 'workflow_approval') {
-    // A workflow can be paused after accepting the approval and before its
-    // native command. Neither expiry nor consumption-before-effect is a proof.
-    const row = await tx.query('SELECT 1 FROM access.workflow_approval WHERE route=$1 AND approval_id=$2', [...key]);
-    if (row.rowCount) return 'approval-consumer-proof-unavailable';
-  }
-  if (store === 'operator_opening_receipt' || store === 'credential_floor_receipt') {
-    const query =
-      store === 'operator_opening_receipt'
-        ? 'SELECT 1 FROM access.operator_opening_receipt WHERE route=$1 AND operator_account_id=$2 AND receipt_id=$3'
-        : 'SELECT 1 FROM access.credential_floor_receipt WHERE route=$1 AND account_id=$2 AND opening_receipt_id=$3';
-    if ((await tx.query(query, [...key])).rowCount)
-      return store === 'operator_opening_receipt'
-        ? 'opening-consumer-proof-unavailable'
-        : 'credential-consumer-proof-unavailable';
-  }
+  if (isAuthConsumerStore(store))
+    return authConsumerBlocker(tx, store, role, key, accountId, progressId, authRetirement);
   if (
     store === 'committed_continuation' ||
     store === 'committed_continuation_entry' ||

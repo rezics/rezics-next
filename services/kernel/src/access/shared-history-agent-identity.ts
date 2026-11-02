@@ -3,7 +3,10 @@ import type { AgentIdentityRetirementStage } from '../history/agent-identity-ret
 import type { HistoryReceivingContext } from '../history/receiving.ts';
 import { lookupAgentIdentityReceivingCopies } from '../history/agent-identity-source.ts';
 import type { HistoryArtifact } from '../history/registry.ts';
-import { reserveIdentityHistoryWork, nativeWork } from '../history/agent-identity-inventory-work.ts';
+import {
+  reserveIdentityHistoryWork,
+  nativeWork,
+} from '../history/agent-identity-inventory-work.ts';
 import type { Pool } from 'pg';
 import { readAgentIdentityCopyReceiving, type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
 import {
@@ -87,7 +90,7 @@ export async function prepareAgentIdentityCopyRetention(
   }>,
 ): Promise<PreparedAgentIdentityCopy> {
   const context = receiving?.context ?? { deadline };
-  if (receiving) await reserveIdentityHistoryWork(pool, nativeWork(270, 270, 12, 90112), receiving.context);
+  await reserveIdentityHistoryWork(pool, nativeWork(270, 270, 12, 90112), context);
   const point = await readAgentIdentityCopyReceiving({ pool }, barrier, [key], {
     deadline,
   });
@@ -109,16 +112,24 @@ export async function prepareAgentIdentityCopyRetention(
         },
         context,
       );
-  if (receiving) await reserveIdentityHistoryWork(pool, nativeWork(80, 80, 12, 32768), receiving.context);
+  await reserveIdentityHistoryWork(pool, nativeWork(80, 80, 12, 32768), context);
   const [lookup] = await lookupAgentIdentityReceivingCopies(pool, [
     { kind: key.direction, account: key.accountId, receipt: key.receiptId },
   ]);
+  // The original lookup supplies an address, not the retained physical role union.
+  // Resolve the actual immutable mapping and complete locator inventory separately.
+  const custodyId =
+    lookup?.state === 'associated' && lookup.artifact.locator.artifactType === 'durable-work/v1'
+      ? lookup.artifact.locator.workId
+      : null;
+  const { readAgentIdentityReceivingArtifact } = await import('../history/agent-identity-sdk-fence.ts');
+  const durable = custodyId ? await readAgentIdentityReceivingArtifact(pool, custodyId, context) : null;
   return {
     ...point,
     inventory,
     recoveryInventory,
     sdkGap,
-    durable: lookup?.state === 'associated' ? lookup.artifact : null,
+    durable,
   };
 }
 

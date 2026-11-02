@@ -13,7 +13,6 @@ import {
   unpricedIdentityHistoryWork,
   IdentityHistoryWorkUnavailable,
 } from './agent-identity-inventory-work.ts';
-import { existsSync } from 'node:fs';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { WorkClient } from '../work/client.ts';
@@ -366,12 +365,19 @@ export async function withAgentIdentityHistoryUnit<T>(
   context: HistoryReceivingContext,
   body: (funded: HistoryReceivingContext) => Promise<T>,
 ): Promise<T> {
-  if (identityUnits.getStore()?.prepaid) refuseNestedUnit();
-  const path = new URL('../semantic/identity-source-consumer-maintenance.ts', import.meta.url);
-  if (!existsSync(path)) throw new IdentityHistoryWorkUnavailable();
-  const producer: IdentitySourceConsumerMaintenanceModule = await import(path.href);
-  if (typeof producer.withIdentitySourceConsumerMaintenance !== 'function') throw new IdentityHistoryWorkUnavailable();
-  return producer.withIdentitySourceConsumerMaintenance(deps, context, (funded) => {
+  if (identityUnits.getStore()) throw new TypeError('Identity History unit cannot replace its Source frame');
+  const producer = await import('../semantic/identity-source-consumer-maintenance.ts');
+  const inherited = producer.activeIdentitySourceConsumerMaintenance(deps.pool);
+  // Presence survives an invalid/settled frame. Never turn its failed validation,
+  // or an explicit foreign token, into permission to allocate another balance.
+  if (
+    !Number.isFinite(context.deadline) ||
+    context.deadline <= Date.now() ||
+    (context.identityConsumerWork !== undefined && context.identityConsumerWork !== inherited?.identityConsumerWork) ||
+    (inherited && !producer.isLiveIdentitySourceConsumerMaintenance(deps.pool, inherited.identityConsumerWork))
+  )
+    throw new IdentityHistoryWorkUnavailable();
+  const enter = (funded: HistoryReceivingContext) => {
     maintenanceCallbacks.add(funded);
     return withSingleCommandAttempt(() =>
       withRequestDeadline(funded.deadline, () =>
@@ -388,7 +394,12 @@ export async function withAgentIdentityHistoryUnit<T>(
         ),
       ),
     );
-  });
+  };
+  if (inherited)
+    return enter(
+      inherited.deadline <= context.deadline ? inherited : Object.freeze({ ...inherited, deadline: context.deadline }),
+    );
+  return producer.withIdentitySourceConsumerMaintenance(deps, context, enter);
 }
 
 async function advanceInFrame(
@@ -532,20 +543,17 @@ export async function readAgentIdentityRetirementStage(
 ): Promise<AgentIdentityRetirementStage | null> {
   const fixed = structuredClone(reference);
   historyDeadline(context, fixed.source.partition);
-  if (maintenanceCallbacks.has(context))
-    await reserveIdentityHistoryWork(
-      pool,
-      unpricedIdentityHistoryWork('source-original-handoff-read', nativeWork(73, 71, 26, 82176)),
-      context,
-    );
-  const readHandoff = (tx: CommandTransaction) => sourceHandoff(tx, fixed);
-  const handoff = currentAgentIdentityHistoryUnit()?.prepaid
-    ? await identityHistoryCommand(pool, context, readHandoff, fixed.source.partition)
-    : (
+  // Explicit expired/foreign tokens must fail even when no callback is active.
+  // A deadline-only independent caller retains its existing admission responsibility.
+  await reserveIdentityHistoryWork(pool, nativeWork(73, 71, 26, 82176), context);
+  const handoff = await withSingleCommandAttempt(
+    async () =>
+      (
         await runCommand(pool, { partition: fixed.source.partition, deadline: context.deadline }, async (tx) =>
-          noEffect(await readHandoff(tx)),
+          noEffect(await sourceHandoff(tx, fixed)),
         )
-      ).value;
+      ).value,
+  );
   if (!handoff) return null;
   // Deadline-only callers retain compatible local staging, but cannot dispatch Source.
   // Source itself validates the original live frame, including foreign/ended values.
@@ -594,11 +602,8 @@ export async function agentIdentityRetirementReadiness(
   artifact: HistoryArtifact,
   barrier: HistoryBarrier,
 ): Promise<HistoryReadiness> {
-  const active = currentAgentIdentityHistoryUnit();
-  if (active) {
-    const { pool } = currentCommandResources(tx);
-    await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.readiness, active.context);
-  }
+  const { pool, deadline } = currentCommandResources(tx);
+  await reserveIdentityHistoryWork(pool, nativeWork(74, 74, 7, 49152), { deadline });
   const receiving = await readAgentIdentitySDKReceivingBinding(tx, artifact, barrier);
   if (receiving.state === 'pending') return { ready: false, gap: receiving.gap };
   const row = (
@@ -766,11 +771,9 @@ export async function readAgentIdentitySDKRetirement(
   if (before.state === 'pending') return before;
   if (row.state !== 'retired' || !row.owner_ready || !row.absence_verified || !row.payload_cleared)
     return pending('identity-sdk-physical-receiving-pending');
-  const artifact: HistoryArtifact = {
-    partition: 0,
-    locator: { artifactType: 'durable-work/v1', workId: row.custody_id },
-    accounts: source.accounts,
-  };
+  const { readAgentIdentityReceivingArtifact } = await import('./agent-identity-sdk-fence.ts');
+  const artifact = await readAgentIdentityReceivingArtifact(pool, row.custody_id, context);
+  if (!artifact) return pending('identity-sdk-physical-inventory-unavailable');
   if (!(await readHistoryReceivingReceipt({ pool }, fixedBarrier, artifact, context)))
     return pending('identity-sdk-physical-receiving-pending');
   const after = await readAgentIdentitySDKFence(pool, client, bound, context);

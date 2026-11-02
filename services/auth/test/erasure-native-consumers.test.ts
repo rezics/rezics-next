@@ -913,6 +913,170 @@ test('an interrupted real reduction finishes through the default consumer using 
   ).toEqual(before);
 }, 180_000);
 
+test('Retire exact Access authorization witnesses after genuine complete Auth consumer and copy custody', async () => {
+  let owner = await f.person('native-access-witness-owner');
+  const survivor = await f.person('native-access-witness-survivor');
+  const survivorBefore = (
+    await f.pool.query('SELECT id,password,"updatedAt" FROM account WHERE "userId"=$1 ORDER BY id', [
+      survivor.accountId,
+    ])
+  ).rows;
+  // Own-human credential authorization uses its original workflow approval,
+  // never a fabricated self-operator opening or an inserted proof row.
+  const effect = await f.host.service.internal.stageCredentialEffect({
+    key: randomUUID(),
+    subjectAccountId: owner.accountId,
+    headers: new Headers({ cookie: owner.cookie }),
+    credential: { kind: 'password', password },
+  });
+  const input = { ...effect, subjectAccountId: owner.accountId, headers: new Headers({ cookie: owner.cookie }) };
+  const approval = await f.host.service.internal.approveCredentialEffect(input);
+  await f.host.service.internal.applyCredentialEffect({ ...input, authorization: approval.reference });
+  owner = await f.login(owner);
+  const route = f.routeOf(owner.accountId)!;
+  const floor = (
+    await f.kernel.query<{ opening_receipt_id: string }>(
+      'SELECT opening_receipt_id FROM access.credential_floor_receipt WHERE route=$1 AND account_id=$2',
+      [route, owner.accountId],
+    )
+  ).rows;
+  expect(floor).toHaveLength(1);
+  const openingId = floor[0]!.opening_receipt_id;
+  const witness = () =>
+    f.kernel.query(
+      'SELECT row_to_json(a)::text AS value FROM access.workflow_approval a WHERE route=$1 AND approval_id=$2',
+      [route, openingId],
+    );
+  const floorWitness = () =>
+    f.kernel.query(
+      `SELECT row_to_json(r)::text AS value FROM access.credential_floor_receipt r
+       WHERE route=$1 AND account_id=$2 AND opening_receipt_id=$3`,
+      [route, owner.accountId, openingId],
+    );
+  // A real local read failure holds copy completion while the original source
+  // and native consumers run. Restoring the query invokes the default publisher.
+  const release = failNativeQueries(f.pool, (sql) => sql.includes('SELECT 1 FROM auth_copy_coverage'));
+  const native = await import('../../kernel/src/access/erasure-native.ts');
+  const phase = native.NATIVE_ERASURE_GROUPS.findIndex(
+    ([store, role]) => store === 'workflow_approval' && role === 'actor_id',
+  );
+  let progressId = '';
+  const until = Date.now() + 1_800_000;
+  const advanceUntil = async (done: () => Promise<boolean>) => {
+    while (!(await done())) {
+      if (Date.now() >= until) throw new Error('Access witness native page did not progress');
+      await native.advanceNativeErasure(f.kernel, progressId);
+    }
+  };
+  try {
+    expect((await f.delete(owner)).status).toBe(200);
+    await eventually(
+      async () =>
+        !!(
+          await f.kernel.query(
+            `SELECT 1 FROM access.auth_history_proof WHERE route=$1 AND account_id=$2 AND phase='native-consumed'`,
+            [route, owner.accountId],
+          )
+        ).rowCount,
+    );
+    progressId = await native.openNativeErasure(f.kernel, owner.accountId);
+    await advanceUntil(
+      async () =>
+        !!(
+          await f.kernel.query(
+            `SELECT 1 FROM access.erasure_native_blocked WHERE progress_id=$1 AND phase=$2
+         AND reason='approval-consumer-proof-unavailable'`,
+            [progressId, phase],
+          )
+        ).rowCount,
+    );
+    expect(
+      (
+        await f.kernel.query(
+          `SELECT 1 FROM access.auth_history_proof WHERE route=$1 AND account_id=$2 AND phase='copies-erased'`,
+          [route, owner.accountId],
+        )
+      ).rowCount,
+    ).toBe(0);
+    const original = (await witness()).rows;
+    const originalFloor = (await floorWitness()).rows;
+    expect(original).toHaveLength(1);
+    expect(originalFloor).toHaveLength(1);
+    const page = (
+      await f.kernel.query(
+        `SELECT result FROM access.erasure_progress
+       WHERE route=$1 AND account_id=$2 AND store='workflow_approval' AND role='actor_id'`,
+        [route, owner.accountId],
+      )
+    ).rows[0]!.result;
+    expect(page.keys).toContainEqual([String(route), openingId]);
+    await native.advanceNativeErasure(f.kernel, progressId);
+    expect((await witness()).rows).toEqual(original);
+    expect((await floorWitness()).rows).toEqual(originalFloor);
+  } finally {
+    release();
+  }
+  // No consent clock adjustment or manufactured copy readiness: the real
+  // producer must publish its later account/version/T after physical retirement.
+  await eventually(
+    async () =>
+      !!(
+        await f.kernel.query(
+          `SELECT 1 FROM access.auth_history_proof p JOIN access.erasure e USING(route,account_id)
+       WHERE p.route=$1 AND p.account_id=$2 AND p.phase='copies-erased'
+       AND p.version=e.version AND p.at=e.at`,
+          [route, owner.accountId],
+        )
+      ).rowCount,
+    450_000,
+  );
+  // Historical copy publication cannot stand in for a current receiving owner.
+  // Observe the original producer; never install an identity or insert a proof.
+  const receiving = await import('../../kernel/src/access/shared-history-auth.ts');
+  const barrier = (
+    await f.kernel.query<{ accountId: string; version: number; at: string }>(
+      'SELECT account_id AS "accountId",version,at::text FROM access.erasure WHERE route=$1 AND account_id=$2',
+      [route, owner.accountId],
+    )
+  ).rows[0]!;
+  const prepare = (expected: typeof barrier) =>
+    receiving.prepareCurrentAuthReceivingClosure({ pool: f.kernel }, expected, { deadline: Date.now() + 5000 });
+  if (!(await prepare(barrier))) {
+    const original = (await witness()).rows;
+    const originalFloor = (await floorWitness()).rows;
+    await native.advanceNativeErasure(f.kernel, progressId);
+    expect((await witness()).rows).toEqual(original);
+    expect((await floorWitness()).rows).toEqual(originalFloor);
+  }
+  await eventually(async () => (await prepare(barrier)) !== null, 450_000);
+  expect(await prepare({ ...barrier, version: barrier.version + 1 })).toBeNull();
+  expect(await prepare({ ...barrier, at: new Date(Date.parse(barrier.at) + 1).toISOString() })).toBeNull();
+  await advanceUntil(
+    async () =>
+      !!(
+        await f.kernel.query(
+          `SELECT 1 FROM access.erasure_native_progress WHERE progress_id=$1 AND phase=$2 AND retry_phase=$3`,
+          [progressId, native.NATIVE_ERASURE_GROUPS.length, phase],
+        )
+      ).rowCount,
+  );
+  expect((await witness()).rows).toEqual([]);
+  await advanceUntil(async () => (await floorWitness()).rowCount === 0);
+  expect(await native.openNativeErasure(f.kernel, owner.accountId)).toBe(progressId);
+  await native.advanceNativeErasure(f.kernel, progressId);
+  expect((await witness()).rows).toEqual([]);
+  expect((await floorWitness()).rows).toEqual([]);
+  await expect(f.access.authenticate(owner.bearer, f.context())).rejects.toThrow();
+  expect(
+    (
+      await f.pool.query('SELECT id,password,"updatedAt" FROM account WHERE "userId"=$1 ORDER BY id', [
+        survivor.accountId,
+      ])
+    ).rows,
+  ).toEqual(survivorBefore);
+  expect((await f.login(survivor)).accountId).toBe(survivor.accountId);
+}, 2_000_000);
+
 test('default native expiry releases the exact registration, handle and operator slot after the source deadline, across restart and duplicate delivery', async () => {
   try {
     // The source owns its thirty-minute pending lifetime. No test clock, source T,

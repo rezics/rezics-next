@@ -474,3 +474,128 @@ test('successful, repeated and rolled-back native IO retains literal inclusive e
   point.settle({ candidateKeys: 0, emptySeeks: 1 });
   expect(work.receipt().used.nativeRows).toBe(repeatFailure.used.nativeRows + 2);
 }, 120_000);
+
+// Genuine selected-original outcomes. The actual Accounts producer must install
+// its complete disjoint Source term before these can enter; no test quote or
+// synthetic private grant substitutes for that still separately owned operand.
+async function withAuthenticLibraryOriginal<T>(
+  body: (
+    context: import('../../src/semantic/identity-source-consumer-maintenance.ts').IdentitySourceConsumerMaintenanceContext,
+    work: NativeCollectionWork,
+  ) => Promise<T>,
+) {
+  const { HistoryRegistry } = await import('../../src/history/registry.ts');
+  const { createWorkClient } = await import('../../src/work/client.ts');
+  const { admitSharedHistory } = await import('../../src/access/shared-history.ts');
+  const { withSelectedHistoryOriginal, consumeSelectedHistoryOriginal, withIdentityOriginalSourceTransfer } =
+    await import('../../src/access/identity-original-admission.ts');
+  const { withPrepaidIdentitySourceConsumerMaintenance, claimIdentitySourceCustodyAdvancement } =
+    await import('../../src/semantic/identity-source-consumer-maintenance.ts');
+  const registry = new HistoryRegistry(),
+    account = newId(route),
+    historyJob = randomUUID();
+  await native.pool.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now())', [
+    route,
+    account,
+  ]);
+  const generation = (
+    await native.pool.query(
+      `INSERT INTO core.history_registry(singleton,digest,gaps)
+    VALUES(true,$1,'[]') ON CONFLICT(singleton) DO UPDATE SET digest=EXCLUDED.digest,
+    generation=core.history_registry.generation+1 RETURNING generation::text`,
+      [registry.digest()],
+    )
+  ).rows[0]!.generation;
+  await runCommand(native.pool, { partition: home }, async (tx) =>
+    noEffect(await admitSharedHistory(tx, account, historyJob)),
+  );
+  await native.pool.query(
+    `UPDATE core.preference_history_job SET registry_digest=$2,registry_generation=$3,
+    next_run='-infinity' WHERE job_id=$1`,
+    [historyJob, registry.digest(), generation],
+  );
+  const client = await createWorkClient(native.pool.options.connectionString!, native.pool);
+  const deps = { pool: native.pool, client, registry };
+  try {
+    return await withSelectedHistoryOriginal(deps, async (selected, original) => {
+      expect(selected).toBe(historyJob);
+      await consumeSelectedHistoryOriginal(deps, original, selected);
+      return withIdentityOriginalSourceTransfer(deps, original, selected, (parent) =>
+        withPrepaidIdentitySourceConsumerMaintenance(deps, parent, async (context) => {
+          const p = parent.position;
+          expect(
+            claimIdentitySourceCustodyAdvancement(native.pool, context.identityConsumerWork, context.deadline, {
+              accountId: p.account_id,
+              accountRoute: p.account_route,
+              version: p.barrier_version,
+              at: p.barrier_at,
+            }),
+          ).toBe(true);
+          return body(context, parent.library);
+        }),
+      );
+    });
+  } finally {
+    await native.pool.query("UPDATE core.preference_history_job SET next_run='infinity' WHERE job_id=$1", [historyJob]);
+    await client.close();
+  }
+}
+
+for (const count of [0, 1]) {
+  test(`authentic selected Library page with ${count} effects keeps its ledger/deadline through current verification and sealed-zero exhausted recheck`, async () => {
+    const { readLibraryScopeEffectsPageWithWork, readLibraryScopeEffectsPage, verifyLibraryScopeEffectsSeal } =
+      await import('../../src/library/identity-scope-effects.ts');
+    const { claimIdentitySourceLibraryCall, withIdentitySourceNoEffectCommand } =
+      await import('../../src/semantic/identity-source-consumer-maintenance.ts');
+    const { bindLibraryIdentityPrepaidWork } = await import('../../src/library/identity-native-planner-work.ts');
+    const { currentCommandResources } = await import('../../src/command/command.ts');
+    const collectionId = await collection('curated');
+    if (count) await member(collectionId);
+    const key = { job, sourceIdentity: await identity(collectionId), scope: 'collection-source' };
+    await seal(key); // Independent native preparation is a different admitted original.
+    const { EventEmitter } = await import('node:events');
+    const foreign = Object.assign(new EventEmitter(), {
+      connect: async () => {
+        throw new Error('Foreign checkout');
+      },
+    }) as unknown as import('pg').Pool;
+    let escaped!: () => Promise<unknown>;
+    await withAuthenticLibraryOriginal(async (context, work) => {
+      const input = { ...key, after: null, limit: 1, deadline: context.deadline };
+      bindLibraryIdentityPrepaidWork(native.pool, work, context.deadline);
+      const before = work.receipt();
+      await expect(
+        readLibraryScopeEffectsPageWithWork(native.pool, { ...input, deadline: input.deadline - 1 }, work),
+      ).rejects.toThrow();
+      await expect(readLibraryScopeEffectsPageWithWork(foreign, input, work)).rejects.toThrow();
+      expect(work.receipt()).toEqual(before);
+      await expect(
+        readLibraryScopeEffectsPage(native.pool, { ...input, allowance: budget().allowance }),
+      ).rejects.toThrow('requires readLibraryScopeEffectsPageWithWork');
+      claimIdentitySourceLibraryCall(native.pool, 'effectPages');
+      const page = await readLibraryScopeEffectsPageWithWork(native.pool, input, work);
+      expect(page.status).toBe('sealed');
+      if (page.status !== 'sealed') throw new Error('Missing genuine Library seal');
+      expect(page.rows).toHaveLength(count);
+      expect(page.exhausted).toBe(count === 0);
+      expect(page.work).toEqual(work.receipt());
+      await expect(readLibraryScopeEffectsPageWithWork(native.pool, input, work)).rejects.toThrow('Missing unspent');
+      await withIdentitySourceNoEffectCommand(native.pool, context.deadline, () =>
+        runCommand(native.pool, { partition: home, deadline: context.deadline }, async (tx) => {
+          expect(currentCommandResources(tx)).toMatchObject({ pool: native.pool, deadline: context.deadline });
+          claimIdentitySourceLibraryCall(native.pool, 'currentVerifications');
+          expect(await verifyLibraryScopeEffectsSeal(tx, key, page.seal)).toBe(true);
+          if (page.exhausted) {
+            claimIdentitySourceLibraryCall(native.pool, 'exhaustedPageRechecks');
+            expect(await verifyLibraryScopeEffectsSeal(tx, key, page.seal)).toBe(true);
+          }
+          return noEffect(null);
+        }),
+      );
+      expect(work.receipt().reservationId).toBe(before.reservationId);
+      expect(work.receipt().used.statements).toBeGreaterThan(page.work.used.statements);
+      escaped = () => readLibraryScopeEffectsPageWithWork(native.pool, input, work);
+    });
+    await expect(escaped()).rejects.toThrow();
+  }, 600_000);
+}

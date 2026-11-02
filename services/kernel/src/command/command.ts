@@ -473,7 +473,7 @@ async function waitForWritable(pool: Pool, partition: number, deadline: number):
   throw new CommandUnavailableError('fenced', partition);
 }
 
-type LegacyCommandOptions = {
+export type LegacyCommandOptions = {
   partition: number;
   deadline?: number;
   basis?: CommandBasis;

@@ -9,6 +9,11 @@ import {
   continuationArtifact,
 } from './erasure-native-consumers.ts';
 import { minimizeDiscoveredAgentIdentitySources } from './erasure-agent-identity.ts';
+import {
+  authConsumerDeletePredicate,
+  isAuthConsumerStore,
+  prepareAuthConsumerRetirement,
+} from './erasure-auth-consumers.ts';
 import type { AgentIdentityRetentionDependencies } from './agent-verification-identity-retention.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { reverseDeletedAccountAgent } from './agent-verification.ts';
@@ -216,6 +221,9 @@ export async function advanceNativeErasure(
     return { name, type };
   });
   allow(nativeErasurePageValid(page, columns.length, expected.page));
+  const authRetirement = page.keys.length
+    ? await prepareAuthConsumerRetirement(pool, store, expected.account_id, expected.route, page.partition)
+    : null;
   const foreignBlocked = await foreignTerminalBlockers(pool, store, page, expected.account_id);
 
   let consumerPending: string | null = null;
@@ -419,6 +427,7 @@ export async function advanceNativeErasure(
           progressId,
           expected.phase,
           current.phase === NATIVE_ERASURE_GROUPS.length,
+          authRetirement,
         )) ??
         (await nativeStoreBlocker(tx, store, key, current.account_id, role));
       if (blocker) return pending(blocker);
@@ -464,6 +473,12 @@ export async function advanceNativeErasure(
             .rowCount === 0,
         );
         await tx.query(`DELETE FROM access.erasure_continuation_role WHERE ${where} AND ${owner}`, params);
+      } else if (isAuthConsumerStore(store)) {
+        await tx.query(
+          `DELETE FROM access.${store} WHERE ${where} AND ${owner}
+           AND ${authConsumerDeletePredicate(store, role, columns.length)}`,
+          [...params, progressId],
+        );
       } else {
         const minimize = nativeMinimization(store, role);
         if (store === 'account' && role === 'account_id')

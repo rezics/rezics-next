@@ -19,6 +19,52 @@ function zero(): Record<keyof WorkDimensions, number> {
   return Object.fromEntries(axes.map((axis) => [axis, 0])) as Record<keyof WorkDimensions, number>;
 }
 
+type WorkPlan = { end: WorkDimensions; active: boolean; parent: WorkPlan | undefined };
+function livePlan(plan: WorkPlan | undefined): boolean {
+  for (; plan; plan = plan.parent) if (!plan.active) return false;
+  return true;
+}
+
+// Receipts identify the existing private ledger for receiving-only constraints. They
+// never supply funding or expose its target through the producer's guarded object.
+const receiptLedgers = new WeakMap<object, NativeCollectionWork>();
+const ledgerAliases = new WeakMap<object, NativeCollectionWork>();
+const receivingLifetimes = new WeakMap<NativeCollectionWork, () => void>();
+const composing = new AsyncLocalStorage<readonly NativeCollectionWork[]>();
+const manuallyObserved = new AsyncLocalStorage<Observation | undefined>();
+
+function receivedLedger(work: NativeCollectionWork): NativeCollectionWork {
+  work.assertReady();
+  const ledger = receiptLedgers.get(work.receipt());
+  if (!ledger) throw new TypeError('Unknown native work ledger');
+  ledgerAliases.set(work, ledger);
+  return ledger;
+}
+
+/** Constrain dispatch on the SAME Accounts-owned object without closing its counters.
+ * This adds a restriction, never original authority or a replacement allocation. */
+export function bindNativeCollectionWorkLifetime(work: NativeCollectionWork, assertLive: () => void): void {
+  const ledger = receivedLedger(work);
+  if (receivingLifetimes.has(ledger)) throw new TypeError('Native work already received');
+  assertLive();
+  receivingLifetimes.set(ledger, assertLive);
+}
+
+/** The producer deliberately exposes a restricted object. Apply the native plan to
+ * its private target, while every operation and callback still uses that SAME object
+ * and its original producer checks. No new proxy, ledger, receipt or allowance. */
+export function withNativeCollectionWorkAllowance<T>(
+  work: NativeCollectionWork, allowance: WorkAllowance, operation: () => Promise<T>,
+): Promise<T> {
+  const ledger = receivedLedger(work);
+  return ledger.withinAllowance(allowance, async () => {
+    work.assertReady();
+    const result = await operation();
+    work.assertReady();
+    return result;
+  });
+}
+
 /** Private accounting only. SQL/API owners supply the proved footprint before dispatch. */
 export class NativeCollectionWork {
   private readonly used = zero();
@@ -26,16 +72,20 @@ export class NativeCollectionWork {
   private readonly remaining: WorkDimensions;
   private closed = false;
   private pending = 0;
+  private readonly planned = new AsyncLocalStorage<WorkPlan>();
+  private open = true;
   failure: Error | undefined;
   private readonly resultBytes = new Map<string, number>();
 
   /** A same-snapshot size point admits an otherwise unbounded native projection. */
   admitResultBytes(key: string, bytes: number): void {
+    this.assertReady();
     if (!Number.isSafeInteger(bytes) || bytes < 0) throw new TypeError('Invalid native byte admission');
     this.resultBytes.set(key, bytes);
   }
 
   resultByteBound(key: string): number | undefined {
+    this.assertReady();
     return this.resultBytes.get(key);
   }
 
@@ -43,11 +93,15 @@ export class NativeCollectionWork {
     private readonly allowance: WorkAllowance,
     private readonly deadline: number,
   ) {
-    if (!allowance.reservationId || !Number.isFinite(deadline)) throw new TypeError('Invalid source reservation');
+    const reservationId = allowance.reservationId;
+    const initial = { ...allowance.remaining };
+    if (!reservationId || !Number.isFinite(deadline)) throw new TypeError('Invalid source reservation');
     for (const axis of axes)
-      if (!Number.isSafeInteger(allowance.remaining[axis]) || allowance.remaining[axis] < 0)
+      if (!Number.isSafeInteger(initial[axis]) || initial[axis] < 0)
         throw new TypeError('Invalid source work dimension');
-    this.remaining = Object.freeze({ ...allowance.remaining });
+    ledgerAliases.set(this, this);
+    this.remaining = Object.freeze(initial);
+    this.allowance = Object.freeze({ reservationId, remaining: this.remaining });
   }
 
   /** The native caller binds this exact frame to its live operational transaction and deadline. */
@@ -56,11 +110,49 @@ export class NativeCollectionWork {
   }
 
   receipt(): WorkReceipt {
-    return Object.freeze({ reservationId: this.allowance.reservationId, used: Object.freeze({ ...this.used }) });
+    const receipt = Object.freeze({ reservationId: this.allowance.reservationId, used: Object.freeze({ ...this.used }) });
+    receiptLedgers.set(receipt, this);
+    return receipt;
   }
 
   available(axis: keyof WorkDimensions): number {
-    return this.remaining[axis] - this.used[axis] - this.held[axis];
+    const plan = this.planned.getStore();
+    if (!this.open || !livePlan(plan)) return 0;
+    receivingLifetimes.get(this)?.();
+    return Math.max(
+      0,
+      Math.min(this.remaining[axis], plan?.end[axis] ?? this.remaining[axis]) - this.used[axis] - this.held[axis],
+    );
+  }
+
+  /** Apply one cumulative ceiling to this SAME ledger, including child transfers,
+   * checkouts and held transaction cleanup. This creates no allocation or receipt.
+   */
+  async withinAllowance<T>(allowance: WorkAllowance, operation: () => Promise<T>): Promise<T> {
+    this.assertReady();
+    if (Date.now() >= this.deadline) throw this.unavailable();
+    if (allowance.reservationId !== this.allowance.reservationId)
+      throw new TypeError('Foreign source work reservation');
+    const end = zero();
+    for (const axis of axes) {
+      const remaining = allowance.remaining[axis];
+      if (!Number.isSafeInteger(remaining) || remaining < 0 || remaining > this.available(axis))
+        throw new TypeError('Source work plan exceeds remaining reservation');
+      end[axis] = this.used[axis] + this.held[axis] + remaining;
+    }
+    const plan = { end: Object.freeze(end), active: true, parent: this.planned.getStore() };
+    return this.planned.run(plan, async () => {
+      try {
+        const result = await operation();
+        this.assertReady();
+        return result;
+      } catch (error) {
+        this.failure = error instanceof Error ? error : new Error('Source work continuation failed');
+        throw error;
+      } finally {
+        plan.active = false;
+      }
+    });
   }
 
   /** Transfer every declared child before any child can dispatch. Unused child capacity stays
@@ -111,6 +203,7 @@ export class NativeCollectionWork {
         this.pending--;
         for (const child of values) {
           child.closed = true;
+          child.open = false;
           this.failure ??= child.failure;
         }
         for (const axis of axes) {
@@ -148,6 +241,7 @@ export class NativeCollectionWork {
     }
     this.pending++;
     const settle = (receipt: WorkReceipt) => {
+      receipt = Object.freeze({ reservationId: receipt.reservationId, used: Object.freeze({ ...receipt.used }) });
       if (receipt.reservationId !== this.allowance.reservationId) throw new TypeError('Foreign source work receipt');
       for (const axis of axes)
         if (!Number.isSafeInteger(receipt.used[axis]) || receipt.used[axis] < 0 || receipt.used[axis] > remaining[axis])
@@ -159,12 +253,16 @@ export class NativeCollectionWork {
       this.pending--;
     };
     try {
-      const result = await operation({ reservationId: this.allowance.reservationId, remaining });
+      Object.freeze(remaining);
+      const result = await composing.run([...(composing.getStore() ?? []), this], () =>
+        operation(Object.freeze({ reservationId: this.allowance.reservationId, remaining })),
+      );
+      this.assertReady();
       settle(result.work);
       return result;
     } catch (error) {
-      // An owned child attaches its settled receipt even when its final operation fails. Preserve
-      // those actual charges. Without a valid receipt the entire admitted remainder stays charged.
+      // A child that did not complete cannot release its prepaid partition.
+      // Failed/rejected/rolled-back callbacks retain the entire dispatched transfer.
       const failed = error instanceof Error && 'work' in error ? (error.work as WorkReceipt) : undefined;
       let accounted = false;
       if (failed) {
@@ -189,9 +287,18 @@ export class NativeCollectionWork {
     }
   }
 
+  /** Permanently end this callback-owned ledger; this never releases spent work. */
+  close(): void {
+    if (this.pending !== 0) throw new TypeError('Native work is still in flight');
+    this.closed = true;
+    this.open = false;
+  }
+
   assertReady(): void {
     if (this.closed) throw new TypeError('Native work allocation is closed');
+    receivingLifetimes.get(this)?.();
     if (this.failure) throw this.failure;
+    if (!this.open || Date.now() >= this.deadline || !livePlan(this.planned.getStore())) throw this.unavailable();
   }
 
   /** Undefined means unproved, including for an operation expected to return no rows. */
@@ -205,12 +312,15 @@ export class NativeCollectionWork {
     cancel(): void;
   } {
     if (this.closed) throw new TypeError('Native work allocation is closed');
+    const plan = this.planned.getStore();
+    receivingLifetimes.get(this)?.();
+    if (!this.open || !livePlan(plan)) throw this.unavailable();
     if (!cleanup) this.assertReady();
     if (Date.now() >= this.deadline || footprint === undefined) throw this.unavailable();
     const bound = Object.freeze({ ...footprint });
     for (const axis of axes) {
       if (!Number.isSafeInteger(bound[axis]) || bound[axis] < 0) throw new TypeError('Invalid native footprint');
-      if (bound[axis] > this.remaining[axis] - this.used[axis] - this.held[axis]) throw this.unavailable();
+      if (bound[axis] > this.available(axis)) throw this.unavailable();
     }
     for (const axis of axes) this.held[axis] += bound[axis];
     this.pending++;
@@ -227,7 +337,8 @@ export class NativeCollectionWork {
     return {
       dispatch: () => {
         if (state !== 'reserved') throw new TypeError('Source work already dispatched');
-        if (!cleanup && Date.now() >= this.deadline) {
+        receivingLifetimes.get(this)?.();
+        if (!this.open || !livePlan(plan) || (!cleanup && Date.now() >= this.deadline)) {
           release(zero());
           throw this.unavailable();
         }
@@ -235,10 +346,44 @@ export class NativeCollectionWork {
       },
       // The owner already admitted this literal. Suppress only duplicate observation of this
       // single dispatched query; no unreserved operation can enter the enclosing frame this way.
-      query: (operation) => {
+      query: async (operation) => {
+        receivingLifetimes.get(this)?.();
+        if (!this.open || !livePlan(plan) || Date.now() >= this.deadline) throw this.unavailable();
         if (state !== 'dispatched' || queried) throw new TypeError('Source query was not uniquely dispatched');
         queried = true;
-        return observing.run(undefined, operation);
+        // A local ledger is only a child cap unless its receipt is actually
+        // composed by the parent. It cannot suppress another ledger's observer.
+        const active = observing.getStore();
+        assertObservation(active);
+        let result: Awaited<ReturnType<typeof operation>>;
+        if (active && ledgerAliases.get(active.work) === this) {
+          // Suppress the duplicate charge, never the owner's literal policy. The
+          // manually held amount must cover the actual literal on all eight axes.
+          let dispatched = false;
+          const required = {
+            pool: active.pool, work: active.work, active: true,
+            footprint: (sql: string, values: readonly unknown[]) => {
+              const literal = active.footprint(sql, values);
+              if (dispatched || !literal || !axes.every((axis) => literal[axis] <= bound[axis])) return undefined;
+              dispatched = true;
+              return literal;
+            },
+          };
+          let parent = active.parent;
+          while (parent && ledgerAliases.get(parent.work) === this) parent = parent.parent;
+          try {
+            result = await requiredFootprints.run([...(requiredFootprints.getStore() ?? []), required], () =>
+              manuallyObserved.run(active, () => observing.run(parent, operation)));
+          } finally {
+            required.active = false;
+          }
+        } else {
+          result = await operation();
+        }
+        assertObservation(active);
+        receivingLifetimes.get(this)?.();
+        if (!this.open || !livePlan(plan) || Date.now() >= this.deadline) throw this.unavailable();
+        return result;
       },
       settle: (actual = {}) => {
         if (state !== 'dispatched') throw new TypeError('Source work was not dispatched');
@@ -259,17 +404,33 @@ export class NativeCollectionWork {
 
   private unavailable(): ProblemError {
     const error = new ProblemError('dependency_unavailable');
-    Object.defineProperty(error, 'work', { get: () => this.receipt(), configurable: true });
+    Object.defineProperty(error, 'work', { value: this.receipt(), configurable: true });
     return error;
   }
 }
 
 type Footprint = (sql: string, values: readonly unknown[]) => WorkDimensions | undefined;
-const observing = new AsyncLocalStorage<{ work: NativeCollectionWork; footprint: Footprint } | undefined>();
+type Observation = {
+  pool: Pool;
+  work: NativeCollectionWork;
+  footprint: Footprint;
+  active: boolean;
+  parent: Observation | undefined;
+};
+function assertObservation(observation: Observation | undefined): void {
+  for (; observation; observation = observation.parent)
+    if (!observation.active) throw new ProblemError('dependency_unavailable');
+}
+const observing = new AsyncLocalStorage<Observation | undefined>();
+const requiredFootprints = new AsyncLocalStorage<
+  readonly { pool: Pool; work: NativeCollectionWork; footprint: Footprint; active: boolean }[]
+>();
 const pools = new WeakSet<Pool>();
-const clients = new WeakSet<PoolClient>();
+type NativeQueryClient = Pick<PoolClient, 'query'>;
+const clients = new WeakSet<NativeQueryClient>();
+const checkoutObservations = new WeakMap<NativeQueryClient, Observation | undefined>();
 
-function observeNativeCollectionClient(client: PoolClient, delegated = false): void {
+function observeNativeCollectionClient(client: NativeQueryClient, pool: Pool, delegated = false): void {
   if (clients.has(client)) return;
   clients.add(client);
   const original = client.query;
@@ -286,17 +447,44 @@ function observeNativeCollectionClient(client: PoolClient, delegated = false): v
     terminal?.rollback?.reservation.cancel();
     terminal = undefined;
   };
-  client.query = function (this: PoolClient, ...args: unknown[]) {
+  client.query = function (this: NativeQueryClient, ...args: unknown[]) {
     const active = observing.getStore();
+    const checkout = checkoutObservations.get(client);
+    assertObservation(checkout);
+    assertObservation(active);
+    assertObservation(manuallyObserved.getStore());
+    if (checkout) {
+      let ancestor = manuallyObserved.getStore() ?? active;
+      while (ancestor && ancestor !== checkout) ancestor = ancestor.parent;
+      if (!ancestor) throw new ProblemError('dependency_unavailable');
+    }
     const invoke = original as unknown as (...args: unknown[]) => unknown;
-    if (!active) return invoke.apply(this, args);
     // A live Core transaction forwards to a bound PoolClient query. Observe that exact
     // transaction even if it predates pool instrumentation, without charging its client twice.
     const invokeQuery = () =>
-      delegated ? observing.run(undefined, () => invoke.apply(this, args)) : invoke.apply(this, args);
+      delegated
+        ? manuallyObserved.run(active ?? manuallyObserved.getStore(), () =>
+            requiredFootprints.run([], () => observing.run(undefined, () => invoke.apply(this, args))))
+        : invoke.apply(this, args);
     const config = args[0] as string | QueryConfig;
     const sql = typeof config === 'string' ? config : config.text;
     const values = (typeof config === 'string' ? args[1] : config.values) as unknown[] | undefined;
+    for (const required of requiredFootprints.getStore() ?? []) {
+      if (required.pool !== pool) continue;
+      try {
+        if (!required.active) throw new ProblemError('dependency_unavailable');
+        if (!required.footprint(sql, Array.isArray(values) ? values : []))
+          throw new ProblemError('dependency_unavailable');
+        // A real transaction keeps its already held cleanup even after a refusal.
+        const cleanup =
+          (sql === 'COMMIT' || sql === 'ROLLBACK') && terminal !== undefined && terminal.work === active?.work;
+        if (!cleanup) required.work.assertReady();
+      } catch (error) {
+        required.work.failure = error instanceof Error ? error : new Error('Unproved transferred source statement');
+        throw error;
+      }
+    }
+    if (!active) return invoke.apply(this, args);
     const beginning = /^BEGIN\b/i.test(sql);
     const control = sql === 'COMMIT' ? 'commit' : sql === 'ROLLBACK' ? 'rollback' : undefined;
     const finishing = control !== undefined && terminal?.work === active.work;
@@ -342,8 +530,8 @@ function observeNativeCollectionClient(client: PoolClient, delegated = false): v
     const settle = (result?: QueryResult, error?: unknown) => {
       if (settled) return;
       settled = true;
-      if ((finishing || beginning) && error)
-        discardConnection(client, error instanceof Error ? error : new Error('Native transaction cleanup failed'));
+      if ((finishing || beginning) && error && 'release' in client)
+        discardConnection(client as PoolClient, error instanceof Error ? error : new Error('Native transaction cleanup failed'));
       reservation.settle({
         emptySeeks:
           !result || bound!.emptySeeks > 1 ? bound!.emptySeeks : result.rows.length === 0 ? bound!.emptySeeks : 0,
@@ -388,22 +576,83 @@ function observeNativeCollectionClient(client: PoolClient, delegated = false): v
   } as PoolClient['query'];
 }
 
+/** A prepaid child retains its parent's literal statement policy even when it
+ * instruments its own ledger. This checks admission without creating or charging funds. */
+export function requireNativeCollectionFootprint<T>(
+  pool: Pool,
+  work: NativeCollectionWork,
+  footprint: Footprint,
+  operation: () => Promise<T>,
+): Promise<T> {
+  observePool(pool);
+  const required = { pool, work, footprint, active: true };
+  return requiredFootprints.run([...(requiredFootprints.getStore() ?? []), required], async () => {
+    try {
+      return await operation();
+    } finally {
+      required.active = false;
+    }
+  });
+}
+
 /** Observe the original pool/clients: no shadow pool, client proxy or identity/time registration changes. */
 export async function instrumentNativeCollectionWork<T>(
   pool: Pool,
   work: NativeCollectionWork,
   footprint: Footprint,
   operation: () => Promise<T>,
-  client?: PoolClient,
+  client?: NativeQueryClient,
 ): Promise<T> {
+  // A live command deliberately exposes query only. Observing its forwarding
+  // surface does not turn it into a PoolClient or give it checkout/release authority.
   // The caller may have acquired this live command before this pool was first observed.
   // Its forwarding wrapper suppresses only duplicate observation at the bound client.
-  if (client) observeNativeCollectionClient(client, true);
+  if (client) observeNativeCollectionClient(client, pool, true);
+  observePool(pool);
+  const parent = observing.getStore();
+  assertObservation(parent);
+  const ledger = receivedLedger(work);
+  // A local observer cannot silently replace a parent's charge. Transfer first or
+  // use the existing ledger; the transferred parent's literal policy remains active.
+  if (parent && ledgerAliases.get(parent.work) !== ledger && !(composing.getStore() ?? []).includes(ledgerAliases.get(parent.work)!))
+    throw new TypeError('Nested native ledger has no parent transfer');
+  const observation = { pool, work, footprint, active: true, parent };
+  // A delegated CommandTransaction was acquired by Core, outside this body
+  // observer. Its real private lifetime guards escape. Do not attach the shorter
+  // body scope as checkout custody: Core still owes its fence/COMMIT/cleanup
+  // after the body observer ends. Actual pool checkouts retain their own custody.
+  const inherited = requiredFootprints.getStore() ?? [];
+  const requirements = parent
+    ? [...inherited, { pool, work: parent.work, footprint: parent.footprint, active: true }]
+    : inherited;
+  return requiredFootprints.run(requirements, () => observing.run(observation, async () => {
+    try {
+      const result = await operation();
+      work.assertReady();
+      return result;
+    } catch (error) {
+      if (error instanceof Error)
+        Object.defineProperty(error, 'work', { value: ledger.receipt(), configurable: true });
+      throw error;
+    } finally {
+      observation.active = false;
+    }
+  }));
+}
+
+function observePool(pool: Pool): void {
   if (!pools.has(pool)) {
     pools.add(pool);
     const connect = pool.connect.bind(pool);
     pool.connect = ((...args: unknown[]) => {
+      for (const required of requiredFootprints.getStore() ?? [])
+        if (required.pool === pool) {
+          if (!required.active) throw new ProblemError('dependency_unavailable');
+          required.work.assertReady();
+        }
       const active = observing.getStore();
+      assertObservation(active);
+      if (manuallyObserved.getStore()) throw new TypeError('A reserved query cannot acquire another checkout');
       if (active) {
         try {
           active.work.assertReady();
@@ -417,19 +666,11 @@ export async function instrumentNativeCollectionWork<T>(
       }
       return (connect as unknown as (...args: unknown[]) => unknown)(...args);
     }) as Pool['connect'];
-    pool.on('acquire', observeNativeCollectionClient);
+    pool.on('acquire', (client) => {
+      checkoutObservations.set(client, observing.getStore());
+      observeNativeCollectionClient(client, pool);
+    });
   }
-  return observing.run({ work, footprint }, async () => {
-    try {
-      const result = await operation();
-      work.assertReady();
-      return result;
-    } catch (error) {
-      if (error instanceof Error)
-        Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
-      throw error;
-    }
-  });
 }
 
 /** One physical Source reservation shared by metadata, native drivers, scope and derived work. */
@@ -646,3 +887,16 @@ export async function registerCollectionSourceWork(context: WorkContext): Promis
     },
   ]);
 }
+
+// Library-owned declaration region. Components never grant or refill work. A whole
+// installed declaration covers only the enforced selected Library schedule.
+export {
+  IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION,
+  declareLibraryIdentityStatement,
+  assembleLibraryIdentityOriginalComponents,
+  LIBRARY_IDENTITY_CHECKOUT_WORK,
+  LIBRARY_IDENTITY_ORIGINAL_MISSING_OPERANDS,
+  assembleLibraryIdentitySelectedBodies,
+  LIBRARY_IDENTITY_SELECTED_MULTIPLICITIES,
+  LIBRARY_IDENTITY_SELECTED_MISSING_OPERANDS,
+} from './identity-original-work.ts';

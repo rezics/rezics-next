@@ -13,6 +13,7 @@ import {
   nativeWork,
   addNativeWork,
   IdentityHistoryWorkUnavailable,
+  IDENTITY_HISTORY_COMMAND_CONTROL,
 } from '../history/agent-identity-inventory-work.ts';
 import {
   AGENT_IDENTITY_HISTORY_GUARD_COST,
@@ -40,7 +41,6 @@ import {
   type PreparedAgentIdentityCopy,
 } from './shared-history-agent-identity.ts';
 import type { HistoryBarrier } from '../history/registry.ts';
-import { currentIdentitySourceConsumerMaintenance } from '../semantic/identity-source-consumer-maintenance.ts';
 import canonicalize from 'canonicalize';
 import {
   currentCommand,
@@ -49,6 +49,7 @@ import {
   runCommand,
   hasLiveCommandTransaction,
   registerCommandCallback,
+  withSingleCommandAttempt,
   type CommandTransaction,
 } from '../command/command.ts';
 import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
@@ -480,6 +481,16 @@ export async function prepareAgentIdentityRetention(
   tx: CommandTransaction,
   input: AgentIdentityRetentionInput,
 ): Promise<readonly AgentIdentityRetentionResult[]> {
+  validateInput(input);
+  const { pool, deadline } = currentCommandResources(tx);
+  // This public validator may be reached directly inside a Source callback, without
+  // minimizeAgentIdentityRetention's released command prepayment. Its caller owns
+  // command controls; this entry still owes its own root/owner/key reads each time.
+  await reserveIdentityHistoryWork(
+    pool,
+    nativeWork(4 + input.keys.length, 4 + input.keys.length, 4 + input.keys.length, 16384),
+    { deadline },
+  );
   return prepareNativeRetention(tx, input);
 }
 
@@ -746,51 +757,63 @@ export function minimizeAgentIdentityRetention(
       }),
     );
   return withRequestDeadline(deadline, async () => {
-    // Pool-only compatibility never allocates a frame or pretends to possess an SDK client.
-    const unit = currentAgentIdentityHistoryUnit();
-    const client = deps?.client ?? unit?.client;
-    if (!client)
-      return (
-        await runCommand(pool, { partition, deadline }, async (tx) => noEffect(await prepareNativeRetention(tx, fixed)))
-      ).value;
-    const execute = async (context: HistoryReceivingContext) => {
-      if (partition !== 0 || partitionOf(fixed.barrier.accountRoute) !== partition)
-        return pending('native-erasure-source-home-root-custody-unavailable');
-      const initial = await identityHistoryCommand(pool, context, async (tx) => {
+    try {
+      // Pool-only compatibility never allocates a frame or pretends to possess an SDK client.
+      const unit = currentAgentIdentityHistoryUnit();
+      const client = deps?.client ?? unit?.client;
+      if (!client) {
         await reserveIdentityHistoryWork(
           pool,
-          nativeWork(4 + fixed.keys.length, 4 + fixed.keys.length, 4 + fixed.keys.length, 16384),
+          addNativeWork(
+            IDENTITY_HISTORY_COMMAND_CONTROL,
+            nativeWork(4 + fixed.keys.length, 4 + fixed.keys.length, 4 + fixed.keys.length, 16384),
+          ),
+          { deadline },
         );
-        return prepareNativeRetention(tx, fixed);
-      });
-      const staged: (StagedRetention | null)[] = [];
-      for (const item of initial) {
-        if (item.gap !== agentIdentityConsumerCustody.dependency) {
-          staged.push(null);
-          continue;
-        }
-        await reserveIdentityHistoryWork(pool, nativeWork(86, 80, 59, 205920));
-        const reference = await consumerReference(pool, fixed, item.key, context.deadline);
-        const stage = reference ? await readAgentIdentityRetirementStage(pool, reference, context) : null;
-        const copy = await prepareAgentIdentityCopyRetention(pool, fixed.barrier, item.key, context.deadline, {
-          client,
-          context,
-        });
-        staged.push({
-          reference,
-          custody: stage?.consumer ?? null,
-          stage,
-          copy,
-          client,
-        });
+        return withSingleCommandAttempt(
+          async () =>
+            (
+              await runCommand(pool, { partition, deadline }, async (tx) =>
+                noEffect(await prepareNativeRetention(tx, fixed)),
+              )
+            ).value,
+        );
       }
-      return identityHistoryCommand(pool, context, (tx) => prepareNativeRetention(tx, fixed, staged));
-    };
-    try {
+      const execute = async (context: HistoryReceivingContext) => {
+        if (partition !== 0 || partitionOf(fixed.barrier.accountRoute) !== partition)
+          return pending('native-erasure-source-home-root-custody-unavailable');
+        const initial = await identityHistoryCommand(pool, context, async (tx) => {
+          await reserveIdentityHistoryWork(
+            pool,
+            nativeWork(4 + fixed.keys.length, 4 + fixed.keys.length, 4 + fixed.keys.length, 16384),
+          );
+          return prepareNativeRetention(tx, fixed);
+        });
+        const staged: (StagedRetention | null)[] = [];
+        for (const item of initial) {
+          if (item.gap !== agentIdentityConsumerCustody.dependency) {
+            staged.push(null);
+            continue;
+          }
+          await reserveIdentityHistoryWork(pool, nativeWork(86, 80, 59, 205920));
+          const reference = await consumerReference(pool, fixed, item.key, context.deadline);
+          const stage = reference ? await readAgentIdentityRetirementStage(pool, reference, context) : null;
+          const copy = await prepareAgentIdentityCopyRetention(pool, fixed.barrier, item.key, context.deadline, {
+            client,
+            context,
+          });
+          staged.push({
+            reference,
+            custody: stage?.consumer ?? null,
+            stage,
+            copy,
+            client,
+          });
+        }
+        return identityHistoryCommand(pool, context, (tx) => prepareNativeRetention(tx, fixed, staged));
+      };
       // Reuse an existing callback frame; nested/replacement frames are forbidden.
       if (unit) return await execute(unit.context);
-      if (currentIdentitySourceConsumerMaintenance(pool, deadline))
-        return pending('identity-history-current-unit-unavailable');
       if (!deps) return pending('identity-history-current-unit-unavailable');
       return await withAgentIdentityHistoryUnit({ pool, ...deps }, { deadline }, execute);
     } catch (error) {

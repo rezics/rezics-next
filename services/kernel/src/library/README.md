@@ -2509,8 +2509,9 @@ raw-width cases. `collection-list-facts-growth.test.ts` measures the whole fixed
 `createLibraryIdentityNativePlanner` in `module.ts` exposes the default native `advance`, `readPage` and
 same-command `verifySeal` ports. The exact key is `{job, sourceIdentity, scope: 'collection-source'}`.
 This is an explicitly funded native maintenance entry point; ordinary Source capture does not gain an
-unfunded mapping-discovery pass. The admitted saved `IdentityJob` and `identityEpochStore.pageChanges` transform immutable input-generation
-originals. Ordinary pending mappings never supply a guessed destination. Metadata, raw capture and raw
+unfunded mapping-discovery pass. The admitted saved `IdentityJob` and Library's bounded native
+`pageLibraryIdentityEpochChanges` projection transform immutable input-generation originals on the same snapshot.
+Ordinary `identityEpochStore.pageChanges` and `readJob` remain unchanged. Ordinary pending mappings never supply a guessed destination. Metadata, raw capture and raw
 planning are independent of ordinary Source readiness. Supported placement is a genuine same-home account,
 Source and admitted job: curated members, private built-in entry/label/session/copy, and committed active
 account-backed explicit output. Private built-in Sources traverse the independent four-family owner ranges, including
@@ -2555,8 +2556,13 @@ physical custody or infer destination erasure.
   `nativeRows`, `identityMetadataRows`, `nativePoints`, `witnessKeys`, `statements`, `bytes`, `emptySeeks`.
   A range admits LIMIT plus one indexed EOF slot, not result count. Effects page: `n` candidate keys,
   `n+1` native rows, zero identity metadata, one native point, zero witnesses, one statement,
-  SQL+serialized binds+`512n` bytes, one empty seek. Locked plan: one native row/point, zero identity
-  metadata, one statement, SQL+binds+12288 bytes, one empty seek. Current capture: seven joined native
+  SQL+serialized binds+`512n` bytes, one empty seek. The native page projects only the producer's
+  `library-native:SHA256(operation)` effect key; malformed retained keys refuse without truncation.
+  Locked plan: one native row/point, zero identity metadata, one statement,
+  SQL+binds+`LIBRARY_IDENTITY_PLAN_RESULT_BYTES`, one empty seek. That result bound is derived from
+  four schema-bounded JSON values, UUID/decimal widths, scope and the four native retained-state fields.
+  SQL validates the SHA256 scope digest and retained UUID/<=256-byte basis shape before projecting it;
+  invalid state returns a bounded rejection marker. Actual original bind bytes are bounded before dispatch. Current capture: seven joined native
   rows/points, one identity metadata row, one statement, SQL+binds+64 bytes, one empty seek. Current
   admitted job: admission/owner, at most two inputs plus EOF, group/bridge/directory and bounded CTE
   revisits plus the actual claim admit 16 native/identity rows, 13 points, one statement, SQL+binds+2048 bytes, four possible
@@ -2566,10 +2572,19 @@ physical custody or infer destination erasure.
   miss slot too, including failed foreign-key probes; an empty or failed dispatch never refunds it.
   Known transaction controls have zero rows/points/metadata/candidates/witnesses/seeks but one statement
   and their actual SQL bytes; native checkout charges one point. No witnesses are constructed anywhere.
-  Unknown statements remain unknown. Saved job JSON first has a same-snapshot size admission before
-  its real transform read; no unbounded projection is priced as a fabricated constant. Native metadata,
-  raw and custody calls transfer only the actual remaining reservation to their existing declared ledger,
-  then settle its exact eight-axis receipt back. Their SQL/projection bounds remain in
+  Unknown statements remain unknown. Library's native transform reads only closed kind and four
+  UUID-or-null fields through `identity-epoch-store-library-transform.sql`: three native rows/points,
+  two identity metadata rows, one statement, SQL+binds+256 result bytes, three possible misses. It
+  validates the native job/epoch/pending-or-published state and current admission owner before use.
+  The input query pays for a third rejection sentinel and refuses more than two generations before
+  original seeks. One input reads <=100 originals; two read <=50 each. The minimum full-page cutoff,
+  ordering, deduplication, original-generation filter and immutable transform remain intact. No whole
+  intent/release/undoJob/verificationReceipt is projected, capped or truncated, and no saved-job size
+  query is needed by this Library helper. Its ordinary store counterpart is unaffected. Native metadata
+  now reads only partition state/epoch/position, paying its fixed point rather than projecting unused
+  node or move addresses. Native metadata,
+  raw and custody descendants now execute on the exact supplied ledger, including their own checkouts,
+  explicit native statement reservations and terminal controls. Their SQL/projection bounds remain in
   `collection-source-native.ts` and `native-source-custody.ts`, including capture/receipt/retention. Custody reserves point-miss slots even for a positive outer result;
   native Core ownership/publication/proof controls also declare their identity-metadata row.
 - Growth check: `test/library/identity-scope-effects.test.ts` supplies focused native outcome cases for all
@@ -2580,14 +2595,21 @@ physical custody or infer destination erasure.
 
 The real `NativeCollectionWork` reservation is cumulative. Its original ID, Pool, deadline and command resources
 are retained; dispatched misses, SQL failures, repeated calls, rollbacks and settlement cannot refill native rows.
-Command cleanup is reserved before BEGIN. `advancePrepaid` uses the existing live Source Library partition
-in place, without a replacement frame. Existing caller `compose` transfers are bounded by that same cumulative
-parent and settle their actual receipts; a historical capture allowance cannot fund a continuation. Verification
-resolves the already-live allocation before any SQL and performs no checkout or foreign IO. Normal Semantic
+Command cleanup is reserved before BEGIN. Custody holds distinct COMMIT and ROLLBACK slots; a failed COMMIT
+still dispatches the separately paid ROLLBACK. `advancePrepaid`,
+`advanceLibraryIdentityNativePlanWithWork`, `readLibraryScopeEffectsPageWithWork` and
+`nextLibraryIdentityNativePlanWithWork` use the existing live Source Library partition in place. The prepaid page
+input omits allowance and retains the source-discriminant generic seal/page union. Library rechecks the exact
+owner ledger, Pool, unchanged owner deadline and live callback before dispatch and after awaited work; a copied
+ledger, changed deadline or escaped callback cannot become independent funding. Planner metadata/raw/capture
+and finish descendants no longer construct a second ledger or transfer a fresh allowance. A historical capture
+allowance cannot fund a continuation. Verification resolves the already-live allocation before any SQL, meters
+its exact command query surface on that same ledger and performs no checkout or foreign IO. Positive and genuine
+sealed-zero verification both retain the native current/receipt/job checks, including a repeated final recheck. Normal Semantic
 receiving can recognize the concrete exported `libraryIdentityFootprint` declaration; its strict unknown refusal
 must remain until its actual SQL owner adopts the reached bodies. The local 512-row/32-point/16-statement/
 262144-byte cap is not additional Source funding. Accounts' selected current original admission/position/control
-is local and fully spent, with Source/Library remainders still null. The whole authentic parent must reserve the
+is local and fully spent. Its installed Library term now resolves, while the complete Source/History term remains absent. The whole authentic parent must reserve the
 disjoint Accounts local, all reached Source/History, all reached Library and transfer-control terms before first
 IO, preserving original/position/Pool/WorkClient/SDK/registry/deadline and live callback. That complete parent
 price remains unknown; this native declaration supplies no guessed zero or replacement foreign producer.
@@ -2722,3 +2744,80 @@ The budget tests retain existing admission, concurrency, completion, failure and
 inherited-declaration refusal and terminal-control settlement after expiry. Numerical accounting does not prove
 native Source currentness. The producer, current physical Source binding, prepared readback and cleanup remain
 required before the funded journey can return useful results.
+  `identity-original-work.ts` exports strict owner-literal component declarations and
+  `assembleLibraryIdentityOriginalComponents`. Each component contains all eight axes and zero engine requests;
+  composition rejects foreign components, nonintegral/unbounded multiplicities and overflow. Literal bytes include
+  SQL and original serialized binds; dynamically admitted result projections remain required operands for unrestricted planning. Checkout
+  is exactly one native point and zero on the other seven axes. Component assembly grants no funding. The installed selected Library data declaration is derived from the guarded
+  composition below. `collection-source-work.ts` re-exports this additive declaration region.
+
+`assembleLibraryIdentitySelectedBodies()` composes the actual native selected body components using the
+adopted Source schedule `discovery=0, plannerSteps=0, effectPages=1, currentVerifications=1,
+exhaustedPageRechecks=1, finalFences=0`, with page LIMIT1. There is one locked plan/current capture/admitted
+job/seal path inside the page and two more in receiving verification, including genuine sealed zero. Every
+path includes all seven current-basis statements for the possible active explicit-output branch: partition,
+account, Collection, committed publication, two native fences, capture and current receipt. Native capture
+cursor projection bytes include maximum JSON escaping of the schema's <=512-byte after key and <=64-byte
+tie. Each current-basis statement prices its actual closed projection. Shared queries use the genuine transaction's deadline/query
+surface and perform no checkout. Independent custody retains its own bounded timeout.
+
+The composed Library SQL term has candidateKeys=1, nativeRows=785, identityMetadataRows=66,
+nativePoints=127, witnessKeys=0, statements=34 and emptySeeks=70. Bytes are the sum of the literal SQL,
+owner-derived maximum original serialized binds and each bounded native projection; the callable assembly
+returns the exact value. No configured allowance or population estimate enters this derivation. Core controls
+are returned separately by reference to the installed `COMMAND_DISPATCH_ALLOWANCE`, with total
+`0/2/0/1/0/8/169/1` and zero engine requests; they are not included in this Library SQL term. Core's enforced
+`single-no-effect` profile prevents the unbounded ordinary partition error read from being reached. Its
+same-client, already-spent cleanup survives failed COMMIT/revocation and must remain disjoint. Ordinary
+Library command instrumentation cannot substitute for the authentic Accounts/Core owner adapter.
+
+The installed `withPrepaidIdentitySourceConsumerMaintenance(deps, parent, body)` authenticates the actual
+Accounts private grant and constrains its exact Library object. Source's irreversible before-IO schedule is bound
+to that original and selected History position; Library consumes each already-spent Source operation claim once.
+`LIBRARY_IDENTITY_SELECTED_MISSING_OPERANDS` is empty. Changing page limit1, using the independent page API,
+discovery or planner steps on that selected frame refuses before IO. A later original is required for pending or
+unbuilt plans. Failure, rollback, callback reentry and restart cannot reopen a claim.
+
+`IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION` is an own frozen data export with exactly `{work,
+engineRequests: 0}`. Its eight-axis work is the selected Library SQL term above. Static selected pricing imports
+only literals/schema-derived bounds; the executable planner and native custody use those same declarations.
+This avoids making installed data depend on the initialization order of executable owner modules. The unrestricted
+ordinary discovery/planner diagnostics remain separate; their full job/error projections and future workflow
+invocations are excluded from this selected declaration.
+
+The selected page's real command uses Source's genuine private adapter to Core `single-no-effect`. Library
+observes only the transaction's body SQL. Core controls are charged atomically to the disjoint Source partition,
+including its separately held failed-COMMIT rollback. A delegated body observer never becomes checkout custody
+that could invalidate the later Core fence/COMMIT. Exact literal recognition remains installed for the page,
+verifier and manually reserved native basis statements; unfamiliar SQL refuses before dispatch.
+
+Exhausted Source receiving uses the delivered `single-source-fence` executor through its genuine original adapter.
+Both Library verifications stay in the same genuine Source-home command, including sealed zero. Source native
+summary/receipt/conflict/component/obligation statements debit Source with their actual binds and closed
+projections before IO. The genuine progress event remains intact. This preserves the disjoint Library price;
+Source's event, command controls, receiving SQL and cleanup are not smuggled into it. Preparation/checkpoint/finish
+with other associations and positive receiving-selection native hold declarations remain separately owned gaps.
+The complete `IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION` is absent, so Accounts still refuses whole-parent
+child admission. Neither a bounded Library declaration nor an EOF establishes physical retirement closure.
+
+- Touches: the installed Source/History private receiver, before-IO one-shot scheduler, same Library ledger,
+  native page/current basis, and genuine Core command profiles. Independent Library planning APIs retain their
+  ordinary contracts.
+- Bound: selected schedule `0/0/1/1/1/0`, page limit1, three inclusive native current paths, and the exact 34-statement
+  Library component sum. Source controls/body terms remain independently reserved; no second ledger or allowance.
+- Growth check: authored selected-original positive/zero page/current cases and strict literal/data/observer
+  accounting cases. Native/full/growth acceptance remains UNRUN; compiler typing is not private grant or native proof.
+
+`test/library/identity-original-work.test.ts` verifies that the installed selected declaration is present as frozen
+own data with the exact eight-axis Library term, while the unrestricted declaration still reports its genuine
+missing invocation schedule and projection operands. Selected admission's receiving operands are delivered and its
+missing list is empty. This bounded Library term does not make the whole Source/History original available: the
+Source declaration, binding-consumer coverage and positive receiving-hold operands remain absent, so authentic
+transfer continues to refuse before I/O.
+
+The additional focused `test/library/identity-original-work.test.ts` cases cover strict literal/component assembly,
+cumulative repeat/terminal prices and live owner/Pool/deadline/copy/escape refusal before IO, selected
+three-path component arithmetic, serialized bind refusal, fixed-width transform/cutoff and malformed/third-input
+refusal. The pure projection fixtures do not claim private admission or native snapshot/owner proof. These cases and the
+retained native positive/zero/driver/rollback outcomes are UNRUN in this source delivery; typing is not native
+private-grant, physical closure or whole-original acceptance evidence.

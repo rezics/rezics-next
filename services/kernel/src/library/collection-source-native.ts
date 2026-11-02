@@ -17,7 +17,6 @@ import {
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
-import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
@@ -27,6 +26,12 @@ import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-so
 import { grantCapable } from './collection-reads.ts';
 import { admittedOwnerWorkingSource } from './owner-filter-working-source.ts';
 import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-source-work.ts';
+import {
+  assertLibraryIdentityWork,
+  assertLibraryIdentityResources,
+  revalidateBoundLibraryIdentityWork,
+  withLibraryIdentityWork,
+} from './identity-native-planner-work.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { NativeOrdinalKey, NativeOrdinalRow } from './collection-source-order.ts';
 import partitionRead from '../partition/read.sql';
@@ -123,8 +128,9 @@ import ordinalPage from './collection-source-native-ordinal.sql';
 const probeSQL = probeQuery.sql;
 const bind = (query: { params: readonly string[] }, values: Record<string, unknown>) =>
   query.params.map((name) => values[name]);
-const partitionSizeSQL =
-  'SELECT octet_length(node)::bigint + COALESCE(octet_length(moved_to),0)::bigint AS bytes FROM core.partition WHERE partition_no=$1';
+// Metadata consumes owner state and stamp only. It never needs node or the move address.
+export const nativeCollectionPartitionMetadataSQL =
+  'SELECT partition_no AS "partitionNo", write_state AS "writeState", epoch, position::text AS position FROM core.partition WHERE partition_no=$1';
 const fenceSQL = 'SELECT generation::text AS generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2';
 const referenceSQL =
   'SELECT collection_id FROM library.builtin_collection_reference WHERE route=$1 AND collection_id=$2';
@@ -160,7 +166,7 @@ const fixed = (rows: number, points: number, bytes: number) => () => ({
 for (const sql of [headerSQL, fenceSQL, referenceSQL, accountSQL]) register(sql, fixed(4, 1, 2048));
 // The native identity JSON has a schema-enforced 4096-byte ceiling, plus its result framing.
 register(scopeIdentitySQL, fixed(4, 1, 4608));
-register(partitionSizeSQL, fixed(4, 1, 128));
+register(nativeCollectionPartitionMetadataSQL, fixed(4, 1, 128));
 register(outputHead.sql, fixed(48, 7, 1024));
 register(outputProbe.sql, () => ({
   nativeRows: 4,
@@ -254,12 +260,19 @@ for (const query of [candidates, permissions])
       bytes: 256 * keys,
     };
   });
-function footprint(sql: string, values: readonly unknown[], work: NativeCollectionWork): WorkDimensions | undefined {
+export function nativeCollectionFootprint(sql: string, values: readonly unknown[], work?: NativeCollectionWork): WorkDimensions | undefined {
+  if (work) revalidateBoundLibraryIdentityWork(work);
   // The existing shared native capture sends these two session SETs. They access no relation, but still cost
   // statements/bytes here; the capture deliberately omits its own setup from its measured statement list.
   const control =
-    /^(?:BEGIN|COMMIT|ROLLBACK)\b/i.test(sql) || /^SET auto_explain\.log_min_duration = (?:0|-1)$/.test(sql);
-  const partitionBytes = work.resultByteBound('partition:' + values[0]);
+    ['BEGIN', 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK',
+      'SET auto_explain.log_min_duration = 0', 'SET auto_explain.log_min_duration = -1'].includes(sql.trim());
+  const range = [outputPage, ordinalPage, membersQuery, factsQuery].find((query) => normal(query.sql) === normal(sql));
+  if (range) {
+    const n = values[range === outputPage || range === ordinalPage ? 4 : range.params.indexOf('limit')];
+    if (typeof n !== 'number' || !Number.isSafeInteger(n) || n < 1 || n > 100) return undefined;
+  }
+  const partitionBytes = work?.resultByteBound('partition:' + values[0]);
   const cost = control
     ? { nativeRows: 0, nativePoints: 0, bytes: 0 }
     : normal(sql) === normal(partitionRead.sql)
@@ -284,13 +297,17 @@ async function call<T extends object>(
   pool: Pool,
   options: Options,
   operation: (work: NativeCollectionWork) => Promise<T>,
+  sharedWork?: NativeCollectionWork,
 ) {
-  const work = new NativeCollectionWork(options.allowance, options.deadline);
+  const work = sharedWork ?? new NativeCollectionWork(options.allowance, options.deadline);
+  if (sharedWork) assertLibraryIdentityResources(pool, work, options.deadline);
   if (options.tx && options.commandTx) throw new TypeError('Ambiguous native read transaction');
   if (options.tx || options.commandTx) {
     if (options.commandTx) {
       if (!hasLiveCommandTransaction(options.commandTx) || currentCommandResources(options.commandTx).pool !== pool)
         throw new ProblemError('semantic_not_ready');
+      if (sharedWork && currentCommandResources(options.commandTx).deadline !== options.deadline)
+        throw new TypeError('Library command changed its prepaid resources');
     } else if (!options.tx || !hasLiveOperationalTransaction(options.tx)) throw new ProblemError('semantic_not_ready');
     if (options.tx) {
       const resources = currentOperationalResources(options.tx);
@@ -307,7 +324,10 @@ async function call<T extends object>(
   return instrumentNativeCollectionWork(
     pool,
     work,
-    (sql, values) => footprint(sql, values, work),
+    (sql, values) => {
+      if (sharedWork) assertLibraryIdentityWork(work);
+      return nativeCollectionFootprint(sql, values, work);
+    },
     async () => ({
       ...(await operation(work)),
       work: work.receipt(),
@@ -334,19 +354,20 @@ async function readOnly<T>(
             : !options.tx || !hasLiveOperationalTransaction(options.tx)
         )
           throw new ProblemError('semantic_not_ready');
-        const reservation = work.reserve(footprint(sql, values, work));
+        const bound = nativeCollectionFootprint(sql, values, work);
+        const reservation = work.reserve(bound);
         reservation.dispatch();
         let result: QueryResult | undefined;
         try {
           const request = { text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) };
-          result = await tx.query(request);
+          result = await reservation.query(() => tx.query(request));
+          revalidateBoundLibraryIdentityWork(work);
           return result;
         } finally {
-          const bound = footprint(sql, values, work)!;
           reservation.settle({
-            emptySeeks: bound.emptySeeks && result?.rows.length === 0 ? 1 : 0,
-            candidateKeys: result ? Math.min(bound.candidateKeys, result.rows.length) : bound.candidateKeys,
-            witnessKeys: result ? Math.min(bound.witnessKeys, result.rows.length) : bound.witnessKeys,
+            emptySeeks: !result || bound!.emptySeeks > 1 ? bound!.emptySeeks : result.rows.length === 0 ? bound!.emptySeeks : 0,
+            candidateKeys: result ? Math.min(bound!.candidateKeys, result.rows.length) : bound!.candidateKeys,
+            witnessKeys: result ? Math.min(bound!.witnessKeys, result.rows.length) : bound!.witnessKeys,
           });
         }
       }) as QueryClient['query'],
@@ -392,10 +413,9 @@ async function observe(
     return null;
   }
   const home = partitionOf(ref.route);
-  const size = (await client.query<{ bytes: string }>(partitionSizeSQL, [home])).rows[0];
-  if (!size) throw new ProblemError('partition_unavailable');
-  work.admitResultBytes('partition:' + home, 6 * Number(size.bytes) + 256);
-  const partition = await readPartition(client, home);
+  const partition = (await client.query<{
+    partitionNo: number; writeState: string; epoch: number; position: string;
+  }>(nativeCollectionPartitionMetadataSQL, [home])).rows[0];
   if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
   const outputPublication =
     row.membershipKind === 'dynamic' && row.visibility !== 'private' && row.state === 'active'
@@ -431,7 +451,7 @@ async function observe(
     stamp: {
       partition: partition.partitionNo,
       epoch: partition.epoch,
-      position: partition.position,
+      position: BigInt(partition.position),
     },
   });
 }
@@ -480,6 +500,14 @@ export async function observeNativePublicCollectionOutput(
 }
 
 export function readNativeCollectionMetadata(pool: Pool, ref: Ref, options: Options) {
+  return metadataCall(pool, ref, options);
+}
+export function readNativeCollectionMetadataWithWork(
+  pool: Pool, ref: Ref, options: Options, work: NativeCollectionWork,
+) {
+  return withLibraryIdentityWork(pool, work, () => metadataCall(pool, ref, options, work));
+}
+function metadataCall(pool: Pool, ref: Ref, options: Options, sharedWork?: NativeCollectionWork) {
   const owner = admittedOwnerWorkingSource(pool, ref.collectionId);
   return call(pool, options, async (work) => ({
     metadata: await readOnly(pool, options, work, async (client) => {
@@ -492,7 +520,7 @@ export function readNativeCollectionMetadata(pool: Pool, ref: Ref, options: Opti
         throw new ProblemError('not_found');
       return metadata;
     }),
-  }));
+  }), sharedWork);
 }
 /** Raw source discovery stays separate from Source.prepare and never executes the built-in query recursively. */
 export function readNativeCollectionScopeIdentity(pool: Pool, input: Ref & Options) {
@@ -673,7 +701,16 @@ export function readNativeCollectionRawOrdinalPage(
     }),
   );
 }
-export function readNativeCollectionRawPage(
+type RawPageInput = Options & { driver: CanonicalRangeKey['driver']; after: CanonicalRangeKey | null; limit: number };
+export function readNativeCollectionRawPage(pool: Pool, metadata: NativeCollectionMetadata, input: RawPageInput) {
+  return rawPageCall(pool, metadata, input);
+}
+export function readNativeCollectionRawPageWithWork(
+  pool: Pool, metadata: NativeCollectionMetadata, input: RawPageInput, work: NativeCollectionWork,
+) {
+  return withLibraryIdentityWork(pool, work, () => rawPageCall(pool, metadata, input, work));
+}
+function rawPageCall(
   pool: Pool,
   metadata: NativeCollectionMetadata,
   input: Options & {
@@ -681,6 +718,7 @@ export function readNativeCollectionRawPage(
     after: CanonicalRangeKey | null;
     limit: number;
   },
+  sharedWork?: NativeCollectionWork,
 ) {
   if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
     throw new RangeError('Native source limit must be 1..100');
@@ -734,6 +772,7 @@ export function readNativeCollectionRawPage(
         exhausted: rows.length < input.limit,
       };
     }),
+    sharedWork,
   );
 }
 /** Current original-source fact only. This result never authorizes original/terminal Subjects or disclosure. */

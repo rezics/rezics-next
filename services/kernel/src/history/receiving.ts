@@ -5,6 +5,10 @@ import type { IdentitySourceConsumerMaintenanceWork } from '../semantic/identity
 import {
   currentCommand,
   currentCommandResources,
+  hasLiveCommandTransaction,
+  noEffect,
+  runCommand,
+  withSingleCommandAttempt,
   CommandUnavailableError,
   type CommandTransaction,
 } from '../command/command.ts';
@@ -133,6 +137,9 @@ export async function recordHistoryReceivingProof(
   pool?: Pool,
   context?: HistoryReceivingContext,
 ): Promise<string | null> {
+  if (partition !== partitionOf(barrier.accountRoute)) return 'history-receiving-barrier-home-unavailable';
+  if (hasLiveCommandTransaction(tx) && currentCommand(tx).partition !== partition)
+    return 'history-receiving-artifact-home-unavailable';
   if (locator.artifactType === 'durable-work/v1') {
     const { currentAgentIdentityHistoryUnit, assertAgentIdentityHistoryUnit } =
       await import('./agent-identity-retirement.ts');
@@ -194,6 +201,11 @@ export async function historyReceivingGap(
   barrier?: HistoryBarrier,
   pool?: Pool,
 ): Promise<string | null> {
+  // The independent History job lease admits its cursor transaction, not a
+  // Source-funded native command. Refuse before any custody SQL in that context.
+  if (!hasLiveCommandTransaction(tx)) return 'history-receiving-command-resources-unavailable';
+  if (currentCommand(tx).partition !== partition) return 'history-receiving-artifact-home-unavailable';
+  if (barrier && partitionOf(barrier.accountRoute) !== partition) return 'history-receiving-barrier-home-unavailable';
   const resources = currentCommandResources(tx);
   if (pool && pool !== resources.pool) throw new TypeError('History receiving pool differs from its command');
   let mapping: Awaited<ReturnType<typeof import('./agent-identity-work.ts').resolveAgentIdentitySDKWork>> = null;
@@ -366,6 +378,9 @@ async function nativeReceipt(
   artifact: HistoryArtifact,
   pool?: Pool,
 ): Promise<ReceiptBinding | null> {
+  // No foreign root read may occur while the artifact home is held. A released
+  // observation cannot carry that root lock into this transaction.
+  if (artifact.partition !== partitionOf(barrier.accountRoute)) return null;
   if (!(await lockHistoryBarrier(tx, barrier))) return null;
   if (await historyReceivingGap(tx, artifact.partition, artifact.locator, barrier, pool)) return null;
   const digest = scopeDigest(artifact);
@@ -432,39 +447,41 @@ export async function readHistoryReceivingReceipt(
   // Do not expose a capability retaining caller-owned mutable arrays or buffers.
   const fixedArtifact = structuredClone(artifact);
   const fixedBarrier = Object.freeze({ ...barrier });
-  const { identityHistoryConnection, reserveIdentityHistoryWork, nativeWork, addNativeWork } =
+  const { reserveIdentityHistoryWork, nativeWork, addNativeWork, IDENTITY_HISTORY_COMMAND_CONTROL } =
     await import('./agent-identity-inventory-work.ts');
   const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
     await import('./agent-identity-sdk-fence.ts');
   await reserveIdentityHistoryWork(
     deps.pool,
-    fixedArtifact.locator.artifactType === 'durable-work/v1'
-      ? addNativeWork(
-          IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.releasedDurableReceiving,
-          AGENT_IDENTITY_HISTORY_GUARD_COST,
-          AGENT_IDENTITY_HISTORY_ABSENCE_COST,
-        )
-      : nativeWork(76, 75, 12, 24576),
+    addNativeWork(
+      IDENTITY_HISTORY_COMMAND_CONTROL,
+      fixedArtifact.locator.artifactType === 'durable-work/v1'
+        ? addNativeWork(
+            nativeWork(76, 75, 13, 131872),
+            AGENT_IDENTITY_HISTORY_GUARD_COST,
+            AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+          )
+        : nativeWork(76, 75, 8, 24448),
+    ),
     context,
   );
-  return identityHistoryConnection(deps.pool, context, async (tx) => {
-    await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-    try {
-      await tx.query("SELECT set_config('statement_timeout',$1,true)", [
-        `${Math.max(1, context.deadline - Date.now())}ms`,
-      ]);
-      const binding = await nativeReceipt(tx, fixedBarrier, fixedArtifact, deps.pool);
-      historyDeadline(context, artifact.partition);
-      await tx.query('COMMIT');
-      if (!binding) return null;
-      const receipt = Object.freeze({}) as HistoryReceivingReceipt;
-      receipts.set(receipt, binding);
-      return receipt;
-    } catch (error) {
-      await tx.query('ROLLBACK');
-      throw error;
-    }
-  });
+  // Recovery and SDK guards consume real command resources. A PoolClient with an
+  // open transaction is insufficient, even though its query method has the same type.
+  // This command releases its checkout before the caller can visit another home.
+  const binding = await withSingleCommandAttempt(
+    async () =>
+      (
+        await runCommand(deps.pool, { partition: fixedArtifact.partition, deadline: context.deadline }, async (tx) => {
+          const current = await nativeReceipt(tx, fixedBarrier, fixedArtifact, deps.pool);
+          historyDeadline(context, fixedArtifact.partition);
+          return noEffect(current);
+        })
+      ).value,
+  );
+  if (!binding) return null;
+  const receipt = Object.freeze({}) as HistoryReceivingReceipt;
+  receipts.set(receipt, binding);
+  return receipt;
 }
 
 /** Final owners call this on their actual account-home command. Locks live through its COMMIT. */

@@ -3492,3 +3492,276 @@ test('default native identity cleanup refuses incomplete copies then minimizes t
     await client.destroy();
   }
 });
+
+test('identity History reuses the original Source frame without replenishing it and rejects foreign or ended frames before dispatch', async () => {
+  const source = await import('../../src/semantic/identity-source-consumer-maintenance.ts');
+  const { withAgentIdentityHistoryUnit, currentAgentIdentityHistoryUnit } =
+    await import('../../src/history/agent-identity-retirement.ts');
+  const { reserveIdentityHistoryWork, nativeWork } = await import('../../src/history/agent-identity-inventory-work.ts');
+  const otherPool = new Pool({ connectionString: databaseUrl });
+  const deadline = Date.now() + 5000;
+  let ended: import('../../src/history/receiving.ts').HistoryReceivingContext | undefined;
+  let calls = 0;
+  try {
+    await source.withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline }, async (funded) => {
+      ended = funded;
+      const before = source.identitySourceConsumerNativeWork(pool, funded.identityConsumerWork, deadline)!;
+      await withAgentIdentityHistoryUnit({ pool, env: {} }, { deadline }, async (nested) => {
+        expect(nested.identityConsumerWork).toBe(funded.identityConsumerWork);
+        expect(nested.deadline).toBe(deadline);
+        expect(currentAgentIdentityHistoryUnit()?.context).toBe(nested);
+        await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 0), nested);
+        calls++;
+        await expect(withAgentIdentityHistoryUnit({ pool, env: {} }, nested, async () => calls++)).rejects.toThrow(
+          'cannot replace its Source frame',
+        );
+      });
+      expect(source.identitySourceConsumerNativeWork(pool, funded.identityConsumerWork, deadline)).toEqual({
+        ...before,
+        rows: before.rows - 1,
+        points: before.points - 1,
+        statements: before.statements - 1,
+      });
+      await expect(
+        withAgentIdentityHistoryUnit({ pool: otherPool, env: {} }, { deadline }, async () => calls++),
+      ).rejects.toThrow('identity-history-native-funding-unavailable');
+      expect(currentAgentIdentityHistoryUnit()).toBeUndefined();
+    });
+    await expect(withAgentIdentityHistoryUnit({ pool, env: {} }, ended!, async () => calls++)).rejects.toThrow(
+      'identity-history-native-funding-unavailable',
+    );
+    expect(calls).toBe(1);
+  } finally {
+    await otherPool.end();
+  }
+});
+
+test('released original receipt receiving uses a real command and rechecks current barrier and role union without closing source or SDK custody', async () => {
+  const { readAgentIdentityNativeInventory, verifyAgentIdentityInventory } =
+    await import('../../src/history/agent-identity-inventory.ts');
+  const {
+    readHistoryReceivingReceipt,
+    recordHistoryReceivingProof,
+    verifyHistoryReceivingReceipt,
+    historyReceivingGap,
+  } = await import('../../src/history/receiving.ts');
+  const { withConnection } = await import('../../src/database/pool.ts');
+  const { sealHistoryAccount } = await import('../../src/history/gates.ts');
+  const { encodeLocator } = await import('../../src/history/locator.ts');
+  const { account, token } = await verifiedHistoryHomeZero();
+  const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
+  expect(released.response.status).toBe(200);
+  const decision = released.body.reversal as AgentVerificationReversal;
+  await finish(decision);
+  const key = {
+    route: 0,
+    accountId: account.id,
+    direction: 'account-agent.unverify' as const,
+    receiptId: decision.receiptId,
+  };
+  const inventory = await readAgentIdentityNativeInventory(pool, key, { deadline: Date.now() + 5000 });
+  expect(inventory.state).toBe('sealed');
+  if (inventory.state !== 'sealed') throw new Error('Original serializer did not seal its native inventory');
+  const artifact = inventory.proof.artifacts.find((copy) => copy.locator.artifactType === 'command-receipt/v1')!;
+  const root = (
+    await pool.query(
+      'INSERT INTO access.erasure(route,account_id,version,at) VALUES(0,$1,1,now()) RETURNING version,at::text',
+      [account.id],
+    )
+  ).rows[0];
+  const barrier = { accountRoute: 0, accountId: account.id, version: root.version, at: root.at };
+  expect(await withConnection(pool, (tx) => historyReceivingGap(tx, 0, artifact.locator, barrier, pool))).toBe(
+    'history-receiving-command-resources-unavailable',
+  );
+  // Independently committed physical-owner disposition, using the original generated
+  // receipt and exact locator. No SDK or Source closure is fabricated by this fixture.
+  await runCommand(pool, { partition: 0 }, async (tx) => {
+    await sealHistoryAccount(tx, 0, 0, account.id);
+    await tx.query(
+      `UPDATE core.receipt SET response='null'::jsonb,payload_state='minimized'
+       WHERE partition_no=0 AND transaction_id=$1 AND position=$2 AND epoch=$3`,
+      [
+        inventory.proof.original.transactionId,
+        inventory.proof.original.position.toString(),
+        inventory.proof.original.epoch,
+      ],
+    );
+    await tx.query(
+      `UPDATE core.history_locator SET state='minimized',proof_barrier=$1
+       WHERE partition_no=0 AND account_route=0 AND account_id=$1 AND artifact_type='command-receipt/v1' AND locator=$2`,
+      [account.id, Buffer.from(encodeLocator(artifact.locator))],
+    );
+    expect(await recordHistoryReceivingProof(tx, barrier, 0, artifact.locator, pool)).toBeNull();
+    return noEffect(null);
+  });
+  const receipt = await readHistoryReceivingReceipt({ pool }, barrier, artifact, { deadline: Date.now() + 5000 });
+  expect(receipt).not.toBeNull();
+  expect(
+    (
+      await runCommand(pool, { partition: 0 }, async (tx) =>
+        noEffect(await verifyHistoryReceivingReceipt(tx, barrier, artifact, receipt!)),
+      )
+    ).value,
+  ).toBe(true);
+  expect(
+    await readHistoryReceivingReceipt({ pool }, { ...barrier, version: barrier.version + 1 }, artifact, {
+      deadline: Date.now() + 5000,
+    }),
+  ).toBeNull();
+  expect(
+    (
+      await runCommand(pool, { partition: 0 }, async (tx) =>
+        noEffect(
+          await verifyHistoryReceivingReceipt(
+            tx,
+            barrier,
+            { ...artifact, accounts: artifact.accounts.slice(1) },
+            receipt!,
+          ),
+        ),
+      )
+    ).value,
+  ).toBe(false);
+  expect(
+    (
+      await runCommand(pool, { partition: 0 }, async (tx) =>
+        noEffect(await verifyAgentIdentityInventory(tx, barrier, key, inventory.proof)),
+      )
+    ).value.state,
+  ).toBe('pending');
+  expect(
+    (
+      await pool.query(
+        'SELECT minimized FROM access.agent_identity_intent WHERE route=0 AND account_id=$1 AND direction=$2 AND receipt_id=$3',
+        [account.id, key.direction, key.receiptId],
+      )
+    ).rows[0].minimized,
+  ).toBe(false);
+});
+
+test('SDK identity observations reject an ended explicit token and a foreign Account barrier', async () => {
+  const owner = await import('../../src/semantic/identity-source-consumer-maintenance.ts');
+  const { readAgentIdentitySDKWriterState, readAgentIdentitySDKReceivingBinding } =
+    await import('../../src/history/agent-identity-sdk-fence.ts');
+  const { createWorkClient } = await import('../../src/work/client.ts');
+  const { recordHistoryReceivingProof, historyReceivingGap } = await import('../../src/history/receiving.ts');
+  const client = await createWorkClient(databaseUrl, pool);
+  const deadline = Date.now() + 5000;
+  let ended: import('../../src/history/receiving.ts').HistoryReceivingContext | undefined;
+  try {
+    await owner.withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline }, async (context) => {
+      ended = context;
+    });
+    await owner.withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline }, async (context) => {
+      const before = owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline);
+      expect(await readAgentIdentitySDKWriterState(pool, client, randomUUID(), ended!)).toEqual({
+        state: 'pending',
+        gap: 'identity-sdk-current-fence-funding-unavailable',
+      });
+      // An ambient live balance must neither replace the supplied token nor pay for its SDK read.
+      expect(owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline)).toEqual(before);
+    });
+    const foreign = newId(accountRoute);
+    const observed = await runCommand(pool, { partition: 0, deadline }, async (tx) =>
+      noEffect(
+        await readAgentIdentitySDKReceivingBinding(
+          tx,
+          {
+            partition: 0,
+            locator: { artifactType: 'durable-work/v1', workId: randomUUID() },
+            accounts: [],
+          },
+          { accountRoute, accountId: foreign, version: 1, at: new Date().toISOString() },
+        ),
+      ),
+    );
+    expect(observed.value).toEqual({ state: 'pending', gap: 'agent-identity-source-barrier-home-unavailable' });
+    const homes = await runCommand(pool, { partition: 0, deadline }, async (tx) => {
+      const locator = { artifactType: 'durable-work/v1' as const, workId: randomUUID() };
+      const barrier = { accountRoute, accountId: foreign, version: 1, at: new Date().toISOString() };
+      return noEffect({
+        foreignBarrier: await recordHistoryReceivingProof(tx, barrier, 0, locator, pool),
+        foreignArtifact: await historyReceivingGap(tx, 1, locator, barrier, pool),
+      });
+    });
+    expect(homes.value).toEqual({
+      foreignBarrier: 'history-receiving-barrier-home-unavailable',
+      foreignArtifact: 'history-receiving-artifact-home-unavailable',
+    });
+  } finally {
+    await client.destroy();
+  }
+});
+
+test('recovery snapshot controls and direct Account preparation spend the inherited original balance before their SQL', async () => {
+  const owner = await import('../../src/semantic/identity-source-consumer-maintenance.ts');
+  const { readAgentIdentityRecoveryInventory, AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST } =
+    await import('../../src/history/agent-identity-inventory.ts');
+  const { prepareAgentIdentityRetention } = await import('../../src/access/agent-verification-identity-retention.ts');
+  const key = { route: 0, accountId: newId(0), direction: 'account-agent.verify' as const, receiptId: randomUUID() };
+  const barrier = { accountRoute: 0, accountId: key.accountId, version: 1, at: new Date().toISOString() };
+  const deadline = Date.now() + 5000;
+  expect(AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST).toEqual({
+    rows: 136,
+    points: 135,
+    statements: 10,
+    bytes: 32896,
+    engineRequests: 0,
+  });
+  await owner.withIdentitySourceConsumerMaintenance(
+    { pool, env: { KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS: '9' } },
+    { deadline },
+    async (context) => {
+      const before = owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline);
+      await expect(readAgentIdentityRecoveryInventory({ pool }, barrier, key, context)).rejects.toThrow(
+        'identity-history-native-funding-unavailable',
+      );
+      expect(owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline)).toEqual(before);
+    },
+  );
+  await owner.withIdentitySourceConsumerMaintenance(
+    { pool, env: { KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS: '4' } },
+    { deadline },
+    async (context) => {
+      const before = owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline);
+      await expect(
+        runCommand(pool, { partition: 0, deadline }, async (tx) =>
+          noEffect(await prepareAgentIdentityRetention(tx, { barrier, role: 'account_id', keys: [key] })),
+        ),
+      ).rejects.toThrow('identity-history-native-funding-unavailable');
+      expect(owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline)).toEqual(before);
+    },
+  );
+});
+
+test('released identity physical inventory refuses insufficient original funding before checkout', async () => {
+  const { spyOn } = await import('bun:test');
+  const owner = await import('../../src/semantic/identity-source-consumer-maintenance.ts');
+  const { readAgentIdentityReceivingArtifact, AGENT_IDENTITY_RECEIVING_ARTIFACT_COST } =
+    await import('../../src/history/agent-identity-sdk-fence.ts');
+  const deadline = Date.now() + 5000;
+  expect(AGENT_IDENTITY_RECEIVING_ARTIFACT_COST).toEqual({
+    rows: 69,
+    points: 69,
+    statements: 4,
+    bytes: 24576,
+    engineRequests: 0,
+  });
+  const checkout = spyOn(pool, 'connect');
+  try {
+    await owner.withIdentitySourceConsumerMaintenance(
+      { pool, env: { KERNEL_IDENTITY_SOURCE_MAINTENANCE_NATIVE_STATEMENTS: '3' } },
+      { deadline },
+      async (context) => {
+        const before = owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline);
+        await expect(readAgentIdentityReceivingArtifact(pool, randomUUID(), context)).rejects.toThrow(
+          'identity-history-native-funding-unavailable',
+        );
+        expect(checkout).not.toHaveBeenCalled();
+        expect(owner.identitySourceConsumerNativeWork(pool, context.identityConsumerWork, deadline)).toEqual(before);
+      },
+    );
+  } finally {
+    checkout.mockRestore();
+  }
+});

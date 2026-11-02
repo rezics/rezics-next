@@ -1,8 +1,15 @@
+import {
+  libraryIdentitySelectedFootprint, isNativeIdentitySourceBasisSQL, nativeIdentitySourceBasisFootprint,
+} from './identity-native-planner-selected-pricing.ts';
 import type { Pool } from 'pg';
+import { ProblemError } from '../http/problem.ts';
 import { currentCommandResources, type CommandTransaction } from '../command/command.ts';
 import {
+  activeIdentitySourceConsumerMaintenance,
   currentIdentitySourceConsumerMaintenance,
   identitySourceConsumerLibraryWork,
+  isPrepaidIdentitySourceConsumerMaintenance,
+  identitySourceConsumerScheduleReceipt,
 } from '../semantic/identity-source-consumer-maintenance.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
 import type { WorkAllowance, WorkDimensions } from './collection-source.ts';
@@ -18,6 +25,8 @@ import partition from '../partition/read.sql';
 import account from '../access/account-share.sql';
 import commit from '../semantic/identity-epoch-store-insert-native-commit.sql';
 import savedJob from '../semantic/identity-epoch-store-select-job-4.sql';
+import libraryTransform from '../semantic/identity-epoch-store-library-transform.sql';
+import { identityEpochLibraryInputsSQL } from '../semantic/identity-epoch-store.ts';
 import inputs from '../semantic/identity-epoch-store-select-input.sql';
 import originals from '../semantic/identity-epoch-store-select-original.sql';
 import owners from '../semantic/identity-epoch-read-owners.sql';
@@ -26,8 +35,69 @@ import pending from '../semantic/identity-epoch-read-pending.sql';
 import mapping from '../semantic/identity-epoch-read-current.sql';
 import facts from './collection-source-native-facts.sql';
 import labels from './owner-index-native-label-originals.sql';
+import {
+  libraryIdentityBoundedPlanSQL, libraryIdentityBoundedJobSQL, libraryIdentityBoundedEffectPageSQL,
+  libraryIdentitySelectedBindBound, LIBRARY_IDENTITY_PLAN_RESULT_BYTES,
+} from './identity-native-planner-projection.ts';
 
-const bindings = new WeakMap<NativeCollectionWork, { pool?: Pool; deadline: number }>();
+type Binding = { pool?: Pool; deadline: number; assertLive?: () => void };
+const bindings = new WeakMap<NativeCollectionWork, Binding>();
+const selectedCalls = new WeakMap<NativeCollectionWork, Map<string, number>>();
+
+/** Consume a claim already made by Source's genuine selected-original scheduler.
+ * Copies, direct callbacks without a claim, repeats and failed dispatch cannot
+ * reopen it. Ordinary independently admitted Library work keeps its existing API.
+ */
+export function consumeLibraryIdentitySelectedCall(
+  pool: Pool, work: NativeCollectionWork,
+  operation: 'effectPages' | 'verification' | 'discovery' | 'plannerSteps',
+): void {
+  assertLibraryIdentityWork(work);
+  if (!isPrepaidIdentitySourceConsumerMaintenance(pool)) return;
+  const active = activeIdentitySourceConsumerMaintenance(pool);
+  const receipt = active && identitySourceConsumerScheduleReceipt(pool, active.identityConsumerWork, deadlineOf(work));
+  const used = selectedCalls.get(work) ?? new Map<string, number>();
+  const names = operation === 'verification' ? ['currentVerifications', 'exhaustedPageRechecks'] : [operation];
+  const name = names.find((name) => (receipt?.calls[`Library.${name}`] ?? 0) > (used.get(name) ?? 0));
+  if (!receipt?.claimed || !name)
+    throw new TypeError(`Missing unspent selected Library ${operation} claim`);
+  used.set(name, (used.get(name) ?? 0) + 1);
+  selectedCalls.set(work, used);
+}
+/** Accounts owns original authentication; Source owns its receiving callback. Never infer
+ * either from a record, reservation ID, allowance or a caller's claimed deadline. */
+export function bindLibraryIdentityPrepaidWork(pool: Pool, work: NativeCollectionWork, deadline: number): void {
+  const active = activeIdentitySourceConsumerMaintenance(pool);
+  const assertLive = () => {
+    if (
+      !active || active.deadline !== deadline ||
+      identitySourceConsumerLibraryWork(pool, active.identityConsumerWork, deadline) !== work
+    ) throw new TypeError('Missing live prepaid Library partition');
+    work.assertReady(); // The Accounts proxy also validates the original grant around method calls.
+  };
+  assertLive();
+  bindLibraryIdentityDeadline(work, deadline);
+  const binding = bindings.get(work)!;
+  if (binding.pool && binding.pool !== pool) throw new TypeError('Foreign Library work pool');
+  binding.pool = pool;
+  binding.assertLive = assertLive;
+}
+export function assertLibraryIdentityWork(work: NativeCollectionWork): void {
+  const binding = bindings.get(work);
+  if (!binding) throw new TypeError('Unbound Library work');
+  binding.assertLive?.();
+  work.assertReady();
+  if (Date.now() >= binding.deadline) throw new ProblemError('dependency_unavailable');
+}
+export function assertLibraryIdentityResources(pool: Pool, work: NativeCollectionWork, deadline: number): void {
+  const binding = bindings.get(work);
+  if (!binding || binding.pool !== pool || binding.deadline !== deadline)
+    throw new TypeError('Library command changed its prepaid resources');
+  assertLibraryIdentityWork(work);
+}
+export function revalidateBoundLibraryIdentityWork(work: NativeCollectionWork): void {
+  if (bindings.has(work)) assertLibraryIdentityWork(work);
+}
 const transactions = new WeakMap<CommandTransaction, NativeCollectionWork>();
 export function bindLibraryIdentityDeadline(work: NativeCollectionWork, deadline: number): NativeCollectionWork {
   const prior = bindings.get(work);
@@ -63,8 +133,10 @@ export async function withLibraryIdentityWork<T>(
   const binding = bindings.get(work);
   if (!binding || (binding.pool && binding.pool !== pool)) throw new TypeError('Foreign Library work pool');
   binding.pool = pool;
-  work.assertReady();
-  return body();
+  assertLibraryIdentityWork(work);
+  const result = await body();
+  assertLibraryIdentityWork(work);
+  return result;
 }
 export async function libraryIdentityWorkFor<T>(
   tx: CommandTransaction,
@@ -75,9 +147,12 @@ export async function libraryIdentityWorkFor<T>(
     binding = bindings.get(work);
   if (!binding || binding.pool !== resources.pool || resources.deadline !== binding.deadline)
     throw new TypeError('Library command changed its prepaid resources');
+  assertLibraryIdentityWork(work);
   transactions.set(tx, work);
   try {
-    return await body();
+    const result = await body();
+    assertLibraryIdentityWork(work);
+    return result;
   } finally {
     transactions.delete(tx);
   }
@@ -86,12 +161,18 @@ export async function libraryIdentityWorkFor<T>(
 export function currentLibraryIdentityWork(tx: CommandTransaction): NativeCollectionWork | null {
   const resources = currentCommandResources(tx);
   const local = transactions.get(tx);
-  if (local) return Date.now() < deadlineOf(local) ? local : null;
+  if (local) {
+    assertLibraryIdentityWork(local);
+    return local;
+  }
   const token = currentIdentitySourceConsumerMaintenance(resources.pool, resources.deadline);
-  return token ? identitySourceConsumerLibraryWork(resources.pool, token, resources.deadline) : null;
+  const work = token ? identitySourceConsumerLibraryWork(resources.pool, token, resources.deadline) : null;
+  if (work) bindLibraryIdentityPrepaidWork(resources.pool, work, resources.deadline);
+  return work;
 }
 /** All statements of the nested read, including checkout, BEGIN and cleanup, use this same ledger. */
 export function bounded<T>(work: NativeCollectionWork, body: () => Promise<T>): Promise<T> {
+  assertLibraryIdentityWork(work);
   const binding = bindings.get(work);
   if (!binding?.pool) throw new TypeError('Unbound Library read pool');
   return instrumentNativeCollectionWork(
@@ -145,6 +226,11 @@ export function libraryIdentityFootprint(
   values: readonly unknown[],
   work?: NativeCollectionWork,
 ): WorkDimensions | undefined {
+  if (work) assertLibraryIdentityWork(work);
+  if (isNativeIdentitySourceBasisSQL(sql)) return nativeIdentitySourceBasisFootprint(sql, values);
+  if (!libraryIdentitySelectedBindBound(sql, values)) return undefined;
+  const selected = libraryIdentitySelectedFootprint(sql, values);
+  if (selected) return selected;
   const text = normalize(sql);
   const point = (rows: number, points: number, metadata: number, output: number, seeks = 0) =>
     cost(sql, values, rows, points, metadata, output, 0, seeks);
@@ -161,7 +247,13 @@ export function libraryIdentityFootprint(
   )
     return point(0, 0, 0, 0);
   if (equal(sql, time.sql)) return point(0, 0, 0, 128);
-  if (equal(sql, partition.sql)) return point(1, 1, 1, 256, 1);
+  if (equal(sql, partition.sql)) {
+    // Core's full command projection includes unbounded node/moved_to text and
+    // supplies no same-snapshot size point. Its legacy estimate cannot price an
+    // authentic original. Keep ordinary execution's existing behavior separate.
+    if (work && bindings.get(work)?.assertLive) return undefined;
+    return point(1, 1, 1, 256, 1);
+  }
   if (equal(sql, account.sql)) return point(1, 1, 0, 64, 1);
   if (equal(sql, noEffectFence.sql) && values[2] === null) return point(1, 1, 1, 64, 1);
   if (equal(sql, fence.sql) && values[3] === null && values[4] === null) {
@@ -176,11 +268,21 @@ export function libraryIdentityFootprint(
   }
   if (equal(sql, commit.sql) && values[2] === 'library-private-follow-counts') return point(2, 2, 1, 64);
   if (equal(sql, plan.sql) || equal(sql, plan.sql.replace(/;\s*$/, ' FOR UPDATE'))) return point(1, 1, 0, 12288, 1);
+  if (equal(sql, libraryIdentityBoundedPlanSQL) || equal(sql, libraryIdentityBoundedPlanSQL.replace(/;\s*$/, ' FOR UPDATE')))
+    return point(1, 1, 0, LIBRARY_IDENTITY_PLAN_RESULT_BYTES, 1);
   if (equal(sql, current.sql)) return point(7, 7, 1, 64, 1);
   // Admission input cardinality is contractually <=2. EXISTS and NOT EXISTS each use that prefix.
   if (equal(sql, job.sql)) return point(16, 13, 16, 2048, 4);
+  if (equal(sql, libraryIdentityBoundedJobSQL)) return point(16, 13, 16, 2048, 4);
+  if (equal(sql, libraryIdentityBoundedEffectPageSQL)) {
+    const n = count(values[5], 100);
+    return n === undefined ? undefined : cost(sql, values, n + 1, 1, 0, 512 * n, n, 1);
+  }
   if (equal(sql, seal.sql)) return point(5, 5, 2, 256, 1);
   if (equal(sql, libraryIdentityJobSizeSQL)) return point(1, 1, 1, 32, 1);
+  // Three native primary-key joins; projection is closed kind plus four UUID-or-null fields.
+  if (equal(sql, libraryTransform.sql)) return point(3, 3, 2, 256, 3);
+  if (equal(sql, identityEpochLibraryInputsSQL)) return point(3, 1, 3, 512, 1);
   if (equal(sql, savedJob.sql)) {
     const bytes = work?.resultByteBound(`library-job:${values[1]}:${values[2]}`);
     return bytes === undefined ? undefined : point(1, 1, 1, bytes + 256, 1);
