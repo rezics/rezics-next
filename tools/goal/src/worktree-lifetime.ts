@@ -7,6 +7,7 @@ import type { Settings, Task, WorktreeCleanupDisposition } from './types.ts';
 import { acquireDirectoryLease, LeaseHeldError, type DirectoryLease } from './lease.ts';
 
 export const IO_PRESSURE_LIMIT = 20;
+export const IO_PRESSURE_WAIT_ATTEMPTS = 30;
 export type LifetimeRuntime = {
   pressure: () => number | null;
   sleep: (ms: number) => Promise<void>;
@@ -258,9 +259,25 @@ export async function removeFinishedWorktree(
         )
           continue;
 
-        while ((io.pressure() ?? 0) > IO_PRESSURE_LIMIT) await io.sleep(1000);
-        // Recheck the directory after waiting for I/O capacity; do not remove a replaced path.
-        const beforeRemoval = statIfPresent(current.worktree);
+        let pressure = io.pressure() ?? 0;
+        let pressureWaits = 0;
+        while (pressure > IO_PRESSURE_LIMIT && pressureWaits < IO_PRESSURE_WAIT_ATTEMPTS) {
+          await io.sleep(1000);
+          pressureWaits++;
+          pressure = io.pressure() ?? 0;
+        }
+        if (pressure > IO_PRESSURE_LIMIT) return null;
+
+        // Recheck task state and directory identity after waiting; the task may have changed while pressure persisted.
+        const afterPressure = store.task(current.id);
+        if (
+          !finished.has(afterPressure.state) ||
+          protectedStates.has(afterPressure.state) ||
+          resolve(afterPressure.worktree) !== resolve(current.worktree) ||
+          !eligibleDirectory(afterPressure, roots)
+        )
+          continue;
+        const beforeRemoval = statIfPresent(afterPressure.worktree);
         if (
           !beforeRemoval ||
           !beforeRemoval.isDirectory() ||
@@ -274,22 +291,22 @@ export async function removeFinishedWorktree(
         try {
           io.command(
             'ionice',
-            ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'remove', '--force', current.worktree],
+            ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'remove', '--force', afterPressure.worktree],
             settings.mainCheckout,
           );
-          removed = statIfPresent(current.worktree) === undefined;
-          if (!removed) throw new Error(`git worktree remove left the task path in place: ${current.worktree}`);
+          removed = statIfPresent(afterPressure.worktree) === undefined;
+          if (!removed) throw new Error(`git worktree remove left the task path in place: ${afterPressure.worktree}`);
         } catch (error) {
-          if (statIfPresent(current.worktree) === undefined) {
+          if (statIfPresent(afterPressure.worktree) === undefined) {
             removed = true;
           } else if (isPermissionFailure(error)) {
-            recordPermissionFailure(current, worktreeStat, error, store, reporter, settings.mainCheckout);
+            recordPermissionFailure(afterPressure, worktreeStat, error, store, reporter, settings.mainCheckout);
             unresolvedCleanup = true;
             continue;
           } else if (oldDisposition && isNotWorkingTree(error)) {
             // A failed Git removal can detach .git before it reaches the permission-denied entry. Once the
             // filesystem generation changes, remove only the same task directory inode that was recorded.
-            const remaining = statIfPresent(current.worktree);
+            const remaining = statIfPresent(afterPressure.worktree);
             if (
               !remaining ||
               !remaining.isDirectory() ||
@@ -299,12 +316,12 @@ export async function removeFinishedWorktree(
             )
               throw error;
             try {
-              rmSync(current.worktree, { recursive: true, force: false });
-              removed = statIfPresent(current.worktree) === undefined;
-              if (!removed) throw new Error(`worktree path remains after bounded cleanup: ${current.worktree}`);
+              rmSync(afterPressure.worktree, { recursive: true, force: false });
+              removed = statIfPresent(afterPressure.worktree) === undefined;
+              if (!removed) throw new Error(`worktree path remains after bounded cleanup: ${afterPressure.worktree}`);
             } catch (cleanupError) {
               if (!isPermissionFailure(cleanupError)) throw cleanupError;
-              recordPermissionFailure(current, remaining, cleanupError, store, reporter, settings.mainCheckout);
+              recordPermissionFailure(afterPressure, remaining, cleanupError, store, reporter, settings.mainCheckout);
               unresolvedCleanup = true;
               continue;
             }
@@ -313,10 +330,10 @@ export async function removeFinishedWorktree(
           }
         }
         if (!removed) continue;
-        store.clearWorktreeCleanup(current.id);
+        store.clearWorktreeCleanup(afterPressure.id);
         if (!unresolvedCleanup)
           io.command('ionice', ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'prune'], settings.mainCheckout);
-        return current.id;
+        return afterPressure.id;
       } finally {
         taskLease.release();
       }

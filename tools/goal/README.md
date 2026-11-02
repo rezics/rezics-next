@@ -845,8 +845,9 @@ it from `main`.
 Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
 promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
 Task worktrees exist while an attempt can use them. A background control-plane sweep removes integrated, merged and
-cancelled worktrees one at a time, under idle I/O priority, after `/proc/pressure/io` reports `some avg10` at or below
-20 (hosts without that file do not wait); a retry recreates a missing worktree from its task branch and installs its
+cancelled worktrees one at a time, under idle I/O priority, after waiting up to 30 seconds for `/proc/pressure/io` to
+report `some avg10` at or below 20 (hosts without that file do not wait); sustained pressure defers the pass and lets a
+later sweep retry. A retry recreates a missing worktree from its task branch and installs its
 dependencies before launch. A permission-denied removal records the offending path and owner when available and sends
 the task manager one durable notice for that path generation. The sweep continues with independent finished tasks; it
 does not retry the blocked path until its ownership, permissions or filesystem identity changes. Cleanup leaves shared
