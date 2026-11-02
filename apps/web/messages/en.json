@@ -4812,5 +4812,11 @@
   "library_owned_collections_address_previews": "Previews",
   "library_owned_collections_address_correct": "Open corrected page",
   "library_owned_collections_address_restart": "Restart first page",
-  "library_owned_collections_address_restart_rows": "Restart first page with rows"
+  "library_owned_collections_address_restart_rows": "Restart first page with rows",
+  "library_subject_label_steps_create": "The label is ready to create. Assignment is a separate step.",
+  "library_subject_label_steps_assign": "The selected label is ready to assign to this subject.",
+  "library_subject_label_steps_created": "Label created. It has not yet been assigned to this subject.",
+  "library_subject_label_steps_retry": "The command outcome is unknown. Retry the same command.",
+  "library_subject_label_steps_continue": "Continue",
+  "library_subject_label_steps_conflict": "This label command conflicts with the current labels. Review the list before starting a new command."
 }

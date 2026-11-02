@@ -134,11 +134,12 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
         const intent =
           intents.length === 1 &&
           typeof intents[0] === 'string' &&
-          ['assign-by-name', 'unassign', 'restore'].includes(intents[0])
+          ['assign-by-name', 'label-step', 'unassign', 'restore'].includes(intents[0])
             ? intents[0]
             : null;
         if (intent) {
           const result = await submitSubjectLabelForm(request);
+          if (result instanceof Response) return result;
           const url = new URL(request.url);
           url.searchParams.delete('labelResult');
           url.searchParams.delete('undoLabelId');

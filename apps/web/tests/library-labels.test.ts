@@ -478,7 +478,7 @@ test('the unprofiled story creates a generic label on its actual subject and kee
     const before = await loadSubjectLibrarySlot(client, request(), env, unprofiledSubjectId);
     expect(before.session).toBe('signed-in');
     expect(before.labels).toEqual([]);
-    const created = await applySubjectLabelMutation(
+    let created = await applySubjectLabelMutation(
       request('POST'),
       env,
       {
@@ -490,6 +490,12 @@ test('the unprofiled story creates a generic label on its actual subject and kee
       },
       client,
     );
+    for (let index = 0; index < 2; index++) {
+      if (!('step' in created)) throw new Error('Expected a captured label step');
+      created = await applySubjectLabelMutation(request('POST'), env, {
+        intent: 'label-step', subjectId: unprofiledSubjectId, token: created.step.token,
+      }, client);
+    }
     expect(created.ok).toBe(true);
     const after = await loadSubjectLibrarySlot(client, request(), env, unprofiledSubjectId);
     expect(after.labels).toEqual([expect.objectContaining({ name: 'For later', id: expect.any(String), revision: 1 })]);

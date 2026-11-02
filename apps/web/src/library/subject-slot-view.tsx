@@ -1,3 +1,4 @@
+import type { SubjectLabelStep } from './subject-label-step';
 import { SubjectLabelMore } from './subject-labels.tsx';
 import { labelReadMessage, SubjectLabelReadNotice } from './subject-labels.tsx';
 import { EntryUndoForm, EntryRemoveForm, EntryRestoreFeedback } from './entry-undo';
@@ -334,6 +335,8 @@ function SubjectLibrarySlotView({
   } | null>(null);
   const uncertainLabel = useRef<{
     input: SubjectLabelMutationInput;
+    step?: SubjectLabelStep;
+    seed: string;
     csrfToken: string;
     send: typeof mutateSubjectLabelAction;
     label?: LibraryLabelSummary | SubjectLabel;
@@ -375,7 +378,7 @@ function SubjectLibrarySlotView({
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const labelPickerTrigger = useRef<HTMLElement>(null);
   const [labelPending, setLabelPending] = useState(false);
-  const [labelNotice, setLabelNotice] = useState(data.labelResult);
+  const [labelNotice, setLabelNotice] = useState<string | undefined>(data.labelResult);
   const [labelUndo, setLabelUndo] = useState(data.labelUndo);
   const labelUndoKeys = useRef(new Map<string, string>());
   const restoredLabelEpisodes = useRef(new Set<string>());
@@ -414,6 +417,8 @@ function SubjectLibrarySlotView({
   }
   if (labelOrigin !== labelLifetime) {
     if (labelOrigin.seed !== labelLifetime.seed) {
+      if (uncertainLabel.current?.step || uncertainLabel.current?.input.intent === 'create-and-assign' ||
+        uncertainLabel.current?.input.intent === 'capture-assign') uncertainLabel.current = null;
       setLabelUndo(undefined);
       labelUndoKeys.current.clear();
       restoredLabelEpisodes.current.clear();
@@ -824,7 +829,8 @@ function SubjectLibrarySlotView({
       setLabelNotice('label-restore-stale');
       return;
     }
-    if (reason === 'capacity') setLabelNotice('label-capacity');
+    if (reason === 'conflict') setLabelNotice('label-conflict');
+    else if (reason === 'capacity') setLabelNotice('label-capacity');
     else if (reason === 'restore-expired') setLabelNotice('label-restore-expired');
     else if (reason === 'restore-occupied') setLabelNotice('label-restore-occupied');
     else if (reason === 'restore-capacity') setLabelNotice('label-restore-capacity');
@@ -836,25 +842,23 @@ function SubjectLibrarySlotView({
     if (!uncertainLabel.current && !data.csrfToken) return;
     const operation: NonNullable<typeof uncertainLabel.current> = uncertainLabel.current ?? {
       input: command,
+      seed: labelLifetime.seed,
       csrfToken: data.csrfToken!,
       send: mutateSubjectLabelAction,
       ...(label ? { label } : {}),
       running: false,
     };
     let input = operation.input;
-    const allowed =
+    const allowed = () =>
       input.intent === 'unassign'
         ? labelLifetime.current('library_label.assignment_list', 'library_label.unassign')
         : input.intent === 'create-and-assign'
-          ? labelLifetime.current(
-              'library_label.assignment_list',
-              'library_label.list',
-              'library_label.create',
-              'library_label.assign',
-            )
-          : labelLifetime.current('library_label.assignment_list', 'library_label.assign');
-    if (!hydrated || !allowed || labelFlight.current || operation.running) return;
-    if (!uncertainLabel.current && input.intent !== 'restore') {
+          ? labelLifetime.current('library_label.assignment_list', 'library_label.list', 'library_label.create', 'library_label.assign')
+          : input.intent === 'label-step' && operation.step?.kind === 'create'
+            ? operation.seed === labelLifetime.seed && labelLifetime.current('library_label.assignment_list', 'library_label.create')
+            : labelLifetime.current('library_label.assignment_list', 'library_label.assign');
+    if (!hydrated || !data.csrfToken || !allowed() || labelFlight.current || operation.running) return;
+    if (!uncertainLabel.current && input.intent !== 'restore' && input.intent !== 'label-step') {
       const freshKey = (preferred: string) => {
         const key = usedLabelKeys.current.has(preferred) ? crypto.randomUUID() : preferred;
         usedLabelKeys.current.add(key);
@@ -873,12 +877,22 @@ function SubjectLibrarySlotView({
     setLabelPending(true);
     setLabelNotice(undefined);
     try {
-      const response =
-        operation.response ??
-        (await operation.send({
-          data: input,
-          headers: { 'X-CSRF-Token': operation.csrfToken },
-        }));
+      let response: SubjectLabelMutationResult;
+      while (true) {
+        response = operation.response ?? await operation.send({
+          data: input, headers: { 'X-CSRF-Token': operation.csrfToken },
+        });
+        // Capture the next native operands before checking whether this UI can still advance.
+        // A retired response may be retained, but never dispatches its next command automatically.
+        if (!response.ok && response.reason === 'continue') {
+          operation.step = response.step;
+          operation.input = input = { intent: 'label-step', subjectId: response.step.subjectId, token: response.step.token };
+          operation.response = undefined;
+          if (!labelLifetime.current() || !allowed()) return;
+          continue;
+        }
+        break;
+      }
       // Keep a dispatched native outcome even if its originating UI episode has since retired.
       operation.response =
         !response.ok &&
@@ -923,7 +937,7 @@ function SubjectLibrarySlotView({
           restoredLabelEpisodes.current.add(labelEpisode(input.assignmentId, input.revision));
           setLabelUndo(undefined);
         }
-        const applied = response.label ?? operation.label;
+        const applied = response.label?.name ? response.label : operation.label;
         if (applied?.name) {
           const labelId = 'labelId' in applied && typeof applied.labelId === 'string' ? applied.labelId : applied.id;
           setLabels((current) => [
@@ -976,7 +990,7 @@ function SubjectLibrarySlotView({
           }
         : input.intent === 'assign'
           ? {
-              intent: input.intent,
+              intent: 'capture-assign',
               subjectId: subject.id,
               labelId,
               idempotencyKey: data.labelAssignKey ?? crypto.randomUUID(),
@@ -1473,6 +1487,7 @@ function SubjectLibrarySlotView({
                 ) : null}
               </details>
             </Exposure>
+            {uncertainLabel.current?.step?.created ? <p role="status" className="text-sm text-muted-foreground">{m.library_subject_label_steps_created()}</p> : null}
             <SubjectLabelNotice {...(labelNotice !== undefined ? { result: labelNotice } : {})} />
             {uncertainLabel.current ? (
               <button

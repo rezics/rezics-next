@@ -4759,5 +4759,11 @@
   "payment_reference_draft_navigation_title": "未送信の外部決済参照を破棄しますか？",
   "payment_reference_draft_navigation_description": "この参照はまだ送信されていません。ここに留まって編集を続けるか、破棄して続行してください。",
   "payment_reference_draft_navigation_stay": "ここに留まる",
-  "payment_reference_draft_navigation_discard": "破棄"
+  "payment_reference_draft_navigation_discard": "破棄",
+  "library_subject_label_steps_create": "ラベルを作成できます。割り当ては別の手順で行います。",
+  "library_subject_label_steps_assign": "選択したラベルをこの対象に割り当てられます。",
+  "library_subject_label_steps_created": "ラベルを作成しました。この対象にはまだ割り当てられていません。",
+  "library_subject_label_steps_retry": "操作の結果を確認できません。同じ操作を再試行してください。",
+  "library_subject_label_steps_continue": "続ける",
+  "library_subject_label_steps_conflict": "この操作は現在のラベルと競合しています。新しい操作を始める前に一覧を確認してください。"
 }

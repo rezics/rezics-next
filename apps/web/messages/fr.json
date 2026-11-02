@@ -4759,5 +4759,11 @@
   "payment_reference_draft_navigation_title": "Abandonner cette référence de paiement externe non envoyée ?",
   "payment_reference_draft_navigation_description": "Cette référence n’a pas été envoyée. Restez ici pour continuer à la modifier ou abandonnez-la pour continuer.",
   "payment_reference_draft_navigation_stay": "Rester",
-  "payment_reference_draft_navigation_discard": "Abandonner"
+  "payment_reference_draft_navigation_discard": "Abandonner",
+  "library_subject_label_steps_create": "Le libellé est prêt à être créé. Son attribution est une étape distincte.",
+  "library_subject_label_steps_assign": "Le libellé sélectionné est prêt à être attribué à ce contenu.",
+  "library_subject_label_steps_created": "Libellé créé. Il n’a pas encore été attribué à ce contenu.",
+  "library_subject_label_steps_retry": "Le résultat de la commande est inconnu. Réessayez la même commande.",
+  "library_subject_label_steps_continue": "Continuer",
+  "library_subject_label_steps_conflict": "Cette commande entre en conflit avec les libellés actuels. Consultez la liste avant de lancer une nouvelle commande."
 }

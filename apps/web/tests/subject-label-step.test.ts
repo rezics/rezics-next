@@ -1,5 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { subjectLabelStepForm } from '../src/library/subject-label-step-form';
+import { m } from '../src/paraglide/messages.js';
 import { applySubjectLabelMutation } from '../src/library/subject-labels';
 
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
@@ -76,5 +78,39 @@ test('exact-name selection captures identity before dispatch; refusal and missin
   closed = true;
   expect(await run(assign)).toMatchObject({ ok: false, reason: 'conflict' });
   expect(calls.at(-1)?.path).toBe(`/v1/libraryLabels/${replacement}:assign`);
+  closed = false;
+});
+
+
+test('script-free continuation carries the actual returned ID and stable command, including on explicit retry', async () => {
+  found = false; calls.length = 0;
+  const create = continuation(await begin());
+  const initial = await subjectLabelStepForm(request(), create, csrf).text();
+  expect(initial).not.toContain('original-token');
+  expect(initial).not.toContain('name="name"');
+  const created = continuation(await run(create));
+  const page = subjectLabelStepForm(request(), created, csrf);
+  expect(page.headers.get('cache-control')).toBe('private, no-store');
+  const html = await page.text();
+  expect(html).toContain(m.library_subject_label_steps_created());
+  const token = /name="token" value="([^"]+)"/.exec(html)![1]!;
+  found = true; lose = 'assign';
+  expect(await run({ ...created, token })).toMatchObject({ ok: false, reason: 'unavailable' });
+  const retry = await subjectLabelStepForm(request(), { ...created, token }, csrf, true).text();
+  expect(retry).toContain(`name="token" value="${token}"`);
+  expect(retry).not.toContain('Reading');
+  expect(await run({ ...created, token })).toMatchObject({ ok: true });
+  expect(calls.slice(-2).map((call) => call.path)).toEqual(Array(2).fill(`/v1/libraryLabels/${labelId}:assign`));
+});
+
+test('missing create key does not dispatch; uniqueness refusal never selects a replacement', async () => {
+  calls.length = 0; found = false;
+  expect(await applySubjectLabelMutation(request(), env, { intent: 'create-and-assign', subjectId, name: 'Reading',
+    idempotencyKey: crypto.randomUUID() }, client)).toMatchObject({ ok: false, reason: 'unavailable' });
+  expect(calls).toHaveLength(0);
+  const create = continuation(await begin());
+  found = true; closed = true;
+  expect(await run(create)).toMatchObject({ ok: false, reason: 'conflict' });
+  expect(calls.map((call) => call.method)).toEqual(['GET', 'POST']);
   closed = false;
 });

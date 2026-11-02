@@ -4759,5 +4759,11 @@
   "payment_reference_draft_navigation_title": "Diese noch nicht gesendete externe Zahlungsreferenz verwerfen?",
   "payment_reference_draft_navigation_description": "Diese Referenz wurde noch nicht gesendet. Bleiben Sie hier, um sie weiter zu bearbeiten, oder verwerfen Sie sie und fahren Sie fort.",
   "payment_reference_draft_navigation_stay": "Bleiben",
-  "payment_reference_draft_navigation_discard": "Verwerfen"
+  "payment_reference_draft_navigation_discard": "Verwerfen",
+  "library_subject_label_steps_create": "Das Label kann jetzt erstellt werden. Die Zuordnung erfolgt in einem eigenen Schritt.",
+  "library_subject_label_steps_assign": "Das ausgewählte Label kann diesem Inhalt jetzt zugeordnet werden.",
+  "library_subject_label_steps_created": "Label erstellt. Es wurde diesem Inhalt noch nicht zugeordnet.",
+  "library_subject_label_steps_retry": "Das Ergebnis des Befehls ist unklar. Wiederhole denselben Befehl.",
+  "library_subject_label_steps_continue": "Weiter",
+  "library_subject_label_steps_conflict": "Diese Label-Aktion steht im Konflikt mit den aktuellen Labels. Prüfe die Liste, bevor du eine neue Aktion startest."
 }

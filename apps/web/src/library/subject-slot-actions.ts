@@ -90,6 +90,9 @@ function validateSubjectLabelSearch(input: unknown): { query: string } {
 export function validateSubjectLabelMutation(input: unknown): SubjectLabelMutationInput {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid subject label action');
   const value = input as Record<string, unknown>;
+  if (value.intent === 'label-step' && typeof value.subjectId === 'string' && value.subjectId.length > 0 &&
+    value.subjectId.length <= 128 && typeof value.token === 'string' && /^[A-Za-z0-9_-]{1,3200}$/.test(value.token))
+    return { intent: 'label-step', subjectId: value.subjectId, token: value.token };
   const validKey = (key: unknown) =>
     typeof key === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key);
   if (
@@ -105,7 +108,7 @@ export function validateSubjectLabelMutation(input: unknown): SubjectLabelMutati
     if (
       typeof value.name !== 'string' ||
       value.name.length > subjectLabelInputLimit ||
-      (value.createKey !== undefined && !validKey(value.createKey))
+      !validKey(value.createKey)
     )
       throw new Error('Invalid subject label action');
     return {
@@ -117,13 +120,13 @@ export function validateSubjectLabelMutation(input: unknown): SubjectLabelMutati
     };
   }
   if (
-    value.intent === 'assign' &&
+    (value.intent === 'assign' || value.intent === 'capture-assign') &&
     typeof value.labelId === 'string' &&
     value.labelId.length > 0 &&
     value.labelId.length <= 128
   )
     return {
-      intent: 'assign',
+      intent: value.intent,
       subjectId,
       labelId: value.labelId,
       idempotencyKey,

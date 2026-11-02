@@ -75,6 +75,7 @@ export const Route = createFileRoute('/library/')({
       POST: async ({ request }) => {
         const form = await request.clone().formData();
         const result = await submitSubjectLabelForm(request);
+          if (result instanceof Response) return result;
         const url = new URL(request.url);
         url.searchParams.delete('labelResult');
         url.searchParams.delete('undoLabelId');

@@ -322,11 +322,11 @@ test('assign, unassign and restore use one idempotent write and the server-provi
   });
 });
 
-test('a new label is created before its assignment and both writes carry distinct idempotency keys', async () => {
+test('a new label prepares separate creation and assignment steps with distinct idempotency keys', async () => {
   reset();
   const createKey = crypto.randomUUID();
   const assignKey = crypto.randomUUID();
-  const result = await applySubjectLabelMutation(
+  let result = await applySubjectLabelMutation(
     mutationRequest(),
     sessionEnv(),
     {
@@ -338,6 +338,15 @@ test('a new label is created before its assignment and both writes carry distinc
     },
     client() as never,
   );
+  expect(result).toMatchObject({ ok: false, reason: 'continue', step: { kind: 'create' } });
+  expect(requests).toHaveLength(1);
+  for (let index = 0; index < 2; index++) {
+    if (!('step' in result)) throw new Error('Expected the next native command');
+    result = await applySubjectLabelMutation(mutationRequest(), sessionEnv(), {
+      intent: 'label-step', subjectId, token: result.step.token,
+    }, client() as never);
+    if (index === 0) expect(result).toMatchObject({ ok: false, reason: 'continue', step: { created: true, label: { id: labelId } } });
+  }
   expect(result).toMatchObject({
     ok: true,
     label: { id: labelId, name: 'New reading list' },

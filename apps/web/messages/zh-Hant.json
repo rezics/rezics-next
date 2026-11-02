@@ -4759,5 +4759,11 @@
   "payment_reference_draft_navigation_title": "要捨棄尚未送出的外部付款參照嗎？",
   "payment_reference_draft_navigation_description": "此參照尚未送出。留在此處可繼續編輯，捨棄後即可繼續。",
   "payment_reference_draft_navigation_stay": "留下",
-  "payment_reference_draft_navigation_discard": "捨棄"
+  "payment_reference_draft_navigation_discard": "捨棄",
+  "library_subject_label_steps_create": "標籤已準備好建立。指派標籤是獨立的步驟。",
+  "library_subject_label_steps_assign": "已準備好將所選標籤指派給此項目。",
+  "library_subject_label_steps_created": "標籤已建立，尚未指派給此項目。",
+  "library_subject_label_steps_retry": "無法確認操作結果。請重試同一操作。",
+  "library_subject_label_steps_continue": "繼續",
+  "library_subject_label_steps_conflict": "此標籤操作與目前的標籤衝突。請先查看清單，再發起新操作。"
 }

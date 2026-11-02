@@ -4759,5 +4759,11 @@
   "payment_reference_draft_navigation_title": "要放弃尚未提交的外部付款参考吗？",
   "payment_reference_draft_navigation_description": "此参考尚未提交。留在此处可继续编辑，放弃后可继续操作。",
   "payment_reference_draft_navigation_stay": "留在此处",
-  "payment_reference_draft_navigation_discard": "放弃"
+  "payment_reference_draft_navigation_discard": "放弃",
+  "library_subject_label_steps_create": "标签已准备好创建。分配标签是单独的步骤。",
+  "library_subject_label_steps_assign": "已准备好将所选标签分配给此条目。",
+  "library_subject_label_steps_created": "标签已创建，尚未分配给此条目。",
+  "library_subject_label_steps_retry": "无法确认操作结果。请重试同一操作。",
+  "library_subject_label_steps_continue": "继续",
+  "library_subject_label_steps_conflict": "此标签操作与当前标签冲突。请先查看列表，再发起新操作。"
 }

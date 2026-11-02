@@ -4759,5 +4759,11 @@
   "payment_reference_draft_navigation_title": "¿Descartar esta referencia de pago externo sin enviar?",
   "payment_reference_draft_navigation_description": "Esta referencia aún no se ha enviado. Quédate aquí para seguir editándola o descártala para continuar.",
   "payment_reference_draft_navigation_stay": "Quedarme",
-  "payment_reference_draft_navigation_discard": "Descartar"
+  "payment_reference_draft_navigation_discard": "Descartar",
+  "library_subject_label_steps_create": "La etiqueta está lista para crearse. La asignación es un paso aparte.",
+  "library_subject_label_steps_assign": "La etiqueta seleccionada está lista para asignarse a este contenido.",
+  "library_subject_label_steps_created": "Etiqueta creada. Aún no se ha asignado a este contenido.",
+  "library_subject_label_steps_retry": "Se desconoce el resultado de la operación. Reintenta la misma operación.",
+  "library_subject_label_steps_continue": "Continuar",
+  "library_subject_label_steps_conflict": "Esta operación entra en conflicto con las etiquetas actuales. Revisa la lista antes de iniciar otra operación."
 }

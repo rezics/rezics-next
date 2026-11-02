@@ -4,7 +4,9 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { applySubjectLabelMutation } from './subject-labels.ts';
 import { validateSubjectLabelMutation } from './subject-slot-actions';
-import { subjectLabelInputLimit } from './subject-label-input';
+import { subjectLabelStepForm } from './subject-label-step-form';
+import { readSubjectLabelStep } from './subject-label-step';
+import { csrfTokenFromRequest } from '../session/csrf';
 
 /** The ordinary HTML form action is server-only so its kernel client never enters the hydrated subject page. */
 export const submitSubjectLabelForm = createServerOnlyFn(async (request: Request) => {
@@ -24,51 +26,28 @@ export const submitSubjectLabelForm = createServerOnlyFn(async (request: Request
       const values = form.getAll(name);
       return values.length === 1 && typeof values[0] === 'string' ? values[0] : null;
     };
-    // Newly rendered label forms capture their key with the native guard. Older forms retain their fallback.
-    if (form.has('idempotencyKey')) {
-      const key = one('idempotencyKey');
-      const intent = one('intent');
-      if (!key) return { ok: false as const, reason: 'unavailable' as const };
-      const input = validateSubjectLabelMutation(
-        intent === 'assign-by-name'
-          ? {
-              intent: 'create-and-assign',
-              subjectId: one('subjectId'),
-              name: one('name'),
-              createKey: one('createKey'),
-              idempotencyKey: key,
-            }
-          : {
-              intent,
-              subjectId: one('subjectId'),
-              labelId: one('labelId'),
-              assignmentId: one('assignmentId'),
-              revision: Number(one('revision')),
-              idempotencyKey: key,
-            },
-      );
-      return applySubjectLabelMutation(request, env as Partial<SessionEnv>, input, kernelClient());
-    }
-    const intents = form.getAll('intent');
-    const intent = intents.length === 1 && typeof intents[0] === 'string' ? intents[0] : null;
+    const intent = one('intent');
     const subjectId = one('subjectId');
     if (!subjectId || subjectId.length > 128) return { ok: false as const, reason: 'unavailable' as const };
-    const idempotencyKey = crypto.randomUUID();
     const sessionEnv = env as Partial<SessionEnv>;
     const client = kernelClient();
-    if (intent === 'assign-by-name') {
-      const name = one('name');
-      if (name === null || name.length > subjectLabelInputLimit)
-        return { ok: false as const, reason: 'unavailable' as const };
-      const input = validateSubjectLabelMutation({
-        intent: 'create-and-assign',
-        subjectId,
-        name,
-        createKey: crypto.randomUUID(),
-        idempotencyKey,
-      });
-      return applySubjectLabelMutation(request, sessionEnv, input, client);
+    if (intent === 'assign-by-name' || intent === 'label-step') {
+      // Preparation sends no native write. Each following form submits its exact sealed command.
+      const input = validateSubjectLabelMutation(intent === 'label-step'
+        ? { intent, subjectId, token: one('token') }
+        : { intent: 'create-and-assign', subjectId, name: one('name'),
+            createKey: one('createKey'), idempotencyKey: one('idempotencyKey') });
+      const result = await applySubjectLabelMutation(request, sessionEnv, input, client);
+      const csrf = await csrfTokenFromRequest(request);
+      if (!result.ok && result.reason === 'continue' && csrf) return subjectLabelStepForm(request, result.step, csrf);
+      if (!result.ok && intent === 'label-step' && csrf && input.intent === 'label-step') {
+        // The display is read only from the authenticated capture, never from form-supplied label/name data.
+        const step = await readSubjectLabelStep(request, sessionEnv, input);
+        if (step) return subjectLabelStepForm(request, step, csrf, true, result.reason);
+      }
+      return result;
     }
+    const idempotencyKey = one('idempotencyKey') ?? crypto.randomUUID();
     if (intent === 'unassign' || intent === 'restore') {
       const labelId = one('labelId');
       const assignmentId = one('assignmentId');

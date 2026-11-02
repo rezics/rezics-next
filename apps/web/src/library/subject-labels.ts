@@ -2,8 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
-import { normalizeLibraryLabelName } from './subject-label-name';
-import { subjectLabelInputIssue } from './subject-label-input';
+import { executeSubjectLabelStep, prepareSubjectLabelStep, type SubjectLabelStep } from './subject-label-step';
 import { readSubjectSlotSession, type SubjectLibraryReadIdentity } from './subject-slot';
 
 export { normalizeLibraryLabelName } from './subject-label-name';
@@ -22,7 +21,8 @@ type Result<T> = {
 
 export type SubjectLabelMutationInput =
   | { intent: 'create-and-assign'; subjectId: string; name: string; createKey?: string; idempotencyKey: string }
-  | { intent: 'assign'; subjectId: string; labelId: string; idempotencyKey: string }
+  | { intent: 'assign' | 'capture-assign'; subjectId: string; labelId: string; idempotencyKey: string }
+  | { intent: 'label-step'; subjectId: string; token: string }
   | {
       intent: 'unassign' | 'restore';
       subjectId: string;
@@ -34,6 +34,7 @@ export type SubjectLabelMutationInput =
 
 export type SubjectLabelMutationResult =
   | { ok: true; assignment: LabelAssignment; label?: LibraryLabelSummary; restoreRevision?: number }
+  | { ok: false; reason: 'continue'; step: SubjectLabelStep }
   | {
       ok: false;
       reason:
@@ -48,7 +49,7 @@ export type SubjectLabelMutationResult =
         | 'unavailable';
     };
 
-function statusOf(result: Result<unknown>): number | undefined {
+export function statusOf(result: Result<unknown>): number | undefined {
   if (typeof result.status === 'number') return result.status;
   if (typeof result.error?.status === 'number') return result.error.status;
   return undefined;
@@ -62,7 +63,7 @@ function problemCode(result: Result<unknown>): string | undefined {
   return typeof detail.code === 'string' ? detail.code : undefined;
 }
 
-function refused(result: Result<unknown>, intent: SubjectLabelMutationInput['intent']): SubjectLabelMutationResult {
+export function refused(result: Result<unknown>, intent: SubjectLabelMutationInput['intent']): SubjectLabelMutationResult {
   const status = statusOf(result);
   const code = problemCode(result);
   if (isPlatformClosedProblem(status, result.error?.value)) return { ok: false, reason: 'closed' };
@@ -148,29 +149,10 @@ export async function applySubjectLabelMutation(
     const stale = await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { ok: false, reason: 'signed-out' };
+    if (input.intent === 'label-step') return await executeSubjectLabelStep(request, sessionEnv, input, client);
+    if (input.intent === 'create-and-assign' || input.intent === 'capture-assign')
+      return await prepareSubjectLabelStep(request, sessionEnv, input, client);
     const headers = { authorization, 'idempotency-key': input.idempotencyKey };
-    if (input.intent === 'create-and-assign') {
-      const name = normalizeLibraryLabelName(input.name);
-      if (subjectLabelInputIssue(input.name)) return { ok: false, reason: 'unavailable' };
-      const search = await client.libraryLabels.get({
-        query: { q: input.name, limit: 20 },
-        headers: { authorization },
-      });
-      if (search.error || !search.data || (statusOf(search) ?? 500) >= 400) return refused(search, input.intent);
-      let label = search.data.labels.find((item) => normalizeLibraryLabelName(item.name) === name);
-      if (!label) {
-        const createHeaders = { authorization, 'idempotency-key': input.createKey ?? crypto.randomUUID() };
-        const created = await client.libraryLabels.post({ name }, { headers: createHeaders });
-        if (created.error || !created.data || (statusOf(created) ?? 500) >= 400) return refused(created, input.intent);
-        label = { id: created.data.label.id, name, revision: created.data.label.revision };
-      }
-      const assigned = await client
-        .libraryLabels({ id: label.id })
-        .$assign.post({ subjectId: input.subjectId }, { headers });
-      if (assigned.error || !assigned.data || (statusOf(assigned) ?? 500) >= 400)
-        return refused(assigned, input.intent);
-      return { ok: true, label, assignment: assigned.data.assignment };
-    }
     if (input.intent === 'assign') {
       const assigned = await client
         .libraryLabels({ id: input.labelId })
