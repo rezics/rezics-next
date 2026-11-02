@@ -1,12 +1,11 @@
+import {
+  indexRetryRun,
+  isSuccessfulIndexed,
+  type AttemptLedgerEntry,
+} from './growth-attempt-index.ts';
 import { isControlStatement, type Cost } from './growth-cost.ts';
 import type { ByteMetric, GrowthMetric } from './growth-bound.ts';
 import type { StatementOccurrence, StatementOccurrences } from './growth-report.ts';
-
-type AttemptLedgerEntry = Readonly<{
-  backend: number;
-  outcome: string;
-  occurrences: readonly number[];
-}>;
 
 type RetryRun = Readonly<{ ledger: readonly AttemptLedgerEntry[] }>;
 
@@ -68,20 +67,14 @@ export function successfulMetricEvidence(
         return {
           explanation: `scale ${sample.scale}, repetition ${repetition} has catalog statements that cannot be separated per occurrence`,
         };
-      const ledgerOccurrences = new Map<number, AttemptLedgerEntry>();
-      for (const attempt of ledger)
-        for (const index of attempt.occurrences) {
-          const occurrence = occurrences.find((item) => item.index === index);
-          if (!occurrence || occurrence.backend !== attempt.backend)
-            return {
-              explanation: `scale ${sample.scale}, repetition ${repetition} has an attempt occurrence without matching foreground attribution`,
-            };
-          if (ledgerOccurrences.has(index))
-            return {
-              explanation: `scale ${sample.scale}, repetition ${repetition} assigns an occurrence to multiple attempts`,
-            };
-          ledgerOccurrences.set(index, attempt);
-        }
+      const indexed = indexRetryRun(occurrences, ledger);
+      if (!indexed.attribution.ok)
+        return {
+          explanation:
+            indexed.attribution.reason === 'duplicate'
+              ? `scale ${sample.scale}, repetition ${repetition} assigns an occurrence to multiple attempts`
+              : `scale ${sample.scale}, repetition ${repetition} has an attempt occurrence without matching foreground attribution`,
+        };
 
       if (
         !sample.attempts &&
@@ -105,8 +98,7 @@ export function successfulMetricEvidence(
           explanation: `scale ${sample.scale}, repetition ${repetition} retry failures cannot be matched to foreground occurrences`,
         };
 
-      const successful = (occurrence: StatementOccurrence): boolean =>
-        isSuccessfulForegroundOccurrence(occurrence, ledger);
+      const successful = (occurrence: StatementOccurrence): boolean => isSuccessfulIndexed(occurrence, indexed);
       if (metric === 'statements') {
         const nonControl = occurrences.filter(({ statement }) => !isControlStatement(statement));
         const observedCount = nonControl.length;

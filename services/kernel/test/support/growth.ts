@@ -52,12 +52,8 @@ import {
   type CountedCheck,
   type CountedSample,
 } from './growth-counters.ts';
-import {
-  isSuccessfulForegroundOccurrence,
-  retryAffectsOccurrence,
-  retainIndependentRetryViolation,
-  successfulMetricEvidence,
-} from './growth-retry-verdict.ts';
+import { indexRetryRun, isSuccessfulIndexed, retryAffectsIndexed } from './growth-attempt-index.ts';
+import { retainIndependentRetryViolation, successfulMetricEvidence } from './growth-retry-verdict.ts';
 
 export * from './growth-counters.ts';
 export { admitGrowthCheck, type AdmittedGrowthCheck, type GrowthCheckConfiguration } from './growth-config.ts';
@@ -243,22 +239,31 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
     error.message = `${check.name}: ${message}\nper-scale attempt ledger:\n${ledgerText}`;
     throw error;
   };
+  const indexedSamples = samples.map((sample) => {
+    if (!sample.attempts) throw new TypeError(`${check.name}: missing attempt ledger at scale ${sample.scale}`);
+    return {
+      scale: sample.scale,
+      attempts: sample.attempts,
+      runs: sample.occurrenceRepetitions.map((run, repetition) =>
+        indexRetryRun(run.statements, sample.attempts!.repetitions[repetition]!.ledger),
+      ),
+    };
+  });
   let committedCount: number | undefined;
   let committedStatements: readonly string[] = [];
-  for (const { attempts, scale, occurrenceRepetitions } of samples) {
-    if (!attempts) throw new TypeError(`${check.name}: missing attempt ledger at scale ${scale}`);
+  for (const { attempts, scale, runs } of indexedSamples) {
     for (const [repetition, run] of attempts.repetitions.entries()) {
       const committed = run.ledger.filter(({ outcome }) => outcome === 'committed');
       if (committed.length !== check.attempts.commands)
         fail(
           `attempts declared ${check.attempts.commands} commands at scale ${scale}, repetition ${repetition}, but observed ${committed.length} committed attempts`,
         );
+      const occurrenceIndex = runs[repetition]?.byIndex;
       for (const [index, attempt] of run.ledger.entries()) {
         if (attempt.outcome !== 'committed') continue;
         const statements = attempt.occurrences.map(
           (occurrence) =>
-            occurrenceRepetitions[repetition]?.statements.find(({ index }) => index === occurrence)?.statement ??
-            `occurrence ${occurrence} (SQL unavailable)`,
+            occurrenceIndex?.get(occurrence)?.statement ?? `occurrence ${occurrence} (SQL unavailable)`,
         );
         if (committedCount === undefined) {
           committedCount = attempt.statements;
@@ -272,39 +277,32 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
       }
     }
   }
-  for (const { attempts, scale } of samples)
-    for (const [repetition, run] of attempts!.repetitions.entries())
+  for (const { attempts, scale } of indexedSamples)
+    for (const [repetition, run] of attempts.repetitions.entries())
       for (const [index, attempt] of run.ledger.entries())
         if (attempt.outcome !== 'committed' && attempt.statements > committedCount!)
           fail(
             `aborted attempt ${index} (${attempt.outcome}) at scale ${scale}, repetition ${repetition} ran ${attempt.statements} statements, exceeding committed attempt count ${committedCount}`,
           );
+  const fingerprints = new Set<string>();
+  for (const { runs } of indexedSamples)
+    for (const run of runs) for (const statement of run.byStatement.keys()) fingerprints.add(statement);
   for (const metric of ['rows', 'blocks'] as const) {
-    const fingerprints = new Set(
-      samples.flatMap(({ occurrenceRepetitions }) =>
-        occurrenceRepetitions.flatMap(({ statements }) => statements.map(({ statement }) => statement)),
-      ),
-    );
     for (const fingerprint of fingerprints) {
       const pointsFor = (successfulOnly: boolean) =>
-        samples.flatMap((sample) => {
-          const executions = sample.occurrenceRepetitions.flatMap((run, repetition) => {
-            const ledger = sample.attempts!.repetitions[repetition]!.ledger;
-            return run.statements.filter(
-              (item) =>
-                item.statement === fingerprint &&
-                (successfulOnly
-                  ? isSuccessfulForegroundOccurrence(item, ledger)
-                  : item.error === null || item.plans.length > 0),
-            );
-          });
+        indexedSamples.flatMap(({ scale, runs }) => {
+          const executions = runs.flatMap((run) =>
+            (run.byStatement.get(fingerprint) ?? []).filter((item) =>
+              successfulOnly ? isSuccessfulIndexed(item, run) : item.error === null || item.plans.length > 0,
+            ),
+          );
           // A missing execution (or a failure without a plan) is not a measured zero. Compare the most expensive
           // execution at each scale so an expensive repetition cannot be hidden by retry incidence.
           if (executions.length === 0) return [];
           const maximum = Math.max(...executions.map((item) => item[metric]));
           return [
             {
-              scale: sample.scale,
+              scale,
               repetitions: [maximum],
               uncertainty: Math.max(GROWTH_UNCERTAINTY[metric].absolute, GROWTH_UNCERTAINTY[metric].relative * maximum),
             },
@@ -318,14 +316,8 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
       const verdict = classifySeries(points, check.bounds[metric], indexProbes);
       if (verdict.outcome !== 'violation') continue;
 
-      const retryAffectsStatement = samples.some((sample) =>
-        sample.occurrenceRepetitions.some((run, repetition) =>
-          run.statements.some(
-            (item) =>
-              item.statement === fingerprint &&
-              retryAffectsOccurrence(item, sample.attempts!.repetitions[repetition]!.ledger),
-          ),
-        ),
+      const retryAffectsStatement = indexedSamples.some(({ runs }) =>
+        runs.some((run) => (run.byStatement.get(fingerprint) ?? []).some((item) => retryAffectsIndexed(item, run))),
       );
       if (!retryAffectsStatement) {
         fail(`statement ${fingerprint} ${metric} violates ${check.bounds[metric]} growth bound across attempts`);
