@@ -4,15 +4,53 @@ export type WindowSettings = { socket: string; session: string; tmuxCommand?: st
 export type WindowRunner = (executable: string, argv: string[]) => string;
 const run: WindowRunner = (executable, argv) => {
   const result = spawnSync(executable, argv, { encoding: 'utf8', timeout: 15_000 });
-  if (result.status !== 0) throw new Error(result.stderr || result.error?.message || `${executable} failed`);
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error((result.stderr || `${executable} failed`).trim());
   return result.stdout.trim();
 };
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+const UNAVAILABLE_CODES = new Set([
+  'ETIMEDOUT',
+  'EACCES',
+  'EPERM',
+  'ECONNRESET',
+  'EPIPE',
+  'ECONNREFUSED',
+  'ENOTCONN',
+  'EAGAIN',
+  'EIO',
+  'ENOENT',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+]);
+const errorCode = (error: unknown) =>
+  error instanceof Error && 'code' in error && error.code != null ? String(error.code) : undefined;
+const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error)).trim();
+const isUnavailableObservation = (error: unknown) => {
+  const code = errorCode(error);
+  return (
+    (code !== undefined && UNAVAILABLE_CODES.has(code)) ||
+    /ETIMEDOUT|EACCES|EPERM|ECONNRESET|EPIPE|ECONNREFUSED|ENOENT|permission denied|timed? ?out|connection reset|broken pipe|connection refused/i.test(
+      errorMessage(error),
+    )
+  );
+};
+const isAbsentWindowObservation = (error: unknown) =>
+  !isUnavailableObservation(error) &&
+  /no server running|can'?t find (?:session|window)|\(No such file or directory\)/i.test(errorMessage(error));
+const unavailableWindowStatus = (error: unknown) => {
+  if (error instanceof Error && error.message.startsWith('window status unavailable:')) return error;
+  const message = errorMessage(error);
+  const code = errorCode(error);
+  return new Error(`window status unavailable: ${code && !message.includes(code) ? `${code}: ${message}` : message}`, {
+    cause: error instanceof Error ? error : undefined,
+  });
+};
 
 export interface ManagerWindows {
   register(manager: string, argv: string[], cwd: string): string;
   unregister(manager: string): void;
-  /** False when the manager's window is gone or its process has exited. */
+  /** False when the manager's window is gone or its process has exited. Observation failures throw. */
   alive?(manager: string): boolean;
   /** Run argv in the manager's window again, replacing whatever it holds. */
   respawn?(manager: string, argv: string[], cwd: string): void;
@@ -29,15 +67,22 @@ export class TermspacesWindows implements ManagerWindows {
   private tmux(argv: string[]): string {
     return this.execute(this.settings.tmuxCommand ?? 'tmux', ['-S', this.settings.socket, ...argv]);
   }
-  private lookupSession(): string | undefined {
+  private observe<T>(read: () => T): T | undefined {
     try {
-      return this.tmux(['list-sessions', '-F', '#{session_id}\t#{session_name}\t#{@ts-session-id}'])
-        .split('\n')
-        .map((line) => line.split('\t'))
-        .find(([, name, id]) => name === this.settings.session || id === this.settings.session)?.[0];
-    } catch {
-      return undefined;
+      return read();
+    } catch (error) {
+      if (isAbsentWindowObservation(error)) return undefined;
+      throw unavailableWindowStatus(error);
     }
+  }
+  private lookupSession(): string | undefined {
+    return this.observe(
+      () =>
+        this.tmux(['list-sessions', '-F', '#{session_id}\t#{session_name}\t#{@ts-session-id}'])
+          .split('\n')
+          .map((line) => line.split('\t'))
+          .find(([, name, id]) => name === this.settings.session || id === this.settings.session)?.[0],
+    );
   }
   private session(): string {
     let session = this.lookupSession();
@@ -75,18 +120,25 @@ export class TermspacesWindows implements ManagerWindows {
     return id;
   }
   private find(session: string, manager: string): string | undefined {
-    return this.tmux(['list-windows', '-t', session, '-F', '#{window_id}\t#{@goal-manager}'])
-      .split('\n')
-      .map((line) => line.split('\t'))
-      .find(([, owner]) => owner === manager)?.[0];
+    return this.observe(
+      () =>
+        this.tmux(['list-windows', '-t', session, '-F', '#{window_id}\t#{@goal-manager}'])
+          .split('\n')
+          .map((line) => line.split('\t'))
+          .find(([, owner]) => owner === manager)?.[0],
+    );
   }
   alive(manager: string): boolean {
     const session = this.lookupSession();
     if (!session) return false;
-    return this.tmux(['list-windows', '-t', session, '-F', '#{@goal-manager}\t#{pane_dead}'])
-      .split('\n')
-      .map((line) => line.split('\t'))
-      .some(([owner, dead]) => owner === manager && dead === '0');
+    return (
+      this.observe(() =>
+        this.tmux(['list-windows', '-t', session, '-F', '#{@goal-manager}\t#{pane_dead}'])
+          .split('\n')
+          .map((line) => line.split('\t'))
+          .some(([owner, dead]) => owner === manager && dead === '0'),
+      ) === true
+    );
   }
   respawn(manager: string, argv: string[], cwd: string): void {
     const id = this.find(this.session(), manager);

@@ -2,20 +2,32 @@ import { unknownReading, tokens, textSignals, parseExitObject } from './shared.t
 import { existsSync, readFileSync, readdirSync, openSync, closeSync, readSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import defaults from '../../defaults.json';
-import type { AgentAdapter, AgentLaunchOptions, SessionUsage, AgentEvent } from '../agents.ts';
+import type {
+  AgentAdapter,
+  AgentLaunchOptions,
+  AgentUsage,
+  AgentUsageAccumulator,
+  SessionUsage,
+  AgentEvent,
+} from '../agents.ts';
 import type { Tokens, Pool, PoolReading, Profile } from '../types.ts';
 
 export function parseCodexSessionUsage(
-  events: Record<string, any>[],
+  events: Iterable<Record<string, any>>,
   start: number,
   end: number,
 ): { tokens: Tokens; usage: SessionUsage; source: 'codex-session' } | null {
-  const ledger = events.filter((event) => event.type === 'token_usage_record');
-  if (!ledger.length) return null;
+  const accumulator = codexUsageAccumulator(start, end);
+  for (const event of events) accumulator.add(event);
+  return accumulator.finish() as { tokens: Tokens; usage: SessionUsage; source: 'codex-session' } | null;
+}
+
+function codexUsageAccumulator(start: number, end: number): AgentUsageAccumulator {
   const totals: Tokens = { input: 0, cached: 0, output: 0 };
   const seen = new Set<string>();
   const usage: SessionUsage = { model: null, effort: null, serviceTier: null, reasoning: 0, compactions: 0 };
-  const number = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0);
+  let foundLedger = false;
+  let valid = true;
   const firstString = (objects: Record<string, any>[], names: string[]): string | null => {
     for (const object of objects)
       for (const name of names) {
@@ -36,31 +48,58 @@ export function parseCodexSessionUsage(
     }
     return result;
   };
-  for (const event of events) {
-    const at = event.timestamp ? Date.parse(event.timestamp) : start;
-    const inside = at >= start && at <= end;
-    if (at > end) continue;
-    if (!inside) continue;
-    const payload = event.payload ?? {};
-    if (event.type === 'token_usage_record') {
-      const responseId = event.response_id ?? payload.response_id ?? event.responseId;
-      if (responseId !== undefined && seen.has(String(responseId))) continue;
-      if (responseId !== undefined) seen.add(String(responseId));
-      const record = payload.usage ?? event.usage ?? payload;
-      totals.input += number(record.input_tokens ?? record.inputTokens);
-      totals.cached += number(record.cached_input_tokens ?? record.cachedInputTokens);
-      totals.output += number(record.output_tokens ?? record.outputTokens);
-      usage.reasoning += number(record.reasoning_output_tokens ?? record.reasoningOutputTokens);
-    }
-    if (event.type === 'compacted' || payload.type === 'compacted' || event.type === 'session.compacted')
-      usage.compactions++;
-    const objects = contextObjects(event);
-    usage.model = firstString(objects, ['model', 'model_name', 'modelName']) ?? usage.model;
-    usage.effort = firstString(objects, ['effort', 'model_reasoning_effort', 'reasoning_effort']) ?? usage.effort;
-    usage.serviceTier =
-      firstString(objects, ['service_tier', 'serviceTier', 'service_tier_name', 'tier']) ?? usage.serviceTier;
-  }
-  return { tokens: totals, usage, source: 'codex-session' };
+  return {
+    add(event) {
+      if (event.type === 'token_usage_record') foundLedger = true;
+      const at = event.timestamp ? Date.parse(event.timestamp) : start;
+      if (at < start || at > end) return;
+      const payload = event.payload ?? {};
+      if (event.type === 'token_usage_record') {
+        const responseId = event.response_id ?? payload.response_id ?? event.responseId;
+        if (responseId !== undefined && seen.has(String(responseId))) return;
+        if (responseId !== undefined) seen.add(String(responseId));
+        const record = payload.usage ?? event.usage ?? payload;
+        if (!record || typeof record !== 'object' || Array.isArray(record)) valid = false;
+        else {
+          const value = (names: string[]): number => {
+            for (const name of names) {
+              if (!Object.hasOwn(record, name)) continue;
+              const current = record[name];
+              if (typeof current === 'number' && Number.isFinite(current) && current >= 0) return current;
+              valid = false;
+              return 0;
+            }
+            return 0;
+          };
+          if (
+            ![
+              'input_tokens',
+              'inputTokens',
+              'cached_input_tokens',
+              'cachedInputTokens',
+              'output_tokens',
+              'outputTokens',
+            ].some((key) => Object.hasOwn(record, key))
+          )
+            valid = false;
+          totals.input += value(['input_tokens', 'inputTokens']);
+          totals.cached += value(['cached_input_tokens', 'cachedInputTokens']);
+          totals.output += value(['output_tokens', 'outputTokens']);
+          usage.reasoning += value(['reasoning_output_tokens', 'reasoningOutputTokens']);
+        }
+      }
+      if (event.type === 'compacted' || payload.type === 'compacted' || event.type === 'session.compacted')
+        usage.compactions++;
+      const objects = contextObjects(event);
+      usage.model = firstString(objects, ['model', 'model_name', 'modelName']) ?? usage.model;
+      usage.effort = firstString(objects, ['effort', 'model_reasoning_effort', 'reasoning_effort']) ?? usage.effort;
+      usage.serviceTier =
+        firstString(objects, ['service_tier', 'serviceTier', 'service_tier_name', 'tier']) ?? usage.serviceTier;
+    },
+    finish(): AgentUsage {
+      return foundLedger && valid ? { tokens: totals, usage, source: 'codex-session' } : null;
+    },
+  };
 }
 
 export const codexAdapter: AgentAdapter = {
@@ -83,7 +122,7 @@ export const codexAdapter: AgentAdapter = {
   canImport: true,
   announcedReset: true,
   readAllowance: readCodexAllowance,
-  readSession: rolloutFor,
+  readSessionPath: rolloutPathFor,
   hasRollout(events) {
     return events.some((event) => event.payload?.type === 'token_count' && event.payload.info?.total_token_usage);
   },
@@ -124,6 +163,9 @@ export const codexAdapter: AgentAdapter = {
   afterExit() {},
   parseUsage(events, start, end) {
     return parseCodexSessionUsage(events, start, end);
+  },
+  createUsageAccumulator(start, end) {
+    return codexUsageAccumulator(start, end);
   },
   failure(event) {
     return event.type === 'turn.failed' || event.type === 'error'
@@ -273,7 +315,7 @@ function readCodexAllowance(pool: Pool, now: number): PoolReading {
   return unknownReading(pool, now);
 }
 
-function rolloutFor(configDirectory: string, session: string): string | null {
+function rolloutPathFor(configDirectory: string, session: string): string | null {
   const root = join(configDirectory, 'sessions');
   const suffix = `-${session}.jsonl`;
   const pending = [root];
@@ -292,10 +334,12 @@ function rolloutFor(configDirectory: string, session: string): string | null {
       else if (entry.isFile() && entry.name.startsWith('rollout-') && entry.name.endsWith(suffix)) matches.push(path);
     }
   }
-  matches.sort((a, b) => basename(a).localeCompare(basename(a)) || a.localeCompare(b));
+  matches.sort((a, b) => basename(a).localeCompare(basename(b)) || a.localeCompare(b));
   for (const path of matches) {
     try {
-      return readFileSync(path, 'utf8');
+      const fd = openSync(path, 'r');
+      closeSync(fd);
+      return path;
     } catch {
       /* A rollout may disappear during cleanup. */
     }

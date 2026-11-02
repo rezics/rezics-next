@@ -305,8 +305,11 @@ export async function stopProcessesUnder(directory: string, graceMs: number, pro
         let cwd: string;
         try {
           cwd = readlinkSync(`${procRoot}/${name}/cwd`).replace(/ \(deleted\)$/, '');
-        } catch {
-          return [];
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code === 'ENOENT' || code === 'ESRCH') return [];
+          const detail = error instanceof Error ? error.message : String(error);
+          throw new Error(`Unable to inspect cwd for PID ${name}: ${detail}`, { cause: error });
         }
         if (cwd !== root && !cwd.startsWith(`${root}/`)) return [];
         const identity = inspectProcessIdentity(Number(name), procRoot);

@@ -90,7 +90,8 @@ export class PoolPolicyReloader {
   }
   private fileVersion(): string {
     try {
-      return String(statSync(this.localFile).mtimeMs);
+      const stat = statSync(this.localFile, { bigint: true });
+      return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
     } catch {
       return 'unreadable';
     }
@@ -101,8 +102,8 @@ export class PoolPolicyReloader {
     if (version === this.version) return this.pools;
     this.version = version;
     try {
-      const local = JSON.parse(readFileSync(this.localFile, 'utf8')) as { pools?: unknown };
-      this.pools = readPoolPolicies(local?.pools ?? [], this.localFile);
+      const local = object(JSON.parse(readFileSync(this.localFile, 'utf8')), 'local settings');
+      this.pools = readPoolPolicies(local.pools, this.localFile);
     } catch (error) {
       this.report(
         `Unable to reload pool policies from ${this.localFile}: ${error instanceof Error ? error.message : String(error)}; keeping the last valid pools`,

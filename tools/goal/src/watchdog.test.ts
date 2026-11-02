@@ -360,6 +360,45 @@ test('the check-host probe starts its SSH attempts in the background and never b
   }
 });
 
+test('an SSH probe that connects but never finishes produces one bounded failure and retains only a bounded first diagnostic line', async () => {
+  const host = { name: 'kernel-a', address: 'ops@kernel-a.test', identity: '/secret/identity' };
+  const child = new EventEmitter() as EventEmitter & {
+    stderr: PassThrough;
+    unref: () => void;
+    kill: () => boolean;
+  };
+  child.stderr = new PassThrough();
+  child.unref = () => {};
+  let killed = 0;
+  child.kill = () => {
+    killed += 1;
+    return true;
+  };
+  const fakeSpawn = (() => child) as unknown as typeof import('node:child_process').spawn;
+  const received: { status: number | null; stderr: string }[] = [];
+  const finished = new Promise<void>((resolve) => {
+    sshProbe(
+      host,
+      (result) => {
+        received.push(result);
+        resolve();
+      },
+      fakeSpawn,
+      1,
+    );
+  });
+  const diagnostic = `ssh: ${'x'.repeat(20_000)}`;
+  child.stderr.write(diagnostic);
+  await finished;
+  expect(received).toEqual([{ status: null, stderr: diagnostic.slice(0, 4 * 1024) }]);
+  expect(killed).toBe(1);
+  child.stderr.write('still-open-without-newline');
+  child.emit('close', 0, null);
+  child.emit('error', new Error('late failure'));
+  expect(received).toHaveLength(1);
+  expect(killed).toBe(1);
+});
+
 test('a sweep judges the probe results the previous sweep started, and two failures in a row report the host once', () => {
   const root = temporaryDirectory('goal-watchdog-previous-hosts-');
   try {

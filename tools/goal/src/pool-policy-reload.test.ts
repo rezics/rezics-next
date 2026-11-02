@@ -112,6 +112,37 @@ test('unreadable or invalid settings preserve the last valid pools and report th
   }
 });
 
+test('same-mtime pool edits reject invalid roots and adopt corrected and empty pools', () => {
+  const h = harness();
+  try {
+    const path = h.settings.localFile;
+    const stamp = new Date(1_700_000_000_000);
+    const events: string[] = [];
+    const local = JSON.parse(readFileSync(path, 'utf8'));
+    utimesSync(path, stamp, stamp);
+    const reloader = new PoolPolicyReloader(path, h.settings.pools, (message) => events.push(message));
+    const replace = (value: object | null) => {
+      writeFileSync(path, JSON.stringify(value));
+      utimesSync(path, stamp, stamp);
+      return reloader.read();
+    };
+    local.pools[0].policy.reservePercent = 1;
+    const valid = replace(local);
+    expect(valid[0]!.policy.reservePercent).toBe(1);
+    expect(replace(null)).toEqual(valid);
+    expect(reloader.read()).toEqual(valid);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toContain('local settings must be an object');
+    local.pools[0].policy.reservePercent = 2;
+    expect(replace(local)[0]!.policy.reservePercent).toBe(2);
+    expect(events).toHaveLength(1);
+    local.pools = [];
+    expect(replace(local)).toEqual([]);
+  } finally {
+    h.dispose();
+  }
+});
+
 test('fractional hourly reserves preserve numeric boundaries without relaxing other policy fields', () => {
   const localFile = `${import.meta.dir}/local.json`;
   const pool = {

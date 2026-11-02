@@ -150,6 +150,45 @@ function parsed<T>(text: string | null): T | null {
   }
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function documentReferences(text: string | null): InboxDocumentReference[] | null {
+  const value = parsed<unknown>(text);
+  if (
+    !Array.isArray(value) ||
+    !value.every(
+      (reference) =>
+        isObjectRecord(reference) &&
+        typeof reference.path === 'string' &&
+        Boolean(reference.path.trim()) &&
+        (reference.change === undefined || typeof reference.change === 'string'),
+    )
+  )
+    return null;
+  return value as InboxDocumentReference[];
+}
+
+function escalationMetadata(text: string | null): InboxEscalation | null {
+  const value = parsed<unknown>(text);
+  if (
+    !isObjectRecord(value) ||
+    typeof value.reason !== 'string' ||
+    (value.target !== undefined && typeof value.target !== 'string')
+  )
+    return null;
+  return value as InboxEscalation;
+}
+
+function validEscalationSql(column: string): string {
+  return `CASE WHEN json_valid(${column}) THEN
+    json_type(${column}) = 'object'
+    AND json_type(${column}, '$.reason') = 'text'
+    AND (json_type(${column}, '$.target') IS NULL OR json_type(${column}, '$.target') = 'text')
+    ELSE 0 END`;
+}
+
 function safeEvent(text: string): unknown {
   return parsed(text);
 }
@@ -197,8 +236,8 @@ function message(row: InboxRow): SharedInboxMessage {
     createdAt: row.created_at,
     replyToId: row.reply_to_id,
     threadRootId: row.thread_root_id ?? row.id,
-    documentRefs: parsed<InboxDocumentReference[]>(row.document_refs),
-    escalation: parsed<InboxEscalation>(row.escalation),
+    documentRefs: documentReferences(row.document_refs),
+    escalation: escalationMetadata(row.escalation),
   };
 }
 
@@ -332,15 +371,16 @@ export class SharedInboxQueries {
     const limit = pageLimit(options.limit);
     const cursor = positiveInteger(options.cursor, 'inbox cursor');
     const openQuestion = answerJoin('manager_inbox.id');
+    const validEscalation = validEscalationSql('escalation');
     const groupsRows = this.db
       .query(`SELECT goal_id,
           COALESCE(SUM(CASE WHEN kind = 'decision' AND created_at >= ? THEN 1 ELSE 0 END), 0) AS decisions,
           COALESCE(SUM(CASE WHEN kind = 'blocker' AND created_at >= ? THEN 1 ELSE 0 END), 0) AS blockers,
-          COALESCE(SUM(CASE WHEN escalation IS NOT NULL AND created_at >= ? THEN 1 ELSE 0 END), 0) AS escalations,
+          COALESCE(SUM(CASE WHEN (${validEscalation}) AND created_at >= ? THEN 1 ELSE 0 END), 0) AS escalations,
           COALESCE(SUM(CASE WHEN kind = 'question' AND created_at < ? AND ${openQuestion} THEN 1 ELSE 0 END), 0) AS overdue_questions,
           COALESCE(SUM(CASE WHEN kind = 'blocker' AND created_at < ? AND ${answerJoinForBlocker()} THEN 1 ELSE 0 END), 0) AS old_blockers
         FROM manager_inbox
-        WHERE (created_at >= ? AND (kind IN ('decision', 'blocker') OR escalation IS NOT NULL))
+        WHERE (created_at >= ? AND (kind IN ('decision', 'blocker') OR (${validEscalation})))
           OR (kind = 'question' AND created_at < ? AND ${openQuestion})
           OR (kind = 'blocker' AND created_at < ? AND ${answerJoinForBlocker()})
         GROUP BY goal_id ORDER BY goal_id`)
@@ -388,12 +428,12 @@ export class SharedInboxQueries {
             WHEN kind = 'question' THEN 'overdue-question'
             WHEN kind = 'blocker' AND created_at < ? THEN 'blocker-intervention'
             WHEN kind = 'blocker' THEN 'blocker'
-            WHEN escalation IS NOT NULL THEN 'escalation'
+            WHEN (${validEscalation}) THEN 'escalation'
             ELSE 'decision' END AS category
           FROM manager_inbox AS question
           WHERE (kind = 'decision' AND created_at >= ?)
             OR (kind = 'blocker' AND created_at >= ?)
-            OR (escalation IS NOT NULL AND created_at >= ?)
+            OR ((${validEscalation}) AND created_at >= ?)
             OR (kind = 'question' AND created_at < ? AND ${answerJoin('question.id')})
             OR (kind = 'blocker' AND created_at < ? AND ${answerJoinForBlocker('question.id')})
         )

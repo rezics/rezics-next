@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { unknownReading, tokens, textSignals, parseExitObject } from './shared.ts';
 import type { Pool, PoolReading } from '../types.ts';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 
@@ -88,7 +88,13 @@ function command(options: AgentLaunchOptions): [string, string[]] {
 
 /** Parse the plan windows of Claude's OAuth usage endpoint, the one Claude Code's /usage reads. */
 export function parseClaudeUsage(body: string, pool: Pool, now = Date.now()): PoolReading {
-  const value = JSON.parse(body) as Record<string, { utilization?: unknown; resets_at?: unknown } | null>;
+  let value: unknown;
+  try {
+    value = JSON.parse(body);
+  } catch {
+    return unknownReading(pool, now, 'Claude OAuth usage response was invalid');
+  }
+  if (!isRecord(value)) return unknownReading(pool, now, 'Claude OAuth usage response was invalid');
   const windows = (
     [
       ['five_hour', 300],
@@ -96,7 +102,7 @@ export function parseClaudeUsage(body: string, pool: Pool, now = Date.now()): Po
     ] as const
   ).flatMap(([key, minutes]) => {
     const window = value[key];
-    if (typeof window?.utilization !== 'number' || !Number.isFinite(window.utilization)) return [];
+    if (!isRecord(window) || typeof window.utilization !== 'number' || !Number.isFinite(window.utilization)) return [];
     const resetsAt = typeof window.resets_at === 'string' ? Date.parse(window.resets_at) : NaN;
     return [
       {
@@ -106,7 +112,7 @@ export function parseClaudeUsage(body: string, pool: Pool, now = Date.now()): Po
       },
     ];
   });
-  if (!windows.length) return unknownReading(pool, now);
+  if (!windows.length) return unknownReading(pool, now, 'Claude OAuth usage response was invalid');
   return {
     pool: pool.name,
     allowanceKey: pool.allowanceKey,
@@ -122,49 +128,127 @@ export function parseClaudeUsage(body: string, pool: Pool, now = Date.now()): Po
 // to curl on stdin, never in its arguments.
 const CLAUDE_REFRESH_MS = 120_000,
   CLAUDE_STALE_MS = 1_200_000;
+const MAX_DATE_MS = 8.64e15;
+const claudeReadings = new Map<string, PoolReading>();
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function dateMilliseconds(value: unknown): number | undefined {
+  if (typeof value !== 'string') return undefined;
+  const milliseconds = Date.parse(value);
+  return Number.isFinite(milliseconds) ? milliseconds : undefined;
+}
+
+function validCachedReading(value: unknown, pool: Pool, now: number): PoolReading | undefined {
+  if (!isRecord(value) || value.pool !== pool.name || value.allowanceKey !== pool.allowanceKey) return undefined;
+  if (dateMilliseconds(value.at) === undefined || typeof value.observedAt !== 'string') return undefined;
+  const observedAt = dateMilliseconds(value.observedAt);
+  if (observedAt === undefined || now < observedAt || now - observedAt >= CLAUDE_STALE_MS) return undefined;
+  if (!Array.isArray(value.windows) || !value.windows.length) return undefined;
+  const validWindows = value.windows.every(
+    (window) =>
+      isRecord(window) &&
+      typeof window.usedPercent === 'number' &&
+      Number.isFinite(window.usedPercent) &&
+      window.usedPercent >= 0 &&
+      window.usedPercent <= 100 &&
+      (window.resetsAt === null ||
+        (typeof window.resetsAt === 'number' &&
+          Number.isFinite(window.resetsAt) &&
+          Math.abs(window.resetsAt) <= MAX_DATE_MS)) &&
+      (window.minutes === null ||
+        (typeof window.minutes === 'number' && Number.isFinite(window.minutes) && window.minutes > 0)) &&
+      (window.window === undefined || typeof window.window === 'string'),
+  );
+  if (!validWindows) return undefined;
+  const exhausted = value.windows.some((window) => (window as Record<string, unknown>).usedPercent === 100);
+  if (value.exhausted !== exhausted || value.error !== null) return undefined;
+  return value as unknown as PoolReading;
+}
+
 function claudeCache(pool: Pool): string {
   return join(
     tmpdir(),
     `goal-claude-usage-${createHash('sha256').update(pool.configDirectory).digest('hex').slice(0, 16)}.json`,
   );
 }
-/** Claude Code streams the plan's windows in its rate_limit_event; a finished worker's log refreshes the shared reading. */
-export function recordClaudeRateLimit(pool: Pool, log: string, now = Date.now()): void {
-  let info: { unifiedWindows?: Record<string, { utilization?: number; resetsAt?: number }> } | undefined;
-  for (const line of log.split('\n')) {
-    if (!line.includes('"rate_limit_event"')) continue;
+
+function cachedClaudeReading(pool: Pool, cache: string, now: number): PoolReading | undefined {
+  let disk: unknown;
+  try {
+    disk = JSON.parse(readFileSync(cache, 'utf8')) as unknown;
+  } catch {
+    /* A damaged cache is not an observation. */
+  }
+  return [claudeReadings.get(cache), disk]
+    .map((reading) => validCachedReading(reading, pool, now))
+    .filter((reading): reading is PoolReading => !!reading)
+    .sort((left, right) => Date.parse(right.observedAt!) - Date.parse(left.observedAt!))[0];
+}
+
+function rememberClaudeReading(pool: Pool, reading: PoolReading): void {
+  const cache = claudeCache(pool);
+  claudeReadings.set(cache, reading);
+  const temporary = `${cache}.${process.pid}`;
+  try {
+    writeFileSync(temporary, JSON.stringify(reading), { mode: 0o600 });
+    renameSync(temporary, cache);
+  } catch {
     try {
-      info = JSON.parse(line).rate_limit_info ?? info;
+      unlinkSync(temporary);
     } catch {
-      /* Not an event line. */
+      /* Persistence is best effort; keep the in-memory observation. */
     }
   }
-  const windows = info?.unifiedWindows;
-  if (!windows) return;
-  const body = Object.fromEntries(
-    Object.entries(windows).map(([key, window]) => [
-      key,
-      {
-        utilization: typeof window.utilization === 'number' ? window.utilization * 100 : undefined,
-        resets_at: typeof window.resetsAt === 'number' ? new Date(window.resetsAt * 1000).toISOString() : undefined,
-      },
-    ]),
-  );
-  const reading = parseClaudeUsage(JSON.stringify(body), pool, now);
-  if (!reading.observedAt) return;
-  const cache = claudeCache(pool);
-  writeFileSync(`${cache}.${process.pid}`, JSON.stringify(reading), { mode: 0o600 });
-  renameSync(`${cache}.${process.pid}`, cache);
+}
+
+function resetIso(seconds: unknown): string | undefined {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return undefined;
+  const milliseconds = seconds * 1000;
+  if (!Number.isFinite(milliseconds) || Math.abs(milliseconds) > MAX_DATE_MS) return undefined;
+  return new Date(milliseconds).toISOString();
+}
+
+/** Claude Code streams the plan's windows in its rate_limit_event; a finished worker's log refreshes the shared reading. */
+export function recordClaudeRateLimit(pool: Pool, log: string, now = Date.now()): void {
+  try {
+    let info: Record<string, unknown> | undefined;
+    for (const line of log.split('\n')) {
+      if (!line.includes('"rate_limit_event"')) continue;
+      try {
+        const event: unknown = JSON.parse(line);
+        if (isRecord(event) && isRecord(event.rate_limit_info)) info = event.rate_limit_info;
+      } catch {
+        /* Not an event line. */
+      }
+    }
+    const windows = info?.unifiedWindows;
+    if (!isRecord(windows)) return;
+    const body = Object.fromEntries(
+      Object.entries(windows).map(([key, value]) => {
+        const window = isRecord(value) ? value : {};
+        return [
+          key,
+          {
+            utilization: typeof window.utilization === 'number' ? window.utilization * 100 : undefined,
+            resets_at: resetIso(window.resetsAt),
+          },
+        ];
+      }),
+    );
+    const reading = parseClaudeUsage(JSON.stringify(body), pool, now);
+    if (!reading.observedAt) return;
+    rememberClaudeReading(pool, reading);
+  } catch {
+    /* Allowance observation must never fail worker settlement. */
+  }
 }
 export function readClaudeUsage(pool: Pool, now: number): PoolReading {
   const cache = claudeCache(pool);
-  let cached: PoolReading | undefined;
-  try {
-    cached = JSON.parse(readFileSync(cache, 'utf8')) as PoolReading;
-  } catch {
-    /* No reading yet. */
-  }
-  const age = cached?.observedAt ? now - Date.parse(cached.observedAt) : Infinity;
+  const cached = cachedClaudeReading(pool, cache, now);
+  const age = cached ? now - Date.parse(cached.observedAt!) : Infinity;
   const reuse = (reading: PoolReading) => ({
     ...reading,
     pool: pool.name,
@@ -183,31 +267,40 @@ export function readClaudeUsage(pool: Pool, now: number): PoolReading {
       return undefined;
     }
   })();
-  const response =
-    typeof token === 'string' && token
-      ? spawnSync(
-          'curl',
-          [
-            '-sf',
-            '-m',
-            '10',
-            '-H',
-            '@-',
-            '-H',
-            'anthropic-beta: oauth-2025-04-20',
-            'https://api.anthropic.com/api/oauth/usage',
-          ],
-          { input: `Authorization: Bearer ${token}\n`, encoding: 'utf8' },
-        )
+  let observationError = 'Claude OAuth access token unavailable';
+  let response: ReturnType<typeof spawnSync> | undefined;
+  if (typeof token === 'string' && token) {
+    try {
+      response = spawnSync(
+        'curl',
+        [
+          '-sf',
+          '-m',
+          '10',
+          '-H',
+          '@-',
+          '-H',
+          'anthropic-beta: oauth-2025-04-20',
+          'https://api.anthropic.com/api/oauth/usage',
+        ],
+        { input: `Authorization: Bearer ${token}\n`, encoding: 'utf8' },
+      );
+    } catch {
+      /* Report a failed optional observation below. */
+    }
+    observationError = 'Claude OAuth usage request failed';
+  }
+  const reading =
+    response?.status === 0 && typeof response.stdout === 'string'
+      ? parseClaudeUsage(response.stdout, pool, now)
       : undefined;
-  const reading = response?.status === 0 ? parseClaudeUsage(response.stdout, pool, now) : undefined;
   if (reading?.observedAt) {
-    writeFileSync(`${cache}.${process.pid}`, JSON.stringify(reading), { mode: 0o600 });
-    renameSync(`${cache}.${process.pid}`, cache);
+    rememberClaudeReading(pool, reading);
     return reading;
   }
+  if (response?.status === 0) observationError = 'Claude OAuth usage response was invalid';
   if (cached && age < CLAUDE_STALE_MS) return reuse(cached);
-  return unknownReading(pool, now, 'quota observation unavailable');
+  return unknownReading(pool, now, observationError);
 }
 
 function claudeEvent(event: Record<string, any>, hasRollout: boolean): AgentEvent | null {

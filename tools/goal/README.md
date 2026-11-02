@@ -146,9 +146,10 @@ attempt ends as an ordinary missing-report failure.
 
 Every fresh launch, retry, held-task release and check wake renders a bounded controller launch context from the current
 task generation under its lease. It records the current contract hash and path, task base and worktree identity, and one
-line for each declared `after:` dependency: integrated in the task's base at its commit, or not in the base, so the
-worker builds against its contract. Lifecycle completion alone never renders as integrated: the line requires the
-integrated commit to be an ancestor of the task source. A new context supersedes future-tense instructions in an older prompt, retry manifest or
+line for each declared `after:` dependency: whether its integrated commit is in the prepared task base, in the current
+source only, or unobserved. An unavailable observation is not described as proven absence. Lifecycle completion alone
+never renders as present: prepared-base and current-source presence each require the integrated commit to be an ancestor
+of that tip. A new context supersedes future-tense instructions in an older prompt, retry manifest or
 attempt result; recovery does not reuse an older attempt's context.
 
 When a waiting session wakes on a finished failed check, Goal includes the exact result identity, command, exit status
@@ -421,12 +422,31 @@ conflict fields read back as unavailable, without backfilling today's observatio
 proof boundary for same-session/attempt/pass landing with one acceptance, rerere without a worker wake, exact-owner
 wrong-resolution fixes and authenticated manager ownership guards; these counters do not certify those scenarios.
 
+### Hourly delivery report
+
+`bun tools/goal/scripts/efficiency-report.ts [--bucket <UTC-hour-start>]` prints the most recently completed UTC hour
+by default. It joins timestamped integrations to task and attempt identities, names the last useful landing, and reads
+current waits, orphaned landings, promotion state, quarantines and shared tool incidents from their existing durable
+records. Missing source history is `unknown`; an empty counter is not inferred from missing evidence. Landing counts
+are task outcomes, not changed-line volume. Worker diff churn is labeled separately and is not presented as delivered
+product work.
+
+Set `integration.hourlyReportNotifier` in untracked local settings to an argv array to enable one report per completed
+UTC hour. Goal appends the report as the final argument, runs without a shell, discards notifier output, and stops the
+notifier after `integration.hourlyReportTimeoutMs` (default `20000`, maximum `120000`). Keep credentials in the
+notifier's secret store; Goal logs only a fixed delivery status and discards notifier output. Each hour's report and delivery outcome are stored
+durably; a sent, failed or uncertain outcome is not retried in that bucket. The manager host starts the report runner
+as a child and continues serving commands while it runs. Without a configured notifier, the report remains available
+as a local command and the host sends nothing. Add `--send` to deliver a report manually; the default command only
+prints it.
+
 The manager host evaluates absolute flow targets each hour and sends one `environment` event to the configured
 supermanager for each breached threshold: efficiency below 40%, any queue older than 60 minutes, landing p90 above
 30 minutes, or more than 1.5 attempts per integrated task. `flow` in local settings can override `efficiencyBelow`,
 `oldestQueueMs`, `landingP90Ms` and `attemptsPerIntegrated`; the defaults are `0.4`, `3600000`, `1800000` and `1.5`.
 Alarm summaries name the stage, measurement and up to three oldest waiting task IDs. A threshold can alert again after
-one hour.
+one hour. Flow alarms, daily audit notices, check-result reuse alerts and shared environment incidents go to the
+configured supermanager; priority grants and scope decisions remain with the supermanager.
 
 Once per UTC day the manager host dispatches the research brief at
 [`templates/daily-step-audit.md`](templates/daily-step-audit.md), unless a daily audit task is already open. It
@@ -845,8 +865,9 @@ it from `main`.
 Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
 promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
 Task worktrees exist while an attempt can use them. A background control-plane sweep removes integrated, merged and
-cancelled worktrees one at a time, under idle I/O priority, after `/proc/pressure/io` reports `some avg10` at or below
-20 (hosts without that file do not wait); a retry recreates a missing worktree from its task branch and installs its
+cancelled worktrees one at a time, under idle I/O priority, after waiting up to 30 seconds for `/proc/pressure/io` to
+report `some avg10` at or below 20 (hosts without that file do not wait); sustained pressure defers the pass and lets a
+later sweep retry. A retry recreates a missing worktree from its task branch and installs its
 dependencies before launch. A permission-denied removal records the offending path and owner when available and sends
 the task manager one durable notice for that path generation. The sweep continues with independent finished tasks; it
 does not retry the blocked path until its ownership, permissions or filesystem identity changes. Cleanup leaves shared
@@ -935,7 +956,10 @@ every limit above.
 A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own
 outcome as a continuation brief at `.temp/continuation/<name>.md` in its worktree. When the attempt ends, settlement
 moves each brief to `<state>/backlog/<goal>/continuation-<task>-<attempt>-<name>.md`, where the backlog is dispatched
-like any other brief, and records a `continuation-queued` event. A brief moves only when it parses with the ordinary
+like any other brief, and records a `continuation-queued` event. A name that normalizes or truncates onto a file
+already holding the same brief is left in place. A different brief is published under a stable distinct name, and the
+source is removed only then; when every distinct name is occupied the source stays and a `continuation-retained` event
+is recorded. A brief moves only when it parses with the ordinary
 brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies;
 anything else is removed and its reason recorded in a `continuation-dropped` event. Workers in a shared module workspace
 list the remainder in their summary instead.
@@ -1040,12 +1064,12 @@ The supermanager sets direction and the managers own the work. This applies to e
   worktree cleanup, recovery of tasks stopped by environment or tooling failures in any Goal and promotion
   are owned by the manager of the Goal that owns `tools/goal`; check-host health is owned by the Goal
   that owns the check scripts. System alerts go to those owners.
-- **Efficiency is measured by scripts.** An hourly report, stall alarms and the supermanager watchdog run without model
-  tokens ([delivery ownership](../../docs/development/delivery.md#delivery-ownership)). The supermanager acts on
+- **Efficiency is measured by scripts.** The hourly report, operational alarms and the supermanager watchdog run without
+  model tokens ([delivery ownership](../../docs/development/delivery.md#delivery-ownership)). The supermanager acts on
   alarms; Performance owns check-host health and its own Goal.
-- **Interface changes are reported as links.** The Goal that owns the shell and design system reports to the project's
-  Telegram group what changed on which pages, with a Storybook link per changed story, and no screenshots; the
-  maintainer reviews the pages himself. Each product Goal owns its user journeys end to end, pages included.
+- **Visual review belongs to the design-authority Goal.** The Goal that owns the shell and design system reviews every
+  visible slice by screenshot against the maintainer's references and reopens defects with the owning Goal; each
+  product Goal owns its user journeys end to end, pages included.
 - **The supermanager keeps direction.** [Resident supervision and recovery](../../docs/development/supermanager.md).
   Direction, priorities and scope with the maintainer, the allowance runway,
   critical-priority grants, deadlocks between owners, efficiency strategy, and a sampled review of the product, not

@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { frozenFile } from './frozen.ts';
 import { integrationHarness, harness } from './test-support.ts';
 import { git, WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
@@ -13,6 +15,16 @@ function briefWith(blocks: string[], paths = ['tests/**']): string {
 }
 
 describe('frozen acceptance files', () => {
+  test('Keep frozen acceptance content consistent with its recorded hash.', () => {
+    const bytes = Buffer.from('\uFEFFcafé\r\n', 'utf8');
+    const file = frozenFile('tests/a.ts', bytes);
+    expect(Buffer.from(file.content, 'utf8').equals(bytes)).toBe(true);
+    expect(file.hash).toBe(createHash('sha256').update(bytes).digest('hex'));
+    expect(() => frozenFile('tests/bad.ts', Uint8Array.of(0xff))).toThrow(
+      'frozen file is not valid UTF-8: tests/bad.ts',
+    );
+  });
+
   test('dispatch writes every path-tagged block byte for byte and commits them first', () => {
     const h = harness();
     try {

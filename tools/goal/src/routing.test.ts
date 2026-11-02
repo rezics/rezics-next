@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseBrief, pathsOverlap, readRiskOwnership } from './briefs.ts';
-import { classifyTask, readRouting, routeTask } from './routing.ts';
+import { classifyTask, parseRouting, readRouting, routeTask } from './routing.ts';
 import { brief, markdown } from './test-support.ts';
 
 const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
@@ -60,4 +61,28 @@ test('a brief parses its pinned model and effort from front matter', () => {
 test('a research brief stays research when it cites sources or names risk areas', () => {
   expect(classifyTask({ ...brief(), kind: 'research', citesSources: true } as never)).toBe('research');
   expect(classifyTask({ ...brief(), kind: 'research', riskAreas: ['disclosure'] } as never)).toBe('research');
+});
+
+test('malformed routing fails with the responsible field named', () => {
+  const valid = JSON.parse(readFileSync(join(import.meta.dir, '../routing.json'), 'utf8'));
+  const cases: [string, (table: Record<string, any>) => void][] = [
+    ['classes.implementation.maxMs', (table) => (table.classes.implementation.maxMs = Infinity)],
+    ['classes.implementation.maxSteps', (table) => (table.classes.implementation.maxSteps = '300')],
+    ['classes.research', (table) => delete table.classes.research],
+    ['classes.implementation.fallbacks', (table) => (table.classes.implementation.fallbacks = {})],
+    ['classes.implementation.first.effort', (table) => (table.classes.implementation.first.effort = 'extreme')],
+    ['classes.implementation.fallbacks[0].model', (table) => (table.classes.implementation.fallbacks[0].model = 1)],
+    ['experiments[0].profiles', (table) => (table.experiments[0].profiles = [])],
+    ['experiments[0].open', (table) => (table.experiments[0].open = 'yes')],
+    ['experiments[0].class', (table) => (table.experiments[0].class = 'mechanical')],
+    ['consultation.cli', (table) => (table.consultation.cli = 'unknown')],
+    ['version', (table) => (table.version = 6)],
+    ['experiments', (table) => (table.experiments = {})],
+    ['classes.implementation.paced', (table) => (table.classes.implementation.paced = 'yes')],
+  ];
+  for (const [field, mutate] of cases) {
+    const table = structuredClone(valid);
+    mutate(table);
+    expect(() => parseRouting(table)).toThrow(field);
+  }
 });

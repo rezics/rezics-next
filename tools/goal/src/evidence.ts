@@ -41,8 +41,10 @@ function hypothesis(attempt: Attempt): string | null {
 
 function worktreeStatus(task: Task): { summary: string; changedPaths: string[]; stat: string } {
   const status = git(task.worktree, ['status', '--porcelain=v1', '--untracked-files=normal']);
-  const changed = git(task.worktree, ['diff', '--name-only', task.base, '--']).split('\n').filter(Boolean);
-  const untracked = git(task.worktree, ['ls-files', '--others', '--exclude-standard']).split('\n').filter(Boolean);
+  const changed = git(task.worktree, ['diff', '--name-only', '-z', task.base, '--']).split('\0').filter(Boolean);
+  const untracked = git(task.worktree, ['ls-files', '--others', '--exclude-standard', '-z'])
+    .split('\0')
+    .filter(Boolean);
   const changedPaths = [...new Set([...changed, ...untracked])].sort();
   const staged = status.split('\n').filter((line) => line && line[0] !== ' ' && line[0] !== '?').length;
   const modified = status
@@ -77,7 +79,7 @@ function buildManifest(
   const assertion =
     exactAssertion ?? failure?.assertion ?? attempt.blocker ?? attempt.result ?? 'No assertion recorded.';
   const command = attempt.failureCommand?.length ? attempt.failureCommand : task.brief.acceptance.command;
-  const pathList = allPaths.join('\n');
+  const pathList = allPaths.map((path) => JSON.stringify(path)).join('\n');
   const visiblePaths =
     pathList.length > 800 ? `${pathList.slice(0, 700)}\n[complete path list is in diff.patch]` : pathList || '(none)';
   const manifest = [

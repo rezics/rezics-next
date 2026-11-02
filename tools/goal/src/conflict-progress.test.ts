@@ -9,9 +9,30 @@ import { openDb } from './db.ts';
 import { WorkerStore } from './store.ts';
 import { git, WorkerTasks } from './tasks.ts';
 import type { GateOutcome } from './contracts.ts';
+import { canonicalConflictPaths, makeRebaseConflictContext, repeatedNoProgressConflict } from './conflict-progress.ts';
 import { integrationHarness } from './test-support.ts';
 
 const REPEATED_REDACTED_FINGERPRINT = 'same-redacted-could-not-apply-fingerprint';
+
+test('conflict path identity preserves POSIX filenames and repeated complete conflicts still stop', () => {
+  const targetHead = 'a'.repeat(40);
+  const workerCommit = 'b'.repeat(40);
+  const conflict = (paths: string[]) => makeRebaseConflictContext(targetHead, workerCommit, paths)!;
+  const spaced = conflict([' path.ts']);
+  const trimmed = conflict(['path.ts']);
+  const slash = conflict(['dir/file.ts']);
+  const backslash = conflict(['dir\\file.ts']);
+
+  expect(canonicalConflictPaths(['path.ts', ' path.ts', 'dir\\file.ts', 'dir/file.ts', 'path.ts'])).toEqual([
+    ' path.ts',
+    'dir/file.ts',
+    'dir\\file.ts',
+    'path.ts',
+  ]);
+  expect(repeatedNoProgressConflict(spaced, [trimmed, trimmed])).toBeUndefined();
+  expect(repeatedNoProgressConflict(slash, [backslash, backslash])).toBeUndefined();
+  expect(repeatedNoProgressConflict(spaced, [spaced, spaced])).toEqual(spaced);
+});
 
 function durableJob(h: ReturnType<typeof integrationHarness>): WorkerJob {
   return new WorkerJob(h.tasks, h.queue, new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory));

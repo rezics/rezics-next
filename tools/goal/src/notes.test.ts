@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -12,6 +12,10 @@ test('notes are validated: text is required, everyHours needs remindAt, unknown 
   expect(() => parseNotes([{ text: 'x', everyHours: 24 }])).toThrow('needs remindAt');
   expect(() => parseNotes([{ text: 'x', when: 'soon' }])).toThrow('unknown notes[0].when');
   expect(() => parseNotes([{ text: 'x', remindAt: 'tomorrow' }])).toThrow('ISO time');
+  for (const everyHours of [Number.MIN_VALUE, Number.MAX_VALUE])
+    expect(() => parseNotes([{ text: 'x', remindAt: '2026-10-27T03:00:00Z', everyHours }])).toThrow(
+      'notes[0].everyHours',
+    );
 });
 
 test('a reminder is due from its time, and a recurring one at its latest period', () => {
@@ -21,6 +25,9 @@ test('a reminder is due from its time, and a recurring one at its latest period'
   expect(occurrence({ text: 'x', remindAt: '2026-10-27T03:00:00Z' }, at + 5)).toBe('2026-10-27T03:00:00.000Z');
   expect(occurrence({ text: 'x', remindAt: '2026-10-27T03:00:00Z', everyHours: 24 }, at + 50 * 3_600_000)).toBe(
     '2026-10-29T03:00:00.000Z',
+  );
+  expect(occurrence({ text: 'x', remindAt: '2026-10-27T03:00:00Z', everyHours: 0.5 }, at + 45 * 60_000)).toBe(
+    '2026-10-27T03:30:00.000Z',
   );
 });
 
@@ -38,6 +45,27 @@ test('each due reminder reaches the supermanager once per occurrence', () => {
     expect(deliverDueReminders(notes, state, (s) => sent.push(s), at + 24 * 3_600_000)).toBe(1);
     expect(sent).toHaveLength(2);
     expect(sent[0]).toContain('check the Claude weekly pace');
+  } finally {
+    rmSync(state, { recursive: true, force: true });
+  }
+});
+
+test('a null reminder journal recovers with one-line delivery and deduplication', () => {
+  const state = mkdtempSync(join(tmpdir(), 'notes-journal-'));
+  const path = join(state, 'note-reminders.json');
+  const due = '2026-10-27T03:00:00.000Z';
+  try {
+    writeFileSync(path, 'null');
+    const notes = parseNotes([
+      { text: 'line one\nline two', remindAt: due },
+      { text: 'not due yet', remindAt: '2026-10-27T04:00:00Z' },
+    ]);
+    const sent: string[] = [];
+    const now = Date.parse(due);
+    expect(deliverDueReminders(notes, state, (summary) => sent.push(summary), now)).toBe(1);
+    expect(sent).toEqual([`Reminder (local configuration note, due ${due}): line one line two`]);
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ 'line one\nline two': due });
+    expect(deliverDueReminders(notes, state, (summary) => sent.push(summary), now + 1)).toBe(0);
   } finally {
     rmSync(state, { recursive: true, force: true });
   }

@@ -1,4 +1,5 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
+import * as fs from 'node:fs';
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acquireDirectoryLease } from './lease.ts';
@@ -116,6 +117,44 @@ test('concurrent dispatch processes wait for the lifecycle lease to be released'
   } finally {
     first.kill();
     second?.kill();
+    t.close();
+  }
+});
+
+test("Initialization failures preserve their cause and remove only the failed acquisition's own temporary directory.", () => {
+  const t = temporaryDirectory();
+  try {
+    const live = join(t.path, 'train.lease');
+    const lease = acquireDirectoryLease(live);
+    const foreign = join(t.path, 'foreign.initializing');
+    mkdirSync(foreign);
+    writeFileSync(join(foreign, 'keep.json'), '{}');
+    const write = fs.writeFileSync;
+    const cause = Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' });
+    const blocked = spyOn(fs, 'writeFileSync').mockImplementation(((
+      path: unknown,
+      data: unknown,
+      options?: unknown,
+    ) => {
+      if (String(path).startsWith(t.path) && String(path).includes('.initializing')) throw cause;
+      return write(path as never, data as never, options as never);
+    }) as typeof fs.writeFileSync);
+    try {
+      let thrown: unknown;
+      try {
+        acquireDirectoryLease(join(t.path, 'other.lease'));
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBe(cause);
+      expect(readdirSync(t.path).sort()).toEqual(['foreign.initializing', 'train.lease']);
+      expect(readdirSync(live)[0]).toBeDefined();
+      expect(readdirSync(foreign)).toEqual(['keep.json']);
+    } finally {
+      blocked.mockRestore();
+      lease.release();
+    }
+  } finally {
     t.close();
   }
 });

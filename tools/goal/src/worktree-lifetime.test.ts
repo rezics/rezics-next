@@ -19,7 +19,12 @@ import { openDb } from './db.ts';
 import { WorkerStore } from './store.ts';
 import { harness } from './test-support.ts';
 import { git } from './tasks.ts';
-import { removeFinishedWorktree, IO_PRESSURE_LIMIT, type LifetimeRuntime } from './worktree-lifetime.ts';
+import {
+  removeFinishedWorktree,
+  IO_PRESSURE_LIMIT,
+  IO_PRESSURE_WAIT_ATTEMPTS,
+  type LifetimeRuntime,
+} from './worktree-lifetime.ts';
 
 function setup(
   state: 'integrated' | 'merged' | 'cancelled' | 'running' | 'landing' | 'ready' | 'held' | 'stopped' = 'integrated',
@@ -133,6 +138,34 @@ test('removal takes one worktree at a time and waits while disk pressure is abov
   }
 });
 
+test('finished-worktree cleanup defers within a finite pass under sustained I/O pressure and later resumes safely', async () => {
+  const { h, task } = setup('integrated');
+  let waits = 0;
+  let commands = 0;
+  const pressured = fake({
+    pressure: () => IO_PRESSURE_LIMIT + 1,
+    sleep: async (ms) => {
+      expect(ms).toBe(1000);
+      expect(++waits).toBeLessThanOrEqual(IO_PRESSURE_WAIT_ATTEMPTS);
+    },
+    command: () => {
+      commands++;
+    },
+  });
+  try {
+    expect(await removeFinishedWorktree(h.settings, h.store, pressured)).toBeNull();
+    expect(waits).toBe(IO_PRESSURE_WAIT_ATTEMPTS);
+    expect(commands).toBe(0);
+    expect(existsSync(task.worktree)).toBe(true);
+    expect(h.store.worktreeCleanup(task.id)).toBeUndefined();
+
+    expect(await removeFinishedWorktree(h.settings, h.store, fake())).toBe(task.id);
+    expect(existsSync(task.worktree)).toBe(false);
+  } finally {
+    h.dispose();
+  }
+});
+
 test('a retry recreates a removed task worktree from its task branch and installs dependencies before launch', async () => {
   const { h, task } = setup('stopped');
   writeFileSync(join(task.worktree, 'package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0' }));
@@ -148,7 +181,7 @@ test('a retry recreates a removed task worktree from its task branch and install
     expect(git(task.worktree, ['rev-parse', 'HEAD'])).toBe(original);
     expect(existsSync(join(task.worktree, 'node_modules'))).toBe(true);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });
 

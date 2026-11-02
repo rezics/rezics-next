@@ -1,6 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
 /** `note` and `$comment` annotate any object in the local settings; they are removed before validation. */
 export function withoutAnnotations(value: unknown): unknown {
@@ -18,26 +28,65 @@ export function readLocalFile(file: string): unknown {
   return existsSync(file) ? withoutAnnotations(JSON.parse(readFileSync(file, 'utf8'))) : {};
 }
 
-export type ConfigurationProblem = { file: string; error: string; reported: boolean; snapshot: string; key: string };
-type Snapshot = { file: string; local: unknown; reported?: string };
+export type ConfigurationProblem = {
+  file: string;
+  error: string;
+  reported: boolean;
+  snapshot: string;
+  key: string;
+  token: string;
+};
+type Snapshot = { file: string; local: unknown; reported?: string; problem?: string; problemToken?: string };
 
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 const problems = new WeakMap<object, ConfigurationProblem>();
 
-/** One snapshot per canonical local file, so another checkout's or file's settings are never substituted. */
-function snapshotPath(file: string, initialMain: string): string {
-  let canonical = file;
+/** Resolve aliases in the existing path prefix too, so a missing settings file retains its canonical identity. */
+function canonicalFile(file: string, aliases = new Set<string>()): string {
+  const absolute = resolve(file);
   try {
-    canonical = realpathSync(file);
+    return realpathSync(absolute);
   } catch {
-    /* a missing file keeps its resolved path */
+    /* the file may be missing or a dangling symlink */
   }
-  return join(initialMain, '.temp/goal/configuration', `${sha(canonical)}.json`);
+  if (!aliases.has(absolute)) {
+    try {
+      if (lstatSync(absolute).isSymbolicLink()) {
+        const target = readlinkSync(absolute);
+        const resolved = isAbsolute(target) ? target : resolve(dirname(absolute), target);
+        const nextAliases = new Set(aliases);
+        nextAliases.add(absolute);
+        return canonicalFile(resolved, nextAliases);
+      }
+    } catch {
+      /* not a readable symlink; resolve the existing parent below */
+    }
+  }
+  const missing: string[] = [];
+  let ancestor = absolute;
+  while (true) {
+    try {
+      return join(realpathSync(ancestor), ...missing);
+    } catch {
+      const parent = dirname(ancestor);
+      if (parent === ancestor) return absolute;
+      missing.unshift(basename(ancestor));
+      ancestor = parent;
+    }
+  }
 }
-function readSnapshot(path: string, file: string): Snapshot | undefined {
+/** One snapshot per canonical local file, so another checkout's or file's settings are never substituted. */
+function snapshotPath(identity: string, initialMain: string): string {
+  return join(initialMain, '.temp/goal/configuration', `${sha(identity)}.json`);
+}
+function readSnapshot(path: string, identity: string): Snapshot | undefined {
   try {
     const snapshot = JSON.parse(readFileSync(path, 'utf8')) as Snapshot;
-    return snapshot.file === file && snapshot.local !== undefined ? snapshot : undefined;
+    return typeof snapshot.file === 'string' &&
+      snapshot.local !== undefined &&
+      (snapshot.file === identity || canonicalFile(snapshot.file) === identity)
+      ? snapshot
+      : undefined;
   } catch {
     return undefined;
   }
@@ -64,21 +113,26 @@ export function loadLocalSettings<T extends object>(
   initialMain: string,
   validate: (local: unknown) => T,
 ): T {
-  const path = snapshotPath(file, initialMain);
+  const identity = canonicalFile(file);
+  const path = snapshotPath(identity, initialMain);
   let text = '';
   try {
     text = existsSync(file) ? readFileSync(file, 'utf8') : '';
     const local = text ? withoutAnnotations(JSON.parse(text)) : {};
     const settings = validate(local);
-    if (text) {
-      const previous = readSnapshot(path, file);
-      // A valid file also clears the reported marker, so the next invalid edit is reported again.
-      if (previous?.reported !== undefined || JSON.stringify(previous?.local) !== JSON.stringify(local))
-        writeSnapshot(path, { file, local });
-    }
+    const previous = readSnapshot(path, identity);
+    // An accepted empty or missing file is a clear; valid settings also reset invalid-edit reporting.
+    if (
+      previous?.file !== identity ||
+      previous?.problem !== undefined ||
+      previous?.problemToken !== undefined ||
+      previous?.reported !== undefined ||
+      JSON.stringify(previous?.local) !== JSON.stringify(local)
+    )
+      writeSnapshot(path, { file: identity, local });
     return settings;
   } catch (error) {
-    const snapshot = readSnapshot(path, file);
+    let snapshot = readSnapshot(path, identity);
     if (!snapshot) throw error;
     let settings: T;
     try {
@@ -88,7 +142,23 @@ export function loadLocalSettings<T extends object>(
     }
     const message = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ').slice(0, 300);
     const key = sha(`${text}\0${message}`);
-    problems.set(settings, { file, error: message, reported: snapshot.reported === key, snapshot: path, key });
+    const sameProblem = snapshot.problem === key && snapshot.problemToken !== undefined;
+    const legacyReported = snapshot.problem === undefined && snapshot.reported === key;
+    const token = sameProblem ? snapshot.problemToken! : randomUUID();
+    if (!sameProblem) {
+      const next: Snapshot = { ...snapshot, file: identity, problem: key, problemToken: token };
+      if (!legacyReported) delete next.reported;
+      snapshot = next;
+      writeSnapshot(path, snapshot);
+    }
+    problems.set(settings, {
+      file,
+      error: message,
+      reported: snapshot.reported === key,
+      snapshot: path,
+      key,
+      token,
+    });
     return settings;
   }
 }
@@ -99,6 +169,7 @@ export function configurationProblem(settings: object): ConfigurationProblem | u
 }
 /** Record that this invalid version was reported, so later processes do not report it again. */
 export function reportedConfigurationProblem(problem: ConfigurationProblem): void {
-  const snapshot = readSnapshot(problem.snapshot, problem.file);
-  if (snapshot) writeSnapshot(problem.snapshot, { ...snapshot, reported: problem.key });
+  const snapshot = readSnapshot(problem.snapshot, canonicalFile(problem.file));
+  if (snapshot?.problem === problem.key && snapshot.problemToken === problem.token && snapshot.reported !== problem.key)
+    writeSnapshot(problem.snapshot, { ...snapshot, reported: problem.key });
 }

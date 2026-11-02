@@ -51,7 +51,15 @@ function git(cwd: string, ...args: string[]): string {
   return result.stdout.trimEnd();
 }
 export function isAncestor(cwd: string, commit: string, head: string): boolean {
-  return spawnSync('git', ['merge-base', '--is-ancestor', commit, head], { cwd }).status === 0;
+  const args = ['merge-base', '--is-ancestor', commit, head];
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  if (result.status === 0) return true;
+  if (result.status === 1) return false;
+  const cause =
+    result.error?.message ||
+    result.stderr?.trim() ||
+    (result.signal ? `terminated by signal ${result.signal}` : `exited with status ${result.status}`);
+  throw new Error(`git ${args.join(' ')} failed: ${cause}`);
 }
 /** Git's trailer parser excludes matching text in the subject or ordinary message body. */
 export function workspaceCommits(cwd: string, base: string, head = 'HEAD'): Map<string, string[]> {
@@ -165,7 +173,15 @@ export class WorkspaceController {
     try {
       git(workspace.worktree, 'merge', '--no-edit', dev);
     } catch (error) {
-      git(workspace.worktree, 'merge', '--abort');
+      try {
+        git(workspace.worktree, 'merge', '--abort');
+      } catch (abortError) {
+        throw new AggregateError(
+          [error, abortError],
+          `${String(error)}; merge --abort cleanup also failed: ${String(abortError)}`,
+          { cause: error },
+        );
+      }
       throw error;
     }
     return true;
