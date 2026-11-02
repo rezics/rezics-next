@@ -72,13 +72,7 @@ async function growUnrelatedOrders(db: GrowthDatabase, anchor: Order, from: numb
   );
 }
 
-async function growReceipts(
-  db: GrowthDatabase,
-  prefix: string,
-  principalId: string,
-  from: number,
-  to: number,
-) {
+async function growReceipts(db: GrowthDatabase, prefix: string, principalId: string, from: number, to: number) {
   if (from === to) return;
   const rows = Array.from({ length: to - from }, (_, offset) => ({
     idempotency_key: `payment-path-growth:${prefix}:${from + offset}`,
@@ -99,13 +93,7 @@ async function growReceipts(
   );
 }
 
-async function growWorkflowRows(
-  db: GrowthDatabase,
-  prefix: string,
-  from: number,
-  to: number,
-  providerEvents: boolean,
-) {
+async function growWorkflowRows(db: GrowthDatabase, prefix: string, from: number, to: number, providerEvents: boolean) {
   if (from === to) return;
   const now = Date.now();
   const rows = Array.from({ length: to - from }, (_, offset) => {
@@ -183,8 +171,7 @@ async function checkAxis(
     name: `Commerce ${operationName} / unrelated ${axis}`,
     scales,
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-    grow: (db, scale, previous) =>
-      growAxis(db, anchor, axis, prefix, principalId, previous, scale),
+    grow: (db, scale, previous) => growAxis(db, anchor, axis, prefix, principalId, previous, scale),
     operation,
     ...(hooks.prepare === undefined ? {} : { prepare: hooks.prepare }),
     ...(hooks.warmup === undefined ? {} : { warmup: hooks.warmup }),
@@ -285,7 +272,11 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
     });
     const app = createApp({
       pool: db.pool,
-      writeRate: { async spend() { return { allowed: true as const }; } },
+      writeRate: {
+        async spend() {
+          return { allowed: true as const };
+        },
+      },
     });
     const webhook = stripeWebhookRoutes(app, {
       secrets: [secret],
