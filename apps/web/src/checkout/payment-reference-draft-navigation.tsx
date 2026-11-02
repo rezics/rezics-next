@@ -82,17 +82,12 @@ export function PaymentReferenceDraftNavigation({
   return (
     <>
       {router ? <RouterDraftBoundary protectedNow={protectedNow} confirm={() => confirmRef.current()} /> : null}
-      <AlertDialog
-        open={open && protectedNow()}
-        onOpenChange={(value) => !value && pending.current && choose(false)}
-      >
+      <AlertDialog open={open && protectedNow()} onOpenChange={(value) => !value && pending.current && choose(false)}>
         {open && protectedNow() ? (
           <AlertDialogContent
             initialFocus={stayButton}
             finalFocus={() =>
-              !discarded.current && protectedNow() && returnFocus.current?.isConnected
-                ? returnFocus.current
-                : false
+              !discarded.current && protectedNow() && returnFocus.current?.isConnected ? returnFocus.current : false
             }
           >
             <AlertDialogHeader>

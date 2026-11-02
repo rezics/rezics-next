@@ -14,10 +14,7 @@ import {
   type PaymentAttestationInput,
   type PaymentAttestationResult,
 } from './creator-payment-attestation-state';
-import {
-  hasUnsentPaymentReference,
-  PaymentReferenceDraftNavigation,
-} from './payment-reference-draft-navigation';
+import { hasUnsentPaymentReference, PaymentReferenceDraftNavigation } from './payment-reference-draft-navigation';
 
 /** This region shares the statement reader's current origin; it starts no parallel reader. */
 export function CreatorPaymentAttestation({

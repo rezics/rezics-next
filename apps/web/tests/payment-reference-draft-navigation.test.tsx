@@ -66,15 +66,13 @@ test('unsent references warn on departure, Stay preserves text and focus, and di
               submissions++;
             }}
           >
-            <input
-              ref={field}
-              value={reference}
-              onChange={(event) => setReference(event.target.value)}
-            />
+            <input ref={field} value={reference} onChange={(event) => setReference(event.target.value)} />
             <button type="submit">Record</button>
           </form>
         ) : null}
-        <button type="button" onClick={refresh}>Refresh evidence</button>
+        <button type="button" onClick={refresh}>
+          Refresh evidence
+        </button>
         <Link to="/next">Next page</Link>
         <PaymentReferenceDraftNavigation
           active={hasUnsentPaymentReference(reference, captured)}
