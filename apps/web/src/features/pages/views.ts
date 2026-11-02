@@ -127,6 +127,31 @@ function previewLimit(node: Node, read: { limit?: number } | undefined): number 
   return Math.min(read?.limit ?? 12, 12);
 }
 
+/** A window size does not distinguish lists; every other planned constraint still does. */
+function previewListKey(read: object | undefined): string | undefined {
+  if (!read) return;
+  return JSON.stringify(
+    Object.entries(read)
+      .filter(([name]) => name !== 'limit')
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+/** Repeated windows supply one list's strongest count. An unknown window cannot establish a total. */
+function navigationCount(lists: Iterable<readonly (Count | undefined)[]>): Count | undefined {
+  return sumCounts(
+    Array.from(lists, (counts) => {
+      let best: Count | undefined;
+      for (const count of counts) {
+        if (!count) return;
+        if (!best || (best.relation !== 'exact' && (count.relation === 'exact' || count.value > best.value)))
+          best = count;
+      }
+      return best;
+    }),
+  );
+}
+
 /** The items and total a preview read returned for one node. Nothing when the read did not succeed. */
 function previewCount(
   node: Node,
@@ -173,7 +198,11 @@ function previewCount(
   if (read.kind.startsWith('account') && Array.isArray(listed)) {
     // A list has no total, only a continuation: a shown count is exact when nothing follows.
     const items = Math.min(listed.length, previewLimit(node, read));
-    return { items, count: { value: listed.length, relation: body.next == null ? 'exact' : 'lower_bound' } };
+    return {
+      items,
+      more: body.next != null || listed.length > items,
+      count: { value: listed.length, relation: body.next == null ? 'exact' : 'lower_bound' },
+    };
   }
   if (read.kind === 'collections' && Array.isArray(body.collections)) {
     const count = isRecord(body.count) ? body.count : undefined;
@@ -246,9 +275,7 @@ export function subjectTabs(page: {
     View,
     {
       items: number;
-      counts: (Count | undefined)[];
-      previews: number;
-      counted: number;
+      lists: Map<string | undefined, (Count | undefined)[]>;
       fits: boolean;
       more: boolean;
       unavailable: boolean;
@@ -260,23 +287,22 @@ export function subjectTabs(page: {
     if (!view || !defined.has(view)) continue;
     const sum = sums.get(view) ?? {
       items: 0,
-      counts: [],
-      previews: 0,
-      counted: 0,
+      lists: new Map<string | undefined, (Count | undefined)[]>(),
       fits: true,
       more: false,
       unavailable: false,
     };
-    sum.previews += 1;
     const key = Object.hasOwn(plan.nodes, node.props.id as string) ? plan.nodes[node.props.id as string] : undefined;
     const planned = key === undefined ? undefined : plan.reads[key];
     if (planned && (planned.kind !== 'subjectThreads' || (key !== undefined && page.reads[key]?.status === 200)))
       openReads.add(view);
     const counted = previewCount(node, planned, key === undefined ? undefined : page.reads[key]);
+    const list = previewListKey(planned);
+    const counts = sum.lists.get(list) ?? [];
+    counts.push(counted?.count);
+    sum.lists.set(list, counts);
     if (counted) {
-      sum.counted += 1;
       sum.items += counted.items;
-      sum.counts.push(counted.count);
       sum.more ||= counted.more === true || !!counted.count?.value;
       sum.fits =
         sum.fits &&
@@ -285,7 +311,6 @@ export function subjectTabs(page: {
         counted.count.relation === 'exact' &&
         counted.count.value === counted.items;
     } else {
-      sum.counts.push(undefined);
       sum.fits = false;
       const status = key === undefined ? undefined : page.reads[key]?.status;
       // Only an explicit dependency failure establishes an unavailable read; absent and concealed reads stay closed.
@@ -298,14 +323,14 @@ export function subjectTabs(page: {
     if (OPEN_READ_VIEWS.has(view)) {
       if (!openReads.has(view)) return [];
       const sum = sums.get(view);
-      const count = sum ? sumCounts(sum.counts) : undefined;
+      const count = sum ? navigationCount(sum.lists.values()) : undefined;
       return [{ view, ...(sum && sum.items > 0 && count ? { count } : {}) }];
     }
     if (ALWAYS.has(view) && !driven.has(view)) return [{ view }];
     const sum = sums.get(view);
     if (!sum || (sum.items === 0 && !sum.more && !sum.unavailable)) return [];
-    if (!ALWAYS.has(view) && sum.fits && sum.previews === sum.counted) return [];
-    const count = sumCounts(sum.counts);
+    if (!ALWAYS.has(view) && sum.fits) return [];
+    const count = navigationCount(sum.lists.values());
     return [{ view, ...(count ? { count } : {}) }];
   });
 }

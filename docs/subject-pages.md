@@ -651,6 +651,8 @@ they voiced or played) when any exist. A character shows Appearances (works, wit
 A Realm-routed page adds nothing to this list; it changes the population of scores, reviews and discussion (see
 [Realm context](#realm-context)).
 
+Repeated previews of the same planned list, including different limits, contribute its strongest supplied count once (an exact total before a lower bound); any unknown total stays unknown, distinct lists add as before, and every preview must independently fit before its tab is hidden.
+
 Views appear in the order above. Each tab shows its count when the count is known. A view whose feature is not open is
 left out, with no panel or notice; its URL redirects to the overview. A view with no data is left out, except Reviews
 and Discussion, whose open reads invite the first contribution when empty. A list view whose items all fit in
