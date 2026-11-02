@@ -2,7 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { FactResult } from '../src/features/catalogue/subject-facts';
+import type { FactCommand, FactResult } from '../src/features/catalogue/subject-facts';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 test('Game discards only the confirmed unsent classification and retires confirmations with drafts and authority', async () => {
@@ -47,7 +47,9 @@ test('Game discards only the confirmed unsent classification and retires confirm
     epoch = 'original',
     generation = 0,
     requests = 0;
-  let propose: () => Promise<FactResult> = async () => ({ ok: false, reason: 'stale' });
+  let propose: (command: FactCommand) => Promise<FactResult> = async () => ({ ok: false, reason: 'stale' });
+  const nativeCommands: FactCommand[] = [];
+  let duringProposal: (() => void) | undefined;
   const props = {
     read,
     locale: 'en',
@@ -55,9 +57,11 @@ test('Game discards only the confirmed unsent classification and retires confirm
     review: fixture.transport.classificationReview,
     transport: {
       read: fixture.transport.facts.read,
-      propose: () => {
+      propose: (command: FactCommand) => {
         requests++;
-        return propose();
+        nativeCommands.push(structuredClone(command));
+        duringProposal?.();
+        return propose(command);
       },
     },
   };
@@ -84,6 +88,12 @@ test('Game discards only the confirmed unsent classification and retires confirm
   const hasConfirmation = () => within(section()).queryByRole('button', { name: m.candidate_cancel() });
   const click = (node: HTMLElement) => act(async () => user.click(node));
   const input = () => within(section()).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement;
+  const retainChange = (field: HTMLInputElement) => {
+    const key = Object.getOwnPropertyNames(field).find((name) => name.startsWith('__reactProps$'));
+    const handler = key ? (Reflect.get(field, key) as { onChange?: (event: unknown) => void }).onChange : undefined;
+    if (!handler) throw new Error('Missing mounted Game classification part callback');
+    return (value: string) => handler({ target: { value } });
+  };
   const edit = async () => {
     await click(buttons(m.facts_edit_field())[0]!);
     await act(async () => {
@@ -135,17 +145,36 @@ test('Game discards only the confirmed unsent classification and retires confirm
     for (const reason of ['stale', 'uncertain'] as const) {
       generation++;
       await render();
+      if (reason === 'uncertain') {
+        await edit();
+        const discardedPart = retainChange(input());
+        await click(discard());
+        await click(discard());
+        await click(buttons(m.facts_edit_field())[0]!);
+        expect(input().value).toBe('en');
+        discardedPart('discarded callback');
+        expect(input().value).toBe('en');
+      }
       await edit();
       await click(discard());
       const confirmation = discard();
       const delivery = Promise.withResolvers<FactResult>();
+      if (reason === 'uncertain') duringProposal = retainChange(input()).bind(null, 'late sealed edit');
       propose = () => delivery.promise;
       await submit();
+      duringProposal = undefined;
+      if (reason === 'uncertain') expect(input().value).toBe('fr');
       expect((discard() as HTMLButtonElement).disabled).toBe(true);
       await act(async () => confirmation.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
       expect(input().value).toBe('fr');
       await act(async () => delivery.resolve({ ok: false, reason }));
       expect((discard() as HTMLButtonElement).disabled).toBe(true);
+      if (reason === 'uncertain') {
+        expect(nativeCommands.at(-1)?.statement.value).toEqual({ type: 'value', content: 'fr' });
+        propose = async () => ({ ok: false, reason: 'uncertain' });
+        await submit();
+        expect(nativeCommands.at(-1)).toEqual(nativeCommands.at(-2));
+      }
       if (reason === 'stale') {
         await click(buttons(m.catalogue_create_review_new())[0]!);
         expect((discard() as HTMLButtonElement).disabled).toBe(false);

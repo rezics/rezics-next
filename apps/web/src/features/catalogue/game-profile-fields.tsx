@@ -520,6 +520,20 @@ function GameClassificationsLive({
   const focusAfterDiscard = useRef<FactDraft | null>(null);
   const current = useRef({ drafts, busy, lifetime, fields, read });
   current.current = { drafts, busy, lifetime, fields, read };
+  const canEdit = (draft: FactDraft, rows = current.current.drafts) => {
+    const active = current.current;
+    return (
+      active.lifetime === lifetime &&
+      active.lifetime.active() &&
+      active.read === read &&
+      active.fields.includes(draft.property) &&
+      rows.some((row) => row === draft) &&
+      !running.current &&
+      !active.busy &&
+      !draft.command &&
+      !factLocked(draft)
+    );
+  };
   const canDiscard = (row: FactDraft) =>
     current.current.lifetime.active() &&
     !running.current &&
@@ -595,32 +609,32 @@ function GameClassificationsLive({
           const selected = admitted ? (read.public.subject.statements[property] ?? []) : [];
           const editorContext = editorRelease ? { ...context, release: editorRelease } : context;
           const stage = (source: (typeof selected)[number] | null) => {
-            if (
-              !current.current.lifetime.active() ||
-              current.current.read !== read ||
-              !current.current.fields.includes(property)
-            )
-              return;
+            const canStage = (rows = current.current.drafts) =>
+              current.current.lifetime === lifetime &&
+              current.current.lifetime.active() &&
+              current.current.read === read &&
+              current.current.fields.includes(property) &&
+              !rows.some((row) => row.property === property) &&
+              (source === null || selected.includes(source));
+            if (!canStage()) return;
             const baseline = source ? statementInput(source) : null;
+            const draft: FactDraft = {
+              property,
+              source: source?.id ?? null,
+              baseline,
+              included: true,
+              statement: baseline
+                ? structuredClone(baseline)
+                : {
+                    property: { id: property },
+                    value: { type: 'value', content: '' },
+                    qualifiers: [],
+                    references: [],
+                    rank: 'normal',
+                  },
+            };
             setDraftReleases((rows) => ({ ...rows, [property]: read.release }));
-            setDrafts((rows) => [
-              ...rows,
-              {
-                property,
-                source: source?.id ?? null,
-                baseline,
-                included: true,
-                statement: baseline
-                  ? structuredClone(baseline)
-                  : {
-                      property: { id: property },
-                      value: { type: 'value', content: '' },
-                      qualifiers: [],
-                      references: [],
-                      rank: 'normal',
-                    },
-              },
-            ]);
+            setDrafts((rows) => (canStage(rows) ? [...rows, draft] : rows));
           };
           return (
             <section key={property} data-classification-property={property} className="min-w-0 max-w-full">
@@ -689,17 +703,15 @@ function GameClassificationsLive({
                         context={editorContext}
                         locale={locale}
                         search={search}
+                        editAllowed={() => canEdit(draft)}
                         change={(statement) =>
-                          lifetime.active() &&
-                          current.current.read === read &&
-                          current.current.fields.includes(property) &&
-                          current.current.drafts.includes(draft) &&
+                          canEdit(draft) &&
                           setDrafts((rows) =>
-                            rows.map((row) =>
-                              row.property === property
-                                ? { ...row, statement, result: undefined, command: undefined }
-                                : row,
-                            ),
+                            canEdit(draft, rows)
+                              ? rows.map((row) =>
+                                  row === draft ? { ...row, statement, result: undefined, command: undefined } : row,
+                                )
+                              : rows,
                           )
                         }
                       />
