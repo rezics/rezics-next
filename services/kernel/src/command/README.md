@@ -388,6 +388,9 @@ The body receives the actual `currentCommand` transaction and must await its que
 owner-derived dimensions; Core enforces its statement count and lifetime. Row/fanout/byte bounds remain structural
 owner obligations. `publisherCommandWork(bodyWork)` adds the static Core components; Semantic's canonical
 representation and bounded body constants are additional operands, never inferred to be zero.
+Core invokes at most twelve Semantic selections, three result encodes and one result decode per execution
+including canonical verification; replay/resolution use at most seven selections, one encode and one decode.
+Those finite representation multiplicities are additive with the owner's body work.
 
 The canonical [activation result](publisher-activation-result.ts), its digest and actual fence metadata commit
 in `core.publisher_operation` in the same serializable transaction as the body. The coordination branch advances
@@ -408,12 +411,12 @@ Static Core costs below use the existing eight work dimensions. Candidate keys, 
 are zero; PostgreSQL MVCC/index maintenance stays within the engine boundary. Each exact key costs O(log H),
 independent of unrelated operations. Bytes conservatively include SQL, scalar parameters and bytea hex transport.
 
-| Component | Rows | Points | Statements | Bytes | Empty seeks |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Controls, including rollback | 2 | 1 | 9 | 8192 | 1 |
-| Association insert/lock/store | 4 | 8 | 3 | 147456 | 2 |
-| Resolution lookup | 1 | 1 | 1 | 135168 | 1 |
-| Cleanup batch, at most 100 | 200 | 300 | 1 | 32768 | 1 |
+| Component                     | Rows | Points | Statements |  Bytes | Empty seeks |
+| ----------------------------- | ---: | -----: | ---------: | -----: | ----------: |
+| Controls, including rollback  |    2 |      1 |          9 |   8192 |           1 |
+| Association insert/lock/store |    4 |      8 |          3 | 147456 |           2 |
+| Resolution lookup             |    1 |      1 |          1 | 135168 |           1 |
+| Cleanup batch, at most 100    |  200 |    300 |          1 |  32768 |           1 |
 
 Controls cover checkout/release (zero SQL), the executor's two BEGIN dispatches, lock timeout, initial/final
 statement timeout, scalar authoritative time, one partition fence, absent-source finalization (zero SQL), COMMIT

@@ -587,6 +587,7 @@ export async function runCommand<T>(
     if (dispatch) await dispatch.prepare();
     const result = await executeCommand(pool, input, body, dispatch, publisher);
     dispatch?.checkpoint();
+    publisher?.assertLive();
     succeeded = true;
     return result;
   } finally {
@@ -874,9 +875,15 @@ async function executeCommand<T>(
             await dispatch.control('finalize', () => finalizeCommandRecordSources(tx, BigInt(row[0]!.position)));
           else await finalizeCommandRecordSources(tx, BigInt(row[0]!.position));
           if (publisher) {
-            await publisher.store(client, {
-              epoch: row[0]!.epoch, position: row[0]!.position, transactionId,
-            }, value);
+            await publisher.store(
+              client,
+              {
+                epoch: row[0]!.epoch,
+                position: row[0]!.position,
+                transactionId,
+              },
+              value,
+            );
             publisher.assertLive();
           }
           await measureCommandPhase('commit', () =>
