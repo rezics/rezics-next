@@ -208,7 +208,7 @@ test('question closure requires a direct info or decision link; digest groups ac
 test('malformed optional metadata stays unavailable while shared inbox views retain messages and counts', () => {
   const s = setup();
   try {
-    const decision = { managerId: 'owner', from: 'worker', kind: 'decision', summary: 'Decision', goalId: 'g',
+    const decision = { managerId: 'owner', from: 'worker', kind: 'decision' as const, summary: 'Decision', goalId: 'g',
       taskId: 't', documentRefs: [{ path: 'docs/decision.md' }], escalation: { reason: 'Explicit context' } };
     s.inbox.deliver(decision);
     s.inbox.deliver({ managerId: 'owner', from: 'worker', kind: 'blocker', summary: 'Blocked', goalId: 'g', taskId: 't', replyToId: 1 });
