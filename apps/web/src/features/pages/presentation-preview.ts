@@ -15,6 +15,7 @@ import {
   type TemplateTarget,
 } from '@rezics/composition';
 import { requestLanguages } from '../../kernel/languages';
+import { admitActiveMetadata } from './curation-read-response';
 import type { SubjectPageData } from './subject';
 
 export type PresentationPreviewInput = {
@@ -187,7 +188,9 @@ export async function loadPresentationPreview(client: KernelClient, value: unkno
     ]);
     if (pinned.status !== 200 || !pinned.data) return failure(pinned.status);
     if (active.status !== 200 || !active.data) return failure(active.status);
-    if (active.data.digest !== page.profile) return { ok: false, reason: 'changed' };
+    const activeMetadata = admitActiveMetadata(active.data);
+    if (!activeMetadata) return { ok: false, reason: 'unavailable' };
+    if (activeMetadata.digest !== page.profile) return { ok: false, reason: 'changed' };
     if (pinned.data.digest !== page.profile || validateProfile(platformRegistry, pinned.data.profile).length > 0)
       return { ok: false, reason: 'unavailable' };
     const profile = pinned.data.profile as PresentationProfile;
@@ -203,7 +206,7 @@ export async function loadPresentationPreview(client: KernelClient, value: unkno
       )
         return { ok: false, reason: 'missing' };
     }
-    return { ok: true, target: input.target, locale: input.locale, head: active.data.head, page };
+    return { ok: true, target: input.target, locale: input.locale, head: activeMetadata.head, page };
   } catch {
     return { ok: false, reason: 'unavailable' };
   }

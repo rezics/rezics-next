@@ -18,7 +18,7 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function admitActiveMetadata(value: unknown): { digest: string; head: number } | undefined {
+export function admitActiveMetadata(value: unknown): { digest: string; head: number } | undefined {
   if (
     !record(value) ||
     typeof value.digest !== 'string' ||
