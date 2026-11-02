@@ -422,12 +422,19 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     expect(host.textContent).toContain('Captured purchase B');
     expect(host.textContent).toContain('$789.01');
     absent('A'); // B is usable while A's native continuation is still pending.
+    await settle(oldA, response('A'));
+    expect(host.textContent).toContain('Captured purchase B');
+    absent('A');
+    search = { cursor: 'pending-before-malformed' };
+    show(viewer('B'));
+    await tick();
+    const lateBeforeMalformed = reads.at(-1)!;
     const beforeMalformed = reads.length;
     search = { cursor: null };
     show(viewer('B'));
     absent('B');
     await tick();
-    await settle(oldA, response('A'));
+    await settle(lateBeforeMalformed, response('B', 'pending-before-malformed'));
     absent('A');
     absent('B');
     expect(reads).toHaveLength(beforeMalformed);
