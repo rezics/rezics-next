@@ -84,11 +84,7 @@ function titleText(value: unknown, pointer: string): string {
 }
 function aliasLines(value: unknown, pointer: string): string[] {
   if (value === undefined || value === null || value === '') return [];
-  if (
-    typeof value !== 'string' ||
-    !value.isWellFormed() ||
-    Buffer.byteLength(value, 'utf8') > vndbLimits.recordBytes
-  )
+  if (typeof value !== 'string' || !value.isWellFormed() || Buffer.byteLength(value, 'utf8') > vndbLimits.recordBytes)
     fail('Invalid or oversized alias list', pointer);
   const source = value as string;
   const aliases: string[] = [];
@@ -347,9 +343,7 @@ export function convertVndb(
     const statements = [
       statement('wdt:P3180', id),
       ...Array.from(uniqueTitles.values(), (title) => statement('schema:name', title)),
-      ...nativeAliases.map((alias) =>
-        statement('schema:alternateName', { language: 'und', text: alias }),
-      ),
+      ...nativeAliases.map((alias) => statement('schema:alternateName', { language: 'und', text: alias })),
     ];
     const diagnostics: ConversionDiagnostic[] = [];
     if (normalizedRecord.vn.olang !== undefined) {

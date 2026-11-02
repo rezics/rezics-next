@@ -108,7 +108,13 @@ test('materialization baseline is the actual completed RunStore row and acquisit
   try {
     const run = await f.stage();
     const grouped = f.facade.page(run, null, 1).records[0]!;
-    expect(grouped.record.vn).toEqual({ id: 'v123', olang: 'en', c_votecount: 2, c_average: 700, alias: 'Harbor Sentinel' });
+    expect(grouped.record.vn).toEqual({
+      id: 'v123',
+      olang: 'en',
+      c_votecount: 2,
+      c_average: 700,
+      alias: 'Harbor Sentinel',
+    });
     expect((await f.facade.commit(run)).status).toBe('committed');
     const before = f.facade.baseline('v123');
     expect(before).toEqual({
@@ -180,7 +186,11 @@ test('native aliases survive bootstrap, bound refresh, removal and durable repla
     const original = await f.stage();
     expect((await f.facade.commit(original)).status).toBe('committed');
     const commands = () => f.calls.flatMap((request) => request.commands);
-    expect(commands()).toEqual(expect.arrayContaining([expect.objectContaining({ op: 'create', subject: { aliases: { und: ['Harbor Sentinel'] } } })]));
+    expect(commands()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ op: 'create', subject: { aliases: { und: ['Harbor Sentinel'] } } }),
+      ]),
+    );
     const digest = f.facade.baseline('v123')!.digest;
 
     f.calls.length = 0;
@@ -192,7 +202,18 @@ test('native aliases survive bootstrap, bound refresh, removal and durable repla
     expect((await f.facade.commit(changed)).status).toBe('bulk-failed');
     expect(f.facade.baseline('v123')!.digest).toBe(digest);
     const replay = structuredClone(f.calls[0]!);
-    expect(commands()).toEqual(expect.arrayContaining([expect.objectContaining({ op: 'propose', source: expect.objectContaining({ external_id: 'v123' }), statement: expect.objectContaining({ property: { id: 'schema:alternateName' }, value: { type: 'value', content: { language: 'und', text: 'Harbor Watch' } } }) })]));
+    expect(commands()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          op: 'propose',
+          source: expect.objectContaining({ external_id: 'v123' }),
+          statement: expect.objectContaining({
+            property: { id: 'schema:alternateName' },
+            value: { type: 'value', content: { language: 'und', text: 'Harbor Watch' } },
+          }),
+        }),
+      ]),
+    );
 
     await f.reopen();
     f.deny(false);
