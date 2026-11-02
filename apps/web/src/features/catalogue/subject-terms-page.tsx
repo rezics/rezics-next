@@ -191,8 +191,22 @@ function SubjectTermsPageLive({
     setLanguage(next);
   }
 
-  function clearLocalDraft(target: string, remove: boolean, expected: LanguageDraft | undefined, focusScaffold = false) {
-    if (!lifetime.active() || !base || busy || uncertain || stale || saved || session !== 'signed-in' || running.current)
+  function clearLocalDraft(
+    target: string,
+    remove: boolean,
+    expected: LanguageDraft | undefined,
+    focusScaffold = false,
+  ) {
+    if (
+      !lifetime.active() ||
+      !base ||
+      busy ||
+      uncertain ||
+      stale ||
+      saved ||
+      session !== 'signed-in' ||
+      running.current
+    )
       return;
     if (drafts[target] !== expected) return;
     // Stored terms can only be removed through an explicit field change and submission.
@@ -266,7 +280,9 @@ function SubjectTermsPageLive({
 
   function confirmLocalAction(decision: LocalTermsDecision) {
     if (!isCurrentDecision(decision)) return;
-    const target = decision.remove ? document.getElementById(domId('language')) : document.getElementById(domId('language'));
+    const target = decision.remove
+      ? document.getElementById(domId('language'))
+      : document.getElementById(domId('language'));
     if (target instanceof HTMLElement) decisionFocus.current = { decision, target };
     localDecisionRef.current = null;
     clearLocalDraft(decision.language, decision.remove, decision.draft);
