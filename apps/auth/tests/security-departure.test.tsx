@@ -54,7 +54,7 @@ async function startNavigation(router: ReturnType<typeof createRouter>, to: '/se
     navigation = router.navigate({ to } as never);
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  return navigation;
+  return { navigation };
 }
 async function setPassword(host: HTMLElement, value: string) {
   await flush(() => {
@@ -69,7 +69,8 @@ test('clean pages leave freely; Stay keeps a masked password and Leave clears it
   const cleanUnload = new dom.Event('beforeunload', { cancelable: true });
   window.dispatchEvent(cleanUnload);
   expect(cleanUnload.defaultPrevented).toBe(false);
-  await startNavigation(ui.router, '/next');
+  const clean = await startNavigation(ui.router, '/next');
+  await flush(() => clean.navigation);
   expect(ui.router.state.location.pathname).toBe('/next');
   await flush(() => ui.router.navigate({ to: '/security' } as never));
   await tick();
@@ -81,7 +82,7 @@ test('clean pages leave freely; Stay keeps a masked password and Leave clears it
   const dirtyUnload = new dom.Event('beforeunload', { cancelable: true });
   window.dispatchEvent(dirtyUnload);
   expect(dirtyUnload.defaultPrevented).toBe(true);
-  const stayed = await startNavigation(ui.router, '/next');
+  const { navigation: stayed } = await startNavigation(ui.router, '/next');
   const dialog = ui.host.querySelector<HTMLElement>('[role="alertdialog"]')!;
   expect(dialog.textContent).not.toContain(secret);
   expect(document.activeElement).toBe(dialog.querySelector('[data-stay]'));
@@ -93,7 +94,7 @@ test('clean pages leave freely; Stay keeps a masked password and Leave clears it
   expect(document.activeElement).toBe(input);
   void stayed;
 
-  const leaving = await startNavigation(ui.router, '/next');
+  const { navigation: leaving } = await startNavigation(ui.router, '/next');
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-leave]')!.click());
   await flush(() => leaving);
   expect(ui.router.state.location.pathname).toBe('/next');
@@ -116,7 +117,7 @@ test('Leave retires an unresolved operation without replaying it after return', 
   expect(button).not.toBeNull();
   await flush(() => button!.click());
   expect(calls).toBe(1);
-  const leaving = await startNavigation(ui.router, '/next');
+  const { navigation: leaving } = await startNavigation(ui.router, '/next');
   expect(ui.host.querySelector('[role="alertdialog"]')).not.toBeNull();
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-leave]')!.click());
   await flush(() => leaving);
