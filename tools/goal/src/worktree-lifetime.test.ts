@@ -181,7 +181,7 @@ test('a retry recreates a removed task worktree from its task branch and install
     expect(git(task.worktree, ['rev-parse', 'HEAD'])).toBe(original);
     expect(existsSync(join(task.worktree, 'node_modules'))).toBe(true);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });
 
