@@ -1812,6 +1812,7 @@
   "library_collection_export_downloaded": "Der Download der ItemList wurde gestartet.",
   "library_collection_export_copied": "ItemList kopiert.",
   "library_collection_export_failed": "Die ItemList konnte nicht exportiert werden. Versuche es erneut.",
+  "library_collection_export_delivery_failed": "Die ItemList ist bereit, konnte aber nicht vom Browser übermittelt werden. Versuche erneut zu kopieren oder lade die vorbereitete Datei herunter.",
   "library_collection_social_unavailable": "Gefällt mir, Speichern und Melden sind für Sammlungen noch nicht verfügbar.",
   "library_collection_actions_unavailable": "Die Aktionen für diese Sammlung konnten nicht geladen werden. Bitte lade die Seite neu.",
   "rating_public_mean": "{mean} von {maximum}",

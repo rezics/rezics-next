@@ -1850,6 +1850,7 @@
   "library_collection_export_downloaded": "ItemList download started.",
   "library_collection_export_copied": "ItemList copied.",
   "library_collection_export_failed": "Could not export the ItemList. Try again.",
+  "library_collection_export_delivery_failed": "ItemList is ready, but browser delivery failed. Try copying again or download the prepared file.",
   "library_collection_social_unavailable": "Like, Save and Report are not available for Collections yet.",
   "library_collection_actions_unavailable": "Collection actions could not be loaded. Reload to try again.",
   "rating_public_mean": "{mean} out of {maximum}",

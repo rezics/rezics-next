@@ -1812,6 +1812,7 @@
   "library_collection_export_downloaded": "ItemList のダウンロードを開始しました。",
   "library_collection_export_copied": "ItemList をコピーしました。",
   "library_collection_export_failed": "ItemList を書き出せませんでした。もう一度お試しください。",
+  "library_collection_export_delivery_failed": "ItemList は準備できていますが、ブラウザーでの受け渡しに失敗しました。もう一度コピーするか、準備済みのファイルをダウンロードしてください。",
   "library_collection_social_unavailable": "コレクションへの「いいね」、保存、報告はまだ利用できません。",
   "library_collection_actions_unavailable": "コレクションの操作を読み込めませんでした。再読み込みしてお試しください。",
   "rating_public_mean": "{mean} / {maximum} 点",

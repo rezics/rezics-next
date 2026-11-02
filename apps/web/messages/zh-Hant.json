@@ -1812,6 +1812,7 @@
   "library_collection_export_downloaded": "已開始下載 ItemList。",
   "library_collection_export_copied": "已複製 ItemList。",
   "library_collection_export_failed": "無法匯出 ItemList，請重試。",
+  "library_collection_export_delivery_failed": "ItemList 已準備好，但瀏覽器未能完成交付。請重試複製或下載已準備好的檔案。",
   "library_collection_social_unavailable": "暫不支援對合集按讚、儲存或檢舉。",
   "library_collection_actions_unavailable": "無法載入合集操作，請重新載入後再試。",
   "rating_public_mean": "{mean} 分（滿分 {maximum} 分）",

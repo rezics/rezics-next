@@ -1812,6 +1812,7 @@
   "library_collection_export_downloaded": "Se ha iniciado la descarga de la ItemList.",
   "library_collection_export_copied": "ItemList copiada.",
   "library_collection_export_failed": "No se pudo exportar la ItemList. Inténtalo de nuevo.",
+  "library_collection_export_delivery_failed": "La ItemList está lista, pero el navegador no pudo entregarla. Intenta copiarla de nuevo o descarga el archivo preparado.",
   "library_collection_social_unavailable": "Las funciones Me gusta, Guardar y Denunciar aún no están disponibles para las colecciones.",
   "library_collection_actions_unavailable": "No se pudieron cargar las acciones de esta colección. Recarga la página para volver a intentarlo.",
   "rating_public_mean": "{mean} de {maximum}",

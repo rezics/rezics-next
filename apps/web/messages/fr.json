@@ -1812,6 +1812,7 @@
   "library_collection_export_downloaded": "Le téléchargement de l’ItemList a démarré.",
   "library_collection_export_copied": "ItemList copiée.",
   "library_collection_export_failed": "Impossible d’exporter l’ItemList. Réessayez.",
+  "library_collection_export_delivery_failed": "La liste ItemList est prête, mais le navigateur n’a pas pu la transmettre. Réessayez de la copier ou téléchargez le fichier préparé.",
   "library_collection_social_unavailable": "Les mentions J’aime, l’enregistrement et le signalement des collections ne sont pas encore disponibles.",
   "library_collection_actions_unavailable": "Impossible de charger les actions de cette collection. Rechargez la page pour réessayer.",
   "rating_public_mean": "{mean} sur {maximum}",

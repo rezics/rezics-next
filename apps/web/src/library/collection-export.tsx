@@ -108,12 +108,14 @@ function CollectionExportActions({
   const descriptionId = useId();
   const attempt = useRef(new CollectionExportAttempt(capture));
   const inFlight = useRef<object | null>(null);
+  const prepared = useRef<CollectionExportFile | null>(null);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
   useLayoutEffect(
     () => () => {
       attempt.current.cancel();
       inFlight.current = null;
+      prepared.current = null;
     },
     [],
   );
@@ -121,6 +123,7 @@ function CollectionExportActions({
   function cancel() {
     attempt.current.cancel();
     inFlight.current = null;
+    prepared.current = null;
     setPending(false);
     setNotice('');
   }
@@ -132,16 +135,26 @@ function CollectionExportActions({
     setPending(true);
     setNotice('');
     let message = m.library_collection_export_failed();
+    let delivering = false;
     try {
-      const result = await attempt.current.run((captured) => request(captured, context));
-      if (inFlight.current !== operation || result.state === 'cancelled') return;
-      if (result.state === 'complete') {
-        if (kind === 'download') downloadFile(result.file);
-        else await navigator.clipboard.writeText(result.file.text);
-        message = kind === 'download' ? m.library_collection_export_downloaded() : m.library_collection_export_copied();
-      } else message = m.library_collection_export_unavailable();
+      let file = prepared.current;
+      if (!file) {
+        const result = await attempt.current.run((captured) => request(captured, context));
+        if (inFlight.current !== operation || result.state === 'cancelled') return;
+        if (result.state !== 'complete') {
+          message = m.library_collection_export_unavailable();
+          return;
+        }
+        // Keep the admitted bytes and file metadata for deliberate local retries in this lifetime.
+        file = { ...result.file };
+        prepared.current = file;
+      }
+      delivering = true;
+      if (kind === 'download') downloadFile(file);
+      else await navigator.clipboard.writeText(file.text);
+      message = kind === 'download' ? m.library_collection_export_downloaded() : m.library_collection_export_copied();
     } catch {
-      message = m.library_collection_export_failed();
+      message = delivering ? m.library_collection_export_delivery_failed() : m.library_collection_export_failed();
     } finally {
       if (inFlight.current === operation) {
         inFlight.current = null;
@@ -172,7 +185,7 @@ function CollectionExportActions({
         >
           {m.library_collection_export_copy()}
         </Button>
-        {pending ? (
+        {pending || prepared.current !== null ? (
           <Button type="button" variant="outline" onClick={cancel}>
             {m.library_collection_cancel()}
           </Button>

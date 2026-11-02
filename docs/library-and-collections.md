@@ -242,6 +242,8 @@ expired preparation will require a new admitted request. The default Members fac
 specification adapters, not a delivered preparation backend. Native and browser verification remain launch
 integration obligations; focused tests and typing do not establish whole-feature completion.
 
+Decision: A complete admitted export is retained only within its mounted capture for explicit Copy or Download retries; local delivery failure keeps that exact file available, and Cancel or capture retirement clears it.
+
 Tracked-entry state actions retain unattempted targets for explicit per-entry recovery with their captured state,
 revision, incarnation and command key, independent of later selection; a refused unknown replay keeps its exact intent.
 
