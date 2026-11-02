@@ -669,7 +669,8 @@ export function ThreadReadingPost({
   };
 
   async function copyLink() {
-    await navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}#${anchorId}`);
+    const href = threadLocation(getLocale(), { id: post.threadId }, undefined, post.id);
+    await navigator.clipboard.writeText(new URL(href, window.location.origin).href);
   }
 
   function cancelEdit() {
