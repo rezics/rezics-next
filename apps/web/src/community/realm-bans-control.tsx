@@ -331,8 +331,7 @@ function RealmBansVisit({
           : view.state === 'ready'
             ? review.trigger
             : null
-        : result?.ok &&
-            (result.action === 'ban' ? result.ban.accountId : result.accountId) === review.target
+        : result?.ok && (result.action === 'ban' ? result.ban.accountId : result.accountId) === review.target
           ? document.getElementById(`${id}-outcome`)
           : null;
     focusRecovery.current = null;
@@ -344,11 +343,7 @@ function RealmBansVisit({
     boundary?.focus();
   }, [view, result, confirm, banConfirm, focusRevision, gate, realmId, id]);
 
-  function makeReview(
-    action: BanReviewIntent['action'],
-    target: string,
-    trigger: HTMLButtonElement,
-  ): BanReviewIntent {
+  function makeReview(action: BanReviewIntent['action'], target: string, trigger: HTMLButtonElement): BanReviewIntent {
     const review = {
       action,
       target,
@@ -960,11 +955,11 @@ function RealmBansVisit({
                               if (!review || !matchesReview(review, 'unban', ban.accountId)) return;
                               void change(
                                 {
-                                realmId,
-                                accountId: ban.accountId,
-                                reason: '',
-                                action: 'unban',
-                                idempotencyKey: crypto.randomUUID(),
+                                  realmId,
+                                  accountId: ban.accountId,
+                                  reason: '',
+                                  action: 'unban',
+                                  idempotencyKey: crypto.randomUUID(),
                                 },
                                 { review, source: event.currentTarget },
                               );

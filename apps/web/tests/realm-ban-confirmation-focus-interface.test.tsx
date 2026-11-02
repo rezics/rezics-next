@@ -42,7 +42,9 @@ window.document.body.append(host);
 let root: ReturnType<typeof createRoot> | undefined;
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 function button(label: string) {
-  const node = [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === label);
+  const node = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (item) => item.textContent?.trim() === label,
+  );
   expect(node).toBeDefined();
   return node!;
 }
