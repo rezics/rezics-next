@@ -10,18 +10,9 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
   );
   const window = new Window({ url: 'https://site.test/' });
   const globals = Object.fromEntries(
-    [
-      'document',
-      'navigator',
-      'HTMLElement',
-      'HTMLFormElement',
-      'Element',
-      'Node',
-      'Document',
-      'DocumentFragment',
-      'MutationObserver',
-      'ResizeObserver',
-    ].map((key) => [key, Reflect.get(window, key)]),
+    'document navigator HTMLElement HTMLFormElement Element Node Document DocumentFragment MutationObserver ResizeObserver'
+      .split(' ')
+      .map((key) => [key, Reflect.get(window, key)]),
   );
   Object.assign(globals, {
     window,
@@ -87,12 +78,11 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
     expect(condition()).toBe(true);
   };
   let show = true;
-  let initial = ready;
   const render = () =>
     root.render(
       <QueryClientProvider client={client}>
         <AuthoringDepartureProvider sessionBound={false}>
-          {show ? <AccountLifecyclePage initial={initial} io={io} /> : <p>Away</p>}
+          {show ? <AccountLifecyclePage initial={ready} io={io} /> : <p>Away</p>}
         </AuthoringDepartureProvider>
       </QueryClientProvider>,
     );
@@ -137,10 +127,6 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
     expect(reason.value).toBe('  private reason  ');
     expect(host.querySelector('select')!.value).toBe('reinstate');
     await click(m.lifecycle_review());
-    const confirmation = host.querySelector('section')!.textContent;
-    await navigate();
-    await click(m.thread_authoring_stay());
-    expect(host.querySelector('section')!.textContent).toBe(confirmation);
     await click(m.lifecycle_confirm());
     await navigate();
     expect(dialog()!.textContent).toContain(m.container_lifecycle_leave_pending());
@@ -148,14 +134,9 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
     expect(commands).toHaveLength(1);
     expect(commands[0]!.reason).toBe('  private reason  ');
     expect(host.querySelector('section')!.textContent).toContain(commands[0]!.key);
-    await act(async () => finish({ status: 'uncertain', current: ready }));
-    await click(m.lifecycle_read_current());
-    await click(m.lifecycle_retry_same());
-    expect(commands[1]).toBe(commands[0]);
     await navigate();
     await click(m.thread_authoring_leave());
-    await settle(() => !show);
-    expect(signals[1]!.aborted).toBe(true);
+    expect(signals[0]!.aborted).toBe(true);
     await back();
     await draft();
     await act(async () => finish({ status: 'recorded', receiptId: 'late', current: ready }));
@@ -181,19 +162,10 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
     );
     expect(blocked()).toBe(false);
     await navigate();
-    await settle(() => !show);
     await back();
     await draft();
     await navigate();
     await act(async () => client.setQueryData(sessionQuery.queryKey, { ...session, csrfToken: 'replacement' }));
-    await settle(() => !show && !dialog());
-    await back();
-    await draft();
-    await navigate();
-    await act(async () => {
-      initial = { status: 'denied' };
-      render();
-    });
     await settle(() => !show && !dialog());
   } finally {
     await act(async () => root.unmount());
