@@ -218,8 +218,9 @@ function workSummary(db: Database, available: boolean): string {
   return `Open work: ${rows.length ? rows.map((row) => `${clean(row.goal)} ${row.state} ${row.count}`).join('; ') : 'none recorded'}.`;
 }
 
-function landingQueueAge(metrics: ReturnType<typeof lifecycleMetrics>, available: boolean): string {
+function landingQueueAge(metrics: ReturnType<typeof lifecycleMetrics> | null, available: boolean): string {
   if (!available) return 'Current landing queue age: unknown (queue or timestamped history unavailable).';
+  if (!metrics) return 'Current landing queue age: unknown (current task state unavailable).';
   const entries = metrics.waiting.queues.filter((entry) => entry.stage === 'landing');
   if (!entries.length) return 'Current landing queue age: 0 queued attempts.';
   const oldest = entries[0]!.ageMs;
@@ -229,8 +230,9 @@ function landingQueueAge(metrics: ReturnType<typeof lifecycleMetrics>, available
     : `Current landing queue age: ${entries.length} queued attempts; oldest ${oldest.toFixed(0)} ms.`;
 }
 
-function waitIdentities(metrics: ReturnType<typeof lifecycleMetrics>, available: boolean): string {
+function waitIdentities(metrics: ReturnType<typeof lifecycleMetrics> | null, available: boolean): string {
   if (!available) return 'Current wait identities: unknown (current task state unavailable).';
+  if (!metrics) return 'Current wait identities: unknown (current task state unavailable).';
   if (!metrics.waiting.entries.length) return 'Current wait identities: none recorded.';
   const entries = metrics.waiting.entries.slice(0, 5).map((entry) => {
     const stage = entry.stage ?? entry.kind;
@@ -288,7 +290,7 @@ function usageSummary(db: Database, bucket: UtcHour): string {
   return `Recorded usage: ${sessionUsage}. Spend: unknown (no durable cost records). Worker diff churn: ${churn}; churn includes non-landed work and is not a delivered-journey count.`;
 }
 
-function promotionSummary(db: Database, metrics: ReturnType<typeof lifecycleMetrics>): string {
+function promotionSummary(db: Database, metrics: ReturnType<typeof lifecycleMetrics> | null): string {
   if (!hasTable(db, 'worker_promotions')) return 'Promotion: unknown (promotion state unavailable).';
   const row = db.query('SELECT body FROM worker_promotions WHERE id=1').get() as { body: string } | null;
   if (!row) return 'Promotion: none recorded.';
@@ -302,11 +304,13 @@ function promotionSummary(db: Database, metrics: ReturnType<typeof lifecycleMetr
   const mainResult = body.mainResult && typeof body.mainResult === 'object' ? (body.mainResult as { passed?: unknown }) : null;
   const result = mainResult?.passed === true ? 'main gate passed' : mainResult?.passed === false ? 'main gate failed' : 'main gate result unknown';
   const disposition = phase === 'blocked' || phase === 'stabilize-blocked' ? 'blocked' : 'recorded phase; process status unknown';
-  const age = metrics.promotion.phaseAgeMs;
+  const age = metrics?.promotion.phaseAgeMs ?? null;
   return `Promotion: ${disposition}; phase ${phase}; ${result}; phase age ${age === null ? 'unknown' : `${Math.round(age / 60_000)}m`}.`;
 }
 
-function operatorAttention(metrics: ReturnType<typeof lifecycleMetrics>): string {
+function operatorAttention(metrics: ReturnType<typeof lifecycleMetrics> | null): string {
+  if (!metrics)
+    return 'Current incidents: unknown (current task state unavailable); unavailable evidence: orphaned landings, promotion timing, quarantine history.';
   const incidents: string[] = [];
   const unavailable: string[] = [];
   const summarize = (values: string[]) =>
@@ -361,21 +365,23 @@ function sharedIncidentSummary(incidents: ReturnType<typeof listOpenToolIncident
 }
 
 function nextActions(
-  metrics: ReturnType<typeof lifecycleMetrics>,
+  metrics: ReturnType<typeof lifecycleMetrics> | null,
   incidents: ReturnType<typeof listOpenToolIncidents>,
 ): string[] {
   const actions: string[] = [];
-  const orphaned = metrics.orphanedLandings;
-  if (orphaned.available && (orphaned.count ?? 0) > 0 && orphaned.taskIds[0])
-    actions.push(`Inspect orphaned landing ${clean(orphaned.taskIds[0])} with Goal status before retrying it.`);
-  if (metrics.promotion.available && ['blocked', 'stabilize-blocked'].includes(metrics.promotion.phase ?? ''))
-    actions.push('Resolve the recorded promotion gate or blocker, then run Goal promote.');
-  const oldestWait = metrics.waiting.entries[0];
-  if (oldestWait)
-    actions.push(`Inspect ${clean(oldestWait.taskId)}#${oldestWait.attempt} (${clean(oldestWait.stage ?? oldestWait.kind)}) with Goal status.`);
-  const firstQuarantine = metrics.quarantines.current?.[0];
-  if (firstQuarantine)
-    actions.push(`Review quarantined task ${clean(firstQuarantine.taskId)}#${firstQuarantine.attempt} before retrying it.`);
+  if (metrics) {
+    const orphaned = metrics.orphanedLandings;
+    if (orphaned.available && (orphaned.count ?? 0) > 0 && orphaned.taskIds[0])
+      actions.push(`Inspect orphaned landing ${clean(orphaned.taskIds[0])} with Goal status before retrying it.`);
+    if (metrics.promotion.available && ['blocked', 'stabilize-blocked'].includes(metrics.promotion.phase ?? ''))
+      actions.push('Resolve the recorded promotion gate or blocker, then run Goal promote.');
+    const oldestWait = metrics.waiting.entries[0];
+    if (oldestWait)
+      actions.push(`Inspect ${clean(oldestWait.taskId)}#${oldestWait.attempt} (${clean(oldestWait.stage ?? oldestWait.kind)}) with Goal status.`);
+    const firstQuarantine = metrics.quarantines.current?.[0];
+    if (firstQuarantine)
+      actions.push(`Review quarantined task ${clean(firstQuarantine.taskId)}#${firstQuarantine.attempt} before retrying it.`);
+  }
   const incident = incidents[0];
   if (incident)
     actions.push(`Review the shared blocker at probe ${clean(incident.probe.taskId)}#${incident.probe.attempt}; delivery operations owns follow-up.`);
@@ -391,7 +397,8 @@ export async function renderHourlyEfficiencyReport(
   if (flowAvailable) ensureFlow(db);
   const events = hourEvents(db, bucket, flowAvailable);
   const asOf = options.now ?? Date.now();
-  const metrics = lifecycleMetrics(db, asOf);
+  const openWorkAvailable = hasTable(db, 'worker_tasks');
+  const metrics = openWorkAvailable ? lifecycleMetrics(db, asOf) : null;
   const starts = events.filter((event) => event.stage === 'worker' && event.action === 'started').length;
   const finishes = new Set(
     events
@@ -419,20 +426,24 @@ export async function renderHourlyEfficiencyReport(
     : checkWaits.length
       ? `Check-slot wait in bucket: ${checkWaits.length} completed request/acquire pairs; p90 ${checkWaitP90 === null ? 'unknown' : `${Math.round(checkWaitP90 / 60_000)}m`}.`
       : 'Check-slot wait in bucket: unknown (no completed wait pair recorded).';
-  const lifetimeLines = formatLifecycleMetrics(metrics);
+  const lifetimeLines = metrics ? formatLifecycleMetrics(metrics) : [];
   const launchTaskLines = lifetimeLines.filter((line) => line.startsWith('  '));
   const aggregateLines = lifetimeLines.filter((line) => !line.startsWith('  '));
-  const openWorkAvailable = hasTable(db, 'worker_tasks');
-  const lifecycleLines = [
-    flowAvailable
-      ? aggregateLines[0] ?? 'Launches in trailing hour: unknown.'
-      : 'Launches in trailing hour: unknown (flow history unavailable).',
-    ...launchTaskLines.slice(0, 8),
-    ...(launchTaskLines.length > 8 ? [`  … ${launchTaskLines.length - 8} additional task rows.`] : []),
-    ...(openWorkAvailable
-      ? aggregateLines.slice(1)
-      : ['Current waits: unknown (current task state unavailable).', ...aggregateLines.slice(2)]),
-  ];
+  const lifecycleLines = metrics
+    ? [
+        flowAvailable
+          ? aggregateLines[0] ?? 'Launches in trailing hour: unknown.'
+          : 'Launches in trailing hour: unknown (flow history unavailable).',
+        ...launchTaskLines.slice(0, 8),
+        ...(launchTaskLines.length > 8 ? [`  … ${launchTaskLines.length - 8} additional task rows.`] : []),
+        ...aggregateLines.slice(1),
+      ]
+    : [
+        'Launches in trailing hour: unknown (current task state unavailable).',
+        'Current waits: unknown (current task state unavailable).',
+        'Orphaned landings: unknown (current task state unavailable).',
+        'Quarantines: unknown (current task state unavailable).',
+      ];
   const landed = landedSummary(db, bucket, flowAvailable);
   const incidents = sharedIncidentLine(db);
   const waitsAvailable = openWorkAvailable;
