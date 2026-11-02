@@ -265,6 +265,22 @@ test('Editorial Context family retains supplied comparison, independent controls
     expect(first.calls.map((call) => call.method)).toEqual(['POST', 'GET']);
     expect(first.calls[0]!.body).toEqual({ labels: { en: longName } });
 
+    // A queued confirmation stays retired after a mounted current reread.
+    await render(null);
+    const queued = editorialContextFixture();
+    await render(<EditorialContextWorkspace id={queued.id} locale="en" transport={queued.transport} />);
+    await until(() => buttons(host, m.editorial_delete({}, o)).length === 1);
+    await click(m.editorial_delete({}, o));
+    const retained = (node: Element, event: string) => {
+      const key = Object.keys(node).find((key) => key.startsWith('__reactProps'))!;
+      return Reflect.get(node, key)[event] as (event?: unknown) => void;
+    };
+    const oldConfirm = retained(button(m.contribution_confirm({}, o)), 'onClick');
+    await click(m.candidate_reload({}, o));
+    await until(() => buttons(host, m.editorial_delete({}, o)).length === 1);
+    await act(async () => oldConfirm());
+    expect(queued.calls.map((call) => call.method)).toEqual(['GET', 'GET']);
+
     // A deliberate delete confirmation keeps confirm/cancel adjacency, then removes review content.
     await render(null);
     const lifecycle = editorialContextFixture();
