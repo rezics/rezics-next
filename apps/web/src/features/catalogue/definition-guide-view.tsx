@@ -5,7 +5,17 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { cn } from '@rezics/ui/utils';
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FocusEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { unitSymbols } from './statement-editor';
@@ -31,6 +41,95 @@ const linkClassName =
 // Keep native summary display and its disclosure marker, including keyboard activation.
 const summaryClassName =
   'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal rounded-sm py-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-0 md:pointer-fine:py-0';
+
+type GuideFocusIntent = {
+  opener: HTMLElement;
+  scope: string;
+  cancelled: boolean;
+  action?: 'retry' | 'directory' | 'type';
+  identity?: string;
+  token?: object;
+};
+
+type GuideFocusRef = { current: GuideFocusIntent | undefined };
+
+function useGuideFocusIntent() {
+  const intent = useRef<GuideFocusIntent>();
+  useEffect(() => {
+    const retireOnPointer = (event: PointerEvent) => {
+      const current = intent.current;
+      if (current && !current.opener.contains(event.target as Node)) current.cancelled = true;
+    };
+    document.addEventListener('pointerdown', retireOnPointer, true);
+    return () => document.removeEventListener('pointerdown', retireOnPointer, true);
+  }, []);
+  return intent;
+}
+
+function armGuideFocusIntent(
+  intent: GuideFocusRef,
+  event: KeyboardEvent<HTMLElement>,
+  scope: string,
+) {
+  if (event.defaultPrevented || event.repeat) return;
+  if (event.key !== 'Enter' && !(event.key === ' ' && event.currentTarget instanceof HTMLButtonElement)) return;
+  intent.current = { opener: event.currentTarget, scope, cancelled: false };
+}
+
+function takeGuideFocusIntent(
+  intent: GuideFocusRef,
+  event: MouseEvent<HTMLElement>,
+  scope: string,
+) {
+  const current = intent.current;
+  if (!current) return undefined;
+  if (event.detail !== 0 || current.opener !== event.currentTarget || current.scope !== scope || current.cancelled) {
+    intent.current = undefined;
+    return undefined;
+  }
+  return current;
+}
+
+function cancelGuideFocusIntentOnBlur(intent: GuideFocusRef, event: FocusEvent<HTMLElement>) {
+  const current = intent.current;
+  if (!current || current.opener !== event.currentTarget || !event.currentTarget.isConnected) return;
+  const next = event.relatedTarget as HTMLElement | null;
+  if (
+    (next === null || next === document.body) &&
+    current.opener instanceof HTMLButtonElement &&
+    current.opener.disabled
+  )
+    return;
+  current.cancelled = true;
+}
+
+function finishGuideFocusIntent(
+  intentRef: GuideFocusRef,
+  intent: GuideFocusIntent,
+  target: HTMLElement | null,
+) {
+  if (intentRef.current === intent) intentRef.current = undefined;
+  if (intent.cancelled) return;
+  if (intent.opener.isConnected) {
+    if (
+      document.activeElement === document.body &&
+      !(intent.opener instanceof HTMLButtonElement && intent.opener.disabled)
+    )
+      intent.opener.focus();
+    return;
+  }
+  target?.focus();
+}
+
+function guideRecoveryTarget(root: HTMLElement | null) {
+  return (
+    root?.querySelector<HTMLElement>('h3[data-guide-recovery]') ??
+    root?.querySelector<HTMLElement>('h2[data-guide-recovery]') ??
+    root?.querySelector<HTMLElement>('[data-guide-recovery]') ??
+    root?.querySelector<HTMLElement>('h1') ??
+    null
+  );
+}
 
 function Kind({ datatype, locale }: { datatype: string; locale: string }) {
   const o = { locale: locale as never };
@@ -236,21 +335,26 @@ export function DefinitionGuide({
       owner.active = false;
     };
   }, [owner]);
-  const [attempt, setAttempt] = useState<{ owner: typeof owner; pending: boolean; completion?: object }>({
+  const [attempt, setAttempt] = useState<{
+    owner: typeof owner;
+    pending: boolean;
+    completion?: { token: object; intent?: GuideFocusIntent };
+  }>({
     owner,
     pending: false,
   });
   const current = attempt.owner === owner ? attempt : undefined;
-  const retry = () => {
-    if (!owner.active || owner.pending || query.isFetching) return;
+  const retry = (intent?: GuideFocusIntent) => {
+    if (!owner.active || owner.pending || query.isFetching) return false;
     owner.pending = true;
     setAttempt({ owner, pending: true });
     // Coalesce an already running shared read rather than cancelling/replacing it.
     void query.refetch({ cancelRefetch: false }).then(() => {
       if (!owner.active) return;
       owner.pending = false;
-      setAttempt({ owner, pending: false, completion: {} });
+      setAttempt({ owner, pending: false, completion: { token: {}, ...(intent ? { intent } : {}) } });
     });
+    return true;
   };
   const read: GuideRead | undefined = query.isError ? { ok: false, reason: 'unavailable' } : query.data;
   return (
@@ -281,6 +385,13 @@ function ActiveGuide({
   const prefixId = useId();
   const exactId = useId();
   const key = JSON.stringify([address.type, address.property, address.release, address.returnTo, locale]);
+  const section = useRef<HTMLElement>(null);
+  const focusIntent = useGuideFocusIntent();
+  const handledFocus = useRef<object | undefined>(undefined);
+  const [focusCompletion, setFocusCompletion] = useState<
+    { token: object; intent: GuideFocusIntent } | undefined
+  >();
+  if (focusIntent.current && focusIntent.current.scope !== key) focusIntent.current = undefined;
   const [search, setSearch] = useState({
     draft: '',
     query: '',
@@ -343,12 +454,45 @@ function ActiveGuide({
       : undefined;
   const page = pageRead?.ok ? pageRead.page : undefined;
   const query = search.active ? search.query : '';
+  const retireFocusIntent = () => {
+    focusIntent.current = undefined;
+    setFocusCompletion(undefined);
+  };
+  const runFocusAction = (
+    event: MouseEvent<HTMLElement>,
+    action: 'directory' | 'type',
+    identity: string,
+    run: () => unknown,
+  ) => {
+    const admitted = takeGuideFocusIntent(focusIntent, event, key);
+    setFocusCompletion(undefined);
+    if (!admitted) {
+      focusIntent.current = undefined;
+      run();
+      return;
+    }
+    admitted.action = action;
+    admitted.identity = identity;
+    const token = {};
+    admitted.token = token;
+    const result = run();
+    void Promise.resolve(result).then(
+      () => {
+        if (focusIntent.current === admitted) setFocusCompletion({ token, intent: admitted });
+      },
+      () => {
+        if (focusIntent.current === admitted) setFocusCompletion({ token, intent: admitted });
+      },
+    );
+  };
   const submitPrefix = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    retireFocusIntent();
     setSearch({ draft: search.draft, query: search.draft, cursor: undefined, active: true });
   };
   const submitExact = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    retireFocusIntent();
     setSelection({
       key,
       type: searchExactDraft,
@@ -356,23 +500,64 @@ function ActiveGuide({
       attempt: currentSelection.attempt + 1,
     });
   };
-  const selectType = (typeId: string) => {
-    setSearchExactDraft(typeId);
-    setSelection({ key, type: typeId, requested: typeId.length > 0, attempt: currentSelection.attempt + 1 });
-  };
-  const retryPage = () => {
-    if (pageRead && !pageRead.ok && pageRead.reason === 'stale' && search.cursor) {
-      setSearch({ ...search, cursor: undefined, active: true });
-      return;
-    }
-    void pageQuery.refetch();
+  const retryPage = (event: MouseEvent<HTMLButtonElement>) => {
+    const restart = Boolean(pageRead && !pageRead.ok && pageRead.reason === 'stale' && search.cursor);
+    const cursor = restart ? undefined : search.cursor;
+    runFocusAction(event, 'directory', JSON.stringify([query, cursor ?? null]), () => {
+      if (restart) {
+        setSearch({ draft: search.draft, query, cursor: undefined, active: true });
+        return;
+      }
+      return pageQuery.refetch();
+    });
   };
   const typeResult = selectedRead;
   const typeFailure = typeResult && !typeResult.ok ? typeResult.reason : undefined;
   const invalidAddressProperty = Boolean(property && type && !field);
 
+  useEffect(() => {
+    const completion = focusCompletion;
+    if (!completion || handledFocus.current === completion.token || focusIntent.current !== completion.intent) return;
+    const intent = completion.intent;
+    if (intent.scope !== key) {
+      focusIntent.current = undefined;
+      return;
+    }
+    const identity =
+      intent.action === 'directory'
+        ? JSON.stringify([query, search.cursor ?? null])
+        : JSON.stringify([query, search.cursor ?? null, currentSelection.type, currentSelection.attempt]);
+    if (intent.identity !== identity) {
+      focusIntent.current = undefined;
+      return;
+    }
+    if (intent.action === 'directory' && (pageQuery.isFetching || (!pageRead && !pageQuery.isError))) return;
+    if (intent.action === 'type' && (typeQuery.isFetching || (!selectedRead && !typeQuery.isError))) return;
+    handledFocus.current = completion.token;
+    const target =
+      intent.action === 'directory'
+        ? section.current?.querySelector<HTMLElement>('[data-guide-recovery]') ??
+          section.current?.querySelector<HTMLElement>('[data-guide-directory]') ??
+          null
+        : guideRecoveryTarget(section.current);
+    finishGuideFocusIntent(focusIntent, intent, target);
+  }, [
+    currentSelection.attempt,
+    currentSelection.type,
+    focusCompletion,
+    key,
+    pageQuery.isError,
+    pageQuery.isFetching,
+    pageRead,
+    query,
+    search.cursor,
+    selectedRead,
+    typeQuery.isError,
+    typeQuery.isFetching,
+  ]);
+
   return (
-    <section className="space-y-6">
+    <section ref={section} className="space-y-6">
       <form className="space-y-3" onSubmit={submitPrefix}>
         <Field>
           <FieldLabel htmlFor={prefixId}>{m.guide_prefix_label({}, o)}</FieldLabel>
@@ -424,6 +609,8 @@ function ActiveGuide({
             <Button
               variant="outline"
               className={actionClassName}
+              onKeyDown={(event) => armGuideFocusIntent(focusIntent, event, key)}
+              onBlur={(event) => cancelGuideFocusIntentOnBlur(focusIntent, event)}
               onClick={retryPage}
               disabled={pageQuery.isFetching}
               aria-busy={pageQuery.isFetching || undefined}
@@ -434,7 +621,12 @@ function ActiveGuide({
         </section>
       )}
       {page && (
-        <section className="space-y-3" aria-label={m.guide_search_results({}, o)}>
+        <section
+          data-guide-directory
+          tabIndex={-1}
+          className={recoveryClassName}
+          aria-label={m.guide_search_results({}, o)}
+        >
           {page.types.length === 0 ? (
             <p role="status" tabIndex={-1} data-guide-recovery className={recoveryClassName}>
               {query ? m.guide_no_prefix_matches({}, o) : m.guide_empty({}, o)}
@@ -446,7 +638,29 @@ function ActiveGuide({
                   <button
                     type="button"
                     className={cn(linkClassName, 'text-left')}
-                    onClick={() => selectType(entry.typeId)}
+                    onKeyDown={(event) => armGuideFocusIntent(focusIntent, event, key)}
+                    onBlur={(event) => cancelGuideFocusIntentOnBlur(focusIntent, event)}
+                    onClick={(event) =>
+                      runFocusAction(
+                        event,
+                        'type',
+                        JSON.stringify([
+                          query,
+                          search.cursor ?? null,
+                          entry.typeId,
+                          currentSelection.attempt + 1,
+                        ]),
+                        () => {
+                          setSearchExactDraft(entry.typeId);
+                          setSelection({
+                            key,
+                            type: entry.typeId,
+                            requested: entry.typeId.length > 0,
+                            attempt: currentSelection.attempt + 1,
+                          });
+                        },
+                      )
+                    }
                     aria-current={currentSelection.type === entry.typeId ? 'true' : undefined}
                   >
                     <span>{entry.label}</span>
@@ -462,7 +676,13 @@ function ActiveGuide({
               variant="outline"
               className={actionClassName}
               disabled={pageQuery.isFetching}
-              onClick={() => setSearch({ draft: search.draft, query, cursor: page.next ?? undefined, active: true })}
+              onKeyDown={(event) => armGuideFocusIntent(focusIntent, event, key)}
+              onBlur={(event) => cancelGuideFocusIntentOnBlur(focusIntent, event)}
+              onClick={(event) =>
+                runFocusAction(event, 'directory', JSON.stringify([query, page.next ?? null]), () =>
+                  setSearch({ draft: search.draft, query, cursor: page.next ?? undefined, active: true }),
+                )
+              }
             >
               {m.guide_next_page({}, o)}
             </Button>
@@ -496,7 +716,21 @@ function ActiveGuide({
             <Button
               variant="outline"
               className={actionClassName}
-              onClick={() => void typeQuery.refetch()}
+              onKeyDown={(event) => armGuideFocusIntent(focusIntent, event, key)}
+              onBlur={(event) => cancelGuideFocusIntentOnBlur(focusIntent, event)}
+              onClick={(event) =>
+                runFocusAction(
+                  event,
+                  'type',
+                  JSON.stringify([
+                    query,
+                    search.cursor ?? null,
+                    currentSelection.type,
+                    currentSelection.attempt,
+                  ]),
+                  () => typeQuery.refetch(),
+                )
+              }
               disabled={typeQuery.isFetching}
               aria-busy={typeQuery.isFetching || undefined}
             >
@@ -616,22 +850,24 @@ export function DefinitionGuideContent({
   locale: string;
   transport?: GuideTransport;
   read?: GuideRead | undefined;
-  retry: () => void;
+  retry: (intent?: GuideFocusIntent) => boolean | void;
   retryPending?: boolean;
-  retryCompletion?: object | undefined;
+  retryCompletion?: { token: object; intent?: GuideFocusIntent } | undefined;
 }) {
   const o = { locale: locale as never };
   const typeId = useId();
   const article = useRef<HTMLElement>(null);
-  const focusedRetry = useRef<object | undefined>(undefined);
+  const focusIntent = useGuideFocusIntent();
+  const handledRetry = useRef<object | undefined>(undefined);
+  const actionScope = JSON.stringify([address.type, address.property, address.release, address.returnTo, locale]);
+  if (focusIntent.current && focusIntent.current.scope !== actionScope) focusIntent.current = undefined;
   useEffect(() => {
-    if (!retryCompletion || retryPending || focusedRetry.current === retryCompletion) return;
-    focusedRetry.current = retryCompletion;
-    const target =
-      article.current?.querySelector<HTMLElement>('h3[data-guide-recovery]') ??
-      article.current?.querySelector<HTMLElement>('[data-guide-recovery]') ??
-      article.current?.querySelector<HTMLElement>('h1');
-    target?.focus();
+    const completion = retryCompletion;
+    if (!completion || retryPending || handledRetry.current === completion.token) return;
+    handledRetry.current = completion.token;
+    const intent = completion.intent;
+    if (!intent || focusIntent.current !== intent) return;
+    finishGuideFocusIntent(focusIntent, intent, guideRecoveryTarget(article.current));
   }, [retryCompletion, retryPending]);
   // A local choice belongs to this exact definition address. Object identity is
   // unsuitable here: route search objects can be recreated without navigation.
@@ -688,7 +924,12 @@ export function DefinitionGuideContent({
             <Button
               variant="outline"
               className={actionClassName}
-              onClick={retry}
+              onKeyDown={(event) => armGuideFocusIntent(focusIntent, event, actionScope)}
+              onBlur={(event) => cancelGuideFocusIntentOnBlur(focusIntent, event)}
+              onClick={(event) => {
+                const intent = takeGuideFocusIntent(focusIntent, event, actionScope);
+                if (retry(intent) === false) focusIntent.current = undefined;
+              }}
               disabled={retryPending}
               aria-busy={retryPending || undefined}
             >
