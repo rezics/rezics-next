@@ -16,6 +16,10 @@ import {
 } from './creator-payment-attestation-state';
 import { hasUnsentPaymentReference, PaymentReferenceDraftNavigation } from './payment-reference-draft-navigation';
 
+function terminalPaymentResult(result: PaymentAttestationResult | null) {
+  return result?.kind === 'saved' || result?.kind === 'conflict';
+}
+
 /** This region shares the statement reader's current origin; it starts no parallel reader. */
 export function CreatorPaymentAttestation({
   statement,
@@ -71,7 +75,7 @@ export function CreatorPaymentAttestation({
   }
 
   async function submit() {
-    if (attempt.result?.kind === 'saved' || attempt.result?.kind === 'conflict') return;
+    if (terminalPaymentResult(attempt.result)) return;
     const csrfToken = guard.csrfToken();
     if (!current() || !csrfToken || (!attempt.request && statement.state !== 'open')) return;
     const startsFreshRequest = !attempt.request || attempt.correctionEditing;
