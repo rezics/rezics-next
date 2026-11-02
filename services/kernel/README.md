@@ -1014,13 +1014,15 @@ Effect registration has no fan-out cap, so a fixed event can create an unbounded
 
 Measure revoked replay and aborted attempts separately from successful commands; trusted authorization fixtures
 isolate executor work while the owning Access checks retain their callback bounds.
+Measure native SQL statement aborts alongside thrown callback failures.
 
 - Touches: each attempt mints time and authorizes before the full partition/principal/kind/key receipt seek.
   Revoked account and anonymous authorization reads no receipt, even when the key has a committed outcome.
   Anonymous `receipt-only` authorization also refuses before receipt access. Account `receipt-only` reads the
-  matching outcome or reports a digest conflict, without running the body or finalizer. Failed bodies and failed
-  finalizers seek a fresh receipt key, update one `core.partition` row by `partition_pkey`, then roll back. The
-  finalizer-failure fixture updates that same row twice. No failed attempt advances the partition or stores a receipt.
+  matching outcome or reports a digest conflict, without running the body or finalizer. Failed bodies, SQL-aborted
+  bodies and failed finalizers seek a fresh receipt key, update one `core.partition` row by `partition_pkey`, then roll
+  back. The finalizer-failure fixture updates that same row twice. No failed attempt advances the partition or stores a receipt.
+  The SQL-aborted fixture adds one relation-free division-by-zero statement and preserves PostgreSQL error `22012`.
 - Bound: constant statements and examined rows, logarithmic receipt-index buffers. The fixtures grow 512, 4,096 and
   32,768 same-principal receipts distributed across the anchor and unrelated partitions, holding the replay key,
   response bytes and callback work fixed. Rollback work includes the attempted updates; application callback work
@@ -1029,7 +1031,9 @@ isolate executor work while the owning Access checks retain their callback bound
   “anonymous revoked command stays bounded as receipt history grows”; “account receipt-only command stays bounded as
   receipt history grows”; “anonymous receipt-only command stays bounded as receipt history grows”; “account conflict
   command stays bounded as receipt history grows”; “account body-failed command stays bounded as receipt history
-  grows”; “anonymous body-failed command stays bounded as receipt history grows”; “account finalizer-failed command
+  grows”; “anonymous body-failed command stays bounded as receipt history grows”; “account sql-aborted command stays
+  bounded as receipt history grows”; “anonymous sql-aborted command stays bounded as receipt history grows”;
+  “account finalizer-failed command
   stays bounded as receipt history grows”; “anonymous finalizer-failed command stays bounded as receipt history grows”.
 
 ## Write rate deployment configuration

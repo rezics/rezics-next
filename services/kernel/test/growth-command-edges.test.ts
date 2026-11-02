@@ -14,7 +14,7 @@ const route = partition << 4;
 const accountId = newId(route);
 const digest = new Uint8Array(32).fill(7);
 const event = { type: 'com.rezics.growth.event.v1', data: { value: 1 } };
-const scenarios = ['revoked', 'receipt-only', 'conflict', 'body-failed', 'finalizer-failed'] as const;
+const scenarios = ['revoked', 'receipt-only', 'conflict', 'body-failed', 'sql-aborted', 'finalizer-failed'] as const;
 
 for (const principalKind of ['account', 'anonymous'] as const) {
   for (const [index, scenario] of scenarios.entries()) {
@@ -107,12 +107,14 @@ for (const principalKind of ['account', 'anonymous'] as const) {
                 : async (tx) => {
                     await mutate(tx);
                     if (scenario === 'body-failed') throw failure;
+                    if (scenario === 'sql-aborted') await tx.query('SELECT 1 / 0');
                     return { value: { repetition }, events: [event] };
                   },
             );
             if (scenario === 'receipt-only' && principalKind === 'account')
               expect(await attempt).toEqual({ ...first, replayed: true });
             else if (scenario === 'conflict') await expect(attempt).rejects.toBeInstanceOf(IdempotencyConflictError);
+            else if (scenario === 'sql-aborted') await expect(attempt).rejects.toMatchObject({ code: '22012' });
             else await expect(attempt).rejects.toBe(failure);
             expect(authorized).toBe(1);
           },
