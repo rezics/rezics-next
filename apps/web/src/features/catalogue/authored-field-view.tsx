@@ -219,10 +219,7 @@ function AuthoredFieldLive({
     };
     const moved = (change: FocusEvent) => {
       const lostToPage = change.target === document.body || change.target === document.documentElement;
-      if (
-        change.target !== opener &&
-        !(lostToPage && (!opener.isConnected || opener.matches(':disabled')))
-      )
+      if (change.target !== opener && !(lostToPage && (!opener.isConnected || opener.matches(':disabled'))))
         clearReadRecoveryFocus(focus);
     };
     const tabbed = (key: KeyboardEvent) => {
@@ -265,9 +262,11 @@ function AuthoredFieldLive({
       if (active !== focus.opener) focus.opener.focus();
       return;
     }
-    (readFailureBoundary.current ??
+    (
+      readFailureBoundary.current ??
       (focus.reviewDraft ? draftBoundary.current : selectedBoundary.current) ??
-      emptyBoundary.current)?.focus();
+      emptyBoundary.current
+    )?.focus();
   }, [busy, current, readFailure, work, ids.failure]);
   function retireReading(retireComparison = true, keepFocus?: ReadRecoveryFocus) {
     retireDiscard();

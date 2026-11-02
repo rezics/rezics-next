@@ -562,8 +562,20 @@ test('only the current discard question resets its original replacement, preserv
 for (const action of ['reload', 'field'])
   test(`${action} retires current text before I/O and recovers private replacements after denial`, async () => {
     const view = await mountedFamily();
-    const { window, host, render, user, within, AuthoredField, authoredFixture, authoredProperty, m, compose, click, input } =
-      view;
+    const {
+      window,
+      host,
+      render,
+      user,
+      within,
+      AuthoredField,
+      authoredFixture,
+      authoredProperty,
+      m,
+      compose,
+      click,
+      input,
+    } = view;
     try {
       const fixture = authoredFixture();
       const initial = await fixture.transport.read();
@@ -675,9 +687,7 @@ test('keyboard read recovery focuses the selected-text boundary after its opener
       await Bun.sleep(0);
     });
     expect(read).toHaveBeenCalledTimes(1);
-    expect(window.document.activeElement).toBe(
-      within(host).getByRole('region', { name: m.authored_selected() }),
-    );
+    expect(window.document.activeElement).toBe(within(host).getByRole('region', { name: m.authored_selected() }));
   } finally {
     await view.close();
   }
