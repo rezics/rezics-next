@@ -28,9 +28,10 @@ export function CreateSubjectProfileDraft({
     if (!node) return;
     const observe = () => {
       const current = JSON.stringify(
-        Array.from(node.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
-          'input, select, textarea',
-        ), (control) => [control.tagName, control.type, control.value, 'checked' in control && control.checked]),
+        Array.from(
+          node.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea'),
+          (control) => [control.tagName, control.type, control.value, 'checked' in control && control.checked],
+        ),
       );
       const draft = drafts.current.get(type);
       drafts.current.set(type, { initial: draft?.initial ?? current, current });

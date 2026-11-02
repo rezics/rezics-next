@@ -22,7 +22,14 @@ type SubjectTermsNavigationGuardProps = {
 };
 
 /** Keep a live Terms editor on the current route until its contributor stays or discards the draft. */
-export function SubjectTermsNavigationGuard({ active, dirty, pending, locale, isActive, leaveLabel }: SubjectTermsNavigationGuardProps) {
+export function SubjectTermsNavigationGuard({
+  active,
+  dirty,
+  pending,
+  locale,
+  isActive,
+  leaveLabel,
+}: SubjectTermsNavigationGuardProps) {
   const protect = active && (dirty || pending);
   const router = useRouter({ warn: false });
 
@@ -40,7 +47,13 @@ export function SubjectTermsNavigationGuard({ active, dirty, pending, locale, is
   return router ? createElement(RouterDepartureGuard, { protect, pending, locale, isActive, leaveLabel }) : null;
 }
 
-function RouterDepartureGuard({ protect, pending, locale, isActive, leaveLabel }: Omit<SubjectTermsNavigationGuardProps, 'active' | 'dirty'> & { protect: boolean }) {
+function RouterDepartureGuard({
+  protect,
+  pending,
+  locale,
+  isActive,
+  leaveLabel,
+}: Omit<SubjectTermsNavigationGuardProps, 'active' | 'dirty'> & { protect: boolean }) {
   const returnFocus = useRef<HTMLElement | null>(null);
   const stayButton = useRef<HTMLButtonElement>(null);
   const resolved = useRef(false);
