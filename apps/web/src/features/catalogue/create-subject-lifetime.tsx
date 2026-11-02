@@ -29,7 +29,7 @@ export function CreateSubjectProfileDraft({
     const observe = () => {
       const current = JSON.stringify(
         Array.from(
-          node.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea'),
+          node.querySelectorAll<HTMLInputElement>('input, select, textarea'),
           (control) => [control.tagName, control.type, control.value, 'checked' in control && control.checked],
         ),
       );

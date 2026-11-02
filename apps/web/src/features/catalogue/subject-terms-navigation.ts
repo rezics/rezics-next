@@ -17,8 +17,8 @@ type SubjectTermsNavigationGuardProps = {
   dirty: boolean;
   pending: boolean;
   locale: string;
-  isActive?: () => boolean;
-  leaveLabel?: string;
+  isActive?: (() => boolean) | undefined;
+  leaveLabel?: string | undefined;
 };
 
 /** Keep a live Terms editor on the current route until its contributor stays or discards the draft. */
