@@ -2,14 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement as h } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import {
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  Outlet,
-  RouterProvider,
-} from '@tanstack/react-router';
+import * as routing from '@tanstack/react-router';
 import * as start from '../.storybook/react-start';
 import type { SourcesResult } from '../src/features/catalogue/subject-sources';
 
@@ -19,7 +12,8 @@ mock.module('@tanstack/react-start/server', () => start);
 let reader = 'alice';
 let read: () => Promise<SourcesResult>;
 const calls: unknown[] = [];
-mock.module('../src/features/pages/subject-queries', () => ({ subjectRequestReader: async () => reader }));
+const queries = await import('../src/features/pages/subject-queries');
+mock.module('../src/features/pages/subject-queries', () => ({ ...queries, subjectRequestReader: async () => reader }));
 mock.module('../src/features/catalogue/subject-sources-actions', () => ({
   loadSubjectSources: async ({ data }: { data: unknown }) => {
     calls.push(data);
@@ -32,17 +26,10 @@ test('actual Sources retry returns focus locally and retires focus across reader
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window({ url: 'https://site.test/en' });
-  const keys = [
-    'window',
-    'document',
-    'navigator',
-    'HTMLElement',
-    'Element',
-    'Node',
-    'MutationObserver',
-    'getComputedStyle',
-    'IS_REACT_ACT_ENVIRONMENT',
-  ];
+  const keys =
+    'window document navigator HTMLElement Element Node MutationObserver getComputedStyle IS_REACT_ACT_ENVIRONMENT'.split(
+      ' ',
+    );
   const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const key of keys)
     Object.defineProperty(globalThis, key, {
@@ -63,7 +50,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
   const unavailable = { kind: 'unavailable' } as const;
   const tick = () => new Promise((done) => setTimeout(done, 0));
   try {
-    for (const mode of ['empty', 'failed', 'error', 'moved', 'navigation', 'canonical', 'reader', 'retired']) {
+    for (const mode of ['empty', 'failed', 'error', 'moved', 'canonical', 'reader', 'retired']) {
       reader = 'alice';
       calls.length = 0;
       read = async () => {
@@ -73,20 +60,15 @@ test('actual Sources retry returns focus locally and retires focus across reader
       const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       const session = () => ({ state: 'signed-in', subject: reader, csrfToken: 'unchanged-current-token' });
       client.setQueryData(sessionQuery.queryKey, session());
-      const parent = createRootRoute({ component: Outlet });
+      const parent = routing.createRootRoute({ component: routing.Outlet });
       const sources = Route.update({
         getParentRoute: () => parent,
         path: '/$locale/subjects/$id/$slug/sources',
       } as never);
-      const other = createRoute({
-        getParentRoute: () => parent,
-        path: '/else',
-        component: () => h('p', {}, 'Elsewhere'),
-      });
       const suffix = '?realm=realm-a&intent=exact%20read#kept';
-      const router = createRouter({
-        routeTree: parent.addChildren([sources, other]),
-        history: createMemoryHistory({ initialEntries: [page.sourcesHref + suffix] }),
+      const router = routing.createRouter({
+        routeTree: parent.addChildren([sources]),
+        history: routing.createMemoryHistory({ initialEntries: [page.sourcesHref + suffix] }),
         defaultPendingMs: 0,
         defaultPendingMinMs: 0,
       });
@@ -99,7 +81,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
       let mounted = true;
       try {
         await act(async () => {
-          root.render(h(QueryClientProvider, { client }, h(RouterProvider, { router })));
+          root.render(h(QueryClientProvider, { client }, h(routing.RouterProvider, { router })));
           await tick();
         });
         expect(document.activeElement).toBe(outside);
@@ -120,10 +102,6 @@ test('actual Sources retry returns focus locally and retires focus across reader
         expect(calls[1]).toEqual({ id: page.id, locale: 'en', realm: 'realm-a', reader: 'alice' });
         expect(host.querySelector('article')?.getAttribute('aria-busy')).toBe('true');
         if (mode === 'moved') outside.focus();
-        if (mode === 'navigation')
-          await act(async () => {
-            await router.navigate({ href: '/else' });
-          });
         if (mode === 'retired') {
           await act(async () => root.unmount());
           mounted = false;

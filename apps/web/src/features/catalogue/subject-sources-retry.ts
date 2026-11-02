@@ -23,6 +23,12 @@ function retryFor(router: object): Retry {
         this.listeners.add(listener);
         return () => {
           this.listeners.delete(listener);
+          // Component replacements subscribe in the same commit; a retired host does not.
+          queueMicrotask(() => {
+            if (this.listeners.size) return;
+            this.intent?.dispose();
+            delete this.intent;
+          });
         };
       },
       snapshot() {
@@ -89,7 +95,12 @@ export function useSourcesRetry({
     const document = headingRef.current?.ownerDocument;
     if (!document) return;
     const opener = document.activeElement;
-    const intent: Intent = { scope, opener, focus: opener?.tagName === 'BUTTON', dispose: () => {} };
+    const intent: Intent = {
+      scope,
+      opener,
+      focus: opener?.tagName === 'BUTTON' && headingRef.current?.closest('article')?.contains(opener) === true,
+      dispose: () => {},
+    };
     const moved = (event: FocusEvent) => {
       if (event.target !== opener && event.target !== document.body) intent.focus = false;
     };
