@@ -15,7 +15,8 @@ import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import type { ReporterStatus } from './reporter-status-model';
 
-type Retry = () => void | Promise<void>;
+type RetryActivation = { keyboard: boolean; source: HTMLButtonElement };
+type Retry = (activation?: RetryActivation) => void | Promise<void>;
 
 /** The served page and its stories share this composition within the site's AppShell. */
 export function ReporterStatusPage(
@@ -84,6 +85,8 @@ function ReporterStatusVisit({
         onRetry={() => journey.retry()}
         onRefresh={() => journey.refresh()}
         isCurrent={journey.isCurrent}
+        retryFocusScope={journey}
+        isRetryFocusScopeCurrent={journey.isConnected}
       />
     </div>
   );
@@ -94,22 +97,105 @@ export function ReporterStatusResultPage({
   onRetry,
   onRefresh,
   isCurrent,
+  retryFocusScope,
+  isRetryFocusScopeCurrent,
 }: {
   result: ReporterStatusResult;
   onRetry: Retry;
   onRefresh?: Retry;
   isCurrent?: () => boolean;
+  retryFocusScope?: object;
+  isRetryFocusScopeCurrent?: () => boolean;
 }) {
-  if (result.state === 'loaded')
-    return (
+  const boundary = useRef<HTMLDivElement>(null);
+  const retryFocusGeneration = useRef(0);
+  const [retryFocus, setRetryFocus] = useState<
+    { id: number; scope: object; source: HTMLButtonElement; settled: boolean } | null
+  >(null);
+  async function retry(activation?: RetryActivation) {
+    const request =
+      activation?.keyboard && retryFocusScope && isRetryFocusScopeCurrent?.()
+        ? {
+            id: ++retryFocusGeneration.current,
+            scope: retryFocusScope,
+            source: activation.source,
+            settled: false,
+          }
+        : null;
+    if (request) setRetryFocus(request);
+    try {
+      await onRetry();
+    } finally {
+      if (request)
+        setRetryFocus((current) => (current?.id === request.id ? { ...request, settled: true } : current));
+    }
+  }
+  useEffect(() => {
+    if (!retryFocus) return;
+    const document = boundary.current?.ownerDocument;
+    if (!document) return;
+    const retire = () => setRetryFocus((current) => (current?.id === retryFocus.id ? null : current));
+    const focusMoved = (event: FocusEvent) => {
+      if (event.target === retryFocus.source) return;
+      if (event.target === document.body && !retryFocus.source.isConnected) return;
+      retire();
+    };
+    const pointerMoved = () => retire();
+    const tabbed = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') retire();
+    };
+    document.addEventListener('focusin', focusMoved, true);
+    document.addEventListener('pointerdown', pointerMoved, true);
+    document.addEventListener('keydown', tabbed, true);
+    return () => {
+      document.removeEventListener('focusin', focusMoved, true);
+      document.removeEventListener('pointerdown', pointerMoved, true);
+      document.removeEventListener('keydown', tabbed, true);
+    };
+  }, [retryFocus]);
+  useEffect(() => {
+    if (!retryFocus) return;
+    const retire = () => setRetryFocus((current) => (current?.id === retryFocus.id ? null : current));
+    if (
+      retryFocus.scope !== retryFocusScope ||
+      !isRetryFocusScopeCurrent?.() ||
+      result.state === 'concealed' ||
+      result.state === 'closed'
+    ) {
+      retire();
+      return;
+    }
+    if (!retryFocus.settled || result.state === 'loading') return;
+    if (result.state !== 'loaded' && result.state !== 'unavailable') {
+      retire();
+      return;
+    }
+    const root = boundary.current;
+    const heading = root?.querySelector<HTMLHeadingElement>('h1#reporter-status-heading');
+    const document = root?.ownerDocument;
+    if (
+      heading &&
+      document &&
+      (document.activeElement === retryFocus.source ||
+        document.activeElement === document.body ||
+        !retryFocus.source.isConnected)
+    )
+      heading.focus();
+    retire();
+  }, [retryFocus, result, retryFocusScope, isRetryFocusScopeCurrent]);
+  const page =
+    result.state === 'loaded' ? (
       <ReporterStatusPage
         report={result.report}
         {...(onRefresh ? { onRefresh } : {})}
         {...(isCurrent ? { isCurrent } : {})}
       />
+    ) : result.state === 'unavailable' ? (
+      <ReporterStatusPage onRetry={retry} />
+    ) : (
+      <ReporterStatusPage state={result.state} />
     );
-  if (result.state === 'unavailable') return <ReporterStatusPage onRetry={onRetry} />;
-  return <ReporterStatusPage state={result.state} />;
+  return <div ref={boundary}>{page}</div>;
 }
 
 export function ReporterStatusReadState({ state }: { state: 'loading' | 'concealed' | 'closed' }) {
@@ -162,7 +248,11 @@ export function ReporterStatusView({
   return (
     <article className="space-y-8 break-words" aria-labelledby="reporter-status-heading">
       <header className="space-y-4">
-        <h1 id="reporter-status-heading" className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+        <h1
+          id="reporter-status-heading"
+          tabIndex={-1}
+          className="font-display text-3xl font-semibold tracking-tight sm:text-4xl"
+        >
           {m.reporter_status_heading()}
         </h1>
         <Badge
@@ -360,11 +450,11 @@ function ReportTime({ instant }: { instant: string }) {
 
 export function ReporterStatusFailure({ onRetry }: { onRetry: Retry }) {
   const [retrying, setRetrying] = useState(false);
-  async function retry() {
+  async function retry(activation: RetryActivation) {
     if (retrying) return;
     setRetrying(true);
     try {
-      await onRetry();
+      await onRetry(activation);
     } catch {
       // A failed read keeps this failure visible and permits another explicit retry.
     } finally {
@@ -373,13 +463,26 @@ export function ReporterStatusFailure({ onRetry }: { onRetry: Retry }) {
   }
   return (
     <section className="space-y-6" aria-labelledby="reporter-status-heading">
-      <h1 id="reporter-status-heading" className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+      <h1
+        id="reporter-status-heading"
+        tabIndex={-1}
+        className="font-display text-3xl font-semibold tracking-tight sm:text-4xl"
+      >
         {m.reporter_status_heading()}
       </h1>
       <p role="alert" className="leading-7 text-muted-foreground">
         {m.reporter_status_unavailable()}
       </p>
-      <Button className="min-h-11" disabled={retrying} onClick={() => void retry()}>
+      <Button
+        className="min-h-11"
+        disabled={retrying}
+        onClick={(event) =>
+          void retry({
+            keyboard: event.detail === 0 && event.currentTarget.ownerDocument.activeElement === event.currentTarget,
+            source: event.currentTarget,
+          })
+        }
+      >
         {retrying ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : null}
         {retrying ? m.reporter_status_retrying() : m.sources_retry()}
       </Button>
