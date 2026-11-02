@@ -11,7 +11,7 @@ import type { ValuePage, ValueRead, ValueTransport } from './value-explanation';
 import { ChangeExplanation } from './subject-changes-page';
 
 type ValueActionKind = 'more' | 'retry' | 'reload';
-type ValueAction = { kind: ValueActionKind; source: HTMLButtonElement; keyboard: boolean };
+type ValueAction = { kind: ValueActionKind; source: HTMLButtonElement; keyboard: boolean; token?: number };
 type ValueActionResult = { token: number; reading: unknown; result: ValueRead };
 type PendingValueAction = ValueAction & { token: number; document: Document; retired: boolean; cancel: () => void };
 
@@ -45,9 +45,9 @@ export function ValueExplanationPage({
   result?: ValueRead | undefined;
   locale: string;
   busy?: boolean;
-  onMore?: (cursor: string, action: ValueAction) => number | void;
-  onReload?: (action: ValueAction) => number | void;
-  onRetry?: ((action: ValueAction) => number | void) | undefined;
+  onMore?: (cursor: string, action: ValueAction) => void;
+  onReload?: (action: ValueAction) => void;
+  onRetry?: ((action: ValueAction) => void) | undefined;
   reloadFromFirstPage?: boolean;
   actionResult?: ValueActionResult | undefined;
   reading?: unknown;
@@ -151,7 +151,7 @@ export function ValueExplanationPage({
   function activate(
     event: MouseEvent<HTMLButtonElement>,
     kind: ValueActionKind,
-    run: (action: ValueAction) => number | void,
+    run: (action: ValueAction) => void,
   ) {
     const source = event.currentTarget;
     const action = {
@@ -159,8 +159,8 @@ export function ValueExplanationPage({
       source,
       keyboard: event.detail === 0 && source.ownerDocument.activeElement === source,
     } satisfies ValueAction;
-    const token = run(action);
-    beginAction(action, typeof token === 'number' ? token : undefined);
+    run(action);
+    beginAction(action, action.token);
   }
   return (
     <article
@@ -501,10 +501,11 @@ function ValueEpisode({
   function load(
     request: PageRequest = { cursor: undefined, session: session.current },
     action?: ValueAction,
-  ): number | undefined {
+  ): void {
     if (!work.active() || running.current) return;
     running.current = true;
     const version = ++generation.current;
+    if (action) action.token = version;
     setBusy(true);
     setResult(undefined);
     setRetry(undefined);
@@ -527,7 +528,6 @@ function ValueEpisode({
       running.current = false;
       if (action?.keyboard) setActionResult({ token: version, reading: work.generation, result: next });
     })();
-    return version;
   }
   useEffect(() => {
     if (!initial) void load();
@@ -548,15 +548,15 @@ function ValueEpisode({
       reading={work.generation}
       isCurrent={work.active}
       onMore={(cursor, action) => {
-        if (offered === generation.current) return load({ cursor, session: session.current }, action);
+        if (offered === generation.current) load({ cursor, session: session.current }, action);
       }}
       onReload={(action) => {
-        if (offered === generation.current) return load(undefined, action);
+        if (offered === generation.current) load(undefined, action);
       }}
       onRetry={
         retry
           ? (action) => {
-              if (offered === generation.current) return load(retry, action);
+              if (offered === generation.current) load(retry, action);
             }
           : undefined
       }
