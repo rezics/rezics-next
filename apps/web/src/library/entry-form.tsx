@@ -10,9 +10,11 @@ import { problem, problemResponse } from '../media/kernel';
 import {
   removePersonalLibraryEntry,
   restorePersonalLibraryEntry,
+  validateLibraryRestoreInput,
   type LibraryRestoreInput,
   type LibraryRestoreResult,
 } from './entries-read';
+import { captureEntryRestoreCredential, originalEntryRestoreCredential } from './entry-restore-credential';
 import { EntryFormPage } from './entry-undo';
 
 async function boundedForm(request: Request): Promise<URLSearchParams> {
@@ -66,7 +68,10 @@ export async function libraryEntryFormResponse(
     const deletionId = single('deletionId');
     const idempotencyKey = single('idempotencyKey');
     const incarnationId = single('incarnationId');
+    const credential = form.has('credential') ? single('credential') : undefined;
     if (
+      (credential !== undefined &&
+        (!/^[A-Za-z0-9_-]{1,3200}$/.test(credential) || form.getAll('credential').length !== 1)) ||
       !subjectId ||
       subjectId.length > 128 ||
       !Number.isSafeInteger(revision) ||
@@ -75,8 +80,7 @@ export async function libraryEntryFormResponse(
       (intent === 'restore' && (!deletionId || deletionId.length > 128)) ||
       (incarnationId &&
         !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(incarnationId)) ||
-      (intent === 'remove' &&
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey))
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)
     )
       return problemResponse(problem(400, 'invalid_request', 'Invalid Request'));
     // Group presence grants neither removal nor restore, and Undo cannot gate removal.
@@ -94,15 +98,23 @@ export async function libraryEntryFormResponse(
       back.origin === new URL(request.url).origin && back.pathname.startsWith(`/${locale}/`)
         ? `${back.pathname}${back.search}`
         : `/${locale}/library`;
-    // The original request has already validated its cookie and form token. Avoid a second session lookup.
     const authorized = new Request(request.url, { method: 'POST', headers: { authorization } });
     let undo: LibraryRestoreInput | undefined;
     let restore: LibraryRestoreResult | undefined;
     let removed = false;
     let conflict = false;
-    if (intent === 'restore')
-      restore = await restorePersonalLibraryEntry(client, authorized, {}, { subjectId, deletionId, revision });
-    else {
+    if (intent === 'restore') {
+      const input = validateLibraryRestoreInput({ subjectId, deletionId, revision, idempotencyKey, credential });
+      const original = await originalEntryRestoreCredential(request, sessionEnv, input.credential);
+      if (!original) return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+      restore = await restorePersonalLibraryEntry(
+        client,
+        new Request(request.url, { method: 'POST', headers: { authorization: original } }),
+        {},
+        { subjectId, deletionId, revision, idempotencyKey },
+      );
+      if (!restore.ok && ['unavailable', 'closed', 'signed-out'].includes(restore.reason)) undo = input;
+    } else {
       const result = await removePersonalLibraryEntry(
         client,
         authorized,
@@ -115,9 +127,15 @@ export async function libraryEntryFormResponse(
         },
       );
       removed = result.ok || result.reason === 'missing';
-      if (result.ok && result.undo && admitted.includes('library_entry.restore' as never))
-        undo = { subjectId, ...result.undo };
-      else if (!result.ok && result.reason === 'conflict') {
+      if (result.ok && result.undo && admitted.includes('library_entry.restore' as never)) {
+        const credential = await captureEntryRestoreCredential(request, sessionEnv);
+        undo = {
+          subjectId,
+          ...result.undo,
+          idempotencyKey: result.undo.idempotencyKey ?? crypto.randomUUID(),
+          ...(credential ? { credential } : {}),
+        };
+      } else if (!result.ok && result.reason === 'conflict') {
         conflict = true;
         restore = { ok: true, entry: result.entry };
       } else if (!removed) restore = { ok: false, reason: 'unavailable' };

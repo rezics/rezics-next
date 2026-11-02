@@ -8,7 +8,7 @@ import { LibraryNavigation } from './library-nav';
 import type { LibraryNavigationRead } from './pins-read';
 import { useCurrentLibraryNavigation } from './pins-current';
 import { readContinueEntries, type ContinueEntry, type ContinueView } from './continue-read';
-import type { LibraryRestoreInput, LibraryRestoreResult, PersonalLibraryView } from './entries-read';
+import type { LibraryRestoreReceipt, LibraryRestoreResult, PersonalLibraryView } from './entries-read';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
@@ -48,7 +48,7 @@ export function PersonalLibraryPage({
   cursor?: string;
   continueEntries?: ContinueEntry[];
   continueState?: ContinueView;
-  undo?: LibraryRestoreInput;
+  undo?: LibraryRestoreReceipt;
   restore?: LibraryRestoreResult;
   csrfToken?: string | null;
   acceptedNavigation?: LibraryNavigationRead;

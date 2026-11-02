@@ -647,6 +647,17 @@ function ShelfEntriesPage({
           {shelfRows.restoreMessage}
         </p>
       ) : null}
+      {shelfRows.canRetryRestore ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={shelfRows.pending}
+          onClick={() => void shelfRows.retryRestore()}
+        >
+          {m.library_entry_restore_retry_action()}
+        </Button>
+      ) : null}
       {notices.map((row) => (
         <p key={row.entry.subjectId} role={row.failure ? 'alert' : 'status'} className="text-sm">
           <span className="font-medium">{titleOf(row.entry, locale).text}</span>{' '}

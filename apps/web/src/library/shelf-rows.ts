@@ -17,7 +17,8 @@ import {
   restorePersonalLibraryEntryAction,
   savePersonalLibraryEntry,
 } from './entries-actions';
-import type { PersonalLibraryEntry } from './entries-read';
+import { useAuthoringDeparture } from '../threads/authoring-departure';
+import type { LibraryRestoreInput, LibraryRestoreResult, PersonalLibraryEntry } from './entries-read';
 import {
   commonShelfStates,
   matchesShelfIntent,
@@ -131,6 +132,14 @@ export function useShelfRows(
   const [labelKind, setLabelKind] = useState<ShelfLabelKind>('assign');
   const [removing, setRemoving] = useState<string | null>(null);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const restoreIntent = useRef<{
+    input: LibraryRestoreInput;
+    headers: Headers;
+    send: typeof restorePersonalLibraryEntryAction;
+    response?: LibraryRestoreResult | undefined;
+    alive: () => boolean;
+    running: boolean;
+  } | null>(null);
   const restoreAdmitted = useOperation('library_entry.restore');
   const writeAdmitted = useOperation('library_entry.put');
   const removeAdmitted = useOperation('library_entry.delete');
@@ -174,6 +183,24 @@ export function useShelfRows(
   const labelKindCurrent = (kind: ShelfLabelKind) => (kind === 'assign' ? labelCurrent() : labelRemoveCurrent());
   const removeCurrent = guard(removeAdmitted, 'library_entry.delete');
   const restoreCurrent = guard(restoreAdmitted, 'library_entry.restore');
+  const latestRestoreCurrent = useRef(restoreCurrent);
+  latestRestoreCurrent.current = restoreCurrent;
+  if (restoreIntent.current && !restoreIntent.current.alive()) {
+    restoreIntent.current = null;
+    setRestoreMessage(null);
+  }
+  const discardRestore = () => {
+    restoreIntent.current = null;
+    queuedUndo.current = null;
+    setRestoreMessage(null);
+  };
+  useAuthoringDeparture(
+    () => !!restoreIntent.current?.alive(),
+    () => restoreIntent.current !== null,
+    `${locale}:${restoreMessage}:${restoreIntent.current?.input.idempotencyKey}`,
+    discardRestore,
+    discardRestore,
+  );
   const copiesCurrent = guard(copies, 'copy.list');
   const progressCurrent = guard(progress, 'progress_session.list');
   const listCurrent = guard(list, 'library_entry.list');
@@ -219,6 +246,7 @@ export function useShelfRows(
     return () => {
       mounted.current = false;
       queuedUndo.current = null;
+      restoreIntent.current = null;
     };
   }, []);
 
@@ -643,6 +671,46 @@ export function useShelfRows(
     }
   };
 
+  async function retryRestore() {
+    const operation = restoreIntent.current;
+    if (!operation || !operation.alive() || !latestRestoreCurrent.current() || operation.running) return;
+    const release = lock(latestRestoreCurrent.current);
+    if (!release) {
+      queuedUndo.current = () => void retryRestore();
+      return;
+    }
+    operation.running = true;
+    try {
+      const restored =
+        operation.response ??
+        (await operation.send({ data: { ...operation.input }, headers: new Headers(operation.headers) }));
+      if (restored.ok || ['occupied', 'stale', 'expired'].includes(restored.reason)) operation.response = restored;
+      if (!isCurrent() || restoreIntent.current !== operation || !operation.alive() || !latestRestoreCurrent.current())
+        return;
+      if (restored.ok || restored.reason === 'occupied') {
+        if (restored.entry)
+          updateRows((current) => [
+            ...current.filter((row) => row.entry.subjectId !== operation.input.subjectId),
+            {
+              entry: { ...restored.entry!, changeKey: crypto.randomUUID(), removeKey: crypto.randomUUID() },
+              conflict: false,
+              failure: null,
+            },
+          ]);
+        restoreIntent.current = null;
+        setRestoreMessage(restored.ok ? null : m.library_restore_occupied());
+      } else if (restored.reason === 'stale' || restored.reason === 'expired') {
+        restoreIntent.current = null;
+        setRestoreMessage(restored.reason === 'stale' ? m.library_restore_stale() : m.library_restore_expired());
+      } else setRestoreMessage(m.library_subject_unavailable());
+    } catch {
+      if (restoreIntent.current === operation && operation.alive()) setRestoreMessage(m.library_subject_unavailable());
+    } finally {
+      operation.running = false;
+      release();
+    }
+  }
+
   const remove = async () => {
     const subjectId = removing;
     const row = currentRows.current.find((item) => item.entry.subjectId === subjectId);
@@ -667,62 +735,30 @@ export function useShelfRows(
       if (result.ok || result.reason === 'missing') {
         patch(subjectId, () => null);
         if (result.ok && result.undo && restoreCurrent()) {
-          const receipt = result.undo;
-          const undoCurrent = guard(restoreAdmitted, 'library_entry.restore');
+          const input: LibraryRestoreInput = {
+            subjectId,
+            ...result.undo,
+            idempotencyKey: result.undo.idempotencyKey ?? crypto.randomUUID(),
+          };
+          // Viewer/locale and exposure retirement are monotonic, independent of healthy read recovery.
+          const origin = shelfOrigin;
+          const viewer = origin?.viewer();
+          const alive = () => mounted.current && (!origin || origin.viewer() === viewer);
           undoToast(
             m.library_removed(),
             () => {
-              const restore = () => {
-                if (!undoCurrent()) return;
-                const requestHeaders = captureMutationHeaders();
-                if (!requestHeaders) return;
-                // Undo is an explicit user command too. Keep it behind the current request lease rather than losing it.
-                const release = lock(undoCurrent);
-                if (!release) {
-                  queuedUndo.current = restore;
-                  return;
-                }
-                void restorePersonalLibraryEntryAction({
-                  data: { subjectId, ...receipt },
-                  headers: new Headers(requestHeaders),
-                })
-                  .then((restored) => {
-                    if (!undoCurrent()) return;
-                    if (restored.ok) {
-                      updateRows((current) => [
-                        ...current.filter((row) => row.entry.subjectId !== subjectId),
-                        {
-                          entry: { ...restored.entry, changeKey: crypto.randomUUID(), removeKey: crypto.randomUUID() },
-                          conflict: false,
-                          failure: null,
-                        },
-                      ]);
-                      setRestoreMessage(null);
-                    } else if (restored.reason === 'occupied') {
-                      if (restored.entry)
-                        updateRows((current) => [
-                          ...current.filter((row) => row.entry.subjectId !== subjectId),
-                          {
-                            entry: {
-                              ...restored.entry!,
-                              changeKey: crypto.randomUUID(),
-                              removeKey: crypto.randomUUID(),
-                            },
-                            conflict: false,
-                            failure: null,
-                          },
-                        ]);
-                      setRestoreMessage(m.library_restore_occupied());
-                    } else if (restored.reason === 'stale') setRestoreMessage(m.library_restore_stale());
-                    else if (restored.reason === 'expired') setRestoreMessage(m.library_restore_expired());
-                    else setRestoreMessage(m.library_subject_unavailable());
-                  })
-                  .catch(() => {
-                    if (undoCurrent()) setRestoreMessage(m.library_subject_unavailable());
-                  })
-                  .finally(release);
+              if (!alive() || !latestRestoreCurrent.current()) return;
+              if (restoreIntent.current && restoreIntent.current.input.idempotencyKey !== input.idempotencyKey) return;
+              const captured = captureMutationHeaders();
+              if (!captured) return;
+              restoreIntent.current ??= {
+                input,
+                headers: captured,
+                send: restorePersonalLibraryEntryAction,
+                alive,
+                running: false,
               };
-              restore();
+              void retryRestore();
             },
             { undo: m.editor_undo() },
           );
@@ -764,6 +800,8 @@ export function useShelfRows(
     sortAdmitted: () => progressCurrent() && listCurrent(),
     pending,
     restoreMessage,
+    retryRestore,
+    canRetryRestore: !!restoreIntent.current?.alive() && restoreCurrent() && !restoreIntent.current.running,
     removing,
     selected: selectedRows.map((row) => row.entry.subjectId),
     commonStates,

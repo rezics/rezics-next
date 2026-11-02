@@ -1,4 +1,4 @@
-import type { LibraryRestoreInput, LibraryRestoreResult } from './entries-read';
+import type { LibraryRestoreReceipt, LibraryRestoreResult } from './entries-read';
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError } from '../kernel/platform-closed';
@@ -76,7 +76,7 @@ export type SubjectLibrarySlotData = {
   labelUndo?: SubjectLabelUndo;
   labelResult?: SubjectLibrarySlotResult;
   result?: SubjectLibrarySlotResult;
-  undo?: LibraryRestoreInput;
+  undo?: LibraryRestoreReceipt;
   restore?: LibraryRestoreResult;
 };
 
@@ -93,7 +93,7 @@ export type SubjectLibraryMutation = {
 export type SubjectLibraryMutationResponse = {
   result: SubjectLibrarySlotResult;
   entry?: SubjectSlotEntry | null;
-  undo?: { deletionId: string; revision: number };
+  undo?: Omit<LibraryRestoreReceipt, 'subjectId'>;
 };
 export type SubjectSlotCollectionsResult = {
   provenance?: SubjectLibraryReadIdentity;

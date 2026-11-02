@@ -4800,5 +4800,6 @@
   "library_collection_text_input_note_help": "유니코드 문자 최대 1,000자. 비워 둘 수 있습니다.",
   "library_collection_text_input_required": "제목을 입력하세요.",
   "library_collection_text_input_limit": "유니코드 문자 {limit}자 이내로 입력하세요.",
-  "library_collection_text_input_nul": "NUL 문자를 삭제하세요."
+  "library_collection_text_input_nul": "NUL 문자를 삭제하세요.",
+  "library_entry_restore_retry_action": "복원 다시 시도"
 }

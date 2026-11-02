@@ -4800,5 +4800,6 @@
   "library_collection_text_input_note_help": "最多 1,000 個 Unicode 字元，可以留空。",
   "library_collection_text_input_required": "請輸入標題。",
   "library_collection_text_input_limit": "請使用不超過 {limit} 個 Unicode 字元。",
-  "library_collection_text_input_nul": "請移除 NUL 字元。"
+  "library_collection_text_input_nul": "請移除 NUL 字元。",
+  "library_entry_restore_retry_action": "重試還原"
 }

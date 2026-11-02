@@ -4853,5 +4853,6 @@
   "library_collection_text_input_note_help": "Up to 1,000 Unicode characters. Empty text is allowed.",
   "library_collection_text_input_required": "Enter a title.",
   "library_collection_text_input_limit": "Use at most {limit} Unicode characters.",
-  "library_collection_text_input_nul": "Remove the NUL character."
+  "library_collection_text_input_nul": "Remove the NUL character.",
+  "library_entry_restore_retry_action": "Retry restore"
 }

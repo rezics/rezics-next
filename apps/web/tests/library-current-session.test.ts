@@ -32,12 +32,14 @@ const entry = {
   subject: { id: subjectId, type: 'schema:Book', label: 'Current book' },
 };
 const change = { subjectId, incarnationId, revision: 7, state: entry.state, idempotencyKey };
-const undo = { subjectId, deletionId, revision: 8 };
+const undo = { subjectId, deletionId, revision: 8, idempotencyKey };
 const sort = { orderBy: 'finishedAt', direction: 'asc' } as const;
 
 function session() {
   let status: 'active' | 'absent' | 'unavailable' = 'active';
   let reads = 0;
+  let accessToken = 'current-viewer';
+  let subject = 'owner';
   const csrfToken = newCsrfToken();
   const env = {
     AUTH_ISSUER: 'https://auth.test',
@@ -51,9 +53,7 @@ function session() {
       get: () => ({
         credential: async () => {
           reads++;
-          return status === 'active'
-            ? { status, accessToken: 'current-viewer', subject: 'owner', csrfToken }
-            : { status, csrfToken };
+          return status === 'active' ? { status, accessToken, subject, csrfToken } : { status, csrfToken };
         },
       }),
     },
@@ -63,6 +63,10 @@ function session() {
     csrfToken,
     get reads() {
       return reads;
+    },
+    renew(token: string, viewer = subject) {
+      accessToken = token;
+      subject = viewer;
     },
     setStatus(value: typeof status) {
       status = value;
@@ -218,7 +222,7 @@ test('current credentials keep bounded keyset reads, restrictive transport, exac
   expect(await calls[4]!.json()).toEqual({ state: entry.state, revision: 7, incarnationId });
   expect(calls[4]!.headers.get('idempotency-key')).toBe(idempotencyKey);
   const removed = await removePersonalLibraryEntry(client, explicit, {}, change);
-  expect(removed).toEqual({ ok: true, undo: { deletionId, revision: 8 } });
+  expect(removed).toMatchObject({ ok: true, undo: { deletionId, revision: 8 } });
   expect(Object.fromEntries(new URL(calls[5]!.url).searchParams)).toEqual({ revision: '7', incarnationId });
   expect(calls[5]!.headers.get('idempotency-key')).toBe(idempotencyKey);
   expect(await restorePersonalLibraryEntry(client, explicit, {}, undo)).toMatchObject({
@@ -258,7 +262,7 @@ test('current credentials keep bounded keyset reads, restrictive transport, exac
   expect(current.reads).toBe(1);
   expect(calls.slice(formStart).map((call) => call.method)).toEqual(['GET', 'DELETE']);
   const restored = await libraryEntryFormResponse(
-    current.request({ intent: 'restore', subjectId, deletionId, revision: '8' }),
+    current.request({ intent: 'restore', subjectId, deletionId, revision: '8', idempotencyKey }),
     current.env,
     client,
   );
@@ -290,4 +294,53 @@ test('current credentials keep bounded keyset reads, restrictive transport, exac
     });
     expect(await loadShelfTypes(client, explicit, {}, {})).toEqual({ state: readState });
   }
+});
+
+test('script-free restore keeps original native credentials through renewal and current admission gates replay', async () => {
+  const current = session();
+  let admitted = true;
+  const writes: Request[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      const call = new Request(input, init);
+      if (call.url.endsWith('/platform/exposure'))
+        return Response.json({ admitted: admitted ? ['library_entry.delete', 'library_entry.restore'] : [] });
+      if (call.method === 'DELETE')
+        return new Response(null, {
+          status: 204,
+          headers: {
+            'Library-Entry-Deletion-Id': deletionId,
+            'Library-Entry-Deletion-Revision': '8',
+          },
+        });
+      writes.push(call.clone());
+      if (writes.length === 1) throw new Error('Lost restore acknowledgement');
+      return Response.json({ libraryEntry: entry });
+    }) as typeof fetch,
+  });
+  const fields = (html: string) =>
+    Object.fromEntries(
+      [...html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g)].map((match) => [match[1]!, match[2]!]),
+    );
+  const removed = fields(
+    await (await libraryEntryFormResponse(current.request(removeForm), current.env, client)).text(),
+  );
+  expect(removed.idempotencyKey).not.toBe(idempotencyKey);
+  expect(removed.credential).toBeTruthy();
+  const first = await libraryEntryFormResponse(current.request(removed), current.env, client);
+  const retry = fields(await first.text());
+  expect(retry).toEqual(removed);
+  current.renew('renewed-viewer');
+  admitted = false;
+  expect((await libraryEntryFormResponse(current.request(retry), current.env, client)).status).toBe(403);
+  expect(writes).toHaveLength(1);
+  admitted = true;
+  const restored = await libraryEntryFormResponse(current.request(retry), current.env, client);
+  expect(await restored.text()).toContain('data-restored-entry');
+  expect(writes[1]!.headers.get('authorization')).toBe('Bearer current-viewer');
+  expect([...writes[1]!.headers]).toEqual([...writes[0]!.headers]);
+  expect(await writes[1]!.text()).toBe(await writes[0]!.text());
+  current.renew('foreign-viewer', 'another-owner');
+  expect((await libraryEntryFormResponse(current.request(retry), current.env, client)).status).toBe(403);
+  expect(writes).toHaveLength(2);
 });

@@ -8,6 +8,7 @@ import {
   type ShelfSort,
 } from './shelf-params';
 export { libraryEntryStateWrite, type LibraryEntryStateWrite } from './shelf-params';
+import { captureEntryRestoreCredential, originalEntryRestoreCredential } from './entry-restore-credential';
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
@@ -80,7 +81,11 @@ export type SavedLibraryEntry = {
 export type ReloadedLibraryEntry = Omit<PersonalLibraryEntry, 'changeKey' | 'removeKey'>;
 
 export type LibraryMutationResult =
-  | { ok: true; entry?: SavedLibraryEntry; undo?: { deletionId: string; revision: number } }
+  | {
+      ok: true;
+      entry?: SavedLibraryEntry;
+      undo?: { deletionId: string; revision: number; idempotencyKey?: string; credential?: string };
+    }
   | { ok: false; reason: 'conflict'; entry: ReloadedLibraryEntry }
   | {
       ok: false;
@@ -102,7 +107,41 @@ export type LibraryRemoveInput = {
   idempotencyKey: string;
 };
 
-export type LibraryRestoreInput = { subjectId: string; deletionId: string; revision: number };
+export type LibraryRestoreReceipt = {
+  subjectId: string;
+  deletionId: string;
+  revision: number;
+  idempotencyKey?: string;
+  credential?: string;
+};
+export type LibraryRestoreInput = LibraryRestoreReceipt & { idempotencyKey: string };
+const restoreKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export function validateLibraryRestoreInput(input: unknown): LibraryRestoreInput {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid library restore');
+  const value = input as Record<string, unknown>;
+  if (
+    typeof value.subjectId !== 'string' ||
+    !value.subjectId ||
+    value.subjectId.length > 128 ||
+    typeof value.deletionId !== 'string' ||
+    !value.deletionId ||
+    value.deletionId.length > 128 ||
+    !Number.isSafeInteger(value.revision) ||
+    (value.revision as number) < 1 ||
+    typeof value.idempotencyKey !== 'string' ||
+    !restoreKeyPattern.test(value.idempotencyKey) ||
+    (value.credential !== undefined &&
+      (typeof value.credential !== 'string' || !/^[A-Za-z0-9_-]{1,3200}$/.test(value.credential)))
+  )
+    throw new Error('Invalid library restore');
+  return {
+    subjectId: value.subjectId,
+    deletionId: value.deletionId,
+    revision: value.revision as number,
+    idempotencyKey: value.idempotencyKey,
+    ...(value.credential ? { credential: value.credential as string } : {}),
+  };
+}
 export type LibraryRestoreResult =
   | { ok: true; entry: ReloadedLibraryEntry }
   | { ok: false; reason: 'occupied'; entry?: ReloadedLibraryEntry }
@@ -438,9 +477,12 @@ export async function removePersonalLibraryEntry(
       const headers = (result as typeof result & { response?: Response }).response?.headers;
       const deletionId = headers?.get('Library-Entry-Deletion-Id');
       const revision = Number(headers?.get('Library-Entry-Deletion-Revision'));
-      return deletionId && Number.isSafeInteger(revision) && revision > 0
-        ? { ok: true, undo: { deletionId, revision } }
-        : { ok: true };
+      if (!deletionId || !Number.isSafeInteger(revision) || revision < 1) return { ok: true };
+      const credential = await captureEntryRestoreCredential(request, sessionEnv);
+      return {
+        ok: true,
+        undo: { deletionId, revision, idempotencyKey: crypto.randomUUID(), ...(credential ? { credential } : {}) },
+      };
     }
     const conflict = await explainConflict(client, authorization, input.subjectId, result);
     if (conflict) return conflict;
@@ -459,14 +501,16 @@ export async function restorePersonalLibraryEntry(
   sessionEnv: Partial<SessionEnv>,
   input: LibraryRestoreInput,
 ): Promise<LibraryRestoreResult> {
+  input = validateLibraryRestoreInput(input);
   try {
-    const authorization = await bearer(request, sessionEnv);
+    if (!(await bearer(request, sessionEnv))) return { ok: false, reason: 'signed-out' };
+    const authorization = await originalEntryRestoreCredential(request, sessionEnv, input.credential);
     if (!authorization) return { ok: false, reason: 'signed-out' };
     const result = await client
       .libraryEntries({ subjectId: input.subjectId })
       .$restore.post(
         { deletionId: input.deletionId, revision: input.revision },
-        { headers: writeHeaders(authorization, crypto.randomUUID()) },
+        { headers: writeHeaders(authorization, input.idempotencyKey) },
       );
     if (!result.error && result.data?.libraryEntry) return { ok: true, entry: presentEntry(result.data.libraryEntry) };
     const code = codeOf(result.error);

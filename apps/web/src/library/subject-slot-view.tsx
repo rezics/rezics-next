@@ -1,3 +1,5 @@
+import { useAuthoringDeparture } from '../threads/authoring-departure';
+import type { LibraryRestoreInput, LibraryRestoreReceipt } from './entries-read';
 import type { SubjectLabelStep } from './subject-label-step';
 import { SubjectLabelMore } from './subject-labels.tsx';
 import { labelReadMessage, SubjectLabelReadNotice } from './subject-labels.tsx';
@@ -234,6 +236,7 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
       key={scopeSequence.current.value}
       {...props}
       data={current}
+      entryIdentity={scope}
       entryLifetime={admissions.current.entry!.lifetime}
       labelLifetime={admissions.current.labels!.lifetime}
       collectionLifetime={admissions.current.collections!.lifetime}
@@ -297,10 +300,12 @@ function SubjectLibrarySlotView({
   locale,
   data,
   entryLifetime,
+  entryIdentity,
   labelLifetime,
   collectionLifetime,
 }: SubjectSlotProps & {
   entryLifetime: SlotLifetime;
+  entryIdentity: string;
   labelLifetime: SlotLifetime;
   collectionLifetime: SlotLifetime;
 }) {
@@ -352,14 +357,24 @@ function SubjectLibrarySlotView({
   const [collectionsLoaded, setCollectionsLoaded] = useState(data.collectionsLoaded);
   const [collectionsProblem, setCollectionsProblem] = useState<'closed' | 'unavailable' | null>(null);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
-  const [entryUndo, setEntryUndo] = useState(data.undo);
+  const captureRestore = (receipt: LibraryRestoreReceipt): LibraryRestoreInput => ({
+    ...receipt,
+    idempotencyKey: receipt.idempotencyKey ?? crypto.randomUUID(),
+  });
+  const [entryUndo, setEntryUndo] = useState(() => (data.undo ? captureRestore(data.undo) : undefined));
   const uncertainRestore = useRef<{
-    receipt: { deletionId: string; revision: number };
-    csrfToken: string;
+    input: LibraryRestoreInput;
+    headers: Headers;
     send: typeof restoreSubjectLibrarySlot;
     running: boolean;
     response?: Awaited<ReturnType<typeof restoreSubjectLibrarySlot>> | undefined;
   } | null>(null);
+  const restoreIdentity = useRef(entryIdentity);
+  if (restoreIdentity.current !== entryIdentity) {
+    restoreIdentity.current = entryIdentity;
+    uncertainRestore.current = null;
+    setEntryUndo(undefined);
+  }
   const memberCreateAdmitted = useOperation('collection_member.create');
   const restoreAdmitted = useOperation('library_entry.restore');
   const entryPutAdmitted = useOperation('library_entry.put');
@@ -406,7 +421,9 @@ function SubjectLibrarySlotView({
   const [collectionOrigin, setCollectionOrigin] = useState(collectionLifetime);
   // Render-time retirement prevents a stale private value from surviving even one committed replacement render.
   if (entryOrigin !== entryLifetime) {
-    if (entryOrigin.seed !== entryLifetime.seed) setEntryUndo(undefined);
+    if (entryOrigin.seed !== entryLifetime.seed) {
+      setEntryUndo(undefined);
+    }
     setEntryOrigin(entryLifetime);
     setEntry(initialEntry);
     setSelectedState(initialEntry?.state ?? '');
@@ -458,7 +475,12 @@ function SubjectLibrarySlotView({
       data.restore?.ok || data.restore?.reason === 'occupied' ? (data.restore.entry ?? null) : data.entry;
     setEntry(loadedEntry);
     setSelectedState(loadedEntry?.state ?? '');
-    if (data.undo) setEntryUndo(data.undo);
+    if (data.undo && !uncertainRestore.current)
+      setEntryUndo((current) =>
+        current?.deletionId === data.undo!.deletionId && current.revision === data.undo!.revision
+          ? current
+          : captureRestore(data.undo!),
+      );
   }, [data.entry, data.restore, data.undo, entryLifetime]);
   useEffect(() => {
     if (!collectionLifetime.current()) return;
@@ -550,12 +572,25 @@ function SubjectLibrarySlotView({
                     ? m.library_subject_unavailable()
                     : null;
 
-  async function restoreEntry(receipt: { deletionId: string; revision: number }) {
+  const discardRestore = () => {
+    uncertainRestore.current = null;
+    setEntryUndo(undefined);
+    setRestoreMessage(null);
+  };
+  useAuthoringDeparture(
+    () => uncertainRestore.current !== null,
+    () => uncertainRestore.current !== null,
+    `${entryLifetime.seed}:${entryUndo?.idempotencyKey}:${restoreMessage}`,
+    discardRestore,
+    discardRestore,
+  );
+
+  async function restoreEntry(input: LibraryRestoreInput) {
     if (!hydrated || !entryLifetime.current('library_entry.get', 'library_entry.restore') || !restoreAdmitted) return;
     if (!uncertainRestore.current && !data.csrfToken) return;
     const operation: NonNullable<typeof uncertainRestore.current> = uncertainRestore.current ?? {
-      receipt,
-      csrfToken: data.csrfToken!,
+      input: { ...input },
+      headers: new Headers({ 'X-CSRF-Token': data.csrfToken! }),
       send: restoreSubjectLibrarySlot,
       running: false,
     };
@@ -566,15 +601,15 @@ function SubjectLibrarySlotView({
       const restored =
         operation.response ??
         (await operation.send({
-          data: { subjectId: subject.id, ...operation.receipt },
-          headers: { 'X-CSRF-Token': operation.csrfToken },
+          data: { ...operation.input },
+          headers: new Headers(operation.headers),
         }));
       operation.response =
         restored.ok ||
         (restored.reason !== 'unavailable' && restored.reason !== 'closed' && restored.reason !== 'signed-out')
           ? restored
           : undefined;
-      if (!entryLifetime.current()) return;
+      if (!entryLifetime.current() || uncertainRestore.current !== operation) return;
       if ('entry' in restored && restored.entry && restored.entry.subjectId !== subject.id) return;
       void queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] });
       if (operation.response) uncertainRestore.current = null;
@@ -613,9 +648,9 @@ function SubjectLibrarySlotView({
       setEntry(null);
       setSelectedState('');
       setActionResult('cleared');
-      if (response.undo) setEntryUndo({ subjectId: subject.id, ...response.undo });
-      if (response.undo && restoreAdmitted) {
-        const receipt = response.undo;
+      const receipt = response.undo ? captureRestore({ subjectId: subject.id, ...response.undo }) : undefined;
+      if (receipt) setEntryUndo(receipt);
+      if (receipt && restoreAdmitted) {
         undoToast(
           m.library_removed(),
           () => {
@@ -1064,9 +1099,7 @@ function SubjectLibrarySlotView({
     void removeLabel(label);
   }
 
-  const undoReceipt =
-    entryUndo ??
-    (uncertainRestore.current ? { subjectId: subject.id, ...uncertainRestore.current.receipt } : undefined);
+  const undoReceipt = uncertainRestore.current?.input ?? entryUndo;
   return (
     <section aria-label={m.library_subject_heading()} className="flex flex-wrap items-center gap-2">
       {undoReceipt && data.entryAvailable ? (
@@ -1078,7 +1111,13 @@ function SubjectLibrarySlotView({
           }}
         >
           <fieldset disabled={!data.csrfToken && !uncertainRestore.current}>
-            <EntryUndoForm undo={undoReceipt} locale={locale} csrfToken={data.csrfToken} returnTo={returnTo} />
+            <EntryUndoForm
+              undo={undoReceipt}
+              locale={locale}
+              csrfToken={uncertainRestore.current?.headers.get('x-csrf-token') ?? data.csrfToken}
+              retry={!!uncertainRestore.current}
+              returnTo={returnTo}
+            />
           </fieldset>
         </div>
       ) : null}

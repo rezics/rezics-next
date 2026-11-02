@@ -4800,5 +4800,6 @@
   "library_collection_text_input_note_help": "最大1,000 Unicode文字。空欄も使用できます。",
   "library_collection_text_input_required": "タイトルを入力してください。",
   "library_collection_text_input_limit": "{limit} Unicode文字以内で入力してください。",
-  "library_collection_text_input_nul": "NUL文字を削除してください。"
+  "library_collection_text_input_nul": "NUL文字を削除してください。",
+  "library_entry_restore_retry_action": "復元を再試行"
 }

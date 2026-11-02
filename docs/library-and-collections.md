@@ -253,6 +253,8 @@ Decision: A complete admitted export is retained only within its mounted capture
 Tracked-entry state actions retain unattempted targets for explicit per-entry recovery with their captured state,
 revision, incarnation and command key, independent of later selection; a refused unknown replay keeps its exact intent.
 
+Decision: Library entry Undo captures a distinct restore key with the deletion receipt and retains its original sender, headers and operands for explicit retry; cookie-backed credentials travel only as a session-bound encrypted command field, and read recovery never replaces them.
+
 ## Indexed filtering and disclosure
 
 Decision: Collection filter links reject the whole requested read when any predicate group is invalid, exceeds

@@ -444,7 +444,32 @@ test('The complete mounted Subject Library workflow accepts only its actual curr
   await act(async () => {
     undos[0]!();
   });
-  expect(restores[0]!.data).toEqual({ subjectId: subject.id, deletionId: id(60), revision: 11 });
+  expect(restores[0]!.data).toEqual({
+    subjectId: subject.id,
+    deletionId: id(60),
+    revision: 11,
+    idempotencyKey: expect.any(String),
+  });
+  const originalRestore = restores[0]!.data;
+  expect(originalRestore.idempotencyKey).not.toBe(original.idempotencyKey);
+  await act(async () => {
+    restores[0]!.reject(new Error('Lost restore acknowledgement'));
+  });
+  await act(async () => {
+    client.setQueryData(['session'], viewer('A', 'renewed'));
+  });
+  const recovered = {
+    ...baseline(),
+    csrfToken: 'renewed',
+    provenance: { ...baseline().provenance!, csrfToken: 'renewed' },
+  };
+  await paint(recovered);
+  await submit('form:has(input[name="deletionId"])');
+  expect(restores[1]!.data).toEqual(originalRestore);
+  expect(restores[1]!.csrf).toBe('rotated');
+  await act(async () => {
+    client.setQueryData(['session'], viewer('A', 'rotated'));
+  });
   const a = { ...baseline(), csrfToken: 'rotated', provenance: { ...baseline().provenance!, csrfToken: 'rotated' } };
   await paint(a);
   await submit('[data-subject-label-remove]');
@@ -537,7 +562,7 @@ test('The complete mounted Subject Library workflow accepts only its actual curr
   await act(async () => {
     undos[0]!();
     restoreLabel();
-    restores[0]!.resolve({ ok: false, reason: 'stale' });
+    restores[1]!.resolve({ ok: false, reason: 'stale' });
     entries[3]!.resolve({ result: 'added' });
     pages[0]!.resolve({
       ...page('A', '', null, 'signed-page'),
@@ -545,7 +570,8 @@ test('The complete mounted Subject Library workflow accepts only its actual curr
     });
     await tick();
   });
-  expect(restores).toHaveLength(1);
+  expect(restores).toHaveLength(2);
+  expect(host.querySelector('input[name="deletionId"]')).toBeNull();
   expect(labels).toHaveLength(before);
   expect(host.textContent).not.toContain('Retired page choice');
   expect(host.textContent).not.toContain(m.library_subject_collection_added());

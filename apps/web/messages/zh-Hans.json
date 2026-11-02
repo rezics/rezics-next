@@ -4800,5 +4800,6 @@
   "library_collection_text_input_note_help": "最多 1,000 个 Unicode 字符，可以留空。",
   "library_collection_text_input_required": "请输入标题。",
   "library_collection_text_input_limit": "请使用不超过 {limit} 个 Unicode 字符。",
-  "library_collection_text_input_nul": "请移除 NUL 字符。"
+  "library_collection_text_input_nul": "请移除 NUL 字符。",
+  "library_entry_restore_retry_action": "重试恢复"
 }

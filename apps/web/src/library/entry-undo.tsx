@@ -1,10 +1,10 @@
-import { useContext } from 'react';
+import { useContext, useState } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { Exposure } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
-import type { LibraryRestoreInput, LibraryRestoreResult } from './entries-read';
+import type { LibraryRestoreReceipt, LibraryRestoreResult } from './entries-read';
 import { LibraryTitle } from './title';
 
 export type EntryFormContext = { locale: string; csrfToken?: string | null; returnTo?: string };
@@ -25,7 +25,12 @@ function ContextFields({ locale, csrfToken, returnTo }: EntryFormContext) {
 }
 
 /** The receipt is carried verbatim by a native form, including on a script-free response page. */
-export function EntryUndoForm({ undo, ...context }: EntryFormContext & { undo: LibraryRestoreInput }) {
+export function EntryUndoForm({
+  undo,
+  retry = false,
+  ...context
+}: EntryFormContext & { undo: LibraryRestoreReceipt; retry?: boolean }) {
+  const [key] = useState(() => undo.idempotencyKey ?? crypto.randomUUID());
   return (
     <Exposure operation="library_entry.restore">
       <form
@@ -38,11 +43,13 @@ export function EntryUndoForm({ undo, ...context }: EntryFormContext & { undo: L
         <input type="hidden" name="subjectId" value={undo.subjectId} />
         <input type="hidden" name="deletionId" value={undo.deletionId} />
         <input type="hidden" name="revision" value={undo.revision} />
+        <input type="hidden" name="idempotencyKey" value={undo.idempotencyKey ?? key} />
+        {undo.credential ? <input type="hidden" name="credential" value={undo.credential} /> : null}
         <p role="status" className="min-w-0 max-w-full">
           {m.library_removed()}
         </p>
         <button className={entryActionClassName} type="submit">
-          {m.editor_undo()}
+          {retry ? m.library_entry_restore_retry_action() : m.editor_undo()}
         </button>
       </form>
     </Exposure>
@@ -130,7 +137,7 @@ export function EntryFormPage({
   conflict = false,
 }: {
   locale: string;
-  undo?: LibraryRestoreInput | undefined;
+  undo?: LibraryRestoreReceipt | undefined;
   restore?: LibraryRestoreResult | undefined;
   csrfToken: string | null;
   returnTo: string;
@@ -140,7 +147,15 @@ export function EntryFormPage({
   return (
     <main className="mx-auto min-w-0 max-w-2xl space-y-6 p-6 text-foreground [overflow-wrap:anywhere]">
       <h1 className="text-2xl font-semibold">{m.library_heading()}</h1>
-      {undo ? <EntryUndoForm undo={undo} locale={locale} csrfToken={csrfToken} returnTo={returnTo} /> : null}
+      {undo ? (
+        <EntryUndoForm
+          undo={undo}
+          retry={!!restore && !restore.ok}
+          locale={locale}
+          csrfToken={csrfToken}
+          returnTo={returnTo}
+        />
+      ) : null}
       {removed && !undo ? <p role="status">{m.library_removed()}</p> : null}
       {conflict ? <p role="status">{m.library_conflict()}</p> : null}
       {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}

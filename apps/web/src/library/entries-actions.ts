@@ -17,7 +17,7 @@ import {
   type LibraryChangeInput,
   type LibraryMutationResult,
   type LibraryRemoveInput,
-  type LibraryRestoreInput,
+  validateLibraryRestoreInput,
   type LibraryRestoreResult,
   type PersonalLibraryView,
   type ReloadedLibraryEntry,
@@ -159,25 +159,8 @@ export const deletePersonalLibraryEntry = createServerFn({ method: 'POST' })
     );
   });
 
-function validateRestore(input: unknown): LibraryRestoreInput {
-  if (!input || typeof input !== 'object') throw new Error('Invalid library entry restore');
-  const value = input as Record<string, unknown>;
-  if (
-    typeof value.subjectId !== 'string' ||
-    !value.subjectId ||
-    value.subjectId.length > 128 ||
-    typeof value.deletionId !== 'string' ||
-    !value.deletionId ||
-    value.deletionId.length > 128 ||
-    !Number.isSafeInteger(value.revision) ||
-    (value.revision as number) < 1
-  )
-    throw new Error('Invalid library entry restore');
-  return { subjectId: value.subjectId, deletionId: value.deletionId, revision: value.revision as number };
-}
-
 export const restorePersonalLibraryEntryAction = createServerFn({ method: 'POST' })
-  .validator(validateRestore)
+  .validator(validateLibraryRestoreInput)
   .handler(async ({ data }): Promise<LibraryRestoreResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     return nameRestoreResult(

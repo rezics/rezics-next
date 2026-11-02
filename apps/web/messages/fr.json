@@ -4800,5 +4800,6 @@
   "library_collection_text_input_note_help": "Jusqu’à 1 000 caractères Unicode. Le texte vide est autorisé.",
   "library_collection_text_input_required": "Saisissez un titre.",
   "library_collection_text_input_limit": "Utilisez au maximum {limit} caractères Unicode.",
-  "library_collection_text_input_nul": "Supprimez le caractère NUL."
+  "library_collection_text_input_nul": "Supprimez le caractère NUL.",
+  "library_entry_restore_retry_action": "Réessayer la restauration"
 }

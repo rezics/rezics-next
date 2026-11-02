@@ -10,7 +10,7 @@ import {
 } from './subject-slot';
 import { libraryEntryStateWrite } from './entries-read';
 import { applySubjectLibraryMutation } from './subject-slot-mutation';
-import { restorePersonalLibraryEntry, type LibraryRestoreInput } from './entries-read';
+import { restorePersonalLibraryEntry, validateLibraryRestoreInput } from './entries-read';
 import { applySubjectLabelMutation, searchSubjectLabels, type SubjectLabelMutationInput } from './subject-labels.ts';
 import { subjectLabelInputLimit } from './subject-label-input';
 
@@ -169,25 +169,8 @@ export const mutateSubjectLibrarySlot = createServerFn({ method: 'POST' })
     return applySubjectLibraryMutation(getRequest(), env as Partial<SessionEnv>, data);
   });
 
-function validateRestore(input: unknown): LibraryRestoreInput {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid library restore');
-  const value = input as Record<string, unknown>;
-  if (
-    typeof value.subjectId !== 'string' ||
-    !value.subjectId ||
-    value.subjectId.length > 128 ||
-    typeof value.deletionId !== 'string' ||
-    !value.deletionId ||
-    value.deletionId.length > 128 ||
-    !Number.isSafeInteger(value.revision) ||
-    (value.revision as number) < 1
-  )
-    throw new Error('Invalid library restore');
-  return { subjectId: value.subjectId, deletionId: value.deletionId, revision: value.revision as number };
-}
-
 export const restoreSubjectLibrarySlot = createServerFn({ method: 'POST' })
-  .validator(validateRestore)
+  .validator(validateLibraryRestoreInput)
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     return restorePersonalLibraryEntry(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);

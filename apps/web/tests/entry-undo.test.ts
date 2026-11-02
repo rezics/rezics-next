@@ -3,6 +3,7 @@ import { removePersonalLibraryEntry, restorePersonalLibraryEntry } from '../src/
 
 const subjectId = 'book-one';
 const deletionId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
+const restoreKey = '0192f3a0-6c1e-7b2a-9d4e-000000000003';
 const request = new Request('https://rezics.test/action', { headers: { authorization: 'Bearer reader' } });
 const entry = {
   subjectId,
@@ -68,6 +69,7 @@ test('a successful restore returns its body without a read', async () => {
       subjectId,
       deletionId,
       revision: 12,
+      idempotencyKey: restoreKey,
     },
   );
   expect(restored).toMatchObject({ ok: true, entry: { subjectId, revision: 7 } });
@@ -85,7 +87,12 @@ test.each([
   ['library_entry_restore_expired', 'expired'],
 ])('%s is returned as its own restore refusal', async (code, reason) => {
   const { client } = clientFor(true, { status: 409, error: { value: { code } } });
-  const result = await restorePersonalLibraryEntry(client, request, {}, { subjectId, deletionId, revision: 12 });
+  const result = await restorePersonalLibraryEntry(
+    client,
+    request,
+    {},
+    { subjectId, deletionId, revision: 12, idempotencyKey: restoreKey },
+  );
   expect(result).toMatchObject({ ok: false, reason });
 });
 
@@ -134,7 +141,7 @@ test('an occupied restore reloads and returns the entry currently in the library
     client as never,
     request,
     {},
-    { subjectId, deletionId, revision: 12 },
+    { subjectId, deletionId, revision: 12, idempotencyKey: restoreKey },
   );
   expect(result).toMatchObject({ ok: false, reason: 'occupied', entry: { revision: 15, state: 'completed' } });
   expect(calls.map(({ method, path }) => [method, path])).toEqual([
@@ -170,9 +177,14 @@ test('the client sends one DELETE and one POST to the restore suffix with the ex
       idempotencyKey: '0192f3a0-6c1e-7b2a-9d4e-000000000002',
     },
   );
-  expect(removed.ok && removed.undo).toEqual({ deletionId: 'undo-ok', revision: 12 });
+  expect(removed.ok && removed.undo).toMatchObject({ deletionId: 'undo-ok', revision: 12 });
   if (!removed.ok || !removed.undo) throw new Error('Missing removal receipt');
-  const restored = await restorePersonalLibraryEntry(client, request, {}, { subjectId, ...removed.undo });
+  const restored = await restorePersonalLibraryEntry(
+    client,
+    request,
+    {},
+    { subjectId, ...removed.undo, idempotencyKey: restoreKey },
+  );
   expect(restored).toMatchObject({ ok: true, entry: { subjectId, state: 'planned', revision: 7 } });
   expect(calls.map((call) => [call.method, new URL(call.url).pathname])).toEqual([
     ['DELETE', `/v1/libraryEntries/${subjectId}`],
@@ -211,7 +223,7 @@ test('rendered shelf and subject removal feedback carries a real POST Undo form,
   client.setQueryData(['exposure', 'anonymous'], ['personal_library', 'library_entry.restore']);
   const render = (component: Parameters<typeof createElement>[0], props: object) =>
     renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(component, props)));
-  const receipt = { subjectId, deletionId, revision: 12 };
+  const receipt = { subjectId, deletionId, revision: 12, idempotencyKey: restoreKey };
   const data = {
     session: 'signed-in',
     csrfToken: 'csrf',
@@ -382,6 +394,8 @@ test.each([false, true])(
         fields.set(match[1]!, match[2]!);
       expect(fields.get('deletionId')).toBe('undo-ok');
       expect(fields.get('revision')).toBe('12');
+      expect(fields.get('idempotencyKey')).toMatch(/^[0-9a-f-]{36}$/);
+      expect(fields.get('idempotencyKey')).not.toBe('0192f3a0-6c1e-7b2a-9d4e-000000000002');
       const response = await send(fields);
       expect(response.status).toBe(200);
       const restored = await response.text();
@@ -397,6 +411,7 @@ test.each([false, true])(
         ['POST', `/v1/libraryEntries/${subjectId}:restore`],
       ]);
       expect(await writes[1]!.json()).toEqual({ deletionId: 'undo-ok', revision: 12 });
+      expect(writes[1]!.headers.get('idempotency-key')).toBe(fields.get('idempotencyKey'));
       expect(writes.every((call) => call.headers.get('authorization') === 'Bearer reader')).toBe(true);
     }
     setFakeAdmitted([]);
@@ -442,6 +457,7 @@ test('the new form endpoint validates cookie CSRF and requires each intent admis
         subjectId,
         deletionId: 'undo-ok',
         revision: '12',
+        idempotencyKey: restoreKey,
         locale: 'en',
         csrf_token: csrf,
       }),
@@ -558,4 +574,83 @@ test('both page components render the restored entry supplied in the restore res
     expect(html).not.toContain('name="deletionId"');
   }
   client.clear();
+});
+
+test('a lost restore acknowledgement retries the original native command without another restore', async () => {
+  const calls: { body: unknown; headers: unknown }[] = [];
+  let effects = 0;
+  const client = {
+    libraryEntries: () => ({
+      $restore: {
+        post: async (body: unknown, options: { headers: unknown }) => {
+          calls.push({ body, headers: options.headers });
+          if (calls.length === 1) {
+            effects++;
+            throw new Error('Lost acknowledgement');
+          }
+          return { data: { libraryEntry: entry }, error: null };
+        },
+      },
+    }),
+  } as never;
+  const input = { subjectId, deletionId, revision: 12, idempotencyKey: restoreKey };
+  expect(await restorePersonalLibraryEntry(client, request, {}, input)).toEqual({ ok: false, reason: 'unavailable' });
+  expect(await restorePersonalLibraryEntry(client, request, {}, input)).toMatchObject({ ok: true });
+  expect(calls[1]).toEqual(calls[0]);
+  expect(calls[0]).toEqual({
+    body: { deletionId, revision: 12 },
+    headers: {
+      authorization: 'Bearer reader',
+      'idempotency-key': restoreKey,
+    },
+  });
+  expect(effects).toBe(1);
+});
+
+test('script-free unknown restore retains its exact intent and invalid keys never dispatch', async () => {
+  const { libraryEntryFormResponse } = await import('../src/library/entry-form');
+  const calls: { body: unknown; headers: unknown }[] = [];
+  const client = {
+    platform: { exposure: { get: async () => ({ data: { admitted: ['library_entry.restore'] } }) } },
+    libraryEntries: () => ({
+      $restore: {
+        post: async (body: unknown, options: { headers: unknown }) => {
+          calls.push({ body, headers: options.headers });
+          if (calls.length === 1) throw new Error('Lost acknowledgement');
+          return { data: { libraryEntry: entry } };
+        },
+      },
+    }),
+  } as never;
+  const fields = new URLSearchParams({
+    intent: 'restore',
+    subjectId,
+    deletionId,
+    revision: '12',
+    idempotencyKey: restoreKey,
+    locale: 'en',
+    csrf_token: 'original',
+  });
+  const send = (body: URLSearchParams) =>
+    libraryEntryFormResponse(
+      new Request(request.url, {
+        method: 'POST',
+        headers: request.headers,
+        body,
+      }),
+      {},
+      client,
+    );
+  for (const key of ['', 'bad', restoreKey + '\r\n']) {
+    expect((await send(new URLSearchParams({ ...Object.fromEntries(fields), idempotencyKey: key }))).status).toBe(400);
+  }
+  expect(calls).toHaveLength(0);
+  const html = await (await send(fields)).text();
+  const retry = new URLSearchParams();
+  for (const match of html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g))
+    retry.set(match[1]!, match[2]!);
+  expect(retry.get('idempotencyKey')).toBe(restoreKey);
+  expect(retry.get('csrf_token')).toBe('original');
+  expect(await (await send(retry)).text()).toContain('data-restored-entry');
+  expect(calls[1]).toEqual(calls[0]);
 });

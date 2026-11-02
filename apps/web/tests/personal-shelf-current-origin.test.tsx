@@ -588,3 +588,42 @@ test('Signed label first/debounced/next/retry pages require actual viewer and ex
     await ui.close();
   }
 });
+
+test('Shelf Undo retry keeps its captured sender, credential, key and receipt through read recovery', async () => {
+  const ui = await mount();
+  try {
+    await ui.run(() => ui.controls.askRemove(id(1)));
+    await ui.run(() => {
+      void ui.controls.remove();
+    });
+    ui.restore.mockRejectedValueOnce(new Error('Lost restore response'));
+    await ui.run(() => ui.undos[0]!());
+    const original = ui.restore.mock.calls[0]![0];
+    expect(original.data).toMatchObject({ subjectId: id(1), deletionId: id(80), revision: 8 });
+    expect(original.data.idempotencyKey).not.toBe(id(201));
+    expect(new Headers(original.headers).get('x-csrf-token')).toBe('csrf-A');
+    await ui.run(() => ui.session('A', 'renewed'));
+    await ui.refresh();
+    await ui.settle(ui.reads.at(-1)!, response('A'));
+    expect(ui.restore).toHaveBeenCalledTimes(1);
+    ui.restore.mockResolvedValueOnce({ ok: false, reason: 'unavailable' });
+    await ui.run(() => {
+      void ui.controls.retryRestore();
+    });
+    const retry = ui.restore.mock.calls[1]![0];
+    expect(retry.data).toEqual(original.data);
+    expect([...new Headers(retry.headers)]).toEqual([...new Headers(original.headers)]);
+    await ui.run(() => {
+      ui.session('B');
+      ui.session('A', 'renewed');
+    });
+    await ui.settle(ui.reads.at(-1)!, response('A'));
+    expect(ui.controls.canRetryRestore).toBe(false);
+    await ui.run(() => {
+      void ui.controls.retryRestore();
+    });
+    expect(ui.restore).toHaveBeenCalledTimes(2);
+  } finally {
+    await ui.close();
+  }
+});
