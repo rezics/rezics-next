@@ -10,6 +10,8 @@ import type { SubjectSummary } from '../../media/summary';
 
 export const TypeListContext = createContext<{ target?: TypeListTarget; full?: string }>({});
 
+const controlClass = `${linkClass} ${linkColor} inline-flex min-h-[44px] min-w-[44px] max-w-full items-center rounded-sm px-2 py-2 text-start whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
+
 /** Render only native search hits and its explicit terminal/continuation outcome, never a detail object's facts. */
 export function TypeList(props: Record<string, unknown>) {
   const value = useContext(OverviewContext);
@@ -45,21 +47,23 @@ export function TypeList(props: Record<string, unknown>) {
     ready && typeof body.next === 'string' && target ? typeListHref(value.locale, target, id, body.next) : undefined;
   return (
     <section data-slot="type-list" aria-labelledby={`${id}-title`} className="min-w-0 space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <ListHeading full={full === id} id={`${id}-title`} lang={title.lang}>
-          {title.text}
-        </ListHeading>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1 basis-48 [overflow-wrap:anywhere]">
+          <ListHeading full={full === id} id={`${id}-title`} lang={title.lang}>
+            {title.text}
+          </ListHeading>
+        </div>
         {full !== id && href && (
-          <a data-slot="see-all" href={href} className={`${linkClass} ${linkColor}`}>
+          <a data-slot="see-all" href={href} className={controlClass}>
             {m.home_see_all({}, options)}
           </a>
         )}
       </div>
       {!ready ? (
-        <p role="alert">
+        <p role="alert" className="[overflow-wrap:anywhere]">
           {m.subject_section_failed({}, options)}{' '}
           {href && (
-            <a href={href} className={`${linkClass} ${linkColor}`}>
+            <a href={href} className={controlClass}>
               {m.subject_section_retry({}, options)}
             </a>
           )}
@@ -72,7 +76,7 @@ export function TypeList(props: Record<string, unknown>) {
             <p role="status">{m.search_no_results({}, options)}</p>
           )}
           {next && (
-            <a data-slot="next-page" href={next} className={`${linkClass} ${linkColor}`}>
+            <a data-slot="next-page" href={next} className={controlClass}>
               {m.library_more({}, options)}
             </a>
           )}
