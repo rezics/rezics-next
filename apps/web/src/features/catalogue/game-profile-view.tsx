@@ -118,7 +118,10 @@ function GameProfileLive({
     recovery.dispose();
     if (!current || (document.activeElement !== intent.opener && document.activeElement !== document.body)) return;
     // A surviving failure-shell opener retains its ordinary focus.
-    if (intent.opener.isConnected && !intent.opener.disabled) return;
+    if (intent.opener.isConnected && !intent.opener.disabled) {
+      if (document.activeElement !== intent.opener) intent.opener.focus();
+      return;
+    }
     const target = creationResult.current?.querySelector('h1') ?? creationFailure.current;
     if (target) {
       target.tabIndex = -1;
@@ -142,7 +145,7 @@ function GameProfileLive({
       focusIntent.current = intent;
       const cancel = () => recovery.dispose();
       const moved = (event: FocusEvent) => {
-        if (event.target !== opener) cancel();
+        if (event.target !== opener && event.target !== document.body) cancel();
       };
       const tabbed = (event: KeyboardEvent) => {
         if (event.key === 'Tab') cancel();

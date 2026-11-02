@@ -890,6 +890,9 @@ test('initial Game creation retry coalesces reads and orients only current delib
               scenario === 'session' ? replacementReader : originalReader,
             );
           await act(async () => outside.focus());
+          const currentLoads = loads;
+          await act(async () => queued({ currentTarget: opener, detail: 0 }));
+          expect(loads).toBe(currentLoads);
         }
         await settle(scenario === 'missing' ? unavailable : ready);
         if (scenario === 'keyboard') {
