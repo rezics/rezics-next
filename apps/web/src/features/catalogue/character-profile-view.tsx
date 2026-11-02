@@ -92,8 +92,9 @@ function CharacterProfileLive({
     refetchOnReconnect: false,
   });
   const retained = useRef<Extract<CharacterRead, { ok: true }> | undefined>(undefined);
-  const currentRead = currentCharacterRead(query.data, { id, work }, query.isFetching, query.isError);
-  if (currentRead) retained.current = query.data;
+  const result = query.data;
+  const currentRead = currentCharacterRead(result, { id, work }, query.isFetching, query.isError);
+  if (currentRead) retained.current = result;
   const current = retained.current;
   const character = current?.character;
   const label = pageText(character?.subject.labels, locale);
