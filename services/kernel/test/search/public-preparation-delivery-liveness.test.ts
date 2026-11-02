@@ -2,10 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
-import {
-  createPublicPreparation,
-  type PublicPreparationOptions,
-} from '../../src/search/public-preparation.ts';
+import { createPublicPreparation, type PublicPreparationOptions } from '../../src/search/public-preparation.ts';
 import {
   PUBLIC_PREPARATION_WORKFLOW,
   createPublicPreparationStore,
@@ -107,9 +104,7 @@ function identity(id: string, revision: string): string {
 }
 
 async function read(owner: string, id: string) {
-  const result = await pool.query<
-    PreparationRecord & { kind: string; lease_until: string; due_at: string }
-  >(
+  const result = await pool.query<PreparationRecord & { kind: string; lease_until: string; due_at: string }>(
     `SELECT id, revision::text, kind, locator, expires_at::text, lease_until::text, due_at::text
      FROM search.public_preparation WHERE partition_no = 0 AND prefix = $1 AND id = $2`,
     [owner, id],
@@ -158,10 +153,7 @@ test('repeated due discovery keeps delayed repair and population deliveries disp
   );
   const populationId = track(await store.retain(frontier, Date.now() + 86_400_000));
   const otherId = track(
-    await other.retain(
-      { kind: 'repair', key: JSON.stringify(isolatedJob), job: isolatedJob },
-      Date.now() + 86_400_000,
-    ),
+    await other.retain({ kind: 'repair', key: JSON.stringify(isolatedJob), job: isolatedJob }, Date.now() + 86_400_000),
   );
   const repairBefore = await read(owner, repairId);
   const populationBefore = await read(owner, populationId);
