@@ -133,6 +133,28 @@ test('clean navigation is quiet; Stay preserves the proposed handle and confirma
   expect(document.activeElement).toBe(input);
 });
 
+test('keyboard navigation stays in the departure dialog and Escape stays on the review', async () => {
+  const ui = await mount(source());
+  await setHandle(ui.host, 'after');
+  await confirm(ui.host);
+  const { navigation } = await startNavigation(ui.router, '/next');
+  const stay = ui.host.querySelector<HTMLButtonElement>('[data-stay]')!;
+  const leave = ui.host.querySelector<HTMLButtonElement>('[data-leave]')!;
+  await flush(() => {
+    leave.focus();
+    leave.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+  });
+  expect(document.activeElement).toBe(stay);
+  await flush(() => stay.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true })));
+  expect(document.activeElement).toBe(leave);
+  await flush(() => document.activeElement!.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  await flush(() => navigation);
+  expect(ui.router.state.location.pathname).toBe('/account/rename');
+  expect(ui.host.querySelector<HTMLInputElement>('#rename-handle')!.value).toBe('after');
+  expect(ui.host.querySelector<HTMLInputElement>('#rename-confirm')!.checked).toBe(true);
+  expect(document.activeElement).toBe(ui.host.querySelector('#rename-handle'));
+});
+
 test('Leave clears an unsent invalid draft before navigation', async () => {
   const ui = await mount(source({ readCurrent: async () => ({ kind: 'ready', target: target('account', null) }) }));
   await setHandle(ui.host, '!');

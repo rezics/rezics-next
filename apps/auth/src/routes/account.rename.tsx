@@ -11,6 +11,15 @@ import {
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
 import { AuthButton as Button } from '../button';
 import { AuthPage } from '../frame';
 import { ErrorAlert } from '../alert';
@@ -220,10 +229,6 @@ function RenameReview({
   useLayoutEffect(() => {
     if (blocker?.status === 'blocked')
       departureDialog.current?.querySelector<HTMLButtonElement>('[data-stay]')?.focus();
-    else if (focusAfterStay.current) {
-      focusAfterStay.current = false;
-      input.current?.focus();
-    }
   }, [blocker?.status]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -414,32 +419,36 @@ function RenameReview({
           </form>
         )}
       </AuthPage>
-      {blocker?.status === 'blocked' ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div
-            ref={departureDialog}
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="rename-departure-heading"
-            className="w-full max-w-md rounded-lg border bg-background p-6 text-foreground shadow-xl"
-          >
-            <h2 id="rename-departure-heading" className="text-lg font-semibold">
-              {m.auth_rename_departure_heading()}
-            </h2>
-            <p className="mt-2 text-sm">
-              {attempt.current?.submitted ? m.auth_rename_departure_pending() : m.auth_rename_departure_unsent()}
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button type="button" variant="outline" data-stay onClick={stay}>
-                {m.auth_rename_stay()}
-              </Button>
-              <Button type="button" data-leave onClick={leave}>
-                {m.auth_rename_leave()}
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <AlertDialog
+        open={blocker?.status === 'blocked'}
+        onOpenChange={(open) => {
+          if (!open) stay();
+        }}
+      >
+        <AlertDialogContent
+          ref={departureDialog}
+          finalFocus={() => {
+            if (focusAfterStay.current) {
+              focusAfterStay.current = false;
+              input.current?.focus();
+              return false;
+            }
+          }}
+        >
+          <AlertDialogTitle>{m.auth_rename_departure_heading()}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {attempt.current?.submitted ? m.auth_rename_departure_pending() : m.auth_rename_departure_unsent()}
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-stay onClick={stay}>
+              {m.auth_rename_stay()}
+            </AlertDialogCancel>
+            <AlertDialogAction data-leave onClick={leave}>
+              {m.auth_rename_leave()}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
