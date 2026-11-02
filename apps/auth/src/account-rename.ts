@@ -236,7 +236,8 @@ export const nativeRenameSource: RenameSource = {
   readCurrent: () => loadRenameTarget(),
   run: (attempt, isCurrent) => runRenameAttempt(attempt, nativeRenameSource.readCurrent, isCurrent),
   stepUp: async (attempt, isCurrent = () => true) => {
-    if (!isCurrent() || !saveRenameContinuation(attempt) || !storePendingManagementOperationStepUp(attempt))
+    const input = { accountId: attempt.accountId, operationKey: attempt.operationKey, operation: attempt.operation };
+    if (!isCurrent() || !saveRenameContinuation(attempt) || !storePendingManagementOperationStepUp(input))
       return false;
     window.location.assign(managementOperationStepUpUrl('rename'));
     return true;
