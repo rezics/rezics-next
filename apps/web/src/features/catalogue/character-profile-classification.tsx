@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -49,6 +49,15 @@ export function CharacterClassification({
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const running = useRef(false);
+  const chooser = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef(false);
+  useEffect(() => {
+    if (draft || !returnFocus.current) return;
+    returnFocus.current = false;
+    // Discard removes the focused button; return to the source choice in this instance.
+    const control = chooser.current?.querySelector<HTMLElement>('select, button');
+    control?.focus();
+  }, [draft]);
   const result = draft?.result;
   const reviewTransport = useMemo(
     () => review(property, result?.ok ? result.session : undefined),
@@ -81,6 +90,7 @@ export function CharacterClassification({
   };
   const discard = () => {
     if (!draft || running.current || factLocked(draft)) return;
+    returnFocus.current = true;
     setDraft(undefined);
     setPicked([]);
     setReviewing(false);
@@ -118,7 +128,7 @@ export function CharacterClassification({
           {label.text}
         </ContentItemHeading>
         {!draft ? (
-          <div className="flex flex-wrap items-end gap-3">
+          <div ref={chooser} className="flex flex-wrap items-end gap-3">
             {!!selected.length && (
               <Field className="min-w-0 flex-1 basis-full sm:basis-56">
                 <FieldLabel htmlFor={selectedValueId} className="max-w-full flex-wrap whitespace-normal">
