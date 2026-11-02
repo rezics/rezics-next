@@ -194,6 +194,11 @@ export const LongFallbackPhone: Story = {
   },
 };
 export const RightToLeft: Story = { ...LongFallbackPhone, args: { variant: 'long', direction: 'rtl' } };
+export const EnteredDraft: Story = {
+  play: async ({ canvasElement }) => {
+    await draft(canvasElement);
+  },
+};
 export const Correction: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -213,6 +218,7 @@ export const ChangedDefinitions: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.character_create() }));
     await expect(canvas.findByText(m.correction_stale())).resolves.toBeVisible();
     await expect(canvas.getAllByRole('textbox', { name: m.catalogue_create_label() })[0]).toHaveValue('A new traveler');
+    await userEvent.click(canvas.getByRole('button', { name: m.recipe_remove_field() }));
     await userEvent.click(canvas.getByRole('button', { name: m.recipe_remove_field() }));
     await expect(canvas.getByRole('combobox', { name: m.character_initial_fact() })).toHaveFocus();
   },

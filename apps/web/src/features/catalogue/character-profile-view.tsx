@@ -234,7 +234,14 @@ function CharacterProfileLive({
                   locale={locale}
                   transport={transport}
                   onCreated={setCreated}
-                  onRefreshDefinitions={() => query.refetch()}
+                  onRefreshDefinitions={async () => {
+                    // Refresh creation metadata independently of the public current-reading query.
+                    // Its failure must leave the entered private draft available for correction.
+                    const next = await transport.load({ id, work });
+                    if (!isCurrentCharacterRead(next, { isSuccess: true, isFetching: false }, { id, work }))
+                      throw new Error('Character creation definitions unavailable');
+                    return next.release;
+                  }}
                 />
               </div>
             )}

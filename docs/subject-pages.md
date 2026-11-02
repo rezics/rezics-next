@@ -41,6 +41,11 @@ content frame; terms use one column on phones and two on desktop. Confirmed crea
 reader actions, with the exact returned ID in labeled technical details; concealment and unavailable-reader
 messages remain visible beside the read retry.
 
+Character creation refreshes rejected metadata independently of the public current reading, retaining editable terms,
+facts and correction links on refresh failure with a metadata retry. Populated language rows and staged facts require
+row-local removal confirmation with Cancel; surviving inputs retain their stable correction targets. Uncertain
+submissions keep removal and editing locked to the original request.
+
 ## Create and correct a recipe
 
 `/{locale}/catalogue/recipe`, linked from catalogue creation, creates a released `schema:Recipe` with initial

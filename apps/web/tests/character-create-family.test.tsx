@@ -127,6 +127,15 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     await act(async () =>
       user.click(canvas().getAllByRole('button', { name: m.catalogue_create_remove_language() })[0]!),
     );
+    expect(canvas().getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(3);
+    await click(m.candidate_cancel());
+    expect(canvas().getAllByRole('textbox', { name: m.catalogue_create_label() })[1]).toHaveProperty('value', '旅人');
+    await act(async () =>
+      user.click(canvas().getAllByRole('button', { name: m.catalogue_create_remove_language() })[0]!),
+    );
+    await act(async () =>
+      user.click(canvas().getAllByRole('button', { name: m.catalogue_create_remove_language() })[0]!),
+    );
     // Removing the middle row preserves its successor and moves focus within the same terms editor.
     expect(canvas().getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(2);
     expect(window.document.activeElement).toBe(
@@ -196,6 +205,35 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     expect(writes(invalid)).toHaveLength(0);
     expect(control(m.catalogue_create_label()).value).toBe('Correction draft');
 
+    // Removing an earlier same-property fact cannot retarget the surviving correction.
+    await add('schema:height');
+    const secondAmount = canvas().getAllByRole('textbox', { name: m.correction_amount() })[1] as HTMLInputElement;
+    await replace(secondAmount, '+');
+    await submit();
+    const firstFact = within(host.querySelector('[data-slot="character-initial-fact"]') as HTMLElement);
+    await act(async () => user.click(firstFact.getByRole('button', { name: m.recipe_remove_field() })));
+    await click(m.candidate_cancel());
+    expect(canvas().getAllByRole('textbox', { name: m.correction_amount() })).toHaveLength(2);
+    await act(async () => user.click(firstFact.getByRole('button', { name: m.recipe_remove_field() })));
+    await act(async () => user.click(firstFact.getByRole('button', { name: m.recipe_remove_field() })));
+    const survivingCorrection = canvas()
+      .getAllByRole('link')
+      .find((link) => link.getAttribute('href') === `#${encodeURIComponent(secondAmount.id)}`)!;
+    await act(async () => user.click(survivingCorrection));
+    expect(window.document.activeElement).toBe(secondAmount);
+    expect(secondAmount.value).toBe('+');
+    await click(m.catalogue_create_add_language());
+    await replace(canvas().getAllByRole('textbox', { name: m.catalogue_create_language() })[1]!, 'fr');
+    await submit();
+    await click(m.catalogue_create_remove_language());
+    await click(m.catalogue_create_remove_language());
+    expect(secondAmount.getAttribute('aria-invalid')).toBe('true');
+    expect(
+      canvas()
+        .getAllByRole('link')
+        .some((link) => link.getAttribute('href') === survivingCorrection.getAttribute('href')),
+    ).toBe(true);
+
     // A real production refresh keeps the draft and safely retires controls removed from the release.
     const refresh = characterProfileFixture();
     const supplied = await refresh.transport.load({});
@@ -206,7 +244,11 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     const rejected: CharacterCommand[] = [];
     const refreshTransport: CharacterTransport = {
       ...refresh.transport,
-      load: async () => (++loads === 1 ? supplied : removed),
+      load: async () => {
+        loads++;
+        if (loads === 2) throw new Error('Metadata refresh unavailable');
+        return loads === 1 ? supplied : removed;
+      },
       create: async (command) => {
         rejected.push(structuredClone(command));
         return {
@@ -224,6 +266,11 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     await submit();
     await waitFor(() => expect(loads).toBe(2));
     expect(control(m.catalogue_create_label()).value).toBe('Retained metadata draft');
+    expect(control(m.correction_url()).value).toBe('https://example.org/retained');
+    expect(host.textContent).not.toContain(m.catalogue_create_uncertain());
+    const recovery = within(host.querySelector('[data-slot="character-create-recovery"]') as HTMLElement);
+    await act(async () => user.click(recovery.getByRole('button', { name: m.correction_reload() })));
+    expect(loads).toBe(3);
     expect(host.textContent).toContain(m.correction_stale());
     expect(canvas().queryByRole('textbox', { name: m.correction_url() })).toBeNull();
     expect(rejected[0]!.item.statements['schema:url']![0]!.value).toEqual({
@@ -233,6 +280,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     expect(host.querySelector('[data-slot="character-initial-fact"] code')!.textContent).toContain(
       'https://example.org/retained',
     );
+    await click(m.recipe_remove_field());
     await click(m.recipe_remove_field());
     expect(host.querySelector('[data-slot="character-initial-fact"]')).toBeNull();
 
@@ -246,6 +294,10 @@ test('Character creation keeps multilingual identity, initial facts, correction 
       if (scenario === 'uncertain') {
         await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_uncertain()));
         expect(control(m.catalogue_create_label()).closest('fieldset[disabled]')).not.toBeNull();
+        const remove = canvas().getByRole('button', { name: m.recipe_remove_field() }) as HTMLButtonElement;
+        expect(remove.disabled || remove.closest('fieldset[disabled]') !== null).toBe(true);
+        await act(async () => user.click(remove));
+        expect(control(m.correction_url()).value).toBe('https://example.org/recovery');
         const original = structuredClone(writes(fixture)[0]);
         await click(m.correction_retry());
         await waitFor(() => expect(canvas().getByRole('link', { name: m.candidate_view_public() })).toBeDefined());

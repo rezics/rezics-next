@@ -9,7 +9,6 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
-import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
 import { DefinitionMeaning } from './definition-meaning';
 import { ScalarControl, EditorFailure } from './statement-editor-view';
 import { editableScalar, type StatementInput } from './statement-editor';
@@ -26,11 +25,80 @@ const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const labelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
 
+/** Confirm against the stable row that owns this control, rather than a changing list index. */
+function DraftRemoval({
+  label,
+  description,
+  populated = true,
+  disabled,
+  locale,
+  onRemove,
+}: {
+  label: string;
+  description: string;
+  populated?: boolean;
+  disabled: boolean;
+  locale: string;
+  onRemove: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const o = { locale: locale as never };
+  useLayoutEffect(() => {
+    if (confirming) cancel.current?.focus();
+  }, [confirming]);
+  return confirming ? (
+    <div className="space-y-2" role="group" aria-label={m.candidate_confirm_title({ action: description }, o)}>
+      <p>{m.candidate_confirm_title({ action: description }, o)}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          ref={cancel}
+          type="button"
+          variant="outline"
+          className={actionClassName}
+          disabled={disabled}
+          onClick={() => {
+            setConfirming(false);
+            requestAnimationFrame(() => trigger.current?.focus());
+          }}
+        >
+          {m.candidate_cancel({}, o)}
+        </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          className={actionClassName}
+          disabled={disabled}
+          onClick={() => {
+            if (!disabled) onRemove();
+          }}
+        >
+          {label}
+        </Button>
+      </div>
+    </div>
+  ) : (
+    <Button
+      ref={trigger}
+      type="button"
+      variant="ghost"
+      className={actionClassName}
+      disabled={disabled}
+      onClick={() => {
+        if (!disabled) populated ? setConfirming(true) : onRemove();
+      }}
+    >
+      {label}
+    </Button>
+  );
+}
+
 /** Initial terms and explicitly added facts use the existing validators, scalar controls and subject POST. */
 export const CharacterProfileCreate = catalogueEditor(CharacterProfileCreateLive);
 
 function CharacterProfileCreateLive({
-  release,
+  release: suppliedRelease,
   locale,
   transport,
   onCreated,
@@ -40,11 +108,16 @@ function CharacterProfileCreateLive({
   locale: string;
   transport: CharacterTransport;
   onCreated: (result: Extract<CreateResult, { ok: true }>) => void;
-  onRefreshDefinitions?: () => Promise<unknown>;
+  onRefreshDefinitions?: () => Promise<Release>;
 }) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const termsId = useId();
+  const [definitions, setDefinitions] = useState<{ source: Release; value: Release }>();
+  const release = definitions?.source === suppliedRelease ? definitions.value : suppliedRelease;
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshRunning = useRef(false);
   const nextTermId = useRef(1);
   const form = useRef<HTMLFormElement>(null);
   const focusAfterChange = useRef<string | null>(null);
@@ -119,10 +192,27 @@ function CharacterProfileCreateLive({
   const [busy, setBusy] = useState(false);
   const pending = useRef<CharacterCommand | null>(null);
   const running = useRef(false);
-  const locked = busy || !!pending.current;
+  const locked = busy || refreshing || !!pending.current;
+  async function refreshDefinitions() {
+    if (!lifetime.active() || !onRefreshDefinitions || refreshRunning.current || pending.current) return;
+    refreshRunning.current = true;
+    setRefreshing(true);
+    try {
+      const next = await onRefreshDefinitions();
+      if (!lifetime.active()) return;
+      setDefinitions({ source: suppliedRelease, value: next });
+      setRefreshFailed(false);
+    } catch {
+      // A metadata failure does not turn a known rejection into an uncertain creation.
+      if (lifetime.active()) setRefreshFailed(true);
+    } finally {
+      refreshRunning.current = false;
+      if (lifetime.active()) setRefreshing(false);
+    }
+  }
   async function submit() {
     if (!lifetime.active()) return;
-    if (running.current || failure?.reason === 'conflict') return;
+    if (running.current || refreshRunning.current || failure?.reason === 'conflict') return;
     if (!pending.current) {
       const draft = characterDraft(release, terms, facts);
       if (draft.errors.length) {
@@ -142,7 +232,7 @@ function CharacterProfileCreateLive({
       } else {
         reportFailure(result);
         if (result.reason !== 'unavailable' && result.reason !== 'conflict') pending.current = null;
-        if (result.refreshDefinitions && onRefreshDefinitions) await onRefreshDefinitions();
+        if (result.refreshDefinitions) await refreshDefinitions();
       }
     } catch {
       if (!lifetime.active()) return;
@@ -255,15 +345,18 @@ function CharacterProfileCreateLive({
                 ))}
               </FieldGroup>
               {index > 0 && (
-                <CreateSubjectLanguageRemove
+                <DraftRemoval
                   locale={locale}
-                  rowId={`${termsId}-${term.id}`}
-                  focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add`}
+                  label={m.catalogue_create_remove_language({}, o)}
+                  description={`${m.catalogue_create_remove_language({}, o)} · ${m.character_create_correction_term({ number: index + 1 }, o)} · ${term.language}`}
+                  populated={!!(term.language || term.label || term.description || term.aliases)}
                   disabled={locked}
                   onRemove={() => {
-                    if (locked || running.current || pending.current) return;
+                    if (!lifetime.active() || locked || running.current || pending.current) return;
+                    focusAfterChange.current = terms[index + 1]
+                      ? `${termsId}-language-${terms[index + 1]!.id}`
+                      : `${termsId}-add`;
                     setTerms((previous) => previous.filter((row) => row.id !== term.id));
-                    setFailure(undefined);
                   }}
                 />
               )}
@@ -387,20 +480,20 @@ function CharacterProfileCreateLive({
                     </details>
                   </>
                 )}
-                <Button
-                  className={actionClassName}
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    if (locked || running.current) return;
+                <DraftRemoval
+                  locale={locale}
+                  label={m.recipe_remove_field({}, o)}
+                  description={`${m.recipe_remove_field({}, o)} · ${m.character_create_correction_fact({ number: index + 1 }, o)} · ${name.text || fact.property.id}`}
+                  disabled={locked}
+                  onRemove={() => {
+                    if (!lifetime.active() || locked || running.current || pending.current) return;
                     focusAfterChange.current = facts[index + 1]
                       ? `${characterFactId(termsId, factId(facts[index + 1]!))}-group`
                       : `${termsId}-initial-field`;
-                    setFacts(facts.filter((_, at) => at !== index));
+                    const removed = factId(fact);
+                    setFacts((previous) => previous.filter((row) => factId(row) !== removed));
                   }}
-                >
-                  {m.recipe_remove_field({}, o)}
-                </Button>
+                />
               </ContentItemFrame>
             </fieldset>
           );
@@ -417,6 +510,20 @@ function CharacterProfileCreateLive({
           {failure.reason === 'unavailable' && <p>{m.catalogue_create_uncertain({}, o)}</p>}
           {failure.reason === 'conflict' && <p>{m.catalogue_create_conflict({}, o)}</p>}
           {failure.refreshDefinitions && <p>{m.catalogue_create_refresh({}, o)}</p>}
+          {refreshFailed && (
+            <>
+              <p>{m.correction_unavailable({}, o)}</p>
+              <Button
+                type="button"
+                variant="outline"
+                className={actionClassName}
+                disabled={locked}
+                onClick={() => void refreshDefinitions()}
+              >
+                {m.correction_reload({}, o)}
+              </Button>
+            </>
+          )}
           {failure.reason === 'invalid' && displayedCorrections.length === 0 && (
             <p>{m.character_create_correction_fallback({}, o)}</p>
           )}
@@ -476,7 +583,7 @@ function CharacterProfileCreateLive({
           )}
         </ContentItemFrame>
       )}
-      <Button className={actionClassName} type="submit" disabled={busy || failure?.reason === 'conflict'}>
+      <Button className={actionClassName} type="submit" disabled={busy || refreshing || failure?.reason === 'conflict'}>
         {busy
           ? m.catalogue_create_saving({}, o)
           : pending.current
