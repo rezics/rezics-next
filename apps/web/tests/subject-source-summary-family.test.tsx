@@ -197,9 +197,15 @@ test('Subject source record summaries use the shared item family with complete a
         const named = rows.filter((row) => row.querySelector('h3'));
         expect(named.map((row) => row.querySelector('h3')?.textContent)).toEqual(records.map(({ name }) => name));
         expect([...section.querySelectorAll('h2, h3')].map((node) => node.tagName)).toEqual([
-          'H2', 'H3', 'H3', 'H3', 'H3',
+          'H2',
+          'H3',
+          'H3',
+          'H3',
+          'H3',
         ]);
-        expect(section.querySelector('li li, a a, a button, img, details, [hidden], [aria-hidden="true"] h3')).toBeNull();
+        expect(
+          section.querySelector('li li, a a, a button, img, details, [hidden], [aria-hidden="true"] h3'),
+        ).toBeNull();
         for (const [index, row] of named.entries()) {
           const heading = row.querySelector('h3')!;
           const primary = heading.querySelector<HTMLAnchorElement>('a')!;
@@ -218,7 +224,9 @@ test('Subject source record summaries use the shared item family with complete a
           for (const link of row.querySelectorAll<HTMLAnchorElement>('a')) {
             expect(link.classList.contains('min-h-11')).toBe(true);
             expect(link.classList.contains('focus-visible:outline-2')).toBe(true);
-            expect(link.hasAttribute('tabindex') || link.hasAttribute('role') || link.hasAttribute('target')).toBe(false);
+            expect(link.hasAttribute('tabindex') || link.hasAttribute('role') || link.hasAttribute('target')).toBe(
+              false,
+            );
           }
         }
         const metadata = named[0]!.querySelector('[data-content-item-slot="metadata"]')!;
@@ -250,7 +258,15 @@ test('Subject source record summaries use the shared item family with complete a
         const links = [...section.querySelectorAll<HTMLAnchorElement>('a')];
         const detailsHref = `/${locale}/subjects/${subject}/lectures/details`;
         expect(links.map((link) => link.getAttribute('href'))).toEqual([
-          viaUrl, sourceUrl, licenceUrl, records[1]!.url, sourceUrl, licenceUrl, records[3]!.url, bareUrl, detailsHref,
+          viaUrl,
+          sourceUrl,
+          licenceUrl,
+          records[1]!.url,
+          sourceUrl,
+          licenceUrl,
+          records[3]!.url,
+          bareUrl,
+          detailsHref,
         ]);
         expect(links.at(-1)?.textContent).toBe(m.subject_details({}, options));
         expect(links.at(-1)?.hasAttribute('data-original-page-link')).toBe(true);
