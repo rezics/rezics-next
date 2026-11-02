@@ -1524,6 +1524,7 @@ Verification recovery starts a fresh private status query and rejects request id
 Profile name, biography, links and avatar remain a local draft until **Save profile**. The visible live unsaved
 indicator compares only those Profile fields, never Public activity. It yields to pending or unknown command
 outcomes; existing save, confirmed readback and recovery announcements retain their separate meanings.
+Local preview requires both supplied link approval and a safe HTTPS destination; stale approval keeps invalid destinations inert without rewriting them.
 Notifications, Collection visibility and Public activity explain automatic saving inside their own sections.
 Recovery still requires the existing explicit review and confirmation controls when indicated.
 Save and reload readbacks retain later explicit field edits, including a return to the original value; retries

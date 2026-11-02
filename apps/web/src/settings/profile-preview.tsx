@@ -11,6 +11,25 @@ type ProfilePreviewAvatar = ProfileValues['avatar'];
 
 export type ProfilePreviewLink = { label: string; url: string; valid: boolean };
 
+function safePreviewLink({ url, valid }: ProfilePreviewLink): boolean {
+  // Keep rejected draft rows inert even when their supplied validity is stale.
+  if (
+    !valid ||
+    Array.from(url).length > 2048 ||
+    /[\u0000-\u0020\u007f]/.test(url) ||
+    !/^https:\/\/[^/@\s]+(?:[/?#]|$)/i.test(url)
+  )
+    return false;
+  try {
+    const destination = new URL(url);
+    return (
+      destination.protocol === 'https:' && !!destination.hostname && !destination.username && !destination.password
+    );
+  } catch {
+    return false;
+  }
+}
+
 function PreviewAvatar({ avatar, localUrl }: { avatar: ProfilePreviewAvatar; localUrl: string | null }) {
   if (!localUrl && avatar && 'variants' in avatar) {
     return (
@@ -107,9 +126,10 @@ export function ProfilePreview({
                   <ul className="grid min-w-0 gap-2 sm:grid-cols-2">
                     {links.slice(0, 5).map((link, index) => {
                       const label = link.label.trim() || m.settings_profile_link_row({ number: index + 1 });
+                      const valid = safePreviewLink(link);
                       return (
                         <li key={`${index}:${link.url}`} className="min-w-0 rounded-xl border border-border/60 p-3">
-                          {link.valid ? (
+                          {valid ? (
                             <a
                               href={link.url}
                               target="_blank"
@@ -124,7 +144,7 @@ export function ProfilePreview({
                           {link.url ? (
                             <p className="max-w-full break-all text-xs text-muted-foreground">{link.url}</p>
                           ) : null}
-                          {!link.valid ? (
+                          {!valid ? (
                             <p className="mt-1 text-xs text-muted-foreground">
                               {m.settings_profile_preview_invalid_link()}
                             </p>
