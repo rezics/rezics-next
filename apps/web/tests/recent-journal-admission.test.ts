@@ -6,11 +6,7 @@ import {
   rememberRecent,
   type RecentStorage,
 } from '../src/search/recent-history';
-import {
-  createRecentSearchSyncAdapter,
-  RecentSyncError,
-  type RecentSearchTransport,
-} from '../src/search/recent-sync';
+import { createRecentSearchSyncAdapter, RecentSyncError, type RecentSearchTransport } from '../src/search/recent-sync';
 
 const accountId = '019f0000-0000-7000-8000-734100000001';
 const bucket = recentBucket('signed-in', accountId)!;
@@ -104,10 +100,13 @@ test('malformed persisted journals stay unavailable without dispatch or loss of 
   ];
 
   for (const nativeJournal of malformed) {
-    const storage = memory(), key = recentHistoryKey(bucket);
+    const storage = memory(),
+      key = recentHistoryKey(bucket);
     const serialized = JSON.stringify({ entries: [entry], removed: [], native: nativeJournal });
     storage.value(key, serialized);
-    let reads = 0, writes = 0, updates = 0;
+    let reads = 0,
+      writes = 0,
+      updates = 0;
     const transport: RecentSearchTransport = {
       read: async () => {
         reads++;

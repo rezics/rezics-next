@@ -28,7 +28,11 @@ function localId(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > 4096) return false;
   try {
     const identity: unknown = JSON.parse(value);
-    if (!Array.isArray(identity) || (identity.length !== 3 && identity.length !== 4) || JSON.stringify(identity) !== value)
+    if (
+      !Array.isArray(identity) ||
+      (identity.length !== 3 && identity.length !== 4) ||
+      JSON.stringify(identity) !== value
+    )
       return false;
     const [kind, id, query, languages] = identity;
     if (
@@ -71,7 +75,9 @@ function nativeEntry(value: unknown): value is NativeEntry {
       (!owns(value, 'languages') ||
         (Array.isArray(value.languages) &&
           value.languages.length <= 8 &&
-          value.languages.every((language) => typeof language === 'string' && language.length >= 1 && language.length <= 35)))
+          value.languages.every(
+            (language) => typeof language === 'string' && language.length >= 1 && language.length <= 35,
+          )))
     );
   return value.kind === 'scope' && keysAre(value, ['kind', 'scope']) && nativeScope(value.scope);
 }
@@ -82,18 +88,17 @@ function revision(value: unknown): value is number {
 /** Admits only persisted command metadata that this adapter can safely resume. */
 export function admitRecentJournal(value: unknown): RecentJournal | undefined {
   if (!record(value) || !keysAre(value, ['revision', 'observed', 'rows', 'pending'], ['conflict'])) return;
-  if (!(value.revision === null || revision(value.revision)) || (owns(value, 'conflict') && typeof value.conflict !== 'boolean'))
+  if (
+    !(value.revision === null || revision(value.revision)) ||
+    (owns(value, 'conflict') && typeof value.conflict !== 'boolean')
+  )
     return;
   if (!record(value.observed) || !record(value.rows) || !Array.isArray(value.pending)) return;
 
   const observed = value.observed,
     rows = value.rows,
     pending = value.pending;
-  if (
-    Object.keys(observed).length > RECENT_HISTORY_LIMIT ||
-    Object.keys(rows).length > 100 ||
-    pending.length > 100
-  )
+  if (Object.keys(observed).length > RECENT_HISTORY_LIMIT || Object.keys(rows).length > 100 || pending.length > 100)
     return;
   for (const [id, visitedAt] of Object.entries(observed))
     if (!localId(id) || typeof visitedAt !== 'number' || !Number.isFinite(visitedAt)) return;
@@ -109,7 +114,8 @@ export function admitRecentJournal(value: unknown): RecentJournal | undefined {
       return;
   }
 
-  const admitted: QueuedRecentCommand[] = [], keys = new Set<string>();
+  const admitted: QueuedRecentCommand[] = [],
+    keys = new Set<string>();
   let attempted = false;
   for (let index = 0; index < pending.length; index++) {
     const raw = pending[index];
@@ -131,7 +137,8 @@ export function admitRecentJournal(value: unknown): RecentJournal | undefined {
     if (hasLocalId && !localId(raw.localId)) return;
     if (owns(raw, 'visitedAt') && (typeof raw.visitedAt !== 'number' || !Number.isFinite(raw.visitedAt))) return;
     if (owns(raw, 'expectedRevision')) {
-      if (!revision(raw.expectedRevision) || index !== 0 || attempted || raw.expectedRevision !== value.revision) return;
+      if (!revision(raw.expectedRevision) || index !== 0 || attempted || raw.expectedRevision !== value.revision)
+        return;
       attempted = true;
     }
 
@@ -145,7 +152,12 @@ export function admitRecentJournal(value: unknown): RecentJournal | undefined {
       )
         return;
     } else if (raw.change.kind === 'remove') {
-      if (!keysAre(raw.change, ['kind', 'id']) || !hasLocalId || owns(raw, 'visitedAt') || typeof raw.change.id !== 'string')
+      if (
+        !keysAre(raw.change, ['kind', 'id']) ||
+        !hasLocalId ||
+        owns(raw, 'visitedAt') ||
+        typeof raw.change.id !== 'string'
+      )
         return;
       if (uuid.test(raw.change.id)) {
         const row = rows[raw.localId as string];
@@ -163,12 +175,7 @@ export function admitRecentJournal(value: unknown): RecentJournal | undefined {
     if (command.change.kind !== 'remove' || uuid.test(command.change.id)) continue;
     const receiptKey = command.change.id.slice('pending:'.length);
     const use = admitted.slice(0, index).find((candidate) => candidate.key === receiptKey);
-    if (
-      !use ||
-      use.change.kind !== 'use' ||
-      use.expectedRevision === undefined ||
-      use.localId !== command.localId
-    )
+    if (!use || use.change.kind !== 'use' || use.expectedRevision === undefined || use.localId !== command.localId)
       return;
   }
 
