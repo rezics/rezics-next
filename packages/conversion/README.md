@@ -523,6 +523,15 @@ of its applicable byte guard: Bangumi infobox and VNDB titles approach 64 KiB,
 Wikidata terms approach 128 KiB, and Open Library description approaches its
 1 MiB prose guard while remaining within the platform hard record bound.
 
+Decision: count actual source descriptor reads and owned-key scans on fixed-shape records at 8, 64, and 512 conversions, matching the existing 1/8/64 groups of eight.
+The observer counts own-property descriptor reads and
+input-owned keys visited through `Object.keys` and `Object.hasOwn` while each
+public converter runs. The VNDB seed includes its `vndb@8` native alternate
+name, and the Wikidata seed uses the `wikidata-5` dish binding. The test requires
+exactly eight times as many visits at each scale step. This measures source
+projection visits, not elapsed CPU, heap allocation, or all work over the
+converter's local normalized values.
+
 Logical retained footprint means
 `Buffer.byteLength(JSON.stringify(entireActualReturn), 'utf8')`, including
 normalized record/hash input, diagnostics, metadata, proposals, and assets.
@@ -530,8 +539,9 @@ The tests measure actual input JSON bytes and whole-return JSON bytes, then
 compare incremental return-byte/input-byte slopes, allowing only 1% variation
 for serialization boundaries. They do not infer cost from expected fixture
 sizes. This is a logical serialized footprint proof, not a machine heap,
-allocation, work-visit, timing, or GC measurement; the work bound above is a
-source derivation, not a timing result. Existing native mapping, rights, caps,
+allocation, timing, or GC measurement. The measured work-visit test above
+counts actual reads from the seeded source graph; the broader `O(record bytes)`
+work bound remains a source derivation. Existing native mapping, rights, caps,
 digest, privacy, and I/O guards remain separate checks of behavior and purity.
 No SQL or network cost is inferred from a zero counter.
 

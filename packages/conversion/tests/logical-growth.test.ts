@@ -22,7 +22,7 @@ function vndbSeed(size: number, key: number): ConversionInput {
     external_id: id,
     record_revision: '7',
     record: {
-      vn: { id, olang: 'en' },
+      vn: { id, olang: 'en', alias: 'Community alternate name' },
       entry_meta: { id, revision: 7 },
       vn_titles: Array.from({ length: 32 }, (_, i) => ({
         id,
@@ -43,7 +43,7 @@ function wikidataSeed(size: number, key: number): ConversionInput {
       id,
       type: 'item',
       lastrevid: 7,
-      labels: { en: { language: 'en', value: 'Book' } },
+      labels: { en: { language: 'en', value: 'Mapo tofu' } },
       aliases: {
         en: Array.from({ length: 60 }, (_, i) => ({ language: 'en', value: `${i}-${'é'.repeat(size)}` })),
       },
@@ -59,7 +59,7 @@ function wikidataSeed(size: number, key: number): ConversionInput {
               datatype: 'wikibase-item',
               datavalue: {
                 type: 'wikibase-entityid',
-                value: { 'entity-type': 'item', 'numeric-id': 47461344, id: 'Q47461344' },
+                value: { 'entity-type': 'item', 'numeric-id': 746549, id: 'Q746549' },
               },
             },
           },
@@ -123,6 +123,50 @@ const sources = [
   },
 ];
 
+function trackSourceGraph(value: unknown, tracked: WeakSet<object>, visited = new WeakSet<object>()): void {
+  if (value === null || typeof value !== 'object' || visited.has(value)) return;
+  visited.add(value);
+  tracked.add(value);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+    if (descriptor && 'value' in descriptor) trackSourceGraph(descriptor.value, tracked, visited);
+  }
+}
+
+function sourceFieldVisits(inputs: ConversionInput[], convert: (input: ConversionInput) => void): number {
+  const tracked = new WeakSet<object>();
+  for (const input of inputs) trackSourceGraph(input, tracked);
+
+  let visits = 0;
+  const getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+  const keys = Object.keys;
+  const hasOwn = Object.hasOwn;
+  const count = (target: object) => {
+    if (tracked.has(target)) visits++;
+  };
+  Object.getOwnPropertyDescriptor = (target, key) => {
+    count(target);
+    return getOwnPropertyDescriptor(target, key);
+  };
+  Object.keys = (target) => {
+    const names = keys(target);
+    if (tracked.has(target)) visits += names.length;
+    return names;
+  };
+  Object.hasOwn = (target, key) => {
+    count(target);
+    return hasOwn(target, key);
+  };
+  try {
+    for (const input of inputs) convert(input);
+  } finally {
+    Object.getOwnPropertyDescriptor = getOwnPropertyDescriptor;
+    Object.keys = keys;
+    Object.hasOwn = hasOwn;
+  }
+  return visits;
+}
+
 for (const source of sources) {
   test(`${source.name}: actual unrelated conversions leave anchor return bytes identical`, () => {
     const options = { converterRevision: source.revision };
@@ -172,4 +216,43 @@ for (const source of sources) {
     // A larger input interval must not produce an increasing marginal byte slope.
     expect(slopes[1]!).toBeLessThanOrEqual(slopes[0]! * 1.01);
   });
+
+  test(`${source.name}: measured source-field visits scale with fixed record neighborhoods`, () => {
+    const options = { converterRevision: source.revision };
+    let nextKey = 1000;
+    const visits: number[] = [];
+    for (const scale of [1, 8, 64]) {
+      const inputs = Array.from({ length: scale * 8 }, () => source.seed(1, nextKey++));
+      visits.push(
+        sourceFieldVisits(inputs, (input) => {
+          const output = source.convert(input, context, options);
+          if (output.proposals.length === 0) throw new Error(`${source.name} produced no proposals`);
+        }),
+      );
+    }
+    expect(visits[0]).toBeGreaterThan(0);
+    expect(visits[1]).toBe(visits[0]! * 8);
+    expect(visits[2]).toBe(visits[1]! * 8);
+    console.info(`${source.name} source-field visits at 1/8/64 scales: ${visits.join('/')}`);
+  });
 }
+
+test('growth seeds retain VNDB native aliases and Wikidata dish classification', () => {
+  const vndb = convertVndb(vndbSeed(1, 1000), context, { converterRevision: vndbRevision });
+  expect(vndb.converter_revision).toBe('vndb@8');
+  expect(vndb.proposals).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        op: 'propose',
+        statement: expect.objectContaining({
+          property: { id: 'schema:alternateName' },
+          value: { type: 'value', content: { language: 'und', text: 'Community alternate name' } },
+        }),
+      }),
+    ]),
+  );
+
+  const wikidata = convertWikidata(wikidataSeed(1, 1000), {}, { converterRevision: wikidataRevision });
+  expect(wikidata.converter_revision).toBe('wikidata-5');
+  expect(wikidata.proposals[0]).toMatchObject({ op: 'create', subject: { type: 'schema:Recipe' } });
+});
