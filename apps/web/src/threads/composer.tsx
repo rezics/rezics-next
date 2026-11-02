@@ -1301,7 +1301,13 @@ function InlinePostEditorContent({
       current.body === null
     )
       return;
-    pruneCopiedImages(current.body);
+    // The delivered revision owns its media; no discarded upload may rewrite it later.
+    for (const source of new Set([...reuploading.current.keys(), ...mediaUpload.copySources()]))
+      mediaUpload.removeCopy(source);
+    reuploading.current.clear();
+    foreignPendingRef.current = 0;
+    editorPendingRef.current = 0;
+    updatePending();
     initialBodyRef.current = current.body;
     bodyRef.current = current.body;
     setBody(current.body);
@@ -1370,6 +1376,7 @@ function InlinePostEditorContent({
           </p>
         ) : (
           <RichTextEditor
+            key={revisionId}
             value={body}
             onChange={updateBody}
             label={m.thread_reply_body_label()}

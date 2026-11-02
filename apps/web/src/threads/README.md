@@ -38,7 +38,8 @@ claim server autosave. The guard does not create, replay or alter a write comman
 Stale-edit recovery previews only the admitted current snapshot without extra reads; Keep editing returns focus to
 the unchanged local body, and only explicit replacement with an available body resets the base and settled command
 intent. The preview uses unavailable image placeholders rather than inventing media authority. A missing or erased
-current body cannot replace the draft. Unknown outcomes retain recovery of the original immutable command.
+current body cannot replace the draft. Replacement retires local uploads before mounting the delivered revision.
+Unknown outcomes retain recovery of the original immutable command.
 The inline edit still inherits native licence and review metadata and offers no separate controls for them.
 
 ## Author erasure caller lifetime
