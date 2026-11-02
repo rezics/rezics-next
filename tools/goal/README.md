@@ -602,7 +602,8 @@ the missing teardown-intent/receipt API; Goal does not claim the check was cance
 replacement. Delivering that lifecycle seam remains separate work.
 
 Declared paths support literals, `*`, `?` and whole-segment `**`. Absolute paths, traversal and unsupported glob syntax
-are refused. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
+are refused. Matching walks an explicit stack and refuses after one million visited states; each pattern shares the
+64 KiB brief size bound. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
 Every intersected risk area must be declared. Extend the ownership data when adding product modules. A `control-plane`
 brief may declare only `tools/goal/` paths; dispatch refuses outside paths and asks that they be split into a dev task.
 
