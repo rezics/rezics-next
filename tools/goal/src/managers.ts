@@ -642,9 +642,10 @@ export class ManagerSessions {
           model: CODEX_MANAGER_MODEL,
           config: codexThreadConfig(spec),
         });
-        state.threadId = started.thread.id;
+        const threadId = started.thread.id as string;
+        state.threadId = threadId;
         this.save(state);
-        const goal = await client.request('thread/goal/set', activeGoalSet(state.threadId, spec));
+        const goal = await client.request('thread/goal/set', activeGoalSet(threadId, spec));
         state.goalState = goal.goal;
         state.status = 'running';
         this.save(state);

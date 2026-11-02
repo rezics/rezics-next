@@ -250,7 +250,7 @@ export async function connectPool(
   const executable = pool.executable ?? 'codex';
   // The overload exposes an isolated environment while keeping the transport entry signature stable.
   const parentEnvironment: NodeJS.ProcessEnv = arguments[2] === undefined ? process.env : arguments[2];
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...cleanManagedProviderEnvironment(parentEnvironment),
     CODEX_HOME: pool.codexHome,
     NO_COLOR: '1',
