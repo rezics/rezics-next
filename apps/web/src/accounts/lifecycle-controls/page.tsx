@@ -1,9 +1,32 @@
 import { useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { parseIntent, type Action, type Intent, type Outcome, type Page } from './data';
+
+type DisplayIdentity = Readonly<{ displayName: string | null; handle: string | null }>;
+type Confirmation = Readonly<{ intent: Intent; identity: DisplayIdentity }>;
+
+const identityLabel = (identity: DisplayIdentity) =>
+  identity.displayName || (identity.handle ? `@${identity.handle}` : m.lifecycle_unnamed_account());
+
+function AccountDetails({ accountId }: { accountId: string }) {
+  return (
+    <details>
+      <summary className="min-h-11 cursor-pointer py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+        {m.lifecycle_identity_details()}
+      </summary>
+      <dl className="mt-2 flex flex-col gap-1">
+        <dt className="text-sm text-muted-foreground">{m.lifecycle_account_id()}</dt>
+        <dd className="select-all break-all font-mono text-sm">{accountId}</dd>
+      </dl>
+    </details>
+  );
+}
 
 type IO = { read(): Promise<Page>; change(intent: Intent): Promise<Outcome> };
 const actionLabel = (action: Action) => (action === 'suspend' ? m.lifecycle_suspend() : m.lifecycle_reinstate());
@@ -34,7 +57,7 @@ export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO })
   const [page, setPage] = useState(initial);
   const [action, setAction] = useState<Action>('suspend');
   const [reason, setReason] = useState('');
-  const [confirmation, setConfirmation] = useState<Intent | null>(null);
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [locked, setLocked] = useState(false);
@@ -93,19 +116,21 @@ export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO })
   }
 
   return (
-    <article className="mx-auto w-full max-w-2xl space-y-6 pb-8">
-      <header className="space-y-3">
+    <article className="mx-auto flex w-full max-w-2xl flex-col gap-6 pb-8">
+      <header className="flex flex-col gap-3">
         <PageHeading>{m.lifecycle_title()}</PageHeading>
         <p className="text-muted-foreground">{m.lifecycle_intro()}</p>
       </header>
       {page.status === 'ready' ? (
         <Card>
           <CardHeader>
-            <CardTitle>{page.account.displayName || page.account.handle || m.lifecycle_target()}</CardTitle>
+            <CardTitle className="break-words [overflow-wrap:anywhere]">{identityLabel(page.account)}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {page.account.handle && <p>@{page.account.handle}</p>}
-            <p className="break-all font-mono text-sm">{page.account.id}</p>
+          <CardContent className="flex flex-col gap-3">
+            {page.account.displayName && page.account.handle && (
+              <p className="break-words [overflow-wrap:anywhere]">@{page.account.handle}</p>
+            )}
+            <AccountDetails accountId={page.account.id} />
             <p>{m.lifecycle_state_unavailable()}</p>
             {offered.length === 0 && <p>{m.lifecycle_capability_unavailable()}</p>}
           </CardContent>
@@ -114,80 +139,104 @@ export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO })
         <p role="status">{statusText(page.status)}</p>
       )}
       {outcome && (
-        <p role="status" aria-live="polite">
-          {statusText(outcome.status)}
-        </p>
+        <div role="status" aria-live="polite" className="flex flex-col gap-2">
+          {!['recorded', 'uncertain', 'pending'].includes(outcome.status) && (
+            <h2 className="font-semibold">{m.lifecycle_not_applied()}</h2>
+          )}
+          <p>{statusText(outcome.status)}</p>
+        </div>
       )}
       <Button variant="outline" disabled={busy} onClick={() => void read()}>
         {m.lifecycle_read_current()}
       </Button>
       {page.status === 'ready' && (
         <form
-          className="space-y-4"
+          className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault();
             if (!canChoose || !selected || reason.length > 2000) return;
-            setConfirmation(
-              parseIntent({
+            setConfirmation({
+              intent: parseIntent({
                 accountId: page.account.id,
                 action: selected,
                 key: crypto.randomUUID(),
                 ...(reason === '' ? {} : { reason }),
               }),
-            );
+              // Display only: later availability reads must not relabel the confirmed request.
+              identity: Object.freeze({ displayName: page.account.displayName, handle: page.account.handle }),
+            });
           }}
         >
-          <fieldset disabled={!canChoose || confirmation !== null} className="space-y-4">
+          <fieldset disabled={!canChoose || confirmation !== null} className="flex flex-col gap-4">
             <legend className="mb-3 font-semibold">{m.lifecycle_action()}</legend>
-            <label className="block space-y-2">
-              <span>{m.lifecycle_action()}</span>
-              <select
-                className="block min-h-11 w-full rounded-md border bg-background p-2"
-                value={selected ?? ''}
-                onChange={(event) => setAction(event.target.value as Action)}
-              >
-                {offered.length === 0 && <option value="">{m.lifecycle_capability_unavailable()}</option>}
-                {offered.map((item) => (
-                  <option key={item} value={item}>
-                    {actionLabel(item)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block space-y-2">
-              <span>{m.lifecycle_reason()}</span>
-              <textarea
-                className="block min-h-28 w-full rounded-md border bg-background p-3"
-                maxLength={2000}
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                aria-describedby="lifecycle-reason-help"
-              />
-            </label>
-            <p id="lifecycle-reason-help" className="text-sm text-muted-foreground">
-              {m.lifecycle_reason_help()}
-            </p>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="lifecycle-action">{m.lifecycle_action()}</FieldLabel>
+                <NativeSelect
+                  id="lifecycle-action"
+                  className="w-full"
+                  value={selected ?? ''}
+                  onChange={(event) => setAction(event.target.value as Action)}
+                >
+                  {offered.length === 0 && (
+                    <NativeSelectOption value="">{m.lifecycle_capability_unavailable()}</NativeSelectOption>
+                  )}
+                  {offered.map((item) => (
+                    <NativeSelectOption key={item} value={item}>
+                      {actionLabel(item)}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="lifecycle-reason">{m.lifecycle_reason()}</FieldLabel>
+                <Textarea
+                  id="lifecycle-reason"
+                  className="min-h-28"
+                  maxLength={2000}
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  aria-describedby="lifecycle-reason-help"
+                />
+                <FieldDescription id="lifecycle-reason-help">{m.lifecycle_reason_help()}</FieldDescription>
+              </Field>
+            </FieldGroup>
             <Button type="submit">{m.lifecycle_review()}</Button>
           </fieldset>
         </form>
       )}
       {confirmation && (
-        <section aria-labelledby="lifecycle-confirm-title" className="space-y-4 rounded-lg border p-5">
+        <section aria-labelledby="lifecycle-confirm-title" className="flex flex-col gap-4 rounded-lg border p-5">
           <h2 id="lifecycle-confirm-title" className="text-lg font-semibold">
             {m.lifecycle_confirmation()}
           </h2>
-          <dl className="space-y-2">
+          <dl className="flex flex-col gap-2">
             <dt className="font-semibold">{m.lifecycle_target()}</dt>
-            <dd className="break-all font-mono text-sm">{confirmation.accountId}</dd>
+            <dd className="flex min-w-0 flex-col gap-1">
+              <p className="break-words font-semibold [overflow-wrap:anywhere]">
+                {identityLabel(confirmation.identity)}
+              </p>
+              {confirmation.identity.displayName && confirmation.identity.handle && (
+                <p className="break-words [overflow-wrap:anywhere]">@{confirmation.identity.handle}</p>
+              )}
+              <AccountDetails accountId={confirmation.intent.accountId} />
+            </dd>
             <dt className="font-semibold">{m.lifecycle_action()}</dt>
-            <dd>{actionLabel(confirmation.action)}</dd>
+            <dd>{actionLabel(confirmation.intent.action)}</dd>
             <dt className="font-semibold">{m.lifecycle_reason()}</dt>
-            <dd className="whitespace-pre-wrap break-words">{confirmation.reason ?? m.lifecycle_no_reason()}</dd>
+            <dd className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              {confirmation.intent.reason ?? m.lifecycle_no_reason()}
+            </dd>
           </dl>
-          <p>{confirmation.action === 'suspend' ? m.lifecycle_suspend_effect() : m.lifecycle_reinstate_effect()}</p>
+          <p>
+            {confirmation.intent.action === 'suspend' ? m.lifecycle_suspend_effect() : m.lifecycle_reinstate_effect()}
+          </p>
           {!locked && (
             <div className="flex flex-wrap gap-3">
-              <Button disabled={busy || !offered.includes(confirmation.action)} onClick={() => void send(confirmation)}>
+              <Button
+                disabled={busy || !offered.includes(confirmation.intent.action)}
+                onClick={() => void send(confirmation.intent)}
+              >
                 {m.lifecycle_confirm()}
               </Button>
               <Button variant="outline" disabled={busy} onClick={() => setConfirmation(null)}>
@@ -196,17 +245,44 @@ export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO })
             </div>
           )}
           {locked && <p>{m.lifecycle_locked()}</p>}
+          <details>
+            <summary className="min-h-11 cursor-pointer py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+              {m.lifecycle_operation_details()}
+            </summary>
+            <div className="mt-2 flex flex-col gap-3 text-sm">
+              <p>{m.lifecycle_operation_help()}</p>
+              <dl className="flex flex-col gap-1">
+                <dt>{m.lifecycle_request_key()}</dt>
+                <dd className="select-all break-all font-mono">{confirmation.intent.key}</dd>
+                {outcome?.status === 'recorded' && (
+                  <>
+                    <dt>{m.lifecycle_receipt_id()}</dt>
+                    <dd className="select-all break-all font-mono">{outcome.receiptId}</dd>
+                  </>
+                )}
+              </dl>
+            </div>
+          </details>
           {outcome?.status === 'uncertain' && (
             <Button
               variant="outline"
-              disabled={busy || !lastRead.current || !offered.includes(confirmation.action)}
-              onClick={() => void send(confirmation)}
+              disabled={busy || !lastRead.current || !offered.includes(confirmation.intent.action)}
+              onClick={() => void send(confirmation.intent)}
             >
               {m.lifecycle_retry_same()}
             </Button>
           )}
         </section>
       )}
+      <details>
+        <summary className="min-h-11 cursor-pointer py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+          {m.lifecycle_technical_details()}
+        </summary>
+        <div className="mt-2 flex flex-col gap-3 text-sm text-muted-foreground">
+          <p>{m.lifecycle_protocol_help()}</p>
+          <p>{m.lifecycle_availability_help()}</p>
+        </div>
+      </details>
     </article>
   );
 }

@@ -12,6 +12,13 @@ The command uses the generated `$suspend.post` or `$reinstate.post` binding, whi
 method, an optional exact reason and the original idempotency header. Native current authorization remains decisive
 before receipt replay. Development fixtures never stand in for this capability.
 
+The target and confirmation lead with the current display name and handle, or a localized name-unavailable label.
+The exact account ID is selectable in optional account details beside the identity. Review captures a display-only
+name/handle snapshot beside the immutable intent; later availability reads cannot relabel that confirmation or
+supply authority. Confirmation shows the actual action, exact private reason and sign-in consequences. Technical
+help and request details retain protocol, floor/fence, original-key and receipt information without leading the
+decision or recovery text. Closing or reloading the page loses its in-memory copy; no persistence is added.
+
 A confirmed immutable intent stays in memory while sending and after response loss. Recovery attempts one current
 native read before offering an identical replay, and checks current advertisement again before sending. A receipt
 is reported only as recorded; it never proves current state, Auth cleanup or operator fanout completion. New effects
@@ -39,5 +46,6 @@ These are requests to the existing native owners, not guessed endpoints or new a
 
 Until these ports are installed, the real page explicitly shows unavailable private lifecycle state and unavailable
 exact actions. The typed real command path is implemented, with no fake fallback. Existing management inventory and
-resource grants remain their owners' pages. Native acceptance, stories from recorded outcomes, visual review and
-operator fanout proof remain later integration work; this delivery makes no deployment or native completion claim.
+resource grants remain their owners' pages. Illustrative review/recovery stories do not prove native capability.
+Native acceptance, stories from recorded outcomes, visual review and operator fanout proof remain later integration
+work; this delivery makes no deployment or native completion claim.

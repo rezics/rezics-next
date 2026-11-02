@@ -177,3 +177,116 @@ nativeTest(
   undefined,
   { cleanupGraceMs: 2_000, forceGraceMs: 3_000 },
 );
+
+// Account lifecycle presentation/transport fixtures. These do not start a native stack.
+// Kept unrun in this slice; the controller owns the deferred acceptance campaign.
+import { test as accountLifecycleFixture } from 'bun:test';
+
+accountLifecycleFixture(
+  'Existing lifecycle command security and uncertainty semantics preserved; human review and exact technical details remain accessible',
+  async () => {
+    const { createKernelClient } = await import('@rezics/client');
+    const { createElement } = await import('react');
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    const { AccountLifecyclePage } = await import('../src/accounts/lifecycle-controls/page');
+    const { commandLifecycle, loadLifecycle, parseIntent } = await import('../src/accounts/lifecycle-controls/data');
+    const { m } = await import('../src/paraglide/messages.js');
+    const account = {
+      id: '01a1a000-0000-7000-8000-000000000101',
+      kind: 'actor' as const,
+      displayName: 'Avery Reader',
+      handle: 'avery',
+    };
+    for (const identity of [
+      account,
+      { ...account, displayName: null },
+      { ...account, displayName: null, handle: null },
+    ]) {
+      const initial = {
+        status: 'ready' as const,
+        account: identity,
+        offered: [],
+        currentState: 'unavailable' as const,
+      };
+      const html = renderToStaticMarkup(
+        createElement(AccountLifecyclePage, {
+          initial,
+          io: {
+            read: async () => initial,
+            change: async () => {
+              throw new Error('Rendering cannot send a lifecycle request');
+            },
+          },
+        }),
+      );
+      const label = identity.displayName || (identity.handle ? `@${identity.handle}` : m.lifecycle_unnamed_account());
+      expect(html).toContain(label);
+      expect(html.indexOf(label)).toBeLessThan(html.indexOf(account.id));
+      expect(html).toMatch(new RegExp(`<details>[\\s\\S]*?${account.id}[\\s\\S]*?</details>`));
+      expect(html).toContain(m.lifecycle_account_id());
+      expect(html).toContain(m.lifecycle_state_unavailable());
+      expect(html).toContain(m.lifecycle_capability_unavailable());
+      expect(html).toContain(m.lifecycle_technical_details());
+      expect(html).toContain(m.lifecycle_protocol_help());
+      expect(html).toContain(m.lifecycle_availability_help());
+    }
+
+    const reason = '  Exact private reason\nKeep whitespace.  ';
+    const intent = parseIntent({ accountId: account.id, action: 'suspend', key: crypto.randomUUID(), reason });
+    expect(Object.isFrozen(intent)).toBe(true);
+    expect(() => parseIntent({ ...intent, identity: account })).toThrow();
+    expect(() => parseIntent({ ...intent, reason: 'x'.repeat(2001) })).toThrow();
+    let advertised = true;
+    let response: 'recorded' | 'not_applied' | 'unknown' = 'recorded';
+    const effects: Request[] = [];
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: (async (input, init) => {
+        const request = new Request(input, init);
+        expect(request.headers.get('authorization')).toBe('Bearer fixture-only');
+        const path = new URL(request.url).pathname;
+        if (path.endsWith('/management')) return Response.json({ account });
+        if (path === '/v1/viewerActions')
+          return Response.json({
+            resources: [
+              {
+                type: 'access.account',
+                id: account.id,
+                viewerActions: [
+                  { action: 'account:suspend', operations: [advertised ? 'account.suspend' : 'account.reinstate'] },
+                ],
+              },
+            ],
+          });
+        expect(path).toBe(`/v1/accounts/${account.id}:suspend`);
+        expect(request.headers.get('idempotency-key')).toBe(intent.key);
+        expect(await request.clone().json()).toEqual({ reason });
+        effects.push(request);
+        if (response !== 'recorded')
+          return Response.json(
+            { code: 'conflict', ...(response === 'not_applied' ? { effect_status: 'not_applied' } : {}) },
+            { status: 409 },
+          );
+        return Response.json({
+          suspension: {
+            accountId: account.id,
+            state: 'suspended',
+            minimumAuthnEpoch: '1',
+            receiptId: '01a1a000-0000-7000-8000-000000000102',
+          },
+        });
+      }) as typeof fetch,
+    });
+    expect((await commandLifecycle(client, 'Bearer fixture-only', intent)).status).toBe('recorded');
+    expect(effects).toHaveLength(1);
+    advertised = false;
+    expect(await loadLifecycle(client, 'Bearer fixture-only', account.id)).toMatchObject({ offered: [] });
+    expect((await commandLifecycle(client, 'Bearer fixture-only', intent)).status).toBe('unavailable');
+    expect(effects).toHaveLength(1); // A replay never bypasses current exact authority to reach a receipt.
+    advertised = true;
+    response = 'unknown';
+    expect((await commandLifecycle(client, 'Bearer fixture-only', intent)).status).toBe('uncertain');
+    response = 'not_applied';
+    expect((await commandLifecycle(client, 'Bearer fixture-only', intent)).status).toBe('conflict');
+    expect(effects).toHaveLength(3);
+  },
+);
