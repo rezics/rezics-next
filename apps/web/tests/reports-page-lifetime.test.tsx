@@ -241,6 +241,16 @@ function button(label: string, index = 0) {
   return found!;
 }
 const click = (label: string, index = 0) => act(async () => button(label, index).click());
+const warns = () => {
+  const event = new window.Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+};
+const chooseDeparture = (label: string) =>
+  act(async () => {
+    const dialog = window.document.querySelector('[role="alertdialog"]')!;
+    [...dialog.querySelectorAll('button')].find((node) => node.textContent === label)!.click();
+  });
 const hidden = () => {
   for (const text of [
     'Private native reason',
@@ -494,6 +504,7 @@ test('current ordinary and uncertain actions preserve exact native intent and re
   await paint();
   const count = reads.length;
   await review();
+  expect(warns()).toBe(false);
   await click(m.moderation_dismiss());
   expect(inputs).toHaveLength(1);
   expect(refreshes).toBe(0);
@@ -504,6 +515,10 @@ test('current ordinary and uncertain actions preserve exact native intent and re
   expect(host.textContent).toContain(m.moderation_queue_uncertain());
   expect(refreshes).toBe(0);
   expect(sends).toHaveLength(1);
+  await click(m.threads_next_page());
+  await chooseDeparture(m.thread_authoring_stay());
+  expect(host.textContent).toContain(m.moderation_queue_uncertain());
+  expect(Object.isFrozen(inputs[0])).toBe(true);
   await click(m.moderation_queue_retry_action());
   expect(inputs[1]).toEqual(inputs[0]);
   expect(sends[1]!.request.headers.get('idempotency-key')).toBe(JSON.stringify(inputs[0]!.idempotencyKey));
@@ -511,6 +526,7 @@ test('current ordinary and uncertain actions preserve exact native intent and re
   refreshGate = deferred<void>();
   await settle(1);
   expect(refreshes).toBe(1);
+  expect(warns()).toBe(false);
   expect(host.textContent).not.toContain(m.moderation_queue_uncertain());
   await act(async () => {
     client.setQueryData(sessionQuery.queryKey, viewer(id(2)));
@@ -645,6 +661,9 @@ test('current takedown retains exact target and reason while its successful refr
     );
     field.dispatchEvent(new window.Event('input', { bubbles: true }));
   });
+  await click(m.threads_next_page());
+  await chooseDeparture(m.thread_authoring_stay());
+  expect(field.value).toBe('Original decision reason');
   await click(m.moderation_take_down());
   expect(inputs[0]).toMatchObject({
     action: 'take-down',
@@ -726,10 +745,7 @@ test('confirmed report departure retires the original reader before continuation
   await click(m.threads_next_page());
   const dialog = window.document.querySelector<HTMLElement>('[role="alertdialog"]')!;
   expect(dialog.textContent).toContain(m.moderation_review_leave_pending());
-  await act(async () => {
-    [...dialog.querySelectorAll('button')].find((node) => node.textContent === m.thread_authoring_leave())!.click();
-    await tick();
-  });
+  await chooseDeparture(m.thread_authoring_leave());
   expect(replacements).toBe(1);
   expect(sends).toHaveLength(1);
   hidden();

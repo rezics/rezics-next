@@ -508,55 +508,6 @@ test('Mixed bulk results keep exact retry and unattempted work protected during 
   });
 });
 
-test('Individual browsing and receipts do not warn; Stay preserves the reason and exact uncertain command', async () => {
-  await withView(async ({ host, render, user, flush }) => {
-    const calls: Parameters<ReportQueueAction>[0][] = [];
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let selections = 0;
-    await render(
-      <ModerationReportsView
-        {...moderationQueueFixture}
-        reports={[postReport]}
-        onSelection={() => {
-          selections++;
-        }}
-        onRefresh={async () => gate}
-        onAction={async (input) => {
-          calls.push(input);
-          if (calls.length === 1) throw new TypeError('Failed to fetch');
-          return { ok: true };
-        }}
-      />,
-    );
-    await act(async () => user.click(button(host, m.moderation_queue_review())));
-    expect(warns()).toBe(false);
-    const reason = host.querySelector('textarea')!;
-    await act(async () => user.type(reason, 'Preserve this exact reason.'));
-    await act(async () => user.click(button(host, m.moderation_filter_reset())));
-    await act(async () => user.click(button(departure(host), m.thread_authoring_stay())));
-    expect(reason.value).toBe('Preserve this exact reason.');
-    await act(async () => user.click(button(host, m.moderation_take_down())));
-    await flush();
-    await act(async () => user.click(button(host, m.moderation_filter_reset())));
-    expect(departure(host).textContent).toContain(m.moderation_review_leave_pending());
-    await act(async () => user.click(button(departure(host), m.thread_authoring_stay())));
-    expect(reason.value).toBe('Preserve this exact reason.');
-    await act(async () => user.click(button(host, m.moderation_queue_retry_action())));
-    await flush();
-    expect(calls).toHaveLength(2);
-    expect(calls[1]).toBe(calls[0]);
-    expect(Object.isFrozen(calls[0])).toBe(true);
-    expect(warns()).toBe(false);
-    await act(async () => user.click(button(host, m.moderation_filter_reset())));
-    expect(departure(host)).toBeNull();
-    expect(selections).toBe(1);
-    await act(async () => release());
-  });
-});
-
 test('An enclosing shared owner blocks search-only route reads and retires report continuations before Leave proceeds', async () => {
   await withView(async ({ host, render, user }) => {
     const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
