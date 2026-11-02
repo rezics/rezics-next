@@ -43,7 +43,13 @@ const recipe = {
     ],
   },
 };
-const messages = { unknown: 'Unknown', none: 'None', unlabelled: 'Unlabelled', sources: 'Sources', aliases: 'Also known as' };
+const messages = {
+  unknown: 'Unknown',
+  none: 'None',
+  unlabelled: 'Unlabelled',
+  sources: 'Sources',
+  aliases: 'Also known as',
+};
 
 function renderPage(documents: Record<string, unknown>): string {
   const page = {

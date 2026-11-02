@@ -331,7 +331,9 @@ export function subjectJsonLd({
     if ((key === undefined && !externalId) || (key !== undefined && reserved.has(key))) continue;
     const values: JsonValue[] = [];
     const hasDocuments = statements.some((statement) => statement.property.data_type === 'document');
-    const selectedCandidate = hasDocuments ? pageDocumentReferences(subject, [property], locale)[0]?.candidate : undefined;
+    const selectedCandidate = hasDocuments
+      ? pageDocumentReferences(subject, [property], locale)[0]?.candidate
+      : undefined;
     const visible = hasDocuments
       ? statements.filter((statement) => selectedCandidate !== undefined && statement.id === selectedCandidate)
       : statements;

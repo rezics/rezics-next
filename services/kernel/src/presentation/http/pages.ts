@@ -430,9 +430,7 @@ export function pageRoutes<App>(
         ? probes.get(canonicalize(initialSubjectDescriptor)!)?.body
         : undefined;
       const properties =
-        isRecord(initialSubject) &&
-        isRecord(initialSubject.subject) &&
-        isRecord(initialSubject.subject.statements)
+        isRecord(initialSubject) && isRecord(initialSubject.subject) && isRecord(initialSubject.subject.statements)
           ? Object.keys(initialSubject.subject.statements)
           : [];
       const plannedDocuments = documentRead(resolved.document, subject?.id ?? null, properties, selected?.context.id);

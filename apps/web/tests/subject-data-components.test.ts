@@ -61,9 +61,7 @@ const subjectBody = {
     descriptions: {},
     aliases: {},
     statements: {
-      'schema:abstract': [
-        abstractStatement,
-      ],
+      'schema:abstract': [abstractStatement],
       'schema:character': [
         statement('schema:character', 'wikibase-item', characterId, [
           { property: { id: 'rezics:role', data_type: 'wikibase-item' }, value: value(roleId) },

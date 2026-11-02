@@ -720,16 +720,18 @@ export async function readPage(options: {
 
   const documents: Record<string, unknown> = {};
   const subjectCanonical = descriptor
-    ? canonicalize({ kind: 'subject' as const, id: descriptor.id, ...(descriptor.context ? { context: descriptor.context } : {}) })
+    ? canonicalize({
+        kind: 'subject' as const,
+        id: descriptor.id,
+        ...(descriptor.context ? { context: descriptor.context } : {}),
+      })
     : undefined;
   const setSubjectResult = (result: PageResult) => {
     if (subjectCanonical) byCanonical.set(subjectCanonical, result);
   };
   const failDocument = async () => {
     setSubjectResult(
-      await responseResult(
-        problemResponse(new ProblemError('dependency_unavailable'), { method: 'GET', id: 'page' }),
-      ),
+      await responseResult(problemResponse(new ProblemError('dependency_unavailable'), { method: 'GET', id: 'page' })),
     );
   };
   for (const id of documentIds) {

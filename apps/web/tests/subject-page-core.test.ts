@@ -91,8 +91,9 @@ const availableDocuments = (read: ReturnType<typeof subject>) =>
   Object.fromEntries(
     Object.values(read.statements).flatMap((rows) =>
       rows.flatMap((entry) => {
-        const content = (entry.value as { type: string; content?: { document?: string; digest?: string; language?: string } })
-          .content;
+        const content = (
+          entry.value as { type: string; content?: { document?: string; digest?: string; language?: string } }
+        ).content;
         const body = content?.document ? documentBodies.get(content.document) : undefined;
         if (!body || !content?.digest || !content.language) return [];
         return [
