@@ -74,7 +74,8 @@ function useTrendingRetryFocus(state: TrendingState, isCurrent?: () => boolean) 
         document,
         onFocusIn(event: FocusEvent) {
           const target = event.target;
-          if (target !== source && target !== document.body && target !== document.documentElement) request.moved = true;
+          if (target !== source && target !== document.body && target !== document.documentElement)
+            request.moved = true;
         },
       };
       document.addEventListener('focusin', request.onFocusIn, true);
