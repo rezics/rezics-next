@@ -407,7 +407,7 @@ data languages, a proposal, a Context decision or an adoption. A proposal, accep
 remain separate; the latest revision is never labelled as the current selection. Return to current reading uses
 the ordinary public subject journey. This page offers no lifecycle command or historical snapshot comparison.
 
-Explicit continuation focuses a boundary for newly admitted unique revisions (including zero and the actual next-page state); choosing or retrying an explanation focuses its heading, while failed reads focus their own retry or failure boundary. Initial reads and retired results never move focus.
+Explicit keyboard continuation or retry focuses a boundary for newly admitted unique revisions (including zero and the actual next-page state); keyboard selection or explanation retry focuses its heading, while failed reads focus their own retry or failure boundary. Pointer actions, initial reads and retired results stay quiet. Focus movement, including away and back, pointer interaction, Tab or leaving the window cancels the original handoff; a successful read never revives it.
 
 Loading, no revisions, denied, invalid, changed, unavailable/retry and limited safe detail are distinct states.
 The temporary detail port remains unavailable until the published closed Semantic response is bound; consumer

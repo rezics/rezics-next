@@ -1,5 +1,5 @@
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState, type Ref } from 'react';
+import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState, type MouseEvent, type Ref } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { SubjectFrame, ViewHeading } from '../pages/subject-frame';
@@ -20,16 +20,19 @@ type FocusResult =
   | { kind: 'batch'; revision?: number | undefined; count: number; next: string | null }
   | { kind: 'detail' | 'failure' };
 
+type ChangeAction = MouseEvent<HTMLButtonElement>;
+type FocusIntent = { opener: HTMLButtonElement; cancel: () => void };
+
 type Props = {
   rootRef?: Ref<HTMLElement>;
   focusResult?: FocusResult | undefined;
   state: ChangesState;
   locale: string;
   currentHref?: string;
-  onMore?: () => void;
-  onSelect?: (revision: number) => void;
-  onRetry?: () => void;
-  onDetailRetry?: () => void;
+  onMore?: (event: ChangeAction) => void;
+  onSelect?: (revision: number, event: ChangeAction) => void;
+  onRetry?: (event: ChangeAction) => void;
+  onDetailRetry?: (event: ChangeAction) => void;
 };
 const actionClassName =
   'relative z-10 h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -265,7 +268,7 @@ export function SubjectChangesPage({
                       className={`${actionClassName} w-full justify-start py-3 text-start`}
                       aria-pressed={state.selected === row.revision}
                       disabled={busy || !onSelect}
-                      onClick={() => onSelect?.(row.revision)}
+                      onClick={(event) => onSelect?.(row.revision, event)}
                     >
                       <span className="flex min-w-0 max-w-full flex-col gap-1">
                         <span>{m.changes_revision({ revision: String(row.revision) }, o)}</span>
@@ -345,6 +348,7 @@ function SubjectChangesReader({
   const [state, dispatch] = useReducer(changesState, { loading: 'list' });
   const [focusResult, setFocusResult] = useState<FocusResult>();
   const focusRoot = useRef<HTMLElement>(null);
+  const focusIntent = useRef<FocusIntent | null>(null);
   const session = useRef<string | undefined>(undefined);
   const running = useRef<number | null>(null);
   const sequence = useRef(0);
@@ -357,7 +361,14 @@ function SubjectChangesReader({
   latest.current = state;
   const active = () => mounted.current && work.active();
   useLayoutEffect(() => {
-    if (!focusResult || !active()) return;
+    if (!focusResult) return;
+    const intent = focusIntent.current;
+    if (!intent) return;
+    const document = intent.opener.ownerDocument;
+    const held = document.activeElement === intent.opener || document.activeElement === document.body;
+    // Consume before focusing: a later successful read cannot revive this handoff.
+    intent.cancel();
+    if (!active() || !held) return;
     const kind =
       focusResult.kind === 'detail'
         ? !state.page
@@ -369,8 +380,32 @@ function SubjectChangesReader({
     const boundary = focusRoot.current?.querySelector<HTMLElement>(`[data-changes-focus="${kind}"]`);
     (boundary?.querySelector<HTMLButtonElement>('button:not(:disabled)') ?? boundary)?.focus();
   }, [focusResult]);
-  function begin() {
+  useLayoutEffect(() => () => focusIntent.current?.cancel(), []);
+  function begin(event?: ChangeAction) {
     if (!active() || running.current !== null) return;
+    focusIntent.current?.cancel();
+    const opener = event?.currentTarget;
+    const document = opener?.ownerDocument;
+    if (event?.detail === 0 && opener?.isConnected && document?.activeElement === opener) {
+      const cancel = () => {
+        document.removeEventListener('focusin', moved, true);
+        document.removeEventListener('pointerdown', cancel, true);
+        document.removeEventListener('keydown', tabbed, true);
+        document.defaultView?.removeEventListener('blur', cancel);
+        if (focusIntent.current?.cancel === cancel) focusIntent.current = null;
+      };
+      const moved = (event: FocusEvent) => {
+        if (event.target !== opener) cancel();
+      };
+      const tabbed = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') cancel();
+      };
+      focusIntent.current = { opener, cancel };
+      document.addEventListener('focusin', moved, true);
+      document.addEventListener('pointerdown', cancel, true);
+      document.addEventListener('keydown', tabbed, true);
+      document.defaultView?.addEventListener('blur', cancel);
+    }
     const operation = ++sequence.current;
     running.current = operation;
     setFocusResult(undefined);
@@ -389,10 +424,10 @@ function SubjectChangesReader({
       running.current = null;
     };
   }, [work]);
-  async function load(cursor?: string, explicit = cursor !== undefined) {
+  async function load(cursor?: string, explicit = cursor !== undefined, event?: ChangeAction) {
     // A continuation belongs only to the page that supplied it, including retries.
     if (cursor !== undefined && cursor !== latest.current.page?.next) return;
-    const operation = begin();
+    const operation = begin(event);
     if (!operation) return;
     retryCursor.current = cursor;
     const previous = new Set(latest.current.page?.revisions.map((row) => row.revision));
@@ -425,9 +460,9 @@ function SubjectChangesReader({
       operation.finish();
     }
   }
-  async function select(revision: number) {
+  async function select(revision: number, event?: ChangeAction) {
     if (!latest.current.page?.revisions.some((row) => row.revision === revision)) return;
-    const operation = begin();
+    const operation = begin(event);
     if (!operation) return;
     dispatch({ type: 'detail-start', revision });
     try {
@@ -452,20 +487,21 @@ function SubjectChangesReader({
       state={state}
       locale={locale}
       {...(currentHref ? { currentHref } : {})}
-      onMore={() => {
+      onMore={(event) => {
         const cursor = state.page?.next;
-        if (cursor !== null && cursor !== undefined && cursor === latest.current.page?.next) void load(cursor);
+        if (cursor !== null && cursor !== undefined && cursor === latest.current.page?.next)
+          void load(cursor, true, event);
       }}
-      onRetry={() => {
+      onRetry={(event) => {
         if (state !== latest.current) return;
         const cursor = retryCursor.current;
-        void load(cursor !== undefined && cursor === state.page?.next ? cursor : undefined, true);
+        void load(cursor !== undefined && cursor === state.page?.next ? cursor : undefined, true, event);
       }}
-      onSelect={(revision) => {
-        void select(revision);
+      onSelect={(revision, event) => {
+        void select(revision, event);
       }}
-      onDetailRetry={() => {
-        if (state.selected !== undefined && state === latest.current) void select(state.selected);
+      onDetailRetry={(event) => {
+        if (state.selected !== undefined && state === latest.current) void select(state.selected, event);
       }}
     />
   );

@@ -93,6 +93,13 @@ test('the complete Subject history family keeps independent headings, bounded su
     await act(async () => user.click(target));
     await settle();
   };
+  const press = async (scope: Element, text: string) => {
+    await act(async () => {
+      button(scope, text).focus();
+      await user.keyboard('{Enter}');
+    });
+    await settle();
+  };
   const queued = (target: object) => {
     const key = Object.keys(target).find((name) => name.startsWith('__reactProps$'))!;
     const callback = Reflect.get(target, key).onClick as () => void;
@@ -257,6 +264,7 @@ test('the complete Subject history family keeps independent headings, bounded su
     expect(a.querySelector('nav a')?.getAttribute('href')).toBe(currentHref);
     expect(a.textContent).toContain(m.changes_current_notice());
     await click(b, selectFive);
+    expect(document.activeElement).toBe(button(b, selectFive));
     const current = b.querySelector(`section[aria-label="${m.changes_current()}"]`)!;
     expect(current.querySelector('h3')?.textContent).toBe(m.changes_current());
     for (const text of [m.context_accepted(), m.context_selected(), m.candidate_rank_preferred()])
@@ -265,14 +273,14 @@ test('the complete Subject history family keeps independent headings, bounded su
 
     // A failed continuation replays exactly its original opaque cursor and continuity.
     listFailure = true;
-    await click(a, m.changes_more());
+    await press(a, m.changes_more());
     expect(document.activeElement).toBe(button(a, m.changes_retry()));
     const retry = queued(button(a, m.changes_retry()));
     expect(calls.at(-1)).toEqual({ operation: 'list', operand: changesCursor, session: 'changes-session' });
     authoredControls(a);
     expect(revisions(a).querySelectorAll('li')).toHaveLength(2);
     listFailure = false;
-    await click(a, m.changes_retry());
+    await press(a, m.changes_retry());
     expect(calls.at(-1)).toEqual({ operation: 'list', operand: changesCursor, session: 'changes-session' });
     expect(document.activeElement?.textContent).toBe(
       m.subject_relation_completed_more({ label: m.changes_revisions(), count: '0' }),
@@ -284,7 +292,7 @@ test('the complete Subject history family keeps independent headings, bounded su
     await settle();
     expect(calls).toHaveLength(afterRetry);
     const oldMore = queued(button(a, m.changes_more()));
-    await click(a, m.changes_more());
+    await press(a, m.changes_more());
     expect(calls.at(-1)).toEqual({ operation: 'list', operand: changesLastCursor, session: 'changes-session' });
     expect(revisions(a).querySelectorAll('li')).toHaveLength(3);
     expect(document.activeElement).toBe(
@@ -300,14 +308,14 @@ test('the complete Subject history family keeps independent headings, bounded su
     await settle();
     expect(calls).toHaveLength(endCalls);
     detailFailure = true;
-    await click(a, m.changes_revision({ revision: '2' }));
+    await press(a, m.changes_revision({ revision: '2' }));
     expect(document.activeElement).toBe(button(a, m.changes_retry_detail()));
     const oldDetailRetry = queued(button(a, m.changes_retry_detail()));
     expect(a.textContent).toContain(m.changes_unavailable());
     expect(a.querySelector('dl')).toBeNull();
     authoredControls(a);
     detailFailure = false;
-    await click(a, m.changes_retry_detail());
+    await press(a, m.changes_retry_detail());
     expect(calls.at(-1)).toEqual({ operation: 'detail', operand: 2, session: 'changes-session' });
     expect(document.activeElement).toBe(explanation(a).querySelector('h2'));
     const afterDetailRetry = calls.length;
@@ -402,27 +410,75 @@ test('the complete Subject history family keeps independent headings, bounded su
     outside.focus();
     await render(<SubjectChanges key="empty-final" locale="en" transport={edgeTransport} />);
     expect(document.activeElement).toBe(outside);
-    await click(host, m.changes_more());
+    await press(host, m.changes_more());
     expect(document.activeElement).toBe(button(host, m.changes_retry()));
-    await click(host, selectFive);
+    await press(host, selectFive);
     expect(document.activeElement).toBe(explanation(histories()[0]!).querySelector('h2'));
     edgeFailure = 'detail';
-    await click(host, selectFive);
+    await press(host, selectFive);
     expect(document.activeElement).toBe(button(host, m.changes_retry_detail()));
-    await click(host, m.changes_retry());
+    await press(host, m.changes_retry());
     expect(document.activeElement?.textContent).toBe(
       m.subject_relation_completed_end({ label: m.changes_revisions(), count: '0' }),
     );
     expect(host.querySelectorAll('ol li')).toHaveLength(initial.page.revisions.length);
     edgeFailure = undefined;
-    await click(host, m.changes_retry_detail());
+    await press(host, m.changes_retry_detail());
     expect(document.activeElement).toBe(explanation(histories()[0]!).querySelector('h2'));
     expect(host.textContent).toContain(m.changes_limited());
     edgeFailure = 'subject';
-    await click(host, selectFive);
+    await press(host, selectFive);
     expect(document.activeElement?.textContent).toBe(m.changes_missing());
     expect(host.querySelector('section[aria-labelledby]')).toBeNull();
     expect(host.textContent).not.toContain(m.changes_limited());
+
+    // Current transport results still publish after cancelled orientation, without reviving it.
+    for (const action of ['more', 'detail'] as const) {
+      for (const intent of ['keyboard', 'pointer', 'away-back', 'retired'] as const) {
+        const held = Promise.withResolvers<ChangesRead & DetailRead>();
+        const response = {
+          kind: 'ready' as const,
+          page: { ...initial.page, revisions: [{ revision: 2, kind: 'terms' }], next: null },
+          detail: { id: initial.page.id, revision: 5, summary: { kind: 'limited' as const } },
+        };
+        let reads = 0;
+        await render(
+          <SubjectChanges
+            key={`${action}-${intent}`}
+            locale="en"
+            transport={{
+              list: () => (reads++ === 0 ? Promise.resolve(initial) : held.promise),
+              detail: () => held.promise,
+            }}
+          />,
+        );
+        const label = action === 'more' ? m.changes_more() : selectFive;
+        const opener = button(host, label);
+        if (intent === 'pointer') await click(host, label);
+        else await press(host, label);
+        if (intent === 'away-back')
+          await act(async () => {
+            outside.focus();
+            opener.focus();
+          });
+        if (intent === 'retired') {
+          await render(null);
+          outside.focus();
+        }
+        const before = document.activeElement;
+        await act(async () => held.resolve(response));
+        if (intent === 'keyboard')
+          expect(document.activeElement).toBe(
+            host.querySelector(`[data-changes-focus="${action === 'more' ? 'batch' : 'detail'}"]`),
+          );
+        else expect(document.activeElement).toBe(before?.isConnected ? before : document.body);
+        if (intent === 'retired') expect(host.textContent).toBe('');
+        else
+          expect(host.textContent).toContain(
+            action === 'more' ? m.changes_revision({ revision: '2' }) : m.changes_limited(),
+          );
+      }
+    }
 
     // Supplied full-family states keep all existing notices, semantics and callbacks.
     const list = await first.transport.list();
