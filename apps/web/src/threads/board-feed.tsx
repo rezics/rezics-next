@@ -1,15 +1,15 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { EllipsisIcon, MessageSquareIcon, HeartIcon } from 'lucide-react';
+import { MessageSquareIcon, HeartIcon } from 'lucide-react';
 import { ContentItem } from '@rezics/ui/content-item';
-import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { Menu } from '@rezics/ui/menu';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { BoardSortNav, type BoardSort } from './board-sort';
 import { Byline, fullDateTime, timeText } from './byline';
 import { threadLocation, threadTitle } from './thread-href';
 import { threadActivity } from './activity';
+import { CopyDiscussionLink } from './copy-discussion-link';
 import {
   boardThreadPreview,
   boardThreadReactionCount,
@@ -27,8 +27,8 @@ function ThreadCard({
   now: string;
 }) {
   const locale = getLocale();
-  const href = threadLocation(locale, { id: thread.id, title: threadTitle(thread) });
   const available = thread.availability === 'available';
+  const href = threadLocation(locale, { id: thread.id, title: available ? threadTitle(thread) : null });
   const preview = boardThreadPreview(thread);
   const title = available ? (thread.title ?? preview ?? m.threads_untitled()) : m.thread_post_deleted();
   const openingUnavailable = available && thread.firstPost.availability !== 'available';
@@ -45,16 +45,6 @@ function ThreadCard({
     ) : null;
   const { replyCount, lastActivityAt } = threadActivity(thread);
   const reactions = boardThreadReactionCount(thread);
-  const [copyStatus, setCopyStatus] = useState<'copied' | 'failed' | null>(null);
-
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(new URL(href, window.location.origin).href);
-      setCopyStatus('copied');
-    } catch {
-      setCopyStatus('failed');
-    }
-  }
 
   return (
     <ContentItem
@@ -77,23 +67,7 @@ function ThreadCard({
       preview={previewContent}
       actions={
         <>
-          <Menu
-            title={m.thread_content_more_actions()}
-            trigger={
-              <Button
-                variant="ghost"
-                size="icon"
-                className="min-h-11 min-w-11"
-                aria-label={m.thread_content_more_actions()}
-              >
-                <EllipsisIcon />
-              </Button>
-            }
-            entries={[
-              { type: 'link', label: m.board_feed_open_thread(), href },
-              { type: 'item', label: m.thread_content_copy_link(), onSelect: () => void copyLink() },
-            ]}
-          />
+          <CopyDiscussionLink href={href} />
           {available && reactions !== null ? (
             <a
               href={href}
@@ -122,11 +96,6 @@ function ThreadCard({
             >
               {m.board_thread_last_activity({ time: timeText(lastActivityAt, now, locale) })}
             </time>
-          ) : null}
-          {copyStatus ? (
-            <span role="status" className="min-w-0 max-w-full text-sm">
-              {copyStatus === 'copied' ? m.board_feed_link_copied() : m.board_feed_copy_failed()}
-            </span>
           ) : null}
         </>
       }
@@ -182,7 +151,12 @@ export function BoardFeed({
       {page.threads.length ? (
         <ul className="space-y-2">
           {page.threads.map((thread) => (
-            <ThreadCard key={thread.id} thread={thread} authors={authors} now={now} />
+            <ThreadCard
+              key={`${boardId}:${thread.id}:${thread.availability}`}
+              thread={thread}
+              authors={authors}
+              now={now}
+            />
           ))}
         </ul>
       ) : (

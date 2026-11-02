@@ -1,5 +1,12 @@
 # Thread authoring
 
+## Board row sharing
+
+Clipboard failures reveal an inline read-only URL field, focus/select it after menu dismissal, and return focus to
+the row menu on Close. The URL is the row's already-admitted localized canonical thread destination, without a post
+position or additional read; unavailable rows use the untitled destination. Only a successful clipboard write reports
+success. Board, row availability, destination replacement and unmount retire prior copy results and manual recovery.
+
 The default new-thread, reply and inline-edit composers compare their current local work with the mounted editor's
 baseline. Changed titles, structured bodies, review or discussion selections, uploads, active submissions and
 unresolved outcomes register with the page's authoring-departure owner. The owner shows one accessible Stay/Leave
