@@ -2230,6 +2230,10 @@ checks the single exact create/replay call at 1, 8 and 64 unrelated records; nat
 - **Growth check:** `tests/curate-presentation.test.ts`: template listing, immutable edits, publish/activate order and
   refusal handling
 
+Removing a keyed template requires confirmation; afterward the editor selects the generic template, preserving the
+selected view when generic defines it. Publication resolves through the existing route, type, structural-base and
+generic order.
+
 ### My Zones (`/<locale>/my/zones`, `/<locale>/my/zones/new`)
 
 The authenticated workspace reads one native owner-index page with `limit=20`, `deleted` and opaque

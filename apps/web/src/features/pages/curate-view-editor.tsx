@@ -69,6 +69,7 @@ import {
 import { type CurationAdmissionLease, CurationReaderAdmission } from './curation-reader-admission';
 import { CurationFailureNotice, CurationPublicationRecovery } from './curation-publish-view';
 import { CurationNavigationGuard } from './curation-navigation-guard';
+import { removeKeyedTemplate, type KeyedTemplate } from './curation-template-removal';
 
 const PageEditor = lazy(() => import('./editor').then((module) => ({ default: module.PageEditor })));
 
@@ -550,6 +551,7 @@ function AdmittedPresentationViewEditor({
   const inFlight = useRef(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [confirm, setConfirm] = useState<'discard' | 'reload' | null>(null);
+  const [removeConfirm, setRemoveConfirm] = useState<KeyedTemplate | null>(null);
   const [generation, setGeneration] = useState(0);
   const [scope, setScope] = useState<'type' | 'route'>('type');
   const [key, setKey] = useState('');
@@ -913,6 +915,15 @@ function AdmittedPresentationViewEditor({
                   {templateLabel(selection.template)}
                 </p>
               )}
+              {selection.template.key !== null && (
+                <Button
+                  className={editorControlClass}
+                  variant="outline"
+                  onClick={() => isCurrent() && setOwned(setRemoveConfirm, { ...selection.template })}
+                >
+                  {m.curation_remove()}
+                </Button>
+              )}
             </Field>
             <Field className="min-w-0">
               <FieldLabel htmlFor={`${formId}-view`}>{m.curation_view()}</FieldLabel>
@@ -1046,6 +1057,37 @@ function AdmittedPresentationViewEditor({
           </div>
         </form>
       </fieldset>
+      <AlertDialog
+        open={removeConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open && isCurrent()) setOwned(setRemoveConfirm, null);
+        }}
+      >
+        {removeConfirm && (
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{m.curation_remove_title({ template: templateLabel(removeConfirm) })}</AlertDialogTitle>
+              <AlertDialogDescription>{m.curation_remove_warning()}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className={editorControlClass}>{m.action_cancel()}</AlertDialogCancel>
+              <AlertDialogAction
+                className={editorControlClass}
+                onClick={() => {
+                  const template = removeConfirm;
+                  if (!isCurrent() || !template) return;
+                  setOwned(setDraft, (value) => value && removeKeyedTemplate(value, template));
+                  setOwned(setCorrection, null);
+                  setOwned(setFailure, null);
+                  setOwned(setRemoveConfirm, null);
+                }}
+              >
+                {m.curation_remove()}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        )}
+      </AlertDialog>
       <AlertDialog
         open={confirm !== null}
         onOpenChange={(open) => {

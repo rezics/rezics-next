@@ -409,6 +409,42 @@ test('retiring one editor drops its draft and late publication without disturbin
   }
 }, 15000);
 
+test('removing a selected keyed template requires confirmation and explicit publication', async () => {
+  const h = await mountedEditors();
+  const { m } = h;
+  try {
+    await h.show();
+    const selected = JSON.stringify({ scope: 'type', key: longType });
+    await h.select(0, m.curation_template(), selected);
+    await h.closeEditor(0);
+    await h.click(h.button(0, m.curation_remove()));
+    let dialog = h.window.document.querySelector('[role="alertdialog"]')!;
+    expect(dialog.textContent).toContain(m.curation_remove_title({ template: `${m.curation_type()}: ${longType}` }));
+    await h.click([...dialog.querySelectorAll('button')].find((button) => button.textContent === m.action_cancel())!);
+    await h.settle(() => !h.window.document.querySelector('[role="alertdialog"]'));
+    expect(h.control(0, m.curation_template()).value).toBe(selected);
+    expect(h.publishes).toEqual([]);
+
+    await h.click(h.button(0, m.curation_remove()));
+    await h.settle(() => !!h.window.document.querySelector('[role="alertdialog"]'));
+    dialog = h.window.document.querySelector('[role="alertdialog"]')!;
+    await h.click([...dialog.querySelectorAll('button')].find((button) => button.textContent === m.curation_remove())!);
+    await h.settle(() => !h.window.document.querySelector('[role="alertdialog"]'));
+    expect(h.control(0, m.curation_template()).value).toBe(JSON.stringify({ scope: 'generic', key: null }));
+    expect(h.publishes).toEqual([]);
+    h.publishResults[0] = async () => ({
+      ok: true,
+      digest: profileDigest({ ...h.initial[0]!.profile, types: [] }),
+      head: 8,
+    });
+    await h.click(h.button(0, m.curation_publish()));
+    expect(h.publishes[0]!.input.profile.types).toEqual([]);
+    expect(h.publishes[0]!.input.profile.routes).toEqual(h.initial[0]!.profile.routes);
+  } finally {
+    await h.cleanup();
+  }
+});
+
 test('growing only supplied template options preserves both identities and makes no read or publication', async () => {
   const h = await mountedEditors();
   try {
