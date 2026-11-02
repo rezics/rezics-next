@@ -31,7 +31,10 @@ const revision = {
   voteCitation: { ...selected.voteCitation!, questionId: questionReference },
   body: fromPlainText(
     [
-      ...Array.from({ length: 12 }, (_, index) => `Historical paragraph ${index + 1}: ${'A complete reading. '.repeat(6)}`),
+      ...Array.from(
+        { length: 12 },
+        (_, index) => `Historical paragraph ${index + 1}: ${'A complete reading. '.repeat(6)}`,
+      ),
       'An unbroken document word: ' + 'original'.repeat(40),
       ending,
     ].join('\n\n'),
@@ -130,7 +133,9 @@ export const SameImmutableRevision: Story = {
       canvas.getByRole('region', { name: 'Exact reader 1' }),
       canvas.getByRole('region', { name: 'Exact reader 2' }),
     ];
-    const triggers = readers.map((reader) => within(reader).getByRole('button', { name: m.thread_provenance_heading() }));
+    const triggers = readers.map((reader) =>
+      within(reader).getByRole('button', { name: m.thread_provenance_heading() }),
+    );
     const ids = triggers.map((trigger) => trigger.getAttribute('aria-controls'));
     await expect(ids[0]).not.toBe(ids[1]);
     for (const [index, reader] of readers.entries()) {
@@ -139,7 +144,8 @@ export const SameImmutableRevision: Story = {
       await expect(reader.querySelector('[data-slot="collapsible-content"]')).toHaveAttribute('id', ids[index]!);
       await expect(within(reader).getByText(selected.licence, { exact: false })).toBeVisible();
       await expect(within(reader).getByRole('link', { name: m.exact_revision_back() })).toHaveAttribute(
-        'href', `${threadLocation(getLocale(), page.thread)}#post-${encodeURIComponent(selected.id)}`,
+        'href',
+        `${threadLocation(getLocale(), page.thread)}#post-${encodeURIComponent(selected.id)}`,
       );
     }
     // Reach the actual primitive through the keyboard; no controlled open state is supplied.
@@ -157,13 +163,17 @@ export const SameImmutableRevision: Story = {
     await expect(triggers[1]).toHaveAttribute('aria-expanded', 'false');
     await expect(triggers[0]).toHaveAttribute('aria-expanded', 'true');
     await userEvent.click(within(readers[0]!).getByText(m.discussion_provenance_details_heading()));
-    await expect(within(readers[0]!).getByText(m.thread_provenance_subject_reference({ id: subjectReference }))).toBeVisible();
+    await expect(
+      within(readers[0]!).getByText(m.thread_provenance_subject_reference({ id: subjectReference })),
+    ).toBeVisible();
     await expect(within(readers[0]!).getByText((text) => text.includes(questionReference))).toBeVisible();
     await readable(readers[0]!.querySelector<HTMLElement>('[data-slot="collapsible-content"]')!);
     await userEvent.click(triggers[0]!);
     await expect(triggers[0]).toHaveAttribute('aria-expanded', 'false');
     await userEvent.click(triggers[0]!);
-    await expect(within(readers[0]!).getByText(m.thread_provenance_subject_reference({ id: subjectReference }))).toBeVisible();
+    await expect(
+      within(readers[0]!).getByText(m.thread_provenance_subject_reference({ id: subjectReference })),
+    ).toBeVisible();
   },
 };
 

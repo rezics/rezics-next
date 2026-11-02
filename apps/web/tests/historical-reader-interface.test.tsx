@@ -47,20 +47,23 @@ mock.module('@tanstack/react-start/server', () => ({
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { createKernelClient } = await import('@rezics/client');
 const kernel = createKernelClient('https://kernel.test', {
-  fetch: Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = new Request(input, init);
-    requests.push(request);
-    const path = new URL(request.url).pathname;
-    if (path === `/v1/posts/${selected.id}/revisions`)
-      return new Promise<Response>((resolve) => pending.push(resolve));
-    if (path === `/v1/posts/${selected.id}/revisions/${selected.revisionId}`)
-      return Response.json({ post: exactPost });
-    if (path === `/v1/threads/${selected.threadId}`) return Response.json(current);
-    if (path === '/v1/accounts') return Response.json({ accounts: [] });
-    if (path === '/v1/media/presentations') return new Response(null, { status: 503 });
-    if (path.startsWith('/v1/subjects/')) return new Response(null, { status: 404 });
-    throw new Error(`Unexpected historical interface request: ${path}`);
-  }, { preconnect() {} }),
+  fetch: Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      const path = new URL(request.url).pathname;
+      if (path === `/v1/posts/${selected.id}/revisions`)
+        return new Promise<Response>((resolve) => pending.push(resolve));
+      if (path === `/v1/posts/${selected.id}/revisions/${selected.revisionId}`)
+        return Response.json({ post: exactPost });
+      if (path === `/v1/threads/${selected.threadId}`) return Response.json(current);
+      if (path === '/v1/accounts') return Response.json({ accounts: [] });
+      if (path === '/v1/media/presentations') return new Response(null, { status: 503 });
+      if (path.startsWith('/v1/subjects/')) return new Response(null, { status: 404 });
+      throw new Error(`Unexpected historical interface request: ${path}`);
+    },
+    { preconnect() {} },
+  ),
 });
 mock.module('../src/kernel/client', () => ({ kernelClient: () => kernel }));
 
@@ -164,7 +167,14 @@ describe('Complete accessible immutable historical reading controls', () => {
       let ids: string[] | undefined;
       for (const locale of ['en', 'zh-Hant'] as const) {
         setLocale(locale, { reload: false });
-        await view.render(<section dir="rtl"><ol>{entry(1)}{entry(2)}</ol></section>);
+        await view.render(
+          <section dir="rtl">
+            <ol>
+              {entry(1)}
+              {entry(2)}
+            </ol>
+          </section>,
+        );
         const entries = [...view.host.querySelectorAll('section > ol > li > article')];
         expect(entries).toHaveLength(2);
         const headings = entries.map((item) => item.querySelector('h4')!);
@@ -174,7 +184,9 @@ describe('Complete accessible immutable historical reading controls', () => {
         ids = currentIds;
         for (const [index, item] of entries.entries()) {
           expect(item.getAttribute('aria-labelledby')).toBe(headings[index]!.id);
-          expect(item.querySelector('h4 a')?.getAttribute('href')).toBe(`/${locale}/posts/${selected.id}/revisions/${selected.revisionId}`);
+          expect(item.querySelector('h4 a')?.getAttribute('href')).toBe(
+            `/${locale}/posts/${selected.id}/revisions/${selected.revisionId}`,
+          );
           expect(item.textContent).toContain(finalParagraph);
           expect(item.textContent).toContain(longReference);
           expect(item.textContent).toContain(author.displayName);
@@ -190,7 +202,10 @@ describe('Complete accessible immutable historical reading controls', () => {
           expect(document.activeElement).toBe(link);
         }
       }
-    } finally { await view.dispose(); setLocale('en', { reload: false }); }
+    } finally {
+      await view.dispose();
+      setLocale('en', { reload: false });
+    }
   });
 
   test('same-identity exact readers independently disclose authentic references and preserve nested details across outer closure', async () => {
@@ -216,9 +231,12 @@ describe('Complete accessible immutable historical reading controls', () => {
         expect(panel.textContent).toContain(identity.postId);
         expect(panel.textContent).toContain(identity.revisionId);
         expect([...panel.querySelectorAll('bdi')].map((reference) => [reference.dir, reference.textContent])).toEqual([
-          ['ltr', identity.postId], ['ltr', identity.revisionId],
+          ['ltr', identity.postId],
+          ['ltr', identity.revisionId],
         ]);
-        expect(reader.querySelector('a')?.getAttribute('href')).toBe(`${threadLocation('en', ready.thread)}#post-${selected.id}`);
+        expect(reader.querySelector('a')?.getAttribute('href')).toBe(
+          `${threadLocation('en', ready.thread)}#post-${selected.id}`,
+        );
         expect(reader.querySelector('h1')?.textContent).toBe(m.exact_revision_heading());
         expect(reader.textContent).toContain(m.exact_revision_read_only());
         const licence = reader.querySelector('[data-slot="collapsible"] > p')!;
@@ -230,7 +248,10 @@ describe('Complete accessible immutable historical reading controls', () => {
       await click(controls[0]!);
       expect(controls.map((control) => control.getAttribute('aria-expanded'))).toEqual(['true', 'false']);
       const details = readers[0]!.querySelector('details')!;
-      await act(async () => { details.querySelector('summary')!.click(); await flush(); });
+      await act(async () => {
+        details.querySelector('summary')!.click();
+        await flush();
+      });
       expect(details.open).toBe(true);
       await click(controls[1]!);
       await click(controls[0]!);
@@ -244,8 +265,12 @@ describe('Complete accessible immutable historical reading controls', () => {
       await view.render(tree());
       const restored = button(view.host.querySelector('article')!, m.thread_provenance_heading());
       expect(restored.getAttribute('aria-controls')).toBe(ids[0]!);
-      expect(button(view.host.querySelectorAll('article')[1]!, m.thread_provenance_heading()).getAttribute('aria-expanded')).toBe('true');
-    } finally { await view.dispose(); }
+      expect(
+        button(view.host.querySelectorAll('article')[1]!, m.thread_provenance_heading()).getAttribute('aria-expanded'),
+      ).toBe('true');
+    } finally {
+      await view.dispose();
+    }
   });
 
   test('loading, problems, unavailable and wrong exact identity remove previous text and attributes; retry is explicit', async () => {
@@ -253,7 +278,8 @@ describe('Complete accessible immutable historical reading controls', () => {
     let retries = 0;
     const illustrated = { ...selected, mediaIds: [id(60)], body: fromPlainText('Private historical text', 'blocks') };
     illustrated.body.doc.content!.push({ type: 'image', attrs: { src: id(60), alt: 'Private image alternative' } });
-    const show = (page: ExactRevisionState) => view.render(<ExactRevisionView identity={identity} page={page} onRetry={() => retries++} />);
+    const show = (page: ExactRevisionState) =>
+      view.render(<ExactRevisionView identity={identity} page={page} onRetry={() => retries++} />);
     try {
       for (const page of [
         { state: 'loading' },
@@ -284,7 +310,10 @@ describe('Complete accessible immutable historical reading controls', () => {
       }
       await view.render(<ExactRevisionView identity={identity} page={{ state: 'problem', status: 503, code: null }} />);
       expect(view.host.querySelector('button')).toBeNull();
-    } finally { exactPost = selected; await view.dispose(); }
+    } finally {
+      exactPost = selected;
+      await view.dispose();
+    }
   });
 
   test('actual history controls retain native20, raw continuation, pending disablement and manual recovery without automatic resend', async () => {
@@ -319,7 +348,14 @@ describe('Complete accessible immutable historical reading controls', () => {
       expect(retry.disabled).toBe(true);
       await click(retry);
       expect(historyCalls()).toHaveLength(2);
-      const withheld = { ...selected, revisionId: id(88), availability: 'withheld', body: null, sha256: null, removed: true };
+      const withheld = {
+        ...selected,
+        revisionId: id(88),
+        availability: 'withheld',
+        body: null,
+        sha256: null,
+        removed: true,
+      };
       const erased = { ...withheld, revisionId: id(89), availability: 'erased' };
       await finish({ revisions: [selected, withheld, erased], next: cursor });
       expect(view.host.querySelectorAll('section > ol > li')).toHaveLength(3);
@@ -337,12 +373,24 @@ describe('Complete accessible immutable historical reading controls', () => {
       await click(button(view.host, m.exact_revision_retry()));
       await finish({ revisions: [later], next: null });
       expect(view.host.querySelectorAll('section > ol > li')).toHaveLength(4);
-      expect([...view.host.querySelectorAll('section > ol h4 a')].at(-1)?.getAttribute('href')).toBe(`/en/posts/${later.id}/revisions/${later.revisionId}`);
-      expect([...view.host.querySelectorAll('button')].some((control) => control.textContent === m.thread_history_more())).toBe(false);
-      expect(historyCalls().map((request) => {
-        const url = new URL(request.url);
-        return { limit: url.searchParams.get('limit'), cursor: url.searchParams.get('cursor'), authorization: request.headers.get('authorization') };
-      })).toEqual([null, null, cursor, cursor].map((value) => ({ limit: '20', cursor: value, authorization: null })));
-    } finally { await view.dispose(); }
+      expect([...view.host.querySelectorAll('section > ol h4 a')].at(-1)?.getAttribute('href')).toBe(
+        `/en/posts/${later.id}/revisions/${later.revisionId}`,
+      );
+      expect(
+        [...view.host.querySelectorAll('button')].some((control) => control.textContent === m.thread_history_more()),
+      ).toBe(false);
+      expect(
+        historyCalls().map((request) => {
+          const url = new URL(request.url);
+          return {
+            limit: url.searchParams.get('limit'),
+            cursor: url.searchParams.get('cursor'),
+            authorization: request.headers.get('authorization'),
+          };
+        }),
+      ).toEqual([null, null, cursor, cursor].map((value) => ({ limit: '20', cursor: value, authorization: null })));
+    } finally {
+      await view.dispose();
+    }
   });
 });
