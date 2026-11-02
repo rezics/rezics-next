@@ -44,10 +44,10 @@ No workflow, architecture or scope document was loaded.
 
 Both previous reports were read from Git objects, without merging:
 
-| Report | Exact object and relevant construction |
-| --- | --- |
-| [Primary](native-scheduler-funded-design-primary.md) | `af7b21363a024eee90122721e896c2f4662f0a0a`; creation-radix minima, global Session tickets, counted queue kernel and coverage protocol |
-| [Independent](native-scheduler-funded-design-independent.md) | `cfba1553be32aeec7353adc2a1fe77ba72dc91a8`; 64 completion-prefix expression indexes and per-bucket progress |
+| Report                                                       | Exact object and relevant construction                                                                                                |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| [Primary](native-scheduler-funded-design-primary.md)         | `af7b21363a024eee90122721e896c2f4662f0a0a`; creation-radix minima, global Session tickets, counted queue kernel and coverage protocol |
+| [Independent](native-scheduler-funded-design-independent.md) | `cfba1553be32aeec7353adc2a1fe77ba72dc91a8`; 64 completion-prefix expression indexes and per-bucket progress                           |
 
 Their common repository pin was `129bf1ff7be77f5ceec93f503d77ba870bcea9d6`.
 The current patch additionally contains selected-step authority and `maintainWorkflowOnce`;
@@ -58,10 +58,10 @@ is inferred from a tracked patch.
 
 Primary implementation references, reused read-only under the main checkout's `.reference/`:
 
-| Local clone | Commit, licence and primary links |
-| --- | --- |
-| `native-scheduler-funded-design/dbos-transact-ts` | `627990fc59619d3584ce88511ab546bc7483f4b9`, MIT, `LICENSE`; [system_database.ts](https://github.com/dbos-inc/dbos-transact-ts/blob/627990fc59619d3584ce88511ab546bc7483f4b9/src/system_database.ts), [native migrations](https://github.com/dbos-inc/dbos-transact-ts/blob/627990fc59619d3584ce88511ab546bc7483f4b9/src/sysdb_migrations/internal/migrations.ts), [wfqueue.ts](https://github.com/dbos-inc/dbos-transact-ts/blob/627990fc59619d3584ce88511ab546bc7483f4b9/src/wfqueue.ts) |
-| `library-shelf-maintenance/postgres` | `700b422af7e26cf310caf3fb76d78f4c8ca39c1f`, PostgreSQL License, `COPYRIGHT`; [nodeModifyTable.c](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/backend/executor/nodeModifyTable.c), [execIndexing.c](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/backend/executor/execIndexing.c), [nbtree.h](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/include/access/nbtree.h), [spgtextproc.c](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/backend/access/spgist/spgtextproc.c) |
+| Local clone                                       | Commit, licence and primary links                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `native-scheduler-funded-design/dbos-transact-ts` | `627990fc59619d3584ce88511ab546bc7483f4b9`, MIT, `LICENSE`; [system_database.ts](https://github.com/dbos-inc/dbos-transact-ts/blob/627990fc59619d3584ce88511ab546bc7483f4b9/src/system_database.ts), [native migrations](https://github.com/dbos-inc/dbos-transact-ts/blob/627990fc59619d3584ce88511ab546bc7483f4b9/src/sysdb_migrations/internal/migrations.ts), [wfqueue.ts](https://github.com/dbos-inc/dbos-transact-ts/blob/627990fc59619d3584ce88511ab546bc7483f4b9/src/wfqueue.ts)                                                                                                                                                      |
+| `library-shelf-maintenance/postgres`              | `700b422af7e26cf310caf3fb76d78f4c8ca39c1f`, PostgreSQL License, `COPYRIGHT`; [nodeModifyTable.c](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/backend/executor/nodeModifyTable.c), [execIndexing.c](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/backend/executor/execIndexing.c), [nbtree.h](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/include/access/nbtree.h), [spgtextproc.c](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/src/backend/access/spgist/spgtextproc.c) |
 
 The DBOS clone is the exact release-source pin used by the reports, not the older
 `980dc550...` clone. PostgreSQL sources were accessed with `git show` where its sparse
@@ -129,13 +129,13 @@ plan accounting. One outer function call cannot conceal nested work. Engine mult
 visibility is excluded by the controlling clarification; live residual traversal, explicit
 summary repair, index inserts, payload conversion and application cleanup remain charged.
 
-| Unit | Correct scope |
-| --- | --- |
-| Queue step | One paid fixed transition; does not inherit retention's 4,000 or another step's balance |
-| Retention batch | One complete selection/deletion attempt and reached controls/hooks; 40 for the named ten-result fixture, 4,000 for the full fixture |
-| Sweep | At most 60 batches with fixed `T,C`; sum actual batch work under its finite original invocation/deadline, not 60 free replenishments |
-| Installation/repair | Separately admitted finite pages; no startup census hidden before the measured selector |
-| Retry/failure | Another charged attempt under the same applicable admission/deadline; rollback is reserved before BEGIN |
+| Unit                | Correct scope                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Queue step          | One paid fixed transition; does not inherit retention's 4,000 or another step's balance                                              |
+| Retention batch     | One complete selection/deletion attempt and reached controls/hooks; 40 for the named ten-result fixture, 4,000 for the full fixture  |
+| Sweep               | At most 60 batches with fixed `T,C`; sum actual batch work under its finite original invocation/deadline, not 60 free replenishments |
+| Installation/repair | Separately admitted finite pages; no startup census hidden before the measured selector                                              |
+| Retry/failure       | Another charged attempt under the same applicable admission/deadline; rollback is reserved before BEGIN                              |
 
 The frozen populations remain 49,152 rows **per axis** at scales 1,4,16, with older
 ineligible creation history, later eligible history, warmup at creation age 202 days and
@@ -177,15 +177,15 @@ and head rows suffice, without scanning the ineligible creation prefix.
 
 This is a real constructive selection argument. It is not a complete batch argument:
 
-| Candidate operation | Literal local work; all other work additional |
-| --- | --- |
-| Select `d=1000` | At most 1,128 ordered head seeks/rows; at most 128 live merge heads, 1,000 selected records |
-| Select `d=10` | At most 138 head seeks/rows using the same algorithm |
-| Select `d=0` | At most 128 head seeks, including paid empty seeks; no deletion |
-| Insert a terminal projection | One heap row, PK index insertion and 64 expression-index insertions; 65 index entry insertions, not 65 SQL statements |
-| Change indexed projection fields | New heap version and up to the same 65 new index entries; old/new contribution logic and native guards additional |
-| Delete a projection by PK | One indexed heap deletion and DELETE hooks; **not** 64 immediate B-tree deletion descents |
-| Build on `N` old terminal rows | At least `N` projection heap insertions and `65N` index entry insertions, paged with committed progress |
+| Candidate operation              | Literal local work; all other work additional                                                                         |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Select `d=1000`                  | At most 1,128 ordered head seeks/rows; at most 128 live merge heads, 1,000 selected records                           |
+| Select `d=10`                    | At most 138 head seeks/rows using the same algorithm                                                                  |
+| Select `d=0`                     | At most 128 head seeks, including paid empty seeks; no deletion                                                       |
+| Insert a terminal projection     | One heap row, PK index insertion and 64 expression-index insertions; 65 index entry insertions, not 65 SQL statements |
+| Change indexed projection fields | New heap version and up to the same 65 new index entries; old/new contribution logic and native guards additional     |
+| Delete a projection by PK        | One indexed heap deletion and DELETE hooks; **not** 64 immediate B-tree deletion descents                             |
+| Build on `N` old terminal rows   | At least `N` projection heap insertions and `65N` index entry insertions, paged with committed progress               |
 
 The DELETE distinction is established by PostgreSQL `nodeModifyTable.c:1838–1848`:
 ordinary index-tuple removal is deferred because older snapshots can still need entries.
@@ -343,15 +343,15 @@ The following is the necessary conditional proof, including installation. It is 
 that the current patch installs these hooks. The actual SDK patch supplies permanent fence
 guards on eight native families; it supplies no discovery coverage receipt for new tables.
 
-| Native writer surface | Required transactional contribution and boundedness |
-| --- | --- |
-| Ordinary, child, caller-transaction, SQL and bulk enqueue | Reconcile current incorporated state, exact keys, monotone Session creation seed and membership; a 500-row SQL chunk is not a bounded whole enqueue |
-| Status/priority/application/version/queue/Session changes | Apply old/new delta once, retain ticket for same Session, touch at most two queue controls, update exact heads/PENDING/retention |
-| Claim, completion, fallback error, cancellation, timeout, recovery | Preserve native owner/token guards; ENQUEUED/PENDING/terminal changes publish atomically with projections |
-| Delay/debounce/activation, suspension/resume, rewind/fork | Maintain only actual native transitions; page due activation; charge copied/deleted native descendants and parent/child fences |
-| Input/output/operation/event/history/notification/stream | Preserve native guards and original owner copy inventory; unchanged queue eligibility does not exempt payload bytes or owner work |
-| Version registry and application rename | Version generation under shared serialization; no V-domain fanout; original bulk rename/activation cannot become a fixed-row step by relabelling |
-| DELETE, COPY/restore, layout replacement, TRUNCATE where admitted | Atomic contribution removal or explicit invalidation; ALWAYS guards; no bypass can publish authoritative coverage |
+| Native writer surface                                              | Required transactional contribution and boundedness                                                                                                 |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ordinary, child, caller-transaction, SQL and bulk enqueue          | Reconcile current incorporated state, exact keys, monotone Session creation seed and membership; a 500-row SQL chunk is not a bounded whole enqueue |
+| Status/priority/application/version/queue/Session changes          | Apply old/new delta once, retain ticket for same Session, touch at most two queue controls, update exact heads/PENDING/retention                    |
+| Claim, completion, fallback error, cancellation, timeout, recovery | Preserve native owner/token guards; ENQUEUED/PENDING/terminal changes publish atomically with projections                                           |
+| Delay/debounce/activation, suspension/resume, rewind/fork          | Maintain only actual native transitions; page due activation; charge copied/deleted native descendants and parent/child fences                      |
+| Input/output/operation/event/history/notification/stream           | Preserve native guards and original owner copy inventory; unchanged queue eligibility does not exempt payload bytes or owner work                   |
+| Version registry and application rename                            | Version generation under shared serialization; no V-domain fanout; original bulk rename/activation cannot become a fixed-row step by relabelling    |
+| DELETE, COPY/restore, layout replacement, TRUNCATE where admitted  | Atomic contribution removal or explicit invalidation; ALWAYS guards; no bypass can publish authoritative coverage                                   |
 
 Let `M(w)` be the contribution incorporated for a native row. After a successful writer,
 `M(w)` equals its current native eligibility scalar state at that COMMIT, or both are absent.
@@ -397,18 +397,18 @@ operational admission; unsuccessful installation must not leave `coverage=comple
 
 ## Copy, snapshot, abort and erasure inventory
 
-| Retained object | Copies/ownership and removal rule |
-| --- | --- |
-| Native eight families | Status, input, output, operations, events, event history, destination notifications, streams; original fixed-ID deletion and four FK families, actual descendants priced |
-| Permanent fences/domain | Actual ID, closure receipt and restore control survive deletion; expressly permanent, never cascade, rotate away or pretend erased |
-| Current selected-step rows | Current patch also retains original ID, registered name/queue/creator/serialization/input and attempt/admission state; not covered by the older eight-family absence helper |
-| Key bindings/chunks/collision records/reverse inventory | Exact identity/owner copies even with numeric handles; refcount changes and final removal in authorized native transaction, retaining shared contributions of others |
-| Contribution, head and pending projections | One row per relevant workflow plus every declared secondary index; remove in original native removal transaction |
-| Member and segment/ticket linkage | Session association remains while any ENQUEUED contribution remains; same-Session updates retain ticket; remove final identifying association atomically |
-| Retention projection and summaries | One heap projection plus 64 index copies for the prefix candidate, or all summary nodes for radix; remove/recompute with native removal, not after-commit janitor |
-| Dirty tickets and base frontier/upper key | Original workflow/key/owner references are retained copies; conditional acknowledgment/removal and covered progress must join owner inventory |
-| Queue frontier, domain/app/version aliases, sweep | Domain locators are identifying while they resolve to an owner; scalar ticket/cutoff without such a binding need not copy payload, but cannot be declared anonymous merely because numeric |
-| Cached heads, merge records, selected IDs, payload conversions | Invocation-local retained/materialized bytes; no durable serialized head pages without explicit new inventory; release/revoke on exit, count abort paths |
+| Retained object                                                | Copies/ownership and removal rule                                                                                                                                                          |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Native eight families                                          | Status, input, output, operations, events, event history, destination notifications, streams; original fixed-ID deletion and four FK families, actual descendants priced                   |
+| Permanent fences/domain                                        | Actual ID, closure receipt and restore control survive deletion; expressly permanent, never cascade, rotate away or pretend erased                                                         |
+| Current selected-step rows                                     | Current patch also retains original ID, registered name/queue/creator/serialization/input and attempt/admission state; not covered by the older eight-family absence helper                |
+| Key bindings/chunks/collision records/reverse inventory        | Exact identity/owner copies even with numeric handles; refcount changes and final removal in authorized native transaction, retaining shared contributions of others                       |
+| Contribution, head and pending projections                     | One row per relevant workflow plus every declared secondary index; remove in original native removal transaction                                                                           |
+| Member and segment/ticket linkage                              | Session association remains while any ENQUEUED contribution remains; same-Session updates retain ticket; remove final identifying association atomically                                   |
+| Retention projection and summaries                             | One heap projection plus 64 index copies for the prefix candidate, or all summary nodes for radix; remove/recompute with native removal, not after-commit janitor                          |
+| Dirty tickets and base frontier/upper key                      | Original workflow/key/owner references are retained copies; conditional acknowledgment/removal and covered progress must join owner inventory                                              |
+| Queue frontier, domain/app/version aliases, sweep              | Domain locators are identifying while they resolve to an owner; scalar ticket/cutoff without such a binding need not copy payload, but cannot be declared anonymous merely because numeric |
+| Cached heads, merge records, selected IDs, payload conversions | Invocation-local retained/materialized bytes; no durable serialized head pages without explicit new inventory; release/revoke on exit, count abort paths                                   |
 
 All indexes are copies too; the table lists each index family rather than treating a covering
 index as storage-free. No new payload copy is necessary for discovery. Existing selected-step
@@ -443,18 +443,18 @@ Source's separate Library eight-axis ledger is never converted into these five a
 
 Established current **conditional declarations**, not autonomous scheduler allocations:
 
-| Body | rows / points / statements / bytes / engineRequests | Scope |
-| --- | --- | --- |
-| Current writer transaction fence | 4 / 2 / 4 / 8,192 / 0 | Outer SELECT, domain lock, exact fence lock, native return; genuine same Pool/transaction |
-| Maintenance BEGIN | 0 / 0 / 1 / 0 / 0 | One dispatch |
-| Maintenance settings | 1 / 0 / 1 / 128 / 0 | Original finite deadline, 200ms lock timeout |
-| Maintenance ROLLBACK | 0 / 0 / 1 / 0 / 0 | Reserved before checkout/BEGIN; charged on failure |
-| Maintenance COMMIT | 0 / 0 / 1 / 0 / 0 | Ambiguous outcome is not a reusable reservation |
-| Native retirement dispatch | 8 / 5 / 9 / 32,768 / 0 | Includes owner-token UPDATE and its fence row guard; no authority inferred |
-| Complete single-attempt retirement | 13 / 7 / 17 / 41,088 / 0 | Controls + current fence + retirement |
-| Narrow delete dispatches | (1/1/1)+(1/1/1)+(64/1/1)+(73/5/5), bytes 0 | Input, output, operations, status plus four FK statements |
-| Complete narrow single-attempt delete | 144 / 10 / 16 / 8,320 / 0 | Requires certified 64 operations, 8 events, 64 history, zero notifications/streams |
-| Existing eight-family inspection declaration | 148 / 8 / 12 / 11,888 / 0 | Owner-received conditional operand; not an inventory for added tables |
+| Body                                         | rows / points / statements / bytes / engineRequests | Scope                                                                                     |
+| -------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Current writer transaction fence             | 4 / 2 / 4 / 8,192 / 0                               | Outer SELECT, domain lock, exact fence lock, native return; genuine same Pool/transaction |
+| Maintenance BEGIN                            | 0 / 0 / 1 / 0 / 0                                   | One dispatch                                                                              |
+| Maintenance settings                         | 1 / 0 / 1 / 128 / 0                                 | Original finite deadline, 200ms lock timeout                                              |
+| Maintenance ROLLBACK                         | 0 / 0 / 1 / 0 / 0                                   | Reserved before checkout/BEGIN; charged on failure                                        |
+| Maintenance COMMIT                           | 0 / 0 / 1 / 0 / 0                                   | Ambiguous outcome is not a reusable reservation                                           |
+| Native retirement dispatch                   | 8 / 5 / 9 / 32,768 / 0                              | Includes owner-token UPDATE and its fence row guard; no authority inferred                |
+| Complete single-attempt retirement           | 13 / 7 / 17 / 41,088 / 0                            | Controls + current fence + retirement                                                     |
+| Narrow delete dispatches                     | (1/1/1)+(1/1/1)+(64/1/1)+(73/5/5), bytes 0          | Input, output, operations, status plus four FK statements                                 |
+| Complete narrow single-attempt delete        | 144 / 10 / 16 / 8,320 / 0                           | Requires certified 64 operations, 8 events, 64 history, zero notifications/streams        |
+| Existing eight-family inspection declaration | 148 / 8 / 12 / 11,888 / 0                           | Owner-received conditional operand; not an inventory for added tables                     |
 
 The narrow status operand is status 1 + events 8 + history 64; its five statement/point
 slots include all four native FK cascades, including empty probes. No DELETE invokes the
@@ -473,13 +473,13 @@ to cost its actual descendants; it needs genuine certified operands before finit
 
 For the adopted queue, the previous primary's explicitly counted kernel remains useful:
 
-| Metadata body | rows / starts / statements | Excluded remainder, never zero |
-| --- | --- | --- |
-| Named/latest one-candidate claim kernel | 23 / 21 / 26 | Writer guard, projection delta, owner/version serialization, aliases, inventory, bytes |
-| Same-queue E→P projection plus explicit final head/veto recheck included | 37 / 40 / 42 | Same remaining guards/authority/bytes; not a complete native vector |
-| Epoch start | 7 / 6 / 10 | Exact key resolution, overflow branch, owner/coverage guards and bytes |
-| Segment move or empty seal | 8 / 7 / 11 | Actual proof locks/currentness/cleanup and bytes |
-| No-head/PENDING-veto visit | 13 / 12 / 16 | Same missing bodies, actual rollback/conflict paths |
+| Metadata body                                                            | rows / starts / statements | Excluded remainder, never zero                                                         |
+| ------------------------------------------------------------------------ | -------------------------- | -------------------------------------------------------------------------------------- |
+| Named/latest one-candidate claim kernel                                  | 23 / 21 / 26               | Writer guard, projection delta, owner/version serialization, aliases, inventory, bytes |
+| Same-queue E→P projection plus explicit final head/veto recheck included | 37 / 40 / 42               | Same remaining guards/authority/bytes; not a complete native vector                    |
+| Epoch start                                                              | 7 / 6 / 10                 | Exact key resolution, overflow branch, owner/coverage guards and bytes                 |
+| Segment move or empty seal                                               | 8 / 7 / 11                 | Actual proof locks/currentness/cleanup and bytes                                       |
+| No-head/PENDING-veto visit                                               | 13 / 12 / 16               | Same missing bodies, actual rollback/conflict paths                                    |
 
 These are named pseudocode compositions, not grants or installed full prices. For example,
 both two-version probes and four-head probes run initially and again on final recheck;
@@ -488,15 +488,15 @@ numeric price is established for the all-application/rate/global-capacity branch
 
 Complete lifecycle disposition, including every unpriced boundary:
 
-| Operation | Index/metadata work established | Body/bytes/requests still unavailable for a full quote |
-| --- | --- | --- |
-| Exact key lookup | Existing native PK supports current fixed-ID reads; proposed long-key routing must charge chunks/collisions | Alias resolver, allocator rollover, inverse owner association, all guards and materialized bytes |
-| Retention selection | Radix 256,258 nodes + 2,000 leaf rows; prefix at most 128+d seeks; each exact nested query charged | Compatible keys, actual ordered-access body, native recheck/serialization, merge/control bytes |
-| Writer maintenance | Radix 194/194/130 per path; prefix 65 index insertions per new projection, one heap row | All old/new queue contribution branches, native fence/payload conversions, constraints, owner inventories, byte widths and index split work |
-| Installation/backfill | Prefix has 1 table + 64 secondary indexes + PK at minimum; `N` successful contributions cost at least `N` heap and `65N` index insertions | DDL/barrier/timeout cleanup, complete source/alias/copy hooks, frontier locks/bytes, publication; no population work hidden in launch |
-| Repair/restore | One fixed current row plus its reconciliation and one conditional acknowledgment/frontier update per page; total follows restored rows | Restore owner admission, closure preservation, exact rollback/DDL failure/retry branches, alias/layout cleanup |
-| Authoritative empty | Queue close kernel above; retention must inspect all exact covered streams/access path and current seal | Complete hook/layout/version/restore proof locks, no unresolved skip or dirty obligation, no guessed zero-byte controls |
-| Deletion and cleanup | Four native DELETE statements, actual children, projection/alias/member/dirty removal and summary repair if used | Full owner authority/inventory, certified cardinalities/bytes, selected-step removal where authorized, every nested constraint/trigger and failed cleanup |
+| Operation             | Index/metadata work established                                                                                                           | Body/bytes/requests still unavailable for a full quote                                                                                                    |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exact key lookup      | Existing native PK supports current fixed-ID reads; proposed long-key routing must charge chunks/collisions                               | Alias resolver, allocator rollover, inverse owner association, all guards and materialized bytes                                                          |
+| Retention selection   | Radix 256,258 nodes + 2,000 leaf rows; prefix at most 128+d seeks; each exact nested query charged                                        | Compatible keys, actual ordered-access body, native recheck/serialization, merge/control bytes                                                            |
+| Writer maintenance    | Radix 194/194/130 per path; prefix 65 index insertions per new projection, one heap row                                                   | All old/new queue contribution branches, native fence/payload conversions, constraints, owner inventories, byte widths and index split work               |
+| Installation/backfill | Prefix has 1 table + 64 secondary indexes + PK at minimum; `N` successful contributions cost at least `N` heap and `65N` index insertions | DDL/barrier/timeout cleanup, complete source/alias/copy hooks, frontier locks/bytes, publication; no population work hidden in launch                     |
+| Repair/restore        | One fixed current row plus its reconciliation and one conditional acknowledgment/frontier update per page; total follows restored rows    | Restore owner admission, closure preservation, exact rollback/DDL failure/retry branches, alias/layout cleanup                                            |
+| Authoritative empty   | Queue close kernel above; retention must inspect all exact covered streams/access path and current seal                                   | Complete hook/layout/version/restore proof locks, no unresolved skip or dirty obligation, no guessed zero-byte controls                                   |
+| Deletion and cleanup  | Four native DELETE statements, actual children, projection/alias/member/dirty removal and summary repair if used                          | Full owner authority/inventory, certified cardinalities/bytes, selected-step removal where authorized, every nested constraint/trigger and failed cleanup |
 
 For the independent expression indexes the logical key-content copy lower bound per terminal
 row is `64*(UTF8(application)+UTF8(id)+8) + 288` bytes: creation contributes 8 per index,
@@ -539,11 +539,11 @@ without a qualifying row. Exact integer ordering cannot be replaced by lossy flo
 
 ## Smallest explicit alternatives and deployment distinction
 
-| Alternative | Exact change and unresolved obligation |
-| --- | --- |
+| Alternative                                                   | Exact change and unresolved obligation                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Preserve contract; add a specialized PostgreSQL access method | Supply lossless integer ordered two-cutoff top-k reporting, compatible exact key handles, atomic update/remove, and a page/split/rebalance certificate for the **whole** 40/4,000 batch. Ordered reporting, not just unordered three-sided reporting, is required. No engine mechanism may conceal charged design-visible summaries. |
-| Explicit retention amendment to bounded incomplete progress | Permit paid partial selection/maturation/repair with durable fixed-cutoff progress, separate incomplete/empty outcomes and revised full-batch fixture/sweep assertions. Define creation-order stability under intervening mutations. This changes retention's current successful-batch promise and needs owner adoption. |
-| Explicit allowance amendment for a SQL construction | Keep creation/completion/order semantics, deliver exact long-key and coverage bodies, then adopt derived complete per-batch/short-batch allowances. Neither 1,128 nor 64-index write count is that complete price. No increase is adopted here. |
+| Explicit retention amendment to bounded incomplete progress   | Permit paid partial selection/maturation/repair with durable fixed-cutoff progress, separate incomplete/empty outcomes and revised full-batch fixture/sweep assertions. Define creation-order stability under intervening mutations. This changes retention's current successful-batch promise and needs owner adoption.             |
+| Explicit allowance amendment for a SQL construction           | Keep creation/completion/order semantics, deliver exact long-key and coverage bodies, then adopt derived complete per-batch/short-batch allowances. Neither 1,128 nor 64-index write count is that complete price. No increase is adopted here.                                                                                      |
 
 Relaxing creation ordering to completion ordering or imposing new text/version/child caps
 would change additional retained semantics; neither is a smaller compatible implementation
