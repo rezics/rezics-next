@@ -97,7 +97,11 @@ function settle(client: InstanceType<typeof QueryClient>, subject: string, admit
   client.setQueryData(key, { subject, admitted });
   return key;
 }
-function session(client: InstanceType<typeof QueryClient>, subject: string, csrfToken = `csrf-${subject}`) {
+function session(
+  client: InstanceType<typeof QueryClient>,
+  subject: string,
+  csrfToken: string | null = `csrf-${subject}`,
+) {
   client.setQueryData(['session'], { state: 'signed-in', subject, csrfToken });
 }
 function fixture(subject = 'A', admitted: readonly string[] = groups) {
@@ -640,5 +644,95 @@ test('Actual Progress start preserves sparse choice input and key on healthy obs
     await view.close();
     release();
     write.mockRestore();
+  }
+});
+
+test('Copies and Labels keep authorized tokenless reads, exact addresses and order while retiring stale callbacks', async () => {
+  const labels = await import('../src/library/labels-page');
+  const copies = await import('../src/library/copies-page');
+  const reads = await import('../src/library/copies-actions');
+  const labelReads = await import('../src/library/labels-read-route');
+  const { CopiesCurrent } = await import('../src/library/copies-current');
+  const { LabelsCurrent } = await import('../src/library/labels-current');
+  let label!: ComponentProps<typeof labels.LabelsPageView>;
+  let copy!: ComponentProps<typeof copies.CopiesPage>;
+  const initial = labelResponse('A');
+  initial.page.labels.push({ ...initial.page.labels[0]!, id: 'second', name: 'Second' });
+  const spies = [
+    spyOn(labels, 'LabelsPageView').mockImplementation((props) => {
+      label = props;
+      return <p>Labels</p>;
+    }),
+    spyOn(copies, 'CopiesPage').mockImplementation((props) => {
+      copy = props;
+      return <p>Copies</p>;
+    }),
+    spyOn(labelReads, 'readLabelsCurrent').mockResolvedValue(initial),
+    spyOn(reads, 'readCopiesCurrent').mockResolvedValue(copyResponse('A')),
+    spyOn(reads, 'readCopyDetailCurrent').mockResolvedValue({
+      sessionSubject: 'A',
+      requested: copyResponse('A').requested,
+      id: id(1),
+      result: { ok: false, reason: 'forbidden' },
+    }),
+  ];
+  const { client, release } = fixture();
+  session(client, 'A', null);
+  settle(client, 'A');
+  const view = mounted(client);
+  try {
+    await view.show(
+      <>
+        <LabelsCurrent initial={initial} search={{ cursor: 'opaque+/==', q: 'Private' }} locale="en" />
+        <CopiesCurrent initial={copyResponse('A')} search={{ cursor: 'opaque+/==' }} locale="en" />
+      </>,
+    );
+    expect(label.page.labels.map(({ id }) => id)).toEqual(['label-A', 'second']);
+    expect(copy.page.requestedCursor).toBe('opaque+/==');
+    expect(label.originating!.isCurrent('library_label.list')).toBe(true);
+    expect(copy.originating!.isCurrent('copy.get')).toBe(true);
+    expect(copy.originating!.headers('copy.create')).toBeNull();
+    expect(label.originating!.isCurrent('library_label.rename')).toBe(false);
+    expect(await copy.originating!.readDetail(id(1))).toEqual({ ok: false, reason: 'forbidden' });
+    expect(await label.refresh!()).toBe(initial.page);
+    expect(labelReads.readLabelsCurrent).toHaveBeenCalledWith({ data: { cursor: 'opaque+/==', query: 'Private' } });
+    await act(async () =>
+      client
+        .getQueryCache()
+        .find({ queryKey: ['copies-current'], type: 'active' })!
+        .setState({ status: 'error', error: new Error('Read unavailable') }),
+    );
+    await tick();
+    await act(async () => view.host.querySelector<HTMLButtonElement>('button')!.click());
+    await tick();
+    expect(reads.readCopiesCurrent).toHaveBeenCalledWith({ data: { subjectId: undefined, cursor: 'opaque+/==' } });
+    expect(copy.originating!.isCurrent()).toBe(true);
+    const before = copy.originating!;
+    await act(async () => {
+      session(client, 'A', 'arrived');
+      settle(client, 'A');
+    });
+    await tick();
+    expect(before.isCurrent('copy.get')).toBe(false);
+    expect(copy.originating!.headers('copy.create')).toEqual({ 'x-csrf-token': 'arrived' });
+    const revoked = label.originating!;
+    await act(async () => {
+      settle(client, 'A', []);
+      settle(client, 'A');
+    });
+    expect(revoked.isCurrent()).toBe(false);
+    await tick();
+    const old = copy.originating!;
+    await act(async () => {
+      session(client, 'B', null);
+      session(client, 'A', null);
+      settle(client, 'A');
+    });
+    expect(old.isCurrent()).toBe(false);
+    expect(await old.readDetail(id(1))).toEqual({ ok: false, reason: 'unavailable' });
+  } finally {
+    await view.close();
+    release();
+    spies.forEach((spy) => spy.mockRestore());
   }
 });

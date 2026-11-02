@@ -9,6 +9,8 @@ export type ManagementGuard = {
   headers: (operation?: GatedOperation) => HeadersInit | null;
 };
 
+const readOperations: readonly GatedOperation[] = ['copy.list', 'copy.get', 'library_label.list'];
+
 /** Local workflow custody. Cache notifications are synchronous, including A -> B -> A
  * updates that React may batch into a single render. Credentials are consumed, never captured.
  */
@@ -70,7 +72,8 @@ class ManagementCurrentOrigin {
   };
   private observe = () => {
     if (this.retired || !this.browser) return;
-    if (!this.credential() || this.admission.read().viewer !== this.viewer) {
+    const current = this.admission.read();
+    if (!this.subject || current.subject !== this.subject || current.viewer !== this.viewer) {
       this.retire();
       return;
     }
@@ -91,7 +94,7 @@ class ManagementCurrentOrigin {
       }
     }
   };
-  hasAuthority = () => this.browser && !!this.credential() && this.admitted(this.operation);
+  hasAuthority = () => this.browser && this.admission.read().subject === this.subject && this.admitted(this.operation);
   isCurrent = () => {
     this.observe();
     return this.alive() && this.admitted(this.operation);
@@ -159,6 +162,7 @@ class ManagementCurrentOrigin {
         this.isCurrent() &&
         !leases.get(this.operation)?.retired &&
         this.admitted(operation) &&
+        (readOperations.includes(operation) || !!this.credential()) &&
         !accepted.retired &&
         !!leases.get(operation) &&
         !leases.get(operation)!.retired;

@@ -315,7 +315,7 @@ test('Copies retains no A read/editor/Undo authority across pre-commit cache ABA
       });
     });
     expect(writes[1]!.input.data).toEqual(original);
-    expect(new Headers(writes[1]!.input.headers).get('x-csrf-token')).toBe('rotated-B');
+    expect(new Headers(writes[1]!.input.headers).get('x-csrf-token')).toBe('actual-B');
     await act(async () => writes[1]!.work.resolve({ ok: false, reason: 'conflict' }));
     await retry;
     const retained = page.originating!;
@@ -423,7 +423,7 @@ test('Labels consumes exact operation admission and actual rotated credentials; 
     await act(async () => client.setQueryData(['session'], viewer('A', 'rotated-A')));
     await act(async () => submit(renameForm()));
     expect(writes[1]!.input.data).toEqual(intent); // Original revision, exact payload and key survive refresh.
-    expect(new Headers(writes[1]!.input.headers).get('x-csrf-token')).toBe('rotated-A');
+    expect(new Headers(writes[1]!.input.headers).get('x-csrf-token')).toBe('actual-A');
     const retainedSubmit = props<{
       onSubmit: (event: { preventDefault(): void; currentTarget: HTMLFormElement }) => void;
     }>(renameForm()).onSubmit;

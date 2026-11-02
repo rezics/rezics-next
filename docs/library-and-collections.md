@@ -174,6 +174,10 @@ original support and terminal: a withheld original never becomes public because 
 
 ## Destinations and actions
 
+Decision: Copies and Labels admit authorized current-subject reads, detail, cursor navigation and read-only retry
+without a CSRF token; commands require the actual current token, while uncertain retries retain their original
+credential, sender, key and operands and token arrival never submits them automatically.
+
 The destinations are **Library**, **Following** and **History**. Library contains a bounded Continue row, Everything,
 Liked, pinned Collections and All Collections. Desktop uses a short pinned sidebar; phone uses a Collection selector
 and a few pins. State is a tile chip in profile wording and a filter; state Collections may be pinned, never compulsory

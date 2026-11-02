@@ -38,7 +38,7 @@ export function libraryWorkspaceAdmission(client: QueryClient | undefined, opera
   const read = (): Snapshot => {
     const session = client?.getQueryState(sessionQuery.queryKey);
     const viewer = session?.status === 'success' ? session.data : undefined;
-    const subject = viewer?.state === 'signed-in' && viewer.subject && viewer.csrfToken ? viewer.subject : null;
+    const subject = viewer?.state === 'signed-in' && viewer.subject ? viewer.subject : null;
     const enrolled = lifetime?.getSnapshot();
     const observation =
       subject && enrolled?.state === 'signed-in' && enrolled.observation.subject === subject

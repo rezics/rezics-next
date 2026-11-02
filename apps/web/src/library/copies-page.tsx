@@ -141,6 +141,7 @@ export function CopyForm({
   inline = false,
   initialKind,
   detailState = 'ready',
+  onRetryDetail,
   subjectId,
   addKey,
   onClose,
@@ -157,6 +158,7 @@ export function CopyForm({
   inline?: boolean;
   initialKind?: string;
   detailState?: 'loading' | 'ready' | 'unavailable' | 'forbidden';
+  onRetryDetail?: (() => void) | undefined;
   subjectId: string | null;
   addKey: string;
   onClose: () => void;
@@ -206,8 +208,17 @@ export function CopyForm({
   const busy = useRef(false);
   const flight = useRef<{ current: () => boolean } | null>(null);
   // Uncertain retries reuse the exact captured payload, CAS and key even if fields or the page refresh.
-  const intent = useRef<{ operation: 'create' | 'update' | 'delete'; data: Record<string, unknown> } | null>(null);
-  const current = (operation: GatedOperation = copy ? 'copy.update' : 'copy.create') =>
+  const intent = useRef<
+    | ({
+        data: Record<string, unknown>;
+        headers: HeadersInit;
+      } & (
+        | { operation: 'create' | 'update'; send: typeof createCopy }
+        | { operation: 'delete'; send: typeof deleteCopy }
+      ))
+    | null
+  >(null);
+  const current = (operation: GatedOperation = copy ? 'copy.get' : 'copy.create') =>
     active.current && (!originating || originating.isCurrent(operation));
   const headers = (operation: GatedOperation) => (originating ? originating.headers(operation) : csrfHeaders());
   if (flight.current && !flight.current.current()) {
@@ -269,6 +280,8 @@ export function CopyForm({
     if (!current(operation) || busy.current || confirming || !editable || intent.current?.operation === 'delete')
       return;
     const editionBinding = binding.current;
+    const credentialHeaders = headers(operation);
+    if (!credentialHeaders) return;
     if (!intent.current) {
       if (!copy && !subjectId && (!edition || editionBinding?.subject.id !== edition.id)) return;
       if (!copy && !selected?.statuses.some((status) => status.id === draft.status)) return;
@@ -287,10 +300,14 @@ export function CopyForm({
       intent.current = copy
         ? {
             operation: 'update',
+            headers: new Headers(credentialHeaders),
+            send: updateCopy,
             data: { id: copy.id, revision: copy.revision, idempotencyKey: copy.idempotencyKey, ...status, ...fields },
           }
         : {
             operation: 'create',
+            headers: new Headers(credentialHeaders),
+            send: createCopy,
             data: {
               subjectId: subjectId ?? editionBinding!.subject.id,
               idempotencyKey: addKey,
@@ -301,18 +318,15 @@ export function CopyForm({
           };
     }
     const captured = intent.current;
-    const credentialHeaders = headers(operation);
-    if (!current(operation) || !credentialHeaders) return;
+    if (captured.operation === 'delete') return;
+    if (!current(operation)) return;
     const lease = { current: () => current(operation) };
     flight.current = lease;
     busy.current = true;
     setPending(true);
     setFailure(null);
     try {
-      const result = await (captured.operation === 'update' ? updateCopy : createCopy)({
-        data: captured.data,
-        headers: credentialHeaders,
-      });
+      const result = await captured.send({ data: captured.data, headers: captured.headers });
       if (!current(operation)) return;
       if (!result.ok) {
         if (result.reason !== 'unavailable') intent.current = null;
@@ -401,6 +415,8 @@ export function CopyForm({
     if (!current('copy.delete') || !credentialHeaders) return;
     intent.current ??= {
       operation: 'delete',
+      headers: new Headers(credentialHeaders),
+      send: deleteCopy,
       data: { id: copy.id, revision: copy.revision, idempotencyKey: copy.idempotencyKey },
     };
     const lease = { current: () => current('copy.delete') };
@@ -410,7 +426,9 @@ export function CopyForm({
     setFailure(null);
     try {
       deleteStarted.current ??= Date.now();
-      const result = await deleteCopy({ data: intent.current.data, headers: credentialHeaders });
+      const captured = intent.current;
+      if (captured.operation !== 'delete') return;
+      const result = await captured.send({ data: captured.data, headers: captured.headers });
       if (!current('copy.delete')) return;
       if (!result.ok) {
         if (result.reason !== 'unavailable') intent.current = null;
@@ -530,7 +548,21 @@ export function CopyForm({
             </p>
           ) : null}
           {detailState === 'loading' ? <p role="status">{m.library_copy_detail_loading()}</p> : null}
-          {detailState === 'unavailable' ? <p role="status">{m.library_copy_detail_unavailable()}</p> : null}
+          {detailState === 'unavailable' ? (
+            <div className="space-y-2">
+              <p role="status">{m.library_copy_detail_unavailable()}</p>
+              {onRetryDetail ? (
+                <button
+                  type="button"
+                  className={quiet}
+                  disabled={pending || !!intent.current}
+                  onClick={() => current('copy.get') && !intent.current && onRetryDetail()}
+                >
+                  {m.subject_view_retry()}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {statusEditable ? (
             <>
               <p className="text-sm text-muted-foreground">{m.library_current_choices()}</p>
@@ -624,7 +656,7 @@ export function CopyForm({
       ) : null}
       <div className="flex flex-wrap gap-3">
         {editable ? (
-          <button type="submit" className={button} disabled={pending}>
+          <button type="submit" className={button} disabled={pending || !headers(copy ? 'copy.update' : 'copy.create')}>
             {copy ? m.library_copy_save() : m.library_copy_add_submit()}
           </button>
         ) : null}
@@ -633,7 +665,7 @@ export function CopyForm({
             type="button"
             ref={deleteControl}
             className={quiet}
-            disabled={pending || !editable}
+            disabled={pending || !editable || !headers('copy.delete')}
             onClick={() =>
               current() && (!intent.current || intent.current.operation === 'delete') && setConfirming(true)
             }
@@ -650,7 +682,7 @@ export function CopyForm({
 
   if (inline) return content;
   return (
-    <Exposure operation={copy ? 'copy.update' : 'copy.create'}>
+    <Exposure operation={copy ? 'copy.get' : 'copy.create'}>
       {mobile ? (
         <BottomSheet open onOpenChange={(open) => !open && close()} title={title}>
           {content}
@@ -875,6 +907,12 @@ function LoadedCopiesPage({
   const inspection = useRef(0);
   const active = useRef(true);
   const latestRemoval = useRef(removed);
+  const restoreIntent = useRef<{
+    removal: typeof removed;
+    data: { id: string; deletionId: string; revision: number; idempotencyKey: string };
+    headers: HeadersInit;
+    send: typeof undoCopy;
+  } | null>(null);
   const [editorKey, setEditorKey] = useState(0);
   useLayoutEffect(() => {
     active.current = true;
@@ -885,7 +923,7 @@ function LoadedCopiesPage({
   }, []);
   const currentPage = (operation?: GatedOperation) =>
     active.current && (!originating || originating.isCurrent(operation));
-  const currentEditor = (operation: GatedOperation = editing ? 'copy.update' : 'copy.create') =>
+  const currentEditor = (operation: GatedOperation = editing ? 'copy.get' : 'copy.create') =>
     currentPage(operation) && editorKey === inspection.current;
   const closeEditor = () => {
     if (!currentEditor()) return;
@@ -1068,10 +1106,17 @@ function LoadedCopiesPage({
             const headers = originating ? originating.headers('copy.update') : csrfHeaders();
             if (!currentPage('copy.update') || !headers) return false;
             try {
-              const result = await undoCopy({
-                data: { id: removed.copy.id, ...removed.result.undo, idempotencyKey },
-                headers,
-              });
+              if (restoreIntent.current?.removal !== removed)
+                restoreIntent.current = {
+                  removal: removed,
+                  data: { id: removed.copy.id, ...removed.result.undo, idempotencyKey },
+                  headers: new Headers(headers),
+                  send: undoCopy,
+                };
+              const captured = restoreIntent.current;
+              const result = await captured.send({ data: captured.data, headers: captured.headers });
+              if (!result.ok && result.reason !== 'unavailable' && restoreIntent.current === captured)
+                restoreIntent.current = null;
               if (!currentPage('copy.update') || !result.ok || result.copy.id !== removed.copy.id) return false;
               setChanged(true);
               setCopies((current) => [
@@ -1102,6 +1147,7 @@ function LoadedCopiesPage({
             readSubject: (id) => (originating ? originating.readSubject(id) : readCopySubject({ data: id })),
           }}
           detailState={detailState}
+          onRetryDetail={editing ? () => void inspect(editing) : undefined}
           {...(editing ? { copy: editing } : {})}
           profile={editing ? undefined : page.profile}
           sendKind={page.sendKind}
@@ -1124,10 +1170,11 @@ function LoadedCopiesPage({
             ]);
           }}
           onSaved={(next) => {
-            if (currentEditor()) setCopies((current) => current.map((item) => (item.id === next.id ? next : item)));
+            if (currentEditor('copy.update'))
+              setCopies((current) => current.map((item) => (item.id === next.id ? next : item)));
           }}
           onRemoved={(id, result, deadline) => {
-            if (!currentEditor()) return;
+            if (!currentEditor('copy.delete')) return;
             setChanged(true);
             const copy = copies.find((item) => item.id === id);
             if (copy) {

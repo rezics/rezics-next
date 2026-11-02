@@ -107,7 +107,13 @@ const sameInput = (a: LabelInput, b: LabelInput) =>
   a.id === b.id &&
   (a.operation === 'restore' || a.name === b.name) &&
   a.revision === b.revision;
-type Attempt = { input: LabelInput; renderedKey: string; unresolved: boolean };
+type Attempt = {
+  input: LabelInput;
+  renderedKey: string;
+  unresolved: boolean;
+  headers: HeadersInit;
+  send: typeof manageLabel;
+};
 
 export function LabelsPageView({
   page: initial,
@@ -193,7 +199,9 @@ export function LabelsPageView({
       alive() &&
       current.signedIn &&
       (!current.state || current.state === 'loaded') &&
-      (originating ? originating.isCurrent(operationOf(input)) : !!current.csrfToken) &&
+      (originating
+        ? originating.isCurrent(operationOf(input)) && !!originating.headers(operationOf(input))
+        : !!current.csrfToken) &&
       current.operations.includes('library_label.list') &&
       current.operations.includes(`library_label.${input.operation === 'restore' ? 'delete' : input.operation}`)
     );
@@ -204,10 +212,10 @@ export function LabelsPageView({
     const previous = attempts.current.get(slot);
     const input =
       previous &&
-      sameInput(previous.input, supplied) &&
       (previous.unresolved ||
-        previous.renderedKey === supplied.idempotencyKey ||
-        previous.input.idempotencyKey === supplied.idempotencyKey)
+        (sameInput(previous.input, supplied) &&
+          (previous.renderedKey === supplied.idempotencyKey ||
+            previous.input.idempotencyKey === supplied.idempotencyKey)))
         ? previous.input
         : {
             ...supplied,
@@ -219,7 +227,19 @@ export function LabelsPageView({
                 ? crypto.randomUUID()
                 : supplied.idempotencyKey,
           };
-    const attempt: Attempt = { input, renderedKey: supplied.idempotencyKey, unresolved: true };
+    const headers = originating
+      ? originating.headers(operationOf(input))
+      : { 'X-CSRF-Token': latestPage.current.csrfToken };
+    if (!headers) return;
+    const attempt: Attempt = previous?.unresolved
+      ? previous
+      : {
+          input,
+          renderedKey: supplied.idempotencyKey,
+          unresolved: true,
+          headers: new Headers(headers),
+          send: manageLabel,
+        };
     attempts.current.set(slot, attempt);
     const lock = { current: () => admitted(input) };
     locked.current = lock;
@@ -227,9 +247,7 @@ export function LabelsPageView({
     const page = latestPage.current;
     try {
       if (!admitted(input)) return;
-      const headers = originating ? originating.headers(operationOf(input)) : { 'X-CSRF-Token': page.csrfToken };
-      if (!headers || !admitted(input)) return;
-      const result = await manageLabel({ data: input, headers });
+      const result = await attempt.send({ data: attempt.input, headers: attempt.headers });
       if (!admitted(input)) return;
       attempt.unresolved = !result.ok && result.reason === 'unavailable';
       const feedback: LabelFeedback = {
