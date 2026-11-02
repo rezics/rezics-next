@@ -286,8 +286,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
         showFailure(outcome);
         // Read recovery never repeats approve/execute, even after an uncertain write.
         if (outcome.reason === 'unavailable') offerReadRetry(() => readCurrent(liveAttempt.current ?? value));
-      }
-      else {
+      } else {
         setUncertain(false);
         setResult(outcome);
         if (outcome.kind === 'current') setCurrent(outcome.relation);
