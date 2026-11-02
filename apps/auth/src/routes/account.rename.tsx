@@ -333,7 +333,7 @@ function RenameReview({
       ) : current.kind !== 'ready' ? (
         <>
           <ErrorAlert ref={alert} tabIndex={-1}>
-            {current.kind === 'denied' ? m.auth_rename_denied() : m.auth_rename_unavailable()}
+            {m.auth_rename_unavailable()}
           </ErrorAlert>
           <Button type="button" disabled={pending} aria-busy={pending} onClick={() => void reload()}>
             {m.auth_rename_reload()}
