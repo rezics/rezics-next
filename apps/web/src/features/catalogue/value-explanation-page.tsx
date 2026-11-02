@@ -326,7 +326,7 @@ function ValueEpisode({
 }: {
   transport: ValueTransport;
   locale: string;
-  initial?: ValueRead;
+  initial?: ValueRead | undefined;
   work: ReturnType<typeof useCatalogueLifetime>;
 }) {
   const [result, setResult] = useState<ValueRead | undefined>(initial);
