@@ -73,8 +73,7 @@ export function declareMembersPreparationParent(owners: MembersPreparationOwnerD
 }> {
   const children = Object.create(null) as Record<MembersPreparationChild, WorkDimensions>;
   for (const name of MEMBERS_PREPARATION_CHILDREN) {
-    const declaration =
-      name in history ? history[name as keyof typeof history] : owners[name as keyof typeof owners];
+    const declaration = name in history ? history[name as keyof typeof history] : owners[name as keyof typeof owners];
     children[name] = snapshot(declaration);
   }
   if (children.members.statements > 16) throw new TypeError('Members preparation body exceeds 16 statements');
