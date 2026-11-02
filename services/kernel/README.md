@@ -449,6 +449,9 @@ CTE buffer costs match producers and scans within nested native plan scopes. Whe
 established, producer blocks stay in the total and the unmatched relationship appears in `Cost.limitations`.
 A counted `limits` ceiling applies to every repetition at every scale and reports the unit, scale, 1-based repetition,
 value and limit; counted `bounds` continue to compare medians.
+Background limitations retain their native plan paths and identify the background plan index; a known
+`backgroundPlanStatements` entry also identifies its statement occurrence, while plans without an occurrence remain
+unattributed. Excluded background plans add no limitations.
 
 Byte totals are recorded for each captured statement. Request bytes include the UTF-8 statement text whenever an
 unnamed statement is sent and once when a named statement is first prepared on a connection, plus each parameter after

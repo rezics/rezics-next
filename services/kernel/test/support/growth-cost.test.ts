@@ -252,6 +252,41 @@ test('an unreferenced data-modifying CTE contributes its relation rows and block
   }
 });
 
+test('included background CTE limitations retain plan provenance and excluded plans add none', () => {
+  const plan = {
+    'Node Type': 'CTE Scan',
+    'CTE Name': 'missing',
+    'Actual Rows': 1,
+    'Actual Loops': 1,
+    'Shared Hit Blocks': 7,
+    'Shared Read Blocks': 0,
+  };
+  const capture = {
+    statements: [],
+    plans: [],
+    backgroundStatements: ['UPDATE app.items'],
+    backgroundPlans: [{ 'Query Text': 'UPDATE app.items', Plan: plan }],
+  };
+  const included = costOf({ ...capture, backgroundPlanStatements: [0] });
+
+  expect(included.backgroundBlocks).toBe(7);
+  expect(included.limitations).toHaveLength(1);
+  expect(included.limitations?.[0]).toContain(
+    'Background plan backgroundPlans[0] for background statement occurrence 0',
+  );
+  expect(included.limitations?.[0]).toContain('at backgroundPlans[0]');
+  const median = medianCost([included]);
+  expect(median.limitations).toEqual(included.limitations);
+  expect(median.limitations).not.toBe(included.limitations);
+
+  const excluded = costOf({
+    ...capture,
+    backgroundStatementBackends: [10],
+    backgroundPlanBackends: [11],
+  });
+  expect(excluded.limitations).toBeUndefined();
+});
+
 test('transaction control is counted separately from application statements', async () => {
   const plan = await explain('SELECT 1');
   const cost = costOf({

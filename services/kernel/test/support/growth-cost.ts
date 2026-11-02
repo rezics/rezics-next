@@ -589,6 +589,12 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
         `backgroundPlans[${index}]`,
       );
       if (!included) continue;
+      const statementOccurrence = capture.backgroundPlanStatements?.[index];
+      const backgroundProvenance =
+        statementOccurrence === undefined
+          ? `Background plan backgroundPlans[${index}] (statement occurrence unavailable)`
+          : `Background plan backgroundPlans[${index}] for background statement occurrence ${statementOccurrence}`;
+      limitations.push(...(planCost.limitations ?? []).map((limitation) => `${backgroundProvenance}: ${limitation}`));
       backgroundRows = checkedAdd(backgroundRows, planCost.rows, 'Total background examined rows');
       backgroundBlocks = checkedAdd(backgroundBlocks, planCost.blocks, 'Total background blocks');
       const prior = backgroundCosts.get(key) ?? { rows: 0, blocks: 0, bounded: true };
