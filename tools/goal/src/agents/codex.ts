@@ -2,7 +2,14 @@ import { unknownReading, tokens, textSignals, parseExitObject } from './shared.t
 import { existsSync, readFileSync, readdirSync, openSync, closeSync, readSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import defaults from '../../defaults.json';
-import type { AgentAdapter, AgentLaunchOptions, AgentUsageAccumulator, SessionUsage, AgentEvent } from '../agents.ts';
+import type {
+  AgentAdapter,
+  AgentLaunchOptions,
+  AgentUsage,
+  AgentUsageAccumulator,
+  SessionUsage,
+  AgentEvent,
+} from '../agents.ts';
 import type { Tokens, Pool, PoolReading, Profile } from '../types.ts';
 
 export function parseCodexSessionUsage(
