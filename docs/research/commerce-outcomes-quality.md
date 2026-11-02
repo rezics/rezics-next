@@ -234,17 +234,17 @@ No new accounting engine or financial policy follows from this review.
 Every row's current execution result is **not measured**. Fixtures/cases below show intended
 coverage, with no inferred pass from their existence.
 
-| Persona | Located cases/boundary | Missing current evidence |
-| --- | --- | --- |
-| Buyer | C0 snapshot/payment/replay; C1 history; C2 consent; C3 exact acquisition | Native authored sale through paid final protected read and reviewed journey |
-| Refunded buyer | Frozen full/partial/early refund and dispute cases (`:391–470`); C4/C6 | Same exact protected read refused/restored only under complete current evidence |
-| Same-route other buyer | Driver buyer/other both route `0x3300` (`:114–115`); frozen identical-404 case `:250`; C7 foreign repair | Current private history/benefit and final-use denial with the buyer's IDs |
-| Creator/seller | Driver's private seller uses real grants/commands; C2 seller revision; C8/C9 own views | A complete creator Auth/API/provider/page journey, without buyer-private disclosure |
-| Other creator/seller | C8 same-route creator scope/principal cases; C9 private statement denials | Current foreign offer mutation/receipt and all creator financial view denials together |
-| Anonymous | Frozen public offer/private denial `:137`, webhook forgery `:337`; C1/C8/C9 | Current subject discovery and final protected-use denial; webhook validity supplies no buyer identity |
-| Suspended | Frozen pre-suspension credential case `:484`; C1 credential refusal before private SQL | Current fresh/replay/use denials; native old bearer must return `401 invalid_credentials`, not a manufactured valid suspended token |
-| Terminal | C6 real Auth T races; C1 deleted history; C8 terminal source fences | Current default late-money reconciliation with no grant/restoration/private read; not whole financial erasure certification |
-| Repair operator | Internal known-order repair C4; buyer repair C7; payout operator C9 is distinct | Adopted authorized/unauthorized repair identity exercised through the real boundary; do not infer it from staff or payout authority |
+| Persona                | Located cases/boundary                                                                                   | Missing current evidence                                                                                                            |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Buyer                  | C0 snapshot/payment/replay; C1 history; C2 consent; C3 exact acquisition                                 | Native authored sale through paid final protected read and reviewed journey                                                         |
+| Refunded buyer         | Frozen full/partial/early refund and dispute cases (`:391–470`); C4/C6                                   | Same exact protected read refused/restored only under complete current evidence                                                     |
+| Same-route other buyer | Driver buyer/other both route `0x3300` (`:114–115`); frozen identical-404 case `:250`; C7 foreign repair | Current private history/benefit and final-use denial with the buyer's IDs                                                           |
+| Creator/seller         | Driver's private seller uses real grants/commands; C2 seller revision; C8/C9 own views                   | A complete creator Auth/API/provider/page journey, without buyer-private disclosure                                                 |
+| Other creator/seller   | C8 same-route creator scope/principal cases; C9 private statement denials                                | Current foreign offer mutation/receipt and all creator financial view denials together                                              |
+| Anonymous              | Frozen public offer/private denial `:137`, webhook forgery `:337`; C1/C8/C9                              | Current subject discovery and final protected-use denial; webhook validity supplies no buyer identity                               |
+| Suspended              | Frozen pre-suspension credential case `:484`; C1 credential refusal before private SQL                   | Current fresh/replay/use denials; native old bearer must return `401 invalid_credentials`, not a manufactured valid suspended token |
+| Terminal               | C6 real Auth T races; C1 deleted history; C8 terminal source fences                                      | Current default late-money reconciliation with no grant/restoration/private read; not whole financial erasure certification         |
+| Repair operator        | Internal known-order repair C4; buyer repair C7; payout operator C9 is distinct                          | Adopted authorized/unauthorized repair identity exercised through the real boundary; do not infer it from staff or payout authority |
 
 ## Owning commands and actual execution status
 
@@ -296,13 +296,13 @@ Do not certify or rewrite acceptance stages from file presence. The capability i
 explicitly historical (`:5–7`); its `unknown` acceptance and pending promotion remain appropriate.
 The following source-absence descriptions need owner reconciliation after measured acceptance:
 
-| Historical claim | Current source counterpoint; proof still missing |
-| --- | --- |
-| `offer-to-usable-benefit` says discovery transport is unapproved/missing (`:859–868`) | Owner now adopts `GET /v1/subjects/:id/offers` and `subject-offers.test.ts`. Full subject slot → payment → protected bytes and reviewed pages remain unmeasured. |
-| `offer-lifecycle-and-target-receipts` says public GET tests existence and revision HTTP is absent (`:890–899`) | `http.test.ts:306` asserts concealed delisting; `offer-revision-http.test.ts:60` and owner revision-bound seller contract exist. The latter's subject-only setup still needs repair; none is a current pass. |
-| Refresh helper, admission/default queues and repair producers are missing (`:180–183,921–930`) | Owner names `beginCheckoutRefresh`/`applyClaimedCheckoutSnapshot`; C4 declares default/recovery races; owner and C7 now define buyer reconcile. Execution and full repair-operator evidence remain open. |
+| Historical claim                                                                                                  | Current source counterpoint; proof still missing                                                                                                                                                                                                      |
+| ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `offer-to-usable-benefit` says discovery transport is unapproved/missing (`:859–868`)                             | Owner now adopts `GET /v1/subjects/:id/offers` and `subject-offers.test.ts`. Full subject slot → payment → protected bytes and reviewed pages remain unmeasured.                                                                                      |
+| `offer-lifecycle-and-target-receipts` says public GET tests existence and revision HTTP is absent (`:890–899`)    | `http.test.ts:306` asserts concealed delisting; `offer-revision-http.test.ts:60` and owner revision-bound seller contract exist. The latter's subject-only setup still needs repair; none is a current pass.                                          |
+| Refresh helper, admission/default queues and repair producers are missing (`:180–183,921–930`)                    | Owner names `beginCheckoutRefresh`/`applyClaimedCheckoutSnapshot`; C4 declares default/recovery races; owner and C7 now define buyer reconcile. Execution and full repair-operator evidence remain open.                                              |
 | README says Accounts factory/getter are absent (`:385–387`), and current Content producer is pending (`:441–445`) | `work/authorization.ts:16–55`, `work/registry.ts:78–99`, `content/edition-sale.ts` and C1 are present. Their existence does not establish paid fulfilment/final use. The repeated pending sentence at `:445–446` also needs editorial reconciliation. |
-| Historical “23 native cases” might be read as current Goal completion | Register counts are registrations only; the retained driver's subject-only setup is incompatible with current fresh sale. Keep unknown current acceptance until C0 and the composed supplement execute. |
+| Historical “23 native cases” might be read as current Goal completion                                             | Register counts are registrations only; the retained driver's subject-only setup is incompatible with current fresh sale. Keep unknown current acceptance until C0 and the composed supplement execute.                                               |
 
 These are documentation reconciliation candidates for Commerce, not permission to remove
 missing protected-use, interface, financial custody or physical-cost obligations. Financial
