@@ -107,7 +107,11 @@ export function DocumentValue({
 }) {
   return (
     <div lang={lang} className="max-w-prose">
-      <DocumentBody document={document} locale={locale} labels={{ revealSpoiler: labels.documentSpoiler }} />
+      <DocumentBody
+        document={document}
+        {...(locale === undefined ? {} : { locale })}
+        labels={{ revealSpoiler: labels.documentSpoiler }}
+      />
     </div>
   );
 }
