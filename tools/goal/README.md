@@ -1050,9 +1050,10 @@ Removal errors are logged and do not prevent attempt settlement; containers with
 
 ### Worker container cleanup
 
-- Touches: one label-filtered Docker listing and removal of that attempt's returned container IDs.
-- Bound: only containers created by the exact task attempt are examined or removed; the work grows with that attempt's containers.
-- Growth check: `bun test tools/goal/src/worker-containers.test.ts` records wrapper arguments and attempt cleanup.
+- Decision: Measure observable Docker CLI calls and returned or removed IDs; daemon-internal examined work is unavailable and is not inferred from those observations.
+- Touches: one Docker listing filtered by the exact task/attempt label and zero or one removal invocation for its returned IDs.
+- Bound: only the exact attempt's returned IDs can be removed, and removals grow with those IDs. Docker daemon candidate work for label filtering is unavailable; no index or constant-scan claim is made.
+- Growth check: `bun test tools/goal/src/worker-containers.test.ts tools/goal/src/worker-containers-native-growth.test.ts` preserves wrapper/label assertions and records native listing/removal calls, returned IDs and removal outcomes with foreign-attempt populations of 1/10/100, selected counts of 1/4/16, empty and replayed cleanup, and interrupted cleanup resumed by the same attempt. The native scenario is unavailable when the wrapper, daemon or cached `busybox:latest` image is missing; capability acceptance requires zero skips.
 
 Each attempt's evidence directory contains `contract.md`, `diff.patch`, `failure.json` and `approaches.json`. Diffs
 include commits, tracked edits and untracked files. Raw session logs stay in the runs directory and never enter the
