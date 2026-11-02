@@ -720,10 +720,24 @@ test('catalogue editors retain only their original live reader, exact address an
     await activate(standalone);
     await ui.render(createElement(RelationEditorSession, { id: standalone.id, locale: 'en' }));
     await ui.click(m.relation_open());
-    await ui.until(() => !!ui.host.querySelector('#relation-property'));
+    await ui.until(() => {
+      const region = ui.host.querySelector(`section[aria-label="${m.relation_title()}"]`);
+      const label = [...(region?.querySelectorAll('label') ?? [])].find(
+        (node) => node.textContent === m.relation_property(),
+      );
+      const control = ui.window.document.getElementById(label?.htmlFor ?? '');
+      return !!label && !!control && control.tagName === 'SELECT' && !!region?.contains(control);
+    });
     await ui.update(signedIn(replacement));
     await ui.click(m.relation_open());
-    await ui.until(() => !!ui.host.querySelector('#relation-property'));
+    await ui.until(() => {
+      const region = ui.host.querySelector(`section[aria-label="${m.relation_title()}"]`);
+      const label = [...(region?.querySelectorAll('label') ?? [])].find(
+        (node) => node.textContent === m.relation_property(),
+      );
+      const control = ui.window.document.getElementById(label?.htmlFor ?? '');
+      return !!label && !!control && control.tagName === 'SELECT' && !!region?.contains(control);
+    });
     expect(standalone.calls.some((call) => call.path.endsWith(standalone.id))).toBe(true);
 
     // The replacement starts its own live proposal, exact review and native adoption.
