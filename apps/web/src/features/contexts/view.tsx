@@ -1,4 +1,5 @@
-import { useId, useState, type RefObject } from 'react';
+import { useBlocker, useRouter } from '@tanstack/react-router';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
@@ -85,6 +86,112 @@ export function ContextFeedback({ failure, locale, retry }: { failure: Failure; 
         </a>
       ) : null}
     </div>
+  );
+}
+function ContextDeparture({
+  locale,
+  protect,
+  unsettled,
+  current,
+  onLeave,
+}: {
+  locale: string;
+  protect: boolean;
+  unsettled: boolean;
+  current: () => boolean;
+  onLeave: () => void;
+}) {
+  const router = useRouter({ warn: false });
+  return router ? (
+    <ContextRouterDeparture
+      locale={locale}
+      protect={protect}
+      unsettled={unsettled}
+      current={current}
+      onLeave={onLeave}
+    />
+  ) : null;
+}
+function ContextRouterDeparture({
+  locale,
+  protect,
+  unsettled,
+  current,
+  onLeave,
+}: {
+  locale: string;
+  protect: boolean;
+  unsettled: boolean;
+  current: () => boolean;
+  onLeave: () => void;
+}) {
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const stayButton = useRef<HTMLButtonElement>(null);
+  const resolved = useRef(false);
+  const leaving = useRef(false);
+  const shouldBlockFn = useCallback(() => {
+    if (!protect || !current()) return false;
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    resolved.current = false;
+    leaving.current = false;
+    return true;
+  }, [protect, current]);
+  const blocker = useBlocker({
+    shouldBlockFn,
+    disabled: !protect,
+    enableBeforeUnload: () => protect && current(),
+    withResolver: true,
+  });
+  const blockerRef = useRef(blocker);
+  blockerRef.current = blocker;
+  useLayoutEffect(
+    () => () => {
+      const pending = blockerRef.current;
+      if (pending.status === 'blocked' && !resolved.current) {
+        resolved.current = true;
+        pending.reset();
+      }
+    },
+    [],
+  );
+  useEffect(() => {
+    if ((!protect || !current()) && blocker.status === 'blocked' && !resolved.current) {
+      resolved.current = true;
+      blocker.reset();
+    }
+  }, [protect, current, blocker]);
+
+  function resolve(leave: boolean) {
+    if (!current() || blocker.status !== 'blocked' || resolved.current) return;
+    resolved.current = true;
+    leaving.current = leave;
+    if (leave) {
+      onLeave();
+      blocker.proceed();
+    } else blocker.reset();
+  }
+
+  const o = options(locale);
+  return (
+    <AlertDialog open={blocker.status === 'blocked'} onOpenChange={(open) => !open && resolve(false)}>
+      <AlertDialogContent
+        initialFocus={stayButton}
+        finalFocus={() => (leaving.current ? false : returnFocus.current?.isConnected ? returnFocus.current : false)}
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle>{m.zone_editor_leave({}, o)}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {unsettled ? m.thread_authoring_leave_pending({}, o) : m.thread_authoring_leave_unsaved({}, o)}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel ref={stayButton}>{m.thread_authoring_stay({}, o)}</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => resolve(true)}>
+            {unsettled ? m.thread_authoring_leave({}, o) : m.zone_editor_discard({}, o)}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 function Permission({ actions, locale }: { actions: Result<Actions> | null; locale: string }) {
@@ -358,6 +465,17 @@ export function ContextCreateView({
           </div>
         </form>
       )}
+      <ContextDeparture
+        locale={locale}
+        protect={current() && (!!intent.pending || (!created && (label !== '' || language !== locale)))}
+        unsettled={intent.busy || intent.result?.kind === 'unknown'}
+        current={current}
+        onLeave={() => {
+          setLabel('');
+          setLanguage(locale);
+          intent.retire();
+        }}
+      />
     </article>
   );
 }
@@ -604,6 +722,13 @@ export function ContextDetailView({
           ) : null}
         </>
       ) : null}
+      <ContextDeparture
+        locale={locale}
+        protect={live() && !!intent.pending}
+        unsettled={intent.busy || intent.result?.kind === 'unknown'}
+        current={live}
+        onLeave={intent.retire}
+      />
     </article>
   );
 }

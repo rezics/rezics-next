@@ -3,6 +3,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ComponentProps, type ReactNode } from 'react';
 import { contextFixture, fixtureId } from '../src/features/contexts/fixtures';
+import { ContextWork } from '../src/features/contexts/lifetime';
 import {
   detailHref,
   directoryHref,
@@ -534,5 +535,144 @@ test('all eight catalogs supply the same additive reader messages with neutral n
     } finally {
       await panel.dispose();
     }
+  }
+});
+
+test('personal Context departure keeps creation and delete recovery on Stay and retires it on Leave', async () => {
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } = await import(
+    '@tanstack/react-router'
+  );
+  const commands: Command[] = [];
+  const completions: ((result: MutationResult) => void)[] = [];
+  const submit = (command: Command) => {
+    commands.push(command);
+    return new Promise<MutationResult>((resolve) => completions.push(resolve));
+  };
+  const current = () => true;
+  const parent = createRootRoute({
+    component: () => (
+      <ContextWork.Provider value={current}>
+        <Outlet />
+      </ContextWork.Provider>
+    ),
+  });
+  const create = createRoute({
+    getParentRoute: () => parent,
+    path: '/my/contexts/new',
+    component: () => (
+      <ContextCreateView locale="en" actions={contextFixture().initialCreation()} submit={submit} reload={async () => {}} />
+    ),
+  });
+  const detail = createRoute({
+    getParentRoute: () => parent,
+    path: '/my/contexts/$id',
+    component: () => (
+      <ContextDetailView
+        id={fixtureId}
+        locale="en"
+        data={contextFixture().initialDetail()}
+        submit={submit}
+        reload={async () => {}}
+      />
+    ),
+  });
+  const readOnly = createRoute({
+    getParentRoute: () => parent,
+    path: '/my/contexts/read-only',
+    component: () => (
+      <ContextDetailView
+        id={fixtureId}
+        locale="en"
+        data={contextFixture('read-only').initialDetail()}
+        submit={submit}
+        reload={async () => {}}
+      />
+    ),
+  });
+  const away = createRoute({ getParentRoute: () => parent, path: '/away', component: () => <p>Destination</p> });
+  const router = createRouter({
+    routeTree: parent.addChildren([create, detail, readOnly, away]),
+    history: createMemoryHistory({ initialEntries: ['/my/contexts/new'] }),
+  });
+  await act(async () => router.load());
+  const panel = await mount(<RouterProvider router={router} />);
+  const go = async (to: '/away' | '/my/contexts/new' | '/my/contexts/read-only' | `/my/contexts/${string}`) =>
+    act(async () => {
+      void router.navigate({ to });
+    });
+  const click = async (target: ParentNode, label: string) => act(async () => userEvent.click(button(target, label)));
+  const unloadBlocked = () => {
+    const event = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  const complete = async (index: number, result: MutationResult) =>
+    act(async () => completions[index]!(result));
+  try {
+    let label = panel.host.querySelector('input') as HTMLInputElement;
+    let language = panel.host.querySelector('select') as HTMLSelectElement;
+    await act(async () => userEvent.type(label, 'temporary'));
+    await act(async () => userEvent.clear(label));
+    await act(async () => userEvent.selectOptions(language, 'ja'));
+    await act(async () => userEvent.selectOptions(language, 'en'));
+    expect(unloadBlocked()).toBe(false);
+    await go('/away');
+    expect(router.state.location.pathname).toBe('/away');
+    await go('/my/contexts/new');
+    label = panel.host.querySelector('input') as HTMLInputElement;
+    language = panel.host.querySelector('select') as HTMLSelectElement;
+    await act(async () => userEvent.type(label, 'Private Context'));
+    await act(async () => userEvent.selectOptions(language, 'ja'));
+    expect(unloadBlocked()).toBe(true);
+    await go('/away');
+    await click(window.document.body, m.thread_authoring_stay({}, o));
+    expect([label.value, language.value, commands.length]).toEqual(['Private Context', 'ja', 0]);
+    await click(panel.host, m.ctxw_create({}, o));
+    const original = commands[0]!;
+    const exact = structuredClone(original);
+    await go('/away');
+    expect(window.document.body.textContent).toContain(m.thread_authoring_leave_pending({}, o));
+    await click(window.document.body, m.thread_authoring_stay({}, o));
+    expect(commands).toHaveLength(1);
+    expect(original).toEqual(exact);
+    await complete(0, { kind: 'unknown' });
+    await click(panel.host, m.ctxw_retry_same({}, o));
+    expect(commands[1]).toBe(original);
+    const lateCreate = completions[1]!;
+    await go('/away');
+    await click(window.document.body, m.thread_authoring_leave({}, o));
+    expect(router.state.location.pathname).toBe('/away');
+    await act(async () =>
+      lateCreate({ kind: 'confirmed', operation: 'create', id: fixtureId, current: { kind: 'unavailable' } }),
+    );
+    expect(window.document.body.textContent).not.toContain(m.ctxw_confirmed({}, o));
+
+    await go('/my/contexts/read-only');
+    await go('/away');
+    expect(router.state.location.pathname).toBe('/away');
+    await go(`/my/contexts/${fixtureId}`);
+    await click(panel.host, m.ctxw_delete({}, o));
+    const deleteDialog = window.document.body.querySelector('[role="alertdialog"]') as HTMLElement;
+    await click(deleteDialog, m.ctxw_delete({}, o));
+    const deletion = commands[2]!;
+    expect(deletion.operation).toBe('delete');
+    await go('/away');
+    await click(window.document.body, m.thread_authoring_stay({}, o));
+    expect(commands[2]).toBe(deletion);
+    await complete(2, { kind: 'unknown' });
+    expect(unloadBlocked()).toBe(true);
+    await go('/away');
+    await click(window.document.body, m.thread_authoring_leave({}, o));
+
+    await go('/my/contexts/new');
+    const completedLabel = panel.host.querySelector('input') as HTMLInputElement;
+    await act(async () => userEvent.type(completedLabel, 'Confirmed Context'));
+    await click(panel.host, m.ctxw_create({}, o));
+    await complete(3, { kind: 'confirmed', operation: 'create', id: fixtureId, current: { kind: 'unavailable' } });
+    expect(unloadBlocked()).toBe(false);
+    await go('/away');
+    expect(router.state.location.pathname).toBe('/away');
+  } finally {
+    await panel.dispose();
   }
 });
