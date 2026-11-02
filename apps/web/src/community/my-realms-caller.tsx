@@ -47,6 +47,7 @@ export type MyRealmsVisit = {
 type CacheQuery = object;
 
 type TaggedPage = { callerId: string; sourceRevision: number; query: CacheQuery };
+type ContinuationFocus = { callerId: string; cursor: string };
 const taggedPages = new WeakMap<object, TaggedPage>();
 const retiredVisits = new WeakSet<object>();
 const sessions = new WeakMap<QueryClient, MyRealmsSessionSource>();
@@ -151,6 +152,7 @@ class MyRealmsSessionSource {
   private active: MyRealmsCaller | null = null;
   private hasVisited = false;
   private visitGeneration = 0;
+  private continuationFocus: ContinuationFocus | null = null;
 
   constructor(readonly client: QueryClient) {
     this.snapshot = sessionFrom(client);
@@ -200,6 +202,24 @@ class MyRealmsSessionSource {
     this.visitGeneration++;
     this.active?.retire(preserveCache);
     return this.visitGeneration;
+  }
+
+  requestContinuationFocus(caller: MyRealmsCaller, cursor: string) {
+    if (!cursor || !caller.isCurrent()) return false;
+    this.continuationFocus = { callerId: caller.visit.id, cursor };
+    return true;
+  }
+
+  takeContinuationFocus(cursor?: string) {
+    const requested = this.continuationFocus;
+    this.continuationFocus = null;
+    const caller = this.active;
+    return !!(
+      requested &&
+      requested.cursor === cursor &&
+      caller?.visit.id === requested.callerId &&
+      caller.isCurrent()
+    );
   }
 
   currentVisitGeneration() {
@@ -255,6 +275,8 @@ class MyRealmsSessionSource {
 
   remove(caller: MyRealmsCaller) {
     if (this.active === caller) this.active = null;
+    if (this.continuationFocus?.callerId === caller.visit.id)
+      this.continuationFocus = null;
     this.visits.delete(caller.visit.id);
   }
 
@@ -306,6 +328,7 @@ export class MyRealmsCaller {
   private readonly localSourceRevision: number;
   private readonly localVisitGeneration: number;
   private resultVisit: MyRealmsVisit | undefined;
+  private continuationFocusPending = false;
 
   private constructor(
     private readonly source: MyRealmsSessionSource,
@@ -316,6 +339,7 @@ export class MyRealmsCaller {
       localSourceRevision: number;
       localSessionCacheRevision: SessionCacheRevision;
       localVisitGeneration: number;
+      continuationFocus?: boolean;
     } = {
       localSourceRevision: visit.sourceRevision,
       localSessionCacheRevision: visit.sessionCacheRevision,
@@ -331,6 +355,7 @@ export class MyRealmsCaller {
     this.hydrationPending = this.adopted;
     this.localSourceRevision = options.localSourceRevision;
     this.localVisitGeneration = options.localVisitGeneration;
+    this.continuationFocusPending = options.continuationFocus ?? false;
   }
 
   static async capture(
@@ -342,6 +367,7 @@ export class MyRealmsCaller {
     const captured = source.read();
     const cache = realmCacheRevision(client, input.cursor);
     const callerId = globalThis.crypto.randomUUID();
+    const continuationFocus = source.takeContinuationFocus(input.cursor);
     const visitGeneration = source.beginVisit(options.preserveQuery);
     if (!options.preserveQuery) source.clearRealmCache(input.cursor);
     const queryKey = ['my-realms', input.cursor ?? ''] as const;
@@ -392,6 +418,7 @@ export class MyRealmsCaller {
       localSourceRevision: captured.sourceRevision,
       localSessionCacheRevision: captured.cacheRevision,
       localVisitGeneration: visitGeneration,
+      continuationFocus,
     });
     if (!source.activate(caller, options.preserveQuery)) {
       caller.retire();
@@ -471,6 +498,20 @@ export class MyRealmsCaller {
       (!this.wasAttached || this.attached) &&
       (!this.adopted || this.hydrationVerified)
     );
+  }
+
+  requestContinuationFocus(cursor: string) {
+    return this.source.requestContinuationFocus(this, cursor);
+  }
+
+  hasContinuationFocus() {
+    return this.continuationFocusPending && this.isCurrent();
+  }
+
+  claimContinuationFocus() {
+    const pending = this.continuationFocusPending;
+    this.continuationFocusPending = false;
+    return pending && this.isCurrent();
   }
 
   isCurrentAddress(address: {
@@ -703,6 +744,7 @@ export class MyRealmsCaller {
   retire(preserveCache = false) {
     if (!this.active) return;
     this.active = false;
+    this.continuationFocusPending = false;
     this.hydrationVerified = false;
     this.hydrationPending = false;
     this.stopReadWatching?.();
@@ -855,6 +897,8 @@ export function MyRealmsCallerHost({
     credentialMode: 'session' as const,
   };
   const matchingAddress = caller.isCurrentAddress(address);
+  const focusContinuation = caller.hasContinuationFocus() ? () => caller.claimContinuationFocus() : undefined;
+  const onKeyboardNext = (nextCursor: string) => caller.requestContinuationFocus(nextCursor);
 
   useEffect(() => {
     const disconnect = caller.connect();
@@ -869,7 +913,11 @@ export function MyRealmsCallerHost({
         <Link to="/realms/new" className="inline-flex min-h-10 items-center text-primary underline underline-offset-4">
           {m.space_setup_heading()}
         </Link>
-        <MyRealmsPageView page={initial.page} />
+        <MyRealmsPageView
+          page={initial.page}
+          onKeyboardNext={onKeyboardNext}
+          focusContinuation={focusContinuation}
+        />
       </div>
     );
   if (hydrated && caller.adoptionPending()) return null;
@@ -887,7 +935,11 @@ export function MyRealmsCallerHost({
       <Link to="/realms/new" className="inline-flex min-h-10 items-center text-primary underline underline-offset-4">
         {m.space_setup_heading()}
       </Link>
-      <MyRealmsPageView page={page} />
+      <MyRealmsPageView
+        page={page}
+        onKeyboardNext={onKeyboardNext}
+        focusContinuation={focusContinuation}
+      />
     </div>
   );
 }

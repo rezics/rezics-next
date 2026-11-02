@@ -111,6 +111,12 @@ async function until(predicate: () => boolean, label: string) {
   throw new Error(`Timed out waiting for ${label}`);
 }
 
+async function activateLink(link: HTMLAnchorElement, detail: number) {
+  await act(async () => {
+    link.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, detail }));
+  });
+}
+
 type Surface = Awaited<ReturnType<typeof createSurface>>;
 
 async function createSurface(options: { locale?: 'en' | 'zh-Hant'; cursor?: string } = {}) {
@@ -334,19 +340,24 @@ test('a fresh explicit visit after a same-account credential replacement uses a 
   }
 });
 
-test('same-account CSRF replacement while the existing server action is pending prevents its late result from reaching cache or display', async () => {
+test('a retired keyboard continuation cannot focus or reveal its late private result', async () => {
   const response = deferred<MyRealmsPage>();
-  resetReader(() => response.promise);
+  const cursor = 'opaque-retired-continuation';
+  resetReader(async (input) => (input.cursor ? response.promise : page('Current first-page realm', cursor)));
   const surface = await createSurface();
   try {
-    const loading = surface.load();
-    await until(() => readCalls.length === 1, 'the existing My Realms server action');
+    await surface.load();
+    await surface.mount();
+    await activateLink(surface.host.querySelector<HTMLAnchorElement>('a[href*="cursor="]')!, 0);
+    await until(() => readCalls.length === 2, 'the keyboard continuation read');
     await surface.setSession(signedIn('realm-owner', 'csrf-replacement'));
     response.resolve(page('Late original realm'));
-    await expect(loading).rejects.toThrow();
+    await until(() => surface.router.state.status === 'idle', 'the retired route result');
     await settle();
-    expect(surface.client.getQueryData(['my-realms', ''])).toBeUndefined();
+    expect(surface.client.getQueryData(['my-realms', cursor])).toBeUndefined();
     expect(surface.host.textContent ?? '').not.toContain('Late original realm');
+    expect(surface.host.textContent ?? '').not.toContain('Current first-page realm');
+    expect(surface.host.querySelector('section[aria-labelledby] h1')).toBeNull();
   } finally {
     response.resolve(page('Settled response'));
     await surface.dispose();
@@ -372,6 +383,33 @@ test('a session transition while the route import is queued skips the private re
   }
 });
 
+test('keyboard continuation focuses the admitted heading on an empty terminal page', async () => {
+  const cursor = 'opaque-terminal-page';
+  resetReader(async (input) =>
+    input.cursor ? { ...page('Empty terminal page'), realms: [] } : page('First-page realm', cursor),
+  );
+  const surface = await createSurface();
+  try {
+    await surface.load();
+    await surface.mount();
+    expect(window.document.activeElement).not.toBe(surface.host.querySelector('section[aria-labelledby] h1'));
+    await activateLink(surface.host.querySelector<HTMLAnchorElement>('a[href*="cursor="]')!, 0);
+    await until(
+      () => readCalls.length === 2 && surface.router.state.status === 'idle',
+      'the terminal keyboard continuation',
+    );
+    const heading = surface.host.querySelector<HTMLHeadingElement>('section[aria-labelledby] h1')!;
+    expect(heading.id).not.toBe('');
+    expect(heading.tabIndex).toBe(-1);
+    expect(surface.host.querySelector('section')?.getAttribute('aria-labelledby')).toBe(heading.id);
+    expect(surface.host.textContent).toContain(m.realms_empty());
+    expect(surface.host.querySelector('a[href*="cursor="]')).toBeNull();
+    expect(window.document.activeElement).toBe(heading);
+  } finally {
+    await surface.dispose();
+  }
+});
+
 test('cursor and locale changes form a new route visit, keep native cursor order and perform one read per visit', async () => {
   const cursor = 'opaque/next?private=%25';
   resetReader(async (input) => page(input.cursor ? 'Second cursor realm' : 'First cursor realm', 'native-next-cursor'));
@@ -380,11 +418,13 @@ test('cursor and locale changes form a new route visit, keep native cursor order
     await surface.load();
     await surface.mount();
     expect(visiblePrivateNames(surface)).toContain('First cursor realm');
-    await surface.router.navigate({ to: '/realms', search: { cursor } } as never);
-    await settle();
+    expect(window.document.activeElement).not.toBe(surface.host.querySelector('section[aria-labelledby] h1'));
+    await activateLink(surface.host.querySelector<HTMLAnchorElement>('a[href*="cursor="]')!, 1);
+    await until(() => readCalls.length === 2 && surface.router.state.status === 'idle', 'the pointer cursor visit');
     expect(readCalls).toEqual([{}, { cursor }]);
     expect(visiblePrivateNames(surface)).toContain('Second cursor realm');
     expect(surface.host.querySelector('a[href*="cursor="]')).not.toBeNull();
+    expect(window.document.activeElement).not.toBe(surface.host.querySelector('section[aria-labelledby] h1'));
 
     await setLocale('zh-Hant', { reload: false });
     surface.router.history.push(`/zh-Hant/realms?cursor=${encodeURIComponent(cursor)}`);
@@ -392,6 +432,9 @@ test('cursor and locale changes form a new route visit, keep native cursor order
     await settle();
     expect(readCalls).toHaveLength(3);
     expect(visiblePrivateNames(surface)).toContain('Second cursor realm');
+    await surface.router.invalidate();
+    await settle();
+    expect(window.document.activeElement).not.toBe(surface.host.querySelector('section[aria-labelledby] h1'));
   } finally {
     await surface.dispose();
   }
@@ -401,24 +444,32 @@ test('a failed continuation keeps same-request retry and restarts through a fres
   const cursor = 'opaque/failed?private=%25';
   resetReader(async (input) => {
     if (input.cursor) throw new Error('Realm list is unavailable');
-    return page('Recovered first-page realm');
+    return readCalls.length === 1 ? page('Initial first-page realm', cursor) : page('Recovered first-page realm');
   });
-  const surface = await createSurface({ cursor });
+  const surface = await createSurface();
   try {
-    await expect(surface.load()).rejects.toThrow();
+    await surface.load();
     await surface.mount();
+    await activateLink(surface.host.querySelector<HTMLAnchorElement>('a[href*="cursor="]')!, 0);
+    await until(
+      () => readCalls.length === 2 && surface.router.state.status === 'idle',
+      'the failed keyboard continuation',
+    );
     expect(surface.host.querySelector('button')).not.toBeNull();
+    expect(surface.host.textContent).not.toContain('Initial first-page realm');
+    expect(surface.host.querySelector('section[aria-labelledby] h1')).toBeNull();
+    expect(surface.router.state.location.search).toEqual({ cursor });
     const retry = surface.host.querySelector('button')!;
     await act(async () => retry.click());
-    await until(() => readCalls.length === 2 && surface.router.state.status === 'idle', 'the same cursor retry');
-    expect(readCalls).toEqual([{ cursor }, { cursor }]);
+    await until(() => readCalls.length === 3 && surface.router.state.status === 'idle', 'the same cursor retry');
+    expect(readCalls).toEqual([{}, { cursor }, { cursor }]);
     expect(surface.client.getQueryState(['my-realms', cursor])).toBeUndefined();
 
     const firstPage = surface.host.querySelector<HTMLAnchorElement>('a[href="/en/realms"]');
     expect(firstPage?.textContent).toBe(m.realms_first_page());
     await act(async () => firstPage!.click());
     await until(() => visiblePrivateNames(surface).includes('Recovered first-page realm'), 'the first-page route');
-    expect(readCalls).toEqual([{ cursor }, { cursor }, {}]);
+    expect(readCalls).toEqual([{}, { cursor }, { cursor }, {}]);
     expect(surface.router.state.location.search).toEqual({});
     expect(surface.client.getQueryState(['my-realms', cursor])).toBeUndefined();
   } finally {
