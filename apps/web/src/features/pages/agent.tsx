@@ -1,11 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import {
-  planReads,
-  platformRegistry,
-  type CompositionDocument,
-  type PageRead,
-  type View,
-} from '@rezics/composition';
+import { planReads, platformRegistry, type CompositionDocument, type PageRead, type View } from '@rezics/composition';
 import { requestLanguages } from '../../kernel/languages.ts';
 import { accountHref, canonicalRedirect } from '../../subject/subject-href';
 import { accountOf } from './account-read';
@@ -31,17 +25,13 @@ export type AgentPageLoad =
       };
     };
 
-type AccountListRead = Extract<
-  PageRead,
-  { kind: 'accountPosts' | 'accountThreads' | 'accountCollections' }
->;
+type AccountListRead = Extract<PageRead, { kind: 'accountPosts' | 'accountThreads' | 'accountCollections' }>;
 
 /** A bare cursor can identify only one distinct planned account list. */
 function accountListEntry(reads: Record<string, PageRead>): [string, AccountListRead] {
   let entry: [string, AccountListRead] | undefined;
   for (const [key, read] of Object.entries(reads)) {
-    if (read.kind !== 'accountPosts' && read.kind !== 'accountThreads' && read.kind !== 'accountCollections')
-      continue;
+    if (read.kind !== 'accountPosts' && read.kind !== 'accountThreads' && read.kind !== 'accountCollections') continue;
     // Identical descriptors already share a key; different limits or kinds cannot share a continuation.
     if (entry) throw new AgentReadError('Ambiguous account list continuation', 'unavailable');
     entry = [key, read];

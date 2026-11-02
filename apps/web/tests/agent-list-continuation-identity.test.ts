@@ -2,11 +2,15 @@ import { expect, mock, test } from 'bun:test';
 import type { CompositionNode } from '@rezics/composition';
 import { continueAgentList } from '../src/features/pages/agent';
 
-const node = (id: string, type = 'AccountPosts', props: Record<string, unknown> = { limit: 3 }): CompositionNode =>
-  ({ type, props: { id, ...props } });
+const node = (id: string, type = 'AccountPosts', props: Record<string, unknown> = { limit: 3 }): CompositionNode => ({
+  type,
+  props: { id, ...props },
+});
 const page = (content: CompositionNode[]): Parameters<typeof continueAgentList>[1] => ({
-  subject: null, account: { id: 'account-id', handle: 'reader' },
-  profile: 'profile', template: { scope: 'type', key: 'schema:Person' },
+  subject: null,
+  account: { id: 'account-id', handle: 'reader' },
+  profile: 'profile',
+  template: { scope: 'type', key: 'schema:Person' },
   document: { root: { props: {} }, content },
   reads: { r0: { status: 200, body: { handle: 'reader' } }, r1: { status: 200, body: { next: 'opaque' } } },
 });
@@ -15,10 +19,22 @@ test('a bare cursor refuses missing or ambiguous lists in either descriptor orde
   const posts = node('posts');
   const review = node('review', 'AccountThreads', { limit: 3, threadKind: 'review' });
   const discussion = node('discussion', 'AccountThreads', { limit: 3, threadKind: 'discussion' });
-  const pairs = [[posts, node('collections', 'AccountCollections')], [review, discussion], [posts, node('more', 'AccountPosts', { limit: 4 })]];
-  const accounts = mock(() => { throw new Error('unexpected standalone request'); });
-  for (const content of [[], [node('identity', 'AccountIdentity', {})], ...pairs.flatMap((pair) => [pair, [...pair].reverse()])]) {
-    await expect(continueAgentList({ accounts } as never, page(content), 'opaque')).rejects.toMatchObject({ state: 'unavailable' });
+  const pairs = [
+    [posts, node('collections', 'AccountCollections')],
+    [review, discussion],
+    [posts, node('more', 'AccountPosts', { limit: 4 })],
+  ];
+  const accounts = mock(() => {
+    throw new Error('unexpected standalone request');
+  });
+  for (const content of [
+    [],
+    [node('identity', 'AccountIdentity', {})],
+    ...pairs.flatMap((pair) => [pair, [...pair].reverse()]),
+  ]) {
+    await expect(continueAgentList({ accounts } as never, page(content), 'opaque')).rejects.toMatchObject({
+      state: 'unavailable',
+    });
   }
   expect(accounts).not.toHaveBeenCalled();
 });
