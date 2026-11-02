@@ -42,10 +42,14 @@ Commerce before freezing the new private predicate; clearing state cannot silent
 | Mounted Zone                     | In scope: `Z-public` unions overlapping mounts/scopes; one composed page reaches 16 reads and 128 total slots. Public reads never inspect Alice's history.                                                                      |
 | TypeList                         | In scope: Book and Recipe are configured in `packages/definitions/presentation/book/zone.json` and `packages/definitions/presentation/recipe/zone.json`; exercise both public list consumers with the same released predicates. |
 
-The checked-in catalogue release `packages/definitions/release/rezics.json` has Book and Recipe types but no
-`schema:wordCount` or `schema:suitableForDiet`; it does not embed the configured Zone documents. Existing TypeList
-configuration makes that cell required, while missing released predicates remain dependencies, not scope exclusions.
+The checked-in catalogue release `packages/definitions/release/rezics.json` includes Book and Recipe types and the
+`schema:wordCount` and `schema:suitableForDiet` properties. It does not embed the configured Zone documents.
+Existing TypeList configuration makes that cell required. The released predicates are available to the public jobs;
+the private completion/history predicate and its owner-query wire schema remain unadopted dependencies.
 Subject detail factual projection belongs to its owner; this capability measures the configured list consumer.
+
+**Decision for this increment:** execute the released public book and recipe jobs; defer “not cooked” and filtered
+bulk-query behavior until their completion/history and owner-query contracts are adopted by the owning modules.
 
 **Reserved frozen scenario names:** each applicable public job/cell and Alice owner job/cell is a separately named
 native case, using `<job>/<surface>/<scenario>`. Jobs are `long-harem-light-novels`, `quick-vegetarian-recipes`,
@@ -85,8 +89,8 @@ Search retains direct catalogue/prepared public checks; Commerce retains direct 
 the `POST /v1/zones/{id}:readPage` owner retains the per-plan composed-page check. Reuse their native plans and
 evidence rather than duplicate their checks or implement benchmark-only matching.
 
-**Stage:** not yet specified. The named suite does not yet exist; released fixtures, native plans and the adopted
-owner completion/query contract are prerequisites. No red, driver, exposed, passed or promoted claim is made.
+**Stage:** the full composed capability remains not yet specified. This increment adds an unexecuted public Search
+slice; no user-case acceptance or promotion claim is made for that slice or the remaining owner/composed cases.
 
 ## growth-harness
 
