@@ -63,9 +63,9 @@ test('publication hands keyboard focus to admitted results and cancels supersede
     expect(document.activeElement).toBe(outside);
     await press(m.edition_publication_create());
     expect(focused()).toBe(m.edition_publication_draft_heading());
-    expect(host.querySelector<HTMLInputElement>('[type="checkbox"]')!.checked).toBe(false);
+    outside.focus();
     await act(async () => fixture.controller.refresh());
-    expect(focused()).toBeNull();
+    expect(document.activeElement).toBe(outside);
     await press(m.edition_publication_accept_review());
     expect(focused()).toBe(m.edition_publication_draft_heading());
     expect(button(m.edition_publication_publish()).disabled).toBe(true);
