@@ -153,7 +153,8 @@ test('Published progress log items preserve immutable supplied snapshots and adm
     expect(within(region).getByRole('heading', { level: 3, name: author })).toBe(heading);
     expect(note.textContent).toBe(deleted.note);
     await act(async () => show({ ...page, logs: [], next: null }));
-    expect(region.textContent).toContain(m.library_logs_empty());
+    expect(region.textContent).toContain(m.library_progress_log_reader_page_empty());
+    expect(region.textContent).not.toContain(m.library_logs_empty());
     expect(region.querySelector('ol')).toBeNull();
   } finally {
     await act(async () => root.unmount());

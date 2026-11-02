@@ -233,6 +233,57 @@ function routerSearch(router: Awaited<ReturnType<typeof mount>>['router']) {
   return router.state.location.search;
 }
 
+test('A true first log page without a logs cursor uses the global empty message and offers no pagination', async () => {
+  setLocale('en', { reload: false });
+  const requested = { changes: search.changes, units: search.units };
+  const h = await mount(page([], null), requested);
+  try {
+    const region = h.region();
+    expect(region.textContent).toContain(m.library_logs_empty());
+    expect(region.textContent).not.toContain(m.library_progress_log_reader_page_empty());
+    expect(region.querySelector('ol')).toBeNull();
+    expect(within(region).queryByRole('link')).toBeNull();
+    expect(routerSearch(h.router)).toEqual(requested);
+    expect(publish).not.toHaveBeenCalled();
+  } finally {
+    await h.close();
+  }
+});
+
+test('An empty later log page has only exact first-page recovery and rejects it after origin retirement', async () => {
+  setLocale('en', { reload: false });
+  const h = await mount(page([], null));
+  try {
+    const region = h.region();
+    const view = within(region);
+    expect(region.textContent).toContain(m.library_progress_log_reader_page_empty());
+    expect(region.textContent).not.toContain(m.library_logs_empty());
+    expect(region.querySelector('ol')).toBeNull();
+    const first = view.getByRole('link', { name: m.library_progress_log_reader_first_page(), exact: true });
+    const target = new URL(first.getAttribute('href')!, window.location.href);
+    expect(decodeURIComponent(target.pathname.split('/library/progress/')[1]!)).toBe(sessionId);
+    expect(target.pathname).toStartWith('/en/library/progress/');
+    expect(Object.fromEntries(target.searchParams)).toEqual({ changes: search.changes, units: search.units });
+    expect(view.queryByRole('link', { name: m.library_logs_more(), exact: true })).toBeNull();
+    expect(region.querySelectorAll('a')).toHaveLength(1);
+    const before = h.router.state.location.href;
+    await act(async () => {
+      h.retire();
+      expect(h.click(first).defaultPrevented).toBe(true);
+      for (const kind of ['click', 'auxclick', 'contextmenu'])
+        expect(h.click(first, kind, true).defaultPrevented).toBe(true);
+    });
+    expect(h.router.state.location.href).toBe(before);
+    expect(routerSearch(h.router)).toEqual(search);
+    await h.show();
+    expect(view.queryByRole('link')).toBeNull();
+    expect(region.textContent).toContain(m.library_progress_log_reader_page_empty());
+    expect(publish).not.toHaveBeenCalled();
+  } finally {
+    await h.close();
+  }
+});
+
 test('Bounded notes expand by keyboard with exact whitespace and literal markup; ordered duplicate snapshots retain destinations and published times', async () => {
   setLocale('en', { reload: false });
   const exact = `  <script>literal & text</script>\n\n${'unbroken_二'.repeat(90)}\n  `;
