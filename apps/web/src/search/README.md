@@ -19,6 +19,9 @@ Result-kind traversal is keyed by the query, locale and initial discovery checkp
 starts a fresh traversal. Global search accepts drafts up to 512 UTF-8 bytes; scoped inputs keep their existing
 256 UTF-16-unit cap, and typeahead keeps its independent 64-code-point prefix bound.
 
+Header suggestions retire on an unsettled session or a change to its state, subject or CSRF observation; a settled
+session reloads the retained draft, while isolated presenters without a session observation use anonymous identity.
+
 Filters stays at the left of the composer's second row. `HeaderSearchFilterProvider` and
 `useRegisterHeaderSearchFilters` connect it to the current route's actual editor and active count. Search owns
 result filters; Collection's dialog remains a separate delivery slice. No new filter state or backend operation

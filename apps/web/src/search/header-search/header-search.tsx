@@ -33,6 +33,8 @@ import { nextSuggestion, startTypeahead, validSuggestionText } from '../typeahea
 import type { SearchScope } from './types';
 import { canEnterHeaderSearch } from './keyboard';
 import { isWithinGlobalSearchQueryLimit } from '../query-text-limit';
+import type { BrowserSession } from '../../session/browser-state';
+import { headerSearchSessionKey } from './session-key';
 
 const controlFocus =
   'focus-visible:ring-0 focus-visible:border-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-2';
@@ -40,6 +42,10 @@ const compactSearch = '(max-width: 1023px)';
 
 export type HeaderSearchProps = {
   locale: string;
+  /** ShellSearch supplies the installed session observation; isolated presenters default to anonymous. */
+  session?: BrowserSession;
+  /** Read the same owner at dispatch time, including cache changes queued before a render. */
+  readSession?: () => BrowserSession;
   history?: RecentHistory | undefined;
   discovery?: SearchDiscovery | undefined;
   loadRealmDiscovery?: SearchRealmDiscoveryLoader | undefined;
@@ -414,6 +420,8 @@ export function HeaderSearchView({
 
 function HeaderSearchController({
   locale,
+  session,
+  readSession,
   scope,
   initialQuery = '',
   fields,
@@ -438,10 +446,29 @@ function HeaderSearchController({
   const pendingFocus = useRef<'input' | 'return' | null>(null);
   const priorFocus = useRef<HTMLElement | null>(null);
   const request = useRef<(() => void) | null>(null);
+  const sessionKey = headerSearchSessionKey(session);
+  const [observedSession, observeSession] = useState(sessionKey);
+  const currentSession = useRef(sessionKey);
+  currentSession.current = sessionKey;
+  const sessionMatches = sessionKey !== null && sessionKey === observedSession;
+  const sessionIsCurrent = () =>
+    sessionMatches &&
+    currentSession.current === sessionKey &&
+    (!readSession || headerSearchSessionKey(readSession()) === sessionKey);
+  // Mask during render as well as clearing stored state before input can select an old option.
+  const visibleState: HeaderSearchState = sessionMatches
+    ? state
+    : { ...state, suggestions: 'idle', result: undefined, activeIndex: -1 };
   const [attempt, retry] = useReducer((value: number) => value + 1, 0);
   const [composing, setComposing] = useState(false);
   const [queryLimitError, setQueryLimitError] = useState(false);
   const region = useHeaderSearchFilterRegion();
+  useLayoutEffect(() => {
+    request.current?.();
+    request.current = null;
+    dispatch({ type: 'invalidate' });
+    observeSession(sessionKey);
+  }, [sessionKey]);
   useEffect(() => {
     dispatch({ type: 'sync-scope', scope });
   }, [scope]);
@@ -449,6 +476,7 @@ function HeaderSearchController({
     dispatch({ type: 'sync-query', query: initialQuery });
   }, [initialQuery]);
   useEffect(() => {
+    if (!sessionIsCurrent()) return;
     if (!state.expanded || !state.query.trim() || composing) return;
     if (!validSuggestionText(state.query)) {
       dispatch({ type: 'suggestions', state: 'invalid' });
@@ -465,12 +493,29 @@ function HeaderSearchController({
       state.query,
       locale,
       state.scope,
-      (result) => dispatch({ type: 'suggestions', state: result.subjects.length ? 'ready' : 'empty', result }),
-      (failure) => dispatch({ type: 'suggestions', state: failure }),
+      (result) => {
+        if (sessionIsCurrent())
+          dispatch({ type: 'suggestions', state: result.subjects.length ? 'ready' : 'empty', result });
+      },
+      (failure) => {
+        if (sessionIsCurrent()) dispatch({ type: 'suggestions', state: failure });
+      },
     );
     request.current = cancel;
     return cancel;
-  }, [state.query, state.scope, state.expanded, locale, composing, attempt, loadSuggestions, loadScopedSuggestions]);
+  }, [
+    state.query,
+    state.scope,
+    state.expanded,
+    locale,
+    composing,
+    attempt,
+    loadSuggestions,
+    loadScopedSuggestions,
+    sessionKey,
+    sessionMatches,
+    readSession,
+  ]);
   const close = (reason: 'escape' | 'outside', restore = false) => {
     request.current?.();
     dispatch({ type: reason });
@@ -620,7 +665,7 @@ function HeaderSearchController({
         if (headerSearchAction(locale, entry.scope)) submitQuery(entry.query, entry.scope, entry);
         else input.current?.focus();
       }}
-      state={state}
+      state={visibleState}
       locale={locale}
       queryLimitError={queryLimitError}
       fields={fields}
@@ -637,11 +682,14 @@ function HeaderSearchController({
         input.current?.focus();
       }}
       onSuggestion={(href) => {
+        if (!sessionIsCurrent()) return;
         if (state.scope || isWithinGlobalSearchQueryLimit(state.query))
           history?.remember(state.query, state.scope, searchLanguages());
         visit(href);
       }}
-      onActive={(index) => dispatch({ type: 'active', index })}
+      onActive={(index) => {
+        if (sessionIsCurrent()) dispatch({ type: 'active', index });
+      }}
       onRetry={retry}
       onFilters={() => {
         close('outside');
@@ -685,16 +733,21 @@ function HeaderSearchController({
             event.preventDefault();
             dispatch({ type: 'remove-scope' });
           }
-          const subjects = state.result?.subjects ?? [];
-          const next = nextSuggestion(event.key, state.activeIndex, subjects.length);
+          const subjects = sessionIsCurrent() ? (visibleState.result?.subjects ?? []) : [];
+          const next = nextSuggestion(event.key, visibleState.activeIndex, subjects.length);
           if (next !== undefined && state.expanded) {
             event.preventDefault();
             dispatch({ type: 'active', index: next });
             document.getElementById(`${id}-option-${next}`)?.scrollIntoView({ block: 'nearest' });
           }
-          if (event.key === 'Enter' && state.expanded && state.activeIndex >= 0 && subjects[state.activeIndex]) {
+          if (
+            event.key === 'Enter' &&
+            state.expanded &&
+            visibleState.activeIndex >= 0 &&
+            subjects[visibleState.activeIndex]
+          ) {
             event.preventDefault();
-            const hit = subjects[state.activeIndex]!;
+            const hit = subjects[visibleState.activeIndex]!;
             if (state.scope || isWithinGlobalSearchQueryLimit(state.query))
               history?.remember(state.query, state.scope, searchLanguages());
             visit(subjectHref({ id: hit.id, label: localizedLabel(hit.labels, locale).text }, locale).href);
