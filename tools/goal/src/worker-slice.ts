@@ -85,9 +85,9 @@ export class WorkerSlice {
   }
 
   private configure(options: SpawnSyncOptions): string | null {
-    const configuration = {
+    const configuration: SpawnSyncOptions = {
       ...options,
-      stdio: ['ignore', 'pipe', 'pipe'] as const,
+      stdio: ['ignore', 'pipe', 'pipe'],
       timeout: this.preparationTimeoutMs,
     };
     const env = options.env ?? process.env;

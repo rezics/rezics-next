@@ -387,19 +387,12 @@ describe('worker systemd slice', () => {
 
     const calls: { command: string; timeout: number | undefined }[] = [];
     const empty = Buffer.alloc(0);
-    const reply = (status: number): ReturnType<typeof spawnSync> => ({
-      pid: 1,
-      output: [null, empty, empty],
-      stdout: empty,
-      stderr: empty,
-      status,
-      signal: null,
-    });
     const startedReports: string[] = [];
     const started = new WorkerSlice(
       (command, _args, options) => {
         calls.push({ command, timeout: options.timeout });
-        return reply(command === 'systemd-run' ? 1 : 0);
+        const status = command === 'systemd-run' ? 1 : 0;
+        return { pid: 1, output: [null, empty, empty], stdout: empty, stderr: empty, status, signal: null };
       },
       () => 'MemTotal:       65011712 kB\n',
       bound,
