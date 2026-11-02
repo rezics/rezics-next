@@ -121,6 +121,8 @@
   "facts_text": "Text und Kennungen",
   "facts_dates": "Datumsangaben",
   "facts_quantities": "Mengen",
+  "album_remove_draft": "Entwurf für {field} entfernen",
+  "album_selection_limit": "Alle Entwurfsplätze sind belegt. Entferne einen noch nicht eingereichten Entwurf, um ein weiteres Feld zu bearbeiten.",
   "facts_selection": "{count} geänderte Felder ausgewählt · höchstens {limit}",
   "facts_separate_results": "Jedes Feld hat ein eigenes Ergebnis. Das Einreichen veröffentlicht oder speichert die Felder nicht gemeinsam.",
   "facts_results": "{count} Vorschläge warten auf Prüfung. Die öffentlichen Fakten bleiben durch das Einreichen unverändert.",

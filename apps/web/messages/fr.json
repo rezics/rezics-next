@@ -121,6 +121,8 @@
   "facts_text": "Texte et identifiants",
   "facts_dates": "Dates",
   "facts_quantities": "Quantités",
+  "album_remove_draft": "Retirer le brouillon de {field}",
+  "album_selection_limit": "Tous les emplacements de brouillon sont occupés. Retirez un brouillon non envoyé pour modifier un autre champ.",
   "facts_selection": "{count} champs modifiés inclus · maximum {limit}",
   "facts_separate_results": "Chaque champ a son propre résultat. L’envoi ne publie ni n’enregistre tous les champs ensemble.",
   "facts_results": "{count} propositions attendent un examen. L’envoi ne modifie pas les faits publics.",

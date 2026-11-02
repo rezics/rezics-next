@@ -11,6 +11,7 @@ import { relationFields, type RelationTransport } from '../../subject/relation-c
 import { subjectHref } from '../../subject/subject-href';
 import { albumFields, albumType, type AlbumTransport } from './album-profile';
 import { AlbumProfileCreate } from './album-profile-create';
+import { changeAlbumSelection } from './album-correction-selection';
 import { DefinitionMeaning } from './definition-meaning';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { DefinitionGuideLink } from './definition-guide-view';
@@ -22,7 +23,6 @@ import {
   factLimit,
   sealFacts,
   sendFacts,
-  stageFact,
   type FactDraft,
   type FactsCurrent,
   type FactsTransport,
@@ -306,28 +306,53 @@ function AlbumCorrections({
           {m.facts_intro({}, o)} {m.facts_separate_results({}, o)}
         </p>
         <fieldset disabled={!enabled || !!loadFailure} className="space-y-4">
-          {fields!.scalar.map((property) => (
-            <FactField
-              key={property}
-              property={property}
-              read={current}
-              locale={locale}
-              href={href}
-              busy={busy}
-              canStage={drafts.length < factLimit}
-              draft={drafts.find((draft) => draft.property === property)}
-              onReview={setReviewing}
-              onChange={(draft) =>
-                setDrafts((previous) => previous.map((item) => (item.property === draft.property ? draft : item)))
-              }
-              onStage={(source) => {
-                const draft = stageFact(current, property, source);
-                if (draft) setDrafts((previous) => (previous.length < factLimit ? [...previous, draft] : previous));
-              }}
-            />
-          ))}
+          {fields!.scalar.map((property) => {
+            const draft = drafts.find((item) => item.property === property);
+            return (
+              <div key={property} className="space-y-2">
+                <FactField
+                  property={property}
+                  read={current}
+                  locale={locale}
+                  href={href}
+                  busy={busy}
+                  canStage={drafts.length < factLimit}
+                  draft={draft}
+                  onReview={setReviewing}
+                  onChange={(draft) => {
+                    if (!lifetime.active() || running.current) return;
+                    setDrafts((previous) => changeAlbumSelection(previous, { kind: 'revise', draft }));
+                  }}
+                  onStage={(source) => {
+                    if (!lifetime.active() || running.current) return;
+                    setDrafts((previous) =>
+                      changeAlbumSelection(previous, { kind: 'stage', read: current, property, source }),
+                    );
+                  }}
+                />
+                {draft && !draft.command && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+                    disabled={busy}
+                    onClick={() => {
+                      if (!lifetime.active() || running.current) return;
+                      setDrafts((previous) => changeAlbumSelection(previous, { kind: 'remove', property }));
+                    }}
+                  >
+                    {m.album_remove_draft(
+                      { field: pickText(current.release.properties[property]!.labels, locale).text },
+                      o,
+                    )}
+                  </Button>
+                )}
+              </div>
+            );
+          })}
           <div className="space-y-3 rounded-xl border border-border p-4">
             <p>{m.facts_selection({ count: changed.length, limit: factLimit }, o)}</p>
+            {drafts.length >= factLimit && <p role="status">{m.album_selection_limit({}, o)}</p>}
             <Button type="submit" disabled={busy || !changed.length}>
               {m.facts_submit({}, o)}
             </Button>

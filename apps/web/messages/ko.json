@@ -121,6 +121,8 @@
   "facts_text": "텍스트 및 식별자",
   "facts_dates": "날짜",
   "facts_quantities": "수량",
+  "album_remove_draft": "{field} 초안 삭제",
+  "album_selection_limit": "초안 슬롯이 모두 사용 중입니다. 다른 필드를 편집하려면 제출하지 않은 초안을 삭제하세요.",
   "facts_selection": "변경 필드 {count}개 포함 · 최대 {limit}개",
   "facts_separate_results": "각 필드의 결과는 개별적입니다. 제출만으로 모든 필드가 함께 저장되거나 공개되지 않습니다.",
   "facts_results": "제안 {count}개가 검토를 기다립니다. 제출해도 공개 사실은 바뀌지 않습니다.",

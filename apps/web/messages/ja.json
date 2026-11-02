@@ -121,6 +121,8 @@
   "facts_text": "テキストと識別子",
   "facts_dates": "日付",
   "facts_quantities": "数量",
+  "album_remove_draft": "{field}の下書きを削除",
+  "album_selection_limit": "下書きの枠がすべて使用されています。別の項目を編集するには、未送信の下書きを削除してください。",
   "facts_selection": "変更した {count} 項目を選択中・上限 {limit} 項目",
   "facts_separate_results": "項目ごとに結果が異なります。送信で全項目が一括保存・公開されることはありません。",
   "facts_results": "{count} 件の提案が審査待ちです。送信しても公開情報は変わりません。",

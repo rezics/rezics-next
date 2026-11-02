@@ -121,6 +121,8 @@
   "facts_text": "Texto e identificadores",
   "facts_dates": "Fechas",
   "facts_quantities": "Cantidades",
+  "album_remove_draft": "Eliminar borrador de {field}",
+  "album_selection_limit": "Todos los espacios para borradores están ocupados. Elimina un borrador sin enviar para editar otro campo.",
   "facts_selection": "{count} campos modificados incluidos · máximo {limit}",
   "facts_separate_results": "Cada campo tiene su propio resultado. El envío no publica ni guarda todos los campos juntos.",
   "facts_results": "{count} propuestas pendientes de revisión. El envío no cambia los datos públicos.",

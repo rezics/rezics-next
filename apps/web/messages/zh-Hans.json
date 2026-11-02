@@ -121,6 +121,8 @@
   "facts_text": "文本与标识符",
   "facts_dates": "日期",
   "facts_quantities": "数量",
+  "album_remove_draft": "移除{field}的草稿",
+  "album_selection_limit": "草稿名额已满。移除一项尚未提交的草稿，即可编辑其他字段。",
   "facts_selection": "已包含 {count} 个更改字段 · 最多 {limit} 个",
   "facts_separate_results": "每个字段有独立结果。提交不会将所有字段一并保存或发布。",
   "facts_results": "{count} 个提案等待审核。提交不会改变公开事实。",

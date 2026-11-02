@@ -121,6 +121,8 @@
   "facts_text": "文字與識別碼",
   "facts_dates": "日期",
   "facts_quantities": "數量",
+  "album_remove_draft": "移除{field}的草稿",
+  "album_selection_limit": "草稿名額已滿。移除一項尚未提交的草稿，即可編輯其他欄位。",
   "facts_selection": "已包含 {count} 個變更欄位 · 最多 {limit} 個",
   "facts_separate_results": "每個欄位有獨立結果。提交不會將所有欄位一併儲存或發布。",
   "facts_results": "{count} 個提案等待審核。提交不會改變公開事實。",
