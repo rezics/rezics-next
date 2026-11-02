@@ -40,9 +40,7 @@ function unavailable(input: Read, retryAt?: number): TypeListQueryResult {
         page: input.page,
         ...(input.cursor !== undefined ? { cursor: input.cursor } : {}),
         state: input.admission.state,
-        ...(input.admission.expectedReader !== undefined
-          ? { expectedReader: input.admission.expectedReader }
-          : {}),
+        ...(input.admission.expectedReader !== undefined ? { expectedReader: input.admission.expectedReader } : {}),
         incarnation: input.admission.incarnation,
         mode: input.admission.mode,
         target,
@@ -59,7 +57,13 @@ mock.module('../src/session/query', () => ({
   useSession: () => ({ state: 'unknown' as const, csrfToken: null }),
 }));
 mock.module('../src/features/pages/type-list-query', () => ({
-  typeListQuery: (locale: string, node: string, page: string, cursor: string | undefined, admission: TypeListAdmissionInput) =>
+  typeListQuery: (
+    locale: string,
+    node: string,
+    page: string,
+    cursor: string | undefined,
+    admission: TypeListAdmissionInput,
+  ) =>
     queryOptions({
       queryKey: ['configured-native-retry', locale, node, page, cursor ?? null, admission.incarnation],
       queryFn: async () => {
@@ -222,8 +226,9 @@ test('a failed TypeList leaf waits on its own hint and restores its exact cursor
     expect((host.querySelector('button') as HTMLButtonElement).disabled).toBe(true);
     await until(() => !!host.querySelector('a[href]'));
     expect(host.querySelector('a[href]')?.getAttribute('href')).toContain('cursor=cursor%3Aleaf');
-    expect(new URL(host.querySelector('a[href]')!.getAttribute('href')!, 'https://rezics.test').searchParams.get('list'))
-      .toBe('selected');
+    expect(
+      new URL(host.querySelector('a[href]')!.getAttribute('href')!, 'https://rezics.test').searchParams.get('list'),
+    ).toBe('selected');
     expect(reads).toHaveLength(before);
   } finally {
     await act(async () => root.unmount());

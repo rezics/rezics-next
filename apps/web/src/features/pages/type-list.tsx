@@ -52,17 +52,20 @@ export function TypeList(props: Record<string, unknown>) {
       {!page ? (
         <p role="alert" className="[overflow-wrap:anywhere]">
           {m.subject_section_failed({}, options)}{' '}
-          {href && (
-            retryWaiting ? (
-              <button type="button" disabled className={`${controlClass} disabled:cursor-not-allowed disabled:opacity-60`}>
+          {href &&
+            (retryWaiting ? (
+              <button
+                type="button"
+                disabled
+                className={`${controlClass} disabled:cursor-not-allowed disabled:opacity-60`}
+              >
                 {m.subject_section_retry({}, options)}
               </button>
             ) : (
               <a href={href} className={controlClass}>
                 {m.subject_section_retry({}, options)}
               </a>
-            )
-          )}
+            ))}
         </p>
       ) : (
         <>
