@@ -189,6 +189,10 @@ identity supplies `automated` and `operatorId`.
 Threads and replies return at most 20 entries per page; collections return at most 24 entries and always use the
 standalone BASIC view. The configured limit is the component's page-read cost; identity costs one.
 
+The website's bare account continuation cursor requires exactly one distinct planned account-list descriptor.
+Identical descriptors share a continuation read. With no account list or several distinct descriptors, continuation
+is unavailable before any standalone list request; document order never selects its target. Other page reads remain intact.
+
 `SearchBox` and `LinkGrid` read nothing. A `LinkGrid` `href` starting with `/` is a site path
 without the locale; the website renderer adds the locale.
 

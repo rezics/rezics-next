@@ -1,5 +1,11 @@
 import type { KernelClient } from '@rezics/client';
-import { planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
+import {
+  planReads,
+  platformRegistry,
+  type CompositionDocument,
+  type PageRead,
+  type View,
+} from '@rezics/composition';
 import { requestLanguages } from '../../kernel/languages.ts';
 import { accountHref, canonicalRedirect } from '../../subject/subject-href';
 import { accountOf } from './account-read';
@@ -25,8 +31,24 @@ export type AgentPageLoad =
       };
     };
 
-/** The activity lists an agent page reads from the account, by the page read that names each. */
-const LIST_READS = new Set(['accountPosts', 'accountThreads', 'accountCollections']);
+type AccountListRead = Extract<
+  PageRead,
+  { kind: 'accountPosts' | 'accountThreads' | 'accountCollections' }
+>;
+
+/** A bare cursor can identify only one distinct planned account list. */
+function accountListEntry(reads: Record<string, PageRead>): [string, AccountListRead] {
+  let entry: [string, AccountListRead] | undefined;
+  for (const [key, read] of Object.entries(reads)) {
+    if (read.kind !== 'accountPosts' && read.kind !== 'accountThreads' && read.kind !== 'accountCollections')
+      continue;
+    // Identical descriptors already share a key; different limits or kinds cannot share a continuation.
+    if (entry) throw new AgentReadError('Ambiguous account list continuation', 'unavailable');
+    entry = [key, read];
+  }
+  if (!entry) throw new AgentReadError('Account page has no list to continue', 'unavailable');
+  return entry;
+}
 
 function problemError(value: unknown): Error {
   const code = isRecord(value) && typeof value.code === 'string' && value.code ? value.code : 'internal_error';
@@ -102,6 +124,7 @@ export async function loadAgentPage(
 /**
  * The page with its list replaced by the page after `cursor`, read through the list's standalone route. The page
  * read gives the first page of each list and its `next`; everything after that is the list's own route.
+ * Without a list address, zero or multiple distinct account lists make the continuation unavailable.
  */
 export async function continueAgentList(
   client: KernelClient,
@@ -109,11 +132,9 @@ export async function continueAgentList(
   cursor: string,
 ): Promise<SubjectPageData> {
   const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
-  const entry = Object.entries(plan.reads).find(([, read]) => LIST_READS.has(read.kind));
-  if (!entry) return page;
-  const [key, read] = entry;
+  const [key, read] = accountListEntry(plan.reads);
   const accountId = page.account.id;
-  const query = { cursor, limit: 'limit' in read ? read.limit : 20 };
+  const query = { cursor, limit: read.limit };
   const outcome =
     read.kind === 'accountPosts'
       ? await client.accounts({ accountId }).posts.get({ query })
