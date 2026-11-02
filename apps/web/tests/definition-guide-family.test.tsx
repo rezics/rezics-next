@@ -461,3 +461,111 @@ test('actual query consumers retry only on explicit eligible actions with unchan
     });
   }
 });
+
+test('deliberate pinned retries lock one read and focus returned guidance or the truthful empty/denied boundary', async () => {
+  for (const ending of ['field', 'empty', 'denied'] as const) {
+    await mounted(async ({ host, render, act, DefinitionGuide, definitionGuideFixture, definitionText, m }) => {
+      const fixture = definitionGuideFixture('pinned');
+      const read = await fixture.transport.read();
+      if (!read.ok) throw new Error('Expected pinned definitions');
+      const back = '/en/subjects/00000000-0000-4000-8000-000000000001/a-book/edit?statement=uncertain#value';
+      const address = { ...fixture.address, returnTo: back };
+      let reads = 0;
+      let settle!: (read: GuideRead) => void;
+      const transport = {
+        read: () => {
+          reads++;
+          return new Promise<GuideRead>((resolve) => {
+            settle = resolve;
+          });
+        },
+      };
+      const component = (
+        <DefinitionGuide
+          address={address}
+          locale="en"
+          transport={transport}
+          initial={{ ok: false, reason: 'unavailable' }}
+        />
+      );
+      await render(component);
+      expect(reads).toBe(0);
+      expect(document.activeElement).toBe(document.body);
+      const retry = host.querySelector('button')!;
+      retry.focus();
+      await act(async () => {
+        retry.click();
+        retry.click();
+      });
+      await render(component);
+      expect(reads).toBe(1);
+      expect(retry.disabled).toBe(true);
+      expect(retry.getAttribute('aria-busy')).toBe('true');
+      expect(host.querySelector('[role="status"]')!.textContent).toBe(m.guide_loading());
+      expect(host.querySelector('[role="alert"]')).toBeNull();
+      await act(async () =>
+        settle(
+          ending === 'denied'
+            ? { ok: false, reason: 'denied' }
+            : ending === 'empty'
+              ? { ...read, release: { digest: read.release.digest, types: {}, properties: {} } }
+              : read,
+        ),
+      );
+      await render(component);
+      const target = host.querySelector(
+        ending === 'field' ? 'h3' : ending === 'empty' ? '[role="status"]' : '[role="alert"]',
+      )!;
+      expect(document.activeElement).toBe(target);
+      expect(target.getAttribute('tabindex')).toBe('-1');
+      expect(target.className).toContain('focus:outline-2');
+      expect(target.textContent).toBe(
+        ending === 'field'
+          ? definitionText(read.release.properties[address.property!]!.labels, 'en').text
+          : ending === 'empty'
+            ? m.guide_empty()
+            : m.guide_denied(),
+      );
+      expect(host.querySelector('[aria-live]')).toBeNull();
+      expect(reads).toBe(1);
+      expect(host.querySelector('a')!.getAttribute('href')).toBe(back);
+      if (ending === 'field') expect(host.querySelector('code')!.textContent).toBe(fixture.address.release!);
+      if (ending === 'denied') expect(host.querySelector('button')!.disabled).toBe(false);
+      expect(fixture.calls.map((call) => call.path)).toEqual([`/v1/definitions/releases/${fixture.address.release}`]);
+    });
+  }
+});
+
+test('initial and retired-address completions stay silent across departure and return to the same pin', async () => {
+  await mounted(async ({ host, render, act, DefinitionGuide, definitionGuideFixture }) => {
+    const fixture = definitionGuideFixture('pinned');
+    const read = await fixture.transport.read();
+    let settle!: (read: GuideRead) => void;
+    let reads = 0;
+    const transport = {
+      read: () => {
+        reads++;
+        return new Promise<GuideRead>((resolve) => {
+          settle = resolve;
+        });
+      },
+    };
+    const show = (address: GuideAddress, initial?: GuideRead) =>
+      render(<DefinitionGuide address={address} locale="en" transport={transport} initial={initial} />);
+    await show(fixture.address);
+    const back = host.querySelector('a')!;
+    back.focus();
+    await act(async () => settle({ ok: false, reason: 'denied' }));
+    await show(fixture.address);
+    expect(document.activeElement).toBe(back);
+    await act(async () => host.querySelector('button')!.click());
+    const oldCompletion = settle;
+    await show({}, read);
+    await show(fixture.address, read);
+    back.focus();
+    await act(async () => oldCompletion({ ok: false, reason: 'unavailable' }));
+    await show(fixture.address, read);
+    expect(document.activeElement).toBe(back);
+    expect(reads).toBe(2);
+  });
+});

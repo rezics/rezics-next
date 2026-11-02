@@ -197,6 +197,7 @@ The current type, property and release address owns the guide selection, includi
 reused or history returns to an earlier address. A type chosen locally remains selected across ordinary
 rerenders of that address; navigation to another definition address resets it before showing content.
 Changing only the validated return destination does not discard that local choice.
+An explicit guide retry keeps one disabled busy action until its read settles, then focuses the returned field or Type heading (the guide heading if neither exists), or its truthful empty/failure boundary; initial, hydrated and retired-address reads never move focus.
 
 Adopt the complete reader journey recommended by [subject design research](research/web-subject-design.md):
 discovery or a collection → current canonical identity → public facts and text → traversable relations, editions

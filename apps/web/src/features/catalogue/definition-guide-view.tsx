@@ -5,7 +5,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { cn } from '@rezics/ui/utils';
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { unitSymbols } from './statement-editor';
@@ -23,6 +23,7 @@ import {
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+const recoveryClassName = 'rounded-sm focus:outline-2 focus:outline-offset-4 focus:outline-ring';
 const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 // Keep native summary display and its disclosure marker, including keyboard activation.
@@ -218,8 +219,48 @@ export function DefinitionGuide({
     refetchOnReconnect: false,
     refetchOnMount: initial === undefined,
   });
+  // Retire callbacks as well as focus intent when this query address leaves.
+  // A later visit to an equal address must not revive an earlier attempt.
+  const key = JSON.stringify([address.type, address.property, address.release, address.returnTo, locale]);
+  const lifetime = useRef({ key, active: true, pending: false });
+  if (lifetime.current.key !== key) {
+    lifetime.current.active = false;
+    lifetime.current = { key, active: true, pending: false };
+  }
+  const owner = lifetime.current;
+  useEffect(() => {
+    owner.active = true;
+    return () => {
+      owner.active = false;
+    };
+  }, [owner]);
+  const [attempt, setAttempt] = useState<{ owner: typeof owner; pending: boolean; completion?: object }>({
+    owner,
+    pending: false,
+  });
+  const current = attempt.owner === owner ? attempt : undefined;
+  const retry = () => {
+    if (!owner.active || owner.pending || query.isFetching) return;
+    owner.pending = true;
+    setAttempt({ owner, pending: true });
+    // Coalesce an already running shared read rather than cancelling/replacing it.
+    void query.refetch({ cancelRefetch: false }).then(() => {
+      if (!owner.active) return;
+      owner.pending = false;
+      setAttempt({ owner, pending: false, completion: {} });
+    });
+  };
   const read: GuideRead | undefined = query.isError ? { ok: false, reason: 'unavailable' } : query.data;
-  return <DefinitionGuideContent address={address} locale={locale} read={read} retry={() => void query.refetch()} />;
+  return (
+    <DefinitionGuideContent
+      address={address}
+      locale={locale}
+      read={read}
+      retry={retry}
+      retryPending={current?.pending || query.isFetching}
+      retryCompletion={current?.completion}
+    />
+  );
 }
 
 export function DefinitionGuideContent({
@@ -227,14 +268,29 @@ export function DefinitionGuideContent({
   locale,
   read,
   retry,
+  retryPending = false,
+  retryCompletion,
 }: {
   address: GuideAddress;
   locale: string;
   read?: GuideRead | undefined;
   retry: () => void;
+  retryPending?: boolean;
+  retryCompletion?: object | undefined;
 }) {
   const o = { locale: locale as never };
   const typeId = useId();
+  const article = useRef<HTMLElement>(null);
+  const focusedRetry = useRef<object | undefined>(undefined);
+  useEffect(() => {
+    if (!retryCompletion || retryPending || focusedRetry.current === retryCompletion) return;
+    focusedRetry.current = retryCompletion;
+    const target =
+      article.current?.querySelector<HTMLElement>('h3[data-guide-recovery]') ??
+      article.current?.querySelector<HTMLElement>('[data-guide-recovery]') ??
+      article.current?.querySelector<HTMLElement>('h1');
+    target?.focus();
+  }, [retryCompletion, retryPending]);
   // A local choice belongs to this exact definition address. Object identity is
   // unsuitable here: route search objects can be recreated without navigation.
   const addressKey = JSON.stringify([address.type, address.property, address.release]);
@@ -249,34 +305,47 @@ export function DefinitionGuideContent({
     setSelection({ addressKey, type: selected });
   }
   const back = guideReturnTo(address.returnTo, locale) ?? `/${locale}/catalogue/new`;
-  const release = read?.ok ? read.release : undefined;
+  const release = read?.ok && !retryPending ? read.release : undefined;
   const types = release ? guideTypes(release, locale) : [];
   const type = selected && release?.types[selected];
   const property = selected === address.type ? address.property : undefined;
   const field = property && release?.properties[property];
   return (
-    <article className="mx-auto w-full min-w-0 max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
+    <article
+      ref={article}
+      className="mx-auto w-full min-w-0 max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]"
+    >
       <header className="space-y-3">
-        <PageHeading>{m.guide_title({}, o)}</PageHeading>
+        <PageHeading tabIndex={-1} className={recoveryClassName}>
+          {m.guide_title({}, o)}
+        </PageHeading>
         <p className="text-muted-foreground">{m.guide_intro({}, o)}</p>
         <a className={buttonVariants({ variant: 'outline', className: actionClassName })} href={back}>
           {m.guide_back({}, o)}
         </a>
       </header>
-      {!read && <p role="status">{m.guide_loading({}, o)}</p>}
+      {(!read || retryPending) && <p role="status">{m.guide_loading({}, o)}</p>}
       {read && !read.ok && (
         <section className="space-y-4">
-          <p role="alert">
-            {read.reason === 'invalid'
-              ? m.guide_invalid({}, o)
-              : read.reason === 'denied'
-                ? m.guide_denied({}, o)
-                : read.reason === 'concealed'
-                  ? m.guide_concealed({}, o)
-                  : m.guide_unavailable({}, o)}
-          </p>
+          {!retryPending && (
+            <p role="alert" tabIndex={-1} data-guide-recovery className={recoveryClassName}>
+              {read.reason === 'invalid'
+                ? m.guide_invalid({}, o)
+                : read.reason === 'denied'
+                  ? m.guide_denied({}, o)
+                  : read.reason === 'concealed'
+                    ? m.guide_concealed({}, o)
+                    : m.guide_unavailable({}, o)}
+            </p>
+          )}
           {(read.reason === 'unavailable' || read.reason === 'denied') && (
-            <Button variant="outline" className={actionClassName} onClick={retry}>
+            <Button
+              variant="outline"
+              className={actionClassName}
+              onClick={retry}
+              disabled={retryPending}
+              aria-busy={retryPending || undefined}
+            >
               {m.guide_retry({}, o)}
             </Button>
           )}
@@ -301,7 +370,9 @@ export function DefinitionGuideContent({
             </a>
           )}
           {types.length === 0 ? (
-            <p role="status">{m.guide_empty({}, o)}</p>
+            <p role="status" tabIndex={-1} data-guide-recovery className={recoveryClassName}>
+              {m.guide_empty({}, o)}
+            </p>
           ) : (
             <Field>
               <FieldLabel className="min-w-0 max-w-full flex-wrap" htmlFor={typeId}>
@@ -331,7 +402,13 @@ export function DefinitionGuideContent({
           {type && (
             <section className="space-y-5">
               <header className="space-y-2">
-                <ContentItemHeading level={2} id={`${typeId}-meaning`} className="text-xl font-semibold">
+                <ContentItemHeading
+                  level={2}
+                  id={`${typeId}-meaning`}
+                  tabIndex={-1}
+                  data-guide-recovery
+                  className={cn('text-xl font-semibold', recoveryClassName)}
+                >
                   <Meaning values={type.labels} locale={locale} />
                 </ContentItemHeading>
                 <p>
@@ -342,7 +419,12 @@ export function DefinitionGuideContent({
                 <section>
                   <ContentItemFrame as="div" className="flex min-w-0 flex-col gap-5 p-4 sm:p-6">
                     <header className="space-y-2">
-                      <ContentItemHeading level={3} className="text-lg font-semibold">
+                      <ContentItemHeading
+                        level={3}
+                        tabIndex={-1}
+                        data-guide-recovery
+                        className={cn('text-lg font-semibold', recoveryClassName)}
+                      >
                         <Meaning values={field.labels} locale={locale} />
                       </ContentItemHeading>
                       <p>
