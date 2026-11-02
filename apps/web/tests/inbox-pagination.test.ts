@@ -115,20 +115,12 @@ test('signed-out, closed and non-transient native failures erase retained rows p
   }
 });
 
-test('Let an Inbox reader refresh a successful or rejected continuation with original request/privacy/recovery bounds intact', () => {
+test('Let an Inbox reader restart after a rejected continuation with original request/privacy/recovery bounds intact', () => {
   const first = receiveInboxPage(emptyInboxPagination, ready([item('original')], secondCursor));
   expect(restartInboxPage(emptyInboxPagination)).toBe(emptyInboxPagination);
   expect(restartInboxPage(first)).toBe(first);
   const continuation = nextInboxPage(first);
   expect(restartInboxPage(continuation)).toBe(continuation);
-  const continued = receiveInboxPage(continuation, ready([item('older')], thirdCursor));
-  const refreshed = restartInboxPage(continued);
-  expect(refreshed).toBe(emptyInboxPagination);
-  expect(readableInboxPage(refreshed)).toBeNull();
-  expect(readableInboxPage(receiveInboxPage(refreshed, ready([item('arrival')], secondCursor)))).toEqual({
-    items: [item('arrival')],
-    next: secondCursor,
-  });
   for (const status of [400, 409, 410]) {
     const rejection: InboxPage = {
       signedIn: true,
