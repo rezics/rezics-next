@@ -895,18 +895,26 @@ The supermanager sets direction and the managers own the work. This applies to e
   exchange and record it in the owner document.
 - **Managers decide inside their Goal.** Contract details, frozen expectations the Goal owns, design choices within the
   maintainer's references, and which slices to run are the manager's decisions. When unsure, research primary sources
-  first, then decide.
+  first, then decide. Managers are resident roles. If the supermanager or maintainer is unreachable, concerned managers
+  decide after one exchange: the producer chooses its interface and the outcome owner decides shared choices. Record
+  reasons and proceed with independent work; park only items that genuinely depend on an unavailable decision.
 - **Escalate rarely and once.** A manager sends the supermanager only a deadlock that one exchange between owners did
   not settle, a change to the maintainer's direction or scope, or something only the maintainer can provide, with the
   options and a recommendation.
 - **Operations belong to the delivery-system Goal.** Manager-host liveness, stuck or stale checks, hung remote runs,
-  worktree cleanup, recovery of tasks stopped by environment or tooling failures in any Goal, promotion and the hourly
-  efficiency report are owned by the manager of the Goal that owns `tools/goal`; check-host health is owned by the Goal
+  worktree cleanup, recovery of tasks stopped by environment or tooling failures in any Goal and promotion
+  are owned by the manager of the Goal that owns `tools/goal`; check-host health is owned by the Goal
   that owns the check scripts. System alerts go to those owners.
+- **Performance owns efficiency and acts.** Its 30-minute reviews measure useful landings, width, queue/check time,
+  failures and allowance, then act on the largest waste in the same round. Performance may dispatch or retry for any
+  Goal whose manager has not acted within 30 minutes. It maintains an optimisation plan with at least two experiments,
+  follows up on results, reports hourly trends and announces stalls immediately. It also supervises and recovers a
+  stuck supermanager using the [full recovery procedure](../../docs/development/supermanager.md).
 - **Visual review belongs to the design-authority Goal.** The Goal that owns the shell and design system reviews every
   visible slice by screenshot against the maintainer's references and reopens defects with the owning Goal; each
   product Goal owns its user journeys end to end, pages included.
-- **The supermanager keeps direction.** Direction, priorities and scope with the maintainer, the allowance runway,
+- **The supermanager keeps direction.** [Resident supervision and recovery](../../docs/development/supermanager.md).
+  Direction, priorities and scope with the maintainer, the allowance runway,
   critical-priority grants, deadlocks between owners, efficiency strategy, and a sampled review of the product, not
   every slice. When a detail reaches the supermanager, it forwards it to the owner instead of doing it.
 
@@ -987,6 +995,10 @@ bun tools/goal/src/cli.ts publication status <authority-id>
 bun tools/goal/src/cli.ts publication recover <invocation-id>
 ```
 
+Legacy custody can be received before a complete inventory exists. The supported preparation journey is described
+below; an unresolved capture or preview must use it instead of fabricating bootstrap identities. Receiving the
+publication allowance and receiving physical custody are separate operations. Neither operation runs a workflow.
+
 The bootstrap document is ignored runtime evidence, not an approval document. It has `version: 1`,
 `visibility: "complete-native-publisher-capture-host-inventory"`, a current UTC `observedAt`,
 `noUnregisteredPublisherOrCaptureGroups: true`, a nonempty `records` array, and `historyEvidencePaths`. The census must
@@ -1049,6 +1061,111 @@ and the current disposition has no actual 01 UTC process handle or fresh native 
 bootstrap still needs that complete current census plus the exact retained evidence and logs above; source presence,
 configuration defaults and this documentation are not a release or permission to invoke publication. The full native
 controller lifecycle and compatibility checks remain deferred to the operations release.
+
+##### Legacy reconciliation preparation
+
+From its own authenticated provider session, the owning manager sends a `decision` with `--document` naming a private
+document in its own state-directory namespace. The configured operations manager receives that inbox ID from its
+current provider session. An operations-owned original uses an operations decision; Web never has to impersonate
+operations, and operations cannot substitute its own decision for a Web-owned original.
+
+```sh
+bun tools/goal/src/cli.ts inbox send <operations-manager> decision "Receive unresolved legacy custody" \
+  --document .temp/goal/<owner>/legacy-disposition.json
+bun tools/goal/src/cli.ts publication legacy-receive <owner-inbox-message-id>
+bun tools/goal/src/cli.ts publication legacy-status [inbox-message-or-preparation-id]
+bun tools/goal/src/cli.ts publication legacy-prepare
+bun tools/goal/src/cli.ts publication legacy-prepare <native-inventory-inbox-message-id>
+bun tools/goal/src/cli.ts publication legacy-resolve <owner-resolution-inbox-message-id>
+bun tools/goal/src/cli.ts publication status [authority-or-invocation-id]
+```
+
+The versioned receiving document has this bounded private schema. Paths in `records` are relative to the configured
+Goal state directory; document references in inbox commands are repository-relative. SHA-256 is over exact file bytes.
+Documents are regular files, at most 1 MiB, inside private state, with at most 16 referenced documents and 256 records
+per request. Symlink escapes, arbitrary identity-field pointers and mismatched workflow PIDs refuse receiving.
+
+```json
+{
+  "version": 1,
+  "kind": "publication-legacy-disposition",
+  "owner": "<owning-manager>",
+  "controller": "<operations-manager>",
+  "records": [
+    { "key": "original-capture", "surface": "capture", "evidencePath": "<owner>/capture.json", "sha256": "<sha256>" },
+    { "key": "original-preview", "surface": "preview", "evidencePath": "<owner>/preview.json", "sha256": "<sha256>" },
+    { "key": "original-publisher", "surface": "publisher", "evidencePath": "<owner>/publisher.json", "sha256": "<sha256>" }
+  ]
+}
+```
+
+The genuine older unavailable disposition is also supported without editing its retained bytes. It has `owner`,
+`reply` identifying the authenticated operations-to-owner agreement, the exact disposition
+`unavailable-exact-capture-terminal-identity; unknown custody remains occupied`, and separate `capture`,
+`previewCompanion`, `legacyPublisher` and `legacyKnownCustody` objects/array. Preview startup and refresh records are
+received separately. The complete original document is retained with each selector and its SHA-256. An absent capture
+terminal file, running metadata, partial identity, preview PID/session, refresh PID, historical provider handle or
+historical publisher exit never becomes the capture's identity or terminal result. Known publisher and cancellation
+history still goes through the existing strict bootstrap importer, including its exact companion bindings and logs.
+
+The immutable inbox event, indexed sender/recipient/document references, retained provider-session provenance,
+operations receiver session and exact raw documents are journaled in `publication_legacy_requests`. Related source
+files are retained with their own hashes, or an explicit unavailable path; stdout includes hashes and receipt fields,
+never those raw documents. Evidence-bound entries in `publication_legacy_entries` start as **UNKNOWN OCCUPIED**,
+including complete historical identities until physical settlement is established. Original raw evidence never changes.
+A new document hash adds distinct occupied
+custody; it cannot replace an older unresolved entry. Restart, migration, refresh omissions and an empty host scan
+preserve every entry. Concurrent receiving, preparation, resolution, bootstrap, capture registration and start share
+the native `publication/custody.lease`. A live lease refuses the contender before an invocation is consumed.
+
+Replaying an inbox ID with identical provenance returns its original receipt. Changed bytes or provenance for that ID,
+an older owner decision overtaking a newer received decision, a foreign owner, or missing authenticated sender evidence
+refuses. A delivery-file error leaves the original SQLite receipt intact; replay rematerializes it under
+`publication/legacy/request-<message-id>.json`. Status exposes the immutable entry IDs, hashes, selectors, original
+identities, resolutions and latest preparation. `recover <invocation-id>` continues to observe only its original
+workflow and deliver its original terminal result; reconciliation never redispatches it.
+`legacy-status <inbox-message-or-preparation-id>` exposes the exact original durable receipt even if its file could
+not be materialized or the originating document has since changed.
+
+`legacy-prepare` records a durable **unavailable** receipt with host, controller incarnation/session, observation time,
+exact retained-set hash, known identities, unresolved IDs and per-field/per-operation blockers. It observes known
+groups through the existing native process API without signaling or adopting any process. Optional inventory input
+must be an operations-authenticated decision with a single document: `version: 1`,
+`kind: "publication-native-inventory"`, `owner`, actual `host` and `boot`, UTC `observedAt`, `retainedSetSha256`, and
+`controller: { manager, sessionId, identity: { pid, start, boot, group } }`. Its host/boot/controller and exact retained
+set must match, including the current receiving operations session; observations older than five minutes or more than
+30 seconds in the future refuse. All supplied bytes
+and provenance are retained. A caller's `noUnknown`, visibility flag or release marker never certifies completeness.
+
+The current native API exposes incarnation and process-group membership. It does **not** supply a complete host-wide
+native/legacy publisher/capture discovery producer, or recover a missing original capture/preview terminal and its
+child/pipe settlement. Preparation reports those exact unavailable capabilities instead of repeatedly demanding a
+nonexistent original PID. It also reports that the installed controller's lifecycle/compatibility release receipt and
+private Wrangler deployment/account credential availability have not been verified. It does not read or disclose
+credentials, contact a provider or treat a public GET as custody evidence. Even when all individually known originals
+settle, a reconciled journal cannot make launch eligible with the old caller-authored bootstrap attestation. Complete
+native inventory capability and validated runtime remain required; source presence is neither.
+
+Resolution is a separate owner-authenticated decision with `version: 1`, `kind: "publication-legacy-resolution"`,
+`owner`, `controller`, and `resolutions: [{ id, evidenceSha256, originalIdentity: { pid, start, boot, group },
+nativeInvocationId, terminalReceiptSha256 }]`. Positive resolution currently requires the **actual original** managed
+publisher invocation and exact terminal receipt in the native database, its recorded close/descriptor and complete
+known-member settlement, original source/identity equality, terminal custody and fresh empty groups for every retained
+member. Reused PIDs, surviving members, unknown children/visibility, mismatched preview/capture identities and arbitrary
+terminal JSON refuse. The descriptor assertion covers the controller's own log descriptor; it does not certify unknown
+inherited descriptors or host-wide visibility. Identity-less publisher evidence also needs an original native producer
+binding it to its invocation; a supplied identity cannot create that link. Capture and preview lack an existing managed
+terminal producer that can certify their original child/pipe settlement; the route durably returns the concrete
+unavailable field and keeps them occupied. There is no
+administrator override, TTL, dropped field or stopped-task shortcut. Resolution replay returns its original receipt;
+conflicting resolutions cannot rewrite it.
+
+Receiving returns zero for truthful durable acceptance, including occupied custody; status is observational. Preparation
+returns one with its unavailable receipt; a resolution with unavailable originals also returns one. Every preparation
+receipt states `launchReady: false`, `authorityChanged: false`, `workflowInvocations: 0`. These receipts are separate
+from publication execution, live-source equality and owner delivery. The retained single allowance and all failed-no-repeat
+history remain intact. Original acceptance, native lifecycle, installed compatibility, complete host visibility and
+release checks belong to the native controller after source integration; typing cannot establish that journey.
 
 #### Width governor
 

@@ -71,3 +71,35 @@ engine's idle mechanism rather than repeated model turns.
 
 A wrap-up instruction means checkpoint and pause promptly. Preserve work and write a continuation containing current
 state, owner links, blockers and next actions. Resume only when authorized.
+
+# Delivery ownership
+
+The [Goal delivery journey](../../tools/goal/README.md#roles-and-delegation) assigns implementation to producers and
+outcomes to resident managers. Producers choose interfaces; outcome owners decide shared choices after one exchange
+with concerned managers. Record the reason and proceed when the supermanager or maintainer is unreachable. Park only
+work that genuinely depends on an unavailable decision.
+
+Performance owns efficiency. Every 30 minutes it measures useful landings per Goal over 30 minutes and two hours,
+worker width against four per Goal, held and idle work, check wait on both check hosts, host memory, repeated
+failures, dispatch-to-integration latency, manager token share and allowance per useful landing, then acts on the largest waste in that
+same round. It may dispatch or retry for a Goal whose manager has not acted within 30 minutes. Control-plane owns
+delivery-tool defects; Performance owns check-host health. Managers keep complete ready briefs available for free width.
+
+Performance keeps an optimisation plan with measured waste, change, owner, metric, expected effect, status and measured
+result, with at least two experiments running. Its private round log records time, numbers and action in three lines.
+Hourly reports to the project's Telegram group use Traditional Chinese and lead with new product code landed in the
+last full clock hour under apps, services and packages, excluding tests, stories, fixtures, recordings, generated files, JSON, evidence
+and documents, against the steady 20,000-line target and 40,000-line aim, with quality signals alongside. Useful
+landings, short-window trends, width, manager allowance share and allowance per landing provide supporting evidence.
+Internal tooling counts when it unblocks product outcomes. Follow up on the previous round's intervention.
+
+No product landing in the last 30 minutes, or fewer than ten running tasks, requires action immediately: use the
+first-scope backlog and review classes to fill available width, wake idle managers and dispatch/retry where the owning
+manager has not acted within 30 minutes. Apply the standing default policy exception after agreement between owners.
+For a reversible owner-recommended choice awaiting only the supermanager for 30 minutes, take the choice, record it
+and notify afterwards. Announce a stall and the action immediately in the reporting channel; do not wait for the hour.
+Measurement without action is a failed review.
+
+Performance also [supervises and recovers the resident supermanager](supermanager.md). Runtime release, authenticated
+authority receiving, physical custody, workflow execution and delivered evidence are distinct facts. Source integration
+and a successful compiler command do not certify native runtime release or consume an operational allowance.
