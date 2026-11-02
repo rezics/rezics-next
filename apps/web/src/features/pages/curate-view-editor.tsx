@@ -333,11 +333,7 @@ function ActualPresentationViewEditor({
     return <p role="status">{m.curation_loading({}, options)}</p>;
   }
   if (!currentAdmission.ok)
-    return retryableReadFailure(
-      currentAdmission,
-      locale,
-      needsRead ? { waiting, onRetry: retryAdmission } : undefined,
-    );
+    return retryableReadFailure(currentAdmission, locale, needsRead ? { waiting, onRetry: retryAdmission } : undefined);
   if (currentAdmission.reader !== reader) return failureView({ ok: false, reason: 'forbidden' }, locale);
   if (!lease) return failureView({ ok: false, reason: 'unavailable' }, locale);
 
@@ -474,11 +470,7 @@ function StandalonePresentationViewEditor({
     return <p role="status">{m.curation_loading({}, options)}</p>;
   }
   if (!currentAdmission.ok)
-    return retryableReadFailure(
-      currentAdmission,
-      locale,
-      needsRead ? { waiting, onRetry: retryAdmission } : undefined,
-    );
+    return retryableReadFailure(currentAdmission, locale, needsRead ? { waiting, onRetry: retryAdmission } : undefined);
   if (currentAdmission.reader !== reader) return failureView({ ok: false, reason: 'forbidden' }, locale);
 
   let retained = publications.current.get(reader);
