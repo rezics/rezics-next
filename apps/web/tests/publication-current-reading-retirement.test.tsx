@@ -1,7 +1,11 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
-import type { PublicationCommand, PublicationRead, PublicationTransport } from '../src/features/catalogue/publication-editor';
+import type {
+  PublicationCommand,
+  PublicationRead,
+  PublicationTransport,
+} from '../src/features/catalogue/publication-editor';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 

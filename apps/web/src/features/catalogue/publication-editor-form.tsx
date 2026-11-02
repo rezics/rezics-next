@@ -206,9 +206,9 @@ function PublicationEditorLive({
   });
   const [draftProfile, setDraftProfile] = useState<PublicationProfile>();
   const [draftNames, setDraftNames] = useState<Record<string, string>>({});
-  const privateDefinitions = useRef<
-    Pick<Extract<PublicationRead, { ok: true }>, 'release' | 'profiles'> | undefined
-  >(undefined);
+  const privateDefinitions = useRef<Pick<Extract<PublicationRead, { ok: true }>, 'release' | 'profiles'> | undefined>(
+    undefined,
+  );
   const [reviewDefinitions, setReviewDefinitions] = useState(false);
   const [refreshRequired, setRefreshRequired] = useState(false);
   const refreshRequiredRef = useRef(false);
@@ -308,11 +308,7 @@ function PublicationEditorLive({
   }
 
   function edit(change: () => void) {
-    if (
-      !lifetime.active() ||
-      renderedReadingGeneration !== readingGeneration.current ||
-      refreshRequiredRef.current
-    )
+    if (!lifetime.active() || renderedReadingGeneration !== readingGeneration.current || refreshRequiredRef.current)
       return;
     change();
     localDraft.current = true;
@@ -554,423 +550,418 @@ function PublicationEditorLive({
             </>
           )}
           {profile && (read || (refreshRequired && privateDefinitions.current)) && (
-                <form onSubmit={(event) => void submit(event)} noValidate className="space-y-6" aria-busy={busy}>
-                  {reviewDefinitions && (
-                    <ContentItemFrame as="div" role="status" className="min-w-0 space-y-3 p-4">
-                      <p>{m.publication_definitions_review({}, o)}</p>
-                      {!currentProfile && <p>{m.publication_empty({}, o)}</p>}
-                      {reviewErrors.length > 0 && (
-                        <ul className="list-inside list-disc">
-                          {[...new Set(reviewErrors.map((error) => errorControl(error.pointer).label))].map((label) => (
-                            <li key={label}>
-                              {label}: {m.catalogue_create_invalid_field({}, o)}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <Button
-                        className={actionClassName}
-                        type="button"
-                        variant="outline"
-                        disabled={busy || query.isFetching}
-                        onClick={() => void refreshDefinitions()}
-                      >
-                        {m.publication_refresh({}, o)}
-                      </Button>
-                      <Button
-                        className={actionClassName}
-                        type="button"
-                        disabled={busy || query.isFetching || refreshRequired || correctionsRequired}
-                        onClick={() => edit(() => setReviewDefinitions(false))}
-                      >
-                        {m.catalogue_create_review_new({}, o)}
-                      </Button>
-                    </ContentItemFrame>
+            <form onSubmit={(event) => void submit(event)} noValidate className="space-y-6" aria-busy={busy}>
+              {reviewDefinitions && (
+                <ContentItemFrame as="div" role="status" className="min-w-0 space-y-3 p-4">
+                  <p>{m.publication_definitions_review({}, o)}</p>
+                  {!currentProfile && <p>{m.publication_empty({}, o)}</p>}
+                  {reviewErrors.length > 0 && (
+                    <ul className="list-inside list-disc">
+                      {[...new Set(reviewErrors.map((error) => errorControl(error.pointer).label))].map((label) => (
+                        <li key={label}>
+                          {label}: {m.catalogue_create_invalid_field({}, o)}
+                        </li>
+                      ))}
+                    </ul>
                   )}
-                  {session === 'unknown' && (
-                    <ContentItemFrame as="div" role="status" className="p-4">
-                      {m.catalogue_create_loading({}, o)}
-                    </ContentItemFrame>
-                  )}
-                  {session === 'unavailable' && (
-                    <ContentItemFrame as="div" role="alert" className="p-4">
-                      {m.catalogue_create_unavailable({}, o)}
-                    </ContentItemFrame>
-                  )}
-                  {session === 'signed-out' && (
-                    <p>
-                      {m.catalogue_create_signed_out({}, o)}{' '}
-                      <a
-                        className={linkClassName}
-                        href={`/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/catalogue/publication?work=${work}`)}`}
-                      >
-                        {m.account_sign_in({}, o)}
-                      </a>
-                    </p>
-                  )}
-                  <ContentItemFrame as="div" className="min-w-0 p-4 sm:p-6">
-                    <FieldSet
-                      disabled={disabled}
-                      aria-describedby={profile.description ? `${id}-profile-description` : undefined}
-                      className="min-w-0 gap-4"
+                  <Button
+                    className={actionClassName}
+                    type="button"
+                    variant="outline"
+                    disabled={busy || query.isFetching}
+                    onClick={() => void refreshDefinitions()}
+                  >
+                    {m.publication_refresh({}, o)}
+                  </Button>
+                  <Button
+                    className={actionClassName}
+                    type="button"
+                    disabled={busy || query.isFetching || refreshRequired || correctionsRequired}
+                    onClick={() => edit(() => setReviewDefinitions(false))}
+                  >
+                    {m.catalogue_create_review_new({}, o)}
+                  </Button>
+                </ContentItemFrame>
+              )}
+              {session === 'unknown' && (
+                <ContentItemFrame as="div" role="status" className="p-4">
+                  {m.catalogue_create_loading({}, o)}
+                </ContentItemFrame>
+              )}
+              {session === 'unavailable' && (
+                <ContentItemFrame as="div" role="alert" className="p-4">
+                  {m.catalogue_create_unavailable({}, o)}
+                </ContentItemFrame>
+              )}
+              {session === 'signed-out' && (
+                <p>
+                  {m.catalogue_create_signed_out({}, o)}{' '}
+                  <a
+                    className={linkClassName}
+                    href={`/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/catalogue/publication?work=${work}`)}`}
+                  >
+                    {m.account_sign_in({}, o)}
+                  </a>
+                </p>
+              )}
+              <ContentItemFrame as="div" className="min-w-0 p-4 sm:p-6">
+                <FieldSet
+                  disabled={disabled}
+                  aria-describedby={profile.description ? `${id}-profile-description` : undefined}
+                  className="min-w-0 gap-4"
+                >
+                  <FieldLegend lang={profile.labelLang ?? undefined} className="max-w-full">
+                    <ContentItemHeading className="text-xl font-semibold [overflow-wrap:anywhere]">
+                      {profile.label}
+                    </ContentItemHeading>
+                  </FieldLegend>
+                  {profile.description && (
+                    <FieldDescription
+                      id={`${id}-profile-description`}
+                      lang={profile.descriptionLang ?? undefined}
+                      className="min-w-0 text-start [overflow-wrap:anywhere]"
                     >
-                      <FieldLegend lang={profile.labelLang ?? undefined} className="max-w-full">
-                        <ContentItemHeading className="text-xl font-semibold [overflow-wrap:anywhere]">
-                          {profile.label}
-                        </ContentItemHeading>
-                      </FieldLegend>
-                      {profile.description && (
-                        <FieldDescription
-                          id={`${id}-profile-description`}
-                          lang={profile.descriptionLang ?? undefined}
-                          className="min-w-0 text-start [overflow-wrap:anywhere]"
-                        >
-                          {profile.description}
-                          {profile.descriptionLang && profile.descriptionLang !== locale && (
-                            <span lang={locale} className="ms-2">
-                              {m.guide_fallback({ language: profile.descriptionLang }, o)}
-                            </span>
-                          )}
-                        </FieldDescription>
+                      {profile.description}
+                      {profile.descriptionLang && profile.descriptionLang !== locale && (
+                        <span lang={locale} className="ms-2">
+                          {m.guide_fallback({ language: profile.descriptionLang }, o)}
+                        </span>
                       )}
-                      <Field data-invalid={invalid('/labels') || undefined}>
-                        <FieldLabel className={labelClassName} htmlFor={`${id}-label`}>
-                          {m.catalogue_create_label({}, o)}
-                        </FieldLabel>
-                        <Input
-                          className={inputClassName}
-                          id={`${id}-label`}
-                          aria-describedby={
-                            failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-label`)
-                              ? `${id}-label-error`
-                              : undefined
-                          }
-                          value={label}
-                          required
-                          maxLength={250}
-                          aria-invalid={invalid('/labels')}
-                          onChange={(e) => edit(() => setLabel(e.target.value))}
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel className={labelClassName} htmlFor={`${id}-language`}>
-                          {m.catalogue_create_language({}, o)}
-                        </FieldLabel>
-                        <Input
-                          className={inputClassName}
-                          id={`${id}-language`}
-                          value={language}
-                          maxLength={64}
-                          aria-describedby={`${id}-language-help${failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-language`) ? ` ${id}-language-error` : ''}`}
-                          onChange={(e) => edit(() => setLanguage(e.target.value))}
-                        />
-                        <FieldDescription id={`${id}-language-help`} className="text-start">
-                          {m.catalogue_create_language_help({}, o)}
-                        </FieldDescription>
-                      </Field>
-                      <Field>
-                        <FieldLabel className={labelClassName} htmlFor={`${id}-relation`}>
-                          {m.relation_property({}, o)}
-                        </FieldLabel>
-                        <NativeSelect
-                          className={selectClassName}
-                          id={`${id}-relation`}
-                          aria-describedby={
-                            failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-relation`)
-                              ? `${id}-relation-error`
-                              : undefined
-                          }
-                          value={relation}
-                          onChange={(e) => edit(() => setRelation(e.target.value))}
-                        >
-                          {unsupportedRelation && (
-                            <NativeSelectOption value={relation} disabled>
-                              {name(relation) || relation}
-                            </NativeSelectOption>
-                          )}
-                          {(read ? currentProfile?.relations ?? [] : profile.relations).map((id) => (
-                            <NativeSelectOption key={id} value={id}>
-                              {name(id)}
-                            </NativeSelectOption>
-                          ))}
-                        </NativeSelect>
-                        {unsupportedRelation && <FieldError>{m.publication_choice_review({}, o)}</FieldError>}
-                      </Field>
-                      <Field orientation="horizontal" data-invalid={invalid('/independent') || undefined}>
-                        <Checkbox
-                          nativeButton
-                          render={<button type="button" />}
-                          id={`${id}-independent`}
-                          aria-describedby={
-                            failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-independent`)
-                              ? `${id}-independent-error`
-                              : undefined
-                          }
-                          checked={independent}
-                          aria-invalid={invalid('/independent')}
-                          onCheckedChange={(value) => edit(() => setIndependent(value))}
-                        />
-                        <FieldLabel
-                          className={`${labelClassName} min-h-11 min-w-11 items-center md:pointer-fine:min-h-8`}
-                          htmlFor={`${id}-independent`}
-                        >
-                          {m.publication_independent({}, o)}
-                        </FieldLabel>
-                      </Field>
-                    </FieldSet>
-                  </ContentItemFrame>
-                  {Object.entries(facts).map(([property, value]) => (
-                    <ContentItemFrame as="div" key={property} className="min-w-0 p-4 sm:p-6">
-                      <FieldSet
-                        id={`${id}-fact-${encodeURIComponent(property)}`}
-                        disabled={disabled}
-                        tabIndex={-1}
-                        aria-describedby={
-                          failure?.errors?.some(
-                            (error) => errorControl(error.pointer).id === `${id}-fact-${encodeURIComponent(property)}`,
+                    </FieldDescription>
+                  )}
+                  <Field data-invalid={invalid('/labels') || undefined}>
+                    <FieldLabel className={labelClassName} htmlFor={`${id}-label`}>
+                      {m.catalogue_create_label({}, o)}
+                    </FieldLabel>
+                    <Input
+                      className={inputClassName}
+                      id={`${id}-label`}
+                      aria-describedby={
+                        failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-label`)
+                          ? `${id}-label-error`
+                          : undefined
+                      }
+                      value={label}
+                      required
+                      maxLength={250}
+                      aria-invalid={invalid('/labels')}
+                      onChange={(e) => edit(() => setLabel(e.target.value))}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel className={labelClassName} htmlFor={`${id}-language`}>
+                      {m.catalogue_create_language({}, o)}
+                    </FieldLabel>
+                    <Input
+                      className={inputClassName}
+                      id={`${id}-language`}
+                      value={language}
+                      maxLength={64}
+                      aria-describedby={`${id}-language-help${failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-language`) ? ` ${id}-language-error` : ''}`}
+                      onChange={(e) => edit(() => setLanguage(e.target.value))}
+                    />
+                    <FieldDescription id={`${id}-language-help`} className="text-start">
+                      {m.catalogue_create_language_help({}, o)}
+                    </FieldDescription>
+                  </Field>
+                  <Field>
+                    <FieldLabel className={labelClassName} htmlFor={`${id}-relation`}>
+                      {m.relation_property({}, o)}
+                    </FieldLabel>
+                    <NativeSelect
+                      className={selectClassName}
+                      id={`${id}-relation`}
+                      aria-describedby={
+                        failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-relation`)
+                          ? `${id}-relation-error`
+                          : undefined
+                      }
+                      value={relation}
+                      onChange={(e) => edit(() => setRelation(e.target.value))}
+                    >
+                      {unsupportedRelation && (
+                        <NativeSelectOption value={relation} disabled>
+                          {name(relation) || relation}
+                        </NativeSelectOption>
+                      )}
+                      {(read ? (currentProfile?.relations ?? []) : profile.relations).map((id) => (
+                        <NativeSelectOption key={id} value={id}>
+                          {name(id)}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                    {unsupportedRelation && <FieldError>{m.publication_choice_review({}, o)}</FieldError>}
+                  </Field>
+                  <Field orientation="horizontal" data-invalid={invalid('/independent') || undefined}>
+                    <Checkbox
+                      nativeButton
+                      render={<button type="button" />}
+                      id={`${id}-independent`}
+                      aria-describedby={
+                        failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-independent`)
+                          ? `${id}-independent-error`
+                          : undefined
+                      }
+                      checked={independent}
+                      aria-invalid={invalid('/independent')}
+                      onCheckedChange={(value) => edit(() => setIndependent(value))}
+                    />
+                    <FieldLabel
+                      className={`${labelClassName} min-h-11 min-w-11 items-center md:pointer-fine:min-h-8`}
+                      htmlFor={`${id}-independent`}
+                    >
+                      {m.publication_independent({}, o)}
+                    </FieldLabel>
+                  </Field>
+                </FieldSet>
+              </ContentItemFrame>
+              {Object.entries(facts).map(([property, value]) => (
+                <ContentItemFrame as="div" key={property} className="min-w-0 p-4 sm:p-6">
+                  <FieldSet
+                    id={`${id}-fact-${encodeURIComponent(property)}`}
+                    disabled={disabled}
+                    tabIndex={-1}
+                    aria-describedby={
+                      failure?.errors?.some(
+                        (error) => errorControl(error.pointer).id === `${id}-fact-${encodeURIComponent(property)}`,
+                      )
+                        ? `${id}-fact-${encodeURIComponent(property)}-error`
+                        : undefined
+                    }
+                    className="min-w-0 gap-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    <FieldLegend className="max-w-full">
+                      <ContentItemHeading level={3} className="text-base font-semibold [overflow-wrap:anywhere]">
+                        {name(property) || m.correction_preserved({}, o)}
+                      </ContentItemHeading>
+                    </FieldLegend>
+                    {factNeedsReview(property) && (
+                      <>
+                        <FieldError>{m.publication_choice_review({}, o)}</FieldError>
+                        {property === 'schema:publisher' && <p>{publisher.map((item) => item.title).join(', ')}</p>}
+                        <details>
+                          <summary className={linkClassName}>{m.publication_staged_value({}, o)}</summary>
+                          <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+                            {JSON.stringify({ property, value }, null, 2)}
+                          </pre>
+                        </details>
+                      </>
+                    )}
+                    {unsupportedFact(property) ? null : property === 'schema:publisher' ? (
+                      <EntityPicker
+                        label={name(property)}
+                        value={publisher}
+                        search={async (text, signal) => {
+                          const results = await search(text, signal);
+                          if (
+                            !read ||
+                            renderedReadingGeneration !== readingGeneration.current ||
+                            refreshRequiredRef.current
                           )
-                            ? `${id}-fact-${encodeURIComponent(property)}-error`
-                            : undefined
-                        }
-                        className="min-w-0 gap-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                      >
-                        <FieldLegend className="max-w-full">
-                          <ContentItemHeading level={3} className="text-base font-semibold [overflow-wrap:anywhere]">
-                            {name(property) || m.correction_preserved({}, o)}
-                          </ContentItemHeading>
-                        </FieldLegend>
-                        {factNeedsReview(property) && (
-                          <>
-                            <FieldError>{m.publication_choice_review({}, o)}</FieldError>
-                            {property === 'schema:publisher' && <p>{publisher.map((item) => item.title).join(', ')}</p>}
-                            <details>
-                              <summary className={linkClassName}>{m.publication_staged_value({}, o)}</summary>
-                              <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-                                {JSON.stringify({ property, value }, null, 2)}
-                              </pre>
-                            </details>
-                          </>
-                        )}
-                        {unsupportedFact(property) ? null : property === 'schema:publisher' ? (
-                          <EntityPicker
-                            label={name(property)}
-                            value={publisher}
-                            search={async (text, signal) => {
-                              const results = await search(text, signal);
-                              if (
-                                !read ||
-                                renderedReadingGeneration !== readingGeneration.current ||
-                                refreshRequiredRef.current
-                              )
-                                return [];
-                              return results.filter((item) =>
-                                item.types.some((type) => publicationTarget(read.release, type, property)),
-                              );
-                            }}
-                            src={coverSrc}
-                            disabled={disabled}
-                            onValueChange={(items) =>
-                              edit(() => {
-                                setPublisher(items);
-                                if (!lifetime.active()) return;
-                                setFacts({ ...facts, [property]: { type: 'value', content: items[0]?.id ?? '' } });
-                              })
-                            }
-                          />
-                        ) : (
-                          <ScalarControl
-                            part={{ property: { id: property }, value }}
-                            definition={controlRead?.release.properties[property]}
-                            read={controlRead!}
-                            locale={locale}
-                            onChange={(next) => edit(() => setFacts({ ...facts, [property]: next }))}
-                          />
-                        )}
-                        {invalid(`/statements/${property}`) && (
-                          <FieldError>{m.catalogue_create_invalid_field({}, o)}</FieldError>
-                        )}
-                        <PublicationFactRemoval
-                          property={property}
-                          locale={locale}
-                          populated={
-                            value.type !== 'value' ||
-                            hasFactContent(value.content) ||
-                            (property === 'schema:publisher' && publisher.length > 0)
-                          }
-                          disabled={disabled}
-                          editable={() => lifetime.active() && !running.current && !disabled && !created}
-                          onRemove={() =>
-                            edit(() => {
-                              setFacts(Object.fromEntries(Object.entries(facts).filter(([id]) => id !== property)));
-                              if (property === 'schema:publisher') setPublisher([]);
-                            })
-                          }
-                        />
-                      </FieldSet>
-                    </ContentItemFrame>
-                  ))}
-                  <ContentItemFrame as="div" className="min-w-0 p-4 sm:p-6">
-                    <FieldSet disabled={disabled} className="min-w-0 flex-row flex-wrap items-end gap-3">
-                      <FieldLegend className="sr-only">{m.publication_field({}, o)}</FieldLegend>
-                      <Field className="min-w-0 basis-full sm:flex-1 sm:basis-64">
-                        <FieldLabel className={labelClassName} htmlFor={`${id}-field`}>
-                          {m.publication_field({}, o)}
-                        </FieldLabel>
-                        <NativeSelect
-                          className={selectClassName}
-                          id={`${id}-field`}
-                          value={field}
-                          onChange={(e) => edit(() => setField(e.target.value))}
-                        >
-                          <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                          {(read ? currentProfile?.fields ?? [] : profile.fields)
-                            .filter((id) => !Object.hasOwn(facts, id))
-                            .map((id) => (
-                              <NativeSelectOption key={id} value={id}>
-                                {name(id)}
-                              </NativeSelectOption>
-                            ))}
-                          {field && read && !currentProfile?.fields.includes(field) && (
-                            <NativeSelectOption value={field} disabled>
-                              {name(field) || field}
-                            </NativeSelectOption>
-                          )}
-                        </NativeSelect>
-                        {field && read && !currentProfile?.fields.includes(field) && (
-                          <FieldError>{m.publication_choice_review({}, o)}</FieldError>
-                        )}
-                      </Field>
-                      <Button
-                        className={actionClassName}
-                        type="button"
-                        variant="outline"
-                        disabled={
-                          disabled || !field || !currentProfile?.fields.includes(field) || Object.hasOwn(facts, field)
-                        }
-                        onClick={() =>
+                            return [];
+                          return results.filter((item) =>
+                            item.types.some((type) => publicationTarget(read.release, type, property)),
+                          );
+                        }}
+                        src={coverSrc}
+                        disabled={disabled}
+                        onValueChange={(items) =>
                           edit(() => {
-                            const datatype = read?.release.properties[field]?.datatype;
-                            if (!datatype) return;
-                            setFacts({
-                              ...facts,
-                              [field]: {
-                                type: 'value',
-                                content: datatype === 'time' || datatype === 'quantity' ? {} : '',
-                              },
-                            });
-                            setField('');
+                            setPublisher(items);
+                            if (!lifetime.active()) return;
+                            setFacts({ ...facts, [property]: { type: 'value', content: items[0]?.id ?? '' } });
                           })
                         }
-                      >
-                        {m.correction_add({}, o)}
-                      </Button>
-                    </FieldSet>
-                  </ContentItemFrame>
-                  {(displayRelease?.properties['schema:url'] || citation) && (
-                    <ContentItemFrame as="div" className="min-w-0 p-4 sm:p-6">
-                      <FieldSet disabled={disabled} className="min-w-0 gap-3">
-                        <FieldLegend className="max-w-full">
-                          <ContentItemHeading className="text-xl font-semibold [overflow-wrap:anywhere]">
-                            {name('schema:url') || m.relation_citation({}, o)}
-                          </ContentItemHeading>
-                        </FieldLegend>
-                        <Field>
-                          <FieldLabel className={labelClassName} htmlFor={`${id}-citation`}>
-                            {m.relation_citation({}, o)}
-                          </FieldLabel>
-                          <Input
-                            className={inputClassName}
-                            id={`${id}-citation`}
-                            aria-describedby={`${id}-citation-help${failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-citation`) ? ` ${id}-citation-error` : ''}`}
-                            type="url"
-                            value={citation}
-                            maxLength={1500}
-                            onChange={(e) => edit(() => setCitation(e.target.value))}
-                          />
-                          <FieldDescription id={`${id}-citation-help`} className="text-start">
-                            {m.publication_citation({}, o)}
-                          </FieldDescription>
-                          {reviewErrors.some((error) => error.pointer.includes('/references/')) && (
-                            <FieldError>{m.publication_choice_review({}, o)}</FieldError>
-                          )}
-                        </Field>
-                      </FieldSet>
-                    </ContentItemFrame>
-                  )}
-                  {failure && (
-                    <ContentItemFrame
-                      as="div"
-                      role="alert"
-                      aria-labelledby={`${id}-recovery`}
-                      className="min-w-0 space-y-3 border-s-2 border-destructive/40 p-4"
-                    >
-                      <ContentItemHeading id={`${id}-recovery`} className="text-lg font-semibold">
-                        {failure.reason === 'denied'
-                          ? m.catalogue_create_denied({}, o)
-                          : failure.reason === 'signed-out'
-                            ? m.catalogue_create_signed_out({}, o)
-                            : failure.reason === 'conflict'
-                              ? m.catalogue_create_conflict({}, o)
-                              : failure.reason === 'invalid'
-                                ? m.catalogue_create_invalid({}, o)
-                                : m.catalogue_create_uncertain({}, o)}
-                      </ContentItemHeading>
-                      {failure.errors?.length ? (
-                        <ul className="list-inside list-disc">
-                          {[
-                            ...new Map(
-                              failure.errors.map((error) => {
-                                const control = errorControl(error.pointer);
-                                return [control.id, control] as const;
-                              }),
-                            ).values(),
-                          ].map((control) => (
-                            <li key={control.id} id={`${control.id}-error`}>
-                              <a className={linkClassName} href={`#${encodeURIComponent(control.id)}`}>
-                                {control.label}
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                      {failure.refreshDefinitions && <p>{m.catalogue_create_refresh({}, o)}</p>}
-                      {failure.reason === 'conflict' && !reviewDefinitions && (
-                        <Button
-                          className={actionClassName}
-                          type="button"
-                          variant="outline"
-                          onClick={() => edit(() => {})}
-                        >
-                          {m.catalogue_create_review_new({}, o)}
-                        </Button>
-                      )}
-                    </ContentItemFrame>
-                  )}
-                  <ContentItemFrame as="div" className="flex min-w-0 flex-wrap gap-3 p-4">
-                    <Button
-                      className={actionClassName}
-                      type="submit"
-                      disabled={
-                        busy ||
-                        session !== 'signed-in' ||
-                        failure?.reason === 'conflict' ||
-                        reviewDefinitions ||
-                        refreshRequired
-                      }
-                    >
-                      {busy
-                        ? m.catalogue_create_saving({}, o)
-                        : uncertain
-                          ? m.catalogue_create_retry({}, o)
-                          : m.publication_submit({}, o)}
-                    </Button>
-                    {read && (
-                      <a href={back} className={outlineLinkClassName}>
-                        {m.publication_back({}, o)}
-                      </a>
+                      />
+                    ) : (
+                      <ScalarControl
+                        part={{ property: { id: property }, value }}
+                        definition={controlRead?.release.properties[property]}
+                        read={controlRead!}
+                        locale={locale}
+                        onChange={(next) => edit(() => setFacts({ ...facts, [property]: next }))}
+                      />
                     )}
-                  </ContentItemFrame>
-                </form>
+                    {invalid(`/statements/${property}`) && (
+                      <FieldError>{m.catalogue_create_invalid_field({}, o)}</FieldError>
+                    )}
+                    <PublicationFactRemoval
+                      property={property}
+                      locale={locale}
+                      populated={
+                        value.type !== 'value' ||
+                        hasFactContent(value.content) ||
+                        (property === 'schema:publisher' && publisher.length > 0)
+                      }
+                      disabled={disabled}
+                      editable={() => lifetime.active() && !running.current && !disabled && !created}
+                      onRemove={() =>
+                        edit(() => {
+                          setFacts(Object.fromEntries(Object.entries(facts).filter(([id]) => id !== property)));
+                          if (property === 'schema:publisher') setPublisher([]);
+                        })
+                      }
+                    />
+                  </FieldSet>
+                </ContentItemFrame>
+              ))}
+              <ContentItemFrame as="div" className="min-w-0 p-4 sm:p-6">
+                <FieldSet disabled={disabled} className="min-w-0 flex-row flex-wrap items-end gap-3">
+                  <FieldLegend className="sr-only">{m.publication_field({}, o)}</FieldLegend>
+                  <Field className="min-w-0 basis-full sm:flex-1 sm:basis-64">
+                    <FieldLabel className={labelClassName} htmlFor={`${id}-field`}>
+                      {m.publication_field({}, o)}
+                    </FieldLabel>
+                    <NativeSelect
+                      className={selectClassName}
+                      id={`${id}-field`}
+                      value={field}
+                      onChange={(e) => edit(() => setField(e.target.value))}
+                    >
+                      <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
+                      {(read ? (currentProfile?.fields ?? []) : profile.fields)
+                        .filter((id) => !Object.hasOwn(facts, id))
+                        .map((id) => (
+                          <NativeSelectOption key={id} value={id}>
+                            {name(id)}
+                          </NativeSelectOption>
+                        ))}
+                      {field && read && !currentProfile?.fields.includes(field) && (
+                        <NativeSelectOption value={field} disabled>
+                          {name(field) || field}
+                        </NativeSelectOption>
+                      )}
+                    </NativeSelect>
+                    {field && read && !currentProfile?.fields.includes(field) && (
+                      <FieldError>{m.publication_choice_review({}, o)}</FieldError>
+                    )}
+                  </Field>
+                  <Button
+                    className={actionClassName}
+                    type="button"
+                    variant="outline"
+                    disabled={
+                      disabled || !field || !currentProfile?.fields.includes(field) || Object.hasOwn(facts, field)
+                    }
+                    onClick={() =>
+                      edit(() => {
+                        const datatype = read?.release.properties[field]?.datatype;
+                        if (!datatype) return;
+                        setFacts({
+                          ...facts,
+                          [field]: {
+                            type: 'value',
+                            content: datatype === 'time' || datatype === 'quantity' ? {} : '',
+                          },
+                        });
+                        setField('');
+                      })
+                    }
+                  >
+                    {m.correction_add({}, o)}
+                  </Button>
+                </FieldSet>
+              </ContentItemFrame>
+              {(displayRelease?.properties['schema:url'] || citation) && (
+                <ContentItemFrame as="div" className="min-w-0 p-4 sm:p-6">
+                  <FieldSet disabled={disabled} className="min-w-0 gap-3">
+                    <FieldLegend className="max-w-full">
+                      <ContentItemHeading className="text-xl font-semibold [overflow-wrap:anywhere]">
+                        {name('schema:url') || m.relation_citation({}, o)}
+                      </ContentItemHeading>
+                    </FieldLegend>
+                    <Field>
+                      <FieldLabel className={labelClassName} htmlFor={`${id}-citation`}>
+                        {m.relation_citation({}, o)}
+                      </FieldLabel>
+                      <Input
+                        className={inputClassName}
+                        id={`${id}-citation`}
+                        aria-describedby={`${id}-citation-help${failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-citation`) ? ` ${id}-citation-error` : ''}`}
+                        type="url"
+                        value={citation}
+                        maxLength={1500}
+                        onChange={(e) => edit(() => setCitation(e.target.value))}
+                      />
+                      <FieldDescription id={`${id}-citation-help`} className="text-start">
+                        {m.publication_citation({}, o)}
+                      </FieldDescription>
+                      {reviewErrors.some((error) => error.pointer.includes('/references/')) && (
+                        <FieldError>{m.publication_choice_review({}, o)}</FieldError>
+                      )}
+                    </Field>
+                  </FieldSet>
+                </ContentItemFrame>
+              )}
+              {failure && (
+                <ContentItemFrame
+                  as="div"
+                  role="alert"
+                  aria-labelledby={`${id}-recovery`}
+                  className="min-w-0 space-y-3 border-s-2 border-destructive/40 p-4"
+                >
+                  <ContentItemHeading id={`${id}-recovery`} className="text-lg font-semibold">
+                    {failure.reason === 'denied'
+                      ? m.catalogue_create_denied({}, o)
+                      : failure.reason === 'signed-out'
+                        ? m.catalogue_create_signed_out({}, o)
+                        : failure.reason === 'conflict'
+                          ? m.catalogue_create_conflict({}, o)
+                          : failure.reason === 'invalid'
+                            ? m.catalogue_create_invalid({}, o)
+                            : m.catalogue_create_uncertain({}, o)}
+                  </ContentItemHeading>
+                  {failure.errors?.length ? (
+                    <ul className="list-inside list-disc">
+                      {[
+                        ...new Map(
+                          failure.errors.map((error) => {
+                            const control = errorControl(error.pointer);
+                            return [control.id, control] as const;
+                          }),
+                        ).values(),
+                      ].map((control) => (
+                        <li key={control.id} id={`${control.id}-error`}>
+                          <a className={linkClassName} href={`#${encodeURIComponent(control.id)}`}>
+                            {control.label}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {failure.refreshDefinitions && <p>{m.catalogue_create_refresh({}, o)}</p>}
+                  {failure.reason === 'conflict' && !reviewDefinitions && (
+                    <Button className={actionClassName} type="button" variant="outline" onClick={() => edit(() => {})}>
+                      {m.catalogue_create_review_new({}, o)}
+                    </Button>
+                  )}
+                </ContentItemFrame>
+              )}
+              <ContentItemFrame as="div" className="flex min-w-0 flex-wrap gap-3 p-4">
+                <Button
+                  className={actionClassName}
+                  type="submit"
+                  disabled={
+                    busy ||
+                    session !== 'signed-in' ||
+                    failure?.reason === 'conflict' ||
+                    reviewDefinitions ||
+                    refreshRequired
+                  }
+                >
+                  {busy
+                    ? m.catalogue_create_saving({}, o)
+                    : uncertain
+                      ? m.catalogue_create_retry({}, o)
+                      : m.publication_submit({}, o)}
+                </Button>
+                {read && (
+                  <a href={back} className={outlineLinkClassName}>
+                    {m.publication_back({}, o)}
+                  </a>
+                )}
+              </ContentItemFrame>
+            </form>
           )}
         </>
       )}
