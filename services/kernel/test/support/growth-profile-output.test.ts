@@ -100,7 +100,9 @@ test('supported native values round-trip with JSON.stringify bytes', async () =>
     Array(2),
   ];
   for (const record of records) appendGrowthProfile({ destination, record, mode: 'required' });
-  expect(await readFile(destination)).toEqual(Buffer.from(`${records.map((record) => JSON.stringify(record)).join('\n')}\n`));
+  expect(await readFile(destination)).toEqual(
+    Buffer.from(`${records.map((record) => JSON.stringify(record)).join('\n')}\n`),
+  );
 });
 
 test('a near-boundary record writes and a one-byte overflow does not', async () => {
@@ -110,9 +112,9 @@ test('a near-boundary record writes and a one-byte overflow does not', async () 
   const first = appendGrowthProfile({ destination, record: { payload }, mode: 'required' });
   expect(first?.bytes).toBe(GROWTH_PROFILE_OUTPUT_LIMITS.lineBytes);
   expect(JSON.parse((await readFile(destination, 'utf8')).slice(0, -1))).toEqual({ payload });
-  expect(() =>
-    appendGrowthProfile({ destination, record: { payload: `${payload}x` }, mode: 'required' }),
-  ).toThrow(`exceeds the ${GROWTH_PROFILE_OUTPUT_LIMITS.lineBytes} byte profile line limit`);
+  expect(() => appendGrowthProfile({ destination, record: { payload: `${payload}x` }, mode: 'required' })).toThrow(
+    `exceeds the ${GROWTH_PROFILE_OUTPUT_LIMITS.lineBytes} byte profile line limit`,
+  );
   expect((await readFile(destination)).byteLength).toBe(GROWTH_PROFILE_OUTPUT_LIMITS.lineBytes);
 });
 
@@ -135,9 +137,9 @@ test('serialization admission stops before later getters and never writes a part
   let nest: unknown = 1;
   for (let depth = 0; depth < GROWTH_PROFILE_OUTPUT_LIMITS.depth; depth++) nest = { nest };
   appendGrowthProfile({ destination: join(directory, 'depth-ok.jsonl'), record: nest, mode: 'required' });
-  expect(() =>
-    appendGrowthProfile({ destination, record: { nest }, mode: 'required' }),
-  ).toThrow(`exceeds the ${GROWTH_PROFILE_OUTPUT_LIMITS.depth} profile serialization depth limit`);
+  expect(() => appendGrowthProfile({ destination, record: { nest }, mode: 'required' })).toThrow(
+    `exceeds the ${GROWTH_PROFILE_OUTPUT_LIMITS.depth} profile serialization depth limit`,
+  );
 
   const wide = new Proxy([] as object[], {
     get(_target, property) {

@@ -55,8 +55,7 @@ function lineLimitError(kind: 'byte' | 'depth' | 'value'): TypeError {
 function prepareJsonValue(value: unknown, key: string): unknown {
   if (value !== null && (typeof value === 'object' || typeof value === 'function')) {
     const toJSON = (value as { toJSON?: unknown }).toJSON;
-    if (typeof toJSON === 'function')
-      value = (toJSON as (this: unknown, property: string) => unknown).call(value, key);
+    if (typeof toJSON === 'function') value = (toJSON as (this: unknown, property: string) => unknown).call(value, key);
   }
   if (value instanceof Number) value = Number(value);
   else if (value instanceof String) value = String(value);
