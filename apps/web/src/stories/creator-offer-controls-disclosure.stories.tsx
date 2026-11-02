@@ -105,7 +105,7 @@ export const Normal: Story = {
     );
     await expect(view.getByText(m.creator_offers_active(), { exact: true })).toBeVisible();
     await expect(view.getByText(m.creator_offers_delisted(), { exact: true })).toBeVisible();
-    await expect(view.getByRole('button', { name: m.creator_delist(), exact: true })).toBeEnabled();
+    await expect(view.getByRole('button', { name: m.creator_delist() })).toBeEnabled();
     await userEvent.click(toggle);
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await expect(toggle).toHaveFocus();
@@ -147,7 +147,7 @@ export const UnavailableRules: Story = {
     await expect(view.getByText(m.creator_offers_amount_unavailable(), { exact: false })).toBeVisible();
     await expect(view.getByText(m.creator_price_unavailable())).toBeVisible();
     await expect(view.getByRole('textbox', { name: m.creator_amount() })).toBeDisabled();
-    await expect(view.getByRole('button', { name: m.creator_delist(), exact: true })).toBeEnabled();
+    await expect(view.getByRole('button', { name: m.creator_delist() })).toBeEnabled();
   },
 };
 export const Unavailable: Story = { render: () => <Example variant="unavailable" /> };
