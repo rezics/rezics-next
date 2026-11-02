@@ -9,31 +9,9 @@ test('Album qualifier cancellation, stable correction targets, selective removal
   );
   const window = new Window({ url: 'https://site.test/en/catalogue/album' });
   const globals: Record<string, unknown> = { window, document: window.document, IS_REACT_ACT_ENVIRONMENT: true };
-  for (const key of [
-    'navigator',
-    'HTMLElement',
-    'HTMLInputElement',
-    'HTMLSelectElement',
-    'HTMLButtonElement',
-    'Element',
-    'Node',
-    'Text',
-    'NodeFilter',
-    'Document',
-    'ShadowRoot',
-    'Event',
-    'KeyboardEvent',
-    'FocusEvent',
-    'MouseEvent',
-    'PointerEvent',
-    'CSS',
-    'DocumentFragment',
-    'DOMParser',
-    'MutationObserver',
-    'ResizeObserver',
-    'Range',
-    'DOMRect',
-  ])
+  for (const key of 'navigator HTMLElement HTMLInputElement HTMLSelectElement HTMLButtonElement Element Node Text NodeFilter Document ShadowRoot Event KeyboardEvent FocusEvent MouseEvent PointerEvent CSS DocumentFragment DOMParser MutationObserver ResizeObserver Range DOMRect'.split(
+    ' ',
+  ))
     globals[key] = Reflect.get(window, key);
   for (const key of ['getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame'])
     globals[key] = Reflect.get(window, key).bind(window);
@@ -90,14 +68,16 @@ test('Album qualifier cancellation, stable correction targets, selective removal
             locale="en"
             enabled={enabled}
             transport={transport}
-            search={async () =>
-              [artistId, roleId].map((id) => ({
-                id,
-                title: publicRead.related[id]!.labels.en!,
-                types: [publicRead.related[id]!.type!],
-                typeLabel: '',
-                cover: null,
-              }))
+            search={async (text) =>
+              [artistId, roleId]
+                .filter((id) => publicRead.related[id]!.labels.en!.includes(text))
+                .map((id) => ({
+                  id,
+                  title: publicRead.related[id]!.labels.en!,
+                  types: [publicRead.related[id]!.type!],
+                  typeLabel: '',
+                  cover: null,
+                }))
             }
           />
         </QueryClientProvider>,
@@ -113,8 +93,7 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     await act(async () =>
       user.type(within(scope).getByRole('combobox', { name: name(property) }), publicRead.related[id]!.labels.en!),
     );
-    await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
-    await act(async () => user.click(within(host).getByRole('option')));
+    await act(async () => user.click(await within(host).findByRole('option')));
   };
   const remove = (id: string) => `${m.relation_remove()}: ${name(id)}`;
   try {
