@@ -1,7 +1,7 @@
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
-import { useMemo } from 'react';
 import { loadValueExplanation } from '../../features/catalogue/value-explanation-actions';
-import { ValueExplanation, ValueExplanationPage } from '../../features/catalogue/value-explanation-page';
+import { ValueExplanationPage } from '../../features/catalogue/value-explanation-page';
+import { ValueExplanationSession } from '../../features/catalogue/value-explanation-session';
 import { valueExplanationHref } from '../../features/catalogue/value-explanation';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
@@ -43,19 +43,12 @@ function ValueRoute() {
   const search = Route.useSearch();
   const initial = Route.useLoaderData();
   const locale = getLocale();
-  const transport = useMemo(
-    () => (cursor?: string, session?: string) =>
-      loadValueExplanation({
-        data: { id, ...search, locale, ...(cursor !== undefined ? { cursor } : {}), ...(session ? { session } : {}) },
-      }),
-    [id, search.property, search.statement, search.context, locale],
-  );
   return (
-    <ValueExplanation
-      key={`${id}:${search.property}:${search.statement}:${search.context}:${locale}`}
+    <ValueExplanationSession
+      id={id}
+      address={search}
       locale={locale}
-      initial={initial}
-      transport={transport}
+      episode={initial}
     />
   );
 }

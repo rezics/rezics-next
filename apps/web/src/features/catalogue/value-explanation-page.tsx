@@ -5,6 +5,7 @@ import { CandidateValue } from '../pages/data';
 import { ViewHeading } from '../pages/subject-frame';
 import type { Snak } from '../pages/shared';
 import { candidateContext } from '../../subject/candidates';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { m } from '../../paraglide/messages.js';
 import type { ValuePage, ValueRead, ValueTransport } from './value-explanation';
 import { ChangeExplanation } from './subject-changes-page';
@@ -302,44 +303,73 @@ export function ValueExplanation({
   transport,
   locale,
   initial,
+  episode = initial,
 }: {
   transport: ValueTransport;
   locale: string;
   initial?: ValueRead;
+  /** A loader refresh starts a new read even when the native address has not changed. */
+  episode?: unknown;
+}) {
+  const previous = useRef({ episode, version: 0 });
+  if (previous.current.episode !== episode)
+    previous.current = { episode, version: previous.current.version + 1 };
+  const work = useCatalogueLifetime(JSON.stringify(['value-explanation', locale, previous.current.version]));
+  return <ValueEpisode key={work.generation} {...{ transport, locale, initial, work }} />;
+}
+
+function ValueEpisode({
+  transport,
+  locale,
+  initial,
+  work,
+}: {
+  transport: ValueTransport;
+  locale: string;
+  initial?: ValueRead;
+  work: ReturnType<typeof useCatalogueLifetime>;
 }) {
   const [result, setResult] = useState<ValueRead | undefined>(initial);
   const [busy, setBusy] = useState(false);
   const session = useRef<string | undefined>(initial?.kind === 'ready' ? initial.session : undefined);
   const running = useRef(false);
   const generation = useRef(0);
+  const currentTransport = useRef(transport);
+  currentTransport.current = transport;
   async function load(cursor?: string) {
-    if (running.current) return;
+    if (!work.active() || running.current) return;
     running.current = true;
     const version = ++generation.current;
     setBusy(true);
     setResult(undefined);
-    const next = await transport(cursor, session.current).catch((): ValueRead => ({ kind: 'unavailable' }));
-    if (version !== generation.current) return;
+    const next = await currentTransport.current(cursor, session.current).catch((): ValueRead => ({ kind: 'unavailable' }));
+    if (!work.active() || version !== generation.current) return;
     session.current = next.kind === 'ready' ? next.session : undefined;
     setResult(next);
     setBusy(false);
     running.current = false;
   }
   useEffect(() => {
-    if (initial) return;
-    void load();
+    if (!initial) void load();
     return () => {
       generation.current++;
       running.current = false;
+      session.current = undefined;
     };
-  }, [transport]);
+  }, [work]);
+  // A saved control belongs to the result that offered it, including across manual reloads.
+  const offered = generation.current;
   return (
     <ValueExplanationPage
-      result={result}
+      result={work.active() ? result : undefined}
       locale={locale}
       busy={busy}
-      onMore={(cursor) => void load(cursor)}
-      onReload={() => void load()}
+      onMore={(cursor) => {
+        if (offered === generation.current) void load(cursor);
+      }}
+      onReload={() => {
+        if (offered === generation.current) void load();
+      }}
     />
   );
 }

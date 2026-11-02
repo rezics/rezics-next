@@ -54,6 +54,8 @@ safe change-detail adapter can explain the selected statement’s exact revision
 generated native binding validates the exact Subject/revision and supported closed response before explaining it.
 Concealed, denied and unavailable detail stays explicit. No historical snapshot or write authority is assumed.
 
+Each value loader result starts a read episode; the browser rereads under its observed current reader before displaying it.
+
 ## Browser flow: subject contributions
 
 The existing subject header and compact view frame expose one **Contribute** menu. The shared UI Menu supplies

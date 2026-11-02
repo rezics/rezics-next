@@ -9,7 +9,12 @@ import { readSubjectRevisionDetail, type RevisionDetailPort } from './subject-ch
 import type { DetailRead } from './subject-changes';
 
 export type ValueAddress = { id: string; property: string; statement: string; context?: string };
-export type ValueRequest = ValueAddress & { locale: string; cursor?: string; session?: string };
+export type ValueRequest = ValueAddress & {
+  locale: string;
+  cursor?: string;
+  session?: string;
+  expectedReader?: string | null;
+};
 type Statement = SubjectRead['subject']['statements'][string][number];
 type Label = ReturnType<typeof pageText>;
 type Failure = { kind: 'denied' | 'missing' | 'invalid' | 'unavailable' };
@@ -58,7 +63,10 @@ export function valueRequest(value: unknown): ValueRequest {
     typeof input.locale !== 'string' ||
     input.locale.length > 35 ||
     (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 8192)) ||
-    (input.session !== undefined && (typeof input.session !== 'string' || input.session.length > 16384))
+    (input.session !== undefined && (typeof input.session !== 'string' || input.session.length > 16384)) ||
+    (input.expectedReader !== undefined &&
+      input.expectedReader !== null &&
+      (typeof input.expectedReader !== 'string' || !uuid.test(input.expectedReader)))
   )
     throw new Error('Invalid value address');
   return {
@@ -69,6 +77,7 @@ export function valueRequest(value: unknown): ValueRequest {
     ...(typeof input.context === 'string' ? { context: input.context } : {}),
     ...(typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
     ...(typeof input.session === 'string' ? { session: input.session } : {}),
+    ...(input.expectedReader !== undefined ? { expectedReader: input.expectedReader as string | null } : {}),
   };
 }
 
