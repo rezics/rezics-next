@@ -1,9 +1,15 @@
-import { expect, spyOn, test } from 'bun:test';
+import { afterAll, expect, spyOn, test } from 'bun:test';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { createElement } from 'react';
 import { button, creationFixture, dom, fill, flush, open, send } from './creation-page-fixture';
 
 creationFixture();
+const previousScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
+Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true, writable: true });
+afterAll(() => {
+  if (previousScrollTo) Object.defineProperty(globalThis, 'scrollTo', previousScrollTo);
+  else Reflect.deleteProperty(globalThis, 'scrollTo');
+});
 const { Route } = await import('../src/routes/recovery');
 const firstLink = '#account_id=first&token=first-token';
 const secondLink = '#account_id=second&token=second-token';
