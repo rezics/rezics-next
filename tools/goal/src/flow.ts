@@ -156,25 +156,25 @@ function nextIntervalBoundary(
   ends: string[],
 ): FlowEvent | undefined {
   const index = events.indexOf(start);
-  return events.slice(index + 1).find(
-    (event) =>
-      event.taskId === start.taskId &&
-      event.attempt === start.attempt &&
-      event.stage === start.stage &&
-      (starts.includes(event.action) || ends.includes(event.action) || event.action === 'closed'),
-  );
+  return events
+    .slice(index + 1)
+    .find(
+      (event) =>
+        event.taskId === start.taskId &&
+        event.attempt === start.attempt &&
+        event.stage === start.stage &&
+        (starts.includes(event.action) || ends.includes(event.action) || event.action === 'closed'),
+    );
 }
 
 function stageDurations(events: FlowEvent[], stage: FlowStage): number[] {
   if (stage === 'dispatch') {
     const dispatch = events.find((e) => e.stage === 'dispatch' && e.action === 'dispatched');
-    const started = dispatch && events.find(
-      (e) =>
-        e.stage === 'start' &&
-        e.action === 'requested' &&
-        e.attempt === dispatch.attempt &&
-        e.at >= dispatch.at,
-    );
+    const started =
+      dispatch &&
+      events.find(
+        (e) => e.stage === 'start' && e.action === 'requested' && e.attempt === dispatch.attempt && e.at >= dispatch.at,
+      );
     if (dispatch && started) {
       const start = Date.parse(dispatch.at);
       const end = Date.parse(started.at);
@@ -258,12 +258,14 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     const elapsed = dispatch && integrated ? Date.parse(integrated.at) - Date.parse(dispatch.at) : null;
     const worker = attemptIntervals(es, 'worker', ['started'], ['finished']);
     const checkWait = attemptIntervals(es, 'check', ['requested'], ['acquired']);
-    const working = worker.observed && !worker.incomplete && !checkWait.incomplete
-      ? [...worker.durationsByAttempt].reduce(
-          (total, [attempt, duration]) => total + Math.max(0, duration - (checkWait.durationsByAttempt.get(attempt) ?? 0)),
-          0,
-        )
-      : null;
+    const working =
+      worker.observed && !worker.incomplete && !checkWait.incomplete
+        ? [...worker.durationsByAttempt].reduce(
+            (total, [attempt, duration]) =>
+              total + Math.max(0, duration - (checkWait.durationsByAttempt.get(attempt) ?? 0)),
+            0,
+          )
+        : null;
     return {
       taskId: task.id,
       goal: task.brief.goal,
