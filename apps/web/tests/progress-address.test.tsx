@@ -47,6 +47,7 @@ test('route and server address admission retain invalid operands and share nativ
   expect(progressAddressIssue({ subjectId: id, cursor: 'x'.repeat(4096) })).toBeUndefined();
   expect(progressAddressIssue({ id, changes: opaque, units: opaque })).toBeUndefined();
   expect(progressAddressIssue(progressIndexAddress({}))).toBeUndefined();
+  expect(progressAddressIssue(progressIndexAddress({ cursor: opaque }))).toBe('subjectId');
   expect(correctProgressAddress({ subjectId: id, cursor: 'invalid' }, 'cursor')).toEqual({ subjectId: id });
   expect(correctProgressAddress({ subjectId: 'invalid', cursor: opaque }, 'subjectId', id)).toEqual({
     subjectId: id,

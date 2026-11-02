@@ -27,6 +27,7 @@ export function progressSessionAddress(input: unknown): ProgressSessionAddress {
 export function progressAddressIssue(
   address: ProgressIndexAddress | ProgressSessionAddress,
 ): ProgressAddressField | undefined {
+  if (!('id' in address) && address.subjectId === undefined && address.cursor !== undefined) return 'subjectId';
   const id = 'id' in address ? 'id' : 'subjectId';
   const identifier = address[id as keyof typeof address];
   if (identifier !== undefined && !progressAddressId.test(identifier)) return id;
