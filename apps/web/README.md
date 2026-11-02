@@ -8,6 +8,9 @@ then requires the producer's prepared status to register the exact snapshot befo
 prepared descriptor and its eleven-field binding stay tied to that original invocation. The native-terminal and
 final-settlement records arrive on FD 3 using closed message schemas; each message is limited to 64 KiB.
 
+The semantic overlay omits ambient desktop, shell and tooling paths and all `KERNEL_CHECK_` controls;
+the trusted driver retains its original placement environment, while unknown host dependencies remain errors.
+
 The receiver fsyncs the original FD 3 bytes before validating each message and records their byte ranges plus raw,
 body and decoded-object SHA-256 digests in the private `web-custody.json` and append-only `receipts.ndjson` files.
 Caller prepare/run lifetime, source and returns validation, producer final custody, private input disposal, Web private
@@ -2394,6 +2397,11 @@ owners before the complete selected surface can be enabled:
 
 These are precise missing producer capabilities, not new Web Kernel endpoints or evidence of runtime delivery.
 The joint document remains the sole API contract authority.
+
+Selected occurrence removal is confirmed at Save with the occurrence count and retained Undo window. The native
+batch command consumes the loaded parent revision before any other draft write; a rejected selection cannot save
+metadata or another edit. A removal-only save sends no metadata PATCH. Other draft edits remain independent writes
+after successful removal, and each returned deletion episode has its own exact Undo action.
 
 ### Story handoff
 

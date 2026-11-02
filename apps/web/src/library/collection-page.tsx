@@ -1,4 +1,5 @@
 import { batchRemoveCollectionMembers, transferCollectionMembers } from './collection-commands';
+import { CollectionBatchRemoveConfirmation } from './collection-batch-remove';
 import { readCollectionDestination, type CollectionDestination } from './collection-read';
 import { CollectionAddMembers } from './collection-add-members';
 import { CollectionMemberDetails } from './collection-member-row';
@@ -334,6 +335,7 @@ function CollectionPageLifetime({
   const destinationEpisode = destinationVersion.current;
   const [transfer, setTransfer] = useState<{ destination: CollectionDestination; memberIds: string[] } | null>(null);
   const [bulkUnavailable, setBulkUnavailable] = useState(false);
+  const [removalConfirmation, setRemovalConfirmation] = useState(false);
   const [batchRemovalIds, setBatchRemovalIds] = useState<ReadonlySet<string>>(new Set());
   const [editorMembers, setEditorMembers] = useState<CollectionMember[] | null>(null);
   // The edit session owns its read revision, even if a background read replaces the reader page.
@@ -688,9 +690,14 @@ function CollectionPageLifetime({
     resetEditor(page);
   }
 
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function save(event?: FormEvent<HTMLFormElement>, confirmed = false) {
+    event?.preventDefault();
     if (!isCurrent('collection.update') || !hydrated || pending || conflict || !editing || !owner) return;
+    if (!confirmed && saveIntent.current === null && removalCount > 0) {
+      setRemovalConfirmation(true);
+      return;
+    }
+    setRemovalConfirmation(false);
     const request = startRequest();
     if (!request) return;
     setFailure('');
@@ -734,9 +741,39 @@ function CollectionPageLifetime({
           if (result.reason === 'unavailable' || result.reason === 'closed') setBulkUnavailable(true);
         }
       };
-      // Guard the loaded draft with the existing parent CAS before independently receipted member commands.
+      const removals = plan.filter((operation) => operation.kind === 'remove');
+      const batchRemoval = removals.length > 1 || removals.some((operation) => batchRemovalIds.has(operation.memberId));
+      if (batchRemoval) {
+        if (!isCurrent()) return;
+        if (currentRevision === undefined) throw new Error('Missing source revision');
+        const data = {
+          collectionId: page.id,
+          revision: currentRevision,
+          memberIds: removals.map((operation) => operation.memberId),
+        };
+        const result = await batchRemoveCollectionMembers({
+          data: { ...data, idempotencyKey: keyFor(data) },
+          headers: headers('collection_member.batch_remove'),
+        });
+        if (!isCurrent('collection_member.batch_remove')) return;
+        if (!result.ok) {
+          await fail(result);
+          return;
+        }
+        currentRevision = result.revision;
+        committed += 1;
+        setUndo((current) => [
+          ...current,
+          ...result.undo
+            .filter((episode) => !current.some((item) => item.deletionId === episode.deletionId))
+            .map((episode) => ({ ...episode, key: crypto.randomUUID() })),
+        ]);
+      }
+      // Batch removal owns the loaded CAS first: a rejected selection must not save even a metadata no-op.
+      // Other draft edits remain independently receipted commands after the atomic removal.
       if (
-        plan.length > 0 ||
+        plan.some((operation) => operation.kind !== 'remove') ||
+        (!batchRemoval && removals.length > 0) ||
         transfer !== null ||
         title !== page.title ||
         description !== (page.description ?? '') ||
@@ -748,13 +785,13 @@ function CollectionPageLifetime({
         const result = await updateCollection({
           data: {
             collectionId: page.id,
-            revision: page.revision,
+            revision: currentRevision!,
             title,
             description,
             visibility,
             ...(kind !== storedKind ? { presentationKind: kind } : {}),
             ...(coverMediaId !== (page.coverMediaId ?? null) ? { coverMediaId } : {}),
-            idempotencyKey: keyFor([page.id, page.revision, title, description, visibility, kind, coverMediaId]),
+            idempotencyKey: keyFor([page.id, currentRevision, title, description, visibility, kind, coverMediaId]),
           },
           headers: headers('collection.update'),
         });
@@ -794,34 +831,6 @@ function CollectionPageLifetime({
         }
         currentRevision = result.revision;
         committed += 1;
-      }
-      const removals = plan.filter((operation) => operation.kind === 'remove');
-      const batchRemoval = removals.length > 1 || removals.some((operation) => batchRemovalIds.has(operation.memberId));
-      if (batchRemoval) {
-        if (!isCurrent()) return;
-        if (currentRevision === undefined) throw new Error('Missing source revision');
-        const data = {
-          collectionId: page.id,
-          revision: currentRevision,
-          memberIds: removals.map((operation) => operation.memberId),
-        };
-        const result = await batchRemoveCollectionMembers({
-          data: { ...data, idempotencyKey: keyFor(data) },
-          headers: headers('collection_member.batch_remove'),
-        });
-        if (!isCurrent('collection_member.batch_remove')) return;
-        if (!result.ok) {
-          await fail(result);
-          return;
-        }
-        currentRevision = result.revision;
-        committed += 1;
-        setUndo((current) => [
-          ...current,
-          ...result.undo
-            .filter((episode) => !current.some((item) => item.deletionId === episode.deletionId))
-            .map((episode) => ({ ...episode, key: crypto.randomUUID() })),
-        ]);
       }
       const applied = await applyCollectionMemberEditPlan(
         batchRemoval ? plan.filter((operation) => operation.kind !== 'remove') : plan,
@@ -965,6 +974,11 @@ function CollectionPageLifetime({
       members,
       draftPage.firstPage,
     ).length > 0;
+  const removalCount = buildCollectionMemberEditPlan(
+    (editorMembers ?? draftPage.members).filter((member) => !transfer?.memberIds.includes(member.id)),
+    members,
+    draftPage.firstPage,
+  ).filter((operation) => operation.kind === 'remove').length;
   const draftChanged =
     editing &&
     (memberDraftChanged ||
@@ -1117,6 +1131,13 @@ function CollectionPageLifetime({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <CollectionBatchRemoveConfirmation
+          open={removalConfirmation && owner}
+          count={removalCount}
+          onOpenChange={setRemovalConfirmation}
+          onConfirm={() => void save(undefined, true)}
+        />
 
         {owner && undo.length ? (
           <div
@@ -1310,7 +1331,8 @@ function CollectionPageLifetime({
                 variant="outline"
                 disabled={pending || draftFrozen || conflict || bulkUnavailable || selectedIds.size === 0}
                 onClick={() => {
-                  if (!isCurrent('collection_member.delete') || inFlight.current || saveIntent.current !== null) return;
+                  if (!isCurrent('collection_member.batch_remove') || inFlight.current || saveIntent.current !== null)
+                    return;
                   setBatchRemovalIds((current) => new Set([...current, ...selectedIds]));
                   setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
                   setSelectedIds(new Set());

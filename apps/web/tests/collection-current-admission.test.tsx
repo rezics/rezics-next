@@ -114,6 +114,7 @@ spyOn(pickers, 'EntityPicker').mockImplementation((props) => {
 const { CollectionPage } = await import('../src/library/collection-page');
 const { CollectionAddMembers } = await import('../src/library/collection-add-members');
 const edits = await import('../src/library/collection-edit');
+const commands = await import('../src/library/collection-commands');
 afterAll(async () => {
   setLocale(oldLocale, { reload: false });
   await window.happyDOM.close();
@@ -270,6 +271,79 @@ async function selectOccurrence(ui: UI) {
 }
 
 describe('Actual scoped Collection authority enables owning editor and occurrence workflows while retaining exact uncertain operations across healthy renewal and retiring replaced callbacks', () => {
+  for (const refusal of ['invalid', 'conflict', null] as const)
+    test(`selected duplicate occurrences require confirmation and one loaded-CAS command: ${refusal ?? 'Undo'}`, async () => {
+      const ui = await mounted();
+      const episodes = ['occurrence-one', 'occurrence-two'].map((memberId, index) => ({
+        collectionId: 'alpha',
+        memberId,
+        deletionId: `episode-${index}`,
+        revision: 8,
+      }));
+      const batch = spyOn(commands, 'batchRemoveCollectionMembers').mockResolvedValue(
+        refusal ? { ok: false, reason: refusal } : { ok: true, revision: 8, undo: episodes },
+      );
+      const update = spyOn(edits, 'updateCollection');
+      const restore = spyOn(edits, 'restoreCollectionMember').mockResolvedValue({ ok: true, id: 'occurrence-one' });
+      const click = (node: Element | null) => settle(() => (node as HTMLElement).click());
+      const dialog = () => document.querySelector('[data-collection-removal-confirmation]');
+      try {
+        await ui.show({
+          page: page('alice', [
+            'collection.update',
+            'collection_member.delete',
+            'collection_member.batch_remove',
+            'collection_member.restore',
+          ]),
+        });
+        await settle(() => ui.client.setQueryData(ui.props().queryKey, ui.props().page));
+        await ui.expose();
+        await begin(ui);
+        await settle(() => {
+          memberList!.onSelectionChange!('occurrence-one', true);
+          memberList!.onSelectionChange!('occurrence-two', true);
+        });
+        await click(
+          [...ui.host.querySelectorAll('button')].find(
+            (node) => node.textContent === m.library_collection_remove_selected(),
+          )!,
+        );
+        await submit(ui);
+        expect(dialog()?.textContent).toContain(m.library_collection_selection_count({ count: 2 }));
+        expect(batch).not.toHaveBeenCalled();
+        await click(
+          [...dialog()!.querySelectorAll('button')].find((node) => node.textContent === m.library_collection_cancel())!,
+        );
+        expect(batch).not.toHaveBeenCalled();
+        await submit(ui);
+        await click(
+          [...dialog()!.querySelectorAll('button')].find((node) => node.textContent === m.library_collection_save())!,
+        );
+        expect(batch).toHaveBeenCalledTimes(1);
+        expect(batch.mock.calls[0]![0]!.data).toMatchObject({
+          collectionId: 'alpha',
+          revision: 7,
+          memberIds: ['occurrence-one', 'occurrence-two'],
+        });
+        expect(update).not.toHaveBeenCalled();
+        if (refusal) {
+          expect(ui.host.querySelector('[data-collection-undo]')).toBeNull();
+          expect(ui.refresh).not.toHaveBeenCalled();
+        } else {
+          const buttons = [...ui.host.querySelectorAll('[data-collection-undo] button')];
+          expect(buttons).toHaveLength(2);
+          await click(buttons[1]!);
+          expect(restore.mock.calls[0]![0]!.data).toMatchObject(episodes[1]!);
+          expect(ui.host.querySelectorAll('[data-collection-undo] button')).toHaveLength(1);
+        }
+      } finally {
+        batch.mockRestore();
+        update.mockRestore();
+        restore.mockRestore();
+        await ui.close();
+      }
+    });
+
   test('healthy subject-scoped exposure opens the actual editor without a global key; foreign global data cannot supply authority or a native action', async () => {
     const ui = await mounted();
     try {

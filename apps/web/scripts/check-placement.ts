@@ -61,7 +61,7 @@ export function requireWebCheckCustody(workspace = root, cwd = workspace): void 
 }
 
 // Transport controls belong to the driver, not the native command's semantic overlay.
-const transportEnvironment = /^(?:GOAL_|CODEX_|REMOTE_CHECK_|REZICS_CHECK_|REZICS_STACK_)/;
+const transportEnvironment = /^(?:GOAL_|CODEX_|KERNEL_CHECK_|REMOTE_CHECK_|REZICS_CHECK_|REZICS_STACK_)/;
 const credentialEnvironment = /^(?:CLOUDFLARE_|CF_|AWS_|GH_|GITHUB_|OPENAI_|ANTHROPIC_)/;
 const hostEnvironment = new Set([
   'PATH',
@@ -88,6 +88,25 @@ const hostEnvironment = new Set([
   'NODE_PATH',
   // The ambient Nix trust bundle belongs to the local host, not the native check environment.
   'NIX_SSL_CERT_FILE',
+  // Ambient host tooling paths are not dependencies of the native Web command.
+  'DEBUGINFOD_IMA_CERT_PATH',
+  'MOZ_GMP_PATH',
+  'NVM_DIR',
+  'NVM_BIN',
+  'NVM_INC',
+  // Desktop and shell session discovery must use the receiving host's own tools.
+  'EDITOR',
+  'VISUAL',
+  'PAGER',
+  'GPG_TTY',
+  'KDEDIRS',
+  'MAIL',
+  'MEMORY_PRESSURE_WATCH',
+  'NIX_PROFILES',
+  'SSH_ASKPASS',
+  'TMUX',
+  'XDG_DATA_DIRS',
+  'ZSH',
   'KERNEL_CHECK_REMOTE',
   'KERNEL_CHECK_ON_REMOTE',
   'WEB_CHECK_DRIVER_ROOT',

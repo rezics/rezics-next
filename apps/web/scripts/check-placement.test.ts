@@ -917,11 +917,30 @@ test('semantic strings/newlines survive JSON while host controls and receipt aut
   expect(f.calls[0]!.command).toContain('.temp/events');
 });
 
-test('ambient Nix trust path stays out of the remote overlay while semantics, argv and returns survive', async () => {
+test('ambient host paths and compiler placement stay out of the overlay while semantics, argv and returns survive', async () => {
   const f = fixture();
   const certificatePath = '/nix/store/host-cacerts/etc/ssl/certs/ca-bundle.crt';
   const env = {
     NIX_SSL_CERT_FILE: certificatePath,
+    DEBUGINFOD_IMA_CERT_PATH: '/nix/store/debugger/certificates',
+    MOZ_GMP_PATH: '/nix/store/browser/plugins',
+    NVM_DIR: '/host/runtime-manager',
+    NVM_BIN: '/host/runtime-manager/bin',
+    NVM_INC: '/host/runtime-manager/include',
+    EDITOR: '/host/editor',
+    VISUAL: '/host/editor',
+    PAGER: '/host/pager',
+    GPG_TTY: '/dev/pts/1',
+    KDEDIRS: '/host/kde',
+    MAIL: '/host/mail',
+    MEMORY_PRESSURE_WATCH: '/host/memory-pressure',
+    NIX_PROFILES: '/host/nix-profile',
+    SSH_ASKPASS: '/host/askpass',
+    TMUX: '/host/tmux,123,0',
+    XDG_DATA_DIRS: '/host/share',
+    ZSH: '/host/shell',
+    KERNEL_CHECK_AFFECTED: '1',
+    KERNEL_CHECK_REMOTE: 'required',
     CI: '1',
     MESSAGE: 'a\nb "quoted" $literal',
     STORYBOOK_OUTPUT_DIR: resolve(f.app, 'storybook-static'),
