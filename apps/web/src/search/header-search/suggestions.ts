@@ -1,6 +1,7 @@
 import type { SuggestionResult } from '../suggestions';
 import type { SearchScope } from './types';
 import { problem } from '../../media/kernel';
+import { parseSuggestionPage } from './suggestion-page';
 
 export const HEADER_SUGGESTION_LIMIT = 8;
 
@@ -39,5 +40,5 @@ export const loadGlobalHeaderSuggestions: HeaderSuggestionLoader = async (query,
       'Suggestions failed',
     );
   }
-  return (await response.json()) as SuggestionResult;
+  return parseSuggestionPage(await response.json());
 };
