@@ -339,6 +339,7 @@ const shelves = new Map<string, Shelf>([
 ]);
 const follows = new Map<string, Follow>();
 const replay = new Map<string, { status: number; body: unknown }>();
+let uncertainNoteMember: string | null = null;
 
 type Call = {
   method: string;
@@ -374,6 +375,7 @@ function resetShelf() {
   shelf.members = freshMembers();
   shelves.set(shelf.id, shelf);
   follows.clear();
+  uncertainNoteMember = null;
   calls.length = 0;
 }
 function actor(request: Request): string | null {
@@ -704,7 +706,7 @@ const fake = Bun.serve({
       const note = (body as { note?: unknown })?.note;
       if (note !== null && typeof note !== 'string') return remember(key, 422, problem(422, 'validation'));
       current.note = note;
-      return remember(key, 200, {
+      const saved = remember(key, 200, {
         member: {
           id: current.id,
           subjectId: current.subjectId,
@@ -712,6 +714,11 @@ const fake = Bun.serve({
           addedAt: current.addedAt,
         },
       });
+      if (uncertainNoteMember === current.id) {
+        uncertainNoteMember = null;
+        return json(problem(503, 'unavailable'), 503, true);
+      }
+      return saved;
     }
     if (memberMatch && request.method === 'DELETE') {
       if (Number(url.searchParams.get('revision')) !== item.revision)
@@ -1085,7 +1092,12 @@ test(
       await page.getByRole('menuitem', { name: 'Edit' }).click();
       expect(await page.getByRole('button', { name: 'Move up' }).count()).toBeGreaterThan(0);
       expect(await page.locator('[data-member] textarea').count()).toBe(3);
+      const canceledNote = memberRow(page, 'Alpha story');
+      await canceledNote.locator('[data-collection-note-editor] summary').click();
+      await canceledNote.getByRole('textbox', { name: 'Note: Alpha story' }).fill('Discard this draft');
+      calls.length = 0;
       await page.getByRole('button', { name: 'Cancel' }).click();
+      expect(writes()).toHaveLength(0);
       expect(await page.getByRole('button', { name: 'Move up' }).count()).toBe(0);
       expect(await page.locator('[data-member] textarea').count()).toBe(0);
       await page.getByRole('button', { name: 'More actions' }).click();
@@ -1126,6 +1138,10 @@ test(
       await page.getByRole('button', { name: 'More actions' }).click();
       await page.getByRole('menuitem', { name: 'Edit' }).click();
       await page.getByRole('textbox', { name: 'Title' }).fill('Lost title');
+      const conflictedNote = memberRow(page, 'Gamma story');
+      await conflictedNote.locator('[data-collection-note-editor] summary').click();
+      const conflictedNoteInput = conflictedNote.getByRole('textbox', { name: 'Note: Gamma story' });
+      await conflictedNoteInput.fill('Keep this note until reload');
       shelf.revision = 3;
       shelf.title = 'Newer night';
       calls.length = 0;
@@ -1135,6 +1151,7 @@ test(
       expect(await alert.innerText()).toContain('Your changes are still here.');
       expect(await page.getByRole('textbox', { name: 'Title' }).inputValue()).toBe('Lost title');
       expect(await page.getByRole('textbox', { name: 'Description' }).inputValue()).toBe('Revised description');
+      expect(await conflictedNoteInput.inputValue()).toBe('Keep this note until reload');
       const conflict = writes().find((call) => call.method === 'PATCH');
       expect(conflict).toMatchObject({
         path: `/v1/collections/${shelf.id}`,
@@ -1150,6 +1167,7 @@ test(
       await page.getByRole('link', { name: 'Load the current version' }).click();
       await page.getByRole('heading', { level: 1, name: 'Newer night' }).waitFor();
       expect(await mainText(page)).not.toContain('Lost title');
+      expect(await mainText(page)).not.toContain('Keep this note until reload');
 
       calls.length = 0;
       await page.getByRole('button', { name: 'More actions' }).click();
@@ -1232,11 +1250,44 @@ test(
       expect(shelf.members.map((item) => item.id)).toEqual([beta.id, gamma.id, alpha.id]);
 
       calls.length = 0;
-      await memberRow(page, 'Beta story').getByRole('textbox', { name: 'Note' }).fill('A margin thought');
-      await memberRow(page, 'Beta story').getByRole('button', { name: 'Save note' }).click();
+      const betaRow = memberRow(page, 'Beta story');
+      const gammaRow = memberRow(page, 'Gamma story');
+      await betaRow.locator('[data-collection-note-editor] summary').click();
+      const betaNote = betaRow.getByRole('textbox', { name: 'Note: Beta story' });
+      await betaNote.fill('A margin thought');
+      await gammaRow.locator('[data-collection-note-editor] summary').click();
+      const gammaNote = gammaRow.getByRole('textbox', { name: 'Note: Gamma story' });
+      await gammaNote.fill('A second margin thought');
+      expect(await betaNote.inputValue()).toBe('A margin thought');
+      uncertainNoteMember = gamma.id;
+      const saveCollection = page.getByRole('button', { name: 'Save collection' });
+      await saveCollection.click();
+      const gammaNoteCalls = () =>
+        calls.filter((call) => call.method === 'PATCH' && call.path.endsWith(`/members/${gamma.id}`));
+      await until(() => gammaNoteCalls().length === 1, 'the uncertain Gamma note write');
+      await betaRow.locator(`[data-collection-note-saved="${beta.id}"]`).waitFor();
+      await page.locator('main').getByRole('alert').waitFor();
+      expect(await gammaRow.locator(`[data-collection-note-saved="${gamma.id}"]`).count()).toBe(0);
+      expect(await saveCollection.isEnabled()).toBe(true);
+      const uncertainKey = gammaNoteCalls()[0]!.key;
+      expect(uncertainKey).toMatch(uuid);
+      await saveCollection.click();
+      await page.locator('[data-collection-save]').waitFor({ state: 'detached' });
+      expect(gammaNoteCalls()).toHaveLength(2);
+      expect(gammaNoteCalls().map((call) => call.key)).toEqual([uncertainKey, uncertainKey]);
+      expect(gammaNoteCalls().map((call) => call.body)).toEqual([
+        { note: 'A second margin thought' },
+        { note: 'A second margin thought' },
+      ]);
       expect(await noted(beta.id)).toMatchObject({
         path: `/v1/collections/${shelf.id}/members/${beta.id}`,
         body: { note: 'A margin thought' },
+      });
+      expect(shelf.members.find((member) => member.id === gamma.id)?.note).toBe('A second margin thought');
+      expect(shelf.members.find((member) => member.id === alpha.id)?.note).toBeNull();
+      expect(shelf.members.map((member) => member.id)).toEqual([beta.id, gamma.id, alpha.id]);
+      expect(calls.find((call) => call.method === 'PATCH' && call.path === `/v1/collections/${shelf.id}`)?.body).toMatchObject({
+        revision: 1,
       });
       await memberRow(page, 'Beta story').locator('p', { hasText: 'A margin thought' }).waitFor();
 

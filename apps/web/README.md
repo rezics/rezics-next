@@ -2425,12 +2425,18 @@ register a Library scope or open the phone header search. It adds no second body
 
 The Collection page uses shared `ListRow` members and an owner-only menu Edit action. At rest, member selection,
 reorder buttons, note inputs and removal controls are absent. Editing is a local draft, including details, loaded
-occurrence order, notes and selection removal; Cancel discards it without writes. Keyboard buttons accompany drag
-handles. Later pages cannot move their first loaded anchor or claim the Collection's first position. Save retains
-the numeric metadata revision and stable per-operation idempotency keys. Current native member operations are
-independent: saving stops at the first refusal or transport failure and reports any earlier accepted changes.
-Pending writes disable editing; a revision conflict retains the draft until explicit reload. No atomic bulk success
-or exact Undo is claimed for current per-member commands.
+occurrence order, notes and selection removal; Cancel discards it without writes. Note drafts stay keyed by occurrence
+ID, so duplicate subjects and opening another note do not replace unfinished text. During a partial save, each
+accepted per-member PATCH stays marked on its occurrence so the curator can see which note was saved. Keyboard
+buttons accompany drag handles. Later pages cannot move their first loaded anchor or claim the Collection's first
+position. Save retains the numeric metadata revision and stable
+per-operation idempotency keys; an unavailable retry reuses the captured command. Current native member operations
+are independent: saving stops at the first refusal or transport failure and reports earlier accepted changes. A
+revision conflict retains the draft until explicit reload. No atomic bulk success or exact Undo is claimed for
+current per-member commands.
+
+Decision: keep notes as occurrence-keyed local drafts, mark a note saved only after its PATCH is accepted, replay
+unavailable retries with the captured command, and resolve conflicts through explicit reload.
 
 Member images use their own actual Type and the exact fallback in
 [Collection presentation](../../docs/collection-presentation.md), then existing valid release `coverRatio` hints.
@@ -2513,11 +2519,14 @@ promotion are intentionally deferred to integration under the current verificati
   definitions for labels/ratios, plus existing follow state where applicable. Preview and cover rendering cause no
   added kernel detail reads.
 - **Bound:** Existing cursor pages cap at 100; preview presenters render at most three supplied members. An editor
-  draft contains at most one loaded page, never all pages. A save plan has at most 300 independently receipted
-  operations, sequentially stopping on failure. No account scan, cross-Collection fanout or new physical allowance.
+  draft contains at most one loaded page, never all pages. A save plan has at most 299 independently receipted
+  operations, derived from 100 removals + 100 note writes + 99 moves. Every member command seeks by the full
+  Collection and occurrence IDs and stops on failure. No account scan, cross-Collection fanout or new physical
+  allowance.
 - **Growth check:** The focused regression records one owner-list request at 1/8/100 Collections, two public inner
-  reads with withheld partial/filtered totals, and stops finite mutation plans on a refused or thrown write. Native
-  privacy, growth and lifecycle proof remain gate-owned.
+  reads with withheld partial/filtered totals, and stops finite mutation plans on a refused or thrown write. The note
+  regression plans 100 note writes and 99 moves from one 100-occurrence page and rejects more than 299 composed
+  commands. Native privacy, growth and lifecycle proof remain gate-owned.
 
 ## Admitted controls
 

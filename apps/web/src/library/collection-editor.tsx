@@ -12,7 +12,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { pageText } from '../features/pages/shared';
 import { libraryTitleValue } from './title';
-import { CollectionMemberDetails } from './collection-member-row';
+import { CollectionMemberDetails, CollectionMemberNoteSaved } from './collection-member-row';
 import { CollectionNoteReader } from './collection-note-reader';
 import { SubjectCover } from './subject-row';
 import { collectionMemberRatio } from './collection-presentation';
@@ -213,7 +213,7 @@ export async function applyCollectionMemberEditPlan(
   operations: readonly CollectionMemberEditOperation[],
   write: (operation: CollectionMemberEditOperation) => Promise<{ ok: true } | { ok: false; reason: string }>,
 ): Promise<{ completed: number; failed?: { operation: CollectionMemberEditOperation; reason: string } }> {
-  if (operations.length > 300) throw new RangeError('Collection edit plan exceeds its per-page bound');
+  if (operations.length > 299) throw new RangeError('Collection edit plan exceeds its per-page bound');
   let completed = 0;
   for (const operation of operations) {
     const result = await write(operation).catch(() => ({ ok: false as const, reason: 'unavailable' }));
@@ -229,6 +229,7 @@ export function CollectionMemberList({
   firstPage,
   busy = false,
   selectedIds = new Set(),
+  savedNoteIds = new Set(),
   onSelectionChange,
   onMove,
   onBoundaryMove,
@@ -246,6 +247,7 @@ export function CollectionMemberList({
   firstPage: boolean;
   busy?: boolean;
   selectedIds?: ReadonlySet<string>;
+  savedNoteIds?: ReadonlySet<string>;
   onSelectionChange?: (memberId: string, selected: boolean) => void;
   onMove?: (memberId: string, after: string | null) => void;
   onBoundaryMove?: ((memberId: string, placement: 'start' | 'end') => void) | undefined;
@@ -377,6 +379,7 @@ export function CollectionMemberList({
                 {member.note ? (
                   <p className="line-clamp-2 text-sm text-muted-foreground [overflow-wrap:anywhere]">{member.note}</p>
                 ) : null}
+                {savedNoteIds.has(member.id) ? <CollectionMemberNoteSaved memberId={member.id} /> : null}
               </ListRowControl>
             ) : member.subject && member.note ? (
               <CollectionNoteReader note={member.note} occurrence={actionContext} className="col-start-2" />

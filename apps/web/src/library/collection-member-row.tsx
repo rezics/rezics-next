@@ -1,8 +1,17 @@
 import { MetaLine } from '@rezics/ui/meta-line';
 import { listKeyFacts } from '../media/type-presentation';
+import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { CollectionListPresentations } from './collection-presentation';
 import type { CollectionMember } from './reads';
+
+export function CollectionMemberNoteSaved({ memberId }: { memberId: string }) {
+  return (
+    <span role="status" data-collection-note-saved={memberId} className="text-sm text-muted-foreground">
+      {m.library_subject_saved()}
+    </span>
+  );
+}
 
 /** Only the supplied FULL facts and the member's actual released Type decide these details. */
 export function CollectionMemberDetails({

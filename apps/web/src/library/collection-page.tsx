@@ -326,6 +326,7 @@ function CollectionPageLifetime({
   });
   const [hydrated, setHydrated] = useState(false);
   const [members, setMembers] = useState(page.members);
+  const [savedNoteIds, setSavedNoteIds] = useState<ReadonlySet<string>>(new Set());
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const writeKeys = useRef(new Map<string, string>());
   const [editing, setEditing] = useState(false);
@@ -646,6 +647,7 @@ function CollectionPageLifetime({
         throw new Error('Collection members are not ready');
       editorPage.current = editable;
       writeKeys.current.clear();
+      setSavedNoteIds(new Set());
       setConflict(false);
       setEditorMembers(editable.members);
       setMembers(editable.members);
@@ -672,6 +674,7 @@ function CollectionPageLifetime({
     editorPage.current = null;
     saveIntent.current = null;
     writeKeys.current.clear();
+    setSavedNoteIds(new Set());
     setBatchRemovalIds(new Set());
     setTransfer(null);
     setDestinationId('');
@@ -690,7 +693,7 @@ function CollectionPageLifetime({
   }
 
   function cancelEditing() {
-    if (!isCurrent() || pending || (saveIntent.current !== null && !conflict)) return;
+    if (!isCurrent() || pending || conflict || saveIntent.current !== null) return;
     resetEditor(page);
   }
 
@@ -737,7 +740,7 @@ function CollectionPageLifetime({
       const fail = async (result: Extract<CollectionWriteResult, { ok: false }>) => {
         if (!isCurrent()) return;
         if (committed > 0) {
-          setConflict(true);
+          setConflict(result.reason !== 'unavailable');
           setFailure(m.library_collection_save_partial({ count: committed }));
         } else if (result.reason === 'conflict') setConflict(true);
         else {
@@ -801,7 +804,7 @@ function CollectionPageLifetime({
         });
         if (!isCurrent()) return;
         if (!result.ok) {
-          if (result.reason !== 'unavailable') saveIntent.current = null;
+          if (result.reason !== 'unavailable' && result.reason !== 'conflict') saveIntent.current = null;
           if (result.reason === 'conflict') setConflict(true);
           else {
             setFailure(writeMessage(result));
@@ -870,19 +873,24 @@ function CollectionPageLifetime({
                   data: { ...common, memberId: operation.memberId, note: operation.note },
                   headers: headers('collection_member.update'),
                 });
-          return isCurrent(operation.kind === 'move' ? 'collection_member.move' : 'collection_member.update')
-            ? result
-            : { ok: false, reason: 'unavailable' };
+          if (!isCurrent(operation.kind === 'move' ? 'collection_member.move' : 'collection_member.update'))
+            return { ok: false, reason: 'unavailable' };
+          if (operation.kind === 'note' && result.ok)
+            setSavedNoteIds((current) => new Set([...current, operation.memberId]));
+          return result;
         },
       );
       if (!isCurrent()) return;
       committed += applied.completed;
       if (applied.failed) {
         if (committed > 0) {
-          setConflict(true);
+          const retryable = applied.failed.reason === 'unavailable';
+          setConflict(!retryable);
           setFailure(m.library_collection_save_partial({ count: committed }));
-        } else if (applied.failed.reason === 'conflict') setConflict(true);
-        else setFailure(m.error_message());
+        } else {
+          setConflict(applied.failed.reason !== 'unavailable');
+          setFailure(m.error_message());
+        }
         return;
       }
       setSaveConfirmed(true);
@@ -1469,6 +1477,7 @@ function CollectionPageLifetime({
               firstPage={page.firstPage}
               busy={pending || draftFrozen}
               selectedIds={selectedIds}
+              savedNoteIds={savedNoteIds}
               onSelectionChange={(memberId, selected) => {
                 if (!isCurrent() || inFlight.current || saveIntent.current !== null) return;
                 setSelectedIds((current) => {
@@ -1487,6 +1496,12 @@ function CollectionPageLifetime({
                 setMembers((current) =>
                   current.map((member) => (member.id === memberId ? { ...member, note: note || null } : member)),
                 );
+                setSavedNoteIds((current) => {
+                  if (!current.has(memberId)) return current;
+                  const next = new Set(current);
+                  next.delete(memberId);
+                  return next;
+                });
               }}
               onRemove={(memberId) => {
                 if (!isCurrent('collection_member.delete') || inFlight.current || saveIntent.current !== null) return;
@@ -1517,7 +1532,7 @@ function CollectionPageLifetime({
             <Button
               type="button"
               variant="outline"
-              disabled={pending || (draftFrozen && !conflict)}
+              disabled={pending || conflict || draftFrozen}
               onClick={cancelEditing}
             >
               {m.library_collection_cancel()}
