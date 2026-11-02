@@ -15,7 +15,18 @@ import {
   type FollowCountState,
 } from './private-follow-counts';
 
-function CountOutcome({ value, context }: { value: FollowCountState; context: FollowCountsSearch }) {
+const countLinkClass =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-primary underline whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+function CountOutcome({
+  value,
+  context,
+  headingId,
+}: {
+  value: FollowCountState;
+  context: FollowCountsSearch;
+  headingId: string;
+}) {
   if (value.state === 'ready')
     return (
       <p data-follow-count={value.count} className="text-4xl font-semibold tabular-nums">
@@ -43,12 +54,17 @@ function CountOutcome({ value, context }: { value: FollowCountState; context: Fo
           })
         : null;
   return (
-    <div className="space-y-2" role={value.state === 'loading' ? 'status' : 'alert'}>
+    <div
+      className="min-w-0 space-y-2"
+      role={value.state === 'loading' ? 'status' : 'alert'}
+      aria-labelledby={headingId}
+    >
       <p>{text}</p>
       {retryText ? <p className="text-sm text-muted-foreground">{retryText}</p> : null}
       {value.state === 'signed-out' ? (
         <a
-          className="text-primary underline"
+          className={countLinkClass}
+          aria-describedby={headingId}
           href={`/auth/sign-in?return_to=${encodeURIComponent(
             context.targetType && context.targetId
               ? (privateFollowCountsHref({ targetType: context.targetType, targetId: context.targetId }) ??
@@ -74,9 +90,9 @@ export function PrivateFollowCountsPageView({
 }) {
   const context = page.context;
   return (
-    <article className="container mx-auto max-w-4xl space-y-8 px-4 py-8 text-foreground">
+    <article className="container mx-auto min-w-0 max-w-4xl space-y-8 px-4 py-8 text-foreground [overflow-wrap:anywhere]">
       <header className="space-y-3">
-        <a href={`/${getLocale()}/library`} className="text-sm text-primary underline">
+        <a href={`/${getLocale()}/library`} className={`${countLinkClass} text-sm`}>
           {m.nav_library()}
         </a>
         <PageHeading>{m.library_follow_counts_heading()}</PageHeading>
@@ -86,11 +102,8 @@ export function PrivateFollowCountsPageView({
         <h2 id="outgoing-count-heading" className="text-xl font-semibold">
           {m.library_follow_counts_outgoing()}
         </h2>
-        <CountOutcome value={page.outgoing} context={context} />
-        <a
-          href={`/${getLocale()}/library/following`}
-          className="inline-flex min-h-10 items-center text-primary underline"
-        >
+        <CountOutcome value={page.outgoing} context={context} headingId="outgoing-count-heading" />
+        <a href={`/${getLocale()}/library/following`} className={countLinkClass}>
           {m.library_nav_following()}
         </a>
       </section>
@@ -116,6 +129,7 @@ export function PrivateFollowCountsPageView({
             <CountOutcome
               value={page.target ?? (busy ? { state: 'loading' } : { state: 'unavailable' })}
               context={context}
+              headingId="target-count-heading"
             />
           </>
         ) : (
@@ -123,7 +137,13 @@ export function PrivateFollowCountsPageView({
         )}
       </section>
       {onReload ? (
-        <Button type="button" variant="outline" disabled={busy} onClick={onReload}>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-left focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+          disabled={busy}
+          onClick={onReload}
+        >
           {m.library_follow_counts_reload()}
         </Button>
       ) : null}
