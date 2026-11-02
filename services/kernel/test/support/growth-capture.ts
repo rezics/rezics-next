@@ -15,6 +15,60 @@ export type GrowthDatabase = {
   close(): Promise<void>;
 };
 
+type CloseablePool = { end(): Promise<void> };
+
+export function createGrowthDatabaseLifecycle() {
+  const resources = new Map<CloseablePool, string>();
+  let closing: Promise<void> | undefined;
+  const assertOpen = () => {
+    if (closing) throw new Error('Growth database is closed');
+  };
+  const acquire = <T extends CloseablePool>(name: string, create: () => T): T => {
+    assertOpen();
+    const resource = create();
+    resources.set(resource, name);
+    return resource;
+  };
+  const close = (): Promise<void> => {
+    if (closing) return closing;
+    closing = Promise.allSettled(
+      Array.from(resources, async ([resource, name]) => {
+        try {
+          await resource.end();
+        } catch (error) {
+          throw new Error(`${name} failed to close: ${asError(error).message}`, { cause: error });
+        }
+      }),
+    ).then((results) => {
+      const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+      if (failures.length)
+        throw new AggregateError(
+          failures,
+          `Could not close growth database resources: ${failures.map((error) => asError(error).message).join('; ')}`,
+        );
+    });
+    return closing;
+  };
+  const setup = async <T>(operation: () => Promise<T>): Promise<T> => {
+    try {
+      return await operation();
+    } catch (primary) {
+      try {
+        await close();
+      } catch (cleanup) {
+        const failures = cleanup instanceof AggregateError ? cleanup.errors : [cleanup];
+        throw new AggregateError(
+          [primary, ...failures],
+          `Growth database setup failed: ${asError(primary).message}; cleanup failed: ${failures.map((error) => asError(error).message).join('; ')}`,
+          { cause: primary },
+        );
+      }
+      throw primary;
+    }
+  };
+  return { acquire, assertOpen, close, setup };
+}
+
 export type SeedingCount = { statements: number; rowsWritten: number };
 
 type ActiveCapture = {
@@ -71,6 +125,7 @@ type Attribution = {
   readonly parent?: Attribution;
 };
 type CaptureState = {
+  lifecycle: ReturnType<typeof createGrowthDatabaseLifecycle>;
   active: ActiveCapture | undefined;
   seeding: SeedingCount | undefined;
   setupError?: Error;
@@ -757,54 +812,47 @@ function instrumentPool(pool: Pool, state: CaptureState): void {
 export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promise<GrowthDatabase> {
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 
-  const pool = createPool(url, { connectionTimeoutMillis: 10_000 });
-  const admin = new pg.Pool({ connectionString: url, max: 2 });
-  const libraryPools = new Set<pg.Pool>();
-  const state: CaptureState = {
-    active: undefined,
-    seeding: undefined,
-    setupTasks: new Set(),
-    relatedDatabases: new Map(),
-    activeTransactions: new Map(),
-    nextTransactionToken: 0,
-  };
-  admin.on('connect', (client) => intercept(client, state, false));
-  const database: GrowthDatabase = {
-    url,
-    pool,
-    admin,
-    openPool: (config = {}) => {
-      const libraryPool = new pg.Pool({ ...config, connectionString: url });
-      instrumentPool(libraryPool, state);
-      libraryPools.add(libraryPool);
-      return libraryPool;
-    },
-    close: async () => {
-      await Promise.all([
-        pool.end(),
-        admin.end(),
-        ...Array.from(libraryPools, (libraryPool) => libraryPool.end()),
-        ...Array.from(state.relatedDatabases.values(), (related) => related.admin.end()),
-      ]);
-    },
-  };
-  states.set(database, state);
-  databasesByAdmin.set(admin, database);
-  instrumentPool(pool, state);
+  const lifecycle = createGrowthDatabaseLifecycle();
+  return lifecycle.setup(async () => {
+    const pool = lifecycle.acquire('instrumented pool', () => createPool(url, { connectionTimeoutMillis: 10_000 }));
+    const admin = lifecycle.acquire('admin pool', () => new pg.Pool({ connectionString: url, max: 2 }));
+    const state: CaptureState = {
+      lifecycle,
+      active: undefined,
+      seeding: undefined,
+      setupTasks: new Set(),
+      relatedDatabases: new Map(),
+      activeTransactions: new Map(),
+      nextTransactionToken: 0,
+    };
+    admin.on('connect', (client) => intercept(client, state, false));
+    const database: GrowthDatabase = {
+      url,
+      pool,
+      admin,
+      openPool: (config = {}) => {
+        const libraryPool = lifecycle.acquire('library pool', () => new pg.Pool({ ...config, connectionString: url }));
+        instrumentPool(libraryPool, state);
+        return libraryPool;
+      },
+      close: lifecycle.close,
+    };
+    states.set(database, state);
+    databasesByAdmin.set(admin, database);
+    instrumentPool(pool, state);
 
-  try {
-    const result = await capture(database, () => withConnection(pool, (client) => client.query('SELECT 1')));
-    if (result.capture.statements.length !== 1 || result.capture.plans.length !== 1)
-      throw new Error('The auto_explain probe did not produce exactly one statement and one plan');
-  } catch (error) {
-    await Promise.allSettled([pool.end(), admin.end()]);
-    throw new Error('auto_explain plans were not reported; growth checks need a superuser test database', {
-      cause: error,
-    });
-  }
-  await disableAutovacuum(database);
-
-  return database;
+    try {
+      const result = await capture(database, () => withConnection(pool, (client) => client.query('SELECT 1')));
+      if (result.capture.statements.length !== 1 || result.capture.plans.length !== 1)
+        throw new Error('The auto_explain probe did not produce exactly one statement and one plan');
+    } catch (error) {
+      throw new Error('auto_explain plans were not reported; growth checks need a superuser test database', {
+        cause: error,
+      });
+    }
+    await disableAutovacuum(database);
+    return database;
+  });
 }
 
 export async function capture<T>(
@@ -823,6 +871,7 @@ async function captureInternal<T>(
 ): Promise<{ value: T; capture: Capture }> {
   const state = states.get(database);
   if (!state) throw new Error('Growth database was not opened by openGrowthDatabase');
+  state.lifecycle.assertOpen();
   const parentActive = state.active;
   const ownsParent = parentActive !== undefined && currentAttribution(state)?.capture === parentActive;
   if (parentActive && !(parentActive.mode === 'warmup' && ownsParent))
@@ -955,14 +1004,17 @@ function databaseName(database: GrowthDatabase): string {
 }
 
 function databaseForName(database: GrowthDatabase, name: string): GrowthDatabase {
+  const state = states.get(database)!;
+  state.lifecycle.assertOpen();
   const ownName = databaseName(database);
   if (name === ownName) return database;
-  const state = states.get(database)!;
   let related = state.relatedDatabases.get(name);
   if (related) return related;
   const url = new URL(database.url);
   url.pathname = `/${name}`;
-  const admin = new pg.Pool({ connectionString: url.toString(), max: 2 });
+  const admin = state.lifecycle.acquire(`related database ${name} admin pool`, () =>
+    new pg.Pool({ connectionString: url.toString(), max: 2 }),
+  );
   admin.on('connect', (client) => intercept(client, state, false));
   related = {
     url: url.toString(),
@@ -971,7 +1023,7 @@ function databaseForName(database: GrowthDatabase, name: string): GrowthDatabase
     openPool: () => {
       throw new Error('A related growth database cannot open instrumented pools');
     },
-    close: () => admin.end(),
+    close: state.lifecycle.close,
   };
   state.relatedDatabases.set(name, related);
   states.set(related, state);

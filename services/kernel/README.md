@@ -411,6 +411,8 @@ memory and work grow with labelled containers, including concurrent checks and i
 their containers. Growth checks do not automatically reset populations between checks, so distinct populations and
 operation writes can accumulate within a file unless it resets them. Capture memory grows with statements, byte totals
 and plans in one operation. `openPool()` creates an instrumented pool that `GrowthDatabase.close()` also closes.
+Shutdown waits for every registered pool and reports all cleanup failures; setup errors remain primary with cleanup
+failures attached. Close is terminal and repeatable, and pool acquisition is rejected as soon as shutdown starts.
 
 ## Growth checks
 
