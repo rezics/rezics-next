@@ -1,6 +1,7 @@
 import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
 import { withReadTransaction } from './read.ts';
-import { SEMANTIC_ERASURE_STORES } from './account-erasure-stores.ts';
+import { SEMANTIC_ERASURE_STORES, SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
+export { SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 
 /** Explicit account input of a native platform producer, in the producer's own home/transaction.
  * No account registry or business payload is copied. Deferred source hooks attach exact record ordinals.
@@ -69,14 +70,6 @@ export function bindSemanticProducerRoles(tx: CommandTransaction, roles: readonl
     );
   });
 }
-
-/** Native receiving stores contain identity/effect proof skeletons, not Library Source bodies. */
-export const SEMANTIC_RECEIVING_ERASURE_STORES = [
-  'identity_epoch_receiving_plan',
-  'identity_epoch_receiving_record',
-  'identity_epoch_receiving_effect',
-  'identity_epoch_receiving_custody',
-] as const;
 
 /** Bind a Source receipt to this executor's real fence. A deferred native constraint
  * checks the same-transaction write basis after the executor appends its commit.

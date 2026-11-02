@@ -3199,6 +3199,20 @@ CREATE UNIQUE INDEX agent_identity_reversal_terminal_receipt ON core.receipt USI
 
 
 --
+-- Name: commerce_live_copy_receipt_position; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE UNIQUE INDEX commerce_live_copy_receipt_position ON core.receipt USING btree (partition_no, "position") WHERE ((principal_kind = 'account'::text) AND (command_kind = ANY (ARRAY['commerce.checkout.record'::text, 'commerce.checkout.refresh'::text, 'commerce.checkout.apply'::text])));
+
+
+--
+-- Name: commerce_live_copy_receipt_transaction; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE UNIQUE INDEX commerce_live_copy_receipt_transaction ON core.receipt USING btree (partition_no, transaction_id) WHERE ((principal_kind = 'account'::text) AND (command_kind = ANY (ARRAY['commerce.checkout.record'::text, 'commerce.checkout.refresh'::text, 'commerce.checkout.apply'::text])));
+
+
+--
 -- Name: consumer_checkpoint_consumer_idx; Type: INDEX; Schema: core; Owner: -
 --
 
@@ -3726,6 +3740,13 @@ CREATE TRIGGER identity_history_original_guard BEFORE DELETE OR UPDATE ON core.i
 
 
 --
+-- Name: partition live_copy_partition_activation_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER live_copy_partition_activation_guard BEFORE INSERT OR UPDATE ON core.partition FOR EACH ROW EXECUTE FUNCTION access.live_copy_partition_activation_guard();
+
+
+--
 -- Name: history_work operational_work_custody_guard; Type: TRIGGER; Schema: core; Owner: -
 --
 
@@ -3919,6 +3940,13 @@ ALTER TABLE core.operational_work_selection ENABLE ALWAYS TRIGGER operational_wo
 --
 
 CREATE TRIGGER public_filter_creation_checkpoint_retained BEFORE DELETE OR UPDATE ON core.consumer_checkpoint FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_creation_checkpoint();
+
+
+--
+-- Name: partition public_filter_population_owner; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER public_filter_population_owner AFTER UPDATE OF epoch, write_state ON core.partition FOR EACH ROW EXECUTE FUNCTION semantic.fence_public_filter_population();
 
 
 --

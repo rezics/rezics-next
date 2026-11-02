@@ -12,6 +12,9 @@ import { continuePageSchema } from '../library/continue-routes.ts';
 const closed = { additionalProperties: false } as const;
 const nullable = t.Union([t.String(), t.Null()]);
 const uuid = t.String({ format: 'uuid' });
+export const FeedSelectionIdSchema = t.String({ format: 'uuid' });
+export type FeedSelection = { spaceId?: string; ratingQuestionId?: string };
+
 export const FeedKindSchema = t.String({ minLength: 1, maxLength: 256 });
 
 /** Use the native kind.in literal grammar, including its UTF-8 byte and control-character bounds.

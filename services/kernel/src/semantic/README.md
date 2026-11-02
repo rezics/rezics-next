@@ -1722,6 +1722,114 @@ on the same client; Global has no personal owner. Creator, adopter, provenance a
   `test/semantic/account-erasure-local-runtime.test.ts`; default composition is covered by `work-module.test.ts`.
   The owning contract retains historical-coverage, full shared-custody and final-ACK launch requirements.
 
+### Distinct origins in the erasure Source directory
+
+The physical `erasure_locator` queue minimizes one account/role/physical record. It is not the
+identity of a Source delivery. `erasure_source_record` retains every authentic transaction and
+source-position pair at each native delivery position. Its generated `origin_key` encodes that
+nullable pair as `transaction/position`; UUID and bigint text contain no slash. The key does not
+allocate a transaction, position or epoch. In particular, two transactions delivered by the same
+native command remain two directory rows. The existing source commits and write bases retain
+their separate native epoch/position associations.
+
+The Source cursor orders `store, record_key, role, delivery_position, origin_key`. Detail and
+refresh read the exact directory origin, independently of the queue's most recent provenance.
+A physical row's completed minimization does not prove both origins' shared custody: the reader
+requires the exact transaction, role and source position, refreshing that origin when absent.
+Local holds, page keys and terminal traversal carry the discriminator. Existing transfers whose
+origin was never stored are unavailable; current locator state cannot reconstruct their proof.
+Sealed replay seeks an existing origin through its transaction/position index. A new origin at
+a sealed account is refused. Rolling the migration down refuses to collapse distinct origins.
+
+- Touches: each directory insert maintains its full primary key, ordered traversal index and
+  origin-replay index. Same-origin conflicts still perform their actual conflict probe. Each raw
+  Source seek returns at most one full origin; detail and native hold verification use its full
+  key and separately probe exact shared custody. Refresh adds one exact directory lock before
+  the existing minimization command. Failed, repeated and rolled-back work retains these touches.
+- Bound: the discriminator adds at most 57 UTF-8 bytes per stored or transferred key, including
+  the nullable historical cases. It is present in the directory primary/traversal keys, generated
+  value, raw/detail projections, cursor digest, hold and page/terminal writes and comparisons.
+  The replay index additionally stores the authentic transaction text and source position. Each
+  nonempty page has one origin; EOF uses the separate empty discriminator. These are additional
+  costs, not funding, a replacement eight-axis quote or a reduction in capture's existing
+  defective five-empty-seek layout. The complete original pre-I/O price and physical capture
+  repair remain required before the configured Source journey can be declared complete.
+- Growth check: `test/semantic/identity-search-receiving-provenance.test.ts` retains both genuine
+  command orders and rollback of attempted native provenance. The appended native case in
+  `test/semantic/subject-erasure-source.test.ts` requires both equal-delivery origins through
+  actual sealed traversal, shared custody and native holds; it also requires exact sealed replay,
+  wrong-position/new-origin refusal and rollback of the rejected source commit/write basis.
+  These assertions and all native growth/combined campaigns remain UNRUN under minimal verification.
+
+### Receiving capture of both command write bases
+
+The funded receiving trigger reads the job's original write basis and the distinct native
+command's write basis. Each retains its own principal, delegation bytes, transaction, source
+position and `erasure_provenance` row. An absent original basis does not skip the native basis;
+a shared original/native transaction is visited once. The post-fence planner arms separate
+nullable locator-count/byte operands for each basis. The deferred body compares both again.
+A basis appearing, disappearing or changing its funded projection after planning aborts the
+whole transaction, including the effect receipt, pending event and attempted origin writes.
+Other, unfunded capture callers retain their existing behavior.
+
+`searchReceivingCaptureCost(copies, sources, originalBasis, nativeBasis?)` exposes the
+conservative deferred reservation subtotal. Omit the fourth operand when the native and
+original transactions are the same or there is no native origin. Pass null for a distinct
+native transaction whose basis is absent. A present operand contains its exact bounded
+`{locators, bytes}`. This is not a whole Source or ordinary preparation quote.
+
+- Touches: one additional indexed `write_basis` point per distinct native transaction in both
+  the planner and deferred body; native provenance upsert and all actual actor/delegation
+  locator calls, their existing locks, conflict probes and triggers. The pending event stores
+  both nullable native operands. Repeated events repeat the reads, reservations and validation.
+- Bound: all eight axes remain explicit. The additional deferred native probe reserves
+  `{candidateKeys:0,nativeRows:1,identityMetadataRows:0,nativePoints:1,witnessKeys:0,statements:1,bytes:256,emptySeeks:1}`.
+  A present native basis with L locators (0–5) and R bounded requested-by bytes (0 or 92) adds
+  rows/points `2+9L`, statements `2+8L`, bytes `512+R+2816L`, empty seeks `5L`, with zero
+  candidate/metadata/witness axes for this operational body. The planner separately prepays
+  its real basis SELECT and arm UPDATE, including a 512-byte arm bound. Failure retains
+  reached reservations and rolls SQL back. These additions do not discount the existing
+  conservative five-empty-seek base, replace the complete origin/index/control derivation,
+  raise an allowance or establish the required Source-core 24-point/two-seek fit.
+- Growth check: the new native-basis unit regression independently enumerates all eight
+  reservation axes, separate and shared transactions, absent original basis and refusal before
+  arming. The native regression uses real executor write bases and delivery for two actor
+  origins, plus superseded pre-fence planning and atomic rollback. Its generous isolated
+  physical ledger is not the authentic Source funding oracle. Both files and all existing
+  native/combined oracles remain authored UNRUN; the two obsolete capture-cost cases are
+  unchanged pending actual physical repair.
+
+### Receiving capture of both copy origins
+
+The post-fence planner traverses complete indexed copy prefixes for both the original
+and distinct native command transaction. It gathers those copies before carried source
+roles, retaining both authentic origins when an account/role occurs in both prefixes.
+A shared transaction is traversed once. The deferred body repeats the same complete
+prefixes and verifies their aggregate count against the armed operand before dispatching
+any additional locator. A late copy aborts the actual command transaction. Source-only
+collisions still refuse until complete Source support/copy closure is available.
+
+- Touches: each actual planner keyset seek, including each EOF, is independently prepaid.
+  Every visited copy prepays its locator body, directory/index/trigger work and 512 bytes
+  of planner origin bookkeeping. The deferred loop uses the actual copy transaction,
+  preserving equal-delivery distinct origins. Failures retain attempted reservations.
+- Bound: `copies` in the deferred cost function is the complete aggregate over both
+  distinct copy prefixes. The retained fixed eight rows/points/statements cover budget
+  read and consume, partition, two copy EOFs, two source EOFs and the original basis
+  probe. The distinct native basis probe adds one more. Each visited copy/source role
+  still reserves rows/points/statements/bytes/empty-seeks `10/10/9/3072/5`, plus the
+  planner's separate 512 bytes; the event adds 1024 planner bytes. Candidate, metadata
+  and witness axes are zero for these operational bodies. These conservative subtotals
+  preserve the defective five-seek base; they neither establish Source-core fit nor
+  replace the complete original preparation quote and physical repair.
+- Growth check: new planner-unit assertions retain 17 overlapping roles per origin,
+  all-eight-axis arithmetic, shared-origin traversal and pre-arm funding refusal. New
+  genuine-command regressions require complete 1/10/100 copy capture and a late native
+  copy to roll back receipt, pending queue, locators, copies, provenance, source commit
+  and write basis while prior original origins survive. Their isolated generous ledger
+  is not the original Source frame, unrelated-data growth or configured factory proof.
+  All product/native assertions remain authored UNRUN under minimal verification.
+
 ### List presentation cost
 
 See [the runtime contract](#current-list-presentation-facts).

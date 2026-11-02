@@ -237,6 +237,28 @@ test('Home composes ordered ContentItems and keeps bounded filters accessible in
     expect(discovery).not.toBeUndefined();
     await act(async () => discovery!.click());
     expect(selectedStream).toBe('home');
+
+    let nextCalls = 0;
+    const onNext = () => {
+      nextCalls++;
+    };
+    await act(async () => root.render(<HomeFeed result={followingSparse} locale="en" onNext={onNext} />));
+    const next = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === m.library_next_page(),
+    )!;
+    await act(async () => {
+      next.click();
+      next.click();
+    });
+    expect(nextCalls).toBe(1);
+    await act(async () => root.render(<HomeFeed result={followingSparse} locale="en" busy onNext={onNext} />));
+    expect(next.disabled).toBe(true);
+    expect(next.textContent).toBe(m.home_feed_loading());
+    await act(async () => root.render(<HomeFeed result={empty} locale="en" onNext={onNext} />));
+    expect(window.document.activeElement).toBe(host.querySelector('[data-feed-result-state]'));
+    expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.library_next_page())).toBe(
+      false,
+    );
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous) {

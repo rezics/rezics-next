@@ -4,7 +4,9 @@ import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { readPartitions } from '../partition/partition.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { withReadTransaction } from '../semantic/read.ts';
+import { publicFilterCreationConsumer } from '../semantic/public-filter-creation-consumer.ts';
 import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+export { publicFilterCreationConsumer } from '../semantic/public-filter-creation-consumer.ts';
 
 export type AccountDiscoveryReductionHead = Readonly<{
   partition: number;
@@ -87,15 +89,6 @@ export type AccountDiscoveryEnrollment = AccountDiscoveryReductionHead &
     receipt: string | null;
     complete: boolean;
   }>;
-
-/** The ordinary outbox checkpoint pins the original creation/change window.
- * It is retained until native Source/copy retirement, never advanced by a query.
- */
-export function publicFilterCreationConsumer(bootstrap: string): string {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(bootstrap))
-    throw new TypeError('Creation retention requires a native bootstrap');
-  return 'public_filter_' + bootstrap.replaceAll('-', '');
-}
 
 /** Enrol one bounded page of the immutable compiler closure in its writer home.
  * Account writers and enrollment take population -> Source head -> enrollment.
@@ -278,12 +271,30 @@ export async function enrollAccountDiscoveryHome(
                 .digest('hex')
             : null);
         if (!original.complete) {
+          // Allocate under the Source home lock, shared with fanout window capture.
+          // A later enrollment must stay outside that window even when its key
+          // sorts before the retained registration frontier.
+          const generation = (
+            await client.query<{ enrollment_generation: string }>(
+              `UPDATE semantic.public_filter_privacy_head SET enrollment_generation=enrollment_generation+1
+               WHERE partition_no=$1 RETURNING enrollment_generation::text`,
+              [input.partition],
+            )
+          ).rows[0];
+          if (!generation) throw new CommandUnavailableError('fenced', input.partition);
           await client.query(
             `INSERT INTO semantic.public_filter_key_enrollment
-             (partition_no,input_key,registration_partition,registration,bootstrap)
-           SELECT $1,k,$2,$3,$4 FROM unnest($5::text[]) k
+             (partition_no,input_key,registration_partition,registration,bootstrap,enrollment_generation)
+           SELECT $1,k,$2,$3,$4,$6::bigint FROM unnest($5::text[]) k
            ON CONFLICT DO NOTHING`,
-            [input.partition, input.registration.partition, input.registration.id, input.bootstrap, admitted],
+            [
+              input.partition,
+              input.registration.partition,
+              input.registration.id,
+              input.bootstrap,
+              admitted,
+              generation.enrollment_generation,
+            ],
           );
           await client.query(
             `UPDATE semantic.public_filter_home_enrollment SET key_after=$3,complete=$4,

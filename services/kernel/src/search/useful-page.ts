@@ -112,6 +112,8 @@ export async function collectRetainedUsefulPage<T>(options: {
   >;
   check: (hits: readonly SearchHit[]) => Promise<ReadonlyMap<SearchHit, T>>;
   canonicalId: (value: T) => string;
+  /** Persist the actual prefix, including rejects and duplicates, before any refill. */
+  consume?: (continuation: SearchConsumedWindow) => Promise<void>;
 }): Promise<RetainedUsefulPage<T>> {
   const { limit } = options;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Invalid Search page size');
@@ -181,6 +183,7 @@ export async function collectRetainedUsefulPage<T>(options: {
       }
     }
     continuation = { execution: page.execution, consumed };
+    await options.consume?.(continuation);
     if (consumed === window.examined && window.exhausted) return finish('exhausted');
     if (values.length === limit) return finish('filled');
     // Zero work without end evidence must prepare, rather than spin or claim EOF.

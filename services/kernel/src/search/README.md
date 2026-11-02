@@ -1788,3 +1788,31 @@ fence/drain/adopt extension before compaction. Fence strings are persisted locat
 native guard. Active, building and retiring physical UUIDs remain required. Unregistered native generations,
 incomplete population, missing deployment configuration, producer or native guard remain pending. The existing native Search writer supplies its extended guard through
 `SearchErasureRuntime.writerGuard`; no callback can certify completion.
+
+The default discovery factory also exports `open(principal, request, context)`, returning a
+`RetainedDiscoveryRead`. Its one `search()` returns the projected page before the native terminal
+observation. One positional `currentPrimaryCandidates(keys)` batch can check at most 160 original
+mixed keys, retaining duplicates and rejecting foreign route/kind identities before owner I/O.
+The initial owner snapshots supply their own revisions and are reused by the ordinary disclosure
+checker. Unknown owners and failed reads reject the operation; they do not prove an empty page.
+`finish()` waits for that batch and then completes the original native final. `close()` abandons
+an unfinished operation and disposes its original observation. Final refusal, projection failure,
+owner failure and deadline expiry retain the same cleanup path. Calls after finish/close are invalid.
+The retained operation snapshots the admitted request, actor and absolute deadline. Caller mutation
+cannot extend its lifetime. Expiry removes publication authority immediately but waits for an already
+dispatched owner batch to settle before disposal. Finish checks the same deadline after that batch
+and after the native final and cleanup, so a late callback cannot restore publication authority.
+The existing public `search(principal, request, context)` composes open/search/finish/finally-close.
+Factory shutdown drains those public calls and closes outstanding retained operations before its
+runtime and work client.
+
+Cost: retaining the operation adds no capture or root, and at most one owner snapshot per Subject
+home or per 100-key Account chunk. The checker reuses these snapshots instead of repeating those
+native reads. Hydration and resource witnesses remain additional work. These cardinality bounds
+are not a complete eight-axis ordinary preparation declaration and do not establish the three-round
+mixed Home bound. This internal request-bound lifecycle does not supply `SpaceScopeReads`, a
+following-only root or the missing original/native capture provenance and funding operands.
+The lifecycle unit regressions are authored; native population, factory, receiving and Home proof
+remain separate acceptance obligations. The dedicated retained-lifetime regressions cover expiry
+during successful and refused owner reads, delayed timer delivery, caller deadline mutation and
+late native final completion. These unit cases remain authored UNRUN.

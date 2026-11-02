@@ -1,5 +1,7 @@
+import { publicFilterCatalogue } from '../search/discovery-catalogue.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
+import { nativePopulationStartId } from './public-filter-coverage-population.ts';
 import { publicFilterSource, publicFilterSourceOrigin } from './public-filter-source.ts';
 import {
   readOriginalPublicFilterProjectionPage,
@@ -10,7 +12,6 @@ import { systemClock } from '../clock.ts';
 import { runCommand, noEffect, currentCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import { readAccountDiscoveryReductionBinding } from '../access/account-discovery-reduction.ts';
 import {
   readAccountDiscoveryRepairObservation,
   type AccountDiscoveryRepairObservation,
@@ -47,7 +48,6 @@ import {
   advancePublicFilterRepairAckFrontier,
 } from './public-filter-repair-chain.ts';
 import { encodePublicFilterNativeState } from '../search/public-filter-custody.ts';
-import readAccounts from './public-filter-source-binding-accounts.sql';
 import repairState from './public-filter-source-binding-repair-state.sql';
 import repairRead from './public-filter-source-binding-repair-read.sql';
 import repairSave from './public-filter-source-binding-repair-save.sql';
@@ -130,7 +130,8 @@ async function acknowledgePublicFilterRepairBaseline(
       await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
       const owner = (
         await client.query<{ write_state: string }>(
-          `SELECT p.write_state FROM core.partition p
+          `/* semantic.native-keyed:2:3 */
+         SELECT p.write_state,p.epoch,e.owner_epoch,e.complete FROM core.partition p
          JOIN semantic.public_filter_home_enrollment e ON
            (e.partition_no,e.bootstrap)=(p.partition_no,$2::uuid)
          WHERE p.partition_no=$1 AND e.complete AND e.owner_epoch=p.epoch
@@ -144,7 +145,8 @@ async function acknowledgePublicFilterRepairBaseline(
       // Keep that native lock order while fencing the incarnation through ACK.
       const target = (
         await client.query<{ incarnation: string }>(
-          `SELECT incarnation FROM search.public_filter_target
+          `/* semantic.native-keyed:1:2 */
+         SELECT incarnation FROM search.public_filter_target
          WHERE (partition_no,physical_target)=($1,$2) FOR SHARE`,
           [baseline.registrationPartition, baseline.physicalTarget],
         )
@@ -153,7 +155,8 @@ async function acknowledgePublicFilterRepairBaseline(
         throw new CommandUnavailableError('fenced', baseline.registrationPartition);
       const registration = (
         await client.query<{ state: string; consumer: string; physical_target: string }>(
-          `SELECT state,consumer,physical_target FROM search.public_filter_registration
+          `/* semantic.native-keyed:1:2 */
+         SELECT state,consumer,physical_target FROM search.public_filter_registration
          WHERE (partition_no,id)=($1,$2) FOR UPDATE`,
           [baseline.registrationPartition, baseline.registration],
         )
@@ -171,7 +174,8 @@ async function acknowledgePublicFilterRepairBaseline(
           acknowledged_position: string;
           acknowledged_native_enqueue: string;
         }>(
-          `SELECT source_epoch,baseline_bootstrap::text,acknowledged_position::text,
+          `/* semantic.native-keyed:1:3 */
+         SELECT source_epoch,baseline_bootstrap::text,acknowledged_position::text,
            acknowledged_native_enqueue::text
          FROM search.public_filter_coverage_home
          WHERE (partition_no,registration,source_home)=($1,$2,$3) FOR UPDATE`,
@@ -187,7 +191,8 @@ async function acknowledgePublicFilterRepairBaseline(
           native_revision: string | null;
           native_claim_revision: string | null;
         }>(
-          `SELECT receipt,source_epoch,source_position::text,native_enqueue_revision::text,
+          `/* semantic.native-keyed:1:4 */
+         SELECT receipt,source_epoch,source_position::text,native_enqueue_revision::text,
            native_revision::text,native_claim_revision::text
          FROM search.public_filter_coverage_baseline
          WHERE (partition_no,registration,bootstrap,source_home)=($1,$2,$3,$4)`,
@@ -212,8 +217,9 @@ async function acknowledgePublicFilterRepairBaseline(
       // The verified full native baseline plus its original creation/change
       // successors covers every obligation through these exact positions. This
       // is not max(delivered), a counter tick, or an event-delivery receipt.
-      await client.query(
-        `UPDATE search.public_filter_coverage_home SET
+      const acknowledged = await client.query(
+        `/* semantic.native-keyed:1:3 */
+         UPDATE search.public_filter_coverage_home SET
            acknowledged_position=$4::bigint,acknowledged_native_enqueue=$5::bigint,
            acknowledged_native_revision=$6::bigint,acknowledged_native_claim_revision=$7::bigint,
            acknowledged_baseline=$8::uuid,
@@ -221,7 +227,11 @@ async function acknowledgePublicFilterRepairBaseline(
            behind=(relevant_position>$4::bigint OR native_enqueue_revision>$5::bigint
              OR native_revision IS DISTINCT FROM $6::bigint
              OR native_claim_revision IS DISTINCT FROM $7::bigint)
-         WHERE (partition_no,registration,source_home)=($1,$2,$3)`,
+         WHERE (partition_no,registration,source_home)=($1,$2,$3)
+         RETURNING source_epoch,acknowledged_position::text,acknowledged_native_enqueue::text,
+           acknowledged_native_revision::text,acknowledged_native_claim_revision::text,
+           acknowledged_baseline::text,acknowledged_observation,acknowledged_execution,
+           acknowledged_settlement,behind`,
         [
           baseline.registrationPartition,
           baseline.registration,
@@ -236,6 +246,7 @@ async function acknowledgePublicFilterRepairBaseline(
           baseline.settlement,
         ],
       );
+      if (acknowledged.rowCount !== 1) throw new CommandUnavailableError('contention', baseline.registrationPartition);
       requireAccessDeadline(deadline);
       await client.query('COMMIT');
       return true;
@@ -637,14 +648,26 @@ function measuredPool(pool: Pool, cost: BindingCost): Pool {
         const value: unknown = Reflect.get(object, key, object);
         if (key === 'query' && typeof value === 'function')
           return async (text: string, values?: unknown[]) => {
+            // Authored native point queries declare their complete keyed relation
+            // footprint. Reserve it before submission, including misses, CAS loss
+            // and thrown attempts. A joined result is not another native row.
+            const native = /^\s*\/\* semantic\.native-keyed:(\d+):(\d+) \*\//.exec(text);
+            const writes = native !== null && /^\s*(?:\/\*[\s\S]*?\*\/\s*)*(?:INSERT|UPDATE|DELETE)\b/.test(text);
             cost.statements++;
-            cost.inputKeys += values?.length ?? 0;
+            cost.inputKeys += native ? Number(native[2]) : (values?.length ?? 0);
             cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encode(values));
+            if (native) {
+              cost.rows += Number(native[1]);
+              cost.dependencyPoints += Number(native[1]);
+              if (writes) cost.resultWrites++;
+            }
             const result = await value.call(object, text, values);
-            cost.rows += result.rowCount ?? 0;
-            cost.dependencyPoints += result.rowCount ?? 0;
+            if (!native) {
+              cost.rows += result.rowCount ?? 0;
+              cost.dependencyPoints += result.rowCount ?? 0;
+            }
             cost.bytes += Buffer.byteLength(encode(result.rows));
-            if (/\b(INSERT|UPDATE|DELETE)\b/.test(text)) cost.resultWrites += result.rowCount ?? 0;
+            if (!native && /\b(INSERT|UPDATE|DELETE)\b/.test(text)) cost.resultWrites += result.rowCount ?? 0;
             return result;
           };
         if (key === 'connect' && typeof value === 'function') return async () => wrap(await value.call(object));
@@ -873,39 +896,15 @@ export function createPublicFilterSourceBinding(
     };
     return { row, definition, bootstrap };
   }
-  async function validateAccounts(
-    row: NonNullable<Awaited<ReturnType<typeof readBootstrap.run>>>,
-    definition: PublicFilterSourceDefinition,
-    db: Pool,
-    context: PublicFilterConsumerContext,
-  ) {
-    if (row.account_after !== 4096) throw new BindingError('owner_unavailable');
-    if (!('representation' in definition.capture)) return;
-    for (let after = 0; after < 4096; after += 100) {
-      checkDeadline(context);
-      const original = await readAccounts.run(db, { bootstrap: row.bootstrap, after_partition: after });
-      const count = Math.min(100, 4096 - after);
-      if (original.length !== count || original.some((head, i) => head.account_partition !== after + i))
-        throw new BindingError('owner_unavailable');
-      const current = await readAccountDiscoveryReductionBinding(
-        db,
-        original.map((head) => head.account_partition),
-        context,
-      );
-      if (
-        current.heads.length !== original.length ||
-        current.heads.some((head, i) => {
-          const old = original[i]!;
-          return (
-            head.partition !== old.account_partition ||
-            head.epoch !== old.owner_epoch ||
-            head.revision !== BigInt(old.revision) ||
-            head.claimRevision !== BigInt(old.claim_revision)
-          );
-        })
-      )
-        throw new BindingError('binding_mismatch');
-    }
+  function requirePopulationBaseline(row: NonNullable<Awaited<ReturnType<typeof readBootstrap.run>>>) {
+    if (
+      row.account_after !== 4096 ||
+      row.coverage_after !== 4096 ||
+      !row.coverage_sealed ||
+      row.coverage_generation === null ||
+      row.coverage_root === null
+    )
+      throw new BindingError('owner_unavailable');
   }
   type Joined = Extract<Awaited<ReturnType<PublicFilterSourceBinding['join']>>, { status: 'joined' }>;
   type RepairState = {
@@ -1386,6 +1385,9 @@ export function createPublicFilterSourceBinding(
             if (existing && (existing.transaction_id === null || existing.native_xid === null))
               throw new BindingError('owner_unavailable');
             if (existing) return noEffect(existing);
+            // The original advancement and its first genuine keyed privacy
+            // baseline are both attempted writes, including a lost CAS.
+            cost.resultWrites += 2;
             const result = await repairAdvance.run(tx, { ...values, transaction_id: currentCommand(tx).transactionId });
             const inserted = Array.isArray(result) ? result[0] : result;
             if (!inserted) throw new BindingError('owner_unavailable');
@@ -1546,18 +1548,49 @@ export function createPublicFilterSourceBinding(
         cut.row.state === 'aborted'
       )
         throw new BindingError('binding_mismatch');
-      if (!maintenance) await validateAccounts(cut.row, definition, db, { deadline });
+      if (!maintenance) requirePopulationBaseline(cut.row);
       if (retained.execution !== null) {
-        const started = await loadBootstrap(retained.execution.start.observation, db, definition);
-        if (
-          started.definition.readDefinition !== definition.readDefinition ||
-          encode(started.bootstrap.consumer) !== encode(retained.queried.consumer) ||
-          started.bootstrap.snapshot !== retained.queried.snapshot.kind ||
-          started.row.state === 'aborting' ||
-          started.row.state === 'aborted'
-        )
-          throw new BindingError('binding_mismatch');
-        if (!maintenance) await validateAccounts(started.row, definition, db, { deadline });
+        const startLocator = retained.execution.start.observation;
+        if (startLocator.startsWith('population:')) {
+          const start = (
+            await db.query<{
+              bootstrap: string;
+              read_definition: string;
+              consumer: string;
+              observation: string;
+              covered_generation: string;
+              start_generation: string;
+              owner_epoch: number;
+            }>(
+              `/* semantic.native-keyed:1:2 */
+            SELECT bootstrap::text,read_definition::text,consumer,observation,
+              covered_generation::text,start_generation::text,owner_epoch
+            FROM semantic.public_filter_population_start WHERE partition_no=0 AND id=$1::uuid`,
+              [nativePopulationStartId(startLocator)],
+            )
+          ).rows[0];
+          if (
+            !start ||
+            start.bootstrap !== cut.row.bootstrap ||
+            start.read_definition !== definition.readDefinition ||
+            start.consumer !== encodePublicFilterNativeState(retained.queried.consumer) ||
+            start.observation !== retained.queried.snapshot.observation ||
+            start.covered_generation !== cut.row.coverage_generation ||
+            start.owner_epoch !== definition.source.epoch
+          )
+            throw new BindingError('binding_mismatch');
+        } else {
+          const started = await loadBootstrap(startLocator, db, definition);
+          if (
+            started.definition.readDefinition !== definition.readDefinition ||
+            encode(started.bootstrap.consumer) !== encode(retained.queried.consumer) ||
+            started.bootstrap.snapshot !== retained.queried.snapshot.kind ||
+            started.row.state === 'aborting' ||
+            started.row.state === 'aborted'
+          )
+            throw new BindingError('binding_mismatch');
+          if (!maintenance) requirePopulationBaseline(started.row);
+        }
       }
       freeze(definition);
       return {
@@ -1603,6 +1636,10 @@ export function createPublicFilterSourceBinding(
             capture_digest: hash(encoded),
             capture: encoded,
             dependency_keys: keys,
+            coverage_keys: [
+              ...publicFilterCoverageKeys(keys),
+              ...('representation' in capture ? [PUBLIC_FILTER_ACCOUNT_DOMAIN] : []),
+            ].sort(),
           })
         )[0];
         if (!definition) throw new BindingError('configuration_changed');
@@ -1624,6 +1661,7 @@ export function createPublicFilterSourceBinding(
     try {
       capture = structuredClone(request.capture);
       consumer = structuredClone(request.consumer);
+      publicFilterCatalogue(consumer, 'representation' in capture);
     } catch {
       return fail('binding_mismatch');
     }
@@ -1678,6 +1716,12 @@ export function createPublicFilterSourceBinding(
         // Source writers share the locks used by this enrollment. Its original
         // tuple survives replay and is not replaced by a current read snapshot.
         const keys = publicFilterCoverageKeys(resolved.definition.dependencyKeys);
+        // The new original enrollment retains both native heads. Their FK
+        // controls are separate from the earlier explicit owner-head reads,
+        // including a rejected or replayed enrollment attempt.
+        cost.inputKeys += 2;
+        cost.dependencyPoints += 2;
+        cost.rows += 2;
         const receipt = await enrollAccountDiscoveryHome(
           db,
           {
@@ -1691,6 +1735,11 @@ export function createPublicFilterSourceBinding(
           { deadline },
         );
         if (!receipt.complete) return { status: 'preparing' as const, bootstrap: cut.bootstrap, cost };
+        // Reserve the deferred original-baseline -> current-summary retention
+        // control before staging adoption; rollback cannot refund the attempt.
+        cost.inputKeys += 3;
+        cost.dependencyPoints++;
+        cost.rows++;
         const adopted = await adoptPublicFilterCoverageBaseline(db, baseline, receipt, deadline);
         const advanced = (
           await accountPage.run(db, {
@@ -2003,7 +2052,7 @@ export function createPublicFilterSourceBinding(
           encode(current.definition) !== encode(cut.definition)
         )
           throw new BindingError('configuration_changed');
-        const advanced = await retainPublicFilterRepairVerification(
+        await retainPublicFilterRepairVerification(
           db,
           chain,
           {
@@ -2027,9 +2076,9 @@ export function createPublicFilterSourceBinding(
             cost.dependencyPoints += controls.rows;
             cost.inputKeys += controls.keys;
             cost.bytes += controls.bytes;
+            cost.frontierWrites += controls.frontierWrites ?? 0;
           },
         );
-        if (advanced) cost.frontierWrites++;
         return {
           status: 'verified' as const,
           step: row.step,
@@ -2259,10 +2308,6 @@ export function createPublicFilterSourceBinding(
         )
           throw new BindingError('binding_mismatch');
         const chain = repairChain(cut.bootstrap, joined);
-        cost.rows++;
-        cost.dependencyPoints++;
-        cost.inputKeys += 4;
-        cost.bytes += Buffer.byteLength(encode(chain));
         const seal = await readPublicFilterRepairHomeSeal(db, chain);
         // This is the actual independent terminal prefix, not the producer's
         // complete flag, an exhausted enumeration or a clean serving probe.
@@ -2304,14 +2349,8 @@ export function createPublicFilterSourceBinding(
           throw new BindingError('binding_mismatch');
         const authority = async () => {
           if (!original) return null;
-          // All six keyed native rows are charged, including the joined control
-          // rows that do not appear separately in the SQL result.
-          cost.rows += 5;
-          cost.dependencyPoints += 5;
-          cost.inputKeys += 14;
-          cost.bytes += Buffer.byteLength(
-            encode([nativeId(input.bootstrap), seal.home, joined.definition.readDefinition]),
-          );
+          // Reserve each of the six native relation points once, independently
+          // of whether the join succeeds or returns no current authority.
           const row = (
             await db.query<{
               registration: string;
@@ -2327,10 +2366,14 @@ export function createPublicFilterSourceBinding(
               current_revision: string;
               current_claim: string;
             }>(
-              `SELECT e.registration,e.registration_partition,e.owner_epoch,e.receipt,e.source_position::text,
+              `/* semantic.native-keyed:6:9 */
+             SELECT e.registration,e.registration_partition,e.owner_epoch,e.receipt,e.source_position::text,
                e.native_enqueue_revision::text,e.native_revision::text,e.native_claim_revision::text,
                h.position::text AS current_position,p.position::text AS current_creation,
-               a.revision::text AS current_revision,a.claim_revision::text AS current_claim
+               a.revision::text AS current_revision,a.claim_revision::text AS current_claim,
+               e.complete,p.epoch,p.write_state,h.owner_epoch AS source_epoch,
+               c.consumer,c.position::text AS checkpoint_position,c.epoch AS checkpoint_epoch,
+               b.state,b.coverage_sealed,b.coverage_after
              FROM semantic.public_filter_home_enrollment e
              JOIN core.partition p ON p.partition_no=e.partition_no
              JOIN semantic.public_filter_privacy_head h ON h.partition_no=e.partition_no
@@ -2398,13 +2441,9 @@ export function createPublicFilterSourceBinding(
           await acknowledgePublicFilterRepairBaseline(db, baseline, deadline);
           // The Source frontier is adopted only after the actual registration
           // ACK commit. A crash before this CAS repeats that same prefix safely.
-          cost.rows += 6;
-          cost.dependencyPoints += 6;
-          cost.inputKeys += 18;
-          cost.bytes += Buffer.byteLength(encode([chain, seal.terminal, seal.home]));
+          cost.frontierWrites++;
           if (!(await advancePublicFilterRepairAckFrontier(db, chain, seal.terminal, seal.home)))
             throw new BindingError('owner_unavailable');
-          cost.frontierWrites++;
           if (seal.home !== 4095) return fail('owner_unavailable', cost);
         }
         return { ...joined, cost };

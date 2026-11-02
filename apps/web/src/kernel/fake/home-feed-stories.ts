@@ -14,6 +14,7 @@ export type HomeFeedStory =
   | 'preparing'
   | 'unavailable'
   | 'empty'
+  | 'sparse'
   | 'following'
   | 'kinds-unavailable'
   | 'kinds-next'
@@ -122,7 +123,7 @@ export function homeFeedStoryPage(
       : [];
   return {
     feedItems:
-      state === 'empty' || state === 'preparing' || state === 'unavailable'
+      state === 'empty' || state === 'preparing' || state === 'unavailable' || (state === 'sparse' && !cursor)
         ? []
         : ratingQuestionId !== undefined
           ? questionItems
@@ -133,7 +134,8 @@ export function homeFeedStoryPage(
             : items,
     next:
       !cursor &&
-      (ratingQuestionId !== undefined ||
+      (state === 'sparse' ||
+        ratingQuestionId !== undefined ||
         kind !== undefined ||
         ((state === 'mixed' || spaceId !== undefined) && personal))
         ? 'illustrative-signed-frontier'

@@ -351,7 +351,7 @@ export async function readIdentitySourceProjection(
 ): Promise<
   | {
       status: 'projected';
-      projection: PublicFilterProjectionPage | null;
+      projection: Extract<PublicFilterProjectionPage, { status: 'progress' | 'complete' }> | null;
       cost: PublicFilterCost;
     }
   | { status: 'changed' | 'unready' | 'unavailable'; cost: PublicFilterCost }

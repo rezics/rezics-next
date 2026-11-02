@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { forwardPublicFilterCoveragePage, openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
 import type { RetainedSearchContinuation } from './cursor.ts';
 import type { SearchHit } from './query.ts';
 import { advanceSearchRecovery } from './page-recovery.ts';
@@ -202,7 +203,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     // Request-owned close also deregisters the factory; shutdown waits for admitted work first.
     owned.add(operations);
     let draining: Promise<void> | undefined;
-    return {
+    const wrapper: PublicDiscoveryConsumerOperations = {
       capture: operations.capture.bind(operations),
       captureDiscovery: operations.captureDiscovery.bind(operations),
       queryDiscovery: operations.queryDiscovery.bind(operations),
@@ -212,6 +213,8 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       closeObservation: operations.closeObservation.bind(operations),
       close: () => (draining ??= operations.close().finally(() => owned.delete(operations))),
     };
+    forwardPublicFilterCoveragePage(operations, wrapper);
+    return wrapper;
   }
   return {
     openDiscovery(registry, digest, context, queried) {
@@ -429,11 +432,13 @@ export type PublicSearchRead<T> = Readonly<{
   finalize: () => Promise<void>;
   /** Releases exhausted observations only, after final disclosure has completed. */
   release: () => Promise<void>;
+  /** Always called by the response owner, including hydration/cursor/final failures. */
+  dispose: () => Promise<void>;
 }>;
 
 /** Execute against ONE native captured observation, never against a live alias.
  * Native methods enforce SQL/point/byte/search ceilings across this root, including
- * final status. This layer additionally limits rounds and actual raw window work.
+ * final authority. This layer additionally limits rounds and actual raw window work.
  */
 export async function readPublicSearchPage<T>(options: {
   operations: PublicFilterConsumerOperations;
@@ -465,13 +470,49 @@ export async function readPublicSearchPage<T>(options: {
   };
   let queried: PublicFilterQueriedObservation;
   let repair: PublicFilterConsumerJob;
-  if (options.continuation) {
-    queried = options.continuation.queried;
-    repair = options.continuation.repair;
+  let captured: Extract<PublicFilterConsumerCapture, { status: 'captured' }> | undefined;
+  let previous = options.continuation;
+  if (previous) {
+    queried = previous.queried;
+    repair = previous.repair;
+    const prepared = queried.snapshot.kind === 'prepared';
+    const candidateLimit = prepared ? 2 * limit + 2 : Math.min(600, 6 * limit + 3);
+    const roundLimit = prepared ? 2 : 3;
+    if (
+      !Number.isInteger(previous.work.rounds) ||
+      previous.work.rounds < 0 ||
+      previous.work.rounds > roundLimit ||
+      !Number.isInteger(previous.work.candidates) ||
+      previous.work.candidates < 0 ||
+      previous.work.candidates > candidateLimit
+    )
+      throw new RangeError('Invalid retained Search allowance');
+    if (previous.work.rounds === roundLimit || previous.work.candidates === candidateLimit) {
+      // No current root or dispatch exists yet. A spent prior continuation can
+      // select only an actual prepared replacement, with its own native enrollment;
+      // it cannot reset a live root or rewrite the previous observation's cut.
+      const replacement = await operations.capture({ plan, snapshot: 'prepared' }, context);
+      if (replacement.status !== 'captured') {
+        if (replacement.status === 'preparing') await recover(replacement.repair);
+        else return unavailable(replacement, true);
+        throw readiness();
+      }
+      if (!isDeepStrictEqual(queried.consumer, replacement.queried.consumer))
+        throw new ProblemError('search_restart_required');
+      if (queried.snapshot.observation === replacement.queried.snapshot.observation) {
+        await recover(replacement.repair);
+        throw readiness();
+      }
+      captured = replacement;
+      queried = replacement.queried;
+      repair = replacement.repair;
+      previous = undefined;
+    }
   } else {
     const capture =
       options.capture ?? (await operations.capture({ plan, snapshot: options.snapshot ?? 'prepared' }, context));
     if (capture.status === 'captured') {
+      captured = capture;
       queried = capture.queried;
       repair = capture.repair;
     } else if (capture.status === 'preparing') {
@@ -480,24 +521,37 @@ export async function readPublicSearchPage<T>(options: {
       throw readiness();
     } else return unavailable(capture, false);
   }
-  const executions: string[] = [];
-  const collect = (continuation?: RetainedSearchContinuation) =>
-    collectRetainedUsefulPage({
+  const coverage = (() => {
+    try {
+      return openPublicFilterCoveragePage(operations, context, captured);
+    } catch {
+      // Missing native composition or a capture from another owner is unavailable.
+      throw readiness();
+    }
+  })();
+  const dispose = async () => {
+    try {
+      await coverage.dispose();
+    } catch (error) {
+      return unavailable(coverage.failure(error), options.continuation !== undefined);
+    }
+  };
+  try {
+    const page = await collectRetainedUsefulPage({
       limit,
       prepared: queried.snapshot.kind === 'prepared',
-      ...(continuation
+      ...(previous
         ? {
-            continuation: continuation.window,
-            spent: continuation.work,
-            frontier: continuation.frontier,
+            continuation: previous.window,
+            spent: previous.work,
+            frontier: previous.frontier,
           }
         : {}),
       read: async (_size, refill) => {
-        const result = await operations.query(queried, context, refill);
+        const result = await coverage.query(queried, refill);
         if (result.status === 'queried') {
           if (!sameObservation(queried, result.queried)) throw readiness();
           queried = result.queried;
-          executions.push(result.execution);
           return { execution: result.execution, hits: result.result.hits, window: result.window };
         }
         if (result.status === 'preparing') {
@@ -508,68 +562,64 @@ export async function readPublicSearchPage<T>(options: {
       },
       check: options.check,
       canonicalId: options.canonicalId,
+      consume: ({ execution, consumed }) => coverage.consume(execution, consumed),
     });
-  let page = await collect(options.continuation);
-  if (page.status === 'preparing') {
-    // Do not hand the native owner a filtered vector or a guessed raw frontier.
-    // Preparation restarts the unserved page from its last PUBLIC consumed tuple;
-    // all partially collected values remain internal and are discarded.
-    const preparing = await operations.capture({ plan, snapshot: 'prepared' }, context);
-    if (!('repair' in preparing)) return unavailable(preparing, options.continuation !== undefined);
-    if (
-      preparing.status === 'captured' &&
-      executions.length === 0 &&
-      preparing.queried.snapshot.observation !== queried.snapshot.observation
-    ) {
-      if (!isDeepStrictEqual(queried.consumer, preparing.queried.consumer))
-        throw new ProblemError('search_restart_required');
-      // A later request that has spent no raw work can read the actual ready
-      // replacement. This is a new prepared capture at the public page boundary,
-      // not another direct reservation or a mutation of the old root.
-      queried = preparing.queried;
-      repair = preparing.repair;
-      page = await collect();
-    }
     if (page.status === 'preparing') {
-      await recover(preparing.repair);
-      // Even a captured build cannot be read after spending this request's allowance.
+      // This unserved root owns every attempted child. Preparation cannot replace
+      // its observation or grant a fresh allowance inside the same response.
+      await recover(repair);
       throw readiness();
     }
+    const continuation: RetainedSearchContinuation = {
+      queried,
+      repair,
+      window: page.continuation,
+      frontier: page.frontier,
+      work: { candidates: page.candidates, rounds: page.rounds },
+      ...(plan.rating
+        ? {
+            rating: {
+              questionId: plan.rating.questionId,
+              populationId: plan.rating.populationId,
+              priorEpoch: plan.rating.priorEpoch,
+            },
+          }
+        : {}),
+    };
+    let finalized = false;
+    return {
+      page,
+      continuation,
+      async finalize() {
+        // One current role verifies the entire native child/own-row chain after
+        // owner hydration, metadata, response/cursor and as_of construction.
+        try {
+          await coverage.finish();
+        } catch (error) {
+          return unavailable(coverage.failure(error), options.continuation !== undefined);
+        }
+        finalized = true;
+      },
+      async release() {
+        if (!finalized) throw readiness();
+        await dispose();
+        if (page.status === 'exhausted') {
+          try {
+            await operations.closeObservation(queried, context);
+          } catch (error) {
+            return unavailable(coverage.failure(error), options.continuation !== undefined);
+          }
+        }
+      },
+      dispose,
+    };
+  } catch (error) {
+    try {
+      await coverage.dispose();
+    } catch {
+      // Preserve the serving failure. Native failed/pending custody is retained
+      // when cleanup itself cannot finish within the original frame.
+    }
+    return unavailable(coverage.failure(error), options.continuation !== undefined);
   }
-  const continuation: RetainedSearchContinuation = {
-    queried,
-    repair,
-    window: page.continuation,
-    frontier: page.frontier,
-    work: { candidates: page.candidates, rounds: page.rounds },
-    ...(plan.rating
-      ? {
-          rating: {
-            questionId: plan.rating.questionId,
-            populationId: plan.rating.populationId,
-            priorEpoch: plan.rating.priorEpoch,
-          },
-        }
-      : {}),
-  };
-  return {
-    page,
-    continuation,
-    async finalize() {
-      // End evidence never substitutes for final privacy authorization. Every
-      // batch has its own retained start and original/terminal own-row set.
-      for (const execution of executions) {
-        const status = await operations.readStatus({ queried, execution }, context);
-        if (status.status !== 'observed') return unavailable(status, options.continuation !== undefined);
-        if (!sameObservation(queried, status.queried)) throw readiness();
-        if (status.blocking.length !== 0) {
-          await recover(repair);
-          throw readiness();
-        }
-      }
-    },
-    async release() {
-      if (page.status === 'exhausted') await operations.closeObservation(queried, context);
-    },
-  };
 }

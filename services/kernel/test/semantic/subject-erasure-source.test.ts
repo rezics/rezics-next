@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { runCommand } from '../../src/command/command.ts';
+import { currentCommand, noEffect, runCommand } from '../../src/command/command.ts';
+import { recordSemanticSourceCommit } from '../../src/semantic/erasure-producer.ts';
+import { searchIdentityWriterChanged } from '../../src/search/identity-epoch-participant-events.ts';
 import type { HistoryBarrier } from '../../src/history/registry.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import {
@@ -288,3 +290,206 @@ test('changed native account custody rejects both serialized Source receipts and
     ).value,
   ).toBe(false);
 }, 360_000);
+
+test('equal-delivery original and native origins traverse into distinct held Source pages and survive sealed replay', async () => {
+  for (const nativeFirst of [false, true]) {
+    const author = await f.author();
+    const id = await subject(author, 'Distinct native provenance');
+    const partition = partitionOf(routeOf(id)!);
+    const revision = (
+      await f.db.admin.query<{
+        key: string;
+        transaction_id: string;
+        position: string;
+      }>(
+        `SELECT r.erasure_key::text AS key,r.recorded_transaction_id::text AS transaction_id,b.position::text
+        FROM semantic.revision r JOIN editorial.write_basis b
+          ON b.partition_no=$1 AND b.transaction_id=r.recorded_transaction_id
+        WHERE r.route=$2 AND r.subject_id=$3 AND r.revision=1`,
+        [partition, routeOf(id), id],
+      )
+    ).rows[0]!;
+    const actor = await f.native.access.authenticate(author.bearer, { pool: f.db.pool, deadline: Date.now() + 5000 });
+    const captured = await runCommand(
+      f.db.pool,
+      {
+        partition,
+        basis: {
+          actorAccountId: actor.accountId,
+          clientId: actor.clientId,
+          requestedBy: actor.requestedBy,
+        },
+      },
+      async (tx) => {
+        const native = currentCommand(tx).transactionId;
+        await recordSemanticSourceCommit(tx, native);
+        const position = (
+          await tx.query<{ position: string }>(
+            'SELECT position::text FROM semantic.erasure_source_commit WHERE partition_no=$1 AND transaction_id=$2',
+            [partition, native],
+          )
+        ).rows[0]!.position;
+        const origins = [
+          { transaction_id: revision.transaction_id, position: revision.position },
+          { transaction_id: native, position },
+        ];
+        for (const origin of nativeFirst ? [...origins].reverse() : origins)
+          await tx.query("SELECT semantic.record_erasure_locator($1,$2,'actor','revision',$3,$4,$5)", [
+            partition,
+            author.accountId,
+            revision.key,
+            origin.transaction_id,
+            origin.position,
+          ]);
+        return { value: origins, events: searchIdentityWriterChanged() };
+      },
+    );
+    const expected = captured.value.map((origin) => `${origin.transaction_id}/${origin.position}`).sort();
+    const nativeRows = (
+      await f.db.admin.query<{ origin_key: string }>(
+        `SELECT origin_key FROM semantic.erasure_source_record WHERE partition_no=$1 AND account_id=$2
+        AND store='revision' AND record_key=$3 AND role='actor' AND delivery_position=$4 ORDER BY origin_key`,
+        [partition, author.accountId, revision.key, captured.position.toString()],
+      )
+    ).rows;
+    expect(nativeRows.map((row) => row.origin_key)).toEqual(expected);
+    await f.tombstone(author);
+    const b = await barrier(author.accountId);
+    await local(b);
+    const result = await complete(b);
+    const prefix = `${partition}:revision:${revision.key}:actor:${captured.position}:`;
+    expect(
+      result.records
+        .filter((record) => record.key.startsWith(prefix))
+        .map((record) => record.key.slice(prefix.length))
+        .sort(),
+    ).toEqual(expected);
+    const holds = (
+      await f.db.admin.query<{ origin_key: string }>(
+        `SELECT DISTINCT h.origin_key FROM semantic.erasure_source_hold h
+        JOIN semantic.erasure_source_commit c USING(partition_no,transaction_id)
+        WHERE h.partition_no=$1 AND h.account_id=$2 AND h.store='revision' AND h.record_key=$3
+          AND h.role='actor' AND h.delivery_position=$4 ORDER BY h.origin_key`,
+        [partition, author.accountId, revision.key, captured.position.toString()],
+      )
+    ).rows;
+    expect(holds.map((row) => row.origin_key)).toEqual(expected);
+    for (const origin of captured.value) {
+      expect(
+        (
+          await f.db.admin.query(
+            `SELECT 1 FROM semantic.erasure_shared_custody WHERE partition_no=$1 AND account_id=$2
+          AND role='actor' AND transaction_id=$3 AND outbox_position=$4`,
+            [partition, author.accountId, origin.transaction_id, origin.position],
+          )
+        ).rowCount,
+      ).toBe(1);
+      // Replay identifies the stored origin even when the physical queue most
+      // recently carried the other transaction. No current actor/body is borrowed.
+      const replay = await runCommand(
+        f.db.pool,
+        {
+          partition,
+          basis: {
+            actorAccountId: '00000000-0000-8000-8000-000000000001',
+            clientId: 'native-origin-replay',
+            requestedBy: null,
+          },
+        },
+        async (tx) => {
+          await tx.query("SELECT semantic.record_erasure_locator($1,$2,'actor','revision',$3,$4,$5)", [
+            partition,
+            author.accountId,
+            revision.key,
+            origin.transaction_id,
+            origin.position,
+          ]);
+          return noEffect(true);
+        },
+      );
+      expect(replay.value).toBe(true);
+      await expect(
+        runCommand(
+          f.db.pool,
+          {
+            partition,
+            basis: {
+              actorAccountId: '00000000-0000-8000-8000-000000000001',
+              clientId: 'native-origin-wrong-position',
+              requestedBy: null,
+            },
+          },
+          async (tx) => {
+            await tx.query("SELECT semantic.record_erasure_locator($1,$2,'actor','revision',$3,$4,$5)", [
+              partition,
+              author.accountId,
+              revision.key,
+              origin.transaction_id,
+              (BigInt(origin.position) + 1n).toString(),
+            ]);
+            return noEffect(true);
+          },
+        ),
+      ).rejects.toMatchObject({ code: '23514' });
+    }
+    let refusedTransaction: string | undefined;
+    await expect(
+      runCommand(
+        f.db.pool,
+        {
+          partition,
+          basis: {
+            actorAccountId: '00000000-0000-8000-8000-000000000001',
+            clientId: 'native-origin-refusal',
+            requestedBy: null,
+          },
+        },
+        async (tx) => {
+          const transactionId = currentCommand(tx).transactionId;
+          refusedTransaction = transactionId;
+          await recordSemanticSourceCommit(tx, transactionId);
+          const native = (
+            await tx.query<{ position: string }>(
+              'SELECT position::text FROM semantic.erasure_source_commit WHERE partition_no=$1 AND transaction_id=$2',
+              [partition, transactionId],
+            )
+          ).rows[0]!;
+          await tx.query("SELECT semantic.record_erasure_locator($1,$2,'actor','revision',$3,$4,$5)", [
+            partition,
+            author.accountId,
+            revision.key,
+            transactionId,
+            native.position,
+          ]);
+          return { value: true, events: searchIdentityWriterChanged() };
+        },
+      ),
+    ).rejects.toMatchObject({ code: '23514' });
+    expect(refusedTransaction).toBeDefined();
+    expect(
+      (
+        await f.db.admin.query(
+          'SELECT 1 FROM semantic.erasure_source_commit WHERE partition_no=$1 AND transaction_id=$2',
+          [partition, refusedTransaction],
+        )
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (
+        await f.db.admin.query('SELECT 1 FROM editorial.write_basis WHERE partition_no=$1 AND transaction_id=$2', [
+          partition,
+          refusedTransaction,
+        ])
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (
+        await f.db.admin.query<{ origin_key: string }>(
+          `SELECT origin_key FROM semantic.erasure_source_record WHERE partition_no=$1 AND account_id=$2
+        AND store='revision' AND record_key=$3 AND role='actor' AND delivery_position=$4 ORDER BY origin_key`,
+          [partition, author.accountId, revision.key, captured.position.toString()],
+        )
+      ).rows,
+    ).toEqual(nativeRows);
+  }
+}, 720_000);

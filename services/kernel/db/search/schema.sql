@@ -51,6 +51,23 @@ END $$;
 
 
 --
+-- Name: enqueue_identity_receiving_scope(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.enqueue_identity_receiving_scope() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NEW.binding->>'step'='search-canonical-index' THEN
+  INSERT INTO search.identity_receiving_native_scope_pending
+   (partition_no,job_id,job_epoch,effect_key,plan_transaction_id)
+  VALUES (NEW.partition_no,NEW.job_id,NEW.job_epoch,NEW.effect_key,NEW.transaction_id);
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: enroll_retained_copy(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -84,6 +101,204 @@ END $$;
 
 
 --
+-- Name: guard_public_filter_coverage_page(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.guard_public_filter_coverage_page() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='INSERT' THEN
+    IF NEW.state<>'planned' OR NEW.revision<>1 OR NEW.rounds<>0 OR NEW.charged<>0
+      OR NEW.tail IS NOT NULL OR NEW.tail_consumed IS NOT NULL OR NEW.pending IS NOT NULL THEN
+      RAISE EXCEPTION 'Native page must begin with a closed plan' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF TG_OP='DELETE' THEN
+    PERFORM 1 FROM search.public_filter_observation WHERE (partition_no,observation)=(OLD.partition_no,OLD.observation)
+      AND state IN ('closing','closed') FOR UPDATE;
+    -- A failed reservation is retired only with its drained original observation.
+    -- Never clear or refund it to make an uncertain execution appear completed.
+    IF NOT FOUND OR (OLD.pending IS NOT NULL AND OLD.state<>'failed')
+      OR EXISTS (SELECT 1 FROM search.public_filter_execution WHERE partition_no=OLD.partition_no AND page_id=OLD.id)
+      OR EXISTS (SELECT 1 FROM search.public_filter_reference WHERE (partition_no,observation)=(OLD.partition_no,OLD.observation))
+      OR EXISTS (SELECT 1 FROM search.public_filter_pit WHERE (partition_no,observation)=(OLD.partition_no,OLD.observation))
+    THEN RAISE EXCEPTION 'Native page obligations have not drained' USING ERRCODE='23514'; END IF;
+    RETURN OLD;
+  END IF;
+  IF NEW.work IS DISTINCT FROM OLD.work
+    AND NOT search.public_filter_coverage_work_advances(OLD.work,NEW.work) THEN
+    RAISE EXCEPTION 'Native page work cannot refund reservations' USING ERRCODE='23514';
+  END IF;
+  IF (NEW.partition_no,NEW.id,NEW.observation,NEW.registration,NEW.definition,NEW.consumer,NEW.deadline,NEW.reference_token,
+      NEW.boundary,NEW.boundary_consumed,NEW.boundary_window,NEW.ceiling)
+    IS DISTINCT FROM (OLD.partition_no,OLD.id,OLD.observation,OLD.registration,OLD.definition,OLD.consumer,OLD.deadline,OLD.reference_token,
+      OLD.boundary,OLD.boundary_consumed,OLD.boundary_window,OLD.ceiling)
+    OR NEW.revision<>OLD.revision+1
+    OR NOT ((OLD.state='planned' AND NEW.state IN ('open','failed'))
+      OR (OLD.state='open' AND NEW.state IN ('open','sealed','failed'))
+      OR (OLD.state='sealed' AND NEW.state IN ('finished','failed')))
+    OR ((OLD.state<>'open' OR NEW.state<>'open') AND
+      (NEW.rounds,NEW.charged,NEW.tail,NEW.tail_consumed,NEW.pending)
+        IS DISTINCT FROM (OLD.rounds,OLD.charged,OLD.tail,OLD.tail_consumed,OLD.pending))
+    OR (OLD.state='open' AND NEW.state='open' AND NOT (
+      (OLD.pending IS NULL AND NEW.pending IS NOT NULL AND NEW.rounds=OLD.rounds+1 AND NEW.tail IS NOT DISTINCT FROM OLD.tail
+        AND NEW.charged>OLD.charged AND NEW.tail_consumed IS NOT DISTINCT FROM OLD.tail_consumed)
+      OR (OLD.pending IS NOT NULL AND NEW.pending IS NULL AND NEW.rounds=OLD.rounds AND NEW.tail=OLD.pending
+        AND NEW.charged<=OLD.charged AND NEW.tail_consumed IS NULL)
+      OR (OLD.pending IS NULL AND NEW.pending IS NULL AND NEW.tail IS NOT DISTINCT FROM OLD.tail
+        AND OLD.tail IS NOT NULL
+        AND NEW.rounds=OLD.rounds AND NEW.charged=OLD.charged
+        AND OLD.tail_consumed IS NULL AND NEW.tail_consumed IS NOT NULL)
+      -- Persist a funded command without changing its pending custody. This is
+      -- used by the same atomic engine-fence statement, before external I/O.
+      OR (OLD.pending IS NOT NULL AND NEW.pending=OLD.pending
+        AND (NEW.rounds,NEW.charged,NEW.tail,NEW.tail_consumed)
+          IS NOT DISTINCT FROM (OLD.rounds,OLD.charged,OLD.tail,OLD.tail_consumed)
+        AND NEW.work IS DISTINCT FROM OLD.work
+        AND (semantic.public_filter_native_json(NEW.work::jsonb)->>'statements')::numeric
+          >(semantic.public_filter_native_json(OLD.work::jsonb)->>'statements')::numeric
+        AND (semantic.public_filter_native_json(NEW.work::jsonb)->>'frontierWrites')::numeric
+          >(semantic.public_filter_native_json(OLD.work::jsonb)->>'frontierWrites')::numeric)))
+    OR (NEW.state IN ('sealed','finished') AND (NEW.pending IS NOT NULL OR NEW.tail IS NULL
+      OR NEW.tail_consumed IS NULL OR NEW.rounds=0))
+  THEN RAISE EXCEPTION 'Invalid native page transition' USING ERRCODE='23514'; END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: guard_public_filter_page_execution(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.guard_public_filter_page_execution() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='DELETE' THEN
+    IF OLD.page_id IS NOT NULL AND OLD.page_status<>'complete' THEN
+      -- Only a false dispatch fence excludes unknown engine successors. Older
+      -- children and lost engine receipts retain their original obligations.
+      -- Known locators must also have left native custody through actual drain.
+      PERFORM 1 FROM search.public_filter_observation o
+      JOIN search.public_filter_coverage_page p ON (p.partition_no,p.id)=(OLD.partition_no,OLD.page_id)
+        AND p.observation=o.observation AND p.state='failed' AND p.pending=OLD.id
+        AND p.rounds=OLD.page_ordinal AND p.charged>=OLD.page_size
+      WHERE (o.partition_no,o.observation)=(OLD.partition_no,OLD.observation)
+        AND OLD.page_engine_started IS FALSE
+        AND o.state IN ('closing','closed')
+        AND NOT EXISTS (SELECT 1 FROM search.public_filter_reference f
+          WHERE (f.partition_no,f.observation)=(o.partition_no,o.observation))
+        AND NOT EXISTS (SELECT 1 FROM search.public_filter_pit t
+          WHERE (t.partition_no,t.observation)=(o.partition_no,o.observation))
+      FOR UPDATE OF o,p;
+      IF NOT FOUND THEN RAISE EXCEPTION 'Native dispatched child has not drained' USING ERRCODE='23514'; END IF;
+    END IF;
+    RETURN OLD;
+  END IF;
+  IF TG_OP='INSERT' THEN
+    IF NEW.page_id IS NOT NULL THEN
+      PERFORM 1 FROM search.public_filter_coverage_page WHERE (partition_no,id)=(NEW.partition_no,NEW.page_id)
+        AND observation=NEW.observation AND state='open' AND pending=NEW.id AND rounds=NEW.page_ordinal FOR UPDATE;
+      IF NOT FOUND OR NEW.page_status<>'dispatched' OR NEW.consumer_window IS NOT NULL
+        OR NEW.page_engine_started IS DISTINCT FROM false THEN
+        RAISE EXCEPTION 'Native child was not reserved' USING ERRCODE='23514';
+      END IF;
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF OLD.page_engine_started IS DISTINCT FROM NEW.page_engine_started THEN
+    IF OLD.page_id IS NULL OR OLD.page_engine_started IS DISTINCT FROM false
+      OR NEW.page_engine_started IS DISTINCT FROM true OR OLD.page_status<>'dispatched'
+      OR NEW.page_status<>'dispatched' OR NEW.execution IS DISTINCT FROM OLD.execution
+      OR NEW.consumer_window IS NOT NULL OR NEW.page_raw IS NOT NULL THEN
+      RAISE EXCEPTION 'Native engine dispatch is immutable' USING ERRCODE='23514';
+    END IF;
+    PERFORM 1 FROM search.public_filter_coverage_page p
+    JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(p.partition_no,p.observation)
+    WHERE (p.partition_no,p.id)=(OLD.partition_no,OLD.page_id) AND p.observation=OLD.observation
+      AND p.state='open' AND p.pending=OLD.id AND o.state='open'
+      AND p.deadline>floor(extract(epoch FROM clock_timestamp())*1000)
+      -- The page retains its original user; another live user is not its lease.
+      -- Legacy roots remain unknown and cannot acquire a reference by inference.
+      AND p.reference_token IS NOT NULL
+      AND EXISTS (SELECT 1 FROM search.public_filter_reference f
+        WHERE (f.partition_no,f.observation,f.token)=(o.partition_no,o.observation,p.reference_token)
+          AND f.expires_at>floor(extract(epoch FROM clock_timestamp())*1000) FOR SHARE OF f)
+    FOR UPDATE OF p FOR SHARE OF o;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Native engine dispatch is not admitted' USING ERRCODE='23514'; END IF;
+  END IF;
+  IF OLD.page_id IS DISTINCT FROM NEW.page_id OR (OLD.page_id IS NOT NULL AND (
+      (NEW.partition_no,NEW.observation,NEW.id,NEW.page_ordinal,NEW.page_parent,NEW.page_consumed,NEW.page_size)
+       IS DISTINCT FROM (OLD.partition_no,OLD.observation,OLD.id,OLD.page_ordinal,OLD.page_parent,OLD.page_consumed,OLD.page_size))) THEN
+    RAISE EXCEPTION 'Native page execution identity is immutable' USING ERRCODE='23514';
+  END IF;
+  IF OLD.page_id IS NOT NULL AND (NEW.execution IS DISTINCT FROM OLD.execution OR NEW.consumer_window IS DISTINCT FROM OLD.consumer_window
+      OR NEW.page_status IS DISTINCT FROM OLD.page_status OR NEW.page_raw IS DISTINCT FROM OLD.page_raw) THEN
+    IF OLD.page_id IS NULL OR OLD.page_status<>'dispatched' OR NEW.page_status<>'complete'
+      OR OLD.consumer_window IS NOT NULL OR NEW.consumer_window IS NULL THEN
+      RAISE EXCEPTION 'Native page execution is immutable' USING ERRCODE='23514';
+    END IF;
+    PERFORM 1 FROM search.public_filter_coverage_page WHERE (partition_no,id)=(OLD.partition_no,OLD.page_id)
+      AND state='open' AND pending=OLD.id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Native page is sealed' USING ERRCODE='23514'; END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: prevent_receiving_plan_mutation(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.prevent_receiving_plan_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN RAISE EXCEPTION 'Native receiving plans are immutable'; END; $$;
+
+
+--
+-- Name: public_filter_coverage_work_advances(text, text); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.public_filter_coverage_work_advances(before_encoded text, after_encoded text) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE
+    AS $$
+DECLARE
+  before_work jsonb := semantic.public_filter_native_json(before_encoded::jsonb);
+  after_work jsonb := semantic.public_filter_native_json(after_encoded::jsonb);
+  counter record;
+  before_value numeric;
+  after_value numeric;
+BEGIN
+  IF jsonb_typeof(before_work) IS DISTINCT FROM 'object'
+    OR jsonb_typeof(after_work) IS DISTINCT FROM 'object'
+    OR (SELECT array_agg(key ORDER BY key) FROM jsonb_object_keys(before_work) key)
+      IS DISTINCT FROM (SELECT array_agg(key ORDER BY key) FROM jsonb_object_keys(after_work) key)
+    OR NOT before_work ?& ARRAY['inputKeys','candidates','accessPoints','dependencyPoints',
+      'engineSearches','engineIteratorSteps','outputSlots','resultWrites','frontierWrites',
+      'statements','rows','bytes','engineRequests'] THEN
+    RETURN false;
+  END IF;
+  FOR counter IN SELECT key,value FROM jsonb_each(before_work) LOOP
+    IF jsonb_typeof(counter.value) IS DISTINCT FROM 'number'
+      OR jsonb_typeof(after_work->counter.key) IS DISTINCT FROM 'number' THEN
+      RETURN false;
+    END IF;
+    before_value := counter.value::text::numeric;
+    after_value := (after_work->counter.key)::text::numeric;
+    IF before_value<0 OR before_value<>trunc(before_value)
+      OR after_value<before_value OR after_value<>trunc(after_value)
+      OR after_value>9007199254740991 THEN
+      RETURN false;
+    END IF;
+  END LOOP;
+  RETURN true;
+END $$;
+
+
+--
 -- Name: retain_public_filter_coverage_baseline(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -93,6 +308,21 @@ CREATE FUNCTION search.retain_public_filter_coverage_baseline() RETURNS trigger
 BEGIN
   IF NEW IS DISTINCT FROM OLD THEN
     RAISE EXCEPTION 'Original coverage baseline is immutable' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: retain_public_filter_population_protocol(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.retain_public_filter_population_protocol() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.population_protocol IS DISTINCT FROM OLD.population_protocol THEN
+    RAISE EXCEPTION 'Original population protocol is immutable' USING ERRCODE='23514';
   END IF;
   RETURN NEW;
 END $$;
@@ -384,6 +614,145 @@ CREATE TABLE search.generation_publication_home (
 
 
 --
+-- Name: identity_receiving_native_copy; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.identity_receiving_native_copy (
+    partition_no integer NOT NULL,
+    plan_id uuid NOT NULL,
+    copy_no integer NOT NULL,
+    locator jsonb NOT NULL,
+    transaction_id uuid NOT NULL,
+    reconciled_transaction_id uuid,
+    settlement jsonb,
+    CONSTRAINT identity_receiving_native_copy_check CHECK (((reconciled_transaction_id IS NULL) = (settlement IS NULL))),
+    CONSTRAINT identity_receiving_native_copy_copy_no_check CHECK ((copy_no >= 0)),
+    CONSTRAINT identity_receiving_native_copy_locator_check CHECK ((octet_length((locator)::text) <= 2048)),
+    CONSTRAINT identity_receiving_native_copy_settlement_check CHECK ((octet_length((settlement)::text) <= 512))
+);
+
+
+--
+-- Name: identity_receiving_native_document; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.identity_receiving_native_document (
+    partition_no integer NOT NULL,
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    document_id uuid NOT NULL,
+    CONSTRAINT identity_receiving_native_document_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: identity_receiving_native_hold; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.identity_receiving_native_hold (
+    partition_no integer NOT NULL,
+    plan_id uuid NOT NULL,
+    hold_id uuid NOT NULL,
+    accepted_transaction_id uuid NOT NULL,
+    accepted_epoch integer,
+    accepted_position bigint,
+    released_transaction_id uuid,
+    CONSTRAINT identity_receiving_native_hold_accepted_epoch_check CHECK ((accepted_epoch > 0)),
+    CONSTRAINT identity_receiving_native_hold_accepted_position_check CHECK ((accepted_position > 0)),
+    CONSTRAINT identity_receiving_native_hold_check CHECK (((accepted_epoch IS NULL) = (accepted_position IS NULL)))
+);
+
+
+--
+-- Name: identity_receiving_native_operation; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.identity_receiving_native_operation (
+    partition_no integer NOT NULL,
+    plan_id uuid NOT NULL,
+    operation_id uuid NOT NULL,
+    hold_id uuid NOT NULL,
+    state text NOT NULL,
+    writer_token uuid NOT NULL,
+    writer_locator text NOT NULL,
+    writer_transaction_id uuid CONSTRAINT identity_receiving_native_operat_writer_transaction_id_not_null NOT NULL,
+    writer_position bigint NOT NULL,
+    dispatch_transaction_id uuid CONSTRAINT identity_receiving_native_oper_dispatch_transaction_id_not_null NOT NULL,
+    visible_transaction_id uuid,
+    visible_position bigint,
+    writer_evidence_digest text,
+    applied_transaction_id uuid,
+    frontier jsonb,
+    CONSTRAINT identity_receiving_native_operatio_writer_evidence_digest_check CHECK ((writer_evidence_digest ~ '^[a-f0-9]{64}$'::text)),
+    CONSTRAINT identity_receiving_native_operation_check CHECK (((state = 'dispatched'::text) = (visible_transaction_id IS NULL))),
+    CONSTRAINT identity_receiving_native_operation_check1 CHECK (((visible_transaction_id IS NULL) = (visible_position IS NULL))),
+    CONSTRAINT identity_receiving_native_operation_check2 CHECK (((visible_transaction_id IS NULL) = (writer_evidence_digest IS NULL))),
+    CONSTRAINT identity_receiving_native_operation_check3 CHECK (((state = 'applied'::text) = (applied_transaction_id IS NOT NULL))),
+    CONSTRAINT identity_receiving_native_operation_check4 CHECK (((applied_transaction_id IS NULL) = (frontier IS NULL))),
+    CONSTRAINT identity_receiving_native_operation_frontier_check CHECK ((octet_length((frontier)::text) <= 2048)),
+    CONSTRAINT identity_receiving_native_operation_state_check CHECK ((state = ANY (ARRAY['dispatched'::text, 'visible'::text, 'applied'::text]))),
+    CONSTRAINT identity_receiving_native_operation_visible_position_check CHECK ((visible_position > 0)),
+    CONSTRAINT identity_receiving_native_operation_writer_locator_check CHECK (((octet_length(writer_locator) >= 1) AND (octet_length(writer_locator) <= 8192))),
+    CONSTRAINT identity_receiving_native_operation_writer_position_check CHECK ((writer_position > 0))
+);
+
+
+--
+-- Name: identity_receiving_native_pending; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.identity_receiving_native_pending (
+    partition_no integer NOT NULL,
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    plan_id uuid NOT NULL
+);
+
+
+--
+-- Name: identity_receiving_native_plan; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.identity_receiving_native_plan (
+    partition_no integer NOT NULL,
+    plan_id uuid NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    original_id uuid NOT NULL,
+    document_id uuid NOT NULL,
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    effect_key text NOT NULL COLLATE pg_catalog."C",
+    scope_digest text NOT NULL,
+    source jsonb NOT NULL,
+    obligations jsonb NOT NULL,
+    action_digest text NOT NULL,
+    initial_copy_count integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_receiving_native_plan_action_digest_check CHECK ((action_digest ~ '^[a-f0-9]{64}$'::text)),
+    CONSTRAINT identity_receiving_native_plan_effect_key_check CHECK (((octet_length(effect_key) >= 1) AND (octet_length(effect_key) <= 256))),
+    CONSTRAINT identity_receiving_native_plan_initial_copy_count_check CHECK (((initial_copy_count >= 0) AND (initial_copy_count <= 100))),
+    CONSTRAINT identity_receiving_native_plan_job_epoch_check CHECK ((job_epoch > 0)),
+    CONSTRAINT identity_receiving_native_plan_obligations_check CHECK ((octet_length((obligations)::text) <= 8192)),
+    CONSTRAINT identity_receiving_native_plan_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_receiving_native_plan_physical_target_check CHECK ((octet_length(physical_target) <= 256)),
+    CONSTRAINT identity_receiving_native_plan_scope_digest_check CHECK ((scope_digest ~ '^[a-f0-9]{64}$'::text)),
+    CONSTRAINT identity_receiving_native_plan_source_check CHECK ((octet_length((source)::text) <= 8192))
+);
+
+
+--
+-- Name: identity_receiving_native_scope_pending; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.identity_receiving_native_scope_pending (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    effect_key text NOT NULL COLLATE pg_catalog."C",
+    plan_transaction_id uuid CONSTRAINT identity_receiving_native_scope_pe_plan_transaction_id_not_null NOT NULL,
+    CONSTRAINT identity_receiving_native_scope_pending_job_epoch_check CHECK ((job_epoch > 0))
+);
+
+
+--
 -- Name: identity_writer; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -627,6 +996,46 @@ CREATE TABLE search.public_filter_coverage_home (
 
 
 --
+-- Name: public_filter_coverage_page; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_coverage_page (
+    partition_no integer NOT NULL,
+    id uuid NOT NULL,
+    observation text NOT NULL,
+    registration text NOT NULL,
+    definition text NOT NULL,
+    consumer text NOT NULL,
+    deadline bigint NOT NULL,
+    boundary text,
+    boundary_consumed integer NOT NULL,
+    boundary_window text,
+    ceiling integer NOT NULL,
+    state text NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    rounds integer DEFAULT 0 NOT NULL,
+    charged integer DEFAULT 0 NOT NULL,
+    tail text,
+    tail_consumed integer,
+    pending text,
+    work text NOT NULL,
+    reference_token uuid,
+    CONSTRAINT public_filter_coverage_page_boundary_consumed_check CHECK (((boundary_consumed >= 0) AND (boundary_consumed <= 200))),
+    CONSTRAINT public_filter_coverage_page_boundary_window_check CHECK ((octet_length(boundary_window) <= 1048576)),
+    CONSTRAINT public_filter_coverage_page_ceiling_check CHECK (((ceiling >= 1) AND (ceiling <= 600))),
+    CONSTRAINT public_filter_coverage_page_check CHECK (((charged >= 0) AND (charged <= ceiling))),
+    CONSTRAINT public_filter_coverage_page_check1 CHECK ((((boundary IS NULL) AND (boundary_window IS NULL) AND (boundary_consumed = 0)) OR ((boundary IS NOT NULL) AND (boundary_window IS NOT NULL)))),
+    CONSTRAINT public_filter_coverage_page_consumer_check CHECK ((octet_length(consumer) <= 65536)),
+    CONSTRAINT public_filter_coverage_page_definition_check CHECK ((octet_length(definition) <= 1048576)),
+    CONSTRAINT public_filter_coverage_page_revision_check CHECK ((revision > 0)),
+    CONSTRAINT public_filter_coverage_page_rounds_check CHECK (((rounds >= 0) AND (rounds <= 3))),
+    CONSTRAINT public_filter_coverage_page_state_check CHECK ((state = ANY (ARRAY['planned'::text, 'open'::text, 'sealed'::text, 'finished'::text, 'failed'::text]))),
+    CONSTRAINT public_filter_coverage_page_tail_consumed_check CHECK (((tail_consumed >= 0) AND (tail_consumed <= 200))),
+    CONSTRAINT public_filter_coverage_page_work_check CHECK ((octet_length(work) <= 65536))
+);
+
+
+--
 -- Name: public_filter_coverage_preparation; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -639,8 +1048,10 @@ CREATE TABLE search.public_filter_coverage_preparation (
     generation bigint NOT NULL,
     after_home integer DEFAULT 0 NOT NULL,
     root text NOT NULL,
+    population_protocol integer,
     CONSTRAINT public_filter_coverage_preparation_after_home_check CHECK (((after_home >= 0) AND (after_home <= 4096))),
     CONSTRAINT public_filter_coverage_preparation_generation_check CHECK ((generation >= 0)),
+    CONSTRAINT public_filter_coverage_preparation_population_protocol_check CHECK (((population_protocol IS NULL) OR (population_protocol = 1))),
     CONSTRAINT public_filter_coverage_preparation_root_check CHECK ((root ~ '^[0-9a-f]{64}$'::text))
 );
 
@@ -657,9 +1068,23 @@ CREATE TABLE search.public_filter_execution (
     consumer_repair text,
     consumer_window text,
     repair_settlement text,
+    page_id uuid,
+    page_ordinal integer,
+    page_parent text,
+    page_consumed integer,
+    page_size integer,
+    page_raw integer,
+    page_status text,
+    page_engine_started boolean,
     CONSTRAINT public_filter_execution_consumer_repair_check CHECK ((octet_length(consumer_repair) <= 1048576)),
     CONSTRAINT public_filter_execution_consumer_window_check CHECK ((octet_length(consumer_window) <= 1048576)),
     CONSTRAINT public_filter_execution_execution_check CHECK ((octet_length(execution) <= 1048576)),
+    CONSTRAINT public_filter_execution_page_consumed_check CHECK (((page_consumed >= 0) AND (page_consumed <= 200))),
+    CONSTRAINT public_filter_execution_page_ordinal_check CHECK (((page_ordinal >= 1) AND (page_ordinal <= 3))),
+    CONSTRAINT public_filter_execution_page_raw_check CHECK (((page_raw >= 0) AND (page_raw <= 200))),
+    CONSTRAINT public_filter_execution_page_shape CHECK ((((page_id IS NULL) AND (page_ordinal IS NULL) AND (page_parent IS NULL) AND (page_consumed IS NULL) AND (page_size IS NULL) AND (page_raw IS NULL) AND (page_status IS NULL) AND (page_engine_started IS NULL)) OR ((page_id IS NOT NULL) AND (page_ordinal IS NOT NULL) AND (page_consumed IS NOT NULL) AND (page_size IS NOT NULL) AND (page_status IS NOT NULL) AND (((page_status = 'dispatched'::text) AND (page_raw IS NULL)) OR ((page_status = 'complete'::text) AND (page_raw IS NOT NULL) AND (page_raw <= page_size)))))),
+    CONSTRAINT public_filter_execution_page_size_check CHECK (((page_size >= 1) AND (page_size <= 200))),
+    CONSTRAINT public_filter_execution_page_status_check CHECK ((page_status = ANY (ARRAY['dispatched'::text, 'complete'::text]))),
     CONSTRAINT public_filter_execution_repair_settlement_check CHECK ((octet_length(repair_settlement) <= 16384))
 );
 
@@ -1089,6 +1514,86 @@ ALTER TABLE ONLY search.generation_publication
 
 
 --
+-- Name: identity_receiving_native_copy identity_receiving_native_copy_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_copy
+    ADD CONSTRAINT identity_receiving_native_copy_pkey PRIMARY KEY (partition_no, plan_id, copy_no);
+
+
+--
+-- Name: identity_receiving_native_document identity_receiving_native_document_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_document
+    ADD CONSTRAINT identity_receiving_native_document_pkey PRIMARY KEY (partition_no, physical_target, document_id);
+
+
+--
+-- Name: identity_receiving_native_hold identity_receiving_native_hold_partition_no_hold_id_key; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_hold
+    ADD CONSTRAINT identity_receiving_native_hold_partition_no_hold_id_key UNIQUE (partition_no, hold_id);
+
+
+--
+-- Name: identity_receiving_native_hold identity_receiving_native_hold_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_hold
+    ADD CONSTRAINT identity_receiving_native_hold_pkey PRIMARY KEY (partition_no, plan_id);
+
+
+--
+-- Name: identity_receiving_native_operation identity_receiving_native_operation_partition_no_plan_id_key; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_operation
+    ADD CONSTRAINT identity_receiving_native_operation_partition_no_plan_id_key UNIQUE (partition_no, plan_id);
+
+
+--
+-- Name: identity_receiving_native_operation identity_receiving_native_operation_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_operation
+    ADD CONSTRAINT identity_receiving_native_operation_pkey PRIMARY KEY (partition_no, plan_id, operation_id);
+
+
+--
+-- Name: identity_receiving_native_pending identity_receiving_native_pending_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_pending
+    ADD CONSTRAINT identity_receiving_native_pending_pkey PRIMARY KEY (partition_no, physical_target, plan_id);
+
+
+--
+-- Name: identity_receiving_native_plan identity_receiving_native_pla_partition_no_job_id_job_epoch_key; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_plan
+    ADD CONSTRAINT identity_receiving_native_pla_partition_no_job_id_job_epoch_key UNIQUE (partition_no, job_id, job_epoch, effect_key);
+
+
+--
+-- Name: identity_receiving_native_plan identity_receiving_native_plan_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_plan
+    ADD CONSTRAINT identity_receiving_native_plan_pkey PRIMARY KEY (partition_no, plan_id);
+
+
+--
+-- Name: identity_receiving_native_scope_pending identity_receiving_native_scope_pending_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_scope_pending
+    ADD CONSTRAINT identity_receiving_native_scope_pending_pkey PRIMARY KEY (partition_no, job_id, job_epoch, effect_key);
+
+
+--
 -- Name: identity_writer_gate identity_writer_gate_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -1150,6 +1655,14 @@ ALTER TABLE ONLY search.public_filter_coverage_baseline
 
 ALTER TABLE ONLY search.public_filter_coverage_home
     ADD CONSTRAINT public_filter_coverage_home_pkey PRIMARY KEY (partition_no, registration, source_home);
+
+
+--
+-- Name: public_filter_coverage_page public_filter_coverage_page_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_coverage_page
+    ADD CONSTRAINT public_filter_coverage_page_pkey PRIMARY KEY (partition_no, id);
 
 
 --
@@ -1355,6 +1868,13 @@ CREATE INDEX generation_publication_home_frontier ON search.generation_publicati
 
 
 --
+-- Name: identity_receiving_native_copy_pending; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX identity_receiving_native_copy_pending ON search.identity_receiving_native_copy USING btree (partition_no, plan_id, copy_no) WHERE (reconciled_transaction_id IS NULL);
+
+
+--
 -- Name: identity_writer_pending; Type: INDEX; Schema: search; Owner: -
 --
 
@@ -1380,6 +1900,34 @@ CREATE INDEX public_filter_coverage_behind ON search.public_filter_coverage_home
 --
 
 CREATE INDEX public_filter_coverage_changed ON search.public_filter_coverage_home USING btree (partition_no, registration, last_change_generation, source_home);
+
+
+--
+-- Name: public_filter_coverage_page_active; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_coverage_page_active ON search.public_filter_coverage_page USING btree (partition_no, observation) WHERE ((state = ANY (ARRAY['planned'::text, 'open'::text, 'sealed'::text])) OR (pending IS NOT NULL));
+
+
+--
+-- Name: public_filter_coverage_page_drain; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_coverage_page_drain ON search.public_filter_coverage_page USING btree (partition_no, observation, id) WHERE (state = ANY (ARRAY['planned'::text, 'open'::text, 'sealed'::text]));
+
+
+--
+-- Name: public_filter_coverage_page_observation; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_coverage_page_observation ON search.public_filter_coverage_page USING btree (partition_no, observation, id);
+
+
+--
+-- Name: public_filter_execution_page; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE UNIQUE INDEX public_filter_execution_page ON search.public_filter_execution USING btree (partition_no, page_id, page_ordinal) WHERE (page_id IS NOT NULL);
 
 
 --
@@ -1516,17 +2064,17 @@ CREATE INDEX trending_term_expiry ON search.trending_term USING btree (route, ex
 
 
 --
--- Name: trending_term_rank; Type: INDEX; Schema: search; Owner: -
---
-
-CREATE INDEX trending_term_rank ON search.trending_term USING btree (route, language, rank DESC, term_key);
-
-
---
 -- Name: trending_term_live_rank; Type: INDEX; Schema: search; Owner: -
 --
 
 CREATE INDEX trending_term_live_rank ON search.trending_term USING btree (route, language, rank DESC, expires_at DESC, term_key);
+
+
+--
+-- Name: trending_term_rank; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX trending_term_rank ON search.trending_term USING btree (route, language, rank DESC, term_key);
 
 
 --
@@ -1558,6 +2106,13 @@ CREATE TRIGGER erasure_enroll_registration AFTER INSERT ON search.public_filter_
 
 
 --
+-- Name: identity_receiving_native_plan identity_receiving_native_plan_immutable; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER identity_receiving_native_plan_immutable BEFORE DELETE OR UPDATE ON search.identity_receiving_native_plan FOR EACH ROW EXECUTE FUNCTION search.prevent_receiving_plan_mutation();
+
+
+--
 -- Name: public_filter_coverage_baseline public_filter_coverage_baseline_immutable; Type: TRIGGER; Schema: search; Owner: -
 --
 
@@ -1565,10 +2120,31 @@ CREATE TRIGGER public_filter_coverage_baseline_immutable BEFORE UPDATE ON search
 
 
 --
+-- Name: public_filter_coverage_page public_filter_coverage_page_guard; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_coverage_page_guard BEFORE INSERT OR DELETE OR UPDATE ON search.public_filter_coverage_page FOR EACH ROW EXECUTE FUNCTION search.guard_public_filter_coverage_page();
+
+
+--
 -- Name: public_filter_coverage_preparation public_filter_coverage_preparation_contiguous; Type: TRIGGER; Schema: search; Owner: -
 --
 
 CREATE TRIGGER public_filter_coverage_preparation_contiguous BEFORE UPDATE ON search.public_filter_coverage_preparation FOR EACH ROW EXECUTE FUNCTION search.advance_public_filter_coverage_preparation();
+
+
+--
+-- Name: public_filter_execution public_filter_page_execution_guard; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_page_execution_guard BEFORE INSERT OR DELETE OR UPDATE ON search.public_filter_execution FOR EACH ROW EXECUTE FUNCTION search.guard_public_filter_page_execution();
+
+
+--
+-- Name: public_filter_coverage_preparation public_filter_population_protocol_immutable; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_population_protocol_immutable BEFORE UPDATE ON search.public_filter_coverage_preparation FOR EACH ROW EXECUTE FUNCTION search.retain_public_filter_population_protocol();
 
 
 --
@@ -1588,11 +2164,59 @@ ALTER TABLE ONLY search.facet_value
 
 
 --
+-- Name: identity_receiving_native_copy identity_receiving_native_copy_partition_no_plan_id_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_copy
+    ADD CONSTRAINT identity_receiving_native_copy_partition_no_plan_id_fkey FOREIGN KEY (partition_no, plan_id) REFERENCES search.identity_receiving_native_plan(partition_no, plan_id);
+
+
+--
+-- Name: identity_receiving_native_hold identity_receiving_native_hold_partition_no_plan_id_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_hold
+    ADD CONSTRAINT identity_receiving_native_hold_partition_no_plan_id_fkey FOREIGN KEY (partition_no, plan_id) REFERENCES search.identity_receiving_native_plan(partition_no, plan_id);
+
+
+--
+-- Name: identity_receiving_native_operation identity_receiving_native_operation_partition_no_hold_id_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_operation
+    ADD CONSTRAINT identity_receiving_native_operation_partition_no_hold_id_fkey FOREIGN KEY (partition_no, hold_id) REFERENCES search.identity_receiving_native_hold(partition_no, hold_id);
+
+
+--
+-- Name: identity_receiving_native_pending identity_receiving_native_pending_partition_no_plan_id_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_pending
+    ADD CONSTRAINT identity_receiving_native_pending_partition_no_plan_id_fkey FOREIGN KEY (partition_no, plan_id) REFERENCES search.identity_receiving_native_plan(partition_no, plan_id);
+
+
+--
+-- Name: identity_receiving_native_scope_pending identity_receiving_native_sco_partition_no_job_id_effect_k_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_receiving_native_scope_pending
+    ADD CONSTRAINT identity_receiving_native_sco_partition_no_job_id_effect_k_fkey FOREIGN KEY (partition_no, job_id, effect_key) REFERENCES semantic.identity_epoch_receiving_plan(partition_no, job_id, effect_key);
+
+
+--
 -- Name: index_incarnation index_incarnation_partition_no_prefix_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
 --
 
 ALTER TABLE ONLY search.index_incarnation
     ADD CONSTRAINT index_incarnation_partition_no_prefix_fkey FOREIGN KEY (partition_no, prefix) REFERENCES search.index_prefix_control(partition_no, prefix);
+
+
+--
+-- Name: public_filter_coverage_baseline public_filter_baseline_current_home; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_coverage_baseline
+    ADD CONSTRAINT public_filter_baseline_current_home FOREIGN KEY (partition_no, registration, source_home) REFERENCES search.public_filter_coverage_home(partition_no, registration, source_home) DEFERRABLE INITIALLY DEFERRED;
 
 
 --
@@ -1620,11 +2244,35 @@ ALTER TABLE ONLY search.public_filter_coverage_home
 
 
 --
+-- Name: public_filter_coverage_page public_filter_coverage_page_partition_no_observation_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_coverage_page
+    ADD CONSTRAINT public_filter_coverage_page_partition_no_observation_fkey FOREIGN KEY (partition_no, observation) REFERENCES search.public_filter_observation(partition_no, observation);
+
+
+--
+-- Name: public_filter_coverage_page public_filter_coverage_page_partition_no_registration_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_coverage_page
+    ADD CONSTRAINT public_filter_coverage_page_partition_no_registration_fkey FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration(partition_no, id);
+
+
+--
 -- Name: public_filter_coverage_preparation public_filter_coverage_preparati_partition_no_registration_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
 --
 
 ALTER TABLE ONLY search.public_filter_coverage_preparation
     ADD CONSTRAINT public_filter_coverage_preparati_partition_no_registration_fkey FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration(partition_no, id);
+
+
+--
+-- Name: public_filter_execution public_filter_execution_page_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_execution
+    ADD CONSTRAINT public_filter_execution_page_fkey FOREIGN KEY (partition_no, page_id) REFERENCES search.public_filter_coverage_page(partition_no, id);
 
 
 --

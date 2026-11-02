@@ -1,3 +1,4 @@
+import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
 import {
   joinNativePublicFilterRepair,
@@ -10,6 +11,7 @@ import repairEffectSql from './public-filter-custody-repair-effect.sql';
 import repairPageSave from './public-filter-custody-repair-page-save.sql';
 import repairPageSql from './public-filter-custody-repair-page.sql';
 import { isDeepStrictEqual } from 'node:util';
+import { installPublicFilterCoveragePage, withPublicFilterCoverageStart } from './public-filter-coverage-page.ts';
 import { releaseDigest } from '@rezics/definitions';
 import { admitFilter, parseFilter, walkFilter } from '@rezics/filter';
 import { routeOf } from '../route/route.ts';
@@ -595,7 +597,12 @@ import type {
   PublicFilterConsumerJob,
   PublicFilterConsumerStatus,
 } from './public-filter-consumer-contract.ts';
-import type { CustodyRegistration, CustodyUse, CustodyCost } from './public-filter-custody-contract.ts';
+import type {
+  CustodyRegistration,
+  CustodyUse,
+  CustodyCost,
+  CustodyExecution,
+} from './public-filter-custody-contract.ts';
 import {
   createPublicFilterCustody,
   encodePublicFilterNativeState as encodeNative,
@@ -763,17 +770,36 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       )
         throw new ConsumerFailure('source_pending');
     };
-    const sql = async <T extends import('pg').QueryResultRow>(query: string, values: unknown[] = []) => {
+    const sql = async <T extends import('pg').QueryResultRow>(
+      query: string,
+      values: unknown[] | (() => unknown[]) = [],
+      countedRows = false,
+    ) => {
       check();
       cost.statements++;
-      cost.bytes += Buffer.byteLength(query) + Buffer.byteLength(encodeState(values));
+      const baseBytes = cost.bytes + Buffer.byteLength(query);
+      let parameters = typeof values === 'function' ? values() : values;
+      // Native page work retains this very statement's reservation. Its encoded
+      // byte counter is itself part of the request, so settle the finite decimal
+      // length before dispatch instead of saving a snapshot from the prior call.
+      for (let attempt = 0; ; attempt++) {
+        const bytes = baseBytes + Buffer.byteLength(encodeState(parameters));
+        if (typeof values !== 'function' || bytes === cost.bytes) {
+          cost.bytes = bytes;
+          break;
+        }
+        if (attempt === 8) throw new ConsumerFailure('dependency_unavailable');
+        cost.bytes = bytes;
+        parameters = values();
+      }
+      check();
       const request: import('pg').QueryConfig & { query_timeout: number } = {
         text: query,
-        values,
+        values: parameters,
         query_timeout: remaining(context),
       };
       const result = await config.pool.query<T>(request);
-      cost.rows += result.rows.length;
+      if (!countedRows) cost.rows += result.rows.length;
       cost.bytes += Buffer.byteLength(encodeState(result.rows));
       check();
       return result;
@@ -869,6 +895,237 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     return { cost, add, check, sql, unavailable, take, native, pool };
   }
   type Meter = ReturnType<typeof meter>;
+  type Page = {
+    context: PublicFilterConsumerContext;
+    m: Meter;
+    id: string | null;
+    queried: PublicFilterQueriedObservation | null;
+    start: PrivacyReductionStart | null;
+    tail: string | null;
+    rounds: number;
+    charged: number;
+    failed: boolean;
+    finished: boolean;
+    disposed: boolean;
+    busy: boolean;
+    use: CustodyUse | null;
+  };
+  const captures = new WeakMap<Extract<PublicFilterConsumerCapture, { status: 'captured' }>, Page>();
+  function newPage(context: PublicFilterConsumerContext): Page {
+    return {
+      context,
+      m: meter(context),
+      id: null,
+      queried: null,
+      start: null,
+      tail: null,
+      rounds: 0,
+      charged: 0,
+      failed: false,
+      finished: false,
+      disposed: false,
+      busy: false,
+      use: null,
+    };
+  }
+  // Native page metadata/control work uses the original consumer meter. Reserve
+  // misses, locks, FK checks and attempted writes before submitting each statement.
+  async function pageSql<T extends import('pg').QueryResultRow>(
+    page: Page,
+    footprint: { points: number; keys: number; writes: number },
+    text: string,
+    values: () => unknown[],
+  ) {
+    page.m.cost.dependencyPoints += footprint.points;
+    page.m.cost.inputKeys += footprint.keys;
+    page.m.cost.rows += footprint.points;
+    page.m.cost.frontierWrites += footprint.writes;
+    page.m.check();
+    // The returned row is the same keyed control already reserved above.
+    // Keep this true even at the result-side budget check and on lost receipts.
+    return page.m.sql<T>(text, values, true);
+  }
+  async function beginPage(
+    page: Page,
+    q: PublicFilterQueriedObservation,
+    use: CustodyUse,
+    prefix: PublicFilterConsumerRefill | undefined,
+    previous: string | null,
+    ceiling: number,
+  ) {
+    if (
+      page.queried &&
+      (page.queried.snapshot.observation !== q.snapshot.observation ||
+        !isDeepStrictEqual(page.queried.consumer, q.consumer))
+    )
+      throw new ConsumerFailure('observation_lost');
+    if (page.id !== null) {
+      if (page.queried?.snapshot.observation !== q.snapshot.observation || page.tail !== prefix?.execution)
+        throw new ConsumerFailure('observation_lost');
+      return;
+    }
+    const id = randomUUID();
+    const result = await pageSql(
+      page,
+      { points: 8, keys: 18, writes: 1 },
+      `WITH input AS (SELECT $1::integer AS home,$2::text AS observation,$3::uuid AS id,
+        $4::uuid AS token,$5::bigint AS now,$6::bigint AS deadline,$7::text AS parent,
+        $8::integer AS consumed,$9::text AS previous,$10::integer AS ceiling,$11::text AS work),
+      locked AS MATERIALIZED (
+        SELECT o.partition_no,o.observation,o.registration,r.definition,r.consumer,
+          i.id,i.deadline,i.parent,i.consumed,i.previous,i.ceiling,i.work
+        FROM input i JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(i.home,i.observation)
+        JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
+        JOIN search.public_filter_reference f ON (f.partition_no,f.observation,f.token)=(o.partition_no,o.observation,i.token)
+        LEFT JOIN search.public_filter_execution e ON (e.partition_no,e.observation,e.id)=(o.partition_no,o.observation,i.parent)
+        WHERE o.state='open' AND o.expires_at>i.now AND f.expires_at>i.now AND r.state='active'
+          AND (i.parent IS NULL OR (e.consumer_window=i.previous AND (e.page_id IS NULL OR e.page_status='complete')))
+          AND NOT EXISTS (SELECT 1 FROM search.public_filter_coverage_page p
+            WHERE (p.partition_no,p.observation)=(o.partition_no,o.observation)
+              AND (p.state IN ('planned','open','sealed') OR p.pending IS NOT NULL))
+        FOR UPDATE OF o FOR SHARE OF r,f)
+      INSERT INTO search.public_filter_coverage_page
+        (partition_no,id,observation,registration,definition,consumer,deadline,reference_token,boundary,boundary_consumed,boundary_window,ceiling,state,work)
+      SELECT l.partition_no,l.id,l.observation,l.registration,l.definition,l.consumer,l.deadline,i.token,
+        l.parent,l.consumed,l.previous,l.ceiling,'planned',l.work
+      FROM locked l CROSS JOIN input i RETURNING id`,
+      () => [
+        locatorHome(q.snapshot.observation),
+        q.snapshot.observation,
+        id,
+        use.token,
+        Date.now(),
+        page.context.deadline,
+        prefix?.execution ?? null,
+        prefix?.consumed ?? 0,
+        previous,
+        ceiling,
+        encodeState(page.m.cost),
+      ],
+    );
+    if (result.rowCount !== 1) throw new ConsumerFailure('observation_lost');
+    page.id = id;
+    page.queried = q;
+    page.use = use;
+    const observed = await withPublicFilterCoverageStart(page.context, id, () =>
+      observe(q, null, undefined, page.m, page.context),
+    );
+    if (observed.blocking.length || observed.unacknowledged.length || observed.changed.length)
+      throw new ConsumerFailure('source_pending');
+    page.start = observed.start;
+  }
+  async function reservePage(
+    page: Page,
+    use: CustodyUse,
+    execution: string,
+    prefix: PublicFilterConsumerRefill | undefined,
+    size: number,
+  ) {
+    const result = await pageSql<{ rounds: number; charged: number }>(
+      page,
+      { points: 8, keys: 20, writes: 2 },
+      `WITH input AS (SELECT $1::integer AS home,$2::uuid AS page,$3::text AS observation,$4::uuid AS token,
+        $5::bigint AS now,$6::text AS execution,$7::text AS parent,$8::integer AS consumed,$9::integer AS size,
+        $10::text AS payload,$11::text AS work), locked AS MATERIALIZED (
+        SELECT p.partition_no,p.id FROM input i JOIN search.public_filter_coverage_page p ON (p.partition_no,p.id)=(i.home,i.page)
+        JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(p.partition_no,p.observation)
+        JOIN search.public_filter_reference f ON (f.partition_no,f.observation,f.token)=(o.partition_no,o.observation,i.token)
+        WHERE p.observation=i.observation AND p.state='open' AND p.pending IS NULL AND p.deadline>i.now
+          AND o.state='open' AND f.expires_at>i.now AND p.rounds<3 AND p.charged+i.size<=p.ceiling
+          AND coalesce(p.tail,p.boundary) IS NOT DISTINCT FROM i.parent
+          AND ((p.tail IS NOT NULL AND p.tail_consumed=i.consumed) OR (p.tail IS NULL AND p.boundary_consumed=i.consumed))
+        FOR UPDATE OF p FOR SHARE OF o,f), advanced AS (
+        UPDATE search.public_filter_coverage_page p SET pending=i.execution,rounds=p.rounds+1,charged=p.charged+i.size,
+          revision=p.revision+1,work=i.work FROM locked l,input i
+        WHERE (p.partition_no,p.id)=(l.partition_no,l.id) RETURNING p.*), appended AS (
+        INSERT INTO search.public_filter_execution
+          (partition_no,observation,id,execution,page_id,page_ordinal,page_parent,page_consumed,page_size,page_status,page_engine_started)
+        SELECT p.partition_no,p.observation,i.execution,i.payload,p.id,p.rounds,i.parent,i.consumed,i.size,'dispatched',false
+        FROM advanced p,input i RETURNING id)
+      SELECT p.rounds,p.charged FROM advanced p JOIN appended a ON a.id=p.pending`,
+      () => [
+        locatorHome(use.observation),
+        page.id,
+        use.observation,
+        use.token,
+        Date.now(),
+        execution,
+        prefix?.execution ?? null,
+        prefix?.consumed ?? 0,
+        size,
+        encodeNative({ id: execution, start: page.start!, ownRows: [] }),
+        encodeState(page.m.cost),
+      ],
+    );
+    const reserved = result.rows[0];
+    if (!reserved || result.rowCount !== 1) throw new ConsumerFailure('observation_lost');
+    page.rounds = reserved.rounds;
+    page.charged = reserved.charged;
+  }
+  async function dispatchPageEngine(page: Page, use: CustodyUse, execution: string) {
+    // Commit the fence and its self-inclusive root reservation before engine I/O.
+    // A lost receipt retains both, even if this process never sends the request.
+    // Funding the root also acquires its lock. The native guard resolves the
+    // root's immutable exact reference in this same statement.
+    const started = await pageSql(
+      page,
+      { points: 5, keys: 12, writes: 2 },
+      `WITH funded AS (
+         UPDATE search.public_filter_coverage_page p SET work=$7,revision=p.revision+1
+         WHERE (p.partition_no,p.id)=($1,$2::uuid) AND p.state='open' AND p.pending=$3
+           AND p.observation=$6 AND p.reference_token=$4::uuid AND p.deadline>$5
+         RETURNING p.partition_no,p.observation,p.id)
+       UPDATE search.public_filter_execution e SET page_engine_started=true FROM funded p
+       WHERE (e.partition_no,e.observation,e.id)=(p.partition_no,p.observation,$3)
+         AND e.page_id=p.id AND e.page_status='dispatched' AND e.page_engine_started IS FALSE RETURNING e.id`,
+      () => [
+        locatorHome(use.observation),
+        page.id,
+        execution,
+        use.token,
+        Date.now(),
+        use.observation,
+        encodeState(page.m.cost),
+      ],
+    );
+    if (started.rowCount !== 1) throw new ConsumerFailure('observation_lost');
+  }
+  async function completePage(
+    page: Page,
+    execution: string,
+    rows: CustodyExecution['ownRows'],
+    window: RetainedWindow,
+    reserved: number,
+  ) {
+    const result = await pageSql(
+      page,
+      { points: 4, keys: 8, writes: 2 },
+      `WITH input AS (SELECT $1::integer AS home,$2::uuid AS page,$3::text AS execution,$4::text AS payload,
+        $5::text AS window,$6::integer AS unused,$7::text AS work,$8::integer AS raw), locked AS MATERIALIZED (
+        SELECT p.partition_no,p.id,p.observation FROM input i JOIN search.public_filter_coverage_page p
+          ON (p.partition_no,p.id)=(i.home,i.page)
+        WHERE p.state='open' AND p.pending=i.execution FOR UPDATE OF p), completed AS (
+        UPDATE search.public_filter_execution e SET execution=i.payload,consumer_window=i.window,page_status='complete',page_raw=i.raw
+        FROM locked l,input i WHERE (e.partition_no,e.observation,e.id)=(l.partition_no,l.observation,i.execution)
+          AND e.page_id=l.id AND e.page_status='dispatched' AND e.consumer_window IS NULL RETURNING e.id)
+      UPDATE search.public_filter_coverage_page p SET tail=c.id,tail_consumed=NULL,pending=NULL,charged=p.charged-i.unused,
+        revision=p.revision+1,work=i.work FROM locked l,completed c,input i
+      WHERE (p.partition_no,p.id)=(l.partition_no,l.id) RETURNING p.id`,
+      () => [
+        locatorHome(page.queried!.snapshot.observation),
+        page.id,
+        execution,
+        encodeNative({ id: execution, start: page.start!, ownRows: rows }),
+        encodeState(window),
+        reserved - window.raw.length,
+        encodeState(page.m.cost),
+        window.raw.length,
+      ],
+    );
+    if (result.rowCount !== 1) throw new ConsumerFailure('observation_lost');
+    page.tail = execution;
+    page.charged -= reserved - window.raw.length;
+  }
   async function mixedGeneration(m: Meter): Promise<void> {
     if (!config.registry) throw new ConsumerFailure('dependency_unavailable');
     const match = /^(.*)discovery-g([1-9][0-9]*)$/.exec(target);
@@ -1145,6 +1402,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     encoded: string,
     m: Meter,
     context: PublicFilterConsumerContext,
+    page?: Page,
   ): Promise<PublicFilterConsumerCapture> {
     if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
     let recovery = m.take(await binding.recover({ bootstrap: work.bootstrap.id }, context));
@@ -1189,6 +1447,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       encoded = await save(work, encoded, true, m);
     }
     if (work.materializing && !work.queried) {
+      // Serving capture cannot enumerate a preparation child before its closed
+      // page plan exists. The ordinary bounded preparation owner advances this
+      // retained frontier; a later capture can adopt only its actual result.
+      if (page) return { status: 'preparing', repair: job, cost: m.cost };
       const q = work.materializing;
       const acquired = m.take(await custody.acquire(q, context));
       if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
@@ -1267,9 +1529,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     try {
       const joined = await join(q, undefined, m, context);
       if (!isDeepStrictEqual(joined.covered, work.bootstrap.covered)) return m.unavailable('observation_lost');
-      const observation = await observe(q, null, undefined, m, context);
-      if (observation.blocking.length || observation.unacknowledged.length || observation.changed.length)
-        return { status: 'preparing', repair: job, cost: m.cost };
+      // An enclosing page starts once, after its complete native plan and cursor
+      // boundary are closed. Baseline preparation cannot manufacture that start.
+      if (!page) {
+        const observation = await observe(q, null, undefined, m, context);
+        if (observation.blocking.length || observation.unacknowledged.length || observation.changed.length)
+          return { status: 'preparing', repair: job, cost: m.cost };
+      }
       return { status: 'captured', queried: q, repair: job, cost: m.cost };
     } catch (error) {
       if (error instanceof ConsumerFailure && ['source_pending', 'routing_incomplete'].includes(error.reason))
@@ -1282,8 +1548,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     plan: PublicCanonicalCaptureInput,
     snapshot: 'pit' | 'prepared',
     context: PublicFilterConsumerContext,
+    page?: Page,
   ): Promise<PublicFilterConsumerCapture> {
-    const m = meter(context);
+    const m = page?.m ?? meter(context);
     if (snapshot !== 'pit' && snapshot !== 'prepared') throw new TypeError('Unknown immutable snapshot kind');
     // All grammar, private-owner and optional DSL validation precedes the first native call.
     let canonical: PublicCanonicalCaptureInput;
@@ -1316,6 +1583,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             physicalTarget: target,
             consumerGeneration: resolved.definition.source.configuration,
             projectionGeneration: resolved.definition.readDefinition,
+            catalogue: null,
           },
           config.search,
           context,
@@ -1330,7 +1598,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         )
       ).rows[0];
       if (old?.consumer_work)
-        return advanceCapture(decodeState<ConsumerWork>(old.consumer_work), old.consumer_work, m, context);
+        return advanceCapture(decodeState<ConsumerWork>(old.consumer_work), old.consumer_work, m, context, page);
       if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
       const preparation = {
         source: config.source,
@@ -1377,7 +1645,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           },
           cost: m.cost,
         };
-      return await advanceCapture(work, encoded, m, context);
+      return await advanceCapture(work, encoded, m, context, page);
     } catch (error) {
       return failure(error, m);
     }
@@ -1387,17 +1655,26 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     context: PublicFilterConsumerContext,
     refill: PublicFilterConsumerRefill | undefined,
     mixed: boolean,
+    page?: Page,
   ): Promise<PublicFilterConsumerQuery | DiscoveryConsumerQuery> {
     let q = structuredClone(input);
     const prefix = refill === undefined ? undefined : structuredClone(refill);
-    const m = meter(context);
+    const m = page?.m ?? meter(context);
     const preparing = () => ({ status: 'preparing' as const, queried: q, cost: m.cost });
     let use: CustodyUse | undefined;
     try {
       m.check();
-      const acquired = m.take(await custody.acquire(q, context));
-      if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
-      use = acquired.use;
+      // This installed factory is the finite registry family. A retained
+      // catalogue consumer needs its actual root-bound native resolver; it
+      // cannot borrow this request's finite selected Type registrations.
+      if (publicFilterCatalogue(q.consumer, mixed) !== null)
+        throw new ConsumerFailure('registration_missing');
+      if (page?.use) use = page.use;
+      else {
+        const acquired = m.take(await custody.acquire(q, context));
+        if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
+        use = acquired.use;
+      }
       const joined = await join(q, undefined, m, context);
       const plan = joined.definition.capture;
       if ('representation' in plan !== mixed || 'purpose' in plan) return m.unavailable('registration_missing');
@@ -1406,6 +1683,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (!work.adopted || !isDeepStrictEqual(work.bootstrap.covered, joined.covered))
         return m.unavailable('observation_lost');
       let previous: RetainedWindow | undefined;
+      let previousEncoded: string | null = null;
       const pageSize = plan.pageSize ?? plan.size;
       const allowance = Math.min(600, 6 * pageSize + 3);
       const size = prefix?.size ?? plan.size;
@@ -1423,6 +1701,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           )
         ).rows[0];
         if (!row?.consumer_window) return m.unavailable('observation_lost');
+        previousEncoded = row.consumer_window;
         previous = decodeState<RetainedWindow>(row.consumer_window);
         if (prefix.consumed > previous.raw.length) throw new TypeError('Consumed prefix exceeds retained execution');
         // Only the actual latest execution may branch; a consumed prefix never admits caller keysets.
@@ -1430,13 +1709,22 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         reused = previous.raw.slice(prefix.consumed);
         after = prefix.consumed === 0 ? previous.before : previous.raw[prefix.consumed - 1]!.sort;
       }
-      if (work.rounds >= 3 || size > allowance - work.charged) return preparing();
-      const started = await observe(q, null, undefined, m, context);
-      if (started.blocking.length || started.unacknowledged.length || started.changed.length) return preparing();
+      if ((page?.rounds ?? work.rounds) >= 3 || size > allowance - (page?.charged ?? work.charged)) return preparing();
+      if (page) await beginPage(page, q, use, prefix, previousEncoded, allowance);
+      const started = page ? { start: page.start! } : await observe(q, null, undefined, m, context);
+      if ('blocking' in started && (started.blocking.length || started.unacknowledged.length || started.changed.length))
+        return preparing();
       await physical(q, m, context);
       // Reserve this attempt before external dispatch. An uncertain engine result cannot regain allowance.
-      work.rounds++;
-      work.charged += size;
+      const execution = randomUUID();
+      if (page) {
+        await reservePage(page, use, execution, prefix, size);
+        work.rounds = page.rounds;
+        work.charged = page.charged;
+      } else {
+        work.rounds++;
+        work.charged += size;
+      }
       let encoded = await save(work, loaded.encoded, false, m);
       let raw: RetainedWindow['raw'];
       let exhausted: boolean;
@@ -1452,6 +1740,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         exhausted = previous!.exhausted && reused.length <= size;
       } else {
         const tail = reused.at(-1)?.sort ?? after;
+        if (page) await dispatchPageEngine(page, use, execution);
         const result = await nativeBatch(q, plan, size - reused.length, tail, use, m, context);
         q = result.queried;
         raw = [...reused, ...result.raw];
@@ -1524,14 +1813,6 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         rows = checked.rows;
         positions = checked.accepted;
       }
-      const execution = randomUUID();
-      const appended = m.take(
-        await custody.appendExecution(
-          { use, execution: { id: execution, start: started.start, ownRows: rows } },
-          context,
-        ),
-      );
-      if (appended.status !== 'appended') return m.unavailable('observation_lost');
       const window: RetainedWindow = {
         parent: prefix?.execution ?? null,
         consumed: prefix ? previous!.consumed + prefix.consumed : 0,
@@ -1541,10 +1822,22 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         rounds: work.rounds,
         charged: work.charged,
       };
-      await m.sql(
-        'UPDATE search.public_filter_execution SET consumer_window=$4 WHERE (partition_no,observation,id)=($1,$2,$3) AND consumer_window IS NULL',
-        [locatorHome(q.snapshot.observation), q.snapshot.observation, execution, encodeState(window)],
-      );
+      if (page) {
+        page.queried = q;
+        await completePage(page, execution, rows, window, size);
+      } else {
+        const appended = m.take(
+          await custody.appendExecution(
+            { use, execution: { id: execution, start: started.start, ownRows: rows } },
+            context,
+          ),
+        );
+        if (appended.status !== 'appended') return m.unavailable('observation_lost');
+        await m.sql(
+          'UPDATE search.public_filter_execution SET consumer_window=$4 WHERE (partition_no,observation,id)=($1,$2,$3) AND consumer_window IS NULL',
+          [locatorHome(q.snapshot.observation), q.snapshot.observation, execution, encodeState(window)],
+        );
+      }
       work.queried = q;
       work.execution = execution;
       work.frontier = null;
@@ -1555,9 +1848,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         !isDeepStrictEqual(finalJoined.covered, joined.covered)
       )
         return m.unavailable('observation_lost');
-      const final = await observe(q, started.start, execution, m, context);
-      if (final.blocking.length || final.unacknowledged.length || final.changed.length) return preparing();
-      await physical(q, m, context);
+      if (!page) {
+        const final = await observe(q, started.start, execution, m, context);
+        if (final.blocking.length || final.unacknowledged.length || final.changed.length) return preparing();
+        await physical(q, m, context);
+      }
       m.cost.outputSlots += positions.length;
       m.check();
       const retainedWindow = { positions, examined: raw.length, exhausted };
@@ -1590,7 +1885,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     } catch (error) {
       return failure(error, m);
     } finally {
-      if (use) m.add((await custody.release(use, context)).cost);
+      if (use && page?.use !== use) m.add((await custody.release(use, context)).cost);
     }
   }
   async function readStatus(
@@ -2027,22 +2322,36 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     work.repairPage!.next++;
     return save(work, encoded, false, m);
   }
+  async function captureForPage(
+    request: Readonly<{ plan: PublicCanonicalCaptureInput; snapshot: 'pit' | 'prepared' }>,
+    incoming: PublicFilterConsumerContext,
+  ): Promise<PublicFilterConsumerCapture> {
+    const context = Object.freeze({ deadline: incoming.deadline });
+    const page = newPage(context);
+    const result = await capturePlan(request.plan, request.snapshot, context, page);
+    // The public report must not alias the private meter that will fund query,
+    // own rows, all refills and finalization. Recognition is one-shot and native.
+    const reported = { ...result, cost: Object.freeze({ ...result.cost }) };
+    if (reported.status === 'captured') {
+      page.queried = structuredClone(reported.queried);
+      captures.set(reported, page);
+    }
+    return reported;
+  }
   const operations: PublicDiscoveryConsumerOperations = {
     capture(request, context) {
       const copied = structuredClone(request);
-      return track(() => capturePlan(copied.plan, copied.snapshot, { deadline: context.deadline }));
+      return track(() => captureForPage(copied, context));
     },
     captureDiscovery(request, context) {
       const copied = structuredClone(request);
-      return track(() => capturePlan(copied.plan, copied.snapshot, { deadline: context.deadline }));
+      return track(() => captureForPage(copied, context));
     },
     query(q, context, refill) {
-      return track(
-        () => queryPlan(q, { deadline: context.deadline }, refill, false) as Promise<PublicFilterConsumerQuery>,
-      );
+      return standalone(q, context, refill, false) as Promise<PublicFilterConsumerQuery>;
     },
     queryDiscovery(q, context, refill) {
-      return track(() => queryPlan(q, { deadline: context.deadline }, refill, true) as Promise<DiscoveryConsumerQuery>);
+      return standalone(q, context, refill, true) as Promise<DiscoveryConsumerQuery>;
     },
     repairStep(job, context) {
       return track(() => repairStep(job, { deadline: context.deadline }));
@@ -2087,5 +2396,157 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       })());
     },
   };
+  function openPage(
+    incoming: PublicFilterConsumerContext,
+    capture?: Extract<PublicFilterConsumerCapture, { status: 'captured' }>,
+  ) {
+    const retained = capture === undefined ? undefined : captures.get(capture);
+    if (capture !== undefined) {
+      if (!retained || retained.context.deadline !== incoming.deadline)
+        throw new ConsumerFailure('observation_lost');
+      captures.delete(capture);
+    }
+    const page = retained ?? newPage(Object.freeze({ deadline: incoming.deadline }));
+    const context = page.context;
+    async function run<T>(body: () => Promise<T>): Promise<T> {
+      if (page.busy || page.failed || page.finished || page.disposed) throw new ConsumerFailure('observation_lost');
+      page.busy = true;
+      try {
+        return await track(body);
+      } catch (error) {
+        page.failed = true;
+        throw error;
+      } finally {
+        page.busy = false;
+      }
+    }
+    async function query(
+      q: PublicFilterQueriedObservation,
+      refill: PublicFilterConsumerRefill | undefined,
+      mixed: boolean,
+    ) {
+      return run(async () => {
+        const result = await queryPlan(q, context, refill, mixed, page);
+        if (result.status !== 'queried') page.failed = true;
+        return result;
+      });
+    }
+    return {
+      failure: (error: unknown) => failure(error, page.m),
+      capture: (plan: PublicCanonicalCaptureInput, snapshot: 'pit' | 'prepared') =>
+        run(async () => {
+          if (page.id !== null || page.queried !== null) throw new ConsumerFailure('observation_lost');
+          const result = await capturePlan(plan, snapshot, context, page);
+          if (result.status === 'captured') page.queried = result.queried;
+          else page.failed = true;
+          return result;
+        }),
+      query: (q: PublicFilterQueriedObservation, refill?: PublicFilterConsumerRefill) =>
+        query(q, refill, false) as Promise<PublicFilterConsumerQuery>,
+      queryDiscovery: (q: PublicFilterQueriedObservation, refill?: PublicFilterConsumerRefill) =>
+        query(q, refill, true) as Promise<DiscoveryConsumerQuery>,
+      consume: (execution: string, consumed: number) =>
+        run(async () => {
+          if (
+            !page.id ||
+            !page.queried ||
+            page.tail !== execution ||
+            !Number.isSafeInteger(consumed) ||
+            consumed < 0 ||
+            consumed > 200
+          )
+            throw new ConsumerFailure('observation_lost');
+          const result = await pageSql(
+            page,
+            { points: 3, keys: 6, writes: 1 },
+            `WITH locked AS MATERIALIZED (
+            SELECT p.partition_no,p.id FROM search.public_filter_coverage_page p
+            JOIN search.public_filter_execution e ON (e.partition_no,e.observation,e.id)=(p.partition_no,p.observation,p.tail)
+            WHERE (p.partition_no,p.id)=($1,$2) AND p.state='open' AND p.pending IS NULL
+              AND p.tail=$3 AND p.tail_consumed IS NULL AND e.page_id=p.id AND e.page_status='complete'
+              AND $4::integer<=e.page_raw
+            FOR UPDATE OF p)
+          UPDATE search.public_filter_coverage_page p SET tail_consumed=$4,revision=p.revision+1,work=$5
+          FROM locked l WHERE (p.partition_no,p.id)=(l.partition_no,l.id) RETURNING p.id`,
+            () => [locatorHome(page.queried!.snapshot.observation), page.id, execution, consumed, encodeState(page.m.cost)],
+          );
+          if (result.rowCount !== 1) throw new ConsumerFailure('observation_lost');
+        }),
+      finish: () =>
+        run(async () => {
+          if (!page.queried || !page.id || !page.start || !page.tail || page.rounds < 1)
+            throw new ConsumerFailure('observation_lost');
+          // Last physical/copy check belongs before the CURRENT Source role. No
+          // dependent native/owner work is allowed after that role succeeds.
+          await physical(page.queried, page.m, context);
+          const sealed = await pageSql(
+            page,
+            { points: 1, keys: 2, writes: 1 },
+            `UPDATE search.public_filter_coverage_page SET state='sealed',revision=revision+1,work=$5
+           WHERE (partition_no,id)=($1,$2) AND state='open' AND pending IS NULL AND tail=$3 AND tail_consumed IS NOT NULL
+             AND deadline=$4 RETURNING id`,
+            () => [
+              locatorHome(page.queried!.snapshot.observation),
+              page.id,
+              page.tail,
+              context.deadline,
+              encodeState(page.m.cost),
+            ],
+          );
+          if (sealed.rowCount !== 1) throw new ConsumerFailure('observation_lost');
+          const final = await observe(page.queried, page.start, page.tail, page.m, context);
+          if (final.blocking.length || final.unacknowledged.length || final.changed.length)
+            throw new ConsumerFailure('source_pending');
+          page.m.check();
+          page.finished = true;
+        }),
+      async dispose() {
+        if (page.busy) throw new ConsumerFailure('observation_lost');
+        if (page.disposed) return;
+        page.disposed = true;
+        try {
+          if (!page.finished && page.id) {
+            // A lost result retains pending and every attempted child. Cleanup
+            // never clears an uncertain dispatch, extends time or grants coverage.
+            await pageSql(
+              page,
+              { points: 1, keys: 2, writes: 1 },
+              `UPDATE search.public_filter_coverage_page SET state='failed',revision=revision+1,work=$3
+             WHERE (partition_no,id)=($1,$2) AND state IN ('planned','open','sealed') RETURNING id`,
+              () => [locatorHome(page.queried!.snapshot.observation), page.id, encodeState(page.m.cost)],
+            );
+          }
+        } finally {
+          if (page.use) {
+            const use = page.use;
+            page.use = null;
+            page.m.add((await custody.release(use, context)).cost);
+            page.m.check();
+          }
+        }
+      },
+    };
+  }
+  async function standalone(
+    q: PublicFilterQueriedObservation,
+    context: PublicFilterConsumerContext,
+    refill: PublicFilterConsumerRefill | undefined,
+    mixed: boolean,
+  ) {
+    const page = openPage(Object.freeze({ deadline: context.deadline }));
+    try {
+      const result = mixed ? await page.queryDiscovery(q, refill) : await page.query(q, refill);
+      if (result.status === 'queried') {
+        await page.consume(result.execution, result.window.examined);
+        await page.finish();
+      }
+      return result;
+    } catch (error) {
+      return page.failure(error);
+    } finally {
+      await page.dispose();
+    }
+  }
+  installPublicFilterCoveragePage(operations, openPage);
   return operations;
 };

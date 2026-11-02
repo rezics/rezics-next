@@ -5,16 +5,26 @@ import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { createWorkClient } from '../work/client.ts';
 import { nativeDiscoveryRegistry } from './account-discovery.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
-import { createDiscoverySearch, type DiscoverySearch } from './discovery-service.ts';
+import { createRetainedDiscoverySearch, type DiscoverySearch, type RetainedDiscoveryRead,
+  type RetainedDiscoverySearch } from './discovery-service.ts';
 import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntimeConfig } from './public-runtime.ts';
 import { createPublicPreparationStore } from './public-preparation-store.ts';
 import { discoveryConsumer } from './generations.ts';
 import { discoveryIndexName } from './indices.ts';
 import { readFreshness } from './freshness.ts';
 import type { PublicDiscoveryConsumerOperations } from './public-filter-consumer-contract.ts';
+import {
+  installPublicFilterCoveragePage,
+  openPublicFilterCoveragePage,
+  type PublicFilterCoveragePage,
+} from './public-filter-coverage-page.ts';
 
 export type DefaultDiscoverySearchConfig = DefaultPublicFilterRuntimeConfig & { keys: KeyRing };
-export type DefaultDiscoverySearch = Readonly<{ search: DiscoverySearch; close(): Promise<void> }>;
+export type DefaultDiscoverySearch = Readonly<{
+  search: DiscoverySearch;
+  open: RetainedDiscoverySearch;
+  close(): Promise<void>;
+}>;
 
 /** Default public catalogue/Account candidates, also consumed by the home feed with its current Actor.
  * Source owns whole-population readiness. Neither a local census nor returned summaries replace it.
@@ -25,9 +35,10 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
   const subjects = createRatedSubjectSource(config.pool, config.routeKey).source;
   let work: ReturnType<typeof createWorkClient> | undefined;
   const pending = new Set<Promise<unknown>>();
+  const retained = new Set<RetainedDiscoveryRead>();
   let closed = false;
   let closing: Promise<void> | undefined;
-  const search: DiscoverySearch = (principal, request, context) => {
+  const open: RetainedDiscoverySearch = (principal, request, context) => {
     if (closed) return Promise.reject(new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } }));
     const execute = async () => {
       let operations: PublicDiscoveryConsumerOperations | undefined;
@@ -60,7 +71,33 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
         },
         close: () => runtime.close(),
       };
-      return createDiscoverySearch({
+      installPublicFilterCoveragePage(consumer, (nativeContext) => {
+        let page: Promise<PublicFilterCoveragePage> | undefined;
+        const open = (queried?: Parameters<typeof runtime.openDiscovery>[3]) =>
+          (page ??= (async () => {
+            operations ??= await runtime.openDiscovery(registry, current.digest, nativeContext, queried);
+            return openPublicFilterCoveragePage(operations, nativeContext);
+          })());
+        return {
+          capture: async (plan, snapshot) => (await open()).capture(plan, snapshot),
+          query: async (queried, refill) => (await open(queried)).query(queried, refill),
+          queryDiscovery: async (queried, refill) => (await open(queried)).queryDiscovery(queried, refill),
+          consume: async (execution, consumed) => (await open()).consume(execution, consumed),
+          async finish() {
+            if (!page) throw new Error('Native page was not opened');
+            await (await page).finish();
+          },
+          async dispose() {
+            if (page) await (await page).dispose();
+          },
+          failure(error) {
+            // The public discovery boundary translates native refusal after
+            // this lazy wrapper has disposed its original resource owner.
+            throw error;
+          },
+        };
+      });
+      const read = await createRetainedDiscoverySearch({
         consumer,
         source,
         keys: config.keys,
@@ -85,6 +122,17 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
           return (await readFreshness(config.pool, discoveryConsumer(config.prefix, generation))).asOf.toISOString();
         },
       })(principal, request, { ...context, access: config.access });
+      const wrapped: RetainedDiscoveryRead = Object.freeze({
+        search: () => read.search(),
+        currentPrimaryCandidates: (keys) => read.currentPrimaryCandidates(keys),
+        finish: () => read.finish(),
+        async close() {
+          try { await read.close(); }
+          finally { retained.delete(wrapped); }
+        },
+      });
+      retained.add(wrapped);
+      return wrapped;
     };
     const operation = execute().catch((error: unknown) => {
       if (error instanceof ProblemError) throw error;
@@ -94,13 +142,28 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
     void operation.finally(() => pending.delete(operation)).catch(() => {});
     return operation;
   };
+  const search: DiscoverySearch = (...args) => {
+    const operation = (async () => {
+      const read = await open(...args);
+      try {
+        const page = await read.search();
+        await read.finish();
+        return page;
+      } finally { await read.close(); }
+    })();
+    pending.add(operation);
+    void operation.finally(() => pending.delete(operation)).catch(() => {});
+    return operation;
+  };
   return {
     search,
+    open,
     close() {
       closed = true;
       return (closing ??= (async () => {
         await Promise.allSettled([...pending]);
         try {
+          await Promise.allSettled([...retained].map((read) => read.close()));
           await runtime.close();
         } finally {
           if (work) await (await work).close();

@@ -130,6 +130,7 @@ test('Default mixed feed composes real discovery, current Following and Continue
         : undefined;
     });
     expect(mixed.feedItems.filter((item) => item.key.id === book)).toHaveLength(1);
+    expect(mixed.feedItems.slice(0, 3).map((item) => item.source)).toEqual(['continue', 'following', 'discovery']);
     expect(mixed.feedItems.find((item) => item.source === 'continue')!.continue).toMatchObject({
       subjectId: book,
       state: active,
@@ -418,6 +419,45 @@ test('Default feed route applies the selected native kind across the mixed strea
     expect(partial.sources).toEqual({ discovery: 'unavailable', following: 'ready', continue: 'ready' });
     expect(partial.feedItems.some((item) => item.source === 'continue' && item.key.id === book)).toBe(true);
     expect(partial.feedItems.every((item) => item.key.kind === 'schema:Book')).toBe(true);
+    const anonymousFailure = await degraded.handle(new Request('http://kernel.test/v1/feedItems'));
+    expect(anonymousFailure.status).toBe(200);
+    expect(await anonymousFailure.json()).toMatchObject({
+      feedItems: [],
+      next: null,
+      sources: { discovery: 'unavailable', following: 'not_requested', continue: 'not_requested' },
+    });
+    // Metadata cannot stand in for the missing native candidate-membership producers.
+    // All three selections remain conjunctive, including under the Following-only mode.
+    for (const stream of ['home', 'following']) {
+      const unavailable = await response(
+        new URLSearchParams({
+          stream,
+          kind: 'schema:Book',
+          spaceId: book,
+          ratingQuestionId: movie,
+        }),
+      );
+      expect(unavailable.status).toBe(503);
+      expect(unavailable.body.code).toBe('dependency_unavailable');
+    }
+    for (const name of ['spaceId', 'ratingQuestionId']) {
+      expect((await response(new URLSearchParams({ [name]: 'invalid' }))).status).toBe(400);
+      expect(
+        (
+          await response(
+            new URLSearchParams([
+              [name, book],
+              [name, movie],
+            ]),
+          )
+        ).status,
+      ).toBe(400);
+      const rebound = await response(
+        new URLSearchParams({ stream: 'home', limit: '1', kind: 'schema:Book', cursor: first.next!, [name]: book }),
+      );
+      expect(rebound.status).toBe(400);
+      expect(rebound.body.code).toBe('invalid_cursor');
+    }
   } finally {
     try {
       await server?.stop();

@@ -12,12 +12,14 @@ type Pending = {
   captured_revision: string | null;
   captured_epoch: number | null;
   fanout_frontier: string | null;
+  captured_enrollment_generation: string | null;
   captured_native_revision: string | null;
   captured_native_claim_revision: string | null;
   native_captured_enqueue: string | null;
   native_captured_epoch: number | null;
 };
 type Enrollment = {
+  enrollment_generation: string;
   registration_partition: number;
   registration: string;
   bootstrap: string;
@@ -26,6 +28,8 @@ type Enrollment = {
   source_position: string;
   native_revision: string | null;
   native_claim_revision: string | null;
+  complete: boolean;
+  receipt: string | null;
 };
 
 async function transaction<T>(pool: Pool, deadline: number, body: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -50,26 +54,41 @@ async function transaction<T>(pool: Pool, deadline: number, body: (client: PoolC
 }
 
 function frontier(enrollment: Enrollment): string {
-  return JSON.stringify([enrollment.registration_partition, enrollment.registration, enrollment.bootstrap]);
+  return JSON.stringify([
+    enrollment.enrollment_generation,
+    enrollment.registration_partition,
+    enrollment.registration,
+    enrollment.bootstrap,
+  ]);
 }
-function after(value: string | null): readonly [number, string, string] {
-  if (value === null) return [-1, '', '00000000-0000-0000-0000-000000000000'];
+function after(value: string | null): readonly [string, number, string, string] {
+  if (value === null) return ['0', -1, '', '00000000-0000-0000-0000-000000000000'];
   const parsed: unknown = JSON.parse(value);
+  // The migration freezes all pre-installation keys at generation zero while
+  // excluding concurrent enrollment. Preserve their original traversal prefix.
+  if (Array.isArray(parsed) && parsed.length === 3) parsed.unshift('0');
   if (
     !Array.isArray(parsed) ||
-    parsed.length !== 3 ||
-    !Number.isInteger(parsed[0]) ||
-    typeof parsed[1] !== 'string' ||
-    typeof parsed[2] !== 'string'
+    parsed.length !== 4 ||
+    typeof parsed[0] !== 'string' ||
+    !/^(0|[1-9][0-9]*)$/.test(parsed[0]) ||
+    !Number.isInteger(parsed[1]) ||
+    parsed[1] < 0 ||
+    parsed[1] > 4095 ||
+    typeof parsed[2] !== 'string' ||
+    typeof parsed[3] !== 'string'
   )
     throw new Error('Invalid retained Source enrollment frontier');
-  return parsed as [number, string, string];
+  return parsed as [string, number, string, string];
 }
 
 /** Receiver apply commits in the existing registration home. Its same-row native
  * positions are also the idempotent receipt. This function grants no ACK.
  */
 async function apply(pool: Pool, pending: Pending, enrollment: Enrollment, deadline: number) {
+  // A staged key is not a completed native enrollment receipt. In particular,
+  // absence of its eventual baseline cannot make a captured interval empty.
+  if (!enrollment.complete || enrollment.receipt === null) return false;
   return transaction(pool, deadline, async (client) => {
     // Take native owner custody before registration custody, matching domain commands.
     const owner = (
@@ -195,8 +214,8 @@ export async function maintainPublicFilterCoverageHome(
       )
     ).rows[0];
     if (!owner || owner.write_state !== 'active') throw new CommandUnavailableError('fenced', partition);
-    const head = await client.query(
-      'SELECT 1 FROM semantic.public_filter_privacy_head WHERE partition_no=$1 FOR UPDATE',
+    const head = await client.query<{ enrollment_generation: string }>(
+      'SELECT enrollment_generation::text FROM semantic.public_filter_privacy_head WHERE partition_no=$1 FOR UPDATE',
       [partition],
     );
     if (head.rowCount !== 1) throw new CommandUnavailableError('fenced', partition);
@@ -220,31 +239,42 @@ export async function maintainPublicFilterCoverageHome(
            captured_revision=CASE WHEN $3 THEN NULL ELSE enqueue_revision END,
            native_captured_enqueue=CASE WHEN $3 THEN enqueue_revision ELSE NULL END,
            captured_native_revision=native_revision,captured_native_claim_revision=native_claim_revision,
-           fanout_frontier=NULL,next_first_position=NULL
+           fanout_frontier=NULL,next_first_position=NULL,captured_enrollment_generation=$4::bigint
          WHERE (partition_no,input_key)=($1,$2) RETURNING *`,
-          [partition, pending.input_key, account],
+          [partition, pending.input_key, account, head.rows[0]!.enrollment_generation],
         )
       ).rows[0];
       if (!saved) throw new Error('Coverage capture lost its locked home key');
       return saved;
     }
+    if (pending.captured_enrollment_generation === null) {
+      // Existing intervals receive their installation cutoff in the migration,
+      // under locks excluding enrollment. Missing authority is not a new cut.
+      throw new Error('Retained Source interval has no enrollment cutoff');
+    }
     return pending;
   });
   if (!captured) return { applied: 0, more: false };
   const keyset = after(captured.fanout_frontier);
+  if (
+    captured.captured_enrollment_generation === null ||
+    BigInt(keyset[0]) > BigInt(captured.captured_enrollment_generation)
+  )
+    throw new Error('Retained Source enrollment frontier exceeds its captured window');
   const enrollments = await withConnection(
     pool,
     async (client) =>
       (
         await client.query<Enrollment>(
-          `SELECT e.registration_partition,e.registration,e.bootstrap::text,h.read_definition::text,
-       h.owner_epoch,h.source_position::text,h.native_revision::text,h.native_claim_revision::text
+          `SELECT e.enrollment_generation::text,e.registration_partition,e.registration,e.bootstrap::text,h.read_definition::text,
+       h.owner_epoch,h.source_position::text,h.native_revision::text,h.native_claim_revision::text,h.complete,h.receipt
      FROM semantic.public_filter_key_enrollment e
      JOIN semantic.public_filter_home_enrollment h USING(partition_no,bootstrap)
      WHERE e.partition_no=$1 AND e.input_key=$2
-       AND (e.registration_partition,e.registration,e.bootstrap)>($3,$4,$5::uuid)
-     ORDER BY e.registration_partition,e.registration,e.bootstrap LIMIT $6`,
-          [partition, captured.input_key, ...keyset, limit],
+       AND e.enrollment_generation<=$3::bigint
+       AND (e.enrollment_generation,e.registration_partition,e.registration,e.bootstrap)>($4::bigint,$5,$6,$7::uuid)
+     ORDER BY e.enrollment_generation,e.registration_partition,e.registration,e.bootstrap LIMIT $8`,
+          [partition, captured.input_key, captured.captured_enrollment_generation, ...keyset, limit],
         )
       ).rows,
   );
@@ -284,11 +314,22 @@ export async function maintainPublicFilterCoverageHome(
         native_captured_enqueue=CASE WHEN $4 THEN NULL ELSE native_captured_enqueue END,
         captured_native_revision=CASE WHEN $4 THEN NULL ELSE captured_native_revision END,
         captured_native_claim_revision=CASE WHEN $4 THEN NULL ELSE captured_native_claim_revision END,
+        captured_enrollment_generation=CASE WHEN $4 THEN NULL ELSE captured_enrollment_generation END,
         next_first_position=CASE WHEN $4 THEN NULL ELSE next_first_position END
        WHERE (partition_no,input_key)=($1,$2) AND live
          AND coalesce(native_captured_enqueue,captured_revision)=$5::bigint
-         AND fanout_frontier IS NOT DISTINCT FROM $7`,
-      [partition, captured.input_key, all ? null : next, all, settled, account, captured.fanout_frontier],
+         AND fanout_frontier IS NOT DISTINCT FROM $7
+         AND captured_enrollment_generation=$8::bigint`,
+      [
+        partition,
+        captured.input_key,
+        all ? null : next,
+        all,
+        settled,
+        account,
+        captured.fanout_frontier,
+        captured.captured_enrollment_generation,
+      ],
     );
     // A concurrent maintainer won the same retained interval. Its committed
     // frontier is authoritative; do not create another traversal or clear it.

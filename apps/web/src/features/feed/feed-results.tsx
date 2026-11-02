@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { ContentItem, type ContentItemHeadingLevel, type ContentItemProps } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 
@@ -42,6 +42,7 @@ export type FeedResultsMessages = {
 
 export type FeedResultsProps<T> = {
   regionLabel: string;
+  boundaryRef?: Ref<HTMLElement> | undefined;
   itemHeadingLevel: ContentItemHeadingLevel;
   listAs: 'ol' | 'ul';
   result: FeedResultsResult<T>;
@@ -64,6 +65,7 @@ export type FeedResultsProps<T> = {
 /** One ordered, named result region. Its owner keeps selection, data access and continuation authority. */
 export function FeedResults<T>({
   regionLabel,
+  boundaryRef,
   itemHeadingLevel,
   listAs,
   result,
@@ -95,6 +97,8 @@ export function FeedResults<T>({
 
   return (
     <section
+      ref={boundaryRef}
+      tabIndex={boundaryRef ? -1 : undefined}
       aria-label={regionLabel}
       aria-busy={busy}
       className={className}

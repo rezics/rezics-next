@@ -566,6 +566,7 @@ export function createSearchService({
       };
       let operations: PublicFilterConsumerOperations | undefined;
       let capture: PublicFilterConsumerCapture | undefined;
+      let disposeRetainedPage: (() => Promise<void>) | undefined;
       try {
         if (runtime) {
           if (retained) {
@@ -595,6 +596,7 @@ export function createSearchService({
               }),
             )
           : undefined;
+        disposeRetainedPage = retainedRead?.dispose;
         if (
           retainedRead &&
           (retainedRead.continuation.queried.consumer.physicalTarget !== subjectIndexName(prefix, generation) ||
@@ -698,9 +700,13 @@ export function createSearchService({
         }
         return response;
       } finally {
-        // Closing the request factory drains resources; only an exhausted page closes
-        // its retained observation. A later request reopens that producer state.
-        await operations?.close();
+        try {
+          // Hydration/cursor failures still release the SAME page use. Disposing
+          // failed work never substitutes for the missing final disclosure.
+          await disposeRetainedPage?.();
+        } finally {
+          await operations?.close();
+        }
       }
     },
 

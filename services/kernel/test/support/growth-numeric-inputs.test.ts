@@ -19,5 +19,5 @@ test('checkedMultiplyDivide keeps finite signed, subnormal, and intermediate-saf
     [[Number.MIN_VALUE, 2, 2], Number.MIN_VALUE],
     [[Number.MAX_VALUE, 2, 2], Number.MAX_VALUE],
   ] as const)
-    expect(checkedMultiplyDivide(...operands, 'Growth slope')).toBe(expected);
+    expect(checkedMultiplyDivide(operands[0], operands[1], operands[2], 'Growth slope')).toBe(expected);
 });

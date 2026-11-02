@@ -471,6 +471,141 @@ END; $$;
 CREATE FUNCTION semantic.capture_erasure_roles(p_home integer, p_store text, p_key bigint, p_tx uuid) RETURNS void
     LANGUAGE plpgsql
     AS $_$
+DECLARE
+ b record; provenance_key bigint; r record; native_position bigint; acting_human uuid;
+ native_tx uuid:=nullif(current_setting('semantic.erasure_native_transaction',true),'')::uuid;
+ source_tx uuid; previous_account uuid; previous_role text;
+ copies bigint:=0; sources bigint:=0; basis_count integer; requested_bytes integer;
+ copy_identity text:=repeat('0',64); source_identity text:=repeat('0',64);
+ expected_basis_locators integer; expected_basis_bytes integer;
+ funded boolean:=current_setting('semantic.identity_receiving_capture',true)='on';
+ budget semantic.identity_receiving_capture_pending;
+BEGIN
+ IF NOT coalesce(funded,false) OR p_store NOT IN ('identity_epoch_receiving_plan','identity_epoch_receiving_record',
+    'identity_epoch_receiving_effect','identity_epoch_receiving_custody','identity_epoch_effect_receipt','identity_epoch_step') THEN
+  PERFORM semantic.capture_erasure_roles_unfunded(p_home,p_store,p_key,p_tx);
+  RETURN;
+ END IF;
+ IF funded THEN
+  -- Consume one actual event in this DB transaction, not a caller-supplied count or cached proof.
+  SELECT * INTO budget FROM semantic.identity_receiving_capture_pending
+   WHERE transaction_xid=pg_current_xact_id()::text AND partition_no=p_home AND store=p_store AND record_key=p_key
+   ORDER BY ordinal LIMIT 1 FOR UPDATE;
+  IF NOT FOUND OR NOT budget.armed OR budget.source_transaction_id IS DISTINCT FROM p_tx
+     OR budget.native_transaction_id IS DISTINCT FROM native_tx THEN
+   RAISE EXCEPTION 'identity_receiving_capture_unfunded_event' USING ERRCODE='23514';
+  END IF;
+  DELETE FROM semantic.identity_receiving_capture_pending
+   WHERE transaction_xid=budget.transaction_xid AND ordinal=budget.ordinal;
+ END IF;
+ SELECT position INTO native_position FROM core.partition WHERE partition_no=p_home;
+
+ -- Copy and source prefixes use the same two authentic origins. The counter is
+ -- their complete aggregate, including repeated account/role pairs in each origin.
+ FOREACH source_tx IN ARRAY ARRAY[p_tx,CASE WHEN native_tx IS DISTINCT FROM p_tx THEN native_tx ELSE NULL END] LOOP
+  CONTINUE WHEN source_tx IS NULL;
+  previous_account:=NULL; previous_role:=NULL;
+  LOOP
+   IF previous_account IS NULL THEN
+    SELECT account_id,CASE WHEN octet_length(role)<=12 THEN CASE WHEN role IN ('actor','author','editor','acting-human','delegate','owner','subject','operator') THEN role END END AS role INTO r FROM semantic.erasure_copy_role
+     WHERE partition_no=p_home AND store=p_store AND record_key=p_key AND transaction_id=source_tx
+     ORDER BY erasure_copy_role.account_id,erasure_copy_role.role LIMIT 1;
+   ELSE
+    SELECT account_id,CASE WHEN octet_length(role)<=12 THEN CASE WHEN role IN ('actor','author','editor','acting-human','delegate','owner','subject','operator') THEN role END END AS role INTO r FROM semantic.erasure_copy_role
+     WHERE partition_no=p_home AND store=p_store AND record_key=p_key AND transaction_id=source_tx
+      AND (account_id,role)>(previous_account,previous_role) ORDER BY erasure_copy_role.account_id,erasure_copy_role.role LIMIT 1;
+   END IF;
+   EXIT WHEN NOT FOUND;
+   copies:=copies+1;
+   IF funded AND copies>budget.copy_roles THEN
+    RAISE EXCEPTION 'identity_receiving_capture_copy_funding_changed' USING ERRCODE='23514';
+   END IF;
+   IF r.role IS NULL THEN
+    RAISE EXCEPTION 'identity_receiving_capture_original_identity_changed' USING ERRCODE='23514';
+   END IF;
+   copy_identity:=encode(sha256(convert_to(copy_identity||'|copy|'||source_tx::text||'|'||r.account_id::text||'|'||r.role,'UTF8')),'hex');
+   PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,source_tx,native_position);
+   previous_account:=r.account_id; previous_role:=r.role;
+  END LOOP;
+ END LOOP;
+ FOREACH source_tx IN ARRAY ARRAY[p_tx,CASE WHEN native_tx IS DISTINCT FROM p_tx THEN native_tx ELSE NULL END] LOOP
+  CONTINUE WHEN source_tx IS NULL;
+  previous_account:=NULL; previous_role:=NULL;
+  LOOP
+   IF previous_account IS NULL THEN
+    SELECT account_id,CASE WHEN octet_length(role)<=12 THEN CASE WHEN role IN ('actor','author','editor','acting-human','delegate','owner','subject','operator') THEN role END END AS role INTO r FROM semantic.erasure_source_role
+     WHERE partition_no=p_home AND transaction_id=source_tx ORDER BY erasure_source_role.account_id,erasure_source_role.role LIMIT 1;
+   ELSE
+    SELECT account_id,CASE WHEN octet_length(role)<=12 THEN CASE WHEN role IN ('actor','author','editor','acting-human','delegate','owner','subject','operator') THEN role END END AS role INTO r FROM semantic.erasure_source_role
+     WHERE partition_no=p_home AND transaction_id=source_tx AND (account_id,role)>(previous_account,previous_role)
+     ORDER BY erasure_source_role.account_id,erasure_source_role.role LIMIT 1;
+   END IF;
+   EXIT WHEN NOT FOUND;
+   sources:=sources+1;
+   IF funded AND sources>budget.source_roles THEN
+    RAISE EXCEPTION 'identity_receiving_capture_source_funding_changed' USING ERRCODE='23514';
+   END IF;
+   IF r.role IS NULL THEN
+    RAISE EXCEPTION 'identity_receiving_capture_original_identity_changed' USING ERRCODE='23514';
+   END IF;
+   source_identity:=encode(sha256(convert_to(source_identity||'|source|'||source_tx::text||'|'||r.account_id::text||'|'||r.role,'UTF8')),'hex');
+   PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,source_tx,native_position);
+   previous_account:=r.account_id; previous_role:=r.role;
+  END LOOP;
+ END LOOP;
+ IF funded AND (copies<>budget.copy_roles OR sources<>budget.source_roles) THEN
+  RAISE EXCEPTION 'identity_receiving_capture_original_roles_changed' USING ERRCODE='23514';
+ END IF;
+ IF copy_identity IS DISTINCT FROM budget.copy_identity OR source_identity IS DISTINCT FROM budget.source_identity THEN
+  RAISE EXCEPTION 'identity_receiving_capture_original_identity_changed' USING ERRCODE='23514';
+ END IF;
+ -- Each authentic original/native write basis is read independently. Do not
+ -- substitute the job's basis for the native command or return early when the
+ -- original basis is absent. A shared transaction is visited exactly once.
+ FOREACH source_tx IN ARRAY ARRAY[p_tx,CASE WHEN native_tx IS DISTINCT FROM p_tx THEN native_tx ELSE NULL END] LOOP
+  CONTINUE WHEN source_tx IS NULL;
+  expected_basis_locators:=CASE WHEN source_tx=p_tx THEN budget.basis_locators ELSE budget.native_basis_locators END;
+  expected_basis_bytes:=CASE WHEN source_tx=p_tx THEN budget.basis_bytes ELSE budget.native_basis_bytes END;
+  -- The delegation expression can match only this bounded ASCII length.
+  SELECT principal_kind,principal_id,position,
+   CASE WHEN octet_length(requested_by)=92 THEN requested_by ELSE NULL END AS requested_by
+  INTO b FROM editorial.write_basis WHERE partition_no=p_home AND transaction_id=source_tx;
+  IF NOT FOUND THEN
+   IF expected_basis_locators IS NOT NULL OR expected_basis_bytes IS NOT NULL THEN
+    RAISE EXCEPTION 'identity_receiving_capture_basis_changed' USING ERRCODE='23514';
+   END IF;
+   CONTINUE;
+  END IF;
+  requested_bytes:=coalesce(octet_length(b.requested_by),0);
+  basis_count:=CASE WHEN b.principal_kind='account' THEN 2 ELSE 0 END
+   + CASE WHEN b.requested_by ~ '^urn:rezics:request:[0-9a-f-]{36}:[0-9a-f-]{36}$' THEN 3 ELSE 0 END;
+  IF expected_basis_locators IS DISTINCT FROM basis_count OR expected_basis_bytes IS DISTINCT FROM requested_bytes THEN
+   RAISE EXCEPTION 'identity_receiving_capture_basis_changed' USING ERRCODE='23514';
+  END IF;
+  INSERT INTO semantic.erasure_provenance(partition_no,transaction_id) VALUES(p_home,source_tx)
+   ON CONFLICT(partition_no,transaction_id) DO UPDATE SET transaction_id=EXCLUDED.transaction_id
+   RETURNING record_key INTO provenance_key;
+  IF b.principal_kind='account' THEN
+   PERFORM semantic.record_erasure_locator(p_home,b.principal_id,'actor',p_store,p_key,source_tx,b.position);
+   PERFORM semantic.record_erasure_locator(p_home,b.principal_id,'actor','write_basis',provenance_key,source_tx,b.position);
+  END IF;
+  IF b.requested_by ~ '^urn:rezics:request:[0-9a-f-]{36}:[0-9a-f-]{36}$' THEN
+   acting_human:=split_part(b.requested_by,':',4)::uuid;
+   PERFORM semantic.record_erasure_locator(p_home,acting_human,'acting-human',p_store,p_key,source_tx,b.position);
+   PERFORM semantic.record_erasure_locator(p_home,acting_human,'acting-human','write_basis',provenance_key,source_tx,b.position);
+   PERFORM semantic.record_erasure_locator(p_home,b.principal_id,'delegate',p_store,p_key,source_tx,b.position);
+  END IF;
+ END LOOP;
+END; $_$;
+
+
+--
+-- Name: capture_erasure_roles_unfunded(integer, text, bigint, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_erasure_roles_unfunded(p_home integer, p_store text, p_key bigint, p_tx uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $_$
 DECLARE b editorial.write_basis; provenance_key bigint; r record; native_position bigint; acting_human uuid;
 BEGIN
  SELECT position INTO native_position FROM core.partition WHERE partition_no=p_home;
@@ -1514,6 +1649,27 @@ END $$;
 
 
 --
+-- Name: enqueue_identity_receiving_capture(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.enqueue_identity_receiving_capture() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF current_setting('semantic.identity_receiving_capture',true) IS DISTINCT FROM 'on'
+    OR current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ IF TG_TABLE_NAME IN ('identity_epoch_effect_receipt','identity_epoch_step') THEN
+  INSERT INTO semantic.identity_receiving_capture_pending(transaction_xid,partition_no,store,record_key,job_id)
+   VALUES(pg_current_xact_id()::text,NEW.partition_no,TG_TABLE_NAME,NEW.erasure_key,NEW.job_id);
+ ELSE
+  INSERT INTO semantic.identity_receiving_capture_pending(transaction_xid,partition_no,store,record_key,source_transaction_id)
+   VALUES(pg_current_xact_id()::text,NEW.partition_no,TG_TABLE_NAME,NEW.erasure_key,NEW.transaction_id);
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: enroll_context_role_provenance(integer, bigint, uuid, uuid, uuid, text, text, text, uuid, uuid); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -1686,6 +1842,22 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+
+--
+-- Name: fence_public_filter_population(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.fence_public_filter_population() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (NEW.epoch,NEW.write_state) IS DISTINCT FROM (OLD.epoch,OLD.write_state) THEN
+    UPDATE semantic.public_filter_privacy_head SET population_fenced=true
+      WHERE partition_no=OLD.partition_no;
+  END IF;
+  RETURN NEW;
+END $$;
 
 
 --
@@ -2605,6 +2777,35 @@ BEGIN RAISE EXCEPTION 'record_retention_commit_is_immutable'; END; $$;
 
 
 --
+-- Name: public_filter_native_json(jsonb); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.public_filter_native_json(value jsonb) RETURNS jsonb
+    LANGUAGE plpgsql IMMUTABLE STRICT
+    AS $$
+DECLARE result jsonb; entry jsonb;
+BEGIN
+  CASE value->>0
+    WHEN 'scalar','value','bigint' THEN RETURN value->1;
+    WHEN 'undefined' THEN RETURN 'null'::jsonb;
+    WHEN 'array' THEN
+      result := '[]'::jsonb;
+      FOR entry IN SELECT jsonb_array_elements(value->1) LOOP
+        result := result || jsonb_build_array(semantic.public_filter_native_json(entry));
+      END LOOP;
+      RETURN result;
+    WHEN 'object' THEN
+      result := '{}'::jsonb;
+      FOR entry IN SELECT jsonb_array_elements(value->1) LOOP
+        result := result || jsonb_build_object(entry->>0,semantic.public_filter_native_json(entry->1));
+      END LOOP;
+      RETURN result;
+    ELSE RAISE EXCEPTION 'Invalid native public-filter encoding';
+  END CASE;
+END $$;
+
+
+--
 -- Name: read_identity_epoch_installation(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -2676,8 +2877,15 @@ DECLARE delivery bigint; is_global boolean:=false;
 BEGIN
  IF EXISTS(SELECT 1 FROM semantic.erasure_source_seal s WHERE s.partition_no=p_home AND s.account_id=p_account) THEN
   -- Re-reporting unchanged provenance of a survivor's existing row creates no new role.
-  IF EXISTS(SELECT 1 FROM semantic.erasure_locator l WHERE l.partition_no=p_home AND l.account_id=p_account
-    AND l.role=p_role AND l.store=p_store AND l.record_key=p_key AND l.source_transaction_id IS NOT DISTINCT FROM p_tx) THEN RETURN; END IF;
+  IF p_position IS NULL THEN
+   IF EXISTS(SELECT 1 FROM semantic.erasure_source_record l WHERE l.partition_no=p_home AND l.account_id=p_account
+     AND l.role=p_role AND l.store=p_store AND l.record_key=p_key
+     AND coalesce(l.source_transaction_id::text,'')=coalesce(p_tx::text,'')) THEN RETURN; END IF;
+  ELSE
+   IF EXISTS(SELECT 1 FROM semantic.erasure_source_record l WHERE l.partition_no=p_home AND l.account_id=p_account
+     AND l.role=p_role AND l.store=p_store AND l.record_key=p_key
+     AND coalesce(l.source_transaction_id::text,'')=coalesce(p_tx::text,'') AND l.source_position=p_position) THEN RETURN; END IF;
+  END IF;
   RAISE EXCEPTION 'Semantic erased Source role admission is sealed' USING ERRCODE='23514';
  END IF;
  -- A command-body Source enrollment has a deferred native fence, never a setting as proof.
@@ -3024,6 +3232,42 @@ END $_$;
 
 
 --
+-- Name: retain_public_filter_definition(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.retain_public_filter_definition() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (NEW.partition_no,NEW.read_definition,NEW.source_id,NEW.configuration,NEW.release_digest,
+      NEW.subject_type,NEW.capture_digest,NEW.capture,NEW.dependency_keys) IS DISTINCT FROM
+     (OLD.partition_no,OLD.read_definition,OLD.source_id,OLD.configuration,OLD.release_digest,
+      OLD.subject_type,OLD.capture_digest,OLD.capture,OLD.dependency_keys)
+     OR (OLD.coverage_keys IS NOT NULL AND NEW.coverage_keys IS DISTINCT FROM OLD.coverage_keys) THEN
+    RAISE EXCEPTION 'Original public-filter definitions are immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: retain_public_filter_enrollment_window(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.retain_public_filter_enrollment_window() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF OLD.captured_enrollment_generation IS NOT NULL
+    AND coalesce(NEW.native_captured_enqueue,NEW.captured_revision) IS NOT NULL
+    AND NEW.captured_enrollment_generation IS DISTINCT FROM OLD.captured_enrollment_generation THEN
+    RAISE EXCEPTION 'Original Source enrollment window is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: retain_public_filter_home_receipt(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -3040,6 +3284,53 @@ BEGIN
     RAISE EXCEPTION 'Incomplete public-filter home receipt' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
+END $$;
+
+
+--
+-- Name: retain_public_filter_key_generation(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.retain_public_filter_key_generation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.enrollment_generation IS DISTINCT FROM OLD.enrollment_generation THEN
+    RAISE EXCEPTION 'Original Source key enrollment generation is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: retain_public_filter_population_start(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.retain_public_filter_population_start() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE observation_state text;
+BEGIN
+  IF TG_OP='UPDATE' THEN
+    IF NEW IS DISTINCT FROM OLD THEN
+      RAISE EXCEPTION 'Original population starts are immutable' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+  END IF;
+  -- Erasure uses the original observation's admission lock. Unknown users,
+  -- physical copies or children retain this cut, including expired leases.
+  SELECT state INTO observation_state FROM search.public_filter_observation
+    WHERE (partition_no,observation)=(OLD.partition_no,OLD.observation) FOR UPDATE;
+  IF observation_state IS NULL OR observation_state NOT IN ('closing','closed')
+    OR EXISTS(SELECT 1 FROM search.public_filter_reference
+      WHERE (partition_no,observation)=(OLD.partition_no,OLD.observation))
+    OR EXISTS(SELECT 1 FROM search.public_filter_pit
+      WHERE (partition_no,observation)=(OLD.partition_no,OLD.observation))
+    OR EXISTS(SELECT 1 FROM search.public_filter_execution
+      WHERE (partition_no,observation)=(OLD.partition_no,OLD.observation)) THEN
+    RAISE EXCEPTION 'Original population start is still in use' USING ERRCODE='23514';
+  END IF;
+  RETURN OLD;
 END $$;
 
 
@@ -4167,7 +4458,7 @@ CREATE TABLE semantic.definition_catalogue_checkpoint (
     job_id uuid NOT NULL,
     "position" bigint NOT NULL,
     result bytea NOT NULL,
-    recorded_transaction_id uuid NOT NULL,
+    recorded_transaction_id uuid CONSTRAINT definition_catalogue_checkpoin_recorded_transaction_id_not_null NOT NULL,
     CONSTRAINT definition_catalogue_checkpoint_phase_check CHECK ((phase = ANY (ARRAY['step'::text, 'activation-step'::text]))),
     CONSTRAINT definition_catalogue_checkpoint_position_check CHECK (("position" >= 0)),
     CONSTRAINT definition_catalogue_checkpoint_result_check CHECK (((octet_length(result) >= 1) AND (octet_length(result) <= 65536))),
@@ -4763,6 +5054,7 @@ CREATE TABLE semantic.erasure_source_hold (
     external_id text,
     field_group text,
     disposition text,
+    origin_key text,
     CONSTRAINT erasure_source_hold_disposition_check CHECK ((disposition = ANY (ARRAY['remove'::text, 'replace'::text, 'retain_deidentified'::text])))
 );
 
@@ -4807,6 +5099,7 @@ CREATE TABLE semantic.erasure_source_page (
     disposition text,
     complete boolean NOT NULL,
     consumed boolean DEFAULT false NOT NULL,
+    origin_key text,
     CONSTRAINT erasure_source_page_disposition_check CHECK ((disposition = ANY (ARRAY['remove'::text, 'replace'::text, 'retain_deidentified'::text])))
 );
 
@@ -4835,7 +5128,8 @@ CREATE TABLE semantic.erasure_source_record (
     context_id uuid,
     source_name text,
     external_id text,
-    field_group text
+    field_group text,
+    origin_key text GENERATED ALWAYS AS (((COALESCE((source_transaction_id)::text, ''::text) || '/'::text) || COALESCE((source_position)::text, ''::text))) STORED NOT NULL
 );
 
 
@@ -4903,6 +5197,7 @@ CREATE TABLE semantic.erasure_source_terminal (
     disposition text,
     complete boolean CONSTRAINT erasure_source_page_complete_not_null NOT NULL,
     consumed boolean DEFAULT false CONSTRAINT erasure_source_page_consumed_not_null NOT NULL,
+    origin_key text,
     CONSTRAINT erasure_source_page_disposition_check CHECK ((disposition = ANY (ARRAY['remove'::text, 'replace'::text, 'retain_deidentified'::text])))
 );
 
@@ -5993,10 +6288,37 @@ CREATE TABLE semantic.identity_epoch_receiving_record (
     source_hold jsonb NOT NULL,
     transaction_id uuid NOT NULL,
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    native_hold jsonb,
+    CONSTRAINT identity_epoch_receiving_native_variant CHECK (COALESCE(((((binding ->> 'step'::text) = 'library-private-follow-counts'::text) AND (native_hold IS NULL)) OR (((binding ->> 'step'::text) = 'search-canonical-index'::text) AND (native_hold IS NOT NULL) AND (jsonb_typeof(native_hold) = 'object'::text) AND (octet_length((native_hold)::text) <= 4096) AND ((native_hold -> 'source'::text) = (binding -> 'source'::text)) AND ((native_hold -> 'locator'::text) = ((binding -> 'source'::text) -> 'locator'::text)) AND ((native_hold ->> 'holdId'::text) IS NOT NULL))), false)),
     CONSTRAINT identity_epoch_receiving_record_binding_check CHECK ((octet_length((binding)::text) <= 4096)),
     CONSTRAINT identity_epoch_receiving_record_effect_key_check CHECK (((octet_length(effect_key) >= 1) AND (octet_length(effect_key) <= 256))),
     CONSTRAINT identity_epoch_receiving_record_job_epoch_check CHECK ((job_epoch > 0)),
     CONSTRAINT identity_epoch_receiving_record_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: identity_epoch_receiving_search_progress; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_receiving_search_progress (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    effect_key text NOT NULL,
+    owner_id uuid NOT NULL,
+    original uuid NOT NULL,
+    accepted_transaction_id uuid CONSTRAINT identity_epoch_receiving_searc_accepted_transaction_id_not_null NOT NULL,
+    binding_digest text CONSTRAINT identity_epoch_receiving_search_progres_binding_digest_not_null NOT NULL,
+    applied_transaction_id uuid,
+    released_transaction_id uuid,
+    revision bigint DEFAULT 0 NOT NULL,
+    after_key text,
+    state text DEFAULT 'progress'::text NOT NULL,
+    CONSTRAINT identity_epoch_receiving_search_progress_after_key_check CHECK (((octet_length(after_key) >= 1) AND (octet_length(after_key) <= 2048))),
+    CONSTRAINT identity_epoch_receiving_search_progress_check CHECK (((state = 'progress'::text) OR (applied_transaction_id IS NOT NULL))),
+    CONSTRAINT identity_epoch_receiving_search_progress_check1 CHECK (((state = 'released'::text) = (released_transaction_id IS NOT NULL))),
+    CONSTRAINT identity_epoch_receiving_search_progress_revision_check CHECK ((revision >= 0)),
+    CONSTRAINT identity_epoch_receiving_search_progress_state_check CHECK ((state = ANY (ARRAY['progress'::text, 'settled'::text, 'released'::text])))
 );
 
 
@@ -6530,6 +6852,49 @@ CREATE TABLE semantic.identity_public_output_transition (
 CREATE TABLE semantic.identity_public_writer (
     partition_no integer NOT NULL,
     revision bigint DEFAULT 1 NOT NULL
+);
+
+
+--
+-- Name: identity_receiving_capture_pending; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_receiving_capture_pending (
+    transaction_xid text NOT NULL,
+    ordinal bigint NOT NULL,
+    partition_no integer NOT NULL,
+    store text NOT NULL,
+    record_key bigint NOT NULL,
+    job_id uuid,
+    source_transaction_id uuid,
+    native_transaction_id uuid,
+    copy_roles bigint,
+    source_roles bigint,
+    basis_locators integer,
+    basis_bytes integer,
+    armed boolean DEFAULT false NOT NULL,
+    native_basis_locators integer,
+    native_basis_bytes integer,
+    copy_identity text,
+    source_identity text,
+    CONSTRAINT identity_receiving_capture_native_basis CHECK (((NOT armed) OR (((native_basis_locators IS NULL) OR ((native_basis_locators >= 0) AND (native_basis_locators <= 5))) AND ((native_basis_bytes IS NULL) OR (native_basis_bytes = ANY (ARRAY[0, 92]))) AND ((native_basis_locators IS NULL) = (native_basis_bytes IS NULL)) AND (((native_transaction_id IS NOT NULL) AND (native_transaction_id IS DISTINCT FROM source_transaction_id)) OR (native_basis_locators IS NULL))))),
+    CONSTRAINT identity_receiving_capture_original_identity CHECK (((NOT armed) OR ((copy_identity IS NOT NULL) AND (copy_identity ~ '^[0-9a-f]{64}$'::text) AND (source_identity IS NOT NULL) AND (source_identity ~ '^[0-9a-f]{64}$'::text)))),
+    CONSTRAINT identity_receiving_capture_pending_check CHECK (((NOT armed) OR ((source_transaction_id IS NOT NULL) AND (copy_roles IS NOT NULL) AND (source_roles IS NOT NULL) AND (copy_roles >= 0) AND (source_roles >= 0) AND ((basis_locators IS NULL) OR ((basis_locators >= 0) AND (basis_locators <= 5))) AND ((basis_bytes IS NULL) OR (basis_bytes = ANY (ARRAY[0, 92]))) AND ((basis_locators IS NULL) = (basis_bytes IS NULL))))),
+    CONSTRAINT identity_receiving_capture_pending_store_check CHECK ((store = ANY (ARRAY['identity_epoch_receiving_plan'::text, 'identity_epoch_receiving_record'::text, 'identity_epoch_receiving_effect'::text, 'identity_epoch_receiving_custody'::text, 'identity_epoch_effect_receipt'::text, 'identity_epoch_step'::text])))
+);
+
+
+--
+-- Name: identity_receiving_capture_pending_ordinal_seq; Type: SEQUENCE; Schema: semantic; Owner: -
+--
+
+ALTER TABLE semantic.identity_receiving_capture_pending ALTER COLUMN ordinal ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME semantic.identity_receiving_capture_pending_ordinal_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -7173,7 +7538,33 @@ CREATE TABLE semantic.public_filter_key_enrollment (
     input_key text NOT NULL COLLATE pg_catalog."C",
     registration_partition integer NOT NULL,
     registration text NOT NULL COLLATE pg_catalog."C",
-    bootstrap uuid NOT NULL
+    bootstrap uuid NOT NULL,
+    enrollment_generation bigint NOT NULL,
+    CONSTRAINT public_filter_key_enrollment_enrollment_generation_check CHECK ((enrollment_generation >= 0))
+);
+
+
+--
+-- Name: public_filter_population_start; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_population_start (
+    partition_no integer NOT NULL,
+    id uuid NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    observation text NOT NULL COLLATE pg_catalog."C",
+    bootstrap uuid NOT NULL,
+    read_definition uuid NOT NULL,
+    consumer text NOT NULL,
+    covered_generation bigint NOT NULL,
+    start_generation bigint NOT NULL,
+    owner_epoch integer NOT NULL,
+    deadline bigint NOT NULL,
+    CONSTRAINT public_filter_population_start_check CHECK ((start_generation >= covered_generation)),
+    CONSTRAINT public_filter_population_start_consumer_check CHECK ((octet_length(consumer) <= 8192)),
+    CONSTRAINT public_filter_population_start_covered_generation_check CHECK ((covered_generation >= 0)),
+    CONSTRAINT public_filter_population_start_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT public_filter_population_start_partition_no_check CHECK ((partition_no = 0))
 );
 
 
@@ -7184,6 +7575,11 @@ CREATE TABLE semantic.public_filter_key_enrollment (
 CREATE TABLE semantic.public_filter_privacy_head (
     partition_no integer NOT NULL,
     "position" bigint DEFAULT 0 NOT NULL,
+    enrollment_generation bigint DEFAULT 0 NOT NULL,
+    owner_epoch integer,
+    population_fenced boolean DEFAULT true NOT NULL,
+    CONSTRAINT public_filter_privacy_head_enrollment_generation_check CHECK ((enrollment_generation >= 0)),
+    CONSTRAINT public_filter_privacy_head_owner_epoch_check CHECK ((owner_epoch > 0)),
     CONSTRAINT public_filter_privacy_head_position_check CHECK (("position" >= 0))
 );
 
@@ -7233,7 +7629,10 @@ CREATE TABLE semantic.public_filter_privacy_pending (
     native_transaction xid8,
     captured_native_revision bigint,
     captured_native_claim_revision bigint,
+    captured_enrollment_generation bigint,
+    CONSTRAINT public_filter_pending_enrollment_window CHECK (((COALESCE(native_captured_enqueue, captured_revision) IS NULL) = (captured_enrollment_generation IS NULL))),
     CONSTRAINT public_filter_pending_native_domain CHECK ((((input_key = '["domain","accounts"]'::text) AND (first_position IS NULL) AND (through_position IS NULL) AND (native_revision IS NOT NULL) AND (native_revision > 0) AND (native_claim_revision IS NOT NULL) AND (native_claim_revision > 0) AND (native_transaction IS NOT NULL)) OR ((input_key <> '["domain","accounts"]'::text) AND (first_position IS NOT NULL) AND (through_position IS NOT NULL) AND (native_revision IS NULL) AND (native_claim_revision IS NULL) AND (native_transaction IS NULL)))),
+    CONSTRAINT public_filter_privacy_pendin_captured_enrollment_generati_check CHECK ((captured_enrollment_generation >= 0)),
     CONSTRAINT public_filter_privacy_pending_check CHECK ((through_position >= first_position)),
     CONSTRAINT public_filter_privacy_pending_check1 CHECK (((captured_through IS NULL) = (captured_revision IS NULL))),
     CONSTRAINT public_filter_privacy_pending_check2 CHECK (((captured_through IS NULL) = (captured_epoch IS NULL))),
@@ -7256,7 +7655,7 @@ CREATE TABLE semantic.public_filter_privacy_subject (
     "position" bigint NOT NULL,
     CONSTRAINT public_filter_privacy_subject_check CHECK (((route >= (partition_no * 16)) AND (route < ((partition_no + 1) * 16)))),
     CONSTRAINT public_filter_privacy_subject_owner_epoch_check CHECK ((owner_epoch > 0)),
-    CONSTRAINT public_filter_privacy_subject_position_check CHECK (("position" > 0))
+    CONSTRAINT public_filter_privacy_subject_position_check CHECK (("position" >= 0))
 );
 
 
@@ -7341,6 +7740,7 @@ CREATE TABLE semantic.public_filter_read_definition (
     capture_digest text NOT NULL,
     capture text NOT NULL,
     dependency_keys jsonb NOT NULL,
+    coverage_keys text[],
     CONSTRAINT public_filter_read_definition_capture_check CHECK ((octet_length(capture) <= 1048576)),
     CONSTRAINT public_filter_read_definition_dependency_keys_check CHECK ((jsonb_typeof(dependency_keys) = 'array'::text))
 );
@@ -8737,7 +9137,7 @@ ALTER TABLE ONLY semantic.erasure_source_page
 --
 
 ALTER TABLE ONLY semantic.erasure_source_record
-    ADD CONSTRAINT erasure_source_record_pkey PRIMARY KEY (partition_no, account_id, role, store, record_key, delivery_position);
+    ADD CONSTRAINT erasure_source_record_pkey PRIMARY KEY (partition_no, account_id, role, store, record_key, delivery_position, origin_key);
 
 
 --
@@ -9349,6 +9749,14 @@ ALTER TABLE ONLY semantic.identity_epoch_receiving_record
 
 
 --
+-- Name: identity_epoch_receiving_search_progress identity_epoch_receiving_search_progress_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_receiving_search_progress
+    ADD CONSTRAINT identity_epoch_receiving_search_progress_pkey PRIMARY KEY (partition_no, job_id, effect_key);
+
+
+--
 -- Name: identity_epoch_source_consumer_custody identity_epoch_source_consumer_custody_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -9554,6 +9962,14 @@ ALTER TABLE ONLY semantic.identity_public_output_transition
 
 ALTER TABLE ONLY semantic.identity_public_writer
     ADD CONSTRAINT identity_public_writer_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: identity_receiving_capture_pending identity_receiving_capture_pending_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_receiving_capture_pending
+    ADD CONSTRAINT identity_receiving_capture_pending_pkey PRIMARY KEY (transaction_xid, ordinal);
 
 
 --
@@ -9794,6 +10210,14 @@ ALTER TABLE ONLY semantic.public_filter_home_enrollment
 
 ALTER TABLE ONLY semantic.public_filter_key_enrollment
     ADD CONSTRAINT public_filter_key_enrollment_pkey PRIMARY KEY (partition_no, input_key, registration_partition, registration, bootstrap);
+
+
+--
+-- Name: public_filter_population_start public_filter_population_start_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_population_start
+    ADD CONSTRAINT public_filter_population_start_pkey PRIMARY KEY (partition_no, id);
 
 
 --
@@ -10661,10 +11085,24 @@ CREATE INDEX erasure_locator_work ON semantic.erasure_locator USING btree (parti
 
 
 --
+-- Name: erasure_source_commit_native_position; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX erasure_source_commit_native_position ON semantic.erasure_source_commit USING btree (partition_no, epoch, "position");
+
+
+--
 -- Name: erasure_source_record_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE INDEX erasure_source_record_key ON semantic.erasure_source_record USING btree (partition_no, account_id, store, record_key, role, delivery_position);
+CREATE INDEX erasure_source_record_key ON semantic.erasure_source_record USING btree (partition_no, account_id, store, record_key, role, delivery_position, origin_key);
+
+
+--
+-- Name: erasure_source_record_origin; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX erasure_source_record_origin ON semantic.erasure_source_record USING btree (partition_no, account_id, role, store, record_key, COALESCE((source_transaction_id)::text, ''::text), source_position);
 
 
 --
@@ -11060,6 +11498,13 @@ CREATE UNIQUE INDEX identity_epoch_receiving_record_erasure_key ON semantic.iden
 
 
 --
+-- Name: identity_epoch_receiving_search_unreleased; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_receiving_search_unreleased ON semantic.identity_epoch_receiving_search_progress USING btree (partition_no, job_id, owner_id, original) WHERE (state <> 'released'::text);
+
+
+--
 -- Name: identity_epoch_scoped_generation_original; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -11106,6 +11551,13 @@ CREATE INDEX identity_public_dirty_revision ON semantic.identity_public_dirty US
 --
 
 CREATE UNIQUE INDEX identity_receipt_claim_native_command ON semantic.identity_epoch_receipt_claim USING btree (partition_no, transaction_id) WHERE (NOT imported);
+
+
+--
+-- Name: identity_receiving_capture_event; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_receiving_capture_event ON semantic.identity_receiving_capture_pending USING btree (transaction_xid, partition_no, store, record_key, ordinal);
 
 
 --
@@ -11358,6 +11810,27 @@ CREATE INDEX provider_review_queue_key_pending ON semantic.provider_review_queue
 --
 
 CREATE UNIQUE INDEX public_filter_bootstrap_capture ON semantic.public_filter_bootstrap USING btree (partition_no, request_key) WHERE (state = 'capturing'::text);
+
+
+--
+-- Name: public_filter_key_enrollment_window; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX public_filter_key_enrollment_window ON semantic.public_filter_key_enrollment USING btree (partition_no, input_key, enrollment_generation, registration_partition, registration, bootstrap);
+
+
+--
+-- Name: public_filter_population_fenced; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX public_filter_population_fenced ON semantic.public_filter_privacy_head USING btree (partition_no) WHERE population_fenced;
+
+
+--
+-- Name: public_filter_population_start_observation; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX public_filter_population_start_observation ON semantic.public_filter_population_start USING btree (partition_no, observation, id);
 
 
 --
@@ -13323,6 +13796,55 @@ CREATE TRIGGER identity_public_writer AFTER INSERT OR DELETE OR UPDATE ON semant
 
 
 --
+-- Name: identity_epoch_effect_receipt identity_receiving_capture_budget; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_receiving_capture_budget AFTER INSERT OR UPDATE ON semantic.identity_epoch_effect_receipt FOR EACH ROW EXECUTE FUNCTION semantic.enqueue_identity_receiving_capture();
+
+
+--
+-- Name: identity_epoch_receiving_custody identity_receiving_capture_budget; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_receiving_capture_budget AFTER INSERT ON semantic.identity_epoch_receiving_custody FOR EACH ROW EXECUTE FUNCTION semantic.enqueue_identity_receiving_capture();
+
+
+--
+-- Name: identity_epoch_receiving_effect identity_receiving_capture_budget; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_receiving_capture_budget AFTER INSERT ON semantic.identity_epoch_receiving_effect FOR EACH ROW EXECUTE FUNCTION semantic.enqueue_identity_receiving_capture();
+
+
+--
+-- Name: identity_epoch_receiving_plan identity_receiving_capture_budget; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_receiving_capture_budget AFTER INSERT ON semantic.identity_epoch_receiving_plan FOR EACH ROW EXECUTE FUNCTION semantic.enqueue_identity_receiving_capture();
+
+
+--
+-- Name: identity_epoch_receiving_record identity_receiving_capture_budget; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_receiving_capture_budget AFTER INSERT ON semantic.identity_epoch_receiving_record FOR EACH ROW EXECUTE FUNCTION semantic.enqueue_identity_receiving_capture();
+
+
+--
+-- Name: identity_epoch_step identity_receiving_capture_budget; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_receiving_capture_budget AFTER INSERT OR UPDATE ON semantic.identity_epoch_step FOR EACH ROW EXECUTE FUNCTION semantic.enqueue_identity_receiving_capture();
+
+
+--
+-- Name: identity_epoch_receiving_plan identity_receiving_scope_pending; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_receiving_scope_pending AFTER INSERT ON semantic.identity_epoch_receiving_plan FOR EACH ROW EXECUTE FUNCTION search.enqueue_identity_receiving_scope();
+
+
+--
 -- Name: identity_epoch_group identity_scope_claim; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -13491,6 +14013,20 @@ CREATE TRIGGER public_filter_bootstrap_baseline_seal BEFORE UPDATE ON semantic.p
 
 
 --
+-- Name: public_filter_read_definition public_filter_definition_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_definition_immutable BEFORE UPDATE ON semantic.public_filter_read_definition FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_definition();
+
+
+--
+-- Name: public_filter_privacy_pending public_filter_enrollment_window_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_enrollment_window_immutable BEFORE UPDATE ON semantic.public_filter_privacy_pending FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_enrollment_window();
+
+
+--
 -- Name: public_filter_home_enrollment public_filter_home_creation_pin; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -13502,6 +14038,20 @@ CREATE TRIGGER public_filter_home_creation_pin BEFORE INSERT OR UPDATE ON semant
 --
 
 CREATE TRIGGER public_filter_home_receipt_immutable BEFORE UPDATE ON semantic.public_filter_home_enrollment FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_home_receipt();
+
+
+--
+-- Name: public_filter_key_enrollment public_filter_key_generation_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_key_generation_immutable BEFORE UPDATE ON semantic.public_filter_key_enrollment FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_key_generation();
+
+
+--
+-- Name: public_filter_population_start public_filter_population_start_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_population_start_immutable BEFORE DELETE OR UPDATE ON semantic.public_filter_population_start FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_population_start();
 
 
 --
@@ -14432,6 +14982,22 @@ ALTER TABLE ONLY semantic.identity_epoch_receiving_record
 
 
 --
+-- Name: identity_epoch_receiving_search_progress identity_epoch_receiving_sear_partition_no_job_id_effect_k_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_receiving_search_progress
+    ADD CONSTRAINT identity_epoch_receiving_sear_partition_no_job_id_effect_k_fkey FOREIGN KEY (partition_no, job_id, effect_key) REFERENCES semantic.identity_epoch_receiving_record(partition_no, job_id, effect_key) ON DELETE CASCADE;
+
+
+--
+-- Name: identity_epoch_receiving_search_progress identity_epoch_receiving_sear_partition_no_released_transa_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_receiving_search_progress
+    ADD CONSTRAINT identity_epoch_receiving_sear_partition_no_released_transa_fkey FOREIGN KEY (partition_no, released_transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
 -- Name: identity_epoch_source_consumer_terminal identity_epoch_source_consume_partition_no_custody_key_pre_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -14672,6 +15238,22 @@ ALTER TABLE ONLY semantic.public_filter_bootstrap
 
 
 --
+-- Name: public_filter_home_enrollment public_filter_enrollment_account_head; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_home_enrollment
+    ADD CONSTRAINT public_filter_enrollment_account_head FOREIGN KEY (partition_no) REFERENCES access.account_discovery_population(partition_no);
+
+
+--
+-- Name: public_filter_home_enrollment public_filter_enrollment_source_head; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_home_enrollment
+    ADD CONSTRAINT public_filter_enrollment_source_head FOREIGN KEY (partition_no) REFERENCES semantic.public_filter_privacy_head(partition_no);
+
+
+--
 -- Name: public_filter_home_enrollment public_filter_home_enrollment_partition_no_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -14685,6 +15267,30 @@ ALTER TABLE ONLY semantic.public_filter_home_enrollment
 
 ALTER TABLE ONLY semantic.public_filter_key_enrollment
     ADD CONSTRAINT public_filter_key_enrollment_partition_no_bootstrap_fkey FOREIGN KEY (partition_no, bootstrap) REFERENCES semantic.public_filter_home_enrollment(partition_no, bootstrap);
+
+
+--
+-- Name: public_filter_population_start public_filter_population_start_partition_no_bootstrap_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_population_start
+    ADD CONSTRAINT public_filter_population_start_partition_no_bootstrap_fkey FOREIGN KEY (partition_no, bootstrap) REFERENCES semantic.public_filter_bootstrap(partition_no, bootstrap);
+
+
+--
+-- Name: public_filter_population_start public_filter_population_start_partition_no_observation_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_population_start
+    ADD CONSTRAINT public_filter_population_start_partition_no_observation_fkey FOREIGN KEY (partition_no, observation) REFERENCES search.public_filter_observation(partition_no, observation);
+
+
+--
+-- Name: public_filter_population_start public_filter_population_start_partition_no_registration_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_population_start
+    ADD CONSTRAINT public_filter_population_start_partition_no_registration_fkey FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration(partition_no, id);
 
 
 --

@@ -10,7 +10,8 @@ Optional singular `kind` is the exact native kind ID, for example
 The native `kind.in` literal grammar permits a nonempty string of at most 256 UTF-8
 bytes without control characters; IDs are neither trimmed nor case folded. Empty,
 malformed, oversized or repeated `kind` parameters return RFC 9457 validation problems.
-No arbitrary JSON filter, Space or Context query parameter is accepted.
+No arbitrary JSON filter is accepted. Exact Space and Context parameters follow the
+Home dimension contract below.
 
 Selection applies to the freshly disclosed primary `FeedItem.key.kind` across all
 three sources. A thread about a Book remains kind `thread`, a reply remains `post`,
@@ -196,4 +197,34 @@ revalidation disables that selection; platform closure remains distinct from acc
 Content's [native witness reader](../services/kernel/src/content/README.md#review-backed-question-witnesses)
 checks exact primary/review pairs against current question authority, opening citations and disclosure.
 Private vote changes preserve published citations. Opening edits and retirement affect the next witness
-read. These point reads supply no population coverage and do not activate a feed selection parameter.
+read. These point reads supply no population coverage and do not activate candidate selection.
+
+Rating-question Context has an adopted meaning and a feed request surface; native
+candidate eligibility integration remains undelivered. It selects one exact native rating-question
+identity. A Subject qualifies when at least one live currently readable review of that
+exact Subject has a currently readable opening revision whose immutable citation names
+the selected question. A review thread requires its own current opening citation and a
+readable reviewed Subject; a reply/post requires that qualifying review thread and its
+own current disclosure. Catalogue Agents follow Subject membership. Native Accounts,
+Collections and ordinary discussions have no membership in this version. A Subject's
+Space witness and question-review witness may be different threads; membership does not
+claim that the cited review was posted in the selected Space.
+
+Private votes, aggregates, question applicability/grain, editorial Contexts and Realm
+populations are not membership witnesses. The chosen future request-only ratingQuestion.id
+shape is not an installed API, stored-reference predicate, permission or rating threshold.
+Before exposing a Context selector, finish current native witnesses and lifecycle/Source
+coverage, definitions:read before enumeration, bounded real question choices with signed
+keysets and current metadata, signed selection/revision binding and the default feed
+composition. Preserve native candidate/frontier bounds and unavailable responses; no
+browser filter, downloaded-first-page directory or selectable placeholder supplies these
+dependencies. Kind and actual Space delivery need not wait for Context. The full dimensions
+outcome remains incomplete.
+
+Home accepts exact `spaceId` and `ratingQuestionId` request selections, but returns
+`dependency_unavailable` until their original native membership producers are composed;
+metadata alone never broadens the stream to unselected candidates. Failed source lanes
+remain omitted; only a ready lane with a native frontier enables Next, while Retry may
+retry a failed lane. The available default sources remain catalogue/Account discovery,
+recent Following and Continue. Public Board/Realm/discussion/Collection discovery and
+Space/Context membership are omitted, pending their original producers.

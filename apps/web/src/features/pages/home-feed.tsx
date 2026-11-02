@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
@@ -58,6 +58,14 @@ export function HomeFeed({
 }) {
   const options = { locale: locale as Locale };
   const filterId = useId();
+  const boundary = useRef<HTMLElement>(null);
+  const advancing = useRef(false);
+  useEffect(() => {
+    if (busy || !advancing.current) return;
+    advancing.current = false;
+    boundary.current?.focus({ preventScroll: true });
+    boundary.current?.scrollIntoView?.({ block: 'start' });
+  }, [busy, result]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const page = result.state === 'ready' ? result.page : undefined;
   const hasPreparing = page ? Object.values(page.sources).includes('preparing') : false;
@@ -161,6 +169,7 @@ export function HomeFeed({
         {questionControl}
       </div>
       <FeedResults
+        boundaryRef={boundary}
         regionLabel={m.nav_home({}, options)}
         itemHeadingLevel={2}
         listAs="ol"
@@ -173,15 +182,17 @@ export function HomeFeed({
         onRestart={onRestart}
         suppressResultMessage={suppressResultMessage}
         nextControl={
-          page && onNext ? (
+          page?.next && onNext ? (
             <Button
               variant="outline"
               disabled={busy || !page.next}
               onClick={() => {
-                if (page.next) onNext(page.next);
+                if (busy || advancing.current || !page.next) return;
+                advancing.current = true;
+                onNext(page.next);
               }}
             >
-              {m.library_next_page({}, options)}
+              {busy && advancing.current ? m.home_feed_loading({}, options) : m.library_next_page({}, options)}
             </Button>
           ) : undefined
         }
@@ -300,6 +311,18 @@ export function HomeFeedConsumer({
       <span key="kind">
         {m.home_kind_label({}, options)}:{' '}
         <bdi lang={kinds.selected.lang}>{kinds.selected.text || m.home_kind_unnamed({}, options)}</bdi>
+        <Button
+          variant="ghost"
+          className="min-h-11"
+          aria-label={m.refinement_remove({ value: kinds.selected.text || m.home_kind_unnamed({}, options) }, options)}
+          onClick={() => {
+            choices.select(undefined);
+            const { cursor: _cursor, kind: _kind, ...selection } = window.snapshot().input;
+            loadSelection(selection);
+          }}
+        >
+          ×
+        </Button>
       </span>,
     );
   }
@@ -307,6 +330,14 @@ export function HomeFeedConsumer({
     activeFilters.push(
       <span key="space">
         {m.home_space_label({}, options)}: {spaceSnapshot.selected.title}
+        <Button
+          variant="ghost"
+          className="min-h-11"
+          aria-label={m.refinement_remove({ value: spaceSnapshot.selected.title }, options)}
+          onClick={spaces.clear}
+        >
+          ×
+        </Button>
       </span>,
     );
   }
@@ -314,6 +345,14 @@ export function HomeFeedConsumer({
     activeFilters.push(
       <span key="question">
         {m.home_question_label({}, options)}: {questionSnapshot.selected.label}
+        <Button
+          variant="ghost"
+          className="min-h-11"
+          aria-label={m.refinement_remove({ value: questionSnapshot.selected.label }, options)}
+          onClick={() => void questions.select(undefined)}
+        >
+          ×
+        </Button>
       </span>,
     );
   }

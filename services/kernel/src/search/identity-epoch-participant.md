@@ -62,21 +62,49 @@ operational copies, not free history, identity membership or an alternate author
 
 ## Exact foreign delivery boundary
 
-`semantic/identity-source-support.ts:createIdentitySourceSupportReader` is absent in this checkout. Its owner must
-supply its closed `readPage` types with exactly the `PublicFilterSourceFactory` configuration. Search does not guess
-that declaration or derive support from `SubjectSource.read`, which omits redirected originals.
+`semantic/identity-source-support.ts:createIdentitySourceSupportReader` is present. It reads admitted originals and
+mapped terminal projections with independent current original privacy and Source guards, using the exact
+`PublicFilterSourceFactory` configuration `{pool, routeKey, access, clock}`. The adopted participant's trusted
+constructor receives `{search,prefix,routeKey}`; its callable receives `(pool,job)`. No installed Source configuration
+accessor supplies that reader's Access/clock configuration to this participant. Ordinary `SubjectSource.read`
+omits redirected originals and cannot replace it.
 
-The delivered `semantic/identity-receiving-effects-types.ts:IdentityReceivingBinding.step` currently accepts only
-`library-private-follow-counts`. Search needs the actual planned/accepted-producer and OLD/NEW/first-apply/handoff
-bindings for `search-canonical-index`, including exact native source incarnation/generation/scope and retained
-receipts, plus bounded uncertain-writer reconciliation. The existing Library Source bridge is also absent. These
-owner inputs must provide complete original/terminal support and independent original privacy, terminal suitability
-and source-account fences at the pending mapping. Encoded public-filter prepared arrays cannot replace them.
+Library's public receiving aliases accept only `library-private-follow-counts`. Search preparation, selection and
+common native dispatch use the separate canonical native union. The
+[Search native contract](identity-receiving-native-contract.ts) declares the Search source and six native operations
+and extracts its binding/record from those canonical variants. `createSearchIdentityReceivingNative` derives its
+trusted Source configuration and binds the actual Search consumer and physical index. The operational store implements immutable committed native
+preparation, same-T hold/common acceptance verification, retained dispatch/visibility/application, original-copy
+reconciliation, indexed native drain and applied-control release. That operational transaction core does not supply absent complete Source
+admission. The [native receiving owner document](identity-receiving-native.md) records the remaining trusted
+Source/writer installation boundaries. Existing ordinary drain and unavailable first-apply/prepared custody cannot
+establish native preparation. No prepared array or receipt locator replaces complete original support or original
+uncertain-copy settlement.
 
 `createSearchIdentityEpochParticipant({search,prefix,routeKey}): IdentityEpochStep` preserves exactly
 `(pool,job: IdentityJobRef) => Promise<IdentityStepProgress>`. It validates trusted deployment inputs and reads the
-actual admitted job, rejecting unknown, nonpending and mapping-incomplete locators before engine work. It then
-refuses the missing owner evidence. No coordinator/default identity worker/Accounts binding is installed, no
+actual admitted job, rejecting unknown, nonpending and mapping-incomplete locators before engine work. An optional
+trusted `receiving` composition supplies the same-Pool Access, clock, physical owner and original work declaration.
+For an existing accepted scope it fuses actual native operation application, the common effect and fixed Search
+`more` step in one transaction, then reconciles original custody. The operational
+`identity_receiving_native_scope_pending` queue is inserted atomically with each common Search plan. Selection
+uses its partition/job/epoch/effect primary key, so a settled first scope cannot starve later scopes and a newly
+prepared lower-sorting effect cannot fall behind a scheduling cursor. After genuine common reconciliation and
+post-control native release, a control command retires exactly that plan transaction/binding/applied receipt
+and records the next fixed `more` step atomically. A crash before retirement preserves the key and resumes
+accepted/applied/released replay. Empty queue state establishes no complete Source population.
+
+A retained complete ACK is replayed only after resolving its original same-transaction native commit/step,
+exact job scope, current owner and indexed pending absence. The frontier comparison uses structural equality
+so PostgreSQL JSONB key order does not invalidate an original committed receipt. This replay does not mint
+completion, release a hold or reuse a private release observation.
+
+It refuses missing complete Source discovery; new whole-participant completion, cancellation and owner-handoff
+handling still require the missing original Source disposition protocol. Specifically the empty-queue path lacks
+a durable complete support/first-apply/predecessor and copy-directory closure witness; the cancelled-job path
+lacks the original writer's dispatch/cancellation settlement; relocation lacks a committed current-owner handoff
+for those same originals and copies. Local pending absence, a changed epoch and a previously applied scope cannot
+substitute for those operands. No coordinator/default identity worker/Accounts binding is installed, no
 receipt claims completion, and unchanged Store publication still requires real mapping, Search and ALL-Library
 custody. Existing `subject-coverage-v1` storage is never consumed as support or an ACK.
 

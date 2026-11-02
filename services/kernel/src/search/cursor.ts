@@ -1,3 +1,4 @@
+import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
@@ -186,7 +187,14 @@ export function retainedSearchContinuation(after: readonly SearchSortValue[]): R
     (value.ratingPhase !== undefined && value.ratingPhase !== 'scored' && value.ratingPhase !== 'unscored')
   )
     return null;
+  let catalogue: ReturnType<typeof publicFilterCatalogue>;
+  try {
+    catalogue = publicFilterCatalogue(c);
+  } catch {
+    return null;
+  }
   const consumer = {
+    ...(c.catalogue === undefined ? {} : { catalogue }),
     physicalTarget: c.physicalTarget,
     incarnation: c.incarnation,
     consumerGeneration: c.consumerGeneration,
@@ -367,7 +375,7 @@ export async function decodeDiscoveryCursor(
     required.some((key) => typeof consumer[key] !== 'string' || !consumer[key]) ||
     (consumer.meaningDigest !== null && typeof consumer.meaningDigest !== 'string') ||
     (consumer.readDefinition !== null && typeof consumer.readDefinition !== 'string') ||
-    Object.keys(consumer).some((key) => ![...required, 'meaningDigest', 'readDefinition'].includes(key))
+    Object.keys(consumer).some((key) => ![...required, 'meaningDigest', 'readDefinition', 'catalogue'].includes(key))
   )
     return invalid();
   // Construct the closed native type only after validating every field; never cast decrypted JSON to authority.
@@ -380,7 +388,14 @@ export async function decodeDiscoveryCursor(
     (consumer.readDefinition !== null && typeof consumer.readDefinition !== 'string')
   )
     return invalid();
+  let catalogue: ReturnType<typeof publicFilterCatalogue>;
+  try {
+    catalogue = publicFilterCatalogue(consumer);
+  } catch {
+    return invalid();
+  }
   const nativeConsumer = {
+    catalogue,
     physicalTarget: consumer.physicalTarget,
     incarnation: consumer.incarnation,
     consumerGeneration: consumer.consumerGeneration,
@@ -419,6 +434,9 @@ export async function decodeDiscoveryCursor(
       },
     };
   else return invalid();
+  // A valid older locator has no independent catalogue identity to resume. Rebuild it through
+  // the existing restart response instead of treating a signed former protocol as malformed.
+  if (consumer.catalogue === undefined) return { ok: false, reason: 'expired' };
   return {
     ok: true,
     state: {

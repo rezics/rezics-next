@@ -31,7 +31,8 @@ const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(valu
 export async function readPublicFilterRepairVerificationTip(pool: Pool, chain: Chain) {
   const row = (
     await pool.query<Proof>(
-      `SELECT step::text,predecessor::text,verified_binding AS binding,verified_root AS root,
+      `/* semantic.native-keyed:1:3 */
+     SELECT step::text,predecessor::text,verified_binding AS binding,verified_root AS root,
        verified_ordinal::text AS ordinal,verified_next::text AS next,complete
      FROM semantic.public_filter_repair_step
      WHERE (partition_no,bootstrap,execution)=(0,$1,$2)
@@ -46,7 +47,8 @@ export async function readPublicFilterRepairVerificationTip(pool: Pool, chain: C
 export async function readPublicFilterRepairVerification(pool: Pool, chain: Chain, step: string) {
   const row = (
     await pool.query<Proof>(
-      `SELECT step::text,predecessor::text,verified_binding AS binding,verified_root AS root,
+      `/* semantic.native-keyed:1:4 */
+     SELECT step::text,predecessor::text,verified_binding AS binding,verified_root AS root,
        verified_ordinal::text AS ordinal,verified_next::text AS next,complete
      FROM semantic.public_filter_repair_step
      WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3)`,
@@ -67,7 +69,7 @@ export async function retainPublicFilterRepairVerification(
   chain: Chain,
   page: Page,
   context: Readonly<{ deadline: number }>,
-  chargeControls: (cost: Readonly<{ rows: number; keys: number; bytes: number }>) => void,
+  chargeControls: (cost: Readonly<{ rows: number; keys: number; bytes: number; frontierWrites?: number }>) => void,
 ): Promise<boolean> {
   requireAccessDeadline(context.deadline);
   return withConnection(pool, async (client) => {
@@ -76,12 +78,14 @@ export async function retainPublicFilterRepairVerification(
       await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(context.deadline - Date.now()))}ms'`);
       const owner = (
         await client.query<{ epoch: number; write_state: string }>(
-          'SELECT epoch,write_state FROM core.partition WHERE partition_no=0 FOR SHARE',
+          `/* semantic.native-keyed:1:1 */
+           SELECT epoch,write_state FROM core.partition WHERE partition_no=0 FOR SHARE`,
         )
       ).rows[0];
       const bootstrap = (
         await client.query<{ owner_epoch: number; state: string }>(
-          `SELECT owner_epoch,state FROM semantic.public_filter_bootstrap
+          `/* semantic.native-keyed:1:2 */
+           SELECT owner_epoch,state FROM semantic.public_filter_bootstrap
          WHERE (partition_no,bootstrap)=(0,$1) FOR SHARE`,
           [chain.bootstrap],
         )
@@ -98,7 +102,8 @@ export async function retainPublicFilterRepairVerification(
       if (page.predecessor !== null) {
         parent = (
           await client.query<Proof>(
-            `SELECT step::text,predecessor::text,verified_binding AS binding,verified_root AS root,
+            `/* semantic.native-keyed:1:4 */
+             SELECT step::text,predecessor::text,verified_binding AS binding,verified_root AS root,
              verified_ordinal::text AS ordinal,verified_next::text AS next,complete
            FROM semantic.public_filter_repair_step
            WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3) FOR UPDATE`,
@@ -117,7 +122,8 @@ export async function retainPublicFilterRepairVerification(
       }
       const current = (
         await client.query<Proof & { state: string; input_limit: number; receipt_protocol: number; digests: string }>(
-          `SELECT step::text,predecessor::text,state,complete,input_limit,receipt_protocol,
+          `/* semantic.native-keyed:1:4 */
+           SELECT step::text,predecessor::text,state,complete,input_limit,receipt_protocol,
            encode(repair_locator_digests,'hex') AS digests,verified_binding AS binding,
            verified_root AS root,verified_ordinal::text AS ordinal,verified_next::text AS next
          FROM semantic.public_filter_repair_step
@@ -155,6 +161,7 @@ export async function retainPublicFilterRepairVerification(
           chargeControls({
             rows: 2,
             keys: 9,
+            frontierWrites: 1,
             bytes:
               2 *
               Buffer.byteLength(
@@ -164,11 +171,14 @@ export async function retainPublicFilterRepairVerification(
                 }),
               ),
           });
-          await client.query(
-            `UPDATE semantic.public_filter_repair_step SET verified_next=$4
-             WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3) AND verified_next IS NULL`,
+          const linked = await client.query(
+            `/* semantic.native-keyed:1:4 */
+             UPDATE semantic.public_filter_repair_step SET verified_next=$4
+             WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3) AND verified_next IS NULL
+             RETURNING verified_next::text`,
             [chain.bootstrap, chain.execution, parent.step, page.step],
           );
+          if (linked.rowCount !== 1) throw new CommandUnavailableError('contention', 0);
         }
         if (parent) {
           // The new prefix member's trigger independently reads its parent.
@@ -188,20 +198,28 @@ export async function retainPublicFilterRepairVerification(
             ),
           });
         }
-        await client.query(
-          `UPDATE semantic.public_filter_repair_step
+        chargeControls({ rows: 0, keys: 0, bytes: 0, frontierWrites: 1 });
+        const adopted = await client.query(
+          `/* semantic.native-keyed:1:4 */
+           UPDATE semantic.public_filter_repair_step
            SET verified_binding=$4,verified_root=$5,verified_ordinal=$6
-           WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3) AND verified_root IS NULL`,
+           WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3) AND verified_root IS NULL
+           RETURNING verified_binding,verified_root,verified_ordinal::text`,
           [chain.bootstrap, chain.execution, page.step, chain.binding, root, String(ordinal)],
         );
+        if (adopted.rowCount !== 1) throw new CommandUnavailableError('contention', 0);
       }
       if (page.closedHome !== undefined) {
-        await client.query(
-          `UPDATE semantic.public_filter_repair_step SET verified_home=$4
+        chargeControls({ rows: 0, keys: 0, bytes: 0, frontierWrites: 1 });
+        const closed = await client.query(
+          `/* semantic.native-keyed:1:4 */
+           UPDATE semantic.public_filter_repair_step SET verified_home=$4
            WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3)
-             AND verified_root IS NOT NULL AND (verified_home IS NULL OR verified_home=$4)`,
+             AND verified_root IS NOT NULL AND (verified_home IS NULL OR verified_home=$4)
+           RETURNING verified_home`,
           [chain.bootstrap, chain.execution, page.step, page.closedHome],
         );
+        if (closed.rowCount !== 1) throw new CommandUnavailableError('contention', 0);
       }
       requireAccessDeadline(context.deadline);
       await client.query('COMMIT');
@@ -233,7 +251,8 @@ export async function readPublicFilterRepairHomeSeal(pool: Pool, chain: Chain) {
         after: number;
         root: string;
       }>(
-        `SELECT w.step::text,w.predecessor::text,w.state,t.ack_after AS home,
+        `/* semantic.native-keyed:2:7 */
+       SELECT w.step::text,w.predecessor::text,w.state,t.ack_after AS home,
        t.step::text AS terminal,t.ack_after AS after,t.verified_root AS root
      FROM semantic.public_filter_repair_step t
      LEFT JOIN semantic.public_filter_repair_step w ON
@@ -260,7 +279,8 @@ export async function advancePublicFilterRepairAckFrontier(
   home: number,
 ): Promise<boolean> {
   const result = await pool.query(
-    `UPDATE semantic.public_filter_repair_step SET ack_after=ack_after+1
+    `/* semantic.native-keyed:6:16 */
+     UPDATE semantic.public_filter_repair_step SET ack_after=ack_after+1
      WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3)
        AND verified_binding=$4 AND complete AND verified_next IS NULL AND ack_after=$5
        AND EXISTS (SELECT 1 FROM core.partition p
@@ -279,7 +299,8 @@ export async function advancePublicFilterRepairAckFrontier(
            AND h.acknowledged_execution=$2 AND h.acknowledged_settlement IS NOT NULL
            AND h.acknowledged_native_enqueue>=b.native_enqueue_revision
            AND h.acknowledged_native_revision IS NOT DISTINCT FROM b.native_revision
-           AND h.acknowledged_native_claim_revision IS NOT DISTINCT FROM b.native_claim_revision)`,
+           AND h.acknowledged_native_claim_revision IS NOT DISTINCT FROM b.native_claim_revision)
+     RETURNING ack_after`,
     [chain.bootstrap, chain.execution, terminal, chain.binding, home],
   );
   return result.rowCount === 1;

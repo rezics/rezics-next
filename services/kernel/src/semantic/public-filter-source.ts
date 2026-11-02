@@ -16,6 +16,7 @@ import type {
   PublicFilterConsumerContext,
   PublicCanonicalCaptureInput,
 } from '../search/public-filter-consumer-contract.ts';
+import { readPublicFilterPopulation } from './public-filter-coverage-population.ts';
 import { createPublicFilterSourceBinding } from './public-filter-source-binding.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
@@ -286,46 +287,7 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
       const readContext = 'context' in request ? request.context : context;
       if (!readContext) return unready('metadata_missing');
       if (request.kind === 'population') {
-        try {
-          requireAccessDeadline(readContext.deadline);
-          const native = origins.get(source);
-          if (!native) return unready('metadata_missing');
-          const binding = createPublicFilterSourceBinding(native.pool, native.routeKey, native.access);
-          const joined = await binding.join(
-            request.start === null
-              ? { queried: request.queried }
-              : { queried: request.queried, execution: request.execution },
-            readContext,
-          );
-          if (joined.status !== 'joined') {
-            if (joined.reason === 'deadline') return unavailable('deadline');
-            if (joined.reason === 'owner_unavailable') return unavailable('dependency_unavailable');
-            if (joined.reason === 'identity_pending') return unready('identity_pending');
-            return unready('metadata_missing');
-          }
-          if (request.start === null) {
-            // `covered` is the persisted Source bootstrap and its native PostgreSQL snapshot.
-            // Resolve it only from the exact retained query/definition join; never mint a cut
-            // from the caller's observation string or a Search status response.
-            if (joined.execution !== null) return unready('metadata_missing');
-            void joined.covered;
-          } else if (
-            !joined.execution ||
-            joined.execution.id !== request.execution ||
-            joined.covered.observation !== request.start.observation ||
-            joined.execution.start.observation !== request.start.observation
-          ) {
-            return unready('metadata_missing');
-          }
-          // The joined native cut and full query/own-row binding are real, but the current
-          // Source tables do not yet retain an indexed commit-visible 4096-home behind/change
-          // observation. Returning a clean `observed` here would turn missing coverage into
-          // negative evidence, so both phases stay closed until that producer exists.
-          return unready('metadata_missing');
-        } catch (error) {
-          if (error instanceof AccessUnavailableError) return unavailable('deadline');
-          throw error;
-        }
+        return readPublicFilterPopulation(config.pool, config.routeKey, request);
       }
       if (request.kind !== 'home') return unready('metadata_missing');
       try {
@@ -340,6 +302,7 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
               partition_no: request.partition,
             });
             if (!row) return unready('metadata_missing');
+            if (row.population_fenced || row.owner_epoch !== owner.epoch) return unready('owner_pending');
             const head = privacyHead(request.partition, owner.epoch, row.position);
             return { status: 'home', head, cost: cost(1) };
           }),
@@ -376,6 +339,7 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
               partition_no: request.partition,
             });
             if (!currentRow) return unready('metadata_missing');
+            if (currentRow.population_fenced || currentRow.owner_epoch !== owner.epoch) return unready('owner_pending');
             const current = BigInt(currentRow.position);
             if (request.through > current) return { status: 'changed', cost: cost(1) };
             if (request.after === request.through)

@@ -158,6 +158,17 @@ export function createHomeFeedWindow(
       emit();
     },
     async load(input: FeedInput) {
+      // A repeated Next click shares the in-flight selection/frontier. A new selection
+      // still aborts the old generation and removes its private rows synchronously.
+      if (
+        snapshot.busy &&
+        input.stream === snapshot.input.stream &&
+        input.cursor === snapshot.input.cursor &&
+        input.kind === snapshot.input.kind &&
+        input.spaceId === snapshot.input.spaceId &&
+        input.ratingQuestionId === snapshot.input.ratingQuestionId
+      )
+        return;
       const current = ++generation;
       pending?.abort();
       const controller = new AbortController();

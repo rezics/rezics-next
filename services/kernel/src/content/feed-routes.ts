@@ -3,7 +3,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { Access } from '../request/access.ts';
 import { languageRanges } from '../semantic/language.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
-import { FeedKindSchema, FeedPageSchema } from './feed-contract.ts';
+import { FeedKindSchema, FeedPageSchema, FeedSelectionIdSchema } from './feed-contract.ts';
 import { FEED_CURSOR_BYTES } from './feed-cursor.ts';
 import { createFeedReads, type FeedDependencies } from './feed.ts';
 
@@ -24,6 +24,8 @@ export function feedRoutes(
           limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20, multipleOf: 1, default: 20 })),
           cursor: t.Optional(t.String({ minLength: 1, maxLength: FEED_CURSOR_BYTES })),
           kind: t.Optional(FeedKindSchema),
+          spaceId: t.Optional(FeedSelectionIdSchema),
+          ratingQuestionId: t.Optional(FeedSelectionIdSchema),
         },
         { additionalProperties: false },
       ),
@@ -31,8 +33,10 @@ export function feedRoutes(
         if (request.headers.has('authorization')) set.headers['cache-control'] = 'private, no-store';
         const parameters = new URL(request.url).searchParams;
         for (const name of parameters.keys())
-          if (!['stream', 'limit', 'cursor', 'kind'].includes(name)) throw new ProblemError('invalid_request');
-        if (parameters.getAll('kind').length > 1) throw new ProblemError('invalid_request');
+          if (!['stream', 'limit', 'cursor', 'kind', 'spaceId', 'ratingQuestionId'].includes(name))
+            throw new ProblemError('invalid_request');
+        for (const name of ['kind', 'spaceId', 'ratingQuestionId'])
+          if (parameters.getAll(name).length > 1) throw new ProblemError('invalid_request');
       },
       response: {
         200: FeedPageSchema,

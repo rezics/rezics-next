@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { FeedSelection } from './feed-contract.ts';
 import type { Actor } from '../request/access.ts';
 import { ProblemError } from '../http/problem.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
@@ -21,6 +22,7 @@ export function feedBinding(
   limit: number,
   languages: readonly string[],
   kind?: string,
+  selection: FeedSelection = {},
 ): ListCursorBinding {
   return {
     route: 'GET /v1/feedItems/v1',
@@ -31,6 +33,7 @@ export function feedBinding(
       languages: languages.join(','),
       authority: fingerprint(actor),
       ...(kind === undefined ? {} : { kind }),
+      ...selection,
     },
   };
 }

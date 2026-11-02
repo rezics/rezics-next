@@ -1,3 +1,4 @@
+import { canonicalDiscoveryCatalogue, publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
 import repairTransaction from './public-filter-custody-repair-transaction.sql';
 import repairFinish from './public-filter-custody-repair-finish.sql';
@@ -176,6 +177,7 @@ function rows(value: CustodyExecution['ownRows']) {
   }
 }
 function queried(value: PublicFilterQueriedObservation) {
+  publicFilterCatalogue(value.consumer);
   partition(value.snapshot.observation);
   for (const key of ['physicalTarget', 'incarnation', 'consumerGeneration', 'projectionGeneration'] as const)
     text(value.consumer[key]);
@@ -230,14 +232,25 @@ function failure(error: unknown, meter: CustodyCost): CustodyFailure {
     cost: meter,
   };
 }
-async function sql(db: Pool | PoolClient, meter: Meter, query: string, values: unknown[] = []): Promise<QueryResult> {
+async function sql(
+  db: Pool | PoolClient,
+  meter: Meter,
+  query: string,
+  values: unknown[] = [],
+  native?: Readonly<{ points: number; keys: number; writes: number }>,
+): Promise<QueryResult> {
   meter.statements++;
-  meter.inputKeys += values.length;
+  meter.inputKeys += native?.keys ?? values.length;
+  if (native) {
+    meter.dependencyPoints += native.points;
+    meter.rows += native.points;
+    meter.resultWrites += native.writes;
+  }
   meter.bytes += Buffer.byteLength(query) + Buffer.byteLength(encode(values));
   const result = await db.query(query, values);
-  meter.rows += result.rowCount ?? 0;
+  if (!native) meter.rows += result.rowCount ?? 0;
   meter.bytes += Buffer.byteLength(encode(result.rows));
-  if (/\b(INSERT|UPDATE|DELETE)\b/.test(query)) meter.resultWrites += result.rowCount ?? 0;
+  if (!native && /\b(INSERT|UPDATE|DELETE)\b/.test(query)) meter.resultWrites += result.rowCount ?? 0;
   return result;
 }
 function isReleaseReference(
@@ -940,7 +953,9 @@ export function createPublicFilterCustody(
       [value.partition, value.id],
     );
     if (!result.rows[0]) throw new Failure('definition_missing');
-    return decode<PublicFilterConsumer>(result.rows[0].consumer);
+    const consumer = decode<PublicFilterConsumer>(result.rows[0].consumer);
+    publicFilterCatalogue(consumer);
+    return consumer;
   }
   async function retain(
     value: CustodyRegistration,
@@ -980,6 +995,7 @@ export function createPublicFilterCustody(
       validateDefinition(input.definition);
       text(input.consumerGeneration);
       text(input.projectionGeneration);
+      const catalogue = canonicalDiscoveryCatalogue(input.catalogue ?? null);
       return run(context, async (meter) => {
         const incarnation = await native(search, meter, context, input.physicalTarget);
         const definition = input.definition;
@@ -990,6 +1006,7 @@ export function createPublicFilterCustody(
           projectionGeneration: input.projectionGeneration,
           meaningDigest: definition.meaning.digest,
           readDefinition: definition.readDefinition,
+          catalogue,
         };
         const identity = {
           partition: definition.source.partition,
@@ -1337,28 +1354,54 @@ export function createPublicFilterCustody(
           signal.dispose();
         }
         check(context);
-        await sql(
+        const expired = await sql(
           pool,
           meter,
-          'DELETE FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at<=$3',
+          `DELETE FROM search.public_filter_reference WHERE (partition_no,observation,token) IN
+           (SELECT partition_no,observation,token FROM search.public_filter_reference
+            WHERE (partition_no,observation)=($1,$2) AND expires_at<=$3 ORDER BY expires_at LIMIT 1) RETURNING token`,
           [...values, Date.now()],
+          { points: 2, keys: 6, writes: 1 },
         );
-        for (;;) {
-          const owned = await sql(
+        if (expired.rowCount) {
+          const more = await sql(
             pool,
             meter,
-            "SELECT id,locator FROM search.public_filter_pit WHERE (partition_no,observation)=($1,$2) AND state='owned' ORDER BY id LIMIT 32",
-            values,
+            `SELECT token FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2)
+             AND expires_at<=$3 ORDER BY expires_at LIMIT 1`,
+            [...values, Date.now()],
+            { points: 1, keys: 3, writes: 0 },
           );
-          if (!owned.rowCount) break;
+          if (more.rowCount) throw new Failure('deadline');
+        }
+        check(context);
+        // One funded PIT batch per invocation. The owned-only index prevents
+        // released locator history from turning a bounded probe into a scan.
+        const owned = await sql(
+          pool,
+          meter,
+          "SELECT id,locator FROM search.public_filter_pit WHERE (partition_no,observation)=($1,$2) AND state='owned' ORDER BY id LIMIT 32",
+          values,
+        );
+        if (owned.rowCount) {
           for (const pit of owned.rows) await deletePit(pit.locator, search, context, meter);
+          check(context);
           await sql(
             pool,
             meter,
             "UPDATE search.public_filter_pit SET state='released' WHERE (partition_no,observation)=($1,$2) AND id=ANY($3::text[])",
             [...values, owned.rows.map((row) => row.id)],
           );
+          const more = await sql(
+            pool,
+            meter,
+            "SELECT id FROM search.public_filter_pit WHERE (partition_no,observation)=($1,$2) AND state='owned' ORDER BY id LIMIT 1",
+            values,
+            { points: 1, keys: 2, writes: 0 },
+          );
+          if (more.rowCount) throw new Failure('deadline');
         }
+        check(context);
         await sql(
           pool,
           meter,
@@ -1544,15 +1587,81 @@ export async function stepRetainedObservationErasure(
       keys,
     );
     if (page.rowCount) return { state: 'more', cost: meter };
+    check(context);
+    // A crashed request may never have disposed its root. Close one admitted
+    // root before retiring children, retaining its full reservation and meter.
+    // The partial index excludes finished/failed history from this finite step.
+    const abandoned = await sql(
+      pool,
+      meter,
+      `WITH candidate AS MATERIALIZED (
+         SELECT partition_no,id FROM search.public_filter_coverage_page
+         WHERE (partition_no,observation)=($1,$2) AND state IN ('planned','open','sealed')
+         ORDER BY id LIMIT 1)
+       UPDATE search.public_filter_coverage_page p SET state='failed',revision=revision+1
+       FROM candidate c WHERE (p.partition_no,p.id)=(c.partition_no,c.id)
+         AND p.state IN ('planned','open','sealed') RETURNING p.id`,
+      keys,
+      { points: 2, keys: 4, writes: 1 },
+    );
+    if (abandoned.rowCount) return { state: 'more', cost: meter };
+    check(context);
     const executions = await sql(
       pool,
       meter,
-      `DELETE FROM search.public_filter_execution WHERE (partition_no,observation,id) IN
-       (SELECT partition_no,observation,id FROM search.public_filter_execution
-        WHERE (partition_no,observation)=($1,$2) ORDER BY id LIMIT 1) RETURNING id`,
+      // Lock the original observation and page before the child, matching
+      // completion's page-before-child order. The trigger rechecks actual drain;
+      // an expired/missing lease or a missing deletion receipt is not a shortcut.
+      `WITH candidate AS MATERIALIZED (
+         SELECT partition_no,observation,id,page_id FROM search.public_filter_execution
+         WHERE (partition_no,observation)=($1,$2) ORDER BY id LIMIT 1),
+       observation AS MATERIALIZED (
+         SELECT o.partition_no,o.observation FROM search.public_filter_observation o
+         JOIN candidate c USING(partition_no,observation)
+         WHERE o.state IN ('closing','closed') FOR UPDATE OF o),
+       page AS MATERIALIZED (
+         SELECT p.partition_no,p.id FROM search.public_filter_coverage_page p
+         JOIN candidate c ON (p.partition_no,p.id)=(c.partition_no,c.page_id)
+         JOIN observation o ON (o.partition_no,o.observation)=(p.partition_no,p.observation) FOR UPDATE OF p)
+       DELETE FROM search.public_filter_execution e USING candidate c,observation o
+       WHERE (e.partition_no,e.observation,e.id)=(c.partition_no,c.observation,c.id)
+         AND (o.partition_no,o.observation)=(c.partition_no,c.observation)
+         AND (c.page_id IS NULL OR EXISTS (SELECT 1 FROM page p
+           WHERE (p.partition_no,p.id)=(c.partition_no,c.page_id))) RETURNING e.id`,
       keys,
+      // Candidate/write, original observation/page, repeated native guard
+      // controls, lease/PIT misses and the repair-page foreign-key check. Reserve
+      // the entire footprint before dispatch, including an ambiguous response.
+      { points: 9, keys: 24, writes: 1 },
     );
     if (executions.rowCount) return { state: 'more', cost: meter };
+    check(context);
+    // A page retains its immutable plan, cursor boundary and failed dispatches
+    // until the original observation has drained. Retire one bounded root only.
+    const coveragePage = await sql(
+      pool,
+      meter,
+      `DELETE FROM search.public_filter_coverage_page WHERE (partition_no,id) IN
+       (SELECT partition_no,id FROM search.public_filter_coverage_page
+        WHERE (partition_no,observation)=($1,$2) ORDER BY id LIMIT 1) RETURNING id`,
+      keys,
+      { points: 7, keys: 14, writes: 1 },
+    );
+    if (coveragePage.rowCount) return { state: 'more', cost: meter };
+    check(context);
+    // Retire one original Source start only after the same observation has
+    // excluded admission and drained every native lease, copy and child above.
+    // Reserve the candidate/write and four keyed trigger controls, including misses.
+    const starts = await sql(
+      pool,
+      meter,
+      `DELETE FROM semantic.public_filter_population_start WHERE (partition_no,id) IN
+       (SELECT partition_no,id FROM semantic.public_filter_population_start
+        WHERE (partition_no,observation)=($1,$2) ORDER BY id LIMIT 1) RETURNING id`,
+      keys,
+      { points: 6, keys: 12, writes: 1 },
+    );
+    if (starts.rowCount) return { state: 'more', cost: meter };
     check(context);
     if (q?.snapshot.kind === 'prepared') {
       await sql(

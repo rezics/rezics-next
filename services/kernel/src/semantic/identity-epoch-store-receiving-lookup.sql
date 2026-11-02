@@ -10,10 +10,10 @@ JOIN semantic.identity_epoch_receiving_gate g ON (g.partition_no,g.owner_id,g.or
  (r.partition_no,r.owner_id,r.original,r.owner_epoch)
 LEFT JOIN semantic.identity_epoch_receiving_effect e ON (e.partition_no,e.job_id,e.effect_key)=(r.partition_no,r.job_id,r.effect_key)
 LEFT JOIN semantic.identity_epoch_native_commit ec ON (ec.partition_no,ec.transaction_id)=(e.partition_no,e.transaction_id)
- AND ec.purpose='library-private-follow-counts' AND ec.xmin=e.xmin AND ec.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
+ AND ec.purpose=r.binding->>'step' AND r.binding->>'step' IN ('library-private-follow-counts','search-canonical-index') AND ec.xmin=e.xmin AND ec.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
  AND EXISTS (SELECT 1 FROM semantic.identity_epoch_step s
    WHERE s.partition_no=e.partition_no AND s.transaction_id=e.transaction_id
-   AND s.job_id=r.job_id AND s.job_epoch=r.job_epoch AND s.step='library-private-follow-counts'
+   AND s.job_id=r.job_id AND s.job_epoch=r.job_epoch AND s.step=r.binding->>'step'
    AND s.version=1 AND s.scope_digest=r.binding->>'scopeDigest' AND s.frontier=e.frontier
    AND s.native_epoch=ec.epoch AND s.native_position=ec.position AND s.xmin=ec.xmin)
 WHERE r.partition_no=$1 AND r.job_id=$2 AND r.job_epoch=$3 AND r.effect_key=$4

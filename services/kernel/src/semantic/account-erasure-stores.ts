@@ -63,3 +63,11 @@ export const SEMANTIC_ERASURE_STORES = [
   'identity_epoch_mapping_undo',
 ] as const;
 export type SemanticErasureStore = (typeof SEMANTIC_ERASURE_STORES)[number] | 'zone' | 'write_basis';
+
+/** Native receiving stores contain identity/effect proof skeletons, not Library Source bodies. */
+export const SEMANTIC_RECEIVING_ERASURE_STORES = [
+  'identity_epoch_receiving_plan',
+  'identity_epoch_receiving_record',
+  'identity_epoch_receiving_effect',
+  'identity_epoch_receiving_custody',
+] as const;

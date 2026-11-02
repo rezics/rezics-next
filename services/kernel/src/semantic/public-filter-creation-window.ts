@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { publicFilterCreationConsumer } from '../access/account-discovery-reduction.ts';
+import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
 import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 
 /** A finite original outbox interval. This is retained inside the existing

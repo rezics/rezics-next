@@ -6,6 +6,9 @@ import type {
   DiscoveryRegistry,
   IndexedAccount,
   DiscoveryEngineHit,
+  DiscoveryKey,
+  DiscoveryRegistration,
+  AccountSnapshot,
 } from './discovery.ts';
 import type { DiscoveryCandidate } from './discovery-query.ts';
 import { currentDiscoveryFilter } from './discovery-filter.ts';
@@ -28,6 +31,99 @@ function partitioned<T extends { id: string }>(values: readonly T[]): Map<number
     group.push(value);
   }
   return groups;
+}
+
+/** One bounded positional owner batch for original primary keys, including duplicate positions.
+ * The initial native snapshots supply their own revisions; an attached summary or engine hit
+ * cannot supply one. Reuse those exact snapshots in the ordinary current/disclosure checker,
+ * rather than observing the owners a second time to reconstruct synthetic engine candidates.
+ */
+export async function currentDiscoveryPrimaryCandidates(
+  registry: DiscoveryRegistry,
+  keys: readonly DiscoveryKey[],
+  filter: DiscoveryFilterDocument | undefined,
+  release: FilterRelease,
+  context: DiscoveryReadContext,
+): Promise<readonly boolean[]> {
+  if (!Array.isArray(keys) || keys.length > 160) unavailable();
+  const saved = keys.map((key) => registry.key({ ...key }));
+  const subjects = new Map<number, SubjectSnapshot>();
+  const accounts = new Map<number, AccountSnapshot>();
+  const candidates: DiscoveryEngineHit[] = [];
+  const byIdentity = new Map<string, DiscoveryEngineHit>();
+  const identity = (key: DiscoveryKey) => `${key.owner}:${key.kind}:${key.route}:${key.id}`;
+  for (const owner of ['semantic', 'accounts'] as const) {
+    const selected = saved.filter((key) => key.owner === owner);
+    if (!selected.length) continue;
+    const entry = registry.entries.find((value) => value.owner === owner);
+    if (!entry) unavailable();
+    for (const [partition, group] of partitioned(selected)) {
+      const ids = [...new Set(group.map(({ id }) => id))];
+      if (entry.owner === 'semantic') {
+        const snapshot = await entry.source.read(partition, ids);
+        const current = validateRequestSourceSnapshot(snapshot, partition, ids);
+        subjects.set(partition, snapshot);
+        for (const key of group) {
+          const row = current.get(key.id);
+          if (!row || row.type !== key.kind || byIdentity.has(identity(key))) continue;
+          const candidate = { key, index: '', sourcePosition: snapshot.position.toString(),
+            revision: String(row.securityRevision), matched: [], sort: [] };
+          candidates.push(candidate);
+          byIdentity.set(identity(key), candidate);
+        }
+      } else {
+        const rows: IndexedAccount[] = [];
+        let position: bigint | undefined;
+        for (let offset = 0; offset < ids.length; offset += 100) {
+          const chunk = ids.slice(offset, offset + 100);
+          const snapshot = await entry.source.read(partition, chunk);
+          if (snapshot.partition !== partition || typeof snapshot.position !== 'bigint' || snapshot.position < 0n ||
+            !Array.isArray(snapshot.accounts) || snapshot.accounts.length > chunk.length ||
+            (position !== undefined && position !== snapshot.position)) unavailable();
+          const seen = new Set<string>();
+          for (const row of snapshot.accounts) {
+            if (!chunk.includes(row.id) || seen.has(row.id) || typeof row.revision !== 'bigint' || row.revision < 0n)
+              unavailable();
+            seen.add(row.id);
+            rows.push(row);
+          }
+          position = snapshot.position;
+        }
+        const snapshot = { partition, position: position!, accounts: rows };
+        accounts.set(partition, snapshot);
+        for (const key of group) {
+          const row = rows.find((value) => value.id === key.id);
+          if (!row || byIdentity.has(identity(key))) continue;
+          const candidate = { key, index: '', sourcePosition: snapshot.position.toString(),
+            revision: row.revision.toString(), matched: [], sort: [] };
+          candidates.push(candidate);
+          byIdentity.set(identity(key), candidate);
+        }
+      }
+    }
+  }
+  const entries: DiscoveryRegistration[] = registry.entries.map((entry) => entry.owner === 'semantic'
+    ? { ...entry, source: { ...entry.source, count: entry.source.count.bind(entry.source),
+      ...(entry.source.matchRelationFacets
+        ? { matchRelationFacets: entry.source.matchRelationFacets.bind(entry.source) } : {}),
+      async read(partition, ids) {
+        const snapshot = subjects.get(partition);
+        if (!snapshot || ids.some((id) => !saved.some((key) => key.owner === 'semantic' && key.id === id))) unavailable();
+        return { ...snapshot, subjects: snapshot.subjects.filter((row) => ids.includes(row.id)) };
+      } } }
+    : { ...entry, source: { count: entry.source.count.bind(entry.source), page: entry.source.page.bind(entry.source),
+      async read(partition, ids) {
+        const snapshot = accounts.get(partition);
+        if (!snapshot || ids.some((id) => !saved.some((key) => key.owner === 'accounts' && key.id === id))) unavailable();
+        return { ...snapshot, accounts: snapshot.accounts.filter((row) => ids.includes(row.id)) };
+      } } });
+  const retained: DiscoveryRegistry = { entries, key: registry.key.bind(registry),
+    get(kind) { const entry = entries.find((value) => value.kind === kind); if (!entry) unavailable(); return entry; } };
+  const current = await currentDiscoveryCandidates(retained, candidates, filter, release, context);
+  return Object.freeze(saved.map((key) => {
+    const candidate = byIdentity.get(identity(key));
+    return candidate !== undefined && current.has(candidate);
+  }));
 }
 
 /** Membership/summary checking only. Whole-query exclusion/order safety must bracket this operation

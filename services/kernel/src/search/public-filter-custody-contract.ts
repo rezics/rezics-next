@@ -1,3 +1,4 @@
+import type { KindCataloguePin } from '@rezics/definitions';
 import type {
   PublicCanonicalCaptureInput,
   PublicFilterConsumerCaptureInput,
@@ -140,6 +141,7 @@ export interface PublicFilterCustody {
       physicalTarget: string;
       consumerGeneration: string;
       projectionGeneration: string;
+      catalogue?: KindCataloguePin | null;
     }>,
     search: OpenSearch,
     context: PublicFilterConsumerContext,

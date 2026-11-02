@@ -56,7 +56,7 @@ export async function verifySubjectErasureSourceProof(
      JOIN core.partition owner ON owner.partition_no=native.partition_no AND owner.epoch=native.epoch
        AND owner.position>=native.position AND owner.write_state='active'
      WHERE route=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz AND id=$5
-       AND complete AND consumed AND source_partition=4095 AND store='' AND record_key=0
+       AND complete AND consumed AND source_partition=4095 AND store='' AND record_key=0 AND origin_key=''
        AND source_epoch IS NOT NULL AND source_position>0 AND source_transaction_id IS NOT NULL
        AND role_epoch IS NOT NULL AND role_position>0 AND role_transaction_id IS NOT NULL FOR SHARE OF page,native,owner`,
     [barrier.accountRoute, barrier.accountId, barrier.version, barrier.at, proof.id, partitionOf(barrier.accountRoute)],
@@ -137,6 +137,7 @@ type Cursor = {
   record_key: string;
   role: string;
   delivery_position: string;
+  origin_key: string;
 };
 type PageRow = Cursor &
   StoredObservation & {
@@ -159,6 +160,7 @@ type Detail = {
   field_group: ImportedFieldGroup | null;
   native_present: boolean;
   state: string;
+  custody_pending: boolean;
   source_transaction_id: string | null;
   source_position: string | null;
 };
@@ -343,6 +345,7 @@ const cursorValues = (cursor: Cursor) => [
   cursor.record_key,
   cursor.role,
   cursor.delivery_position,
+  cursor.origin_key,
 ];
 const sameCursor = (left: Cursor, right: Cursor) =>
   JSON.stringify(cursorValues(left)) === JSON.stringify(cursorValues(right));
@@ -363,6 +366,7 @@ export async function verifySubjectErasureSourcePage(
        AND owner.partition_no=native.partition_no AND owner.epoch=native.epoch
        AND owner.position>=native.position AND owner.write_state='active'
        AND route=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz AND id=$5
+       AND origin_key IS NOT NULL
        AND source_epoch IS NOT NULL AND source_position>0 AND source_transaction_id IS NOT NULL
        AND role_epoch IS NOT NULL AND role_position>0 AND role_transaction_id IS NOT NULL
      RETURNING id`,
@@ -411,7 +415,7 @@ function sourceFactory(
             if (!(await root(tx, barrier))) return noEffect(null);
             const page = (
               await tx.query<PageRow>(
-                `SELECT id::text,previous_id::text,complete,consumed,source_partition,store,record_key::text,role,delivery_position::text,
+                `SELECT id::text,previous_id::text,complete,consumed,source_partition,store,record_key::text,role,delivery_position::text,origin_key,
                source_epoch,source_position::text,${observationColumns}
              FROM ${pageTable} page WHERE route=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz
                AND EXISTS(SELECT 1 FROM semantic.erasure_source_commit c JOIN core.partition p
@@ -431,6 +435,9 @@ function sourceFactory(
           });
           if (!selected.value) return { status: 'pending', cost };
           const { previous } = selected.value;
+          // Old transfers did not identify an origin. A current physical locator
+          // cannot reconstruct their custody, even when its role name still agrees.
+          if (previous && typeof previous.origin_key !== 'string') return { status: 'unavailable', cost };
           if (('replay' in selected.value && selected.value.replay && previous) || previous?.complete) {
             const record = storedRecord(previous!, barrier);
             const records = record ? [record] : [];
@@ -444,8 +451,8 @@ function sourceFactory(
           // homes are explicit committed pages: EOF in one home cannot certify the next home.
           const sourceHome = previous ? previous.source_partition + (previous.store === '' ? 1 : 0) : 0;
           const after = previous?.store
-            ? [previous.store, previous.record_key, previous.role, previous.delivery_position]
-            : ['', '0', '', '0'];
+            ? [previous.store, previous.record_key, previous.role, previous.delivery_position, previous.origin_key]
+            : ['', '0', '', '0', ''];
           const sought = await command(sourceHome, async (tx) => {
             const seal = await tx.query(
               `SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR SHARE`,
@@ -454,10 +461,10 @@ function sourceFactory(
             if (!seal.rowCount) return noEffect(null);
             const raw = (
               await tx.query<Cursor>(
-                `SELECT partition_no AS source_partition,store,record_key::text,role,delivery_position::text
+                `SELECT partition_no AS source_partition,store,record_key::text,role,delivery_position::text,origin_key
              FROM semantic.erasure_source_record WHERE partition_no=$1 AND account_id=$2
-             AND (store,record_key,role,delivery_position)>($3,$4::bigint,$5,$6::bigint)
-             ORDER BY store,record_key,role,delivery_position LIMIT 1`,
+             AND (store,record_key,role,delivery_position,origin_key)>($3,$4::bigint,$5,$6::bigint,$7)
+             ORDER BY store,record_key,role,delivery_position,origin_key LIMIT 1`,
                 [sourceHome, barrier.accountId, ...after],
               )
             ).rows[0];
@@ -471,6 +478,7 @@ function sourceFactory(
             record_key: '0',
             role: '',
             delivery_position: '0',
+            origin_key: '',
           };
           const complete = !raw && sourceHome === 4095;
           let record: SubjectErasureSourceRecord | null = null;
@@ -498,12 +506,16 @@ function sourceFactory(
                 (
                   await tx.query<Detail>(
                     `SELECT d.original::text,d.previous_terminal::text,d.identity_epoch::text,d.slot_id::text,d.candidate_id::text,
-              d.property,d.release,d.context_id::text,d.source_name,d.external_id,d.field_group,d.native_present,l.state,l.source_transaction_id::text,l.source_position::text
+              d.property,d.release,d.context_id::text,d.source_name,d.external_id,d.field_group,d.native_present,l.state,d.source_transaction_id::text,d.source_position::text,
+              (d.source_transaction_id IS NOT NULL AND NOT EXISTS(
+                SELECT 1 FROM semantic.erasure_shared_custody c WHERE c.partition_no=d.partition_no
+                  AND c.account_id=d.account_id AND c.role=d.role AND c.transaction_id=d.source_transaction_id
+                  AND c.outbox_position IS NOT DISTINCT FROM d.source_position)) AS custody_pending
              FROM semantic.erasure_source_record d JOIN semantic.erasure_locator l
                USING(partition_no,account_id,role,store,record_key)
              JOIN semantic.erasure_source_disposition proof USING(partition_no,store,record_key)
              WHERE d.partition_no=$1 AND d.account_id=$2 AND d.role=$3 AND d.store=$4 AND d.record_key=$5
-               AND d.delivery_position=$6`,
+               AND d.delivery_position=$6 AND d.origin_key=$7`,
                     [
                       next.source_partition,
                       barrier.accountId,
@@ -511,6 +523,7 @@ function sourceFactory(
                       next.store,
                       next.record_key,
                       next.delivery_position,
+                      next.origin_key,
                     ],
                   )
                 ).rows[0],
@@ -522,8 +535,9 @@ function sourceFactory(
                 recordKey: next.record_key,
                 role: next.role,
                 deliveryPosition: next.delivery_position,
+                originKey: next.origin_key,
               });
-            if (detail.state !== 'minimized') {
+            if (detail.state !== 'minimized' || detail.custody_pending) {
               await refresh();
               return { status: 'pending', cost };
             }
@@ -572,7 +586,7 @@ function sourceFactory(
                 currentRelease: source.current_release,
               };
               const output: SubjectErasureSourceRecord = {
-                key: [next.source_partition, next.store, next.record_key, next.role, next.delivery_position].join(':'),
+                key: cursorValues(next).join(':'),
                 original: detail.original,
                 previousTerminal: old,
                 currentTerminal: source.terminal,
@@ -646,14 +660,19 @@ function sourceFactory(
                 await recordSemanticSourceCommit(tx, transactionId);
                 await tx.query(
                   `INSERT INTO semantic.erasure_source_hold(partition_no,id,account_id,version,at,store,record_key,role,delivery_position,
-                  transaction_id,${observationColumns})
-                 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+                  transaction_id,${observationColumns},origin_key)
+                 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
                  ON CONFLICT(partition_no,id) DO UPDATE SET transaction_id=EXCLUDED.transaction_id,
                   original=EXCLUDED.original,previous_terminal=EXCLUDED.previous_terminal,current_terminal=EXCLUDED.current_terminal,
                   source_home=EXCLUDED.source_home,source_revision=EXCLUDED.source_revision,source_security_revision=EXCLUDED.source_security_revision,
                   source_release=EXCLUDED.source_release,slot_id=EXCLUDED.slot_id,candidate_id=EXCLUDED.candidate_id,
                   property=EXCLUDED.property,tuple_route=EXCLUDED.tuple_route,source_name=EXCLUDED.source_name,
-                  external_id=EXCLUDED.external_id,field_group=EXCLUDED.field_group,disposition=EXCLUDED.disposition`,
+                  external_id=EXCLUDED.external_id,field_group=EXCLUDED.field_group,disposition=EXCLUDED.disposition
+                 WHERE semantic.erasure_source_hold.origin_key=EXCLUDED.origin_key
+                   AND semantic.erasure_source_hold.store=EXCLUDED.store
+                   AND semantic.erasure_source_hold.record_key=EXCLUDED.record_key
+                   AND semantic.erasure_source_hold.role=EXCLUDED.role
+                   AND semantic.erasure_source_hold.delivery_position=EXCLUDED.delivery_position`,
                   [
                     home,
                     id,
@@ -666,6 +685,7 @@ function sourceFactory(
                     next.delivery_position,
                     transactionId,
                     ...observationValues(output),
+                    next.origin_key,
                   ],
                 );
               });
@@ -676,10 +696,16 @@ function sourceFactory(
                 [next.source_partition, barrier.accountId, barrier.version, barrier.at],
               );
               const local = await tx.query(
-                `SELECT 1 FROM semantic.erasure_locator WHERE partition_no=$1 AND account_id=$2 AND role=$3 AND store=$4
-                AND record_key=$5 AND state='minimized' AND source_transaction_id IS NOT DISTINCT FROM $6::uuid
-                AND source_position IS NOT DISTINCT FROM $7::bigint
-                AND EXISTS(SELECT 1 FROM semantic.erasure_source_disposition proof WHERE proof.partition_no=$1 AND proof.store=$4 AND proof.record_key=$5) FOR SHARE`,
+                `SELECT 1 FROM semantic.erasure_source_record d JOIN semantic.erasure_locator l
+                  USING(partition_no,account_id,role,store,record_key)
+                WHERE d.partition_no=$1 AND d.account_id=$2 AND d.role=$3 AND d.store=$4
+                  AND d.record_key=$5 AND l.state='minimized' AND d.source_transaction_id IS NOT DISTINCT FROM $6::uuid
+                  AND d.source_position IS NOT DISTINCT FROM $7::bigint AND d.origin_key=$8 AND d.delivery_position=$9
+                  AND EXISTS(SELECT 1 FROM semantic.erasure_source_disposition proof WHERE proof.partition_no=$1 AND proof.store=$4 AND proof.record_key=$5)
+                  AND (d.source_transaction_id IS NULL OR EXISTS(SELECT 1 FROM semantic.erasure_shared_custody c
+                    WHERE c.partition_no=d.partition_no AND c.account_id=d.account_id AND c.role=d.role
+                      AND c.transaction_id=d.source_transaction_id AND c.outbox_position IS NOT DISTINCT FROM d.source_position))
+                FOR SHARE OF d,l`,
                 [
                   next.source_partition,
                   barrier.accountId,
@@ -688,6 +714,8 @@ function sourceFactory(
                   next.record_key,
                   detail.source_transaction_id,
                   detail.source_position,
+                  next.origin_key,
+                  next.delivery_position,
                 ],
               );
               if (!seal.rowCount || !local.rowCount) return noEffect({ ready: false as const, record: null });
@@ -753,8 +781,9 @@ function sourceFactory(
               registerCommandCallback(tx, async (transactionId) => {
                 await recordSemanticSourceCommit(tx, transactionId);
                 await tx.query(
-                  `INSERT INTO semantic.erasure_source_hold(partition_no,id,account_id,version,at,store,record_key,role,delivery_position,transaction_id)
-                 VALUES($1,$2,$3,$4,$5,'',0,'',0,$6) ON CONFLICT(partition_no,id) DO UPDATE SET transaction_id=EXCLUDED.transaction_id`,
+                  `INSERT INTO semantic.erasure_source_hold(partition_no,id,account_id,version,at,store,record_key,role,delivery_position,transaction_id,origin_key)
+                 VALUES($1,$2,$3,$4,$5,'',0,'',0,$6,'') ON CONFLICT(partition_no,id) DO UPDATE SET transaction_id=EXCLUDED.transaction_id
+                   WHERE semantic.erasure_source_hold.origin_key='' AND semantic.erasure_source_hold.store='' `,
                   [sourceHome, id, barrier.accountId, barrier.version, barrier.at, transactionId],
                 );
               });
@@ -775,7 +804,8 @@ function sourceFactory(
              JOIN semantic.erasure_source_commit c USING(partition_no,transaction_id)
              JOIN core.partition p ON p.partition_no=c.partition_no AND p.epoch=c.epoch AND p.position>=c.position AND p.write_state='active'
              WHERE h.partition_no=$1 AND h.id=$2 AND h.account_id=$3 AND h.version=$4 AND h.at=$5::timestamptz
-               AND c.transaction_id=$6 AND c.epoch=$7 AND c.position=$8 AND h.xmin=c.xmin`,
+               AND c.transaction_id=$6 AND c.epoch=$7 AND c.position=$8 AND h.xmin=c.xmin
+               AND h.store=$9 AND h.record_key=$10 AND h.role=$11 AND h.delivery_position=$12 AND h.origin_key=$13`,
                     [
                       home,
                       id,
@@ -785,6 +815,11 @@ function sourceFactory(
                       native.transactionId,
                       native.epoch,
                       native.position.toString(),
+                      next.store,
+                      next.record_key,
+                      next.role,
+                      next.delivery_position,
+                      next.origin_key,
                     ],
                   )
                 ).rowCount === 1,
@@ -810,7 +845,7 @@ function sourceFactory(
             if (!(await root(tx, barrier))) return noEffect(false);
             const current = (
               await tx.query<PageRow>(
-                `SELECT id::text,consumed,source_partition,store,record_key::text,role,delivery_position::text
+                `SELECT id::text,consumed,source_partition,store,record_key::text,role,delivery_position::text,origin_key
              FROM ${pageTable} WHERE route=$1 AND account_id=$2 AND version=$3 AND at=$4::timestamptz FOR UPDATE`,
                 [barrier.accountRoute, barrier.accountId, barrier.version, barrier.at],
               )
@@ -822,11 +857,11 @@ function sourceFactory(
               return noEffect(false);
             await tx.query(
               `INSERT INTO ${pageTable}(route,account_id,version,at,id,previous_id,source_partition,store,record_key,role,
-              delivery_position,source_epoch,source_position,source_transaction_id,role_epoch,role_position,role_transaction_id,complete,consumed,${observationColumns})
-             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34)
+              delivery_position,source_epoch,source_position,source_transaction_id,role_epoch,role_position,role_transaction_id,complete,consumed,${observationColumns},origin_key)
+             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35)
              ON CONFLICT(route,account_id) DO UPDATE SET version=EXCLUDED.version,at=EXCLUDED.at,id=EXCLUDED.id,previous_id=EXCLUDED.previous_id,
               source_partition=EXCLUDED.source_partition,store=EXCLUDED.store,record_key=EXCLUDED.record_key,role=EXCLUDED.role,
-              delivery_position=EXCLUDED.delivery_position,source_epoch=EXCLUDED.source_epoch,source_position=EXCLUDED.source_position,
+              delivery_position=EXCLUDED.delivery_position,origin_key=EXCLUDED.origin_key,source_epoch=EXCLUDED.source_epoch,source_position=EXCLUDED.source_position,
               source_transaction_id=EXCLUDED.source_transaction_id,role_epoch=EXCLUDED.role_epoch,role_position=EXCLUDED.role_position,
               role_transaction_id=EXCLUDED.role_transaction_id,complete=EXCLUDED.complete,consumed=EXCLUDED.consumed,
               original=EXCLUDED.original,previous_terminal=EXCLUDED.previous_terminal,current_terminal=EXCLUDED.current_terminal,
@@ -841,7 +876,7 @@ function sourceFactory(
                 barrier.at,
                 id,
                 previous?.id ?? null,
-                ...cursorValues(next),
+                ...cursorValues(next).slice(0, 5),
                 custody?.epoch ?? null,
                 custody?.position.toString() ?? null,
                 custody?.transactionId ?? null,
@@ -851,6 +886,7 @@ function sourceFactory(
                 complete,
                 terminalProof,
                 ...observationValues(record),
+                next.origin_key,
               ],
             );
             cost.frontierWrites++;

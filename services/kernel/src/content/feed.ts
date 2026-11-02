@@ -19,7 +19,13 @@ import { readPublication } from '../community/publication.ts';
 import { ContentNotFoundError, discloseThreads, readBoard, readPost, type ThreadView } from './reads.ts';
 import { createFeedActivityStore, feedRoute, type ActivityRef } from './feed-activity.ts';
 import { decodeFeedCursor, encodeFeedCursor, feedBinding, fingerprint, type FeedPosition } from './feed-cursor.ts';
-import { readFeedKind, type FeedItem, type FeedPage, type FeedSourceState } from './feed-contract.ts';
+import {
+  readFeedKind,
+  type FeedItem,
+  type FeedPage,
+  type FeedSourceState,
+  type FeedSelection,
+} from './feed-contract.ts';
 
 export type FeedDependencies = {
   pool: Pool;
@@ -192,7 +198,7 @@ export function createFeedReads(deps: FeedDependencies) {
   return {
     async list(
       actor: Actor,
-      query: { stream?: 'home' | 'following'; limit?: number; cursor?: string; kind?: string },
+      query: { stream?: 'home' | 'following'; limit?: number; cursor?: string; kind?: string } & FeedSelection,
       deadline: number,
       languages: readonly string[],
     ): Promise<FeedPage> {
@@ -248,7 +254,11 @@ export function createFeedReads(deps: FeedDependencies) {
           deadline,
         });
       const now = deps.clock();
-      const binding = feedBinding(actor, stream, limit, languages, kind);
+      const selection: FeedSelection = {
+        ...(query.spaceId === undefined ? {} : { spaceId: query.spaceId }),
+        ...(query.ratingQuestionId === undefined ? {} : { ratingQuestionId: query.ratingQuestionId }),
+      };
+      const binding = feedBinding(actor, stream, limit, languages, kind, selection);
       const position: FeedPosition = query.cursor
         ? await decodeFeedCursor(deps.tokens, binding, query.cursor, now)
         : {
@@ -259,6 +269,11 @@ export function createFeedReads(deps: FeedDependencies) {
             continue: personal && stream === 'home' ? null : false,
             resume: null,
           };
+      // Exact selection metadata is not candidate membership. Neither native Space membership
+      // nor question witnesses are composed yet. Refuse before reading any unselected lane;
+      // their producers will join this same reader rather than introducing another stream.
+      if (query.spaceId !== undefined || query.ratingQuestionId !== undefined)
+        throw new ProblemError('dependency_unavailable');
       const sources: FeedPage['sources'] = {
         discovery: stream === 'home' ? 'ready' : 'not_requested',
         following: personal ? 'ready' : 'not_requested',
@@ -483,7 +498,7 @@ export function createFeedReads(deps: FeedDependencies) {
           };
       }
       next.turn = turn;
-      const hasNext = names.some((lane) => next[lane] !== false && sources[lane] !== 'not_requested');
+      const hasNext = names.some((lane) => next[lane] !== false && sources[lane] === 'ready');
       return {
         feedItems,
         sources,

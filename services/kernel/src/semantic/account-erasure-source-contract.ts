@@ -22,6 +22,9 @@ export type SubjectErasurePageReceipt = Readonly<{
 }>;
 
 export type SubjectErasureSourceRecord = Readonly<{
+  /** Opaque native directory identity, including authentic transaction/position origin.
+   * Equal physical roles and delivery positions can produce distinct records.
+   */
   key: string;
   original: string;
   previousTerminal: string | null;

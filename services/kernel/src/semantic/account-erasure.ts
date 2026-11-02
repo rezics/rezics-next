@@ -4,10 +4,10 @@ import { noEffect, runCommand, type CommandTransaction } from '../command/comman
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
-import { SEMANTIC_ERASURE_STORES } from './account-erasure-stores.ts';
+import { SEMANTIC_ERASURE_STORES, SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 import { SEMANTIC_EVENTS } from './events.ts';
 import type { Effect } from '../events/effects.ts';
-import { recordSemanticSourceDisposition, SEMANTIC_RECEIVING_ERASURE_STORES } from './erasure-producer.ts';
+import { recordSemanticSourceDisposition } from './erasure-producer.ts';
 
 export const SEMANTIC_ERASURE_SCHEDULED = 'com.rezics.semantic.erasure.scheduled.v1';
 export const SEMANTIC_LOCATOR_SCHEDULED = 'com.rezics.semantic.erasure.locator-scheduled.v1';
@@ -581,16 +581,22 @@ export async function refreshSemanticErasureSourceRecord(
   pool: Pool,
   accountId: string,
   partition: number,
-  key: Readonly<{ store: string; recordKey: string; role: string; deliveryPosition: string }>,
+  key: Readonly<{ store: string; recordKey: string; role: string; deliveryPosition: string; originKey?: string }>,
 ): Promise<void> {
   const locator = await indexedRead(
     pool,
     async (tx) =>
       (
         await tx.query<Locator>(
-          `SELECT store,record_key::text,role,source_transaction_id::text,source_position::text,delivery_position::text
-     FROM semantic.erasure_locator WHERE partition_no=$1 AND account_id=$2 AND store=$3 AND record_key=$4 AND role=$5`,
-          [partition, accountId, key.store, key.recordKey, key.role],
+          key.originKey === undefined
+            ? `SELECT store,record_key::text,role,source_transaction_id::text,source_position::text,delivery_position::text
+               FROM semantic.erasure_locator WHERE partition_no=$1 AND account_id=$2 AND store=$3 AND record_key=$4 AND role=$5`
+            : `SELECT store,record_key::text,role,source_transaction_id::text,source_position::text,delivery_position::text
+               FROM semantic.erasure_source_record WHERE partition_no=$1 AND account_id=$2 AND store=$3 AND record_key=$4 AND role=$5
+                 AND delivery_position=$6 AND origin_key=$7`,
+          key.originKey === undefined
+            ? [partition, accountId, key.store, key.recordKey, key.role]
+            : [partition, accountId, key.store, key.recordKey, key.role, key.deliveryPosition, key.originKey],
         )
       ).rows[0],
   );
@@ -602,6 +608,27 @@ export async function refreshSemanticErasureSourceRecord(
       [partition, accountId],
     );
     if (!seal.rowCount) return noEffect(null);
+    // The Context directory asks for a physical-row refresh without transferring
+    // Source custody. Source traversal always supplies its exact immutable origin.
+    if (key.originKey !== undefined) {
+      const origin = await tx.query(
+        `SELECT 1 FROM semantic.erasure_source_record WHERE partition_no=$1 AND account_id=$2 AND store=$3
+          AND record_key=$4 AND role=$5 AND delivery_position=$6 AND origin_key=$7
+          AND source_transaction_id IS NOT DISTINCT FROM $8::uuid AND source_position IS NOT DISTINCT FROM $9::bigint FOR SHARE`,
+        [
+          partition,
+          accountId,
+          key.store,
+          key.recordKey,
+          key.role,
+          key.deliveryPosition,
+          key.originKey,
+          locator.source_transaction_id,
+          locator.source_position,
+        ],
+      );
+      if (origin.rowCount !== 1) return noEffect(null);
+    }
     await tx.query(
       "SELECT set_config('semantic.erasure_cleanup','on',true),set_config('semantic.erasure_account',$1,true)",
       [accountId],

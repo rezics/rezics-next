@@ -29,6 +29,17 @@ export const SignedIn: Story = {
     await expect(canvas.getByRole('region', { name: m.nav_home() })).toBeVisible();
     await expect(canvas.getByRole('list', { name: m.nav_home() })).toBeVisible();
     await expect(context.canvasElement.querySelector('main main')).toBeNull();
+    const nativeOrder = [...context.canvasElement.querySelectorAll('[data-feed-id]')].map((row) =>
+      row.getAttribute('data-feed-source'),
+    );
+    await expect(nativeOrder).toEqual(['discovery', 'following', 'continue']);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_next_page() }));
+    await waitFor(() =>
+      expect(context.canvasElement.ownerDocument.activeElement).toBe(
+        canvas.getByRole('region', { name: m.nav_home() }),
+      ),
+    );
+    await expect(canvas.queryByRole('button', { name: m.library_next_page() })).toBeNull();
   },
 };
 export const SignedOut: Story = {
@@ -282,5 +293,18 @@ export const ExpiredPageRecovery: Story = {
     await expect(selected).toHaveTextContent(selectedLabel);
     await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
     await expect(kind).toHaveValue('schema:Book');
+  },
+};
+
+export const SparseContinuation: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="sparse" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByText(m.home_feed_sparse())).toBeVisible();
+    await expect(canvas.queryByText(m.home_feed_empty())).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_next_page() }));
+    await expect(await canvas.findByRole('link', { name: 'Books I come back to' })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.library_next_page() })).toBeNull();
   },
 };
