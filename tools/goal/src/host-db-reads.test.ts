@@ -68,7 +68,8 @@ function fixture(
     const event = db.query(
       "INSERT INTO worker_events(task_id, attempt, kind, at, body) VALUES (?, ?, 'fixture', '2000-01-01', '{}')",
     );
-    for (let i = 0; i < eventCount; i++) event.run(`settled-${i % taskCount}`, i + 1);
+    for (let i = 0; i < eventCount; i++)
+      event.run(activeCount && i % 2 ? 'active-2' : `settled-${i % taskCount}`, i + 3);
     if (activeCount) {
       event.run('active-2', 1);
       event.run('active-2', 1);

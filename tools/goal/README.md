@@ -538,9 +538,11 @@ these database operations, not every optional proof-reader, filesystem or proces
 The two-file owning group is `bun test tools/goal/src/host-db-reads.test.ts tools/goal/src/orphan-sweep-growth.test.ts`,
 submitted through normal shared admission. Host fixtures independently seed T/R/H = 100/200/300,
 1000/2000/3000 and 3000/5000/9000 with five active task/attempt bodies (or zero); the largest retains the
-original under-50-KB ceiling for each decoded body kind. Orphan fixtures seed 100/1000/5000 terminal tasks,
+original under-50-KB ceiling for each decoded body kind. Event history includes other attempts of the selected task.
+Orphan fixtures seed 100/1000/5000 terminal tasks,
 twice as many historical attempts and three times as many unrelated events with one fixed candidate, then repeat
-both command/host modes and empty sweeps. The real worker fixture verifies settled replay outcomes.
+both command/host modes and empty sweeps. The real worker fixture verifies settlement and replay at all three
+scales in both modes, retaining the current attempt, events and replacement/lease counts on replay.
 
 Decision: settled-history fixtures use terminal task states; held, ready, stopped and landing tasks belong to the
 active-work axis and cannot be counted as unrelated settled history.
@@ -554,11 +556,17 @@ across scales. This fixture ceiling follows fixed state probes and at most five 
 production limit on active tasks or selected event history. VM instructions measure executed engine work, not
 examined index rows or physical B-tree page visits. Index-row counters are unavailable through this extension API
 and are reported as null, never replaced by decoded bytes, returned rows or EQP. Entire observed read traces,
-engine version/source and operation labels are printed as raw diagnostics; the orphan assertions select only the
+source revision, engine version/source and operation labels are printed as raw diagnostics; the orphan assertions select only the
 mapped candidate/event operations. Compiler/extension failures fail the group rather than skipping native evidence.
 The implementation follows [Bun's extension API](https://bun.com/docs/runtime/sqlite#loadextension) and
 [SQLite's extension contract](https://sqlite.org/loadext.html). Successful revision-bound acceptance remains the
 shared runner's responsibility; adding this mapping does not claim that acceptance has run.
+
+The raw host-mode trace also exposes existing work outside the mapped candidate/event reads: a
+`SELECT id, body FROM worker_tasks ORDER BY sequence` scan and one `worker_worktree_cleanup` lookup per settled
+task. At 100/1000/5000 settled tasks that scan executes 513/5013/25013 VM instructions and 100/1000/5000 fullscan
+steps. This is an outstanding Delivery-owned host maintenance bound, not constant-work evidence for the complete
+host sweep; the two-file group retains those diagnostics without changing runtime reconciliation ownership.
 
 | Environment variable      | Override                                                        |
 | ------------------------- | --------------------------------------------------------------- |

@@ -39,6 +39,8 @@ export function observeSqliteWork(db: Database, directory: string) {
   const query = original.bind(db);
   const counter = query<{ work: string }, [string, number]>('SELECT goal_statement_work(?, ?) AS work');
   const engine = query('SELECT sqlite_version() AS version, sqlite_source_id() AS source').get();
+  const revision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: join(import.meta.dir, '../../..') });
+  if (revision.exitCode !== 0) throw new Error(revision.stderr.toString());
   const rows: SqliteWork[] = [];
   db.query = ((sql: string) => {
     const statement = query(sql);
@@ -63,6 +65,7 @@ export function observeSqliteWork(db: Database, directory: string) {
       console.log(
         JSON.stringify({
           label,
+          revision: revision.stdout.toString().trim(),
           engine,
           indexedRowVisits: null,
           attribution: 'stmt_status on actual Bun statements; index row visits unavailable through extension API',
