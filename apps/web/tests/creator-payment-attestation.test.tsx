@@ -288,6 +288,9 @@ test('the actual form retries captured evidence after a paid read, confirms only
     expect(host.textContent).toContain('current statement evidence could not be refreshed');
     expect(host.textContent).toContain(key!);
     expect(transport.mock.calls[0]![1]?.headers).toEqual(transport.mock.calls[1]![1]?.headers);
+    expect(field.disabled).toBe(true);
+    await submit();
+    expect([writes, refreshes]).toEqual([2, 2]);
   } finally {
     globalThis.fetch = originalFetch;
     await act(async () => root.unmount());
