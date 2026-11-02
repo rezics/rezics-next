@@ -58,7 +58,7 @@ export type DynamicCollectionPage = CollectionPresentationData & {
   filter?: FilterDocument;
   filterIgnored?: string[];
   filterType?: string;
-  filterStatus?: 'unsupported' | 'preparing' | 'failed';
+  filterStatus?: 'unsupported' | 'preparing' | 'failed' | undefined;
   filterProperties?: CollectionFilterProperty[];
   filterParams?: CollectionFilterParams;
   pins?: LibraryPinsRead;
