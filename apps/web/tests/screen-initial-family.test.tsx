@@ -285,8 +285,11 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     const removeQualifier = within(director).getAllByRole('button', { name: m.relation_remove() })[0]!;
     removeQualifier.focus();
     await key('{Enter}');
+    await act(async () => user.click(within(director).getAllByRole('button', { name: m.relation_remove() })[0]!));
     expect(observed.second![0]!.statement.qualifiers).toEqual([]);
-    director.querySelector<HTMLButtonElement>(':scope > button')!.focus();
+    within(director).getAllByRole('button', { name: m.relation_remove() }).at(-1)!.focus();
+    await key('{Enter}');
+    within(director).getAllByRole('button', { name: m.relation_remove() }).at(-1)!.focus();
     await key('{Enter}');
     expect(observed.second).toEqual([]);
     expect(fields('first').querySelector('section')).toBeNull();
@@ -346,6 +349,13 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
       'https://example.org/revised',
     );
     expect(observed.preserved![0]!.statement.references[0]).toEqual(preserved[0]!.statement.references[0]);
+    await act(async () =>
+      user.click(
+        within(section(fields('preserved'), fieldName('schema:director'))).getAllByRole('button', {
+          name: m.relation_remove(),
+        })[0]!,
+      ),
+    );
     await act(async () =>
       user.click(
         within(section(fields('preserved'), fieldName('schema:director'))).getAllByRole('button', {

@@ -194,7 +194,7 @@ function InitialStatement({
         change={(value) => change({ ...statement, value })}
       />
       {(statement.qualifiers ?? []).map((part, index) => (
-        <div key={partKey(part)} className="min-w-0 space-y-2 border-s-2 ps-3">
+        <div key={partKey(part)} data-screen-qualifier className="min-w-0 space-y-2 border-s-2 ps-3">
           <p
             lang={screenName(release, part.property.id, locale).lang ?? undefined}
             className="min-w-0 max-w-full text-sm font-medium [overflow-wrap:anywhere]"
@@ -215,14 +215,17 @@ function InitialStatement({
               })
             }
           />
-          <Button
-            className={screenActionClassName}
-            type="button"
-            variant="ghost"
-            onClick={() => change({ ...statement, qualifiers: statement.qualifiers!.filter((_, at) => at !== index) })}
-          >
-            {m.relation_remove({}, o)}
-          </Button>
+          <ScreenQualifierRemove
+            part={part}
+            disabled={disabled}
+            locale={locale}
+            onRemove={() =>
+              change({
+                ...statement,
+                qualifiers: statement.qualifiers!.filter((item) => partKey(item) !== partKey(part)),
+              })
+            }
+          />
         </div>
       ))}
       {!!property.qualifiers.length && (
@@ -321,6 +324,127 @@ function InitialStatement({
             </Field>
           );
         })}
+    </div>
+  );
+}
+
+/** Keep the value and picker mounted until this stable, unsent part is confirmed. */
+function ScreenQualifierRemove({
+  part,
+  disabled,
+  locale,
+  onRemove,
+}: {
+  part: SnakInput;
+  disabled: boolean;
+  locale: string;
+  onRemove: () => void;
+}) {
+  const o = { locale: locale as never };
+  const key = partKey(part);
+  const holder = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  const [pending, setPending] = useState<string>();
+  const confirming = pending === key;
+  const current = useRef({ disabled, key, onRemove });
+  current.current = { disabled, key, onRemove };
+  const editable = () =>
+    !current.current.disabled &&
+    current.current.key === key &&
+    !!holder.current?.isConnected &&
+    !holder.current.closest('fieldset:disabled, [inert]');
+  useLayoutEffect(() => {
+    if (disabled) return;
+    if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current) {
+      trigger.current?.focus();
+      restoreFocus.current = false;
+    }
+  }, [confirming, disabled]);
+  const cancelRemoval = () => {
+    restoreFocus.current = true;
+    setPending(undefined);
+  };
+  const remove = () => {
+    if (!editable()) return;
+    const qualifier = holder.current!.closest('[data-screen-qualifier]')!;
+    const parent = qualifier.parentElement!;
+    const siblings = [...parent.querySelectorAll<HTMLElement>('[data-screen-qualifier]')];
+    const index = siblings.indexOf(qualifier as HTMLElement);
+    const controls = 'input, select, textarea, button, [tabindex="0"], [contenteditable="true"]';
+    const candidates = [...siblings.slice(index + 1), ...siblings.slice(0, index).reverse(), parent].flatMap(
+      (region) => [...region.querySelectorAll<HTMLElement>(controls)],
+    );
+    candidates
+      .find(
+        (control) =>
+          !qualifier.contains(control) &&
+          !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
+          !control.closest('[hidden], [inert]'),
+      )
+      ?.focus();
+    current.current.onRemove();
+  };
+  const hasContent = (value: unknown): boolean => {
+    if (typeof value === 'string') return !!value.trim();
+    if (value == null) return false;
+    if (typeof value === 'object') return Object.values(value).some(hasContent);
+    return true;
+  };
+  const populated = part.value.type !== 'value' || hasContent(part.value.content);
+  return (
+    <div ref={holder}>
+      {confirming ? (
+        <div
+          role="group"
+          aria-label={m.candidate_confirm_title({ action: m.relation_remove({}, o) }, o)}
+          className="space-y-2"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              cancelRemoval();
+            }
+          }}
+        >
+          <p>{m.candidate_confirm_title({ action: m.relation_remove({}, o) }, o)}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              ref={cancel}
+              className={screenActionClassName}
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={cancelRemoval}
+            >
+              {m.candidate_cancel({}, o)}
+            </Button>
+            <Button
+              className={screenActionClassName}
+              type="button"
+              variant="destructive"
+              disabled={disabled}
+              onClick={remove}
+            >
+              {m.relation_remove({}, o)}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          ref={trigger}
+          className={screenActionClassName}
+          type="button"
+          variant="ghost"
+          disabled={disabled}
+          onClick={() => {
+            if (editable()) populated ? setPending(key) : remove();
+          }}
+        >
+          {m.relation_remove({}, o)}
+        </Button>
+      )}
     </div>
   );
 }
