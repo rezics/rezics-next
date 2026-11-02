@@ -26,7 +26,7 @@ export function completeWorkerSourceBaseline(value: unknown): WorkerSourceBaseli
 }
 
 export function canonicalConflictPaths(paths: readonly string[]): string[] {
-  return [...new Set(paths.map((path) => path.trim().replaceAll('\\', '/')).filter(Boolean))].sort((left, right) =>
+  return [...new Set(paths.filter(Boolean))].sort((left, right) =>
     left < right ? -1 : left > right ? 1 : 0,
   );
 }
