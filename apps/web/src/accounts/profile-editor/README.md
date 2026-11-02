@@ -21,3 +21,5 @@ Missing real `KERNEL_ORIGIN` is unavailable, including development; the editor n
 
 Integration acceptance remains the contract's web suite and native authority oracles. This delivery's permitted
 verification is local web workspace typing; Web owns subsequent visual review.
+
+Profile reads and saves use Web’s ten-second deadline through headers and body decoding, composed with caller cancellation; a timed-out PATCH retains its exact command and draft for explicit recovery, and only a fresh account-bound read confirms current state.

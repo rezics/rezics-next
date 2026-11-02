@@ -1,3 +1,4 @@
+import { withProfileDeadline } from './profile-request-deadline';
 import {
   profileChanges,
   profileReadDenied,
@@ -17,8 +18,8 @@ export type ProfileAttempt = Readonly<{
   scope: ProfileScope;
 }>;
 export type ProfileEditorIO = {
-  read: () => Promise<ProfileValues>;
-  save: (attempt: ProfileAttempt) => Promise<ProfileSaveResult>;
+  read: (signal?: AbortSignal) => Promise<ProfileValues>;
+  save: (attempt: ProfileAttempt, signal?: AbortSignal) => Promise<ProfileSaveResult>;
   confirmed?: (profile: ProfileValues) => void;
   isCurrent?: () => boolean;
   canWrite?: () => boolean;
@@ -94,6 +95,7 @@ export class ProfileEditor {
   private state: ProfileEditorState;
   private listeners = new Set<() => void>();
   private active = true;
+  private lifetime = new AbortController();
   private readVersion = 0;
   private pending = false;
   // Value comparisons alone cannot distinguish a later edit back to the original value.
@@ -137,6 +139,7 @@ export class ProfileEditor {
   retire() {
     if (!this.active) return;
     this.active = false;
+    this.lifetime.abort();
     this.readVersion++;
     this.laterEdits = {};
     this.update({
@@ -267,7 +270,7 @@ export class ProfileEditor {
     this.update({ phase: 'saving', readStatus: undefined, failure: undefined });
     let result: ProfileSaveResult;
     try {
-      result = await this.io.save(attempt);
+      result = await withProfileDeadline((signal) => this.io.save(attempt, signal), this.lifetime.signal);
     } catch (error) {
       if (!this.current()) return;
       const failure = failureMetadata(error);
@@ -293,7 +296,7 @@ export class ProfileEditor {
     this.update({ phase: 'reloading', readStatus: 'confirming' });
     const version = this.readVersion;
     try {
-      const current = await this.io.read();
+      const current = await withProfileDeadline((signal) => this.io.read(signal), this.lifetime.signal);
       if (!this.current() || version !== this.readVersion) return;
       this.finishRead(current, true);
     } catch (error) {
@@ -355,7 +358,7 @@ export class ProfileEditor {
     this.update({ phase: 'reloading', readStatus: 'checking', failure: undefined });
     const version = this.readVersion;
     try {
-      const current = await this.io.read();
+      const current = await withProfileDeadline((signal) => this.io.read(signal), this.lifetime.signal);
       if (!this.current() || version !== this.readVersion) return;
       this.finishRead(current, false);
     } catch (error) {
@@ -401,9 +404,9 @@ export class ProfileEditorSession {
     const io = createIO(this);
     this.editor = new ProfileEditor({
       ...io,
-      read: async () => {
+      read: async (signal) => {
         if (!this.canRead()) throw new Error('Profile unavailable');
-        return io.read();
+        return io.read(signal);
       },
       isCurrent: () => this.isActive() && (io.isCurrent?.() ?? true),
       canWrite: () => this.canWrite() && (io.canWrite?.() ?? true),

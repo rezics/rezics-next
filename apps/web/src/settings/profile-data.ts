@@ -1,3 +1,4 @@
+import { withProfileDeadline } from './profile-request-deadline';
 import type { KernelClient } from '@rezics/client';
 import { settingsCommandKeyHeader } from './command-headers';
 import {
@@ -79,8 +80,9 @@ export async function loadProfileRecord(
   authorization: string,
   accountId: string,
   source: EditableProfileSource = createEditableProfileSource(client),
+  signal?: AbortSignal,
 ): Promise<ProfileValues> {
-  const profile = await source.read(authorization, accountId);
+  const profile = await source.read(authorization, accountId, signal);
   if (profile.id !== accountId) throw new Error('Profile unavailable');
   return accountProfile(profile);
 }
@@ -120,12 +122,16 @@ export async function saveProfileRecord(
   before: ProfileValues,
   after: ProfileValues,
   idempotencyKey: string,
+  signal?: AbortSignal,
 ): Promise<ProfileSaveResult> {
   if (after.links.length > 5) throw new Error('At most five links are allowed');
   const body = profileChanges(before, after);
   if (!Object.keys(body).length) return { ok: true, profile: before };
   const headers = { authorization, 'idempotency-key': settingsCommandKeyHeader(idempotencyKey) };
-  const result = await client.accounts({ accountId }).patch(body, { headers });
+  const result = await withProfileDeadline(
+    (bounded) => client.accounts({ accountId }).patch(body, { headers, fetch: { signal: bounded } }),
+    signal,
+  );
   if (!result.error && result.data) return { ok: true, profile: after };
   const errorBody = result.error?.value;
   const message =

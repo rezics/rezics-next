@@ -71,23 +71,23 @@ function BoundProfile({ accountId, viewerId, csrfToken }: { accountId: string; v
     };
     const editor = new AccountProfileEditor({
       isCurrent: current,
-      read: async () => {
+      read: async (signal) => {
         if (!current()) throw new Error('Profile selection changed');
         let next: ProfilePage;
         try {
-          next = await readAccountProfile({ data: { accountId, viewerId } });
+          next = await readAccountProfile({ data: { accountId, viewerId }, signal });
         } catch {
           next = { state: 'unavailable' };
         }
         // A detached request may complete, but cannot seed or replace any live draft.
-        if (!current()) throw new Error('Profile selection changed');
+        if (!current() || signal?.aborted) throw new Error('Profile selection changed');
         if (next.state === 'ready' && (next.viewerId !== viewerId || next.profile.accountId !== accountId))
           next = { state: 'unavailable' };
         setPage(next);
         if (next.state !== 'ready') throw new Error(next.state);
         return next.profile;
       },
-      save: async (attempt) => {
+      save: async (attempt, signal) => {
         if (!current() || attempt.before.accountId !== accountId || attempt.after.accountId !== accountId)
           throw new Error('Profile selection changed');
         const result = await saveAccountProfile({
@@ -99,8 +99,9 @@ function BoundProfile({ accountId, viewerId, csrfToken }: { accountId: string; v
             confirmed: true,
           },
           headers: { 'X-CSRF-Token': csrfToken },
+          signal,
         });
-        if (current() && !result.ok && [401, 403, 404].includes(result.status))
+        if (current() && !signal?.aborted && !result.ok && [401, 403, 404].includes(result.status))
           setPage({ state: result.status === 404 ? 'missing' : result.status === 401 ? 'signed-out' : 'denied' });
         return result;
       },
@@ -148,7 +149,8 @@ export function AccountProfileView({
     editor.confirmationSnapshot,
   );
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
-  if (!page) return <p role="status">{m.settings_profile_loading()}</p>;
+  if (!page && state.readStatus !== 'failed') return <p role="status">{m.settings_profile_loading()}</p>;
+  page ??= { state: 'unavailable' };
   if (page.state !== 'ready')
     return (
       <Alert>

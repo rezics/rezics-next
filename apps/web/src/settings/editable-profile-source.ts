@@ -1,3 +1,4 @@
+import { withProfileDeadline } from './profile-request-deadline';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import { MediaProblem } from '../media/kernel';
@@ -92,10 +93,10 @@ const response = v.strictObject({
 export function createEditableProfileSource(client: KernelClient): EditableProfileSource {
   return {
     async read(authorization, accountId, signal) {
-      const result = await client.accounts({ accountId }).profile.get({
+      const result = await withProfileDeadline((bounded) => client.accounts({ accountId }).profile.get({
         headers: { authorization, 'cache-control': 'no-store' },
-        fetch: { cache: 'no-store', ...(signal ? { signal } : {}) },
-      });
+        fetch: { cache: 'no-store', signal: bounded },
+      }), signal);
       if (result.error || !result.data) {
         const failure = nativeProfileFailure(result.status, result.error?.value, result.headers);
         throw new EditableProfileReadError(result.status, Object.keys(failure).length > 1 ? failure : undefined);

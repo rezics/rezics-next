@@ -20,7 +20,7 @@ export const readAccountProfile = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<ProfilePage> => {
     try {
       const authorization = await viewer(data);
-      return authorization ? readTarget(kernelClient(), authorization, data) : { state: 'signed-out' };
+      return authorization ? readTarget(kernelClient(), authorization, data, getRequest().signal) : { state: 'signed-out' };
     } catch {
       return { state: 'unavailable' };
     }
@@ -31,6 +31,6 @@ export const saveAccountProfile = createServerFn({ method: 'POST' })
     // prepareSession enforces allowed Origin and the current session's CSRF token before native I/O.
     const authorization = await viewer(data);
     return authorization
-      ? writeTarget(kernelClient(), authorization, data)
+      ? writeTarget(kernelClient(), authorization, data, getRequest().signal)
       : { ok: false as const, status: 403, message: '' };
   });
