@@ -3,7 +3,9 @@ SELECT ordinal::text AS ordinal,
        member_id::text AS "memberId",
        state,
        reason,
-       resulting_member_id::text AS "resultingMemberId"
+       resulting_member_id::text AS "resultingMemberId",
+       collection_id::text AS "collectionId",
+       target, receipt, evidence, source_digest AS "sourceDigest"
 FROM library.bulk_target
 WHERE route = :route::integer
   AND operation_id = :operation_id::uuid

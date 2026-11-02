@@ -151,6 +151,14 @@ const outcome = t.Object(
     state: targetState,
     reason: nullableReason,
     resultingMemberId: nullableId,
+    deletion: t.Union([
+      t.Object({ deletionId: id, revision: t.Integer({ minimum: 1 }), restoreUntil: t.String() }, closed),
+      t.Null(),
+    ]),
+    memberDeletion: t.Union([
+      t.Object({ deletionId: id, revision: t.Integer({ minimum: 1 }), purgeAfter: t.String() }, closed),
+      t.Null(),
+    ]),
   },
   closed,
 );

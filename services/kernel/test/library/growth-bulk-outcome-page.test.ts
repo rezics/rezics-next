@@ -138,7 +138,7 @@ test('outcome state and nullable occurrence fields come from the caller snapshot
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     const before = await pageBulkOutcomes(client, query);
     expect(before).toEqual({
-      outcomes: [{ ordinal: '0', subjectId, memberId, state: 'pending', reason: 'deadline', resultingMemberId }],
+      outcomes: [{ ordinal: '0', subjectId, memberId, state: 'pending', reason: 'deadline', resultingMemberId, deletion: null, memberDeletion: null }],
       nextAfter: null,
     });
     await db.admin.query("UPDATE library.bulk_target SET state = 'applied' WHERE route = $1 AND operation_id = $2", [

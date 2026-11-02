@@ -113,6 +113,9 @@ export type OutcomeView = Readonly<{
   state: TargetState;
   reason: BulkReason | null;
   resultingMemberId: string | null;
+  /** Original native removal evidence; null when no bound evidence is available. */
+  deletion: EntryDeletion | null;
+  memberDeletion: NonNullable<TargetEvidence['memberDeletion']> | null;
 }>;
 export type OutcomeQuery = { limit?: number; cursor?: string; state?: TargetState };
 export type OutcomePage = { outcomes: readonly OutcomeView[]; next: string | null };

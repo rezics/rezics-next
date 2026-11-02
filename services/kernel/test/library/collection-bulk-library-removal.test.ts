@@ -17,6 +17,7 @@ import {
   type TargetCommand,
 } from '../../src/library/bulk-contract.ts';
 import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
+import { createCollectionBulkOperations } from '../../src/library/collection-bulk-operation.ts';
 import {
   previewCollectionBulk,
   confirmCollectionBulk,
@@ -270,8 +271,22 @@ test('captured removal retains independent facts, native deletion event and orig
   ).toEqual(['com.rezics.library.entry.deleted.v1']);
   expect(await attempt(command!)).toEqual(result);
   expect(await f.inspect()).toEqual(after);
+  const bulk = createCollectionBulkOperations(deps), id = command!.source.id;
+  const response = await f.send('owner', 'GET', `/v1/libraryOperations/${id}/outcomes`);
+  expect(response.status).toBe(200);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  expect((await response.json()).outcomes[0]).toMatchObject({ subjectId: entry.subjectId,
+    deletion: result.evidence.deletion, memberDeletion: null });
+  expect((await bulk.outcomes(f.owner.actor, id, {})).outcomes[0]?.deletion).toEqual(result.evidence.deletion);
+  expect(await f.inspect()).toEqual(after);
+  await expect(bulk.outcomes(f.other.actor, id, {})).rejects.toThrow();
+  await expect(bulk.outcomes({ ...f.owner.actor, scopes: f.owner.actor.scopes.filter((s) => s !== 'subject:read') }, id, {}))
+    .rejects.toThrow();
+  await expect(createCollectionBulkOperations({ ...deps, clock: () => new Date(Date.now() + 49 * 3600000) })
+    .outcomes(f.owner.actor, id, {})).rejects.toThrow();
   await f.revokeLibraryGate(f.owner.actor.accountId);
   await f.setLibraryOpen(false);
+  await expect(bulk.outcomes(f.owner.actor, id, {})).rejects.toThrow();
   expect(await attempt(command!)).toEqual(result); // Private accounting after current authority loss.
   expect((await f.inspect()).deletedEntries).toEqual(after.deletedEntries);
   await f.setLibraryOpen(true);
@@ -285,6 +300,9 @@ test('edited, recreated and absent ABA slots conflict individually while another
   const commands = await preview(
     await Promise.all([edited.subjectId, recreated.subjectId, absentId, unchanged.subjectId].map(capture)),
   );
+  const bulk = createCollectionBulkOperations(deps), id = commands[0]!.source.id;
+  const pending = await bulk.outcomes(f.owner.actor, id, { limit: 1 });
+  expect(pending.outcomes[0]).toMatchObject({ state: 'pending', deletion: null, memberDeletion: null });
   await f.commands.putEntry(
     f.owner.actor,
     edited.subjectId,
@@ -312,8 +330,11 @@ test('edited, recreated and absent ABA slots conflict individually while another
     ['applied', null],
   ]);
   expect(await f.commands.readEntry(f.owner.actor, recreated.subjectId)).toEqual(replacement.value.entry);
+  expect((await bulk.outcomes(f.owner.actor, id, {})).outcomes.slice(0, 3).map((row) => row.deletion))
+    .toEqual([null, null, null]);
   const fresh = await put(),
     [denied] = await preview([await capture(fresh.subjectId)]);
+  await expect(bulk.outcomes(f.owner.actor, denied!.source.id, { cursor: pending.next! })).rejects.toThrow();
   await f.setLibraryOpen(false);
   const before = await f.inspect();
   expect(await attempt(denied!)).toEqual({ kind: 'stop', reason: 'authority_lost' });

@@ -120,6 +120,23 @@ Personal removals are same-home; the executor installs no remote dispatcher, sch
 It uses the operation owner's installed durable reader/restorer and chunk limiter; admission, confirmation and
 worker composition remain owned by the integration delivery.
 
+## Reopened removal results
+
+Decision: outcome pages return nullable `deletion` and `memberDeletion` fields from stored, source-bound terminal evidence; unavailable evidence stays null and GET never reconstructs a deletion from current state.
+
+The mounted typed outcomes route preserves personal `{ deletionId, revision, restoreUntil }` and occurrence
+`{ deletionId, revision, purgeAfter }` values exactly. Each receipt must match the stored operation digest,
+ordinal, Subject, occurrence and native command identity. Only an actual applied removal with terminal evidence
+can disclose one. Pending, skipped, no-effect and other actions carry null fields. Projection exposes no durable
+initiating actor, command credential or private accounting record.
+
+Every page requires the current independent operation owner, personal Library admission and Subject disclosure;
+Collection actions additionally require current native Collection read authority. Operation/state-bound cursors,
+20-row pages and private/no-store responses remain unchanged. Reads neither capture nor execute Undo: Web retains
+the restore command, and the native restore endpoint still independently admits current authority. The original
+restore expiry is never renewed by replay or later reads. The operation's 48-hour result lifetime governs access
+to this evidence separately from its restore deadline; existing Accounts erasure deletes the same manifest rows.
+
 ## Static bounds
 
 The separately owned command envelope admits at most 64 KiB. The stored-value ceilings below bound internal

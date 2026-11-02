@@ -40,6 +40,7 @@ import {
   type CollectionBulkTarget,
 } from './collection-bulk-store.ts';
 import { pageBulkOutcomes } from './bulk-outcome-page.ts';
+import { createCollectionReads } from './collection-reads.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import creationReceipt from './collection-publication-episode-receipt.sql';
 
@@ -250,7 +251,7 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
   async function read<T>(
     actor: Actor,
     operationId: string,
-    body: (tx: CommandTransaction, key: CollectionBulkKey) => Promise<T>,
+    body: (tx: CommandTransaction, key: CollectionBulkKey, operation: CollectionBulkOperation) => Promise<T>,
   ) {
     const owner = bulkOwner(actor, 'library_entry:list'),
       key = bulkKey(owner, operationId);
@@ -287,7 +288,7 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
         const operation = await readCollectionBulk(tx, key);
         if (!operation || Date.parse(operation.resultsExpireAt) <= Date.parse(authoritativeTimeValue(time)))
           throw new LibraryNotFoundError();
-        const result = await body(tx, key);
+        const result = await body(tx, key, operation);
         await tx.query('COMMIT');
         return result;
       } catch (error) {
@@ -402,7 +403,7 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
       return read(actor, operationId, collectionBulkView);
     },
     async outcomes(actor: Actor, operationId: string, query: OutcomeQuery) {
-      const result = await read(actor, operationId, async (tx, key) => {
+      const result = await read(actor, operationId, async (tx, key, operation) => {
         const binding = { operation: 'library.bulk.outcomes', parameters: { ...key, state: query.state ?? null } };
         let after: string | null = null;
         if (query.cursor !== undefined) {
@@ -424,10 +425,12 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
           after,
           limit: query.limit ?? 20,
           state: query.state ?? null,
+          operation,
         });
         return {
           outcomes: page.outcomes,
           next: page.nextAfter === null ? null : encodeCursor(tokens, binding, { epoch: 1, after: [page.nextAfter] }),
+          collectionId: 'collectionId' in operation.request ? operation.request.collectionId : null,
         };
       });
       // Release the source snapshot before checking foreign subject homes. A page is
@@ -436,7 +439,11 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
         const subject = await resolveSubject(deps, actor, outcome.subjectId);
         if (!subject || subject.subjectId !== outcome.subjectId) throw new GrantDeniedError();
       }
-      return read(actor, operationId, async () => result);
+      if (result.collectionId !== null) {
+        bulkOwner(actor, 'collection:read');
+        await createCollectionReads(deps).readCollection(actor, result.collectionId);
+      }
+      return read(actor, operationId, async () => ({ outcomes: result.outcomes, next: result.next }));
     },
     async confirm(actor: Actor, operationId: string, requestKey: string) {
       const owner = bulkOwner(actor, 'library_entry:update'),

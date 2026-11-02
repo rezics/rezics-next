@@ -12,6 +12,7 @@ import {
 } from '../../src/library/collection-bulk-store.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { testTokens } from '../support/test-kernel.ts';
+import { createCollectionBulkOperations } from '../../src/library/collection-bulk-operation.ts';
 import {
   createCollectionBatchFixture,
   entryKey,
@@ -22,6 +23,8 @@ let f: CollectionBatchFixture;
 let time = Date.now();
 beforeAll(async () => {
   f = await createCollectionBatchFixture({ clock: () => new Date(time) });
+  f.owner.actor = { ...f.owner.actor, scopes: [...f.owner.actor.scopes, 'library_entry:list'] };
+  await f.refresh();
 }, 120000);
 afterAll(async () => {
   await f?.close();
@@ -139,6 +142,11 @@ test('captured occurrence removal preserves an unselected duplicate, ordering, n
   expect(result.kind).toBe('terminal');
   if (result.kind !== 'terminal') throw new Error('Missing result');
   expect(result.evidence.outcome).toBe('applied');
+  const bulk = createCollectionBulkOperations({ ...c.deps, tokens: f.tokens });
+  expect((await bulk.outcomes(f.owner.actor, c.commands[0]!.source.id, {})).outcomes[0])
+    .toMatchObject({ memberId: first.id, deletion: null, memberDeletion: result.evidence.memberDeletion });
+  await expect(bulk.outcomes({ ...f.owner.actor, scopes: f.owner.actor.scopes.filter((s) => s !== 'collection:read') },
+    c.commands[0]!.source.id, {})).rejects.toThrow();
   expect((await f.page(collection.id)).map((m) => m.id)).toEqual([second.id, third.id]);
   expect(await member(collection.id, second.id)).toEqual(before);
   const events = await f.pool.query(
@@ -222,6 +230,8 @@ test('lost response and exact replay preserve one removal receipt/deadline; auth
   expect(c.restored()).toBe(2);
   // Real current Access refusal, even though the restorer component port returns the original actor.
   await f.grant(collection.id, f.owner.actor.accountId, true);
+  await expect(createCollectionBulkOperations({ ...c.deps, tokens: f.tokens })
+    .outcomes(f.owner.actor, c.commands[0]!.source.id, {})).rejects.toThrow();
   expect(await executeCollectionRemoveTarget(c.deps, c.commands[0]!)).toEqual(lost);
   const refused = await executeCollectionRemoveTarget(c.deps, c.commands[1]!);
   expect(refused.kind === 'terminal' && refused.evidence.outcome).toBe('denied');

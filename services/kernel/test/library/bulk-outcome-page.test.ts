@@ -11,7 +11,7 @@ test('native outcome pages preserve ordinal precision filter and emitted-prefix 
  const a=await pageBulkOutcomes(db.admin,input);expect(a.outcomes.map(x=>x.ordinal)).toEqual([base.toString(),(base+1n).toString()]);expect(a.nextAfter).toBe((base+1n).toString());
  const b=await pageBulkOutcomes(db.admin,{...input,state:'applied'});expect(b.outcomes.map(x=>x.subjectId)).toEqual([ids[0]!,ids[2]!]);expect(b.nextAfter).toBe((base+2n).toString());
  const c=await pageBulkOutcomes(db.admin,{...input,state:'applied',after:b.nextAfter});expect(c.outcomes.map(x=>x.subjectId)).toEqual([ids[4]!]);expect(c.nextAfter).toBeNull();
- expect(Object.keys(c.outcomes[0]!).sort()).toEqual(['memberId','ordinal','reason','resultingMemberId','state','subjectId'].sort());
+ expect(Object.keys(c.outcomes[0]!).sort()).toEqual(['memberId','ordinal','reason','resultingMemberId','state','subjectId','deletion','memberDeletion'].sort());
  expect((await pageBulkOutcomes(db.admin,{...input,accountId:newId(route)})).outcomes).toEqual([]);
  await expect(pageBulkOutcomes(db.admin,{...input,limit:21})).rejects.toThrow();await expect(pageBulkOutcomes(db.admin,{...input,after:'01'})).rejects.toThrow();
 });
