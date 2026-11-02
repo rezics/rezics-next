@@ -55,9 +55,7 @@ export function advanceRealmPageProgress(
   return { ...previous, cursor: nextCursor, distance };
 }
 
-export type RealmPageReader = (
-  input: Readonly<{ cursor?: string; signal: AbortSignal }>,
-) => Promise<unknown>;
+export type RealmPageReader = (input: Readonly<{ cursor?: string; signal: AbortSignal }>) => Promise<unknown>;
 
 /** Shared explicit-page controller for Search and header Realm browsing. */
 export function createRealmPageProgress(input: {

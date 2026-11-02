@@ -99,10 +99,7 @@ export function createRealmDiscoveryWindow(state: unknown): RealmDiscoveryWindow
 }
 
 /** Successful pages replace the finite window; pending and failed requests retain the accepted window. */
-export function reduceRealmDiscovery(
-  previous: RealmDiscoveryWindow,
-  incoming: unknown,
-): RealmDiscoveryWindow {
+export function reduceRealmDiscovery(previous: RealmDiscoveryWindow, incoming: unknown): RealmDiscoveryWindow {
   if (!isAdmittedRealmDiscoveryState(incoming)) {
     if (previous.state.kind === 'ready') return requireRealmDiscoveryRestart(previous);
     return {
