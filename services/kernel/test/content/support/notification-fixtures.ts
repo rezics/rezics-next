@@ -19,7 +19,7 @@ const WRITE_RATE_OVERRIDES = JSON.stringify({
 const READ_SCOPES = ['account:read', 'board:read', 'post:read', 'realm:read', 'thread:read'] as const;
 
 function personaScopes(...actions: string[]): string[] {
-  return [...new Set([...READ_SCOPES, ...actions])].sort();
+  return [...new Set([...READ_SCOPES, 'account:update', ...actions])].sort();
 }
 
 export type NotificationFixture = {
@@ -467,15 +467,24 @@ export async function createNotificationFixture(): Promise<NotificationFixture> 
         await setMemberRecord(system, protectedBoard.realmId, account, currentNow, member);
       },
       async setPreference(account, kind, allowed) {
-        const accountRoute = route(account.id);
-        await system.database.pool.query(
-          `INSERT INTO access.account_preferences
-             (route,account_id,spoiler_level,suitability,version,shelf,notifications)
-           VALUES ($1,$2,0,'show',1,'{}'::jsonb,jsonb_build_object($3::text,$4::boolean))
-           ON CONFLICT (route,account_id) DO UPDATE SET
-             notifications=access.account_preferences.notifications || jsonb_build_object($3::text,$4::boolean),
-             version=access.account_preferences.version+1`,
-          [accountRoute, account.id, kind, allowed],
+        const path = `/v1/accounts/${account.id}/preferences`;
+        const current = await api<{ version: number }>(system, account, 'GET', path);
+        await expectStatus(current.response, 200, 'Notification preference read');
+        if (!current.value) throw new Error('Notification preferences response is missing its version');
+        const changed = await api(
+          system,
+          account,
+          'PATCH',
+          path,
+          { expectedVersion: current.value.version, notifications: { [kind]: allowed } },
+          randomUUID(),
+        );
+        // Accounts rejects attempts to disable mandatory outcomes. Exercise that
+        // contract rather than storing a preference the public API cannot write.
+        await expectStatus(
+          changed.response,
+          kind === 'moderation_decision' ? 400 : 200,
+          'Notification preference write',
         );
       },
       async setAccountState(account, state) {

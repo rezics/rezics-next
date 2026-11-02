@@ -71,7 +71,7 @@ export async function replyNoticeFixture() {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
     );
-    const value = await response.json();
+    const value = response.status === 204 ? null : await response.json();
     return { status: response.status, value };
   }
   async function thread(author = accounts.recipient, visibility: 'published' | 'draft' = 'published', board = boardId) {
