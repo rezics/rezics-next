@@ -313,16 +313,24 @@ admission/debit/cleanup commit replies, expired admission, failed effect rollbac
 fresh-native replacement, refusal to evict an unspent custodian, exact actual
 owner-query revocation, and four full cohome slots.
 
-The preceding source compiler `bun run --cwd services/kernel typecheck --emit-schema=semantic`
-ran on compiler host b against source commit b7466413b4 and exited 2. Its first
-reported error was `identity-terminal-closure-delete-empty-slot.sql(2,52): error
-reylo3: The parameter $2 appears more than once`; the remaining diagnostics were
-the same repeated-parameter defect for `$1` and `$2`. The query now projects each
-parameter once through a typed input CTE. That source invocation was not rerun. A new compiler receipt for the substantively
-changed maintenance source will replace this paragraph when it terminates. The compiler
-reported 237.723 seconds command time, 327.429 CPU seconds and 6947 MiB peak
-memory. It did not reach construct or schema emission. No passing typing or
-product completion is claimed.
+The sole permitted compiler for this changed source,
+`bun run --cwd services/kernel typecheck --emit-schema=semantic`, ran from the
+worktree root at source commit `c6aa69596da467c1aa583c2e6129c581c7ae6aae` with the
+supported placement. Its actual foreground session terminated with exit 75 and:
+
+```text
+remote-check: retrying transport failure on b with code 75
+error: script "typecheck" exited with code 75
+```
+
+No terminal compiler diagnostics or successful typing receipt were returned, and
+no generated snapshot change was returned to the worktree. The Semantic snapshot
+contains the authored forward DDL. Typing remains unverified; the prior typed-CTE
+correction has no passing receipt either. No second compiler, transport repair,
+native/unit/growth/full acceptance or other check was started. The transport
+failure blocks required typing. Independently, the exact Core executor operands
+and owned compositions listed above remain unresolved; this source is not
+whole-feature or Goal completion.
 
 ## Reference sources
 
