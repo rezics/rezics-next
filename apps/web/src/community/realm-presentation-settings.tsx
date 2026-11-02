@@ -701,11 +701,7 @@ export function RealmAppearanceSettings({
               <details className="space-y-3">
                 <summary>{m.realm_appearance_current()}</summary>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <ImagePreview
-                    key={imagePreviewKey(snapshot.avatar)}
-                    image={snapshot.avatar}
-                    title={snapshot.title}
-                  />
+                  <ImagePreview key={imagePreviewKey(snapshot.avatar)} image={snapshot.avatar} title={snapshot.title} />
                   <ImagePreview
                     key={imagePreviewKey(snapshot.banner)}
                     image={snapshot.banner}
