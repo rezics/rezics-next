@@ -8,17 +8,7 @@ test('starts Web Storybook on the requested port and a loopback host', () => {
     kind: 'storybook',
     command: 'storybook',
     cwd: roots.web,
-    args: [
-      'dev',
-      '--config-dir',
-      '.storybook',
-      '--port',
-      '16497',
-      '--exact-port',
-      '--ci',
-      '--host',
-      '127.0.0.1',
-    ],
+    args: ['dev', '--config-dir', '.storybook', '--port', '16497', '--exact-port', '--ci', '--host', '127.0.0.1'],
   });
 });
 
