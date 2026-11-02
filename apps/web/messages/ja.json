@@ -4390,5 +4390,7 @@
   "ctx_reader_rule": "ルール {number}",
   "ctx_reader_rule_reference": "ルール {number} の技術参照",
   "ctx_reader_property_key": "正確なプロパティキー",
-  "ctx_reader_no_defaults": "既定のルールは提供されていません。"
+  "ctx_reader_no_defaults": "既定のルールは提供されていません。",
+  "library_entries_first_page": "最初のページ",
+  "library_entries_page_empty": "このページに追跡中の項目は表示されていません。"
 }

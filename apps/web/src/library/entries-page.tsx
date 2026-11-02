@@ -1,226 +1,27 @@
 import { useCallback, useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
-import { ToggleGroup, ToggleGroupItem } from '@rezics/ui/shadcn/toggle-group';
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { EntryRestoreFeedback, EntryUndoForm } from './entry-undo';
 import { ContinueSection, useContinueRefresh } from './continue';
 import { LibraryNavigation } from './library-nav';
 import type { LibraryNavigationRead } from './pins-read';
 import { useCurrentLibraryNavigation } from './pins-current';
 import { readContinueEntries, type ContinueEntry, type ContinueView } from './continue-read';
-import type {
-  LibraryEntryStateWrite,
-  LibraryRestoreInput,
-  LibraryRestoreResult,
-  PersonalLibraryView,
-} from './entries-read';
+import type { LibraryRestoreInput, LibraryRestoreResult, PersonalLibraryView } from './entries-read';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import {
-  shelfHref,
-  shelfSort,
-  type ShelfSort,
-  shelfLayouts,
-  shelfSizes,
-  type ShelfLayout,
-  type ShelfSize,
-  type ShelfDisplay,
-} from './shelf-params';
+import { shelfHref, shelfSort, type ShelfDisplay } from './shelf-params';
 import { ShelfEntries } from './shelf-view';
-import { ShelfColumnsControl } from './shelf-columns';
-import { shelfMutationLease, useHydrated, type ShelfMutationLease } from './shelf-rows';
+import { DisplayControls, SortControls, EntriesFirstPage } from './entries-current';
+import { shelfMutationLease, type ShelfMutationLease } from './shelf-rows';
 import { LabelShelfEntries } from './shelf-view';
 import type { LabelShelfPageData } from './label-shelf-read';
 import { SubjectLabelNotice } from './subject-labels.tsx';
 import { ShelfTypes } from './shelf-types';
 
 type Display = ShelfDisplay;
-function layoutLabel(layout: ShelfLayout): string {
-  return layout === 'grid'
-    ? m.library_layout_grid()
-    : layout === 'list'
-      ? m.library_layout_list()
-      : m.library_layout_table();
-}
-function sizeLabel(size: ShelfSize): string {
-  return size === 's' ? m.library_size_small() : size === 'm' ? m.library_size_medium() : m.library_size_large();
-}
-function DisplayControls({
-  state,
-  type,
-  locale,
-  display,
-  label,
-  sort,
-  cursor,
-  filterSort,
-  tableAvailable,
-  isCurrent,
-}: {
-  state?: LibraryEntryStateWrite;
-  type?: string;
-  locale: string;
-  display: Display;
-  label?: string;
-  sort?: ShelfSort;
-  filterSort?: ShelfSort;
-  cursor?: string;
-  tableAvailable?: boolean;
-  isCurrent?: () => boolean;
-}) {
-  const hydrated = useHydrated();
-  const navigate = useNavigate();
-  const typeSearch = type ? { type } : {};
-  const stateSearch = { ...typeSearch, ...(state ? { state } : {}), ...sort, ...(cursor ? { cursor } : {}) };
-  const labelSearch = label ? { label } : {};
-  if (!hydrated) {
-    const selected = (current: boolean) => buttonVariants({ variant: current ? 'secondary' : 'outline', size: 'sm' });
-    return (
-      <div className="flex flex-wrap items-center gap-4">
-        <nav aria-label={m.library_layout()} className="flex gap-1">
-          {shelfLayouts.map((layout) => (
-            <a
-              key={layout}
-              href={shelfHref(locale, { ...stateSearch, ...display, layout, ...labelSearch })}
-              aria-current={display.layout === layout ? 'page' : undefined}
-              className={`${selected(display.layout === layout)}${layout === 'table' ? ' max-sm:hidden' : ''}`}
-            >
-              {layoutLabel(layout)}
-            </a>
-          ))}
-        </nav>
-        {display.layout === 'grid' ? (
-          <nav aria-label={m.library_size()} className="flex gap-1">
-            {shelfSizes.map((size) => (
-              <a
-                key={size}
-                href={shelfHref(locale, { ...stateSearch, ...display, size, ...labelSearch })}
-                aria-current={display.size === size ? 'page' : undefined}
-                className={selected(display.size === size)}
-              >
-                {sizeLabel(size)}
-              </a>
-            ))}
-          </nav>
-        ) : null}
-        {state ? (
-          <a
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            href={shelfHref(locale, { ...typeSearch, ...filterSort, ...display, ...labelSearch })}
-          >
-            {m.library_clear_state()}
-          </a>
-        ) : null}
-      </div>
-    );
-  }
-  return (
-    <div className="flex flex-wrap items-center gap-4">
-      <ToggleGroup
-        aria-label={m.library_layout()}
-        value={[display.layout]}
-        onValueChange={(values) => {
-          const layout = values[0] as ShelfLayout | undefined;
-          if (layout && (isCurrent?.() ?? true))
-            void navigate({
-              to: '/library',
-              search: (previous) => ({ ...previous, ...stateSearch, ...labelSearch, ...display, layout }),
-            });
-        }}
-        variant="outline"
-      >
-        {shelfLayouts.map((layout) => (
-          <ToggleGroupItem key={layout} value={layout} className={layout === 'table' ? 'max-sm:hidden' : undefined}>
-            {layoutLabel(layout)}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
-      {display.layout === 'table' && !label && tableAvailable ? (
-        <div className="hidden sm:block">
-          <ShelfColumnsControl {...(display.columns ? { value: display.columns } : {})} disabled={!hydrated} />
-        </div>
-      ) : null}
-      {display.layout === 'grid' ? (
-        <ToggleGroup
-          aria-label={m.library_size()}
-          value={[display.size]}
-          onValueChange={(values) => {
-            const size = values[0] as ShelfSize | undefined;
-            if (size && (isCurrent?.() ?? true))
-              void navigate({
-                to: '/library',
-                search: (previous) => ({ ...previous, ...stateSearch, ...labelSearch, ...display, size }),
-              });
-          }}
-          variant="outline"
-        >
-          {shelfSizes.map((size) => (
-            <ToggleGroupItem key={size} value={size}>
-              {sizeLabel(size)}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      ) : null}
-      {state ? (
-        <a
-          className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          href={shelfHref(locale, { ...typeSearch, ...filterSort, ...display, ...labelSearch })}
-        >
-          {m.library_clear_state()}
-        </a>
-      ) : null}
-    </div>
-  );
-}
-
-/** Ordinary URL form works before hydration and resets the keyset when the selected predicate changes. */
-function SortControls({
-  locale,
-  state,
-  type,
-  display,
-  sort,
-}: {
-  locale: string;
-  state?: string;
-  type?: string;
-  display: Display;
-  sort: ShelfSort;
-}) {
-  const entries = useOperation('library_entry.list');
-  const progress = useOperation('progress_session.list');
-  if (!entries || !progress) return null;
-  return (
-    <form method="get" action={`/${locale}/library`} className="flex flex-wrap items-end gap-2">
-      {state ? <input type="hidden" name="state" value={state} /> : null}
-      {type ? <input type="hidden" name="type" value={type} /> : null}
-      <input type="hidden" name="layout" value={display.layout} />
-      <input type="hidden" name="size" value={display.size} />
-      {display.columns ? <input type="hidden" name="columns" value={display.columns} /> : null}
-      <label className="grid gap-1 text-sm">
-        {m.library_sort_by()}
-        <select name="orderBy" defaultValue={sort.orderBy} className="rounded-md border bg-background p-2">
-          <option value="lastActivity">{m.library_sort_activity()}</option>
-          <option value="createdAt">{m.library_sort_created()}</option>
-          <option value="finishedAt">{m.library_sort_finished()}</option>
-        </select>
-      </label>
-      <label className="grid gap-1 text-sm">
-        {m.library_sort_direction()}
-        <select name="direction" defaultValue={sort.direction} className="rounded-md border bg-background p-2">
-          <option value="desc">{m.library_sort_newest()}</option>
-          <option value="asc">{m.library_sort_oldest()}</option>
-        </select>
-      </label>
-      <Button type="submit" variant="outline">
-        {m.library_sort_apply()}
-      </Button>
-    </form>
-  );
-}
 
 export function PersonalLibraryPage({
   page,
@@ -286,6 +87,7 @@ export function PersonalLibraryPage({
   const filterSort = page.sortExplicit ? sort : undefined;
   const effectiveCursor = page.cursorReset ? undefined : cursor;
   const typeSearch = page.type ? { type: page.type } : {};
+  const firstPage = { ...typeSearch, ...(page.state ? { state: page.state } : {}), ...sort, ...display };
   const clearTypeHref = shelfHref(locale, { ...(page.state ? { state: page.state } : {}), ...sort, ...display });
   const typeLabel = page.typeLabel ?? m.library_type_unnamed();
   const heading = page.state
@@ -361,6 +163,7 @@ export function PersonalLibraryPage({
           {...(page.state ? { state: page.state } : {})}
           display={display}
           sort={sort}
+          {...(isCurrent ? { isCurrent } : {})}
           {...typeSearch}
         />
         <div className="flex flex-wrap items-center gap-2">
@@ -386,15 +189,18 @@ export function PersonalLibraryPage({
           </p>
         ) : null}
         {page.readState ? (
-          <p role={page.readState === 'preparing' ? 'status' : 'alert'}>
-            {page.readState === 'closed'
-              ? m.platform_closed_message()
-              : page.readState === 'denied'
-                ? m.library_sort_denied()
-                : page.readState === 'preparing'
-                  ? m.library_sort_preparing()
-                  : m.error_message()}
-          </p>
+          <div className="flex flex-col items-start gap-3">
+            <p role={page.readState === 'preparing' ? 'status' : 'alert'}>
+              {page.readState === 'closed'
+                ? m.platform_closed_message()
+                : page.readState === 'denied'
+                  ? m.library_sort_denied()
+                  : page.readState === 'preparing'
+                    ? m.library_sort_preparing()
+                    : m.error_message()}
+            </p>
+            <EntriesFirstPage locale={locale} view={firstPage} />
+          </div>
         ) : (
           <ShelfEntries
             key={`${page.type ?? ''}:${page.state ?? 'all'}:${sort.orderBy}:${sort.direction}:${effectiveCursor ?? ''}`}
@@ -409,30 +215,39 @@ export function PersonalLibraryPage({
             locale={locale}
             {...display}
             empty={
-              <ShelfEmpty
-                kind={page.type || page.state ? 'no-match' : 'library'}
-                title={
-                  page.type
-                    ? m.library_type_empty_title({ type: typeLabel })
-                    : page.state
-                      ? m.library_filter_empty_title({ status: page.stateLabel ?? m.library_other() })
-                      : m.library_empty_title()
-                }
-                description={
-                  page.type || page.state ? m.library_filter_empty_description() : m.library_empty_description()
-                }
-                actions={
-                  page.type ? (
-                    <a href={clearTypeHref} className={buttonVariants({ variant: 'outline' })}>
-                      {m.library_type_clear()}
-                    </a>
-                  ) : (
-                    <a href={`/${locale}/search`} className={buttonVariants({ variant: 'outline' })}>
-                      {m.library_browse()}
-                    </a>
-                  )
-                }
-              />
+              effectiveCursor || page.next ? (
+                <Empty role="status">
+                  <EmptyHeader>
+                    <EmptyTitle>{m.library_entries_page_empty()}</EmptyTitle>
+                  </EmptyHeader>
+                  <EntriesFirstPage locale={locale} view={firstPage} />
+                </Empty>
+              ) : (
+                <ShelfEmpty
+                  kind={page.type || page.state ? 'no-match' : 'library'}
+                  title={
+                    page.type
+                      ? m.library_type_empty_title({ type: typeLabel })
+                      : page.state
+                        ? m.library_filter_empty_title({ status: page.stateLabel ?? m.library_other() })
+                        : m.library_empty_title()
+                  }
+                  description={
+                    page.type || page.state ? m.library_filter_empty_description() : m.library_empty_description()
+                  }
+                  actions={
+                    page.type ? (
+                      <a href={clearTypeHref} className={buttonVariants({ variant: 'outline' })}>
+                        {m.library_type_clear()}
+                      </a>
+                    ) : (
+                      <a href={`/${locale}/search`} className={buttonVariants({ variant: 'outline' })}>
+                        {m.library_browse()}
+                      </a>
+                    )
+                  }
+                />
+              )
             }
           />
         )}

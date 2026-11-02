@@ -4391,5 +4391,7 @@
   "ctx_reader_rule": "规则 {number}",
   "ctx_reader_rule_reference": "规则 {number} 的技术引用",
   "ctx_reader_property_key": "完整属性键",
-  "ctx_reader_no_defaults": "未提供默认规则。"
+  "ctx_reader_no_defaults": "未提供默认规则。",
+  "library_entries_first_page": "第一页",
+  "library_entries_page_empty": "此页没有显示任何追踪项目。"
 }

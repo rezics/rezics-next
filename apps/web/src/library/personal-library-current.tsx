@@ -5,6 +5,7 @@ import { useOperation } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
 import { PersonalLibraryPage } from './entries-page';
+import { EntriesFirstPage } from './entries-current';
 import { shelfMutationLease, type ShelfMutationLease } from './shelf-rows';
 import {
   personalLibraryAddress,
@@ -388,7 +389,16 @@ function PersonalLibraryRead({
     };
   }, [origin, accepted, continueCurrent]);
   if (!accepted)
-    return <p role="status">{query.isError || query.data ? m.error_message() : m.library_sort_preparing()}</p>;
+    return (
+      <div className="flex flex-col items-start gap-3">
+        <p role={query.isError || query.data ? 'alert' : 'status'}>
+          {query.isError || query.data ? m.error_message() : m.library_sort_preparing()}
+        </p>
+        {query.isError || query.data ? (
+          <EntriesFirstPage locale={address.locale} view={{ ...input, ...display }} />
+        ) : null}
+      </div>
+    );
   return (
     <div hidden={hydrated && !regionAdmitted('entries') && !regionAdmitted('continue')}>
       <PersonalShelfOrigin.Provider value={pageOrigin}>

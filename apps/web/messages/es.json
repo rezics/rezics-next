@@ -4390,5 +4390,7 @@
   "ctx_reader_rule": "Regla {number}",
   "ctx_reader_rule_reference": "Referencia técnica de la regla {number}",
   "ctx_reader_property_key": "Clave exacta de la propiedad",
-  "ctx_reader_no_defaults": "No se han proporcionado reglas predeterminadas."
+  "ctx_reader_no_defaults": "No se han proporcionado reglas predeterminadas.",
+  "library_entries_first_page": "Primera página",
+  "library_entries_page_empty": "No se muestran entradas seguidas en esta página."
 }

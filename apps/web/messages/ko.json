@@ -4390,5 +4390,7 @@
   "ctx_reader_rule": "규칙 {number}",
   "ctx_reader_rule_reference": "규칙 {number}의 기술 참조",
   "ctx_reader_property_key": "정확한 속성 키",
-  "ctx_reader_no_defaults": "제공된 기본 규칙이 없습니다."
+  "ctx_reader_no_defaults": "제공된 기본 규칙이 없습니다.",
+  "library_entries_first_page": "첫 페이지",
+  "library_entries_page_empty": "이 페이지에 표시된 추적 항목이 없습니다."
 }

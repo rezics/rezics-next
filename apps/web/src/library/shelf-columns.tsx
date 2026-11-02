@@ -5,7 +5,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useNavigate } from '@tanstack/react-router';
 import { useId } from 'react';
 import { m } from '../paraglide/messages.js';
-import { shelfColumnIds, shelfColumns, type PersonalShelfColumnId } from './shelf-params';
+import { shelfColumnIds, shelfColumns, type ShelfSearch, type PersonalShelfColumnId } from './shelf-params';
 
 export function shelfColumnLabel(id: PersonalShelfColumnId): string {
   switch (id) {
@@ -27,18 +27,24 @@ export function shelfColumnLabel(id: PersonalShelfColumnId): string {
 }
 
 /** The personal table's existing fields, using the same display URL as layout and size. */
-export function ShelfColumnsControl({ value, disabled }: { value?: string; disabled: boolean }) {
+export function ShelfColumnsControl({
+  value,
+  disabled,
+  view,
+  isCurrent,
+}: {
+  value?: string;
+  disabled: boolean;
+  view: ShelfSearch;
+  isCurrent?: () => boolean;
+}) {
   const navigate = useNavigate();
   const id = useId();
   const chosen = (shelfColumns(value) ?? shelfColumnIds.join(',')).split(',');
   const change = (columns: string | undefined) => {
-    void navigate({
-      to: '/library',
-      search: (previous) => {
-        const { columns: _columns, ...rest } = previous;
-        return { ...rest, ...(columns ? { columns } : {}) };
-      },
-    });
+    if (disabled || !(isCurrent?.() ?? true)) return;
+    const { columns: _columns, ...rest } = view;
+    void navigate({ to: '/library', search: { ...rest, ...(columns ? { columns } : {}) } });
   };
   return (
     <Menu

@@ -4390,5 +4390,7 @@
   "ctx_reader_rule": "規則 {number}",
   "ctx_reader_rule_reference": "規則 {number} 的技術參照",
   "ctx_reader_property_key": "完整屬性鍵",
-  "ctx_reader_no_defaults": "未提供預設規則。"
+  "ctx_reader_no_defaults": "未提供預設規則。",
+  "library_entries_first_page": "第一頁",
+  "library_entries_page_empty": "此頁沒有顯示任何追蹤項目。"
 }

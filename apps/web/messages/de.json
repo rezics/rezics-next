@@ -4390,5 +4390,7 @@
   "ctx_reader_rule": "Regel {number}",
   "ctx_reader_rule_reference": "Technische Referenz für Regel {number}",
   "ctx_reader_property_key": "Exakter Eigenschaftsschlüssel",
-  "ctx_reader_no_defaults": "Es wurden keine Standardregeln bereitgestellt."
+  "ctx_reader_no_defaults": "Es wurden keine Standardregeln bereitgestellt.",
+  "library_entries_first_page": "Erste Seite",
+  "library_entries_page_empty": "Auf dieser Seite werden keine verfolgten Einträge angezeigt."
 }

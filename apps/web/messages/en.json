@@ -4391,5 +4391,7 @@
   "ctx_reader_rule": "Rule {number}",
   "ctx_reader_rule_reference": "Technical reference for rule {number}",
   "ctx_reader_property_key": "Exact property key",
-  "ctx_reader_no_defaults": "No default rules are supplied."
+  "ctx_reader_no_defaults": "No default rules are supplied.",
+  "library_entries_first_page": "First page",
+  "library_entries_page_empty": "No tracked entries are shown on this page."
 }
