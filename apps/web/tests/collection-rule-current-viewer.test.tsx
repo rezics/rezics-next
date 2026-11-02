@@ -115,6 +115,12 @@ async function mount(initial: Partial<Props> = {}) {
     async click(name: string) {
       await act(async () => this.button(name).click());
     },
+    async editPrefix(value: string) {
+      const input = host.querySelector<HTMLInputElement>('input[id$="-label-search"]')!;
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      await act(async () => input.dispatchEvent(new window.Event('input', { bubbles: true }) as unknown as Event));
+      return input;
+    },
     async changeLabel() {
       const select = [...host.querySelectorAll('select')].find((node) => node.value === 'alice-label')!;
       expect(select).toBeDefined();
@@ -371,4 +377,73 @@ describe('Private rule editor data and asynchronous work stay with the originati
       await ui.close();
     }
   });
+});
+
+
+test('rule label lookup normalizes a copy, corrects invalid prefixes, and retains the unsaved rule without CSRF', async () => {
+  const reads: string[] = [];
+  const writes: RuleWrite[] = [];
+  const ui = await mount({
+    csrfToken: '',
+    labels: async (q, cursor) => {
+      reads.push(q);
+      return { viewerId: 'alice', address: { q, cursor: cursor ?? null }, choices: ready().choices };
+    },
+    save: async (value) => { writes.push(value); return { ok: false, reason: 'invalid' }; },
+  });
+  try {
+    await ui.changeLabel();
+    for (const raw of ['  e\u0301\u00a0 x  ', '😀'.repeat(100), '   ']) {
+      const input = await ui.editPrefix(raw);
+      await ui.click(m.search_apply());
+      expect(input.value).toBe(raw);
+    }
+    expect(reads).toEqual(['é x', '😀'.repeat(100), '']);
+    for (const raw of ['😀'.repeat(101), 'a\u0001b', 'a\ud800b', ' '.repeat(1001)]) {
+      const input = await ui.editPrefix(raw);
+      expect(input.value).toBe(raw);
+      expect(input.getAttribute('aria-invalid')).toBe('true');
+      const error = ui.host.querySelector(`[id="${input.getAttribute('aria-describedby')}"]`)!;
+      expect(error.getAttribute('role')).toBe('alert');
+      await ui.click(m.search_apply());
+      expect(reads).toHaveLength(3);
+      expect(ui.host.querySelector('select')!.value).toBe('changed');
+    }
+    await ui.render({ csrfToken: 'csrf-alice' });
+    await ui.submit();
+    expect(writes[0]!.filter).toEqual({ owner: { label: { id: 'changed' } } });
+  } finally { await ui.close(); }
+});
+
+test('raw prefix edits retire choices and cursors, and equal normalized edits cannot revive an old request', async () => {
+  const pending: { q: string; cursor?: string; resolve: (value: RuleChoicePage) => void }[] = [];
+  const ui = await mount({ labels: (q, cursor) => new Promise((resolve) => pending.push({ q, cursor, resolve })) });
+  const reply = async (index: number, q: string, viewerId = 'alice') => {
+    const choices = ready().choices;
+    choices.labels.values = [{ id: 'result', name: 'Fresh result' }];
+    await act(async () => pending[index]!.resolve({ viewerId, address: { q, cursor: null }, choices }));
+  };
+  try {
+    const oldMore = ui.button(m.library_label_more());
+    await ui.editPrefix('é');
+    expect(ui.host.textContent).not.toContain('Changed label');
+    expect(ui.host.contains(oldMore)).toBe(false);
+    await act(async () => oldMore.click());
+    expect(pending).toHaveLength(0);
+    await ui.click(m.search_apply());
+    await ui.editPrefix(' e\u0301 ');
+    await ui.editPrefix('é');
+    await reply(0, 'é');
+    expect(ui.host.textContent).not.toContain('Fresh result');
+    await ui.click(m.search_apply());
+    await reply(1, 'wrong-query');
+    expect(ui.host.textContent).not.toContain('Fresh result');
+    await ui.click(m.search_apply());
+    await reply(2, 'é', 'bob');
+    expect(ui.host.textContent).not.toContain('Fresh result');
+    await ui.click(m.search_apply());
+    await reply(3, 'é');
+    expect(ui.host.textContent).toContain('Fresh result');
+    expect(pending.map(({ q, cursor }) => [q, cursor])).toEqual(Array(4).fill(['é', undefined]));
+  } finally { await ui.close(); }
 });
