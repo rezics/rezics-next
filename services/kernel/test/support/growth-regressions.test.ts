@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { capture, checkGrowth, openGrowthDatabase, settle, type GrowthDatabase } from './growth.ts';
+import { capture, checkGrowth, openGrowthDatabase, type GrowthDatabase } from './growth.ts';
 import { captureWarmup } from './growth-capture.ts';
 import { statementOccurrences } from './growth-report.ts';
 import { seed, type Population } from './growth-seed.ts';
@@ -44,23 +44,29 @@ afterAll(async () => {
 
 test('a warmup capture is allowed and its writes settle before the first measured repetition', async () => {
   let id = 10_000;
+  const vacuumBeforeWarmup = new Map<number, number>();
   await checkGrowth(db, {
     name: 'nested warmup capture settles',
     scales: [1, 4, 16],
     repetitions: 1,
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
     grow: async () => {},
-    warmup: async (database) => {
+    warmup: async (database, scale) => {
+      const before = await cloneAdmin.query<{ vacuumCount: number }>(
+        `SELECT vacuum_count::integer AS "vacuumCount" FROM pg_stat_user_tables WHERE relid=$1::regclass`,
+        [table],
+      );
+      vacuumBeforeWarmup.set(scale, before.rows[0]!.vacuumCount);
       await capture(database, async () => {
         await clonePool.query(`INSERT INTO ${table} VALUES ($1, repeat('w', 100))`, [id++]);
       });
     },
-    operation: async () => {
-      const result = await cloneAdmin.query<{ pages: number; visible: number }>(
-        `SELECT relpages AS pages,relallvisible AS visible FROM pg_class WHERE oid=$1::regclass`,
+    operation: async (_database, scale) => {
+      const result = await cloneAdmin.query<{ vacuumCount: number }>(
+        `SELECT vacuum_count::integer AS "vacuumCount" FROM pg_stat_user_tables WHERE relid=$1::regclass`,
         [table],
       );
-      expect(result.rows[0]!.visible).toBe(result.rows[0]!.pages);
+      expect(result.rows[0]!.vacuumCount).toBeGreaterThanOrEqual(vacuumBeforeWarmup.get(scale)! + 1);
     },
   });
 });
@@ -156,33 +162,38 @@ test('captureWarmup cannot replace an active measured parent or enter nested chi
 
 test('writes through a connection to another database settle there, not by relation name in the growth database', async () => {
   let id = 20_000;
+  const vacuumBeforeWarmup = new Map<number, number>();
   await checkGrowth(db, {
     name: 'other database write targets',
     scales: [1, 4, 16],
     repetitions: 2,
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
     grow: async () => {},
-    warmup: async () => {
-      await clonePool.query(`INSERT INTO ${table} VALUES ($1, 'warmup')`, [id++]);
-    },
-    operation: async () => {
-      const state = await cloneAdmin.query<{ pages: number; visible: number }>(
-        `SELECT relpages AS pages,relallvisible AS visible FROM pg_class WHERE oid=$1::regclass`,
+    warmup: async (_database, scale) => {
+      const before = await cloneAdmin.query<{ vacuumCount: number }>(
+        `SELECT vacuum_count::integer AS "vacuumCount" FROM pg_stat_user_tables WHERE relid=$1::regclass`,
         [table],
       );
-      expect(state.rows[0]!.visible).toBe(state.rows[0]!.pages);
+      vacuumBeforeWarmup.set(scale, before.rows[0]!.vacuumCount);
+      await clonePool.query(`INSERT INTO ${table} VALUES ($1, 'warmup')`, [id++]);
+    },
+    operation: async (_database, scale, repetition) => {
+      const state = await cloneAdmin.query<{ vacuumCount: number }>(
+        `SELECT vacuum_count::integer AS "vacuumCount" FROM pg_stat_user_tables WHERE relid=$1::regclass`,
+        [table],
+      );
+      expect(state.rows[0]!.vacuumCount).toBeGreaterThanOrEqual(vacuumBeforeWarmup.get(scale)! + repetition + 1);
       await clonePool.query(`INSERT INTO ${table} VALUES ($1, 'other database')`, [id++]);
     },
   });
-  const stats = await cloneAdmin.query<{ pages: number; visible: number }>(
-    `SELECT relpages AS pages,relallvisible AS visible FROM pg_class WHERE oid=$1::regclass`,
-    [table],
-  );
-  expect(stats.rows[0]!.visible).toBe(stats.rows[0]!.pages);
 });
 
 test('seed settles an admin pool handed out by openPool', async () => {
   const admin = db.openPool({ max: 2 });
+  const before = await db.admin.query<{ vacuumCount: number }>(
+    `SELECT vacuum_count::integer AS "vacuumCount" FROM pg_stat_user_tables WHERE relid=$1::regclass`,
+    [table],
+  );
   await seed(
     { pool: admin, admin },
     {
@@ -192,55 +203,36 @@ test('seed settles an admin pool handed out by openPool', async () => {
     },
     { from: 0, to: 8 },
   );
-  const result = await db.admin.query<{ count: string; pages: number; visible: number }>(
+  const result = await db.admin.query<{ count: string; pages: number; vacuumCount: number }>(
     `SELECT (SELECT count(*)::text FROM ${table} WHERE id >= 40000) AS count,
-            c.relpages AS pages,c.relallvisible AS visible FROM pg_class c WHERE c.oid=$1::regclass`,
+            c.relpages AS pages,s.vacuum_count::integer AS "vacuumCount"
+       FROM pg_class c JOIN pg_stat_user_tables s ON s.relid=c.oid WHERE c.oid=$1::regclass`,
     [table],
   );
   expect(result.rows[0]!.count).toBe('8');
   expect(result.rows[0]!.pages).toBeGreaterThan(0);
-  expect(result.rows[0]!.visible).toBe(result.rows[0]!.pages);
+  expect(result.rows[0]!.vacuumCount).toBeGreaterThanOrEqual(before.rows[0]!.vacuumCount + 1);
 });
 
 test('seed settles a redirected database handed out by openPool', async () => {
+  const before = await cloneAdmin.query<{ vacuumCount: number }>(
+    `SELECT vacuum_count::integer AS "vacuumCount" FROM pg_stat_user_tables WHERE relid=$1::regclass`,
+    [table],
+  );
   const population: Population = {
     name: 'external pool seed',
     hotPartition: 4,
     rows: ({ ordinal }) => ({ [table]: [{ id: 30_000 + ordinal, payload: 'seeded' }] }),
   };
   await seed({ pool: clonePool, admin: clonePool }, population, { from: 0, to: 8 });
-  const rows = await cloneAdmin.query<{ count: string; pages: number; visible: number }>(
+  const rows = await cloneAdmin.query<{ count: string; vacuumCount: number }>(
     `SELECT (SELECT count(*)::text FROM ${table} WHERE id >= 30000) AS count,
-            c.relpages AS pages,c.relallvisible AS visible FROM pg_class c WHERE c.oid=$1::regclass`,
+            s.vacuum_count::integer AS "vacuumCount"
+       FROM pg_class c JOIN pg_stat_user_tables s ON s.relid=c.oid WHERE c.oid=$1::regclass`,
     [table],
   );
   expect(rows.rows[0]!.count).toBe('8');
-  expect(rows.rows[0]!.visible).toBe(rows.rows[0]!.pages);
-});
-
-test('a missing relation is an infrastructure error naming its database and relation', async () => {
-  await expect(settle(db, { relations: [`${schema}.missing`] })).rejects.toMatchObject({
-    name: 'GrowthSettleInfrastructureError',
-    message: expect.stringContaining(`database ${new URL(db.url).pathname.slice(1)} relation ${schema}.missing`),
-  });
-});
-
-test('the transaction horizon orders full xids across an epoch wrap', async () => {
-  const result = await db.admin.query<{ older: boolean }>(
-    `WITH sample AS (
-       SELECT 4294967300::numeric AS current_xid,
-              4294967294::numeric AS backend_xid,
-              4294967297::numeric AS horizon
-     ), xid_parts AS (
-       SELECT current_xid - mod(current_xid, 4294967296) AS epoch,
-              mod(current_xid, 4294967296) AS low,
-              backend_xid,horizon
-       FROM sample
-     )
-     SELECT epoch + backend_xid - CASE WHEN backend_xid > low THEN 4294967296 ELSE 0 END < horizon AS older
-       FROM xid_parts`,
-  );
-  expect(result.rows[0]!.older).toBe(true);
+  expect(rows.rows[0]!.vacuumCount).toBeGreaterThanOrEqual(before.rows[0]!.vacuumCount + 1);
 });
 
 test('a measured backend holding its transaction across repetitions fails immediately with commit guidance', async () => {

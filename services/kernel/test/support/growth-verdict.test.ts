@@ -438,7 +438,7 @@ test('established block and statement growth fail with GrowthBoundError under st
   }
 }, 120_000);
 
-test('settle failures are recorded, later settles are bounded, blocks become inconclusive, and statements still fail', async () => {
+test('a held snapshot does not hide measured rows and blocks or create settle failures', async () => {
   await db.admin.query(`TRUNCATE ${settlingRows}`);
   let holder: pg.Client | undefined;
   const profilePath = join(tempDirectory, 'settle-profile.jsonl');
@@ -486,27 +486,17 @@ test('settle failures are recorded, later settles are bounded, blocks become inc
     expect(captured.value).toBeInstanceOf(GrowthBoundError);
     const error = captured.value as GrowthBoundError;
     expect(error.message).toContain('statements violates constant growth bound');
+    expect(error.message).toContain('blocks violates logarithmic growth bound');
     const measuredSamples = error.samples as unknown as readonly ReportSample[];
     expect(measuredSamples).toHaveLength(3);
-    expect(measuredSamples[0]!.settleFailures).toBeUndefined();
-    expect(measuredSamples[1]!.settleFailures?.length).toBeGreaterThan(0);
-    expect(measuredSamples[2]!.settleFailures?.length).toBeGreaterThan(0);
-    expect(measuredSamples[2]!.seeding.vacuumMs).toBeLessThan(2000);
-    expect(captured.lines).toHaveLength(1);
-    expect(reviewJson(captured.lines[0]!)).toMatchObject({
-      check: 'settle and statements evidence',
-      metric: 'blocks',
-      reason: 'settle',
-      settleFailures: expect.arrayContaining([
-        expect.objectContaining({ scale: 4 }),
-        expect.objectContaining({ scale: 16 }),
-      ]),
-    });
+    expect(measuredSamples.every(({ settleFailures }) => !settleFailures?.length)).toBe(true);
+    expect(
+      measuredSamples.every(({ repetitions }) => repetitions[0]!.rows > 0 && repetitions[0]!.blocks > 0),
+    ).toBe(true);
+    expect(captured.lines.map(reviewJson).some(({ metric }) => metric === 'blocks')).toBe(true);
+    expect(captured.lines.map(reviewJson).some(({ reason }) => reason === 'settle')).toBe(false);
     const profileLine = JSON.parse((await readFile(profilePath, 'utf8')).trim());
-    expect(profileLine).toMatchObject({
-      verdicts: { blocks: { outcome: 'inconclusive', reason: 'settle' }, statements: { outcome: 'violation' } },
-      settleFailures: [[], expect.any(Array), expect.any(Array)],
-    });
+    expect(profileLine.settleFailures).toEqual([[], [], []]);
   } finally {
     if (holder) {
       await holder.query('ROLLBACK').catch(() => {});
@@ -517,7 +507,8 @@ test('settle failures are recorded, later settles are bounded, blocks become inc
   }
 }, 120_000);
 
-test('seed catches its own settle infrastructure failure and emits one settle review', async () => {
+test('seed succeeds with an unrelated held snapshot and emits no settle review', async () => {
+  await db.admin.query(`TRUNCATE ${seedRows}`);
   const holder = new pg.Client({ connectionString: databaseUrl, application_name: 'growth-seed-snapshot' });
   await holder.connect();
   await holder.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
@@ -532,10 +523,8 @@ test('seed catches its own settle infrastructure failure and emits one settle re
       seed({ pool: db.pool, admin: db.admin }, population, { from: 0, to: 1 }),
     );
     expect(captured.value).toBeUndefined();
-    expect(captured.lines).toHaveLength(1);
-    const review = reviewJson(captured.lines[0]!);
-    expect(review).toMatchObject({ check: 'seed', metric: 'settle', reason: 'settle', rule: 'seed' });
-    expect((review.settleFailures as string[])[0]!.length).toBeLessThanOrEqual(2000);
+    expect(captured.lines).toHaveLength(0);
+    expect((await holder.query(`SELECT count(*)::integer AS count FROM ${seedRows}`)).rows[0]!.count).toBe(0);
     const result = await db.admin.query(`SELECT id FROM ${seedRows} WHERE id=1`);
     expect(result.rowCount).toBe(1);
   } finally {
