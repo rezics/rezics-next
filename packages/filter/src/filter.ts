@@ -25,16 +25,21 @@ export type FilterDocument =
   | { readonly saved: string }
   | OwnerLeaf;
 
+/** An exact native question identity. Definition revisions are resolved by the server. */
+export type RatingQuestionLeaf = { readonly ratingQuestion: { readonly id: string } };
+
 /** Opt-in discovery grammar. Catalogue/saved consumers retain FilterDocument. */
 export type DiscoveryFilterDocument =
   | { readonly and: readonly DiscoveryFilterDocument[] }
   | { readonly or: readonly DiscoveryFilterDocument[] }
   | { readonly not: DiscoveryFilterDocument }
   | { readonly kind: { readonly in: readonly string[] } }
+  | RatingQuestionLeaf
   | Exclude<FilterDocument, { readonly and: unknown } | { readonly or: unknown } | { readonly not: unknown }>;
 
 function catalogueOnly(filter: DiscoveryFilterDocument): FilterDocument {
   if ('kind' in filter) throw new FilterError('invalid_request', '/kind', 'unknown_field');
+  if ('ratingQuestion' in filter) throw new FilterError('invalid_request', '/ratingQuestion', 'unknown_field');
   if ('and' in filter) return { and: filter.and.map(catalogueOnly) };
   if ('or' in filter) return { or: filter.or.map(catalogueOnly) };
   if ('not' in filter) return { not: catalogueOnly(filter.not) };
@@ -223,6 +228,17 @@ function requiredValue(fields: object, key: string, pointer: string): unknown {
   return ownValue(fields, key, pointer);
 }
 
+function parseRatingQuestion(input: unknown, pointer: string): RatingQuestionLeaf {
+  const fields = record(input, pointer);
+  for (const key of Object.getOwnPropertyNames(fields))
+    if (key !== 'id') fail(appendPointer(pointer, key), 'unknown_field');
+  const idPointer = appendPointer(pointer, 'id');
+  const id = requiredValue(fields, 'id', idPointer);
+  if (typeof id !== 'string') fail(idPointer, 'invalid_type');
+  if (uuidPattern.exec(id)?.[0] !== id) fail(idPointer, 'invalid_format');
+  return { ratingQuestion: { id } };
+}
+
 function parseOwner(input: unknown, pointer: string): OwnerLeaf {
   const fields = record(input, pointer);
   const keys = Object.getOwnPropertyNames(fields);
@@ -343,6 +359,10 @@ function parseDocument(input: unknown, discovery: boolean): DiscoveryFilterDocum
         const inPointer = appendPointer(fieldPointer, 'in');
         return { kind: { in: values(requiredValue(selection, 'in', inPointer), inPointer, false) } };
       }
+      case 'ratingQuestion':
+        if (!discovery) return fail(fieldPointer, 'unknown_field');
+        if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
+        return parseRatingQuestion(ownValue(fields, key, fieldPointer), fieldPointer);
       case 'type': {
         if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
         return { type: { in: parseFacet(ownValue(fields, key, fieldPointer), fieldPointer, false).in } };
@@ -872,6 +892,14 @@ function admitConstructed(
         if (!options.kinds.has(kind))
           reject(appendPointer(inPointer, index), source, 'unsupported', 'unsupported_query');
       return { kind: { in: [...node.kind.in] } };
+    }
+
+    if ('ratingQuestion' in node) {
+      // The request grammar is the only entry point. A saved definition is
+      // parsed by parseFilter before expansion and cannot acquire this operand.
+      if (!options.kinds || source !== undefined)
+        reject(appendPointer(pointer, 'ratingQuestion'), source, 'unsupported', 'unsupported_query');
+      return parseRatingQuestion(node.ratingQuestion, appendPointer(pointer, 'ratingQuestion'));
     }
 
     if ('type' in node) {

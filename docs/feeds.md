@@ -191,8 +191,8 @@ primary candidate in the existing mixed stream.
 Home Space choice reads retain the resolved Space identity on point-read failure so a failed
 revalidation disables that selection; platform closure remains distinct from access denial.
 
-Rating-question Context has an adopted meaning, while its native request surface and
-eligibility readers remain undelivered. It selects one exact native rating-question
+Rating-question Context has an adopted meaning and native witness/eligibility readers, while its public
+request surface and complete all-lane Source integration remain undelivered. It selects one exact native rating-question
 identity. A Subject qualifies when at least one live currently readable review of that
 exact Subject has a currently readable opening revision whose immutable citation names
 the selected question. A review thread requires its own current opening citation and a

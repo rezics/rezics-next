@@ -69,6 +69,16 @@ resource references remain rejected, without recursion. No query-time account se
   Content checks current thread, opening post, board, place, subject reference and Access disclosure. Every Realm
   leaf requires current Realm read and ban checks, including under NOT. Ban is not a public-index predicate or
   public privacy-head fanout. A known-candidate batch alone is not a Realm-to-subject enumeration anchor.
+- Review-backed Context is `{ratingQuestion:{id:UUID}}`, request-only with a server-resolved exact native
+  definition revision. Original `definitions:read` precedes enumeration for every reference, including under
+  NOT or true OR. A Semantic Subject, including a catalogue Agent, requires a live readable review of that
+  exact Subject and a current readable opening revision citing the selected question. Review threads need
+  their own qualifying citation and readable target; posts/replies also need their own disclosure. Accounts,
+  Collections and ordinary discussions have no membership. Private votes, scores, credits, grain and attached
+  reason targets cannot witness membership. See [feeds](feeds.md#native-question-witness-preparation) for the
+  same-primary kind/Space conjunction, independent witness threads, bounded choices and sparse frontier.
+  The closed parser and native resolution bridge are implemented; native population/default feed activation
+  remains unfinished. Existing engine admission rejects the leaf until that branch is installed.
 
 Subject scope meanings do not automatically apply to non-subject kinds. Collection metadata is not its own
 member, Realm/thread/post containment is not the subjects-discussed relation, and Zone metadata is not its page

@@ -12,6 +12,31 @@ The optional `languages` request field is the reader's language chain, in priori
 label choice rule for hit labels, requested descriptions and item fact labels, returning one entry per nonempty map.
 Omitting `languages` keeps every language.
 
+## Review-backed question admission
+
+The mixed request parser now recognizes the closed `{ratingQuestion:{id:UUID}}` leaf. It counts every
+occurrence against the shared tree limits before deduplication. Catalogue and stored/saved definitions
+reject it; clients cannot supply revisions, witnesses or authorization flags. This parser addition does
+not install native mixed-query execution or the feed query parameter. The existing engine compiler rejects
+the leaf explicitly until the native selected-population branch is installed, including under NOT or OR.
+
+`rating-question-condition.ts` exports `resolveRatingQuestionConditions(deps, filter, context)`,
+`assertCurrentRatingQuestionConditions(deps, conditions, context)` and
+`qualifyRatingQuestionConditionWitnesses(deps, conditions, questionId, candidates, context)`.
+Resolution takes the expanded admitted request, reparses a private bounded copy, and resolves every distinct
+question using original Global `definitions:read` before enumeration. Boolean truth never skips a resource.
+The opaque request-bound result retains the complete frozen tree and exact native
+`{kind:'reviewQuestion',question,revision}` keys with canonical decimal revisions. Final assertion repeats
+metadata and authority; qualification delegates to Content's existing native witness reader, at most 160
+positional primary/witness pairs. A refused witness is not complete nonmembership or a complement.
+
+Resolution adds at most 32 native question authority/metadata reads; final assertion repeats those reads.
+Qualification retains Content's native disclosure cost in addition to Source work. No execution budget is
+inferred from the number of leaves or raw feed candidates. These operations must run within the authentic
+original prepared quote. Default Source population, local baseline enrollment, foreign reduction routing,
+retained lifecycle receiving, all-lane feed binding and complete question pricing remain necessary before
+public activation. No substitute Source, observation or unavailable-success lane is introduced.
+
 The approved [public facet discovery contract](../../../../docs/search-facets.md) is the single owner of the
 count-free continuation wire, with types in `facet-discovery-contract.ts`. The public service consumes
 `facet-discovery-runtime.ts`: it admits the entire request, authenticates per-property confidential cursors,
