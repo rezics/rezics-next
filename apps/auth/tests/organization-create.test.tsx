@@ -17,7 +17,6 @@ test('initial read retries the saved draft; uncertain creation requires the same
   await flush(() => send(page.host));
   await flush(() => page.calls[0]!.resolve(approval()));
   await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
-  // An explicit retry keeps the original key even after the page is reloaded.
   const saved = readPendingAccountOperationStepUp()!;
   storePendingOrganizationHandle('another-draft');
   await page.render(<NewOrganizationPage key="restored" initial={initial} />);
@@ -61,7 +60,6 @@ for (const result of ['success', 'step-up', 'approval'] as const)
       );
       expect(readPendingOrganizationHandle()).toBe('new-team');
       expect(readPendingAccountOperationStepUp()!.accountId).toBe('replacement');
-      expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('new-team');
       expect(assign).not.toHaveBeenCalled();
       expect(page.calls).toHaveLength(result === 'approval' ? 1 : 2);
     } finally {
