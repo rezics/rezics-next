@@ -1,10 +1,16 @@
-import { expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { creationFixture, approval, button, dom, fill, flush, open, send } from './creation-page-fixture';
 import { AutomatedAccountCreatePage } from '../src/routes/automated.new';
 import { AUTOMATED_PROFILE, restoreAutomatedAttempt } from '../src/automated-account-create';
 const { createBrowserHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
   await import('@tanstack/react-router');
 creationFixture();
+const previousScroll = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
+beforeAll(() => Object.defineProperty(globalThis, 'scrollTo', { configurable: true, value: dom.scrollTo.bind(dom) }));
+afterAll(() => {
+  if (previousScroll) Object.defineProperty(globalThis, 'scrollTo', previousScroll);
+  else Reflect.deleteProperty(globalThis, 'scrollTo');
+});
 const human = '11111111-1111-4111-8111-111111111111';
 const operator = {
   id: '22222222-2222-4222-8222-222222222222',
