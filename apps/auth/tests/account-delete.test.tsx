@@ -62,7 +62,7 @@ test('uncertain deletion survives cached return with its exact command; accepted
   await flush(leave);
   await flush(restore);
   expect(page.calls).toHaveLength(3);
-  expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('');
+  expect(page.host.querySelector<HTMLInputElement>('input')?.value, page.host.textContent ?? '').toBe('');
   await flush(() => {
     confirm(page.host);
     send(page.host);
