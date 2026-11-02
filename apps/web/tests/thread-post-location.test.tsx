@@ -80,38 +80,50 @@ async function render(loaded: LoadedThreadPage) {
 const request = new Request('https://web.test/en/threads/linked');
 const input = { id: thread.thread.id, post: target.id, cursor: 'unrelated-old-page' };
 
-test.each(['moderation', 'Home'])('%s cross-page link renders the exact admitted post through one native page, with ordinary continuation', async (source) => {
-  const { client, paths } = native('available');
-  const { moderationTargetContent } = await import('../src/moderation/target-content');
-  const evidence = {
-    id: target.id,
-    kind: 'post',
-    state: 'available',
-    post: target,
-    thread: thread.thread,
-    now: '2030-01-01T00:00:00Z',
-    documentMedia: { kind: 'unavailable' },
-  };
-  const markup = renderToStaticMarkup(
-    moderationTargetContent({
-      key: `post:${target.id}`,
+test.each(['moderation', 'Home'])(
+  '%s cross-page link renders the exact admitted post through one native page, with ordinary continuation',
+  async (source) => {
+    const { client, paths } = native('available');
+    const { moderationTargetContent } = await import('../src/moderation/target-content');
+    const evidence = {
+      id: target.id,
       kind: 'post',
-      value: { moderationEvidence: evidence },
-    }),
-  );
-  const href = source === 'moderation' ? /href="([^"]+)"/.exec(markup)![1]! : homeFeedDestination({ ...homeFeedStoryPage().feedItems.find((item) => item.destination.kind === 'thread')!, destination: { kind: 'post', threadId: thread.thread.id, title: thread.thread.title, postId: target.id } }, 'en')!;
-  const destination = new URL(href, request.url);
-  const linkedInput = { id: input.id, ...threadSearch(Object.fromEntries(destination.searchParams)) };
-  const page = await loadThreadPage(client, request, {}, linkedInput, verification, 'anonymous');
-  expect(page.posts.posts.map((post) => post.id)).toEqual([target.id]);
-  const html = await render(page);
-  expect(html).toContain(`id="post-${target.id}"`);
-  expect(html).toContain('Linked post beyond the first page.');
-  expect(html).toContain('?cursor=signed-next');
-  expect(html).not.toContain(`?post=${target.id}`);
-  expect(paths.filter((path) => path.includes('/location'))).toHaveLength(1);
-  expect(paths.filter((path) => path.includes('/posts?'))).toHaveLength(1);
-});
+      state: 'available',
+      post: target,
+      thread: thread.thread,
+      now: '2030-01-01T00:00:00Z',
+      documentMedia: { kind: 'unavailable' },
+    };
+    const markup = renderToStaticMarkup(
+      moderationTargetContent({
+        key: `post:${target.id}`,
+        kind: 'post',
+        value: { moderationEvidence: evidence },
+      }),
+    );
+    const href =
+      source === 'moderation'
+        ? /href="([^"]+)"/.exec(markup)![1]!
+        : homeFeedDestination(
+            {
+              ...homeFeedStoryPage().feedItems.find((item) => item.destination.kind === 'thread')!,
+              destination: { kind: 'post', threadId: thread.thread.id, title: thread.thread.title, postId: target.id },
+            },
+            'en',
+          )!;
+    const destination = new URL(href, request.url);
+    const linkedInput = { id: input.id, ...threadSearch(Object.fromEntries(destination.searchParams)) };
+    const page = await loadThreadPage(client, request, {}, linkedInput, verification, 'anonymous');
+    expect(page.posts.posts.map((post) => post.id)).toEqual([target.id]);
+    const html = await render(page);
+    expect(html).toContain(`id="post-${target.id}"`);
+    expect(html).toContain('Linked post beyond the first page.');
+    expect(html).toContain('?cursor=signed-next');
+    expect(html).not.toContain(`?post=${target.id}`);
+    expect(paths.filter((path) => path.includes('/location'))).toHaveLength(1);
+    expect(paths.filter((path) => path.includes('/posts?'))).toHaveLength(1);
+  },
+);
 
 for (const mode of ['missing', 'withdrawn'] as const) {
   test(`${mode} linked posts disclose no previous body and offer recovery to the thread beginning`, async () => {
