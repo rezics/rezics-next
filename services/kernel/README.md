@@ -424,7 +424,9 @@ unchanged. That 10% allowance covers about four extra bytes per value for intege
 the payload is at least 40 bytes. `bounds` remains required for rows, blocks and statements. Use `checkGrowth`
 from `test/support/growth.ts` with `seed` in `grow` to add rows between scales. Grow both the total data and hot
 partition, while keeping the operation's own neighbourhood fixed. Seed through production writes or bulk rows of
-identical shape. The existing default slack is 2 rows or 10%, 4 blocks or 50%, and no statement slack. Other modules
+identical shape. Bulk seed transactions hold at most 500 rows and 1 MiB of serialized JSON across all table payloads,
+including array framing; an individual row that cannot fit is rejected before insertion. The existing default slack is
+2 rows or 10%, 4 blocks or 50%, and no statement slack. Other modules
 import the public API from `test/support/growth.ts`. A check uses three to five scales, and its largest scale must not
 exceed 4096.
 
