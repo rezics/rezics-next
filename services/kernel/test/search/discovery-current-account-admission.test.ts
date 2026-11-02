@@ -47,9 +47,7 @@ const hit = (id: string, revision = '7', sourcePosition = '12'): DiscoveryEngine
 function disclose(
   candidates: readonly DiscoveryEngineHit[],
   read: (ids: readonly string[]) => AccountSnapshot | Promise<AccountSnapshot>,
-  hydrate: (
-    ids: readonly string[],
-  ) => Promise<ReadonlyMap<string, AccountDiscoverySummary>> = noHydrate,
+  hydrate: (ids: readonly string[]) => Promise<ReadonlyMap<string, AccountDiscoverySummary>> = noHydrate,
 ) {
   return currentDiscoveryCandidates(
     createDiscoveryRegistry({
@@ -132,10 +130,14 @@ test('valid current Account rows hydrate and omitted keys stay not-current while
     avatar: null,
     verifiedAgent: null,
   };
-  const passed = await disclose([live, missing], () => observed, async (ids) => {
-    expect(ids).toEqual([nativeId]);
-    return new Map([[nativeId, summary]]);
-  });
+  const passed = await disclose(
+    [live, missing],
+    () => observed,
+    async (ids) => {
+      expect(ids).toEqual([nativeId]);
+      return new Map([[nativeId, summary]]);
+    },
+  );
   expect([...passed.keys()]).toEqual([live]);
   expect(passed.get(live)).toEqual({ key: live.key, summary: { kind: 'account', value: summary } });
   await expect(disclose([hit(nativeId, '7', '13')], () => observed)).rejects.toBeInstanceOf(SearchUnavailableError);
