@@ -23,6 +23,7 @@ import {
   restartPopulationProgress,
   startPopulationProgress,
 } from './rating-population-progress';
+import { admitPopulationEnvelope } from './population-envelope-admission';
 
 type Session = ReturnType<typeof useSession>;
 export type PopulationTransport = (input: PopulationInput) => Promise<PopulationEnvelope>;
@@ -317,7 +318,7 @@ function PopulationVisit({
         const version = registry.version(hash);
         if (!matches()) throw new Error('Rating population visit retired');
         if (kind === 'directory' && progress.current.stopped) throw new Error('Rating population traversal stopped');
-        const value = await read({
+        const input: PopulationInput = {
           id: subjectId,
           question: question.id,
           locale,
@@ -327,16 +328,21 @@ function PopulationVisit({
               ? { cursor: pageRequest.cursor }
               : {}
             : { selected }),
-        });
+        };
+        const value = await read(input);
+        if (!matches() || registry.version(hash) !== version)
+          throw new Error('Rating population response retired');
+        const admitted = admitPopulationEnvelope(value, input);
         if (
+          !admitted ||
           !matches() ||
           registry.version(hash) !== version ||
-          value.reader !== reader ||
-          value.subject !== subjectId ||
-          value.question !== question.id
+          admitted.reader !== reader ||
+          admitted.subject !== subjectId ||
+          admitted.question !== question.id
         )
           throw new Error('Rating population response retired');
-        return value;
+        return admitted;
       },
     };
   }

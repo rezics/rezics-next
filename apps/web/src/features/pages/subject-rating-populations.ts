@@ -5,6 +5,7 @@ import { GLOBAL, preparedRatingReader, ratingFailure, type Figure, type RatingOu
 import { admitRatingAggregate, admitRatingPopulationPage } from './rating-population-value';
 
 export const POPULATION_LIMIT = 20;
+const REALM_TITLE_LIMIT = 1024;
 export type PopulationInput = {
   id: string;
   question: string;
@@ -26,6 +27,14 @@ export type PopulationEnvelope = {
   question: string;
   result: RatingOutcome<PopulationResult>;
 };
+
+function realmLabel(id: string, value: unknown): { id: string; name: string } | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const realm = value as Record<string, unknown>;
+  if (realm.realmId !== id || typeof realm.title !== 'string') return null;
+  const titleLength = [...realm.title].length;
+  return titleLength >= 1 && titleLength <= REALM_TITLE_LIMIT ? { id, name: realm.title } : null;
+}
 
 /** Expected reader is a comparison operand, never an authentication or freshness assertion. */
 export async function readRatingPopulations(
@@ -62,9 +71,7 @@ export async function readRatingPopulations(
           try {
             // Use the installed generated Realm route; a population's presence/count grants no Realm read.
             const result = await client.realms({ realmId: id }).get({ headers });
-            return result.status === 200 && result.data?.realm.realmId === id
-              ? { id, name: result.data.realm.title }
-              : null;
+            return result.status === 200 ? realmLabel(id, result.data?.realm) : null;
           } catch {
             return null;
           }
