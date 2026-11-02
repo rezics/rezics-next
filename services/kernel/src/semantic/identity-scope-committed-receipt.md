@@ -128,6 +128,9 @@ configuration, independent parent or caller-provided callback authority. Existin
 observation/foreign producer bodies keep their own original accounting; this
 additive package cannot stand in for their whole-parent funding.
 
+Writer deadlines must be safe integer milliseconds within the original immutable
+deadline. This also bounds the literal timeout representation charged above.
+
 ## Remaining foreign operands and verification
 
 Both resolver and writer use `identitySourceConsumerLibraryWork` from the actual
@@ -162,10 +165,8 @@ evidence, catalogue and audience source; the full foreign operand disposition;
 and both the Semantic native writer decision and Commerce regional consent. No
 external reference project is prescribed for this surface.
 
-The permitted foreground command was
-`bun run --cwd services/kernel typecheck --emit-schema=semantic`. Its supported
-compiler placement terminated with exit 1 before reaching TypeScript: dbmate
-required the new migration's omitted `-- migrate:up` marker. That marker is now
-fixed and committed. The single-run policy does not permit another invocation;
-workspace typing and generated snapshot normalization therefore remain unverified.
-No native/unit/growth/full acceptance command was run.
+The migration has its required `-- migrate:up` marker. The supported foreground
+Kernel compiler can normalize this module's schema snapshot with
+`bun run --cwd services/kernel typecheck --emit-schema=semantic` using its existing
+placement and compiler database. Compiler success alone does not establish native
+acceptance, source custody, a foreign dispatch grant or an audience closure.

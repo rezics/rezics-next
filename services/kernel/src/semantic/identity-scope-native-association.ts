@@ -61,7 +61,7 @@ export function prepayIdentityScopeNativeAssociation(
   const context = activeIdentitySourceConsumerMaintenance(pool);
   const effective = Math.min(deadline, context?.deadline ?? NaN);
   const work = context && identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, effective);
-  if (!context || !work || !Number.isFinite(effective) || effective <= Date.now()) throw new ProblemError('dependency_unavailable');
+  if (!context || !work || !Number.isSafeInteger(effective) || effective <= Date.now()) throw new ProblemError('dependency_unavailable');
   const total = { ...zero };
   for (const cost of Object.values(identityScopeNativeAssociationPrices))
     for (const axis of Object.keys(total) as (keyof WorkDimensions)[]) total[axis] += cost[axis];
