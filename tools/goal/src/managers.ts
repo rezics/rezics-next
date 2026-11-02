@@ -9,6 +9,7 @@ import { connectPool, textInput } from './app-server.ts';
 import { agentEnvironmentKeys } from './agents.ts';
 import { migrate } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
+import { isPendingContinuationHandshake } from './manager-continuation.ts';
 import type { ProcessIdentity } from './process.ts';
 import type { ManagerWindows } from './windows.ts';
 
@@ -819,15 +820,7 @@ export class ManagerSessions {
   async outgoingMessage(id: string, recipient: string, summary: string): Promise<void> {
     return this.serial(id, async () => {
       const state = this.get(id);
-      if (
-        state.engine !== 'codex' ||
-        !state.continuationAsked ||
-        state.continuationRenewed ||
-        state.pendingRenewal ||
-        recipient !== state.supermanager ||
-        !/continuation written/i.test(summary)
-      )
-        return;
+      if (!isPendingContinuationHandshake(summary, recipient, state)) return;
       await this.renewForContinuation(id, state.goalState?.tokensUsed ?? 0);
     });
   }

@@ -34,6 +34,7 @@ import { acquireDirectoryLease } from './lease.ts';
 import { ensureHostRunning, startHostSupervisor, recordHostLiveness } from './host-liveness.ts';
 import { sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager, type AuthenticatedManager } from './priority-authority.ts';
+import { isPendingContinuationHandshake } from './manager-continuation.ts';
 import { completedUtcHour } from './efficiency-report.ts';
 
 /** Composition belongs to the caller; this module never reads worker configuration or tables. */
@@ -898,7 +899,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         if (manager.managerId !== runtime.supermanager && !isResidentSupermanagerRecord(runtime, manager.managerId))
           runtime.db
             .transaction(() => {
-              inbox.assertManagerSend(manager.from, summary);
+              inbox.assertManagerSend(manager.from, summary, id);
               deliver(manager);
             })
             .immediate();
@@ -912,20 +913,13 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         const source = runtime.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(sender.managerId) as {
           state: string;
         } | null;
-        const state = source
-          ? (JSON.parse(source.state) as {
-              engine?: string;
-              supermanager?: string;
-              continuationAsked?: boolean;
-              continuationRenewed?: boolean;
-            })
-          : null;
-        if (
-          state?.engine === 'codex' &&
-          state.supermanager === id &&
-          state.continuationAsked &&
-          !state.continuationRenewed
-        ) {
+        let state: unknown = null;
+        try {
+          state = source ? JSON.parse(source.state) : null;
+        } catch {
+          state = null;
+        }
+        if (isPendingContinuationHandshake(summary, id, state)) {
           await ensureHost(runtime);
           // The durable local decision is authoritative. Keep the host's legacy audit view in sync with a short,
           // isolated delivery attempt; its failure must not change the inbox-send or continuation result.

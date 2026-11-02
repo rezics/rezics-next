@@ -178,7 +178,7 @@ test('identical deliveries to one recipient within an hour fold into one row wit
   }
 });
 
-test('manager sends are capped at six an hour and 600 characters, except the continuation handshake', () => {
+test('manager sends are capped at six an hour and 600 characters', () => {
   const t = temporaryDirectory();
   const db = openDb(join(t.path, 'state.sqlite'));
   let now = Date.UTC(2026, 10, 2, 12);
@@ -194,13 +194,66 @@ test('manager sends are capped at six an hour and 600 characters, except the con
       now += 60_000;
     }
     expect(() => send('Decision 7')).toThrow(/web has sent 6 messages in the last hour and the limit is 6/);
-    expect(() => send('continuation written')).not.toThrow();
+    expect(() => send('continuation written')).toThrow(/web has sent 6 messages in the last hour and the limit is 6/);
+    expect(() => send('CONTINUATION WRITTEN')).toThrow(/web has sent 6 messages in the last hour and the limit is 6/);
     // System alarms carry no sender and are never capped.
     for (let index = 0; index < 10; index++)
       inbox.deliver({ managerId: 'web', kind: 'environment', summary: `Alarm ${index}` });
     expect(inbox.pending('web')).toHaveLength(10);
     now = Date.UTC(2026, 10, 2, 13, 0, 0, 1);
     expect(() => send('Decision 8')).not.toThrow();
+  } finally {
+    db.close();
+    t.close();
+  }
+});
+
+test('only a pending Codex continuation handshake is exempt from the hourly send limit', () => {
+  const t = temporaryDirectory();
+  const db = openDb(join(t.path, 'state.sqlite'));
+  const inbox = new SqliteManagerInbox(db, t.path, () => Date.UTC(2026, 10, 2, 12));
+  const state: {
+    id: string;
+    engine: string;
+    supermanager: string;
+    continuationAsked: boolean;
+    continuationRenewed: boolean;
+    pendingRenewal?: { tokensUsed: number; oldThreadId: string; ready: boolean };
+  } = {
+    id: 'web',
+    engine: 'codex',
+    supermanager: 'search',
+    continuationAsked: true,
+    continuationRenewed: false,
+  };
+  db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+  const save = () =>
+    db.query('INSERT OR REPLACE INTO manager_sessions(id, state) VALUES (?, ?)').run('web', JSON.stringify(state));
+  save();
+  try {
+    const cap = /web has sent 6 messages in the last hour and the limit is 6/;
+    const send = (summary: string, recipient = 'search', kind: 'decision' | 'question' | 'info' = 'decision') => {
+      inbox.assertManagerSend('web', summary, recipient);
+      inbox.deliver({ managerId: recipient, kind, summary, from: 'web' });
+    };
+    for (let index = 1; index <= 5; index++) send(`Decision ${index}`);
+    send('continuation written');
+    send('Decision 6');
+    expect(() => send('Decision 7')).toThrow(cap);
+    expect(() => send('continuation written')).not.toThrow();
+    expect(() => send('continuation written', 'other')).toThrow(cap);
+    expect(() => send('CONTINUATION WRITTEN', 'other', 'question')).toThrow(cap);
+    state.engine = 'claude';
+    save();
+    expect(() => send('continuation written')).toThrow(cap);
+    state.engine = 'codex';
+    state.pendingRenewal = { tokensUsed: 1, oldThreadId: 't', ready: false };
+    save();
+    expect(() => send('continuation written')).toThrow(cap);
+    delete state.pendingRenewal;
+    state.continuationRenewed = true;
+    save();
+    expect(() => send('continuation written')).toThrow(cap);
   } finally {
     db.close();
     t.close();

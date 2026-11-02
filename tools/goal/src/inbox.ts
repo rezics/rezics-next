@@ -11,6 +11,7 @@ import {
   SHARED_INBOX_MAX_PAGE_SIZE,
   type InboxPage,
 } from './inbox-shared.ts';
+import { isPendingContinuationHandshake } from './manager-continuation.ts';
 
 const wakingKinds = new Set<ManagerEventKind>([
   'width',
@@ -137,24 +138,38 @@ export class SqliteManagerInbox implements ManagerInbox {
   }
   /**
    * Refuse a Goal manager's send above six an hour or 600 characters. Call it in the transaction that delivers the
-   * send. The continuation handshake is exempt from the hourly cap, since renewal waits for it.
+   * send. Only a pending Codex continuation-renewal handshake is exempt from the hourly cap.
    */
-  assertManagerSend(sender: string, summary: string): void {
+  assertManagerSend(sender: string, summary: string, recipient?: string): void {
     if (summary.length > MANAGER_SEND_MAX_CHARACTERS)
       throw new InboxSendRefusedError(
         `inbox send refused: the summary has ${summary.length} characters and a manager message may have at most ${MANAGER_SEND_MAX_CHARACTERS} (about 60 words). Send the decision, question or handoff; put details in the brief or owner document.`,
       );
-    if (/continuation written/i.test(summary)) return;
+    if (recipient !== undefined && this.continuationHandshake(sender, summary, recipient)) return;
     const since = this.now() - SEND_WINDOW_MS;
     const { count } = this.db
       .query(
-        "SELECT count(*) AS count FROM manager_inbox WHERE sender = ? AND created_at > ? AND summary NOT LIKE '%continuation written%'",
+        'SELECT count(*) AS count FROM manager_inbox WHERE sender = ? AND created_at > ? AND continuation_handshake = 0',
       )
       .get(sender, since) as { count: number };
     if (count >= MANAGER_SENDS_PER_HOUR)
       throw new InboxSendRefusedError(
         `inbox send refused: ${sender} has sent ${count} messages in the last hour and the limit is ${MANAGER_SENDS_PER_HOUR}. Send only decisions, blocking questions and handoffs; status, receipts and acknowledgements are not messages.`,
       );
+  }
+  private sessionState(id: string): unknown {
+    if (!id || !this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get())
+      return null;
+    const row = this.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.state);
+    } catch {
+      return null;
+    }
+  }
+  private continuationHandshake(sender: string, summary: string, recipient: string): boolean {
+    return isPendingContinuationHandshake(summary, recipient, this.sessionState(sender));
   }
   record(manager: string, event: unknown): void {
     this.insert(manager, event, false);
@@ -207,11 +222,13 @@ export class SqliteManagerInbox implements ManagerInbox {
         event && typeof event === 'object' && !Array.isArray(event)
           ? { ...event, ...(taskId ? { taskId } : {}), ...(goalId ? { goalId } : {}) }
           : event;
+      const handshake = this.continuationHandshake(fields.sender ?? '', fields.summary ?? '', manager);
       const inserted = this.db
         .query(`INSERT INTO manager_inbox(
         manager, event, wakeable, created_at, sender, goal_id, task_id, kind, summary,
-        reply_to_id, thread_root_id, document_refs, escalation, dedupe_key, quiet
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        reply_to_id, thread_root_id, document_refs, escalation, dedupe_key, quiet,
+        continuation_handshake
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(
           manager,
           JSON.stringify(storedEvent),
@@ -228,6 +245,7 @@ export class SqliteManagerInbox implements ManagerInbox {
           fields.escalation ? JSON.stringify(fields.escalation) : null,
           key,
           Number(quiet),
+          Number(handshake),
         );
       const id = Number(inserted.lastInsertRowid);
       if (rootId === null) {

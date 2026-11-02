@@ -1151,8 +1151,10 @@ tasks stays two events. Records and completion results (`goal-met`, `goal-unmet`
 returned by the manager's next `inbox read`, but it sends no wakeup, starts no turn and does not end an `inbox wait`.
 Worker questions, blockers and handoffs still wake. A Goal manager's `inbox send` is refused above six sends in the last
 hour or 600 characters, with an error that says which limit was reached; the configured supermanager, workers and
-system events are not capped, and the `continuation written` handshake neither counts nor is refused by the hourly
-limit.
+system events are not capped. Only an authenticated pending Codex continuation-renewal handshake (asked, not yet
+renewed, no in-flight renewal, sent to the configured supermanager) neither counts nor is refused by the hourly limit;
+an ordinary decision, question or status that contains those words counts normally, regardless of recipient or letter
+case.
 
 Inbox kinds are explicit. `question` starts an open question. Only a direct linked `info` or `decision` reply answers
 it; another `question` is a clarification and remains open. A `blocker`, `handoff`, `instruction`, system event, read,
