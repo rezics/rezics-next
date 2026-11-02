@@ -38,12 +38,13 @@ test('selected removal keeps later selection separate, preserves personal facts 
   }));
   const reads: string[] = [];
   let assignmentRevision = 4;
+  let readViewer = 'owner';
   mock.module('../src/library/labels-actions', () => ({
     readShelfLabelAssignment: async ({ data }: { data: { subjectId: string; labelId: string } }) => {
       reads.push(data.subjectId);
       return {
         state: 'loaded',
-        provenance: { viewer: 'owner', csrfToken: 'csrf', ...data },
+        provenance: { viewer: readViewer, csrfToken: 'csrf', ...data },
         assignment:
           data.subjectId === 'b' ? null : { id: `assignment-${data.subjectId}`, revision: assignmentRevision },
       };
@@ -85,6 +86,7 @@ test('selected removal keeps later selection separate, preserves personal facts 
     },
   }));
   const before = structuredClone(rows);
+  let initial = rows;
   const origin: ShelfOrigin = {
     current: () => true,
     viewer: () => 'owner',
@@ -96,7 +98,7 @@ test('selected removal keeps later selection separate, preserves personal facts 
   const lease = shelfMutationLease();
   let controls!: ReturnType<typeof useShelfRows>;
   function Shelf() {
-    controls = useShelfRows(rows, 'en', lease);
+    controls = useShelfRows(initial, 'en', lease);
     return null;
   }
   const label = { id: 'label', name: 'Revisit', revision: 1 };
@@ -137,6 +139,8 @@ test('selected removal keeps later selection separate, preserves personal facts 
     });
     const uncertain = calls.at(-1)!;
     expect(uncertain).toMatchObject({ intent: 'unassign', subjectId: 'c', assignmentId: 'assignment-c', revision: 4 });
+    initial = rows.map((row) => (row.subjectId === 'c' ? { ...row, revision: 3 } : row));
+    await act(async () => root.render(createElement(context.Provider, { value: origin }, createElement(Shelf))));
     assignmentRevision = 9;
     answer = { ok: true, assignment: { id: 'assignment-c', revision: 4 } };
     await act(async () => {
@@ -157,7 +161,14 @@ test('selected removal keeps later selection separate, preserves personal facts 
     });
     expect(calls.at(-1)).toMatchObject({ revision: 9 });
     expect(calls.at(-1)!.idempotencyKey).not.toBe(uncertain.idempotencyKey);
-    expect(controls.rows.map((row) => row.entry)).toEqual(before);
+    expect(controls.rows.map((row) => row.entry)).toEqual(initial);
+    readViewer = 'other';
+    const sent = calls.length;
+    await act(async () => {
+      await controls.assignSelectedLabel(label, 'unassign');
+    });
+    expect(calls).toHaveLength(sent);
+    expect(controls.labelOutcomes[0]!.status).toBe('failed');
     expect(lease.current).toBe(false);
   } finally {
     release?.();

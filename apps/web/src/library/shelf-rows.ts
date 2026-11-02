@@ -429,6 +429,7 @@ export function useShelfRows(
     }
   };
 
+  const renderedLabelOperation = labelOperation.current?.id;
   const recordLabel = (
     operationId: string,
     subjectId: string,
@@ -448,8 +449,8 @@ export function useShelfRows(
       labelOperation.current?.id === intent.operationId;
     const row = currentRows.current.find((item) => item.entry.subjectId === intent.input.subjectId);
     if (!current() || !row || row.unknownIntent || row.unknownRemove) return { status: 'not-attempted' };
-    // Recovery retains both the original command and the captured entry revision.
-    if (!matchesShelfLabelIntent(row.entry, intent)) return { status: 'conflicted' };
+    // A recovery replays the original label command, even after an entry-state refresh. It never adopts new CAS.
+    if (!row.unknownLabelIntent && !matchesShelfLabelIntent(row.entry, intent)) return { status: 'conflicted' };
     if (row.unknownLabelIntent && row.unknownLabelIntent !== intent) return { status: 'not-attempted' };
     patch(intent.input.subjectId, (value) => ({ ...value, unknownLabelIntent: intent }));
     recordLabel(intent.operationId, intent.input.subjectId, { status: 'unknown' });
@@ -541,7 +542,11 @@ export function useShelfRows(
               read.provenance.viewer !== viewer ||
               !read.provenance.csrfToken ||
               read.provenance.subjectId !== subjectId ||
-              read.provenance.labelId !== labelId
+              read.provenance.labelId !== labelId ||
+              (read.assignment !== null &&
+                (!read.assignment.id ||
+                  !Number.isSafeInteger(read.assignment.revision) ||
+                  read.assignment.revision < 1))
             )
               return { ok: false, reason: 'unavailable' };
             return { ok: true, assignment: read.assignment };
@@ -565,16 +570,19 @@ export function useShelfRows(
       !intent ||
       row.unknownIntent ||
       row.unknownRemove ||
-      !matchesShelfLabelIntent(row.entry, intent) ||
+      renderedLabelOperation !== intent.operationId ||
       labelOperation.current?.id !== intent.operationId
     )
       return;
     const kind = intent.input.intent === 'assign' ? 'assign' : 'unassign';
     const release = lock(() => labelKindCurrent(kind));
     if (!release) return;
+    const operation = labelOperation.current;
+    operation.running = true;
     try {
       recordLabel(intent.operationId, subjectId, await mutateLabel(intent));
     } finally {
+      operation.running = false;
       release();
     }
   };
@@ -723,7 +731,7 @@ export function useShelfRows(
     retryLabel,
     canRetryLabel: (subjectId: string) => {
       const row = rows.find((item) => item.entry.subjectId === subjectId);
-      return !!row?.unknownLabelIntent && matchesShelfLabelIntent(row.entry, row.unknownLabelIntent);
+      return !!row?.unknownLabelIntent && row.unknownLabelIntent.operationId === renderedLabelOperation;
     },
     labelSelectionBlocked:
       selectedRows.some((row) => !!row.unknownIntent || !!row.unknownRemove) ||

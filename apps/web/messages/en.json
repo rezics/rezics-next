@@ -4037,7 +4037,6 @@
   "library_selected_labels_remove_retry": "Retry exact removal",
   "library_selected_labels_remove_retry_title": "Retry removing “{name}” from {title}",
   "library_selected_labels_conflict": "The entry or label changed. Review the shelf, then choose the label again to start a new request.",
-  "library_selected_labels_changed_recovery": "The entry changed after this request. Reload the shelf to review the current facts before starting another request.",
   "library_selected_labels_open": "Add an existing label",
   "library_selected_labels_description": "Add one private label to selected items on this loaded page. Their other labels and ownership stay the same.",
   "library_selected_labels_search": "Find an existing label",

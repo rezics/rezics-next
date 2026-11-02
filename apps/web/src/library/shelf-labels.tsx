@@ -349,9 +349,6 @@ export function ShelfLabelOutcomes({ controls }: { controls: Controls }) {
                     ? m.library_selected_labels_remove_unknown()
                     : m.library_selected_labels_unknown()}
                 </span>
-                {!controls.canRetryLabel(outcome.subjectId) ? (
-                  <span>{m.library_selected_labels_changed_recovery()}</span>
-                ) : null}
                 <Button
                   variant="outline"
                   size="sm"
