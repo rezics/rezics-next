@@ -18,7 +18,7 @@ test('pricing retirement preserves native reservations and unmatched provisional
   const db = await identityEpochDatabase();
   try {
     const original = await seedLegacyRoot(db, 0x7610);
-    await historicalEdge(db, original, newId(0x7620));
+    await historicalEdge(db, original, newId(0x7610));
     await installIdentityEpochBootstrap(db.pool);
     await stepIdentityEpochBootstrap(db.pool, home(original));
     const inventory = async () => (await db.admin.query(`SELECT slot,generation,closure_copies
