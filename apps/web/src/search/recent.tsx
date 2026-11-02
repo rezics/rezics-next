@@ -15,6 +15,7 @@ import {
 } from './recent-history';
 import { useRecentHistory } from './recent-history-hook';
 import { useHistoryRemovalFocus } from './history-removal-focus';
+import { useHistoryRetryFocus } from './history-retry-focus';
 import { admitRecentRetryHeaders, type RecentRetryAdmission } from './recent-retry-admission';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
@@ -290,6 +291,7 @@ export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { hi
   const announce = useCallback((message: string) => setAnnouncement(message), []);
   const visibleEntries = entries.slice(0, history ? 100 : 5);
   const focus = useHistoryRemovalFocus(entries, visibleEntries, announce, props.owner);
+  const retry = useHistoryRetryFocus(focus.regionRef, props.owner, status === 'loading', status);
   return (
     <section
       ref={focus.regionRef}
@@ -325,7 +327,16 @@ export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { hi
         <p role="status" className="text-sm text-muted-foreground">
           {status === 'conflict' ? m.search_history_conflict() : m.search_history_offline()}
           {onReload && (
-            <Button type="button" variant="ghost" size="sm" onClick={onReload}>
+            <Button
+              ref={retry.reloadRef}
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={(event) => {
+                retry.requestReloadFocus(event.currentTarget);
+                onReload();
+              }}
+            >
               {m.search_history_reload()}
             </Button>
           )}

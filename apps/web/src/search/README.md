@@ -95,6 +95,10 @@ Recent server functions admit only native command discriminants and fields befor
 Native Recent Retry-After is an in-memory, adapter-scoped minimum delay: sync, refresh and retry refuse native I/O
 until that instant without polling or persisting a deadline; local remember, remove and clear continue, and an explicit
 retry after the delay resends the same attempted command.
+A focused Reload recovers onto a surviving current reload action or the named Recent region after the action
+disappears, only while the same history owner remains current, and never if the reader moved away; account or
+session replacement, Header unmount and a superseded retry drop the request. Header Reload stays while failure remains
+even if sync is pending; clearing failure during pending is the existing hide path.
 
 The [canonical stories](../stories/header-search/README.md) cover resting, focused discovery, suggestions,
 filter entry and phone interaction. `tests/header-search-composition.test.tsx` exercises the existing routed

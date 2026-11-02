@@ -5,6 +5,7 @@ import { m } from '../paraglide/messages.js';
 import type { RecentEntry, RecentHistory } from './recent-history';
 import { SearchRealmDiscoverySection, type SearchRealmDiscoveryLoader } from './realm-discovery-section';
 import { useHistoryRemovalFocus } from './history-removal-focus';
+import { useHistoryRetryFocus } from './history-retry-focus';
 
 export type SearchRealmDiscovery = { id: string; name: string; description: string; href: string; avatar?: string };
 /** Legacy caller shape retained for compatibility. Realm arrays cannot establish native discovery authority. */
@@ -42,6 +43,12 @@ export function RecentPanel({
   const announce = useCallback((message: string) => setAnnouncement(message), []);
   const focusCandidates = entries.slice(0, (all ? 32 : 5) + 1);
   const focus = useHistoryRemovalFocus(entries, focusCandidates, announce, history?.owner);
+  const retry = useHistoryRetryFocus(
+    focus.regionRef,
+    history?.owner,
+    history?.sync === 'pending' && !history.failure,
+    history?.failure ?? history?.sync,
+  );
   const options = { locale: language as never };
   const status =
     history?.failure === 'conflict'
@@ -73,7 +80,15 @@ export function RecentPanel({
           </div>
           {status && <p className="px-2 text-xs text-muted-foreground">{status}</p>}
           {history?.failure && history.retry && (
-            <button type="button" className={control} onClick={history.retry}>
+            <button
+              ref={retry.reloadRef}
+              type="button"
+              className={control}
+              onClick={(event) => {
+                retry.requestReloadFocus(event.currentTarget);
+                history.retry?.();
+              }}
+            >
               {m.search_history_reload({}, options)}
             </button>
           )}
