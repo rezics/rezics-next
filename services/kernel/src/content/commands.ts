@@ -30,7 +30,7 @@ import membershipHistory from '../community/membership-history.sql';
 import { readPartition } from '../partition/partition.ts';
 import { withConnection } from '../database/pool.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
-import { InvalidDocumentError, validateContentDocument } from './document.ts';
+import { InvalidDocumentError, validateContentDocument, type ValidatedContentDocument } from './document.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { claimMedia, InvalidMediaClaimError, MediaUnavailableError } from './media.ts';
 import {
@@ -512,16 +512,13 @@ function creationEntries(
 async function appendRevision(
   tx: CommandTransaction,
   value: ContentCommandValue,
-  body: unknown,
-  licence: string,
-  subjectIds: readonly (string | null)[],
+  validated: ValidatedContentDocument,
   boardId: string,
   mediaIds: readonly string[],
   transactionId: string,
   time: AuthoritativeTime,
   voteCitation: ReviewVoteCitation | null = null,
 ) {
-  const validated = document(body, licence, subjectIds);
   await insertRevision.run(tx, {
     route: route(value.threadId),
     thread_id: value.threadId,
@@ -717,6 +714,9 @@ export async function createThread(
         if (isReview && (body.subjectIds.length !== 1 || routeOf(body.subjectIds[0]!) === null))
           throw new InvalidDocumentError('A review must name exactly one subject');
         if (!isReview && body.voteCitation !== undefined) throw new InvalidDocumentError();
+        // Validate the entire opening before inserting either member of the
+        // deferred thread/post cycle. Keep validation after authorized replay.
+        const validated = document(body.body, body.licence, body.subjectIds);
         const citation = isReview
           ? await currentReviewCitation(tx, author.accountId, body.subjectIds[0]!, body.voteCitation)
           : null;
@@ -749,9 +749,7 @@ export async function createThread(
         const subjectIds = await appendRevision(
           tx,
           value,
-          body.body,
-          body.licence,
-          body.subjectIds,
+          validated,
           body.boardId,
           mediaIds,
           command.transactionId,
@@ -841,6 +839,11 @@ export async function createPost(
         throw new InvalidDocumentError('Board mismatch');
       const firstPost = await post(tx, root.first_post_id!, body.threadId);
       const mediaIds = mediaReferences(body.mediaIds === undefined ? [] : body.mediaIds, r);
+      const validated = document(
+        body.body,
+        body.licence,
+        body.subjectIds === undefined ? firstPost.subject_ids : body.subjectIds,
+      );
       await insertPost.run(tx, {
         route: r,
         thread_id: value.threadId,
@@ -852,17 +855,7 @@ export async function createPost(
         transaction_id: command.transactionId,
         at: authoritativeTimeValue(command.time),
       });
-      await appendRevision(
-        tx,
-        value,
-        body.body,
-        body.licence,
-        body.subjectIds === undefined ? firstPost.subject_ids : body.subjectIds,
-        root.board_id,
-        mediaIds,
-        command.transactionId,
-        command.time,
-      );
+      await appendRevision(tx, value, validated, root.board_id, mediaIds, command.transactionId, command.time);
       inserted.set(tx, command.transactionId);
       await initializeResourceGrants(tx, entries[0]!);
       if (mediaIds.length)
@@ -933,9 +926,7 @@ export async function revisePost(
       const revisedSubjectIds = await appendRevision(
         tx,
         value,
-        body.body,
-        body.licence === undefined ? previous.licence : body.licence,
-        body.subjectIds === undefined ? previous.subject_ids : body.subjectIds,
+        document(body.body, body.licence === undefined ? previous.licence : body.licence, revisedSubjectIdsInput),
         body.boardId === undefined ? previous.board_id : body.boardId,
         mediaIds,
         command.transactionId,

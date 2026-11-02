@@ -307,6 +307,15 @@ keys; total cost is `2 * nativePostRead + 2`, with logarithmic seeks independent
 ordinary reader retains its own finite 200-candidate/100-result ceiling. A linked post takes precedence over a page
 cursor; unavailable links recover at the thread beginning, while Next continues without the locator.
 
+## Atomic content commands
+
+Thread and post creation validate the complete document before inserting either the thread or post.
+Validation stays inside the authorized command body, after receipt lookup, so replay retains its committed
+identities without revalidating a later head. Thread, opening post, revision, author grants, media claims,
+receipt and events share the native transaction; revision insertion and head advancement share it too.
+A failed validation or transaction leaves no content or author grant from that attempt. Retrying a rejected
+request with the same key may succeed because rejection stores no receipt.
+
 ## Post revision provenance
 
 Ordinary site edits omit `licence`, allowing the native revision command to inherit the stored SPDX identifier.

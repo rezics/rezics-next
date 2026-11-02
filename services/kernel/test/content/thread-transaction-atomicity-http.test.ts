@@ -2,7 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import canonicalize from 'canonicalize';
 import { createHash, randomUUID } from 'node:crypto';
 import { fromPlainText, normalizeDocument } from '@rezics/document';
-import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { threadTarget } from '../../src/content/commands.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import {
   call,
@@ -58,6 +59,33 @@ test('Posts, threads and boards: canonical writes commit their complete revision
   await invalidMediaRollbacksAndPositiveControl();
   await concurrentRevisionRace();
   await nativeDenialsAndControl();
+});
+
+test('rejected openings roll back content and author grants; the key remains reusable', async () => {
+  const { system, kernel, board } = world;
+  const author = system.actors.author;
+  const body = fromPlainText('Complete opening');
+  const input = { boardId: board.id, title: 'Retry', visibility: 'published', body, licence: 'MIT', subjectIds: [] };
+  for (const failure of ['document', 'media']) {
+    const key = randomUUID();
+    const target = threadTarget(system.routeKey, author.actor.accountId, key);
+    const create = (body: object) => call<{ thread: ContentThread }>(kernel, author, 'POST', '/v1/threads', body, key);
+    const before = await atomicSnapshot(target.id, [], key);
+    const invalid = failure === 'document' ? { licence: 'invalid' } : { mediaIds: [newId(target.route)] };
+    const rejected = await create({ ...input, ...invalid });
+    expect(rejected.response.status).toBe(failure === 'document' ? 400 : 409);
+    expect(await atomicSnapshot(target.id, [], key)).toEqual(before);
+    const committed = await create(input);
+    expect(committed.response.status).toBe(201);
+    expect(committed.body.thread.id).toBe(target.id);
+    const { firstPost } = committed.body.thread;
+    expect((await revisionRow(firstPost.id, firstPost.revisionId)).licence).toBe('MIT');
+    const beforeReplay = await atomicSnapshot(target.id, [], key);
+    const replay = await create(input);
+    expect(replay.response.status).toBe(201);
+    expect(replay.body.thread).toEqual(committed.body.thread);
+    expect(await atomicSnapshot(target.id, [], key)).toEqual(beforeReplay);
+  }
 });
 
 async function canonicalRevisionReplayAndReads(): Promise<void> {
@@ -594,6 +622,14 @@ async function atomicSnapshot(postId: string, mediaIds: readonly string[], idemp
   const route = routeOf(postId)!;
   const partition = partitionOf(route);
   const authorId = system.actors.author.actor.accountId;
+  const opening = await system.database.pool.query(
+    `SELECT * FROM (SELECT 'thread' AS kind,to_jsonb(t) AS row FROM content.thread t WHERE route=$1 AND thread_id=$2
+     UNION ALL SELECT 'post',to_jsonb(p) FROM content.post p WHERE route=$1 AND thread_id=$2
+     UNION ALL SELECT 'revision',to_jsonb(r) FROM content.revision r WHERE route=$1 AND thread_id=$2
+     UNION ALL SELECT 'grant',to_jsonb(g) FROM access.resource_grant g WHERE route=$1) AS opening
+     ORDER BY kind,row::text`,
+    [route, postId],
+  );
   const [post, revisions, mediaClaims, keyReceipt, receipts, writeBasisRows, outboxRows, partitionRows] =
     await Promise.all([
       system.database.pool.query<{ head: string; availability: string; security_revision: string }>(
@@ -643,6 +679,7 @@ async function atomicSnapshot(postId: string, mediaIds: readonly string[], idemp
     (row) => row.subject === postId && row.type === 'com.rezics.content.revision.created.v1',
   );
   return {
+    opening: opening.rows,
     head: post.rows[0]?.head ?? null,
     post: post.rows[0] ?? null,
     revisionKeys: revisions.rows.map((row) => row.revision_id),
