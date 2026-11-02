@@ -99,6 +99,13 @@ function rowMatchesCurrentDefinition(row: Row, read: Ready): boolean {
   return read.fields.includes(property) && recipePropertyCompatible(row.definition, read.release.properties[property]);
 }
 
+function availableAdditionalFields(read: Ready, rows: Row[]) {
+  return read.fields.filter((field) => {
+    const definition = read.release.properties[field];
+    return !!definition && (definition.multivalued || !rows.some((row) => row.statement.property.id === field));
+  });
+}
+
 export const RecipeEditor = catalogueEditor(RecipeEditorLive);
 
 function RecipeEditorLive({
@@ -184,6 +191,9 @@ function RecipeEditorLive({
       ));
   const pendingWrite = (pending.current !== null && pendingUncertain.current) || rows.some((row) => row.uncertain);
   const name = (id: string) => pickText(read?.release.properties[id]?.labels ?? {}, locale).text || id;
+  const offeredAdditionalFields = read ? availableAdditionalFields(read, rows) : [];
+  const selectedAdditionalField = offeredAdditionalFields.includes(property) ? property : '';
+  const withdrawnChoice = !!property && !selectedAdditionalField;
   const currentFields = read?.public
     ? [
         ...new Set([
@@ -610,29 +620,30 @@ function RecipeEditorLive({
                   id={`${termsId}-recipe-field`}
                   className="w-full min-w-0 [&>select]:relative [&>select]:z-10 [&>select]:min-h-11 [&>select]:min-w-11 [&>select:focus-visible]:outline-2 [&>select:focus-visible]:outline-offset-2 [&>select:focus-visible]:outline-ring"
                   disabled={locked}
-                  value={property}
+                  value={selectedAdditionalField}
+                  aria-describedby={withdrawnChoice ? `${termsId}-recipe-field-stale` : undefined}
                   onChange={(event) => setProperty(event.target.value)}
                 >
                   <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                  {read.fields
-                    .filter(
-                      (field) =>
-                        read.release.properties[field]?.multivalued ||
-                        !rows.some((row) => row.statement.property.id === field),
-                    )
-                    .map((field) => (
+                  {offeredAdditionalFields.map((field) => (
                       <NativeSelectOption key={field} value={field}>
                         {name(field)}
                       </NativeSelectOption>
                     ))}
                 </NativeSelect>
               </Field>
+              {withdrawnChoice && (
+                <p id={`${termsId}-recipe-field-stale`} role="status">
+                  {m.correction_stale({}, o)}
+                </p>
+              )}
               <Button
                 type="button"
                 className={recipeActionClassName}
                 variant="outline"
-                disabled={locked || session !== 'signed-in' || !property}
+                disabled={locked || session !== 'signed-in' || !selectedAdditionalField}
                 onClick={() => {
+                  if (!availableAdditionalFields(read, rows).includes(property)) return;
                   const definition = read.release.properties[property];
                   if (!definition) return;
                   setRows([...rows, newRow(property, definition)]);
