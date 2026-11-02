@@ -24,8 +24,11 @@ bun tools/goal/src/cli.ts attempts --json
 ```
 
 Run dispatch from a checkout of this repository after configuring local pools and writing a brief. The main checkout
-must have main checked out. Workers commit on their assigned branches, do not rebase and never edit frozen acceptance
-files; when a contract changes a behaviour an existing test asserts, the worker updates that test. They do not merge either, except that a product worker integrating into dev in its own worktree merges or
+must have main checked out. Workers commit source changes on their assigned branches, do not rebase and never edit frozen
+acceptance files. A clean unchanged claim must not add an empty or unrelated commit; the controller runs the unchanged
+acceptance on its retained source, while dirty or changed source or contract and failed or unavailable acceptance stay
+non-green. When a contract changes a behaviour an existing test asserts, the worker updates that test. They do not merge
+either, except that a product worker integrating into dev in its own worktree merges or
 cherry-picks a branch or commit its contract names explicitly.
 If initial dispatch preparation fails before a task is registered, Goal removes the worktree and branch it created when
 Git confirms ownership, preserves the original error, and names any artifact retained for recovery.

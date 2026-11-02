@@ -301,6 +301,7 @@ export function workerPrompt(
         ? 'Do not rebase; merge or cherry-pick only what the contract names.'
         : 'Do not rebase or merge.'
     }${devProduct && !research ? " Check the contract's premises against your base first." : ''}`,
+    'If the requested behaviour already exists on the clean retained source, do not make an empty or unrelated commit. Report success without source changes; the controller runs the exact frozen acceptance on that bound source. Dirty source, changed contract, or failed or unavailable acceptance stays non-green.',
     research
       ? ''
       : `Write missing acceptance tests the contract names${devProduct ? ' or implies' : ''}; never edit a frozen file. If the contract changes a behaviour an existing test asserts, update that test and list it; keep assertions of unchanged behaviour. Write the fewest tests that pin user-visible behaviour and edge cases (as a rule fewer test lines than product lines) and only stories for states the contract names.`,

@@ -1583,6 +1583,7 @@ export class MergeTrain {
 
   private canBatch(entry: LandingEntry): boolean {
     const o = this.options;
+    if (entry.request.unchangedClaim) return false;
     if (entry.request.managerLanding) return false;
     if (!o.integrationBranch || !o.fence.commitBatchMerge) return false;
     if ((entry.request.affectedTests ?? []).some((test) => test.status === 'failed')) return false;
@@ -2572,6 +2573,110 @@ export class MergeTrain {
             attributeFailure(result, owners.length ? owners : undefined);
           }
           return finish();
+        }
+        const unchangedClaimProblem = (): string | undefined => {
+          const task = o.fence instanceof WorkerStore ? o.fence.task(request.taskId) : undefined;
+          if (
+            !task ||
+            task.currentAttempt !== request.attempt ||
+            task.branch !== request.branch ||
+            task.worktree !== request.worktree ||
+            task.workspace ||
+            request.managerLanding
+          )
+            return 'Unchanged claim no longer matches its task and current attempt';
+          if (request.sourceDirtyAtSettlement) return 'Unchanged claim source was dirty at settlement';
+          if (
+            !request.workerCommit ||
+            workerCommit !== request.workerCommit ||
+            tip !== workerCommit ||
+            tip !== originalBase
+          )
+            return 'Unchanged claim source changed after settlement';
+          if (
+            !request.contractHash ||
+            createHash('sha256').update(task.brief.markdown).digest('hex') !== request.contractHash
+          )
+            return 'Unchanged claim contract changed after settlement';
+          if (
+            readFileSync(task.briefPath, 'utf8') !== task.brief.markdown ||
+            JSON.stringify(task.brief.acceptance.command) !== JSON.stringify(request.gate)
+          )
+            return 'Unchanged claim acceptance contract changed after settlement';
+          if (
+            git(request.worktree, 'rev-parse', 'HEAD') !== workerCommit ||
+            git(request.worktree, 'status', '--porcelain', '--untracked-files=all')
+          )
+            return 'Unchanged claim source worktree is dirty or changed';
+          if (git(o.mainCheckout, 'rev-parse', `${request.branch}^{commit}`) !== workerCommit)
+            return 'Unchanged claim source ref changed after settlement';
+          try {
+            git(o.mainCheckout, 'merge-base', '--is-ancestor', workerCommit, target());
+          } catch {
+            return 'Unchanged claim source is no longer on the landing target';
+          }
+          return undefined;
+        };
+        if (request.unchangedClaim) {
+          const refuse = (message: string): GateOutcome => {
+            result.stage = 'rebase';
+            result.firstFailure = firstFailure(message);
+            appendFileSync(logPath, `${message}\n`);
+            result.hostMs = Date.now() - started;
+            return finish();
+          };
+          const problem = unchangedClaimProblem();
+          if (problem) return refuse(problem);
+          const retainedSourceAcceptance: NonNullable<GateOutcome['retainedSourceAcceptance']> = {
+            sourceCommit: workerCommit!,
+            command: [...request.gate],
+            status: 'unavailable',
+          };
+          result.retainedSourceAcceptance = retainedSourceAcceptance;
+          appendFileSync(
+            logPath,
+            `Retained-source acceptance task=${request.taskId} attempt=${request.attempt} source=${workerCommit}: ${request.gate.join(' ')}\n`,
+          );
+          try {
+            if (
+              !existsSync(join(trainTree, 'node_modules')) &&
+              existsSync(join(trainTree, 'bun.lock')) &&
+              existsSync(join(trainTree, 'package.json'))
+            )
+              installShared(trainTree);
+            const checked = await runGate(request.gate, trainTree, logPath);
+            retainedSourceAcceptance.status = checked.passed
+              ? 'passed'
+              : checked.timedOut
+                ? 'unavailable'
+                : 'failed';
+            assertCandidate(trainTree, workerCommit!, 'retained-source acceptance', logPath);
+            if (git(trainTree, 'status', '--porcelain', '--untracked-files=all'))
+              throw new Error('Retained-source acceptance left a dirty source worktree');
+            o.fence.assertCurrent(request);
+            const afterProblem = unchangedClaimProblem();
+            if (afterProblem) return refuse(afterProblem);
+            if (!checked.passed) {
+              result.stage = 'gate';
+              result.firstFailure = firstFailure(checked.output || 'Retained-source acceptance did not pass');
+              result.failedCommand = [...request.gate];
+              result.timedOut = checked.timedOut;
+              result.hostMs = Date.now() - started;
+              return finish();
+            }
+            result.passed = true;
+            result.stage = 'merge';
+            result.mergedCommit = workerCommit!;
+            result.hostMs = Date.now() - started;
+            return finish();
+          } catch (error) {
+            if (error instanceof StaleAttemptError) throw error;
+            result.stage = 'gate';
+            result.firstFailure = firstFailure(String(error));
+            result.failedCommand = [...request.gate];
+            result.hostMs = Date.now() - started;
+            return finish();
+          }
         }
         const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
         const worked = git(trainTree, 'diff', '--name-only', originalBase, 'HEAD')
