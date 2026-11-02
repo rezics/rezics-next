@@ -322,11 +322,11 @@ test.each(['occupied', 'stale', 'expired'] as const)(
   },
 );
 
-test('script-free forms remove then restore from the exact receipt on either surface without another entry read', async () => {
+test.each([false, true])('script-free removal with restore admission %s preserves the native receipt', async (restoreAdmitted) => {
   const { createKernelClient } = await import('@rezics/client');
   const { createRecordedKernelFetch, setFakeAdmitted } = await import('../src/kernel/fake');
   const { libraryEntryFormResponse } = await import('../src/library/entry-form');
-  setFakeAdmitted(['personal_library', 'library_entry.restore']);
+  setFakeAdmitted(['personal_library', 'library_entry.delete', ...(restoreAdmitted ? ['library_entry.restore'] : [])]);
   const calls: Request[] = [];
   const fake = createRecordedKernelFetch({});
   const client = createKernelClient('https://kernel.test', {
@@ -361,6 +361,13 @@ test('script-free forms remove then restore from the exact receipt on either sur
     expect(removed.status).toBe(200);
     expect(removed.headers.get('cache-control')).toBe('private, no-store');
     const html = await removed.text();
+    if (!restoreAdmitted) {
+      expect(html).toContain('Removed');
+      expect(html).not.toContain('name="intent" value="restore"');
+      expect(html).not.toContain('name="deletionId"');
+      expect(calls.filter((call) => call.method === 'DELETE')).toHaveLength(1);
+      continue;
+    }
     expect(html).toContain('method="post"');
     expect(html).toContain('action="/library/entry"');
     expect(html).not.toContain('<script');
@@ -389,7 +396,7 @@ test('script-free forms remove then restore from the exact receipt on either sur
   setFakeAdmitted([]);
 });
 
-test('the new form endpoint validates cookie CSRF and stays closed when only the group is exposed', async () => {
+test('the new form endpoint validates cookie CSRF and requires each intent admission', async () => {
   const { createKernelClient } = await import('@rezics/client');
   const { createRecordedKernelFetch, setFakeAdmitted } = await import('../src/kernel/fake');
   const { libraryEntryFormResponse } = await import('../src/library/entry-form');
@@ -418,12 +425,13 @@ test('the new form endpoint validates cookie CSRF and stays closed when only the
       }),
     },
   } as unknown as import('../src/session/client').SessionEnv;
-  const send = (csrf: string) =>
+  const send = (csrf: string, intent = 'restore') =>
     new Request('https://rezics.test/library/entry', {
       method: 'POST',
       headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}`, origin: 'https://rezics.test' },
       body: new URLSearchParams({
-        intent: 'restore',
+        intent,
+        idempotencyKey: '0192f3a0-6c1e-7b2a-9d4e-000000000002',
         subjectId,
         deletionId: 'undo-ok',
         revision: '12',
@@ -447,12 +455,35 @@ test('the new form endpoint validates cookie CSRF and stays closed when only the
   expect(calls).toHaveLength(0);
   setFakeAdmitted(['personal_library']);
   expect((await libraryEntryFormResponse(send(token), env, client)).status).toBe(403);
+  expect((await libraryEntryFormResponse(send(token, 'remove'), env, client)).status).toBe(403);
   expect(calls.every((call) => new URL(call.url).pathname === '/v1/platform/exposure')).toBe(true);
   calls.length = 0;
   setFakeAdmitted(['personal_library', 'library_entry.restore']);
+  expect((await libraryEntryFormResponse(send(token, 'remove'), env, client)).status).toBe(403);
+  const foreign = send(token);
+  foreign.headers.set('origin', 'https://other.test');
+  expect((await libraryEntryFormResponse(foreign, env, client)).status).toBe(403);
   expect((await libraryEntryFormResponse(send(token), env, client)).status).toBe(200);
   expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1);
   setFakeAdmitted([]);
+});
+
+test.each([
+  [['personal_library', 'library_entry.delete'], true],
+  [['personal_library', 'library_entry.restore'], false],
+  [['personal_library'], false],
+] as const)('remove form requires its own operation: %j', async (admitted, visible) => {
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { createElement } = await import('react');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { EntryRemoveForm } = await import('../src/library/entry-undo');
+  const client = new QueryClient();
+  client.setQueryData(['exposure', 'anonymous'], admitted);
+  const html = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(EntryRemoveForm, {
+    locale: 'en', subjectId, revision: 7, idempotencyKey: deletionId,
+  })));
+  expect(html.includes('name="intent" value="remove"')).toBe(visible);
+  client.clear();
 });
 
 test('both page components render the restored entry supplied in the restore response', async () => {
