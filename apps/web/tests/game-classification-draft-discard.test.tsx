@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { FactResult } from '../src/features/catalogue/subject-facts';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -41,6 +42,7 @@ test('Game discards only the confirmed unsent classification and retires confirm
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   let visible = true,
     epoch = 'original',
     generation = 0,
@@ -62,11 +64,16 @@ test('Game discards only the confirmed unsent classification and retires confirm
   const render = () =>
     act(async () =>
       root.render(
-        <CandidateReaderBoundary observed={{ state: 'signed-in', subject: gameId, csrfToken: epoch }} address={gameId}>
-          <CatalogueCurrentReading visible={visible} ready={visible} revision={String(visible)}>
-            <GameClassifications key={generation} {...props} />
-          </CatalogueCurrentReading>
-        </CandidateReaderBoundary>,
+        <QueryClientProvider client={client}>
+          <CandidateReaderBoundary
+            observed={{ state: 'signed-in', subject: gameId, csrfToken: epoch }}
+            address={gameId}
+          >
+            <CatalogueCurrentReading visible={visible} ready={visible} revision={String(visible)}>
+              <GameClassifications key={generation} {...props} />
+            </CatalogueCurrentReading>
+          </CandidateReaderBoundary>
+        </QueryClientProvider>,
       ),
     );
   const section = (property = 'schema:inLanguage') =>
@@ -147,6 +154,7 @@ test('Game discards only the confirmed unsent classification and retires confirm
     }
   } finally {
     await act(async () => root.unmount());
+    client.clear();
     await window.happyDOM.abort();
     setLocale(oldLocale, { reload: false });
     for (const [key, descriptor] of saved)
