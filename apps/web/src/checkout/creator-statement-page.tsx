@@ -1,3 +1,4 @@
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@rezics/ui/shadcn/accordion';
 import { Link } from '@tanstack/react-router';
@@ -139,89 +140,97 @@ export function CreatorStatementPage({
                     {m.statements_lines_empty()}
                   </p>
                 ) : (
-                  <ul className="space-y-4">
+                  <ul className="min-w-0 space-y-2">
                     {page.lines.lines.map((line) => (
-                      <li
-                        key={line.balanceTransactionId}
-                        className="min-w-0 space-y-4 rounded-xl border bg-card p-4 text-card-foreground sm:p-5"
-                      >
-                        <div className="flex flex-wrap justify-between gap-2">
-                          <h3 className="font-semibold">{lineKind(line.kind)}</h3>
-                          <StatementAmount
-                            moneyUnit={recordedMoneyUnit(line)}
-                            value={line.netReceiptsMinor}
-                            currency={line.currency}
-                            locale={locale}
-                          />
-                        </div>
-                        <dl className="grid min-w-0 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                          {[
-                            [m.statements_recording_month(), line.period],
-                            [
-                              m.statements_royalty_basis(),
-                              new Intl.NumberFormat(locale).format(line.royaltyBasisPoints),
-                            ],
-                          ].map(([label, value]) => (
-                            <div key={label} className="min-w-0">
-                              <dt className="text-muted-foreground">{label}</dt>
-                              <dd className="break-all">{value}</dd>
-                            </div>
-                          ))}
-                          <div>
-                            <dt className="text-muted-foreground">{m.statements_created()}</dt>
-                            <dd>
-                              <StatementTime value={line.created} locale={locale} />
-                            </dd>
-                          </div>
-                          <div>
-                            <dt className="text-muted-foreground">{m.statements_recorded()}</dt>
-                            <dd>
-                              <StatementTime value={line.recordedAt} locale={locale} />
-                            </dd>
-                          </div>
-                          {(
-                            [
-                              [m.statements_gross(), line.grossMinor],
-                              [m.statements_tax(), line.taxMinor],
-                              [m.statements_fee(), line.feeMinor],
-                              [m.statements_dispute_fee(), line.disputeFeeMinor],
-                              [m.statements_net(), line.netReceiptsMinor],
-                            ] satisfies readonly (readonly [string, number])[]
-                          ).map(([label, value]) => (
-                            <div key={label}>
-                              <dt className="text-muted-foreground">{label}</dt>
-                              <dd>
+                      <li key={line.balanceTransactionId} className="min-w-0">
+                        <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
+                          <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-6 gap-y-2">
+                            <ContentItemHeading
+                              level={3}
+                              className="min-w-0 break-words text-[17px] leading-snug font-semibold sm:text-lg md:text-xl"
+                            >
+                              {lineKind(line.kind)}
+                            </ContentItemHeading>
+                            <dl className="min-w-0 sm:text-right">
+                              <dt className="text-sm text-muted-foreground">{m.statements_net()}</dt>
+                              <dd className="break-words font-semibold">
                                 <StatementAmount
                                   moneyUnit={recordedMoneyUnit(line)}
-                                  value={value}
+                                  value={line.netReceiptsMinor}
                                   currency={line.currency}
                                   locale={locale}
                                 />
                               </dd>
+                            </dl>
+                          </div>
+                          <dl className="grid min-w-0 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+                            {[
+                              [m.statements_recording_month(), line.period],
+                              [
+                                m.statements_royalty_basis(),
+                                new Intl.NumberFormat(locale).format(line.royaltyBasisPoints),
+                              ],
+                            ].map(([label, value]) => (
+                              <div key={label} className="min-w-0">
+                                <dt className="text-muted-foreground">{label}</dt>
+                                <dd className="break-words tabular-nums">{value}</dd>
+                              </div>
+                            ))}
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">{m.statements_created()}</dt>
+                              <dd className="break-words">
+                                <StatementTime value={line.created} locale={locale} />
+                              </dd>
                             </div>
-                          ))}
-                        </dl>
-                        <Accordion className="min-w-0">
-                          <AccordionItem value="source">
-                            <AccordionTrigger className="min-h-11">
-                              {m.statements_line_source_details()}
-                            </AccordionTrigger>
-                            <AccordionContent keepMounted>
-                              <dl className="grid min-w-0 gap-3 text-sm">
-                                {[
-                                  [m.statements_transaction(), line.balanceTransactionId],
-                                  [m.statements_order_source(), line.orderId],
-                                  [m.statements_offer_source(), line.offerId],
-                                ].map(([label, value]) => (
-                                  <div key={label} className="min-w-0">
-                                    <dt className="text-muted-foreground">{label}</dt>
-                                    <dd className="select-all break-all">{value}</dd>
-                                  </div>
-                                ))}
-                              </dl>
-                            </AccordionContent>
-                          </AccordionItem>
-                        </Accordion>
+                            <div className="min-w-0">
+                              <dt className="text-muted-foreground">{m.statements_recorded()}</dt>
+                              <dd className="break-words">
+                                <StatementTime value={line.recordedAt} locale={locale} />
+                              </dd>
+                            </div>
+                            {(
+                              [
+                                [m.statements_gross(), line.grossMinor],
+                                [m.statements_tax(), line.taxMinor],
+                                [m.statements_fee(), line.feeMinor],
+                                [m.statements_dispute_fee(), line.disputeFeeMinor],
+                              ] satisfies readonly (readonly [string, number])[]
+                            ).map(([label, value]) => (
+                              <div key={label} className="min-w-0">
+                                <dt className="text-muted-foreground">{label}</dt>
+                                <dd className="break-words">
+                                  <StatementAmount
+                                    moneyUnit={recordedMoneyUnit(line)}
+                                    value={value}
+                                    currency={line.currency}
+                                    locale={locale}
+                                  />
+                                </dd>
+                              </div>
+                            ))}
+                          </dl>
+                          <Accordion className="min-w-0">
+                            <AccordionItem value="source">
+                              <AccordionTrigger className="min-h-11">
+                                {m.statements_line_source_details()}
+                              </AccordionTrigger>
+                              <AccordionContent keepMounted>
+                                <dl className="grid min-w-0 gap-3 text-sm">
+                                  {[
+                                    [m.statements_transaction(), line.balanceTransactionId],
+                                    [m.statements_order_source(), line.orderId],
+                                    [m.statements_offer_source(), line.offerId],
+                                  ].map(([label, value]) => (
+                                    <div key={label} className="min-w-0">
+                                      <dt className="text-muted-foreground">{label}</dt>
+                                      <dd className="select-all break-all">{value}</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              </AccordionContent>
+                            </AccordionItem>
+                          </Accordion>
+                        </ContentItemFrame>
                       </li>
                     ))}
                   </ul>
