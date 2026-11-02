@@ -104,8 +104,9 @@ function descriptionFor(
 }
 
 function visibleStatement(subject: NonNullable<ReturnType<typeof subjectBody>>['subject']): boolean {
-  return Object.values(subject.statements).some((statements) =>
-    bestRank((statements as unknown as Stmt[]).filter((statement) => spoilerLevel(statement) === 0)).length > 0,
+  return Object.values(subject.statements).some(
+    (statements) =>
+      bestRank((statements as unknown as Stmt[]).filter((statement) => spoilerLevel(statement) === 0)).length > 0,
   );
 }
 
