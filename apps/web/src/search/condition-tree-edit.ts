@@ -5,6 +5,7 @@ export type ConditionTreeEdit =
   | { type: 'operator'; operator: 'and' | 'or' | 'not' }
   | { type: 'unwrap' }
   | { type: 'append'; value: FilterDocument }
+  | { type: 'replace'; value: FilterDocument }
   | { type: 'remove' };
 export type ConditionTreeEditResult = { accepted: true; value: FilterDocument | undefined } | { accepted: false };
 
@@ -89,6 +90,7 @@ export function editConditionTree(
   const next = updateAt(tree, path, (current): EditValue => {
     if (edit.type === 'remove') return undefined;
     if (edit.type === 'unwrap') return 'not' in current ? current.not : rejected;
+    if (edit.type === 'replace') return edit.value;
     if (edit.type === 'append') {
       if ('and' in current) return { and: [...current.and, edit.value] };
       if ('or' in current) return { or: [...current.or, edit.value] };

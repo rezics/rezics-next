@@ -2,6 +2,7 @@ import {
   createFilterConstruction,
   FilterError,
   parseFilter,
+  type FilterAdmissionOptions,
   type FilterDocument,
   type FilterRelease,
 } from '@rezics/filter';
@@ -69,6 +70,13 @@ export function conditionMetadata(
     ),
     ...(release.filters ? { filters } : {}),
   };
+}
+
+/** Apply released-filter expansion and grammar limits to the complete edited tree. */
+export function conditionTreeAdmission(metadata: ConditionMetadata, options?: FilterAdmissionOptions) {
+  const construction = createFilterConstruction(metadata);
+  return (condition: FilterDocument): boolean =>
+    construction.validateFilter({ and: [condition] }, options).length === 0;
 }
 
 /** Retain the authored tree, rather than persisting saved-filter expansion or interpreting Boolean truth. */

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   FILTER_LIMITS,
   facetProperties,
@@ -14,10 +14,12 @@ import { m } from '../paraglide/messages.js';
 import { localizedLabel } from './results';
 import { ConditionRangeInput } from './condition-range-input';
 import { ConditionLanguages } from './condition-languages';
+import { ConditionSavedFilter, editSavedFilterTree, type SavedFilterEditMode } from './condition-saved-filter';
 import {
   CONDITION_POINTER,
   conditionChoiceLabels,
   conditionFieldIssues,
+  conditionTreeAdmission,
   type ConditionIssue,
   type ConditionMetadata,
 } from './condition-editor-model';
@@ -46,6 +48,9 @@ type EditorContext = {
   announce(message: string, pointer: string): void;
   canEditTree(path: ConditionTreePath, edit: ConditionTreeEdit): boolean;
   editTree(path: ConditionTreePath, edit: ConditionTreeEdit): boolean;
+  savedFilters: readonly string[];
+  canSelectSavedFilter(path: ConditionTreePath, id: string, mode: SavedFilterEditMode): boolean;
+  selectSavedFilter(path: ConditionTreePath, id: string, mode: SavedFilterEditMode): boolean;
   extension?: ConditionExtension | undefined;
 };
 /** A consumer can compose additional shared grammar leaves without a second tree editor or evaluator. */
@@ -120,8 +125,37 @@ export function ConditionEditor({
     onChange(result.value);
     return true;
   };
+  const admitsCondition = useMemo(
+    () => (metadata ? conditionTreeAdmission(metadata, extension ? { owner: true } : undefined) : undefined),
+    [metadata, extension !== undefined],
+  );
+  const savedFilters = metadata ? Object.keys(metadata.filters ?? {}) : [];
+  const getSavedFilterEdit = (path: ConditionTreePath, id: string, mode: SavedFilterEditMode) => {
+    if (!value || !admitsCondition) return undefined;
+    return editSavedFilterTree(value, path, id, mode, admitsCondition);
+  };
+  const canSelectSavedFilter = (path: ConditionTreePath, id: string, mode: SavedFilterEditMode) =>
+    getSavedFilterEdit(path, id, mode) !== undefined;
+  const selectSavedFilter = (path: ConditionTreePath, id: string, mode: SavedFilterEditMode) => {
+    const next = getSavedFilterEdit(path, id, mode);
+    if (!next) return false;
+    onChange(next);
+    return true;
+  };
   const context: EditorContext | undefined = metadata
-    ? { metadata, locale, issues, values, announce, canEditTree, editTree, extension }
+    ? {
+        metadata,
+        locale,
+        issues,
+        values,
+        announce,
+        canEditTree,
+        editTree,
+        savedFilters,
+        canSelectSavedFilter,
+        selectSavedFilter,
+        extension,
+      }
     : undefined;
   return (
     <div ref={root} className="min-w-0 space-y-3 border-t border-border/60 pt-4" data-condition-editor>
@@ -248,6 +282,8 @@ function NodeEditor({
         ? m.condition_or()
         : operator === 'not'
           ? m.condition_not()
+          : 'saved' in value
+            ? m.condition_saved_filter_label({ id: value.saved })
           : 'type' in value
             ? m.search_type()
             : 'statement' in value
@@ -423,6 +459,15 @@ function NodeEditor({
               {choice.label}
             </Button>
           ))}
+          <ConditionSavedFilter
+            filters={context.savedFilters}
+            canSelect={(id) => context.canSelectSavedFilter(path, id, 'append')}
+            onSelect={(id) => {
+              const added = context.selectSavedFilter(path, id, 'append');
+              if (added) context.announce(m.condition_added(), `${pointer}/${operator}/${group.length}`);
+              return added;
+            }}
+          />
         </>
       )}
       {'not' in value && (
@@ -605,7 +650,15 @@ function NodeEditor({
           )}
         </>
       )}
-      {('saved' in value || 'owner' in value) && !extensionLeaf && (
+      {'saved' in value && !extensionLeaf && (
+        <ConditionSavedFilter
+          filters={context.savedFilters}
+          value={value.saved}
+          canSelect={(id) => context.canSelectSavedFilter(path, id, 'replace')}
+          onSelect={(id) => context.selectSavedFilter(path, id, 'replace')}
+        />
+      )}
+      {'owner' in value && !extensionLeaf && (
         <p className="text-sm text-muted-foreground">{m.condition_retained()}</p>
       )}
       {pendingPropertyChange && (
