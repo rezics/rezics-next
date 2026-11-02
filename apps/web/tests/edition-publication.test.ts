@@ -6,10 +6,12 @@ import { editionDocumentDigest } from '../src/content-editions/edition-model';
 import {
   EditionPublicationController,
   editionCreateHref,
+  editionCreateNavigationContext,
   editionSourceFromLink,
   type EditionCommandRead,
   type EditionCreateApi,
   type EditionPublicationIntent,
+  type EditionSourceRead,
 } from '../src/content-editions/edition-create';
 import {
   createNativeEditionCreateApi,
@@ -153,6 +155,41 @@ async function fixture() {
     },
   };
 }
+
+test('retirement ignores late source reads and refuses later actions', async () => {
+  const native = await fixture();
+  let resolveSource!: (result: EditionSourceRead) => void;
+  let reads = 0;
+  const pending = new Promise<EditionSourceRead>((resolve) => {
+    resolveSource = resolve;
+  });
+  const controller = new EditionPublicationController({
+    ...native.api,
+    source: async () => {
+      reads++;
+      return pending;
+    },
+  });
+  const selecting = controller.select(identity);
+  controller.retire();
+  await controller.select(identity);
+  await controller.resume(editionId);
+  await controller.create();
+  expect(reads).toBe(1);
+  resolveSource(await native.api.source(identity));
+  await selecting;
+  expect(controller.snapshot()).toMatchObject({ source: null, identity: null, intent: null, busy: false });
+});
+
+test('publication route identity ignores unrelated search metadata', () => {
+  const current = { pathname: '/de/editions/new', search: { ...identity, campaign: 'one' } };
+  expect(editionCreateNavigationContext(current)).toBe(
+    editionCreateNavigationContext({ ...current, search: { ...current.search, campaign: 'two' } }),
+  );
+  expect(editionCreateNavigationContext(current)).not.toBe(
+    editionCreateNavigationContext({ ...current, search: { ...current.search, postId: id(4) } }),
+  );
+});
 
 test('the assigned real current-authorized journey binds its native source while privacy retry and request bounds remain meaningful', async () => {
   const native = await fixture();

@@ -15,6 +15,7 @@ import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { useSession } from '../session/query';
 import { exactRevisionHref } from '../threads/exact-revision-href';
+import { useAuthoringDeparture } from '../threads/authoring-departure';
 import {
   commandEditionPublication,
   readEditionCreateSource,
@@ -141,6 +142,28 @@ export function EditionPublication({
   const locale = getLocale();
   const initialPostId = initialSource?.postId;
   const initialRevisionId = initialSource?.revisionId;
+  const unresolvedCommand = !!state.intent && (state.busy || state.uncertain);
+  const localSelection =
+    state.resumeEditionId === null &&
+    !state.edition &&
+    (!!sourceLink.trim() || !!state.identity);
+  const needsDeparture =
+    localSelection || (confirmed && state.edition?.state === 'draft') || unresolvedCommand;
+  useAuthoringDeparture(
+    needsDeparture,
+    unresolvedCommand,
+    JSON.stringify([
+      sourceLink,
+      state.identity,
+      state.targetSubjectId,
+      state.edition?.editionId,
+      state.edition?.editionRevision,
+      state.intent,
+      confirmed,
+    ]),
+    undefined,
+    controller.retire,
+  );
   useEffect(() => {
     if (initialEditionId !== undefined) {
       void controller.resume(initialEditionId, initialResume);
@@ -150,6 +173,7 @@ export function EditionPublication({
       void controller.select({ postId: initialPostId, revisionId: initialRevisionId });
   }, [controller, initialPostId, initialRevisionId, initialEditionId, initialResume]);
   useEffect(() => {
+    if (state.intent && (state.busy || state.uncertain)) return;
     setConfirmed(false);
   }, [state.review, state.failure, state.busy, state.edition?.editionRevision, state.targetSubjectId]);
   const { source, failure } = state;

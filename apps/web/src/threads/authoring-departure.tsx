@@ -203,8 +203,8 @@ export function AuthoringDepartureProvider({
   navigationContext?: NavigationContext;
   onNavigationLeave?: () => void;
   navigationMessages?: NavigationMessages;
-  /** Claim panels already bind replacement sessions through their private caller lifetime. */
-  sessionBound?: boolean;
+  /** `subject` treats a same-account token refresh as the same session; `true` also binds the token. */
+  sessionBound?: boolean | 'subject';
 }) {
   const leave = useRef(onNavigationLeave);
   leave.current = onNavigationLeave;
@@ -222,7 +222,10 @@ export function AuthoringDepartureProvider({
   const retired = useRef(false);
   if (sessionBound && session?.state === 'signed-in') {
     if (!owner.current) owner.current = { subject: session.subject ?? null, csrfToken: session.csrfToken };
-    else if (owner.current.subject !== (session.subject ?? null) || owner.current.csrfToken !== session.csrfToken)
+    else if (
+      owner.current.subject !== (session.subject ?? null) ||
+      (sessionBound === true && owner.current.csrfToken !== session.csrfToken)
+    )
       retired.current = true;
   } else if (sessionBound && owner.current) retired.current = true;
 

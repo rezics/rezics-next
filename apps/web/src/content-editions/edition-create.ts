@@ -95,6 +95,20 @@ export type EditionPublicationState = {
   uncertain: boolean;
 };
 
+const emptyPublicationState = (): EditionPublicationState => ({
+  source: null,
+  identity: null,
+  targetSubjectId: '',
+  edition: null,
+  knownEditionId: null,
+  resumeEditionId: null,
+  intent: null,
+  failure: null,
+  review: null,
+  busy: false,
+  uncertain: false,
+});
+
 /** Only an existing exact-revision link selects a source; IDs never become document bytes. */
 export function editionSourceFromLink(value: string, origin = 'https://site.invalid'): EditionSourceIdentity | null {
   try {
@@ -125,6 +139,15 @@ export function editionCreateSearch(search: Record<string, unknown>) {
         ? search.revisionId
         : undefined,
   };
+}
+
+/** Route departure follows only the source or edition identity; unrelated search metadata is browsing state. */
+export function editionCreateNavigationContext(location: { pathname: string; search: Record<string, unknown> }) {
+  if (!location.pathname.endsWith('/editions/new')) return location.pathname;
+  const { editionId, postId, revisionId } = editionCreateSearch(location.search);
+  const identity =
+    editionId !== undefined ? `edition:${editionId}` : `source:${postId ?? ''}:${revisionId ?? ''}`;
+  return `${location.pathname}\u0000${identity}`;
 }
 
 export function editionCreateHref(source: EditionSourceIdentity, locale: string): string {
@@ -159,38 +182,37 @@ export function editionBindingMatches(a: EditionMetadata, b: EditionMetadata): b
 
 /** One mounted draft. Neither a new token nor a lost response replaces its intent. */
 export class EditionPublicationController {
-  private state: EditionPublicationState = {
-    source: null,
-    identity: null,
-    targetSubjectId: '',
-    edition: null,
-    knownEditionId: null,
-    resumeEditionId: null,
-    intent: null,
-    failure: null,
-    review: null,
-    busy: false,
-    uncertain: false,
-  };
+  private state: EditionPublicationState = emptyPublicationState();
   private listeners = new Set<() => void>();
   private generation = 0;
+  private retired = false;
   constructor(
     private api: EditionCreateApi,
     private newKey: () => string = () => crypto.randomUUID(),
   ) {}
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {
+    if (this.retired) return () => {};
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
     };
   };
+  retire = () => {
+    if (this.retired) return;
+    this.retired = true;
+    this.generation++;
+    this.state = emptyPublicationState();
+    this.listeners.clear();
+  };
   private set(patch: Partial<EditionPublicationState>) {
+    if (this.retired) return;
     this.state = { ...this.state, ...patch };
     for (const listener of this.listeners) listener();
   }
   async resume(editionId: string, loaded?: EditionResumeRead) {
-    if (this.state.busy || this.state.intent || this.state.edition || this.state.resumeEditionId !== null) return;
+    if (this.retired || this.state.busy || this.state.intent || this.state.edition || this.state.resumeEditionId !== null)
+      return;
     const generation = ++this.generation;
     this.set({
       resumeEditionId: editionId,
@@ -218,7 +240,7 @@ export class EditionPublicationController {
       });
   }
   async select(identity: EditionSourceIdentity) {
-    if (this.state.intent || this.state.edition || this.state.resumeEditionId !== null) return;
+    if (this.retired || this.state.intent || this.state.edition || this.state.resumeEditionId !== null) return;
     const generation = ++this.generation;
     this.set({ identity, source: null, targetSubjectId: '', failure: null, review: null, busy: true });
     let result: EditionSourceRead;
@@ -242,6 +264,7 @@ export class EditionPublicationController {
   }
   chooseSubject(targetSubjectId: string) {
     if (
+      this.retired ||
       this.state.busy ||
       this.state.intent ||
       this.state.edition ||
@@ -254,6 +277,7 @@ export class EditionPublicationController {
   async create() {
     const { source, targetSubjectId, edition, intent, busy, failure } = this.state;
     if (
+      this.retired ||
       busy ||
       intent ||
       edition ||
@@ -271,7 +295,14 @@ export class EditionPublicationController {
   }
   async publish() {
     const { source, targetSubjectId, edition, intent, busy, failure } = this.state;
-    if (busy || intent || failure || (!source && this.state.resumeEditionId === null) || edition?.state !== 'draft')
+    if (
+      this.retired ||
+      busy ||
+      intent ||
+      failure ||
+      (!source && this.state.resumeEditionId === null) ||
+      edition?.state !== 'draft'
+    )
       return;
     await this.send({
       kind: 'publish',
@@ -284,6 +315,7 @@ export class EditionPublicationController {
   }
   async retry() {
     if (
+      !this.retired &&
       !this.state.busy &&
       (this.state.source || this.state.resumeEditionId !== null) &&
       this.state.intent &&
@@ -295,6 +327,7 @@ export class EditionPublicationController {
       else await this.send(this.state.intent);
   }
   private async send(intent: EditionPublicationIntent) {
+    if (this.retired) return;
     const generation = ++this.generation;
     this.set({ intent, failure: null, review: null, busy: true });
     let result: EditionCommandRead;
@@ -341,7 +374,7 @@ export class EditionPublicationController {
   }
   /** A fresh refusal conceals old bytes immediately, even while an earlier command completes. */
   async refresh() {
-    if (!this.state.identity && this.state.resumeEditionId === null) return;
+    if (this.retired || (!this.state.identity && this.state.resumeEditionId === null)) return;
     const generation = ++this.generation;
     this.set({
       source: null,
@@ -416,7 +449,7 @@ export class EditionPublicationController {
   }
   acceptReview() {
     const { review, busy, intent, targetSubjectId } = this.state;
-    if (busy || !review || (intent && this.state.uncertain)) return;
+    if (this.retired || busy || !review || (intent && this.state.uncertain)) return;
     if (
       review.edition &&
       (review.source

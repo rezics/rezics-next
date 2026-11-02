@@ -34,9 +34,19 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
-    await import('@tanstack/react-router');
+  const {
+    createMemoryHistory,
+    createRootRoute,
+    createRoute,
+    createRouter,
+    Outlet,
+    RouterProvider,
+  } = await import('@tanstack/react-router');
   const { AuthoringDepartureProvider } = await import('../src/threads/authoring-departure');
+  const { EditionPublication } = await import('../src/content-editions/edition-create-view');
+  const { EditionPublicationController, editionCreateNavigationContext } = await import(
+    '../src/content-editions/edition-create'
+  );
   const { PostComposer, InlinePostEditor } = await import('../src/threads/composer');
   const { ThreadReplyComposer } = await import('../src/threads/reply-context-composer');
   const { sessionQuery } = await import('../src/session/query');
@@ -90,7 +100,12 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     return event.defaultPrevented;
   };
   const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
-  const openDialog = async (origin: HTMLElement, message: string, discard = false) => {
+  const openDialog = async (
+    origin: HTMLElement,
+    message: string,
+    discard = false,
+    title = m.thread_authoring_leave_title(),
+  ) => {
     await act(async () => {
       origin.focus();
       await user.keyboard('{Enter}');
@@ -101,7 +116,7 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     expect(description?.textContent).toBe(message);
     expect(description?.closest('details')).toBeNull();
     expect(popup.querySelector('h2')?.textContent).toBe(
-      discard ? m.thread_authoring_discard_title() : m.thread_authoring_leave_title(),
+      discard ? m.thread_authoring_discard_title() : title,
     );
     expect(popup.querySelectorAll('button')).toHaveLength(2);
     const stay = button(popup, m.thread_authoring_stay());
@@ -130,7 +145,11 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     return editor;
   };
 
-  const mount = async (kind: 'opening' | 'reply' | 'edit', hold = false) => {
+  const mount = async (
+    kind: 'opening' | 'reply' | 'edit' | 'edition',
+    hold = false,
+    publication?: { controller: InstanceType<typeof EditionPublicationController>; events: string[] },
+  ) => {
     await act(async () => root.render(null));
     client.clear();
     client.setQueryData(sessionQuery.queryKey, owner);
@@ -152,7 +171,19 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
       return (
         <>
           {shown ? (
-            <AuthoringDepartureProvider>
+            <AuthoringDepartureProvider
+              navigationContext={kind === 'edition' ? editionCreateNavigationContext : undefined}
+              navigationMessages={
+                kind === 'edition'
+                  ? {
+                      title: m.edition_publication_leave_title(),
+                      unsaved: m.edition_publication_leave_unsaved(),
+                      pending: m.edition_publication_leave_pending(),
+                    }
+                  : undefined
+              }
+              sessionBound={kind === 'edition' ? 'subject' : true}
+            >
               {kind === 'edit' ? (
                 [0, 1].map((index) => (
                   <section key={index} data-editor={index}>
@@ -191,6 +222,8 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
                     successes++;
                   }}
                 />
+              ) : kind === 'edition' ? (
+                <EditionPublication controller={publication!.controller} />
               ) : (
                 <PostComposer
                   initialKey={id(10)}
@@ -204,7 +237,7 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
                 />
               )}
               <button type="button" onClick={() => void router.navigate({ href: '/inbox' })}>
-                Leave conversation
+                {kind === 'edition' ? 'Leave publication' : 'Leave conversation'}
               </button>
               <form method="post" action="/auth/sign-out">
                 <button type="submit">Sign out</button>
@@ -229,7 +262,14 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     const router = createRouter({
       routeTree: parent.addChildren([
         createRoute({ getParentRoute: () => parent, path: '/compose', component: Page }),
-        createRoute({ getParentRoute: () => parent, path: '/inbox', component: Destination }),
+        createRoute({
+          getParentRoute: () => parent,
+          path: '/inbox',
+          loader: () => {
+            if (publication) publication.events.push('read');
+          },
+          component: Destination,
+        }),
       ]),
       history: createMemoryHistory({ initialEntries: ['/compose'] }),
     });
@@ -241,7 +281,9 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
         </QueryClientProvider>,
       ),
     );
-    await settle(() => !!host.querySelector('.ProseMirror'));
+    await settle(() =>
+      kind === 'edition' ? host.textContent?.includes(m.edition_publication_draft_heading()) === true : !!host.querySelector('.ProseMirror'),
+    );
     expect(blocked()).toBe(false);
     if (kind === 'opening') {
       await act(async () => user.type(host.querySelector('#thread-title')!, localTitle));
@@ -256,7 +298,7 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
       commands,
       cancels,
       resolve,
-      origin: button(host, 'Leave conversation'),
+      origin: button(host, kind === 'edition' ? 'Leave publication' : 'Leave conversation'),
       counts: () => ({ arrivals, successes }),
     };
   };
@@ -410,6 +452,60 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     expect(dialog()).toBeNull();
     expect(signingOut.counts()).toEqual({ arrivals: 0, successes: 0 });
     expect(requests).toEqual([]);
+
+    const story = await import('../src/stories/patterns/edition-publication/edition-publication-fixtures');
+    const fixture = await story.publicationFixture('draft');
+    const events: string[] = [];
+    const retire = fixture.controller.retire;
+    fixture.controller.retire = () => {
+      events.push('retire');
+      retire();
+    };
+    const command = fixture.api.command;
+    let resolvePublish!: (result: Awaited<ReturnType<typeof fixture.api.command>>) => void;
+    const pendingPublish = new Promise<Awaited<ReturnType<typeof fixture.api.command>>>((resolve) => {
+      resolvePublish = resolve;
+    });
+    fixture.api.command = (intent) => {
+      if (intent.kind === 'publish') return pendingPublish;
+      return command(intent);
+    };
+    const page = await mount('edition', false, { controller: fixture.controller, events });
+    const controller = fixture.controller;
+    const draft = controller.snapshot().edition!;
+    const openPublicationLeave = (origin: HTMLElement) =>
+      openDialog(origin, m.edition_publication_leave_pending(), false, m.edition_publication_leave_title());
+    expect(blocked()).toBe(false); // A persisted draft alone is browsing state.
+    await click(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    await click(button(host, m.edition_publication_publish()));
+    await settle(() => !!controller.snapshot().intent);
+    const intent = structuredClone(controller.snapshot().intent);
+    const stay = await openPublicationLeave(page.origin);
+    await stayAndRestore(stay.stay, page.origin);
+    expect(controller.snapshot()).toMatchObject({
+      identity: story.identity,
+      targetSubjectId: story.subjectId,
+      edition: { editionRevision: draft.editionRevision },
+      intent,
+    });
+    expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true);
+    const leave = await openPublicationLeave(page.origin);
+    await click(leave.leave);
+    await settle(() => page.router.state.location.pathname === '/inbox');
+    expect(events.indexOf('retire')).toBeGreaterThanOrEqual(0);
+    expect(events.indexOf('read')).toBeGreaterThan(events.indexOf('retire'));
+    const retired = controller.snapshot();
+    await act(async () => {
+      resolvePublish({
+        kind: 'confirmed',
+        edition: { ...draft, state: 'published', editionRevision: '2' },
+      });
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(controller.snapshot()).toEqual(retired);
+    expect(page.router.state.location.pathname).toBe('/inbox');
+    expect(host.textContent).toContain('Inbox destination');
+    expect(host.textContent).not.toContain(m.edition_publication_published_heading());
   } finally {
     await act(async () => root.unmount());
     client.clear();
