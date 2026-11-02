@@ -1634,7 +1634,8 @@ It retains one scalar population frontier and at most one interrupted key page, 
 ordinary Source reads at 256, and invokes the ordinary indexer's serializer and actual versions. The delivered
 `SearchWriterGuard` caps its native write chunks at 100 keys for both cold population and replay. Replay remains on
 the ordinary log/checkpoint path, at most one envelope per preparation step. Claims advance their native revision,
-so an expired attempt cannot overwrite a successor frontier. Maintenance locators expire after 24 hours; this does
+so an expired attempt cannot overwrite a successor frontier. Due discovery re-enqueues the current unleased
+revision; only a claim, an advance, or expired-lease recovery changes that dispatchable frontier. Maintenance locators expire after 24 hours; this does
 not allocate a public output slot or extend its native quota grant. Only the consumer producer owns current/building
 public output reservations. First-start discovery no longer aliases an empty generation in this composition.
 

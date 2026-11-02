@@ -98,9 +98,12 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
     },
     async due(): Promise<void> {
       await transaction(async (client) => {
+        // CASE reads the uncleared lease; later SET assignments see earlier ones.
         const rows = await client.query<{ id: string; revision: string }>(
           `
-          UPDATE search.public_preparation SET revision = revision + 1
+          UPDATE search.public_preparation
+          SET revision = CASE WHEN lease_until > 0 THEN revision + 1 ELSE revision END,
+            lease_until = 0
           WHERE (partition_no, id) IN (SELECT partition_no, id FROM search.public_preparation
           WHERE partition_no = 0 AND prefix = $1 AND due_at <= $2 AND lease_until <= $2
           ORDER BY due_at, id LIMIT 16 FOR UPDATE SKIP LOCKED)
