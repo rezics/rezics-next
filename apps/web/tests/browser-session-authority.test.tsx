@@ -73,7 +73,7 @@ function SessionProbe({ name }: { name: string }) {
   return <output data-session={name}>{JSON.stringify(session)}</output>;
 }
 
-function viewer(subject = 'reader-one', csrfToken = 'csrf-one'): SessionResult {
+function viewer(subject = 'reader-one', csrfToken: string | null = 'csrf-one'): SessionResult {
   return { state: 'signed-in', subject, csrfToken };
 }
 
@@ -206,6 +206,133 @@ test('session hydration stays private on the server and guard-seeded data become
   });
 });
 
+test('an initial browser session read with null CSRF remains signed in without granting upload authority', async () => {
+  await withUi(async (ui) => {
+    const client = ui.client();
+    sessionReads = 0;
+    sessionReader = async () => viewer('reader-one', null);
+
+    await ui.render(client, createElement(SessionProbe, { name: 'main' }));
+    await ui.flush();
+
+    expect(sessionReads).toBe(1);
+    expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('success');
+    expect(ui.session('main')).toEqual(viewer('reader-one', null));
+    expect(sessionCsrfToken()).toBeNull();
+    expect(await captureUploadToken()).toBe('');
+  });
+});
+
+test('a successful null-CSRF read stays signed in through the real guard, hook, and upload boundary', async () => {
+  await withUi(async (ui) => {
+    const client = ui.client();
+    sessionReads = 0;
+    sessionReader = async () => viewer('reader-one', null);
+    const { requireSignedIn } = await import('../src/session/guard');
+
+    await requireSignedIn({ context: { queryClient: client }, location: { publicHref: '/en/settings' } });
+    expect(sessionReads).toBe(1);
+    expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('success');
+
+    const content = createElement(SessionProbe, { name: 'main' });
+    const serverTree = createElement(QueryClientProvider, { client }, content);
+    const markup = renderToString(serverTree);
+    expect(markup).toContain('"state":"unknown"');
+    expect(sessionCsrfToken()).toBeNull();
+
+    ui.host.innerHTML = markup;
+    await ui.hydrate(client, content);
+    await ui.flush();
+
+    expect(ui.session('main')).toEqual(viewer('reader-one', null));
+    await expect(
+      requireSignedIn({ context: { queryClient: client }, location: { publicHref: '/en/settings' } }),
+    ).resolves.toBeUndefined();
+    expect(sessionCsrfToken()).toBeNull();
+    expect(await captureUploadToken()).toBe('');
+  });
+});
+
+test('same-subject null-CSRF refresh and subject changes preserve reads without borrowing a mutation token', async () => {
+  await withUi(async (ui) => {
+    const client = ui.client();
+    const { requireSignedIn } = await import('../src/session/guard');
+    client.setQueryData(sessionQuery.queryKey, viewer('reader-one', 'original-explicit-token'));
+    await ui.render(client, createElement(SessionProbe, { name: 'main' }));
+    expect(await captureUploadToken()).toBe('original-explicit-token');
+
+    client.setQueryData(sessionQuery.queryKey, viewer('reader-one', null));
+    expect(sessionCsrfToken()).toBeNull();
+    expect(await captureUploadToken()).toBe('');
+    await ui.flush();
+    expect(ui.session('main')).toEqual(viewer('reader-one', null));
+    await expect(
+      requireSignedIn({ context: { queryClient: client }, location: { publicHref: '/en/settings' } }),
+    ).resolves.toBeUndefined();
+
+    const exactToken = 'csrf:opaque/value==';
+    client.setQueryData(sessionQuery.queryKey, viewer('reader-one', exactToken));
+    expect(sessionCsrfToken()).toBe(exactToken);
+    await ui.flush();
+    expect(await captureUploadToken()).toBe(exactToken);
+
+    client.setQueryData(sessionQuery.queryKey, viewer('reader-two', null));
+    expect(sessionCsrfToken()).toBeNull();
+    expect(await captureUploadToken()).toBe('');
+    await ui.flush();
+    expect(ui.session('main')).toEqual(viewer('reader-two', null));
+    await expect(
+      requireSignedIn({ context: { queryClient: client }, location: { publicHref: '/en/settings' } }),
+    ).resolves.toBeUndefined();
+  });
+});
+
+test('background reads keep successful null-CSRF data usable until failure, then recover only current null authority', async () => {
+  await withUi(async (ui) => {
+    const client = ui.client();
+    client.setQueryData(sessionQuery.queryKey, viewer('reader-one', null));
+    await ui.render(client, createElement(SessionProbe, { name: 'main' }));
+    expect(ui.session('main')).toEqual(viewer('reader-one', null));
+
+    const backgroundResult = deferred<SessionResult>();
+    const backgroundRead = client
+      .fetchQuery({ ...sessionQuery, queryFn: () => backgroundResult.promise, staleTime: 0 })
+      .catch(() => undefined);
+    expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('success');
+    expect(ui.session('main')).toEqual(viewer('reader-one', null));
+    expect(sessionCsrfToken()).toBeNull();
+    expect(await captureUploadToken()).toBe('');
+    backgroundResult.resolve(viewer('reader-one', null));
+    await act(async () => {
+      await backgroundRead;
+    });
+    await ui.flush();
+    expect(ui.session('main')).toEqual(viewer('reader-one', null));
+
+    await client
+      .fetchQuery({
+        ...sessionQuery,
+        queryFn: async () => {
+          throw new Error('background null-CSRF session failure');
+        },
+        staleTime: 0,
+      })
+      .catch(() => undefined);
+    expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
+    expect(client.getQueryData(sessionQuery.queryKey)).toEqual(viewer('reader-one', null));
+    await ui.flush();
+    expect(ui.session('main').state).toBe('unknown');
+    expect(sessionCsrfToken()).toBeNull();
+    expect(await captureUploadToken()).toBe('');
+
+    client.setQueryData(sessionQuery.queryKey, viewer('reader-one', null));
+    expect(sessionCsrfToken()).toBeNull();
+    await ui.flush();
+    expect(ui.session('main')).toEqual(viewer('reader-one', null));
+    expect(await captureUploadToken()).toBe('');
+  });
+});
+
 test('failed retained data, recovery, transitions, malformed observations, and removal govern the real upload dispatch token', async () => {
   await withUi(async (ui) => {
     const client = ui.client();
@@ -256,14 +383,24 @@ test('failed retained data, recovery, transitions, malformed observations, and r
     expect(ui.session('main')).toEqual(viewer('reader-two', 'csrf-refreshed'));
     expect(await captureUploadToken()).toBe('csrf-refreshed');
 
-    for (const invalid of [
+    const invalidObservations: unknown[] = [
       { state: 'signed-out', subject: 'ignored', csrfToken: 'must-not-lend' },
+      { state: 'signed-out', subject: null },
       { state: 'unavailable', subject: 'ignored', csrfToken: 'must-not-lend' },
       { state: 'signed-in', subject: null, csrfToken: 'missing-subject' },
-      { state: 'signed-in', subject: 'reader-two', csrfToken: null },
       { state: 'signed-in', subject: ' ', csrfToken: 'blank-subject' },
       { state: 'signed-in', subject: 'reader-two', csrfToken: ' ' },
-    ]) {
+      { state: 'signed-in', csrfToken: null },
+      { state: 'signed-in', subject: 12, csrfToken: null },
+      { state: 'signed-in', subject: 'reader-two' },
+      { state: 'signed-in', subject: 'reader-two', csrfToken: false },
+      { state: 'signed-in', subject: 'reader-two', csrfToken: undefined },
+      { subject: 'reader-two', csrfToken: null },
+      { state: 1, subject: 'reader-two', csrfToken: null },
+      null,
+      [],
+    ];
+    for (const invalid of invalidObservations) {
       client.setQueryData(sessionQuery.queryKey, invalid);
       await ui.flush();
       expect(await captureUploadToken()).toBe('');
@@ -421,6 +558,12 @@ test('replacement clients, delayed old results, abandoned renders, and anonymous
     expect(anonymousClient.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
     expect(ui.session('anonymous').state).toBe('signed-out');
     expect(await captureUploadToken()).toBe('current-csrf');
+
+    currentClient.setQueryData(sessionQuery.queryKey, viewer('current-reader', null));
+    expect(sessionCsrfToken()).toBeNull();
+    expect(await captureUploadToken()).toBe('');
+    await ui.flush();
+    expect(ui.session('curator')).toEqual(viewer('current-reader', null));
 
     await ui.close();
     expect(currentCounts.subscribed - currentCounts.unsubscribed).toBe(0);

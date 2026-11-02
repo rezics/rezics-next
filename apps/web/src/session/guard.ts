@@ -48,7 +48,6 @@ export async function requireSignedIn({ context, location }: GuardContext): Prom
   const queryState = context.queryClient.getQueryState(sessionQuery.queryKey);
   if (!queryState || queryState.status !== 'success') throw new Error('Session unavailable');
   const session = normalizeSessionObservation(queryState.data);
-  if (session.state === 'unavailable') throw new Error('Session unavailable');
   if (session.state === 'signed-out') {
     const url = new URL(location.publicHref, 'https://site.invalid');
     throw redirect({
@@ -57,4 +56,5 @@ export async function requireSignedIn({ context, location }: GuardContext): Prom
       reloadDocument: true,
     });
   }
+  if (session.state !== 'signed-in') throw new Error('Session unavailable');
 }

@@ -29,6 +29,17 @@ test('a successful guard-seeded observation admits the current signed-in page', 
   }
 });
 
+test('a successful signed-in observation with explicit null CSRF admits read-only personal routes', async () => {
+  const queryClient = client();
+  try {
+    queryClient.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'reader-one', csrfToken: null });
+    await expect(requireSignedIn({ context: { queryClient }, location: location() })).resolves.toBeUndefined();
+    expect(queryClient.getQueryState(sessionQuery.queryKey)?.status).toBe('success');
+  } finally {
+    queryClient.clear();
+  }
+});
+
 test('ensureQueryData retained errored data cannot authorize a personal loader', async () => {
   const queryClient = client();
   try {
@@ -75,15 +86,24 @@ test('a current signed-out observation preserves the localized document redirect
   }
 });
 
-test('unavailable and malformed signed-in observations fail closed with the existing unavailable error', async () => {
+test('unavailable and malformed observations fail closed with the existing unavailable error', async () => {
   const queryClient = client();
   try {
-    for (const observation of [
+    const malformedObservations: unknown[] = [
       { state: 'unavailable', subject: null, csrfToken: null },
       { state: 'signed-in', subject: null, csrfToken: 'csrf-without-subject' },
-      { state: 'signed-in', subject: 'reader-one', csrfToken: null },
       { state: 'signed-in', subject: 'reader-one', csrfToken: ' ' },
-    ]) {
+      { state: 'signed-in', csrfToken: null },
+      { state: 'signed-in', subject: 12, csrfToken: null },
+      { state: 'signed-in', subject: 'reader-one' },
+      { state: 'signed-in', subject: 'reader-one', csrfToken: false },
+      { state: 'signed-in', subject: 'reader-one', csrfToken: undefined },
+      { subject: 'reader-one', csrfToken: null },
+      { state: 1, subject: 'reader-one', csrfToken: null },
+      null,
+      [],
+    ];
+    for (const observation of malformedObservations) {
       queryClient.setQueryData(sessionQuery.queryKey, observation);
       await expect(requireSignedIn({ context: { queryClient }, location: location() })).rejects.toThrow(
         'Session unavailable',

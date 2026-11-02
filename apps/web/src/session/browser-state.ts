@@ -37,10 +37,20 @@ const signedOutSession: BrowserSession = { state: 'signed-out', csrfToken: null,
 /** Convert an untrusted successful response into the session states the browser may observe. */
 export function normalizeSessionObservation(value: unknown): BrowserSession {
   if (!isRecord(value)) return unavailableSession;
+  const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(value, key);
+  if (!hasOwn('state')) return unavailableSession;
 
   if (value.state === 'signed-in') {
-    if (!nonEmptyString(value.subject) || !nonEmptyString(value.csrfToken)) return unavailableSession;
-    return { state: 'signed-in', subject: value.subject, csrfToken: value.csrfToken };
+    const subject = value.subject;
+    const csrfToken = value.csrfToken;
+    if (
+      !hasOwn('subject') ||
+      !hasOwn('csrfToken') ||
+      !nonEmptyString(subject) ||
+      !(csrfToken === null || nonEmptyString(csrfToken))
+    )
+      return unavailableSession;
+    return { state: 'signed-in', subject, csrfToken };
   }
 
   if (value.state === 'signed-out') return signedOutSession;
