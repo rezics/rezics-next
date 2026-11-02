@@ -32,6 +32,7 @@ const linkChange = Type.Object(
 
 export const CATALOGUE_ARTIFACT = 'com.rezics.definitions.catalogue.artifact.v1' as const;
 export const CATALOGUE_BUILD_REQUESTED = 'com.rezics.definitions.catalogue.build-requested.v1' as const;
+export const CATALOGUE_ACTIVATION_REQUESTED = 'com.rezics.definitions.catalogue.activation-requested.v1' as const;
 export const CATALOGUE_PROGRESS = 'com.rezics.definitions.catalogue.progress.v1' as const;
 export const CATALOGUE_ACTIVATED = 'com.rezics.definitions.catalogue.activated.v1' as const;
 
@@ -118,6 +119,10 @@ export const SEMANTIC_EVENTS = {
     { additionalProperties: false },
   ),
   [CATALOGUE_BUILD_REQUESTED]: Type.Object({ rootDigest: Type.String() }, { additionalProperties: false }),
+  [CATALOGUE_ACTIVATION_REQUESTED]: Type.Object(
+    { rootDigest: Type.String(), activationId: UUID },
+    { additionalProperties: false },
+  ),
   [CATALOGUE_PROGRESS]: Type.Object(
     {
       rootDigest: Type.String(),

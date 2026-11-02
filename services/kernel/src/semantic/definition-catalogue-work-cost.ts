@@ -29,6 +29,7 @@ import ledgerTicketSpend from './definition-catalogue-ticket-spend.sql';
 import ledgerTicketAdmit from './definition-catalogue-ticket-admit.sql';
 import ledgerOriginalRead from './definition-catalogue-original-read.sql';
 import ledgerOriginalAdmit from './definition-catalogue-original-admit.sql';
+import { CATALOGUE_MECHANICAL_REPRESENTATION } from './definition-catalogue-mechanical.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { NativeCollectionWork } from '../library/collection-source-work.ts';
@@ -1016,6 +1017,12 @@ export const CATALOGUE_PUBLISHER_CONTROLS = Object.freeze({
   releaseDecode: controlOperation(2 * 4194304),
   declarationDecode: controlOperation(2 * 65536),
   memberIdentity: controlOperation(2 * 4194304),
+  // Input canonicalization, identity encoding and digest; bounded result
+  // canonicalization and output copy. No native IO occurs in either component.
+  mechanicalInput: controlOperation(3 * CATALOGUE_MECHANICAL_REPRESENTATION.inputBytes),
+  mechanicalResult: controlOperation(
+    3 * CATALOGUE_MECHANICAL_REPRESENTATION.inputBytes + 2 * CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes,
+  ),
 });
 
 /** Local control representation only: immutable input plus bounded decoded/canonical

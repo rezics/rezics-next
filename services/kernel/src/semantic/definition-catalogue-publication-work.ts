@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import type { CatalogueMechanicalInput, CatalogueMechanicalResult } from './definition-catalogue-types.ts';
+import { catalogueMechanicalSelection, encodeCatalogueMechanicalResult } from './definition-catalogue-mechanical.ts';
 import type { Pool, QueryResultRow } from 'pg';
 import {
   runCommand,
@@ -71,9 +73,9 @@ export const CATALOGUE_PUBLISHER_MISSING_COMPOSITION: readonly CataloguePublishe
     operation: 'committed irreversible dispatch-ticket receipt resolution and original binding before child checkout',
   }),
   Object.freeze({
-    owner: 'Core',
+    owner: 'Semantic',
     operation:
-      'original funding and committed job association for finite retained build/activation schedules at actual native positions',
+      'original funding and finite retained build/activation schedules selected from committed native positions',
   }),
 ]);
 export const CATALOGUE_PUBLISHER_COMPOSITION = Object.freeze({
@@ -83,6 +85,18 @@ export const CATALOGUE_PUBLISHER_COMPOSITION = Object.freeze({
   ownedControl: CATALOGUE_PUBLISHER_CONTROLS,
   missing: CATALOGUE_PUBLISHER_MISSING_COMPOSITION,
   installed: false as const,
+});
+/** The selected receipt-free composition has no Access/receipt/event child.
+ * Core's actual single-no-effect declaration cannot stand in for this writer.
+ * Semantic still owns the finite original and its allocation, including admission.
+ */
+export const CATALOGUE_MECHANICAL_COMPOSITION = Object.freeze({
+  phases: Object.freeze(['step', 'activation-step'] as const),
+  installed: false as const,
+  missing: Object.freeze([
+    Object.freeze({ owner: 'Core', operation: 'receipt-free publisher pre-checkout lifetime and committed irreversible-ticket result resolver' }),
+    Object.freeze({ owner: 'Semantic', operation: 'native-position original admission and complete prepaid finite schedule' }),
+  ] satisfies CataloguePublisherMissingTerm[]),
 });
 export class CataloguePublisherAdmissionUnavailable extends AccessUnavailableError {
   readonly missing = CATALOGUE_PUBLISHER_MISSING_COMPOSITION;
@@ -105,6 +119,7 @@ type Binding = Readonly<{
   inputDigest: Buffer;
   originalKey: string;
   tickets: CataloguePublisherTickets;
+  mechanicalInput: CatalogueMechanicalInput | null;
 }>;
 const bindings = new WeakMap<CommandTransaction, Binding>();
 const kinds = Object.freeze({
@@ -345,6 +360,7 @@ function receiveFundedPublisherOriginal(
   root: string;
   phase: CataloguePublisherPhase;
   tickets: CataloguePublisherTickets;
+  mechanicalInput: CatalogueMechanicalInput | null;
 }> {
   return unavailable();
 }
@@ -382,6 +398,15 @@ export function cataloguePublisherInvocation(pool: Pool, phase: CataloguePublish
       )
         return unavailable();
       const mechanical = phase === 'activation-step' || (phase === 'step' && !options.receipt);
+      if (mechanical) {
+        if (!original.mechanicalInput) return unavailable();
+        const selection = catalogueMechanicalSelection(original.mechanicalInput);
+        if (
+          selection.input.phase !== phase || selection.input.root !== root ||
+          selection.input.deadline !== original.deadline || selection.originalKey !== original.originalKey ||
+          !Buffer.from(selection.inputDigest.slice(7), 'hex').equals(original.inputDigest)
+        ) return unavailable();
+      } else if (original.mechanicalInput !== null) return unavailable();
       const action = phase === 'activate' ? 'definitions:activate' : 'definitions:publish';
       if (
         mechanical
@@ -414,7 +439,19 @@ export function cataloguePublisherInvocation(pool: Pool, phase: CataloguePublish
             return unavailable();
           bindings.set(tx, Object.freeze({ ...original, pool, phase, root, command }));
           try {
-            return await body(tx, context, original.work);
+            const response = await body(tx, context, original.work);
+            if (mechanical) {
+              if (response.events.length || !original.mechanicalInput) return unavailable();
+              const input = original.mechanicalInput;
+              // The bounded bytes are ready for Core's same-transaction result
+              // association. No precommit locator is promoted to committed proof.
+              await cataloguePublisherControl(tx, 'mechanicalResult', async () =>
+                encodeCatalogueMechanicalResult(input, {
+                  phase: input.phase, progress: response.value,
+                } as CatalogueMechanicalResult),
+              );
+            }
+            return response;
           } finally {
             bindings.delete(tx);
           }

@@ -2,8 +2,9 @@
 
 The four ordinary catalogue metadata reads retain their signatures. Metadata, pins, cursors and released
 bodies are not native Kind identity, custody or publisher original authority. Public route shapes are unchanged.
-The publisher receiving boundary currently refuses before checkout because the installed Core command profile
-cannot admit this event-bearing producer. This is a missing operational operand, not successful publication.
+Public publisher phases currently refuse before checkout because the installed Core command profile
+cannot admit authorization/receipt-bearing publication. The selected receipt-free mechanical profile also
+refuses: its genuine pre-checkout lifetime and committed result resolver are not installed. This is a missing operational operand, not successful publication.
 
 ## Receiving boundaries
 
@@ -163,3 +164,49 @@ catalogue and Accounts branch bodies were read as repository history, not merged
 or legacy branch was ported. Tests append literal arithmetic, pre-IO original refusal and genuine route/native
 replay assertions; they never insert custody, tickets, ACKs or complete bits to manufacture authority. Original
 acceptance/native/unit/growth/full execution remains deferred. Typing alone does not establish product completion.
+
+
+## Mechanical receiving representation
+
+The first selected composition is receipt-free `step` and `activation-step`.
+`CATALOGUE_MECHANICAL_COMPOSITION` describes that selection separately from public
+command composition. It is unavailable until genuine Core lifetime/result and
+Semantic finite-original admission are installed; the ordinary noEffect and
+Source-fence profiles remain inapplicable. Accounts admission and Source withdrawal
+remain separate unavailable positive transitions in this base. No missing producer
+has been replaced with caller proof or fabricated zero work.
+
+`definition-catalogue-mechanical.ts` supplies canonical bounded input/result bytes.
+The input binds root, phase, committed build transaction or activation identity,
+episode, actual retained position and immutable deadline. Selection hashes the
+native job/position, excluding deadline and episode: changing either conflicts
+with the same key and a different immutable input digest. Selection is data, not
+proof of a committed job, funding, currentness or authorization. The private
+publisher body validates that selection against its bound root/input/deadline
+and prepares bounded result bytes; Core's missing same-transaction association
+must still store and authenticate them before any positive recovery is enabled.
+
+Mechanical build work now returns no catalogue progress event, matching the
+receipt-free selection. Public progress events retain their separate unsupported
+command profile. Activation wakeups register one nonretrying mechanical step for
+the exact intent; they cannot perform final publication or renew funding.
+
+Input is at most 1024 canonical bytes. The result is at most 65536 bytes: the
+8192-byte bounded refusal can expand to at most 49152 JSON bytes; the closed pin,
+six bigint counters, state/phase, nullable digest and envelope fit the remainder.
+Counters are canonical nonnegative PostgreSQL bigint strings. One build result
+retains the selected steps position or advances it once; foreign roots/phases,
+extra fields, different intent, active-with-pending, noncanonical bytes and
+oversized results refuse. The two pure representation components explicitly
+price their bounded input scans/copies and result encoding before IO; they are
+additive body costs and do not price a whole original or prove commit.
+
+Decision: Restore only catalogue-owned prerequisites from the named retained source and install its previously absent schema together in one newly timestamped forward-only migration; base migrations remain unchanged.
+Decision: Mechanical result identity excludes the deadline and episode while its immutable input digest includes them, so changed replay input cannot select another payer at the same native job position.
+
+Current source reads: the five launch owner documents; the named retained commit's
+catalogue modules, SQL, prerequisite migrations and native regressions; installed
+Core command/dispatch-lifetime/operational interfaces; Accounts Kind admission;
+Library native Source custody exports; catalogue publication and work registration;
+and kernel typing/check placement scripts. No external reference project was
+required or ported. Original native acceptance is preserved for deferred execution.

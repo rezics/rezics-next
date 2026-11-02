@@ -446,7 +446,7 @@ export async function runCatalogueBuildStep(pool: Pool, pin: KindCataloguePin, c
       await captureCataloguePublisherPosition(tx);
       return {
         value,
-        events: [event(CATALOGUE_PROGRESS, { rootDigest: pin.rootDigest, state: value.state, steps: value.steps })],
+        events: [],
       };
     })
   ).value;
