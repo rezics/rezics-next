@@ -105,9 +105,7 @@ test('property picker no-match text follows the supplied locale', async () => {
   try {
     const ja = { locale: 'ja' as never };
     root = createRoot(host);
-    await act(async () =>
-      root!.render(createElement(PropertyPicker, { properties, locale: 'ja', onSelect() {} })),
-    );
+    await act(async () => root!.render(createElement(PropertyPicker, { properties, locale: 'ja', onSelect() {} })));
     const search = host.querySelector<HTMLInputElement>('input[type="search"]')!;
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
     await act(async () => {
