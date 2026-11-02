@@ -1,5 +1,5 @@
 import type { Capture } from './growth-cost.ts';
-import type { GrowthMetric } from './growth-bound.ts';
+import type { ByteMetric, GrowthMetric } from './growth-bound.ts';
 import type { ReportSample, StatementAttribution } from './growth.ts';
 import { indexStatementRepetitions } from './growth-report-index.ts';
 import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
@@ -505,41 +505,74 @@ export function profileStatements(samples: readonly Pick<ReportSample, 'statemen
   });
 }
 
+type AttributionSample = Pick<ReportSample, 'scale' | 'statementRepetitions'> & {
+  readonly cost?: Partial<Record<ByteMetric, number>>;
+};
+
+function rankedStatementLines(
+  samples: readonly Pick<ReportSample, 'scale'>[],
+  profiles: readonly ReturnType<typeof profileStatementRuns>[],
+  field: 'rows' | 'blocks' | 'count',
+): string[] {
+  const all = new Set(profiles.flatMap(({ statements }) => [...statements.keys()]));
+  return [...all]
+    .map((statement) => {
+      const values = profiles.map(({ statements }) => statements.get(statement)?.[field] ?? 0);
+      const nodes = profiles.flatMap(({ statements }) => {
+        const node = statements.get(statement)?.node;
+        return node ? [node] : [];
+      });
+      return {
+        statement,
+        values,
+        growth: (values.at(-1) ?? 0) - (values[0] ?? 0),
+        node: nodes.at(-1) ?? 'unknown plan node',
+      };
+    })
+    .sort((a, b) => b.growth - a.growth)
+    .slice(0, 5)
+    .map(
+      (item) =>
+        `  ${item.statement.split('\n')[0]} | ${samples.map(({ scale }, index) => `${scale}: ${item.values[index] ?? 0}`).join(', ')} | ${item.node}`,
+    );
+}
+
+function formatByteMetric(
+  samples: readonly AttributionSample[],
+  metric: ByteMetric,
+): { totals: string; unavailable: string } {
+  const totals = samples
+    .map(({ scale, cost }) => `${scale}: ${cost?.[metric] === undefined ? 'unmeasured' : cost[metric]}`)
+    .join(', ');
+  return {
+    totals: `Measured ${metric} totals by scale: ${totals}`,
+    unavailable: `Per-statement ${metric} attribution is unavailable; StatementAttribution has rows, blocks and counts, not byte costs.`,
+  };
+}
+
+/** Byte metrics keep sample-cost totals and never rank SQL rows as statement byte costs. */
 export function formatStatementAttribution(
-  samples: readonly Pick<ReportSample, 'scale' | 'statementRepetitions'>[],
+  samples: readonly AttributionSample[],
   metrics: readonly GrowthMetric[],
 ): string {
   const lines: string[] = [];
   const profiles = samples.map(({ statementRepetitions }) => profileStatementRuns(statementRepetitions));
-  for (const metric of [...new Set(metrics)]) {
-    const all = new Set(profiles.flatMap(({ statements }) => [...statements.keys()]));
-    const field =
-      metric === 'rows' || metric === 'requestBytes' || metric === 'responseBytes'
-        ? 'rows'
-        : metric === 'blocks'
-          ? 'blocks'
-          : 'count';
-    const ranked = [...all]
-      .map((statement) => {
-        const values = profiles.map(({ statements }) => statements.get(statement)?.[field] ?? 0);
-        const nodes = profiles.flatMap(({ statements }) => {
-          const node = statements.get(statement)?.node;
-          return node ? [node] : [];
-        });
-        return {
-          statement,
-          values,
-          growth: (values.at(-1) ?? 0) - (values[0] ?? 0),
-          node: nodes.at(-1) ?? 'unknown plan node',
-        };
-      })
-      .sort((a, b) => b.growth - a.growth)
-      .slice(0, 5);
+  const unique = [...new Set(metrics)];
+  let sqlContext = unique.some((metric) => metric !== 'requestBytes' && metric !== 'responseBytes');
+  for (const metric of unique) {
+    if (metric === 'requestBytes' || metric === 'responseBytes') {
+      const { totals, unavailable } = formatByteMetric(samples, metric);
+      lines.push(totals, unavailable);
+      if (!sqlContext) {
+        lines.push('SQL row attribution (not statement byte costs):');
+        lines.push(...rankedStatementLines(samples, profiles, 'rows'));
+        sqlContext = true;
+      }
+      continue;
+    }
+    const field = metric === 'rows' ? 'rows' : metric === 'blocks' ? 'blocks' : 'count';
     lines.push(`Statements growing most for ${metric}:`);
-    for (const item of ranked)
-      lines.push(
-        `  ${item.statement.split('\n')[0]} | ${samples.map(({ scale }, index) => `${scale}: ${item.values[index] ?? 0}`).join(', ')} | ${item.node}`,
-      );
+    lines.push(...rankedStatementLines(samples, profiles, field));
   }
   samples.forEach(({ scale }, sampleIndex) => {
     const { repetitionCount, statements } = profiles[sampleIndex]!;

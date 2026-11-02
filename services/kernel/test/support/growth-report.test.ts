@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { withConnection } from '../../src/database/pool.ts';
 import { checkGrowth, GrowthBoundError, openGrowthDatabase, type GrowthDatabase } from './growth.ts';
-import { statementAttributions } from './growth-report.ts';
+import { formatStatementAttribution, statementAttributions } from './growth-report.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -147,4 +147,56 @@ test('grouped statement diagnostics use supplied native occurrence ownership eve
     { statement: groupedInsert, count: 1, rows: 1, blocks: 1, node: 'Seq Scan app.outer' },
     { statement: lookup, count: 1, rows: 2, blocks: 2, node: 'Seq Scan app.lookup' },
   ]);
+});
+
+test('byte-growth failures distinguish measured byte totals from SQL row attribution', () => {
+  const samples = [
+    {
+      scale: 1,
+      cost: { requestBytes: 40, responseBytes: 12 },
+      statementRepetitions: [
+        [
+          { statement: 'SELECT growing', rows: 100, blocks: 2, count: 1, node: 'Seq Scan t' },
+          { statement: 'SELECT constant', rows: 10, blocks: 1, count: 1, node: 'Seq Scan c' },
+        ],
+      ],
+    },
+    {
+      scale: 8,
+      cost: { requestBytes: 80, responseBytes: 96 },
+      statementRepetitions: [
+        [
+          { statement: 'SELECT growing', rows: 800, blocks: 16, count: 1, node: 'Seq Scan t' },
+          { statement: 'SELECT constant', rows: 10, blocks: 1, count: 1, node: 'Seq Scan c' },
+        ],
+      ],
+    },
+  ];
+
+  const bytes = formatStatementAttribution(samples, ['requestBytes', 'responseBytes']);
+  const [requestSection, afterRequest] = bytes.split('SQL row attribution (not statement byte costs):');
+  expect(requestSection).toContain('Measured requestBytes totals by scale: 1: 40, 8: 80');
+  expect(requestSection).toContain('Measured responseBytes totals by scale: 1: 12, 8: 96');
+  expect(requestSection).toContain('Per-statement requestBytes attribution is unavailable');
+  expect(requestSection).toContain('Per-statement responseBytes attribution is unavailable');
+  expect(requestSection).not.toContain('Statements growing most for requestBytes:');
+  expect(requestSection).not.toContain('Statements growing most for responseBytes:');
+  expect(requestSection).not.toContain('100');
+  expect(requestSection).not.toContain('800');
+  expect(afterRequest).toContain('SELECT growing | 1: 100, 8: 800 | Seq Scan t');
+
+  const mixed = formatStatementAttribution(samples, ['rows', 'blocks', 'statements', 'responseBytes']);
+  expect(mixed).toContain(
+    'Statements growing most for rows:\n  SELECT growing | 1: 100, 8: 800 | Seq Scan t',
+  );
+  expect(mixed).toContain(
+    'Statements growing most for blocks:\n  SELECT growing | 1: 2, 8: 16 | Seq Scan t',
+  );
+  expect(mixed).toContain(
+    'Statements growing most for statements:\n  SELECT growing | 1: 1, 8: 1 | Seq Scan t',
+  );
+  expect(mixed).toContain('Measured responseBytes totals by scale: 1: 12, 8: 96');
+  expect(mixed).toContain('Per-statement responseBytes attribution is unavailable');
+  expect(mixed).not.toContain('Statements growing most for responseBytes:');
+  expect(mixed).not.toContain('SQL row attribution (not statement byte costs):');
 });
