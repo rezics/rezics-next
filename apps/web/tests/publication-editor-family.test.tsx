@@ -360,16 +360,12 @@ test('independent publication creation, local corrections, immutable recovery an
     await add('schema:numberOfPages');
     const amount = input(m.correction_amount());
     await replace(amount, '+240');
-    await act(async () =>
-      user.selectOptions(scope().getByRole('combobox', { name: m.correction_unit() }), '1'),
-    );
+    await act(async () => user.selectOptions(scope().getByRole('combobox', { name: m.correction_unit() }), '1'));
     await add('schema:publisher');
     const publisherLabel = correction.fixture.release.properties['schema:publisher']!.labels.en!;
     await act(async () => user.type(scope().getByRole('combobox', { name: publisherLabel }), 'Press'));
     const correctionBody = within(window.document.body as unknown as HTMLElement);
-    await act(async () =>
-      user.click(await correctionBody.findByRole('option', { name: /Supplied publisher/ })),
-    );
+    await act(async () => user.click(await correctionBody.findByRole('option', { name: /Supplied publisher/ })));
     await click(m.publication_submit());
     await scope().findByRole('heading', { name: m.catalogue_create_invalid(), level: 2 });
     const citation = input(m.relation_citation());
@@ -408,10 +404,12 @@ test('independent publication creation, local corrections, immutable recovery an
       type: 'value',
       content: publisherId,
     });
-    expect(correction.commands[1]!.item.statements['schema:exampleOfWork']![0]!.references[0]!.parts[0]!.value).toEqual({
-      type: 'value',
-      content: 'https://publisher.example/edition',
-    });
+    expect(correction.commands[1]!.item.statements['schema:exampleOfWork']![0]!.references[0]!.parts[0]!.value).toEqual(
+      {
+        type: 'value',
+        content: 'https://publisher.example/edition',
+      },
+    );
 
     for (const scenario of ['reader-unavailable', 'reader-concealed'] as const) {
       const result = tracked(scenario);

@@ -368,11 +368,7 @@ function PublicationEditorLive({
       : [];
     return { feedback: { id: feedbackId, address: 'fact', errors }, entries };
   }
-  function linkedError(
-    target: string,
-    label: string,
-    instruction: string = m.catalogue_create_invalid_field({}, o),
-  ) {
+  function linkedError(target: string, label: string, instruction: string = m.catalogue_create_invalid_field({}, o)) {
     return { target, summaryId: `${target}-error`, label, instruction, unique: false };
   }
   function generalError(error: NonNullable<CreateFailure['errors']>[number], index: number) {
@@ -404,8 +400,7 @@ function PublicationEditorLive({
     const languageValue = language.trim();
     const languageValid = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(languageValue);
     const segments = pointerSegments(error.pointer);
-    if (error.pointer === '/independent')
-      return linkedError(`${id}-independent`, m.publication_independent({}, o));
+    if (error.pointer === '/independent') return linkedError(`${id}-independent`, m.publication_independent({}, o));
     if (error.pointer === '/type' || error.pointer === '/relation')
       return linkedError(`${id}-relation`, m.relation_property({}, o));
     if (error.pointer === '/language') return linkedError(`${id}-language`, m.catalogue_create_language({}, o));
@@ -540,7 +535,10 @@ function PublicationEditorLive({
   function reviewErrorLabel(pointer: string) {
     if (pointer.includes('/references/')) return m.relation_citation({}, o);
     const address = statementAddress(pointer);
-    if (address) return address.property === relation ? m.relation_property({}, o) : name(address.property) || m.publication_field({}, o);
+    if (address)
+      return address.property === relation
+        ? m.relation_property({}, o)
+        : name(address.property) || m.publication_field({}, o);
     if (pointer === '/independent') return m.publication_independent({}, o);
     if (pointer === '/type' || pointer === '/relation') return m.relation_property({}, o);
     const segments = pointerSegments(pointer);
@@ -901,10 +899,7 @@ function PublicationEditorLive({
                     </NativeSelect>
                     {unsupportedRelation && <FieldError>{m.publication_choice_review({}, o)}</FieldError>}
                   </Field>
-                  <Field
-                    orientation="horizontal"
-                    data-invalid={hasControlError(`${id}-independent`) || undefined}
-                  >
+                  <Field orientation="horizontal" data-invalid={hasControlError(`${id}-independent`) || undefined}>
                     <Checkbox
                       nativeButton
                       render={<button type="button" />}
