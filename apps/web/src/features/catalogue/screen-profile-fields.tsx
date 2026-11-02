@@ -742,12 +742,47 @@ export function ScreenInitialFields({
   const current = useRef({ rows, disabled, change, release, fields, property });
   current.current = { rows, disabled, change, release, fields, property };
   const mounted = useRef(true);
+  const pendingFocus = useRef<{ row: ScreenRow; trigger: HTMLButtonElement } | undefined>(undefined);
   useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      pendingFocus.current = undefined;
     };
   }, []);
+  useLayoutEffect(() => {
+    const intent = pendingFocus.current;
+    if (!intent) return;
+    const state = current.current;
+    const propertyId = intent.row.statement.property.id;
+    if (
+      !mounted.current ||
+      state.disabled ||
+      !state.fields.includes(propertyId) ||
+      !state.release.properties[propertyId] ||
+      !intent.trigger.isConnected ||
+      intent.trigger.disabled
+    ) {
+      pendingFocus.current = undefined;
+      return;
+    }
+    const row = state.rows.find((item) => item.key === intent.row.key);
+    if (!row) return;
+    if (row.statement !== intent.row.statement) {
+      pendingFocus.current = undefined;
+      return;
+    }
+    const section = document.getElementById(screenRowId(row));
+    const target = section?.querySelector<HTMLElement>(
+      'input:not([type="hidden"]), textarea, select, [role="combobox"], [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
+    );
+    if (!target || document.activeElement !== intent.trigger) {
+      pendingFocus.current = undefined;
+      return;
+    }
+    pendingFocus.current = undefined;
+    target.focus();
+  }, [rows, disabled, release, type]);
   const edit = (
     rowKey: string,
     propertyId: string,
@@ -783,7 +818,8 @@ export function ScreenInitialFields({
     current.current = { ...state, rows: next };
     state.change(next);
   };
-  const addRow = () => {
+  const addRow = (keyboard: boolean, trigger: HTMLButtonElement) => {
+    pendingFocus.current = undefined;
     const state = current.current;
     const definition = state.release.properties[state.property];
     if (
@@ -794,19 +830,18 @@ export function ScreenInitialFields({
       (!definition.multivalued && state.rows.some((row) => row.statement.property.id === state.property))
     )
       return;
-    const next = [
-      ...state.rows,
-      {
-        key: crypto.randomUUID(),
-        statement: {
-          property: { id: state.property },
-          value: { type: 'value' as const, content: '' },
-          qualifiers: [],
-          references: [],
-          rank: 'normal' as const,
-        },
+    const row: ScreenRow = {
+      key: crypto.randomUUID(),
+      statement: {
+        property: { id: state.property },
+        value: { type: 'value', content: '' },
+        qualifiers: [],
+        references: [],
+        rank: 'normal',
       },
-    ];
+    };
+    const next = [...state.rows, row];
+    if (keyboard && document.activeElement === trigger) pendingFocus.current = { row, trigger };
     current.current = { ...state, rows: next };
     state.change(next);
     setProperty('');
@@ -829,8 +864,10 @@ export function ScreenInitialFields({
           onChange={(event) => {
             const state = current.current;
             const selected = event.target.value;
-            if (mounted.current && !state.disabled && (!selected || state.fields.includes(selected)))
+            if (mounted.current && !state.disabled && (!selected || state.fields.includes(selected))) {
+              pendingFocus.current = undefined;
               setProperty(selected);
+            }
           }}
         >
           <NativeSelectOption value="">{m.character_add_fact({}, o)}</NativeSelectOption>
@@ -861,7 +898,13 @@ export function ScreenInitialFields({
           !fields.includes(property) ||
           (!release.properties[property]?.multivalued && rows.some((row) => row.statement.property.id === property))
         }
-        onClick={addRow}
+        onPointerDown={() => {
+          pendingFocus.current = undefined;
+        }}
+        onBlur={(event) => {
+          if (pendingFocus.current?.trigger === event.currentTarget) pendingFocus.current = undefined;
+        }}
+        onClick={(event) => addRow(event.detail === 0, event.currentTarget)}
       >
         {m.correction_add({}, o)}
       </Button>

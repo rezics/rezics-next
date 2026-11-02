@@ -5,7 +5,7 @@ import type { Release } from '@rezics/definitions';
 import type { ScreenRow } from '../src/features/catalogue/screen-profile-fields';
 import definitions from '../src/kernel/recorded/definitions-release.json';
 
-test('Screen row removal recovers complete drafts, preserves stable siblings and obeys current locks', async () => {
+test('Screen initial facts recover removals and focus only current keyboard additions', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -72,7 +72,9 @@ test('Screen row removal recovers complete drafts, preserves stable siblings and
   }));
   let rows: ScreenRow[] = [],
     disabled = false,
-    changes = 0;
+    changes = 0,
+    deferredRows: ScreenRow[] | undefined,
+    deferRows = false;
   const paint = () =>
     root.render(
       <form>
@@ -86,8 +88,11 @@ test('Screen row removal recovers complete drafts, preserves stable siblings and
           disabled={disabled}
           change={(next) => {
             changes++;
-            rows = next;
-            paint();
+            if (deferRows) deferredRows = next;
+            else {
+              rows = next;
+              paint();
+            }
           }}
         />
       </form>,
@@ -170,6 +175,45 @@ test('Screen row removal recovers complete drafts, preserves stable siblings and
     await click(remove(empty));
     expect(rows).toEqual([]);
     expect(window.document.activeElement).toBe(within(host).getByRole('button', { name: m.correction_add() }));
+
+    rows = [complete];
+    await render();
+    const completeSection = region(complete);
+    const selectGenre = () =>
+      act(async () => user.selectOptions(within(host).getByLabelText(m.character_add_fact()), 'schema:genre'));
+    await selectGenre();
+    const keyboardAdd = within(host).getByRole('button', { name: m.correction_add() });
+    await act(async () => {
+      keyboardAdd.focus();
+      await user.keyboard('{Enter}');
+    });
+    const keyboardRow = rows.at(-1)!;
+    expect(keyboardRow.statement.property.id).toBe('schema:genre');
+    expect(window.document.activeElement).toBe(region(keyboardRow).querySelector('input'));
+    expect(region(complete)).toBe(completeSection);
+
+    await selectGenre();
+    const pointerAdd = within(host).getByRole('button', { name: m.correction_add() });
+    await click(pointerAdd);
+    const pointerRow = rows.at(-1)!;
+    expect(pointerRow.statement.property.id).toBe('schema:genre');
+    expect(window.document.activeElement).toBe(pointerAdd);
+
+    deferRows = true;
+    deferredRows = undefined;
+    await selectGenre();
+    const deferredAdd = within(host).getByRole('button', { name: m.correction_add() });
+    const siblingInput = within(host).getByRole('textbox', { name: 'Name' });
+    await act(async () => {
+      deferredAdd.focus();
+      await user.keyboard('{Enter}');
+    });
+    expect(deferredRows?.at(-1)?.statement.property.id).toBe('schema:genre');
+    await act(async () => siblingInput.focus());
+    rows = deferredRows!;
+    deferRows = false;
+    await render();
+    expect(window.document.activeElement).toBe(siblingInput);
   } finally {
     await act(async () => root.unmount());
     window.happyDOM.abort();
