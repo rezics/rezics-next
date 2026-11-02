@@ -159,9 +159,12 @@ function RealmClaimReviewContent({
   const pendingFocus = useRef<FocusIntent | null>(null);
   const selectedReviewButton = useRef<HTMLButtonElement>(null);
   const confirmationBoundary = useRef<HTMLElement>(null);
-  const receiptBoundary = useRef<HTMLElement>(null);
+  const receiptBoundary = useRef<HTMLDivElement>(null);
   const recoveryBoundary = useRef<HTMLElement>(null);
   const approvalRetryButton = useRef<HTMLButtonElement>(null);
+  const setRecoveryBoundary = (node: HTMLElement | null) => {
+    recoveryBoundary.current = node;
+  };
   useEffect(() => {
     const cancel = () => {
       pendingFocus.current = null;
@@ -336,7 +339,7 @@ function RealmClaimReviewContent({
           <div aria-live="polite" aria-atomic="true" className="space-y-4">
             {state.outcome === 'conflict' ? (
               <p
-                ref={recoveryBoundary}
+                ref={setRecoveryBoundary}
                 tabIndex={-1}
                 role="alert"
                 className="rounded-xl border p-4 text-sm leading-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -345,7 +348,7 @@ function RealmClaimReviewContent({
               </p>
             ) : null}
             {state.outcome === 'uncertain' && !denied ? (
-              <div ref={recoveryBoundary} role="alert" className="space-y-3 rounded-xl border p-4 text-sm leading-6">
+              <div ref={setRecoveryBoundary} role="alert" className="space-y-3 rounded-xl border p-4 text-sm leading-6">
                 <p>{m.realm_review_uncertain()}</p>
                 <Button
                   ref={approvalRetryButton}
@@ -372,16 +375,20 @@ function RealmClaimReviewContent({
             {receipt ? (
               <ContentItemFrame
                 as="article"
-                ref={receiptBoundary}
-                tabIndex={-1}
                 role="status"
                 aria-labelledby={`${id}-receipt`}
-                className="space-y-3 p-5 text-sm leading-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="space-y-3 p-5 text-sm leading-6"
               >
-                <ContentItemHeading level={3} id={`${id}-receipt`} className="flex items-center gap-2 font-semibold">
-                  <Check className="size-4" aria-hidden="true" />
-                  {m.realm_review_success()}
-                </ContentItemHeading>
+                <div
+                  ref={receiptBoundary}
+                  tabIndex={-1}
+                  className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <ContentItemHeading level={3} id={`${id}-receipt`} className="flex items-center gap-2 font-semibold">
+                    <Check className="size-4" aria-hidden="true" />
+                    {m.realm_review_success()}
+                  </ContentItemHeading>
+                </div>
                 <dl className="space-y-2">
                   <div>
                     <dt className="text-muted-foreground">{m.realm_review_claimant()}</dt>
@@ -408,7 +415,7 @@ function RealmClaimReviewContent({
             ) : null}
             {!page ? (
               <div
-                ref={state.outcome === 'conflict' ? undefined : recoveryBoundary}
+                ref={state.outcome === 'conflict' ? undefined : setRecoveryBoundary}
                 tabIndex={-1}
                 className="space-y-3 p-2 text-sm leading-7 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >

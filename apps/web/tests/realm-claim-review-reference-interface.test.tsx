@@ -338,7 +338,7 @@ test('Realm claim review prioritizes the human request and preserves visible app
     await mount(success);
     await click(m.realm_review_review());
     await click(m.realm_review_confirm());
-    expect(window.document.activeElement).toBe(host.querySelector('article[role="status"]'));
+    expect(window.document.activeElement).toBe(host.querySelector('article[role="status"] > div'));
     expect(success.approvals).toHaveLength(1);
     expect(success.reads).toHaveLength(2);
     const receipt = host.querySelector('article[role="status"]')!;
@@ -367,7 +367,7 @@ test('Realm claim review prioritizes the human request and preserves visible app
     expect(uncertain.approvals).toEqual([uncertain.approvals[0]!, uncertain.approvals[0]!]);
     expect(uncertain.reads).toHaveLength(3);
     expect(host.textContent).toContain(m.realm_review_success());
-    expect(window.document.activeElement).toBe(host.querySelector('article[role="status"]'));
+    expect(window.document.activeElement).toBe(host.querySelector('article[role="status"] > div'));
 
     const conflict = observed('conflict');
     await mount(conflict);
