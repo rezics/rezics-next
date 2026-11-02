@@ -257,6 +257,12 @@ export function subjectPageType(page: SubjectPageData): string | undefined {
   return subjectBody(page)?.subject.type;
 }
 
+function subjectPageRealm(page: SubjectPageData): string | undefined {
+  return (
+    page.requestedRealm ?? (page.context?.population.kind === 'realm' ? page.context.population.id : undefined)
+  );
+}
+
 export function subjectPageJsonLd(
   page: SubjectPageData,
   locale: string,
@@ -276,6 +282,11 @@ export function subjectPageJsonLd(
     page.context?.id,
   );
   const origin = (options.origin ?? 'https://rezics.com').replace(/\/+$/, '');
+  const subjectLabel = subjectDisplayLabel(read.subject.labels, locale, originalLanguage(read.subject));
+  const href = contextHref(
+    subjectHref({ id: read.subject.id, label: subjectLabel }, locale).href,
+    subjectPageRealm(page),
+  );
   const json = subjectJsonLd({
     subject: {
       ...read.subject,
@@ -293,10 +304,10 @@ export function subjectPageJsonLd(
     locale,
     ...(options.origin ? { origin: options.origin } : {}),
     ...(options.typeLabel ? { typeLabel: options.typeLabel } : {}),
-    subjectLabel: subjectDisplayLabel(read.subject.labels, locale, originalLanguage(read.subject)),
+    subjectLabel,
     ...(options.schemaOrgType ? { schemaOrgType: options.schemaOrgType } : {}),
     ...(options.ratings && page.context?.population.kind !== 'realm' ? { ratings: options.ratings } : {}),
-    url: `${origin}${subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale).href}`,
+    url: `${origin}${href}`,
   });
   const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
   // These are inverse properties of visible SubjectLists, never a second lookup or a complete edition inventory.
@@ -476,8 +487,7 @@ export function SubjectPage({
   const overview = view === 'overview';
   const read = subjectBody(page);
   const existingActions = read && actions ? actions({ id: read.subject.id, type: read.subject.type, locale }) : null;
-  const realm =
-    page.requestedRealm ?? (page.context?.population.kind === 'realm' ? page.context.population.id : undefined);
+  const realm = subjectPageRealm(page);
   const ContextLink = useMemo(() => {
     const Link = link ?? PlainLink;
     return function SelectedLink(props: ComponentProps<PageLink>) {
