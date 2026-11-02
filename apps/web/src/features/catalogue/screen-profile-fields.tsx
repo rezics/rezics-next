@@ -326,7 +326,12 @@ function InitialStatement({
 }
 
 /** Local recovery for one unsent row, including content outside its main value. */
-function ScreenInitialRemove({ row, disabled, locale, onRemove }: {
+function ScreenInitialRemove({
+  row,
+  disabled,
+  locale,
+  onRemove,
+}: {
   row: ScreenRow;
   disabled: boolean;
   locale: string;
@@ -358,16 +363,20 @@ function ScreenInitialRemove({ row, disabled, locale, onRemove }: {
   const remove = () => {
     const section = holder.current?.closest('section');
     if (!editable() || !section?.isConnected) return;
-    const controls = [...((section.closest('form') ?? section.closest('fieldset'))?.querySelectorAll<HTMLElement>(
-      'button, input, select, textarea, [tabindex="0"], [contenteditable="true"]',
-    ) ?? [])];
+    const controls = [
+      ...((section.closest('form') ?? section.closest('fieldset'))?.querySelectorAll<HTMLElement>(
+        'button, input, select, textarea, [tabindex="0"], [contenteditable="true"]',
+      ) ?? []),
+    ];
     const first = controls.findIndex((control) => section.contains(control));
     const last = controls.findLastIndex((control) => section.contains(control));
     [...controls.slice(last + 1), ...controls.slice(0, first).reverse()]
-      .find((control) =>
-        !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
-        !control.closest('[hidden], [inert]'),
-      )?.focus();
+      .find(
+        (control) =>
+          !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
+          !control.closest('[hidden], [inert]'),
+      )
+      ?.focus();
     current.current.onRemove();
   };
   const hasContent = (value: unknown): boolean => {
@@ -377,7 +386,9 @@ function ScreenInitialRemove({ row, disabled, locale, onRemove }: {
     return true;
   };
   const populatedPart = (part: SnakInput) => part.value.type !== 'value' || hasContent(part.value.content);
-  const populated = populatedPart(row.statement) || row.statement.qualifiers?.some(populatedPart) ||
+  const populated =
+    populatedPart(row.statement) ||
+    row.statement.qualifiers?.some(populatedPart) ||
     row.statement.references.some((reference) => reference.parts.some(populatedPart));
   return (
     <div ref={holder}>
