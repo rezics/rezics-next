@@ -858,6 +858,8 @@ Characters and credits are grouped by role and ordered by the stated credit orde
 that differs from the subject's display name is shown with the credit. Spoiler-level qualifiers hide the
 character, role or relation behind a reveal control according to the reader's spoiler setting.
 
+Relation reveal consent follows the statement occurrence, delivered content, page subject, selected Context and reader gates; indistinguishable duplicate occurrences use their occurrence order, while unchanged relations retain consent across rerenders and reordering.
+
 Custom relation types from a selected Context appear in their own group under their own label, after the bundled
 groups, and are labelled with the Context they come from.
 

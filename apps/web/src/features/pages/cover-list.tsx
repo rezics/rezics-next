@@ -7,14 +7,24 @@ import {
 } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { CoverCard, CoverGrid, CoverRow } from '@rezics/ui/cover-card';
+import { useContext } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
 import { listKeyFacts } from '../../media/type-presentation';
 import type { Fact } from '../../search/results';
 import { relationTargetHref } from './edition-work';
-import type { Item, RowValue } from './overview';
+import { OverviewContext, type Item, type RowValue } from './overview';
 import { QualifiedCredit } from './qualified-credit';
 import { SpoilerGate } from './values';
+
+/** DTO object allocation and member order do not change an accepted relation's content. */
+function contentIdentity(value: unknown): string {
+  return JSON.stringify(value, (_key, part: unknown) =>
+    part && typeof part === 'object' && !Array.isArray(part)
+      ? Object.fromEntries(Object.entries(part).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)))
+      : part,
+  );
+}
 
 /** One current relation, keeping full credit facts separate from ordinary card metadata. */
 function ItemCard({
@@ -77,7 +87,13 @@ function ItemCard({
       {...(notes.length > 0 ? { secondary: <MetaLine items={notes} /> } : {})}
     />
   );
-  return item.gated ? <SpoilerGate label={value.spoilerShow}>{card}</SpoilerGate> : card;
+  // Only rendered facts and the resolved presentation matter, not adapter function identity or unused facts.
+  const disclosure = contentIdentity([keyFacts, listPresentation]);
+  return item.gated ? (
+    <SpoilerGate key={disclosure} label={value.spoilerShow} hideLabel={value.labels.spoilerHide}>
+      {card}
+    </SpoilerGate>
+  ) : card;
 }
 
 /**
@@ -95,7 +111,7 @@ export function CoverList({
   memberFacts,
 }: {
   items: Item[];
-  value: RowValue;
+  value: RowValue & { subject?: string | null };
   label: string;
   preview?: boolean;
   /** Optional adapter for a presentation already resolved from the current released Type hierarchy. */
@@ -103,14 +119,34 @@ export function CoverList({
   /** Already supplied current-page facts by member ID. No fact producer or per-member read is implied. */
   memberFacts?: Readonly<Record<string, Readonly<Record<string, readonly Fact[]>>>>;
 }) {
+  const page = useContext(OverviewContext);
+  const subject = value.subject === undefined ? page?.subject : value.subject;
+  const context = value.context;
+  const disclosure = [
+    subject,
+    context?.id,
+    context?.population.kind,
+    context?.population.kind === 'realm' ? context.population.id : undefined,
+    value.locale,
+    value.reader.spoilerLevel,
+    value.reader.suitability,
+    value.unlabelled,
+  ];
   const ratio =
     value.ratio ?? sharedRatio(items.map((item) => coverSubject(item.id, item.label.text, item.summary, item.type)));
   const credits = items.some((item) => (item.qualified?.length ?? 0) > 0);
-  const cards = items.map((item, index) => {
+  const occurrences = new Map<string, number>();
+  const cards = items.map((item) => {
+    // Item has no revision field: compare its delivered content even when a statement ID is reused.
+    // Count only identical occurrences, so distinct statements to the same target survive reordering.
+    const identity = contentIdentity([item, disclosure]);
+    const occurrence = occurrences.get(identity) ?? 0;
+    occurrences.set(identity, occurrence + 1);
+    const key = `${identity}:${occurrence}`;
     const facts = memberFacts && Object.hasOwn(memberFacts, item.id) ? memberFacts[item.id] : undefined;
     const card = (
       <ItemCard
-        key={`${item.id}-${index}`}
+        key={key}
         item={item}
         value={value}
         credit={credits}
@@ -119,11 +155,11 @@ export function CoverList({
       />
     );
     return credits ? (
-      <li key={`${item.id}-${index}`}>
+      <li key={key}>
         <div data-statement={item.statement}>{card}</div>
       </li>
     ) : (
-      <div key={`${item.id}-${index}`} role="listitem" data-statement={item.statement} className="min-w-0">
+      <div key={key} role="listitem" data-statement={item.statement} className="min-w-0">
         {card}
       </div>
     );

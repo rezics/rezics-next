@@ -130,7 +130,7 @@ export function RelationsView({
             {groups.length > 1 && (
               <h2 className="text-lg font-semibold tracking-tight">{GROUP_TITLES[group](options)}</h2>
             )}
-            <CoverList items={members} value={value} label={heading} />
+            <CoverList items={members} value={{ ...value, subject: subject.id }} label={heading} />
           </div>
         ))
       )}
