@@ -107,21 +107,24 @@ test('a stale head, an invalid profile and a refusal come back as reasons', asyn
     return { result, requests: seen.length };
   };
   expect(await run([answer(200, { digest }), problem(409, 'stale_editorial_head')])).toEqual({
-    result: { ok: false, reason: 'stale' },
+    result: { ok: false, reason: 'stale', phase: 'activate' },
     requests: 2,
   });
   const errors = [{ pointer: '/profile/generic/content/0/type', code: 'unsupported' }];
   expect(await run([problem(400, 'invalid_request', { errors })])).toEqual({
-    result: { ok: false, reason: 'invalid', errors },
+    result: { ok: false, reason: 'invalid', errors, phase: 'publish' },
     requests: 1,
   });
-  expect(await run([problem(403, 'forbidden')])).toEqual({ result: { ok: false, reason: 'forbidden' }, requests: 1 });
+  expect(await run([problem(403, 'forbidden')])).toEqual({
+    result: { ok: false, reason: 'forbidden', phase: 'publish' },
+    requests: 1,
+  });
   expect(await run([answer(201, { digest }), problem(403, 'forbidden')])).toEqual({
-    result: { ok: false, reason: 'forbidden' },
+    result: { ok: false, reason: 'forbidden', phase: 'activate' },
     requests: 2,
   });
   expect(await run([problem(429, 'rate_limited')])).toEqual({
-    result: { ok: false, reason: 'rate-limited' },
+    result: { ok: false, reason: 'rate-limited', phase: 'publish' },
     requests: 1,
   });
   const limited = kernel([new Response(null, { status: 429, headers: { 'retry-after': '30' } })]);
@@ -129,9 +132,10 @@ test('a stale head, an invalid profile and a refusal come back as reasons', asyn
     ok: false,
     reason: 'rate-limited',
     retryAfter: 30,
+    phase: 'publish',
   });
   expect(await run([problem(503, 'unavailable')])).toEqual({
-    result: { ok: false, reason: 'unavailable' },
+    result: { ok: false, reason: 'unavailable', phase: 'publish' },
     requests: 1,
   });
 });
