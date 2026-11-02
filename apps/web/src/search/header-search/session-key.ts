@@ -19,3 +19,15 @@ export function currentHeaderSearchSession(client: QueryClient): BrowserSession 
   const snapshot = sessionStateSnapshot(client);
   return snapshot?.status === 'success' ? normalizeSessionObservation(snapshot.data) : unknownSession;
 }
+
+/** Observe transitions even when several cache changes are batched into one React render. */
+export function observeHeaderSearchSession(client: QueryClient, retire: () => void): () => void {
+  let key = headerSearchSessionKey(currentHeaderSearchSession(client));
+  return client.getQueryCache().subscribe((event) => {
+    if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== 'session') return;
+    const next = headerSearchSessionKey(currentHeaderSearchSession(client));
+    if (key === next) return;
+    key = next;
+    retire();
+  });
+}

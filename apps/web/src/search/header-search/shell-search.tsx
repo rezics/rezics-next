@@ -8,7 +8,7 @@ import { recentBucket } from '../recent-history';
 import { useRecentHistory } from '../recent-history-hook';
 import { HeaderSearch } from './header-search';
 import type { SearchScope } from './types';
-import { currentHeaderSearchSession } from './session-key';
+import { currentHeaderSearchSession, observeHeaderSearchSession } from './session-key';
 
 /** One responsive owner in AppShell. Route filters register their real controls through the provider. */
 export function ShellSearch({ scope }: { scope?: SearchScope } = {}) {
@@ -17,6 +17,7 @@ export function ShellSearch({ scope }: { scope?: SearchScope } = {}) {
   const session = useSession();
   const client = useQueryClient();
   const readSession = useCallback(() => currentHeaderSearchSession(client), [client]);
+  const observeSession = useCallback((retire: () => void) => observeHeaderSearchSession(client, retire), [client]);
   const bucket = recentBucket(session.state, session.subject);
   const history = useRecentHistory(bucket);
   useEffect(() => {
@@ -31,6 +32,7 @@ export function ShellSearch({ scope }: { scope?: SearchScope } = {}) {
       history={history}
       session={session}
       readSession={readSession}
+      observeSession={observeSession}
       scope={scope}
       initialQuery={onSearchPage && typeof params.q === 'string' ? params.q : ''}
       fields={onSearchPage ? searchFormFields(params) : []}

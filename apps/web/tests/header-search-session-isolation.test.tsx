@@ -54,7 +54,8 @@ for (const transition of [
     const { createRoot } = await import('react-dom/client');
     const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
     const { sessionQuery, useSession } = await import('../src/session/query');
-    const { currentHeaderSearchSession } = await import('../src/search/header-search/session-key');
+    const { currentHeaderSearchSession, observeHeaderSearchSession } =
+      await import('../src/search/header-search/session-key');
     const { HeaderSearch } = await import('../src/search/header-search/header-search');
     const client = new QueryClient();
     const host = window.document.createElement('div');
@@ -67,12 +68,14 @@ for (const transition of [
     function Owner() {
       const session = useSession();
       const readSession = useCallback(() => currentHeaderSearchSession(client), []);
+      const observeSession = useCallback((retire: () => void) => observeHeaderSearchSession(client, retire), []);
       return (
         <HeaderSearch
           locale="en"
           initialQuery="Prince"
           session={session}
           readSession={readSession}
+          observeSession={observeSession}
           history={{ entries: [], persistence: 'memory', sync: 'local-only', remember() {}, remove() {}, retry() {} }}
           loadSuggestions={load}
           onNavigate={(href) => visits.push(href)}
@@ -102,11 +105,31 @@ for (const transition of [
       await act(async () => requests[0]!.resolve(result('Old suggestion')));
       await act(async () => key('ArrowDown'));
       expect(input.getAttribute('aria-activedescendant')).toBeTruthy();
+      if (transition.state === 'unknown') {
+        await act(async () => {
+          client.setQueryData(sessionQuery.queryKey, viewer('briefly-other'));
+          client.setQueryData(sessionQuery.queryKey, viewer());
+          key('Enter');
+        });
+        expect(options().length).toBe(0);
+        expect(visits).toEqual([]);
+        await pause();
+        await act(async () => requests.at(-1)!.resolve(result('Old suggestion')));
+        await act(async () => key('ArrowDown'));
+      }
+      const initialCount = requests.length;
       const oldLink = options()[0]!.querySelector('a')!;
       // Dispatch before React flushes the session notification, as well as checking the committed view.
       await act(async () => {
         client.setQueryData(sessionQuery.queryKey, transition);
         oldLink.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+        for (const [type, extra] of [
+          ['click', { ctrlKey: true }],
+          ['auxclick', { button: 1 }],
+        ] as const)
+          expect(
+            oldLink.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true, ...extra })),
+          ).toBe(false);
         key('Enter');
       });
       expect(visits).toEqual([]);
@@ -117,7 +140,7 @@ for (const transition of [
       expect(requests[0]!.signal.aborted).toBe(true);
       if (transition.state === 'unknown' || transition.state === 'unavailable') {
         await pause();
-        expect(requests.length).toBe(1);
+        expect(requests.length).toBe(initialCount);
         await act(async () => {
           client.setQueryData(sessionQuery.queryKey, viewer('settled'));
         });

@@ -46,6 +46,7 @@ export type HeaderSearchProps = {
   session?: BrowserSession;
   /** Read the same owner at dispatch time, including cache changes queued before a render. */
   readSession?: () => BrowserSession;
+  observeSession?: (retire: () => void) => () => void;
   history?: RecentHistory | undefined;
   discovery?: SearchDiscovery | undefined;
   loadRealmDiscovery?: SearchRealmDiscoveryLoader | undefined;
@@ -82,6 +83,7 @@ type ViewProps = Pick<
   onRemoveScope?(): void;
   onFilters?(): void;
   onSuggestion?(href: string): void;
+  canSelectSuggestion?(): boolean;
   onActive?(index: number): void;
   onRetry?(): void;
   onRecent?(entry: RecentEntry): void;
@@ -107,6 +109,7 @@ export function HeaderSearchView({
   onRemoveScope = () => undefined,
   onFilters,
   onSuggestion,
+  canSelectSuggestion,
   onActive,
   onRetry,
   suggestionRatio,
@@ -360,11 +363,19 @@ export function HeaderSearchView({
                       href={href}
                       tabIndex={-1}
                       onPointerDown={(event) => {
+                        if (canSelectSuggestion && !canSelectSuggestion()) {
+                          event.preventDefault();
+                          return;
+                        }
                         if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
                           event.preventDefault();
                       }}
                       className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                       onClick={(event) => {
+                        if (canSelectSuggestion && !canSelectSuggestion()) {
+                          event.preventDefault();
+                          return;
+                        }
                         if (
                           onSuggestion &&
                           !event.metaKey &&
@@ -376,6 +387,9 @@ export function HeaderSearchView({
                           event.preventDefault();
                           onSuggestion(href);
                         }
+                      }}
+                      onAuxClick={(event) => {
+                        if (canSelectSuggestion && !canSelectSuggestion()) event.preventDefault();
                       }}
                     >
                       <Cover
@@ -422,6 +436,7 @@ function HeaderSearchController({
   locale,
   session,
   readSession,
+  observeSession: subscribeSession,
   scope,
   initialQuery = '',
   fields,
@@ -449,6 +464,7 @@ function HeaderSearchController({
   const sessionKey = headerSearchSessionKey(session);
   const [observedSession, observeSession] = useState(sessionKey);
   const currentSession = useRef(sessionKey);
+  const resultsRetired = useRef(false);
   currentSession.current = sessionKey;
   const sessionMatches = sessionKey !== null && sessionKey === observedSession;
   const sessionIsCurrent = () =>
@@ -456,6 +472,7 @@ function HeaderSearchController({
     currentSession.current === sessionKey &&
     (!readSession || headerSearchSessionKey(readSession()) === sessionKey);
   // Mask during render as well as clearing stored state before input can select an old option.
+  const canSelectSuggestion = () => sessionIsCurrent() && !resultsRetired.current;
   const visibleState: HeaderSearchState = sessionMatches
     ? state
     : { ...state, suggestions: 'idle', result: undefined, activeIndex: -1 };
@@ -463,6 +480,16 @@ function HeaderSearchController({
   const [composing, setComposing] = useState(false);
   const [queryLimitError, setQueryLimitError] = useState(false);
   const region = useHeaderSearchFilterRegion();
+  useLayoutEffect(
+    () =>
+      subscribeSession?.(() => {
+        resultsRetired.current = true;
+        request.current?.();
+        dispatch({ type: 'invalidate' });
+        retry();
+      }),
+    [subscribeSession],
+  );
   useLayoutEffect(() => {
     request.current?.();
     request.current = null;
@@ -494,8 +521,10 @@ function HeaderSearchController({
       locale,
       state.scope,
       (result) => {
-        if (sessionIsCurrent())
+        if (sessionIsCurrent()) {
+          resultsRetired.current = false;
           dispatch({ type: 'suggestions', state: result.subjects.length ? 'ready' : 'empty', result });
+        }
       },
       (failure) => {
         if (sessionIsCurrent()) dispatch({ type: 'suggestions', state: failure });
@@ -666,6 +695,7 @@ function HeaderSearchController({
         else input.current?.focus();
       }}
       state={visibleState}
+      canSelectSuggestion={canSelectSuggestion}
       locale={locale}
       queryLimitError={queryLimitError}
       fields={fields}
@@ -682,13 +712,13 @@ function HeaderSearchController({
         input.current?.focus();
       }}
       onSuggestion={(href) => {
-        if (!sessionIsCurrent()) return;
+        if (!canSelectSuggestion()) return;
         if (state.scope || isWithinGlobalSearchQueryLimit(state.query))
           history?.remember(state.query, state.scope, searchLanguages());
         visit(href);
       }}
       onActive={(index) => {
-        if (sessionIsCurrent()) dispatch({ type: 'active', index });
+        if (canSelectSuggestion()) dispatch({ type: 'active', index });
       }}
       onRetry={retry}
       onFilters={() => {
@@ -733,7 +763,7 @@ function HeaderSearchController({
             event.preventDefault();
             dispatch({ type: 'remove-scope' });
           }
-          const subjects = sessionIsCurrent() ? (visibleState.result?.subjects ?? []) : [];
+          const subjects = canSelectSuggestion() ? (visibleState.result?.subjects ?? []) : [];
           const next = nextSuggestion(event.key, visibleState.activeIndex, subjects.length);
           if (next !== undefined && state.expanded) {
             event.preventDefault();
