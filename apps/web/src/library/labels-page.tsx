@@ -19,6 +19,7 @@ import { shelfHref } from './shelf-params';
 import type { LibraryLabelSummary } from './subject-labels';
 import type { ManagementGuard } from './management-current-origin';
 import type { GatedOperation } from '../kernel/exposure';
+import { hasUnsentLabelName, useLabelDraftNavigation } from './label-draft-navigation';
 
 /** A catalogue label opens its complete personal shelf. */
 export function LabelShelfLink({ label, locale }: { label: LibraryLabelSummary; locale: string }) {
@@ -135,6 +136,11 @@ export function LabelsPageView({
   const [busy, setBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [action, setAction] = useState<LabelAction | null>(() => failedAction(initial));
+  const [createName, setCreateName] = useState(() =>
+    initial.feedback?.operation === 'create' && !initial.feedback.ok ? initial.feedback.name ?? '' : '',
+  );
+  const createField = useRef<HTMLInputElement>(null);
+  const renameField = useRef<HTMLInputElement>(null);
   const locked = useRef<{ current: () => boolean } | null>(null);
   const mounted = useRef(false);
   const attempts = useRef(new Map<string, Attempt>());
@@ -206,6 +212,30 @@ export function LabelsPageView({
       current.operations.includes(`library_label.${input.operation === 'restore' ? 'delete' : input.operation}`)
     );
   }
+  function originalName(operation: 'create' | 'rename', id = '') {
+    const attempt = attempts.current.get(`${operation}:${id}`);
+    if (attempt) return attempt.unresolved ? attempt.input.name : undefined;
+    const feedback = page.feedback;
+    return feedback?.operation === operation && (feedback.id ?? '') === id &&
+      !feedback.ok && feedback.reason === 'unavailable' ? feedback.name : undefined;
+  }
+  const createDirty = hasUnsentLabelName(createName, '', originalName('create'));
+  const renameDirty = action?.operation === 'rename' &&
+    hasUnsentLabelName(action.name, action.label.name, originalName('rename', action.label.id));
+  const navigation = useLabelDraftNavigation({
+    dirty: createDirty || renameDirty,
+    isCurrent: () =>
+      (createDirty && admitted({ operation: 'create', idempotencyKey: page.createKey })) ||
+      (renameDirty && admitted({ operation: 'rename', idempotencyKey: action!.label.renameKey })),
+    focus: () => renameDirty ? renameField.current : createField.current,
+  });
+  function chooseAction(next: LabelAction | null) {
+    void navigation.confirm(renameDirty).then((discard) => {
+      if (discard && alive() && !locked.current &&
+        (!originating || originating.isCurrent(`library_label.${next?.operation ?? action?.operation ?? 'rename'}`)))
+        setAction(next);
+    });
+  }
   async function submit(supplied: LabelInput) {
     if (!admitted(supplied) || locked.current) return;
     const slot = `${supplied.operation}:${supplied.id ?? ''}`;
@@ -250,6 +280,12 @@ export function LabelsPageView({
       const result = await attempt.send({ data: attempt.input, headers: attempt.headers });
       if (!admitted(input)) return;
       attempt.unresolved = !result.ok && result.reason === 'unavailable';
+      if (result.ok && input.operation === 'create')
+        setCreateName((value) => value === input.name ? '' : value);
+      if (result.ok && input.operation === 'rename')
+        setAction((selected) => selected?.label.id !== input.id ? selected :
+          selected.name === input.name ? null :
+            { ...selected, label: { ...selected.label, name: input.name ?? selected.label.name } });
       const feedback: LabelFeedback = {
         ...result,
         operation: input.operation,
@@ -309,7 +345,8 @@ export function LabelsPageView({
       current = preserveAttempts(current, latestPage.current);
       setPage({ ...current, feedback: retained, undoKey: retained.undoKey ?? current.undoKey });
       if (input.operation === 'rename' || input.operation === 'delete') {
-        setAction((selected) => (!selected || selected.label.id !== input.id ? selected : result.ok ? null : selected));
+        setAction((selected) => (!selected || selected.label.id !== input.id ? selected :
+          result.ok && (input.operation === 'delete' || selected.name === input.name) ? null : selected));
       }
       if ((result.ok && input.operation === 'restore') || undoUnavailable) retireToast();
       if (feedback.undo && admitted(input)) {
@@ -414,6 +451,7 @@ export function LabelsPageView({
           <Field>
             <FieldLabel htmlFor={`label-${label.id}`}>{m.library_label_name()}</FieldLabel>
             <Input
+              ref={fallback ? undefined : renameField}
               id={`label-${label.id}`}
               name="name"
               required
@@ -464,7 +502,7 @@ export function LabelsPageView({
                   (!originating || originating.isCurrent(`library_label.${selected.operation}`)) &&
                   !locked.current
                 )
-                  setAction(null);
+                  chooseAction(null);
               }}
             >
               {m.action_cancel()}
@@ -551,6 +589,7 @@ export function LabelsPageView({
     );
   return (
     <article ref={pageRef} tabIndex={-1} className="min-w-0 max-w-3xl space-y-8 text-foreground" aria-busy={busy}>
+      {navigation.boundary}
       <header className="space-y-2">
         <PageHeading>{m.library_labels_heading()}</PageHeading>
         <p className="text-muted-foreground">{m.library_labels_private()}</p>
@@ -596,12 +635,17 @@ export function LabelsPageView({
             <FieldLabel htmlFor="new-label">{m.library_label_name()}</FieldLabel>
             <div className="flex flex-wrap gap-2">
               <Input
+                ref={createField}
                 id="new-label"
                 name="name"
                 required
                 maxLength={1000}
                 className={`${fieldClass} flex-1 basis-48`}
-                defaultValue={fieldError('create') ? feedback?.name : ''}
+                value={createName}
+                onChange={(event) => {
+                  if (alive() && (!originating || originating.isCurrent('library_label.create')))
+                    setCreateName(event.target.value);
+                }}
                 aria-invalid={fieldError('create') || undefined}
                 aria-describedby={fieldError('create') ? 'create-error' : undefined}
               />
@@ -632,7 +676,7 @@ export function LabelsPageView({
                 label: m.library_label_rename(),
                 onSelect: () => {
                   if (alive() && (!originating || originating.isCurrent('library_label.rename')) && !locked.current)
-                    setAction({ operation: 'rename', label, name: label.name });
+                    chooseAction({ operation: 'rename', label, name: label.name });
                 },
               });
             if (
@@ -644,7 +688,7 @@ export function LabelsPageView({
                 label: m.library_label_delete(),
                 onSelect: () => {
                   if (alive() && (!originating || originating.isCurrent('library_label.delete')) && !locked.current)
-                    setAction({ operation: 'delete', label, name: label.name });
+                    chooseAction({ operation: 'delete', label, name: label.name });
                 },
               });
             return (
@@ -745,7 +789,7 @@ export function LabelsPageView({
               !open &&
               !locked.current
             )
-              setAction(null);
+              chooseAction(null);
           }}
         >
           <DialogContent
