@@ -27,6 +27,7 @@ import { QualifierInput } from './relation-editor';
 import type { StatementInput } from './statement-editor';
 import { ScalarControl } from './statement-editor-view';
 import { DefinitionMeaning } from './definition-meaning';
+import { InitialFieldChoice } from './initial-field-choice';
 
 type Row = AlbumRow;
 
@@ -73,7 +74,6 @@ function AlbumProfileCreateLive({
     { id: 0, language: locale, label: '', description: '', aliases: '' },
   ]);
   const [rows, setRows] = useState<Row[]>([]);
-  const [property, setProperty] = useState('');
   const [failure, setFailure] = useState<CreateFailure>();
   const [corrections, setCorrections] = useState<AlbumCorrection[]>([]);
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
@@ -302,34 +302,19 @@ function AlbumProfileCreateLive({
           />
         ))}
         <fieldset disabled={locked} className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
-          <Field className="w-full min-w-0 sm:flex-1">
-            <FieldLabel className={labelClassName} htmlFor="album-field">
-              {m.character_add_fact({}, o)}
-            </FieldLabel>
-            <NativeSelect
-              id="album-field"
-              className="w-full [&>select]:min-h-11"
-              value={property}
-              onChange={(event) => setProperty(event.target.value)}
-            >
-              <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-              {choices
-                .filter(
-                  (id) => release.properties[id]!.multivalued || !rows.some((row) => row.statement.property.id === id),
-                )
-                .map((id) => (
-                  <NativeSelectOption key={id} value={id}>
-                    {pickText(release.properties[id]!.labels, locale).text}
-                  </NativeSelectOption>
-                ))}
-            </NativeSelect>
-          </Field>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-auto min-h-11 max-w-full whitespace-normal"
-            disabled={!choices.includes(property)}
-            onClick={() => {
+          <InitialFieldChoice
+            id="album-field"
+            groups={[{ properties: choices }]}
+            release={release}
+            occupied={rows.map((row) => row.statement.property.id)}
+            locale={locale}
+            disabled={locked}
+            fieldClassName="w-full min-w-0 sm:flex-1"
+            labelClassName={labelClassName}
+            selectClassName="w-full [&>select]:min-h-11"
+            buttonClassName="h-auto min-h-11 max-w-full whitespace-normal"
+            add={(property) => {
+              if (!lifetime.active() || locked || running.current || pending.current || !metadataCurrent(release)) return;
               setRows([
                 ...rows,
                 {
@@ -343,11 +328,8 @@ function AlbumProfileCreateLive({
                   },
                 },
               ]);
-              setProperty('');
             }}
-          >
-            {m.correction_add({}, o)}
-          </Button>
+          />
         </fieldset>
       </section>
       <div className="space-y-3">

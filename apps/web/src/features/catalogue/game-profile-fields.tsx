@@ -1,17 +1,16 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { catalogueEditor, useEditorLifetime, useCurrentReadingVisible } from './editor-lifetime';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import { controlId } from './statement-validation-presentation';
 import { gameGroups, gameTarget, type GameRead } from './game-profile';
+import { InitialFieldChoice } from './initial-field-choice';
 import { StatementFields, PartValue, EditorFailure, type StatementFieldsRead } from './statement-editor-view';
 import { statementInput, type SnakInput, type StatementInput } from './statement-editor';
 import { factChanged, factLocked, sealFacts, sendFacts, type FactDraft, type FactsTransport } from './subject-facts';
@@ -265,8 +264,6 @@ export function GameInitialFacts({
   disabled: boolean;
   change: (rows: { key: string; statement: StatementInput }[]) => void;
 }) {
-  const propertySelectId = useId();
-  const [property, setProperty] = useState('');
   const o = { locale: locale as never };
   const groups = gameGroups(release, type);
   const context: StatementFieldsRead = { release, source: null, public: { subject: { type }, related: {} } };
@@ -274,49 +271,18 @@ export function GameInitialFacts({
     <fieldset disabled={disabled} className="min-w-0 max-w-full space-y-5">
       <legend className="font-sans text-lg font-semibold">{m.game_profile_initial({}, o)}</legend>
       <p className="text-sm text-muted-foreground">{m.game_profile_optional({}, o)}</p>
-      <Field className="min-w-0 max-w-full">
-        <FieldLabel
-          htmlFor={propertySelectId}
-          className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
-        >
-          {m.character_add_fact({}, o)}
-        </FieldLabel>
-        <NativeSelect
-          id={propertySelectId}
-          className={gamePropertySelectClass}
-          aria-label={m.character_add_fact({}, o)}
-          value={property}
-          onChange={(event) => setProperty(event.target.value)}
-        >
-          <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-          {Object.entries(groups)
-            .filter(([, ids]) => ids.length)
-            .map(([group, ids]) => (
-              <optgroup key={group} label={gameGroupLabel(group, locale)}>
-                {ids
-                  .filter(
-                    (id) =>
-                      release.properties[id]!.multivalued ||
-                      !statements.some((row) => row.statement.property.id === id),
-                  )
-                  .map((id) => {
-                    const label = pickText(release.properties[id]!.labels, locale);
-                    return (
-                      <NativeSelectOption key={id} value={id} lang={label.lang ?? undefined}>
-                        {label.text}
-                      </NativeSelectOption>
-                    );
-                  })}
-              </optgroup>
-            ))}
-        </NativeSelect>
-      </Field>
-      <Button
-        type="button"
-        className={gameActionClass}
-        variant="outline"
-        disabled={!Object.values(groups).flat().includes(property) || statements.length >= 32}
-        onClick={() => {
+      <InitialFieldChoice
+        groups={Object.entries(groups).map(([group, properties]) => ({ label: gameGroupLabel(group, locale), properties }))}
+        release={release}
+        occupied={statements.map((row) => row.statement.property.id)}
+        locale={locale}
+        disabled={disabled}
+        atLimit={statements.length >= 32}
+        fieldClassName="min-w-0 max-w-full"
+        labelClassName="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+        selectClassName={gamePropertySelectClass}
+        buttonClassName={gameActionClass}
+        add={(property) => {
           change([
             ...statements,
             {
@@ -330,11 +296,8 @@ export function GameInitialFacts({
               },
             },
           ]);
-          setProperty('');
         }}
-      >
-        {m.correction_add({}, o)}
-      </Button>
+      />
       {statements.map((row) => {
         const label = pickText(release.properties[row.statement.property.id]?.labels ?? {}, locale);
         return (

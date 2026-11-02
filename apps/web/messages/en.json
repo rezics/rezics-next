@@ -1,4 +1,5 @@
 {
+  "initial_field_choice_withdrawn": "The field you chose is no longer offered. Choose a current field to add. Your existing facts and names are kept.",
   "member_window_cycle": "The list repeated a continuation. Start again to read its current entries.",
   "member_window_restart": "Start again",
   "collection_filter_address_rejected": "This filter link cannot be applied. No members were requested for this address. Correct or clear the filters to continue.",
