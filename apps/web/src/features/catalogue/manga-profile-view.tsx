@@ -1,25 +1,31 @@
-import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useQuery } from '@tanstack/react-query';
-import { useId, useRef, useState } from 'react';
-import { pickText } from '@rezics/composition';
-import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
-import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { Checkbox } from '@rezics/ui/shadcn/checkbox';
-import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { Input } from '@rezics/ui/shadcn/input';
-import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
-import { m } from '../../paraglide/messages.js';
-import { ViewHeadingActions } from '../pages/view-heading';
-import { definitionText } from './definition-guide';
-import { DefinitionGuideLink } from './definition-guide-view';
-import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
-import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
-import { EditorFailure } from './statement-editor-view';
-import { MangaInitialField, type MangaRow } from './manga-profile-field';
-import { mangaCreateFeedback } from './manga-create-feedback';
-import { MangaCorrections, type MangaCorrectionPorts } from './manga-profile-corrections';
+import { catalogueEditor, useEditorLifetime } from "./editor-lifetime";
+import { useQuery } from "@tanstack/react-query";
+import { useId, useRef, useState } from "react";
+import { pickText } from "@rezics/composition";
+import { ContentItemFrame, ContentItemHeading } from "@rezics/ui/content-item";
+import { Button, buttonVariants } from "@rezics/ui/shadcn/button";
+import { Checkbox } from "@rezics/ui/shadcn/checkbox";
+import { Field, FieldLabel } from "@rezics/ui/shadcn/field";
+import { Input } from "@rezics/ui/shadcn/input";
+import { Textarea } from "@rezics/ui/shadcn/textarea";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@rezics/ui/shadcn/native-select";
+import type { EntityPickerSearch } from "@rezics/ui/entity-picker";
+import { m } from "../../paraglide/messages.js";
+import { ViewHeadingActions } from "../pages/view-heading";
+import { definitionText } from "./definition-guide";
+import { DefinitionGuideLink } from "./definition-guide-view";
+import type { CreateFailure, CreateResult, TermDraft } from "./create-subject";
+import { CreateSubjectLanguageRemove } from "./create-subject-language-remove";
+import { EditorFailure } from "./statement-editor-view";
+import { MangaInitialField, type MangaRow } from "./manga-profile-field";
+import { mangaCreateFeedback } from "./manga-create-feedback";
+import {
+  MangaCorrections,
+  type MangaCorrectionPorts,
+} from "./manga-profile-corrections";
 import {
   blankMangaStatement,
   mangaDraft,
@@ -29,7 +35,7 @@ import {
   type MangaRead,
   type MangaTransport,
   type MangaType,
-} from './manga-profile';
+} from "./manga-profile";
 
 export type MangaReady = Extract<MangaRead, { ok: true }>;
 type MangaTermDraft = TermDraft & { id: number };
@@ -67,7 +73,7 @@ function MangaProfileEditorLive({
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const query = useQuery({
-    queryKey: [...['manga-profile', id, locale], lifetime.generation],
+    queryKey: [...["manga-profile", id, locale], lifetime.generation],
     queryFn: transport.load,
     retry: false,
     staleTime: Infinity,
@@ -75,23 +81,38 @@ function MangaProfileEditorLive({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const read = !query.isError && (!id || !query.isFetching) && query.data?.ok &&
-    (!id || query.data.public?.subject.id === id) ? query.data : undefined;
+  const read =
+    !query.isError &&
+    (!id || !query.isFetching) &&
+    query.data?.ok &&
+    (!id || query.data.public?.subject.id === id)
+      ? query.data
+      : undefined;
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
-      <ViewHeadingActions headingClassName="font-sans" label={id ? m.manga_edit({}, o) : m.manga_title({}, o)} />
-      <p className="max-w-prose text-muted-foreground">{m.manga_intro({}, o)}</p>
-      {session !== 'signed-in' &&
-        (session === 'unavailable' ? (
+      <ViewHeadingActions
+        headingClassName="font-sans"
+        label={id ? m.manga_edit({}, o) : m.manga_title({}, o)}
+      />
+      <p className="max-w-prose text-muted-foreground">
+        {m.manga_intro({}, o)}
+      </p>
+      {session !== "signed-in" &&
+        (session === "unavailable" ? (
           <div className="space-y-3">
             <p role="alert">{m.catalogue_create_unavailable({}, o)}</p>
-            <Button onClick={() => void retrySession?.()} disabled={!retrySession}>
+            <Button
+              onClick={() => void retrySession?.()}
+              disabled={!retrySession}
+            >
               {m.erasure_retry_session({}, o)}
             </Button>
           </div>
         ) : (
           <p role="status">
-            {session === 'signed-out' ? m.catalogue_create_signed_out({}, o) : m.candidate_loading({}, o)}
+            {session === "signed-out"
+              ? m.catalogue_create_signed_out({}, o)
+              : m.candidate_loading({}, o)}
           </p>
         ))}
       {query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
@@ -100,12 +121,19 @@ function MangaProfileEditorLive({
       )}
       {(query.isError || (query.data && !query.data.ok)) && (
         <div className="space-y-3">
-          {query.data && !query.data.ok && query.data.reason === 'concealed' ? (
+          {query.data && !query.data.ok && query.data.reason === "concealed" ? (
             <p role="alert">{m.catalogue_create_concealed({}, o)}</p>
           ) : (
-            <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
+            <EditorFailure
+              locale={locale}
+              reason={
+                query.data && !query.data.ok ? query.data.reason : "unavailable"
+              }
+            />
           )}
-          <Button onClick={() => void query.refetch()}>{m.correction_reload({}, o)}</Button>
+          <Button onClick={() => void query.refetch()}>
+            {m.correction_reload({}, o)}
+          </Button>
         </div>
       )}
       {id ? (
@@ -113,7 +141,7 @@ function MangaProfileEditorLive({
           read={read}
           revision={String(query.dataUpdatedAt)}
           locale={locale}
-          disabled={session !== 'signed-in'}
+          disabled={session !== "signed-in"}
           ports={correction}
           reload={() => query.refetch()}
         />
@@ -121,7 +149,7 @@ function MangaProfileEditorLive({
         <MangaCreate
           read={read}
           locale={locale}
-          disabled={session !== 'signed-in'}
+          disabled={session !== "signed-in"}
           transport={transport}
           search={search}
           refresh={() => query.refetch()}
@@ -150,13 +178,13 @@ function MangaCreate({
   const o = { locale: locale as never };
   const termsId = useId();
   const nextTermId = useRef(1);
-  const [type, setType] = useState<MangaType>('schema:ComicSeries');
+  const [type, setType] = useState<MangaType>("schema:ComicSeries");
   const [terms, setTerms] = useState<MangaTermDraft[]>([
-    { id: 0, language: locale, label: '', description: '', aliases: '' },
+    { id: 0, language: locale, label: "", description: "", aliases: "" },
   ]);
   const [drafts, setDrafts] = useState<Record<MangaType, MangaRow[]>>({
-    'schema:ComicSeries': [],
-    'schema:PublicationVolume': [],
+    "schema:ComicSeries": [],
+    "schema:PublicationVolume": [],
   });
   const [independent, setIndependent] = useState(false);
   const [failure, setFailure] = useState<CreateFailure>();
@@ -168,7 +196,15 @@ function MangaCreate({
   const rows = drafts[type];
   const groups = read ? mangaGroups(read.release, type, locale) : undefined;
   const labels = mangaGroupLabels(locale);
-  const feedback = mangaCreateFeedback(failure?.errors ?? [], rows, terms, read, locale, termsId, type);
+  const feedback = mangaCreateFeedback(
+    failure?.errors ?? [],
+    rows,
+    terms,
+    read,
+    locale,
+    termsId,
+    type,
+  );
   function changeRows(next: MangaRow[]) {
     if (!locked) {
       setDrafts({ ...drafts, [type]: next });
@@ -177,7 +213,14 @@ function MangaCreate({
   }
   async function submit() {
     if (!lifetime.active()) return;
-    if (!read || disabled || running.current || created || failure?.reason === 'conflict') return;
+    if (
+      !read ||
+      disabled ||
+      running.current ||
+      created ||
+      failure?.reason === "conflict"
+    )
+      return;
     if (!request.current) {
       const draft = mangaDraft(
         read.release,
@@ -186,19 +229,27 @@ function MangaCreate({
         terms,
         rows.map((row) => row.statement),
       );
-      if (type === 'schema:PublicationVolume' && !independent)
-        draft.errors.push({ pointer: '/independent', code: 'required' });
+      if (type === "schema:PublicationVolume" && !independent)
+        draft.errors.push({ pointer: "/independent", code: "required" });
       for (const row of rows)
-        if (read.release.properties[row.statement.property.id]?.datatype === 'document' && !row.original)
+        if (
+          read.release.properties[row.statement.property.id]?.datatype ===
+            "document" &&
+          !row.original
+        )
           draft.errors.push({
             pointer: `/statements/${row.statement.property.id}/${rows.filter((item) => item.statement.property.id === row.statement.property.id).indexOf(row)}/original`,
-            code: 'required',
+            code: "required",
           });
       if (draft.errors.length) {
-        setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
+        setFailure({ ok: false, reason: "invalid", errors: draft.errors });
         return;
       }
-      request.current = { key: crypto.randomUUID(), item: draft.item, independent };
+      request.current = {
+        key: crypto.randomUUID(),
+        item: draft.item,
+        independent,
+      };
     }
     running.current = true;
     setBusy(true);
@@ -211,13 +262,14 @@ function MangaCreate({
         request.current = null;
       } else {
         setFailure(result);
-        if (!['unavailable', 'conflict'].includes(result.reason)) request.current = null;
+        if (!["unavailable", "conflict"].includes(result.reason))
+          request.current = null;
         if (result.refreshDefinitions) await refresh();
         if (!lifetime.active()) return;
       }
     } catch {
       if (!lifetime.active()) return;
-      setFailure({ ok: false, reason: 'unavailable' });
+      setFailure({ ok: false, reason: "unavailable" });
     } finally {
       if (!lifetime.active()) return;
       running.current = false;
@@ -232,9 +284,12 @@ function MangaCreate({
             <span role="status">{m.manga_created({}, o)}</span>
           </ContentItemHeading>
           <p className="break-all font-mono text-sm">{created.id}</p>
-          {created.reader.state === 'ready' ? (
+          {created.reader.state === "ready" ? (
             <a
-              className={buttonVariants({ className: 'h-auto min-h-11 max-w-full whitespace-normal text-start' })}
+              className={buttonVariants({
+                className:
+                  "h-auto min-h-11 max-w-full whitespace-normal text-start",
+              })}
               href={created.reader.href}
             >
               {m.candidate_view_public({}, o)}
@@ -242,7 +297,7 @@ function MangaCreate({
           ) : (
             <>
               <p>
-                {created.reader.state === 'concealed'
+                {created.reader.state === "concealed"
                   ? m.catalogue_create_concealed({}, o)
                   : m.catalogue_create_reader_unavailable({}, o)}
               </p>
@@ -260,7 +315,10 @@ function MangaCreate({
                     setCreated({ ...created, reader });
                   } catch {
                     if (!lifetime.active()) return;
-                    setCreated({ ...created, reader: { state: 'unavailable' } });
+                    setCreated({
+                      ...created,
+                      reader: { state: "unavailable" },
+                    });
                   } finally {
                     if (!lifetime.active()) return;
                     running.current = false;
@@ -279,11 +337,11 @@ function MangaCreate({
     <>
       <a
         className={buttonVariants({
-          variant: 'outline',
+          variant: "outline",
           className:
-            'h-auto min-h-11 max-w-full whitespace-normal text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+            "h-auto min-h-11 max-w-full whitespace-normal text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         })}
-        href={`/${locale}/search${terms[0]?.label.trim() ? `?q=${encodeURIComponent(terms[0].label.trim())}` : ''}`}
+        href={`/${locale}/search${terms[0]?.label.trim() ? `?q=${encodeURIComponent(terms[0].label.trim())}` : ""}`}
       >
         {m.catalogue_create_search({}, o)}
       </a>
@@ -297,11 +355,15 @@ function MangaCreate({
       >
         <fieldset disabled={locked} className="min-w-0 space-y-4">
           <legend className="mb-3 max-w-full">
-            <ContentItemHeading className="font-sans text-xl font-semibold">{m.manga_grain({}, o)}</ContentItemHeading>
+            <ContentItemHeading className="font-sans text-xl font-semibold">
+              {m.manga_grain({}, o)}
+            </ContentItemHeading>
           </legend>
           <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
             <Field className="min-w-0">
-              <FieldLabel htmlFor="manga-type">{m.manga_grain({}, o)}</FieldLabel>
+              <FieldLabel htmlFor="manga-type">
+                {m.manga_grain({}, o)}
+              </FieldLabel>
               <NativeSelect
                 className="w-full min-w-0"
                 id="manga-type"
@@ -319,37 +381,55 @@ function MangaCreate({
                 {mangaTypes
                   .filter((id) => read?.release.types[id])
                   .map((id) => {
-                    const text = definitionText(read!.release.types[id]!.labels, locale);
+                    const text = definitionText(
+                      read!.release.types[id]!.labels,
+                      locale,
+                    );
                     return (
-                      <NativeSelectOption key={id} value={id} lang={text.lang ?? undefined}>
+                      <NativeSelectOption
+                        key={id}
+                        value={id}
+                        lang={text.lang ?? undefined}
+                      >
                         {text.text}
                       </NativeSelectOption>
                     );
                   })}
               </NativeSelect>
             </Field>
-            <p className="text-sm text-muted-foreground">{m.manga_grain_help({}, o)}</p>
+            <p className="text-sm text-muted-foreground">
+              {m.manga_grain_help({}, o)}
+            </p>
             {read?.release.types[type] && (
-              <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/manga` }} />
+              <DefinitionGuideLink
+                locale={locale}
+                address={{ type, returnTo: `/${locale}/catalogue/manga` }}
+              />
             )}
-            {type === 'schema:PublicationVolume' && (
+            {type === "schema:PublicationVolume" && (
               <Field orientation="horizontal">
                 <Checkbox
                   id="manga-independent"
                   checked={independent}
-                  aria-invalid={feedback.some((error) => error.target === 'manga-independent') || undefined}
+                  aria-invalid={
+                    feedback.some(
+                      (error) => error.target === "manga-independent",
+                    ) || undefined
+                  }
                   aria-describedby={
                     feedback
-                      .filter((error) => error.target === 'manga-independent')
+                      .filter((error) => error.target === "manga-independent")
                       .map((error) => error.id)
-                      .join(' ') || undefined
+                      .join(" ") || undefined
                   }
                   onCheckedChange={(value) => {
                     setIndependent(value === true);
                     setFailure(undefined);
                   }}
                 />
-                <FieldLabel htmlFor="manga-independent">{m.manga_independent({}, o)}</FieldLabel>
+                <FieldLabel htmlFor="manga-independent">
+                  {m.manga_independent({}, o)}
+                </FieldLabel>
               </Field>
             )}
           </ContentItemFrame>
@@ -367,46 +447,72 @@ function MangaCreate({
               id={`${termsId}-row-${term.id}`}
               className="grid min-w-0 gap-4 py-3 sm:grid-cols-2 sm:py-4"
             >
-              {(['language', 'label', 'description', 'aliases'] as const).map((field) => {
-                const label = {
-                  language: m.catalogue_create_language({}, o),
-                  label: m.catalogue_create_label({}, o),
-                  description: m.catalogue_create_description({}, o),
-                  aliases: m.catalogue_create_aliases({}, o),
-                }[field];
-                const props = {
-                  id: `${termsId}-${field}-${term.id}`,
-                  value: term[field],
-                  'aria-invalid':
-                    feedback.some((error) => error.target === `${termsId}-${field}-${term.id}`) || undefined,
-                  'aria-describedby':
-                    feedback
-                      .filter((error) => error.target === `${termsId}-${field}-${term.id}`)
-                      .map((error) => error.id)
-                      .join(' ') || undefined,
-                  onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-                    setTerms((previous) =>
-                      previous.map((item) => (item.id === term.id ? { ...item, [field]: event.target.value } : item)),
-                    );
-                    setFailure(undefined);
-                  },
-                };
-                return (
-                  <Field key={field} className="min-w-0">
-                    <FieldLabel htmlFor={props.id}>{label}</FieldLabel>
-                    {field === 'aliases' ? <Textarea {...props} /> : <Input {...props} />}
-                  </Field>
-                );
-              })}
+              {(["language", "label", "description", "aliases"] as const).map(
+                (field) => {
+                  const label = {
+                    language: m.catalogue_create_language({}, o),
+                    label: m.catalogue_create_label({}, o),
+                    description: m.catalogue_create_description({}, o),
+                    aliases: m.catalogue_create_aliases({}, o),
+                  }[field];
+                  const props = {
+                    id: `${termsId}-${field}-${term.id}`,
+                    value: term[field],
+                    "aria-invalid":
+                      feedback.some(
+                        (error) =>
+                          error.target === `${termsId}-${field}-${term.id}`,
+                      ) || undefined,
+                    "aria-describedby":
+                      feedback
+                        .filter(
+                          (error) =>
+                            error.target === `${termsId}-${field}-${term.id}`,
+                        )
+                        .map((error) => error.id)
+                        .join(" ") || undefined,
+                    onChange: (
+                      event: React.ChangeEvent<
+                        HTMLInputElement | HTMLTextAreaElement
+                      >,
+                    ) => {
+                      setTerms((previous) =>
+                        previous.map((item) =>
+                          item.id === term.id
+                            ? { ...item, [field]: event.target.value }
+                            : item,
+                        ),
+                      );
+                      setFailure(undefined);
+                    },
+                  };
+                  return (
+                    <Field key={field} className="min-w-0">
+                      <FieldLabel htmlFor={props.id}>{label}</FieldLabel>
+                      {field === "aliases" ? (
+                        <Textarea {...props} />
+                      ) : (
+                        <Input {...props} />
+                      )}
+                    </Field>
+                  );
+                },
+              )}
               {index > 0 && (
                 <CreateSubjectLanguageRemove
                   locale={locale}
                   rowId={`${termsId}-row-${term.id}`}
-                  focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add-language`}
+                  focusId={
+                    terms[index + 1]
+                      ? `${termsId}-language-${terms[index + 1]!.id}`
+                      : `${termsId}-add-language`
+                  }
                   disabled={locked}
                   onRemove={() => {
                     if (locked || running.current || request.current) return;
-                    setTerms((previous) => previous.filter((row) => row.id !== term.id));
+                    setTerms((previous) =>
+                      previous.filter((row) => row.id !== term.id),
+                    );
                     setFailure(undefined);
                   }}
                 />
@@ -423,7 +529,13 @@ function MangaCreate({
               if (locked || running.current || request.current) return;
               setTerms((previous) => [
                 ...previous,
-                { id: nextTermId.current++, language: '', label: '', description: '', aliases: '' },
+                {
+                  id: nextTermId.current++,
+                  language: "",
+                  label: "",
+                  description: "",
+                  aliases: "",
+                },
               ]);
             }}
           >
@@ -441,16 +553,26 @@ function MangaCreate({
               .filter(([, fields]) => fields.length)
               .map(([group, fields]) => (
                 <section key={group} className="min-w-0">
-                  <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
+                  <ContentItemFrame
+                    as="div"
+                    className="min-w-0 space-y-4 py-3 sm:py-4"
+                  >
                     <ContentItemHeading className="font-sans text-xl font-semibold">
                       {labels[group as keyof typeof labels]}
                     </ContentItemHeading>
-                    <div data-content-item-slot="preview" className="min-w-0 space-y-4">
-                      {group === 'membership' && (
-                        <p className="text-sm text-muted-foreground">{m.manga_order_help({}, o)}</p>
+                    <div
+                      data-content-item-slot="preview"
+                      className="min-w-0 space-y-4"
+                    >
+                      {group === "membership" && (
+                        <p className="text-sm text-muted-foreground">
+                          {m.manga_order_help({}, o)}
+                        </p>
                       )}
                       {rows
-                        .filter((row) => fields.includes(row.statement.property.id))
+                        .filter((row) =>
+                          fields.includes(row.statement.property.id),
+                        )
                         .map((row) => (
                           <MangaInitialField
                             key={row.id}
@@ -464,8 +586,18 @@ function MangaCreate({
                               id: `manga-row-${row.id}`,
                               errors: feedback,
                             }}
-                            onChange={(next) => changeRows(rows.map((item) => (item.id === row.id ? next : item)))}
-                            onRemove={() => changeRows(rows.filter((item) => item.id !== row.id))}
+                            onChange={(next) =>
+                              changeRows(
+                                rows.map((item) =>
+                                  item.id === row.id ? next : item,
+                                ),
+                              )
+                            }
+                            onRemove={() =>
+                              changeRows(
+                                rows.filter((item) => item.id !== row.id),
+                              )
+                            }
                           />
                         ))}
                       <AddField
@@ -474,16 +606,23 @@ function MangaCreate({
                         fields={fields.filter(
                           (id) =>
                             read.release.properties[id]!.multivalued ||
-                            !rows.some((row) => row.statement.property.id === id),
+                            !rows.some(
+                              (row) => row.statement.property.id === id,
+                            ),
                         )}
-                        name={(id) => pickText(read.release.properties[id]!.labels, locale)}
+                        name={(id) =>
+                          pickText(read.release.properties[id]!.labels, locale)
+                        }
                         onAdd={(property) =>
                           changeRows([
                             ...rows,
                             {
                               id: crypto.randomUUID(),
                               statement: blankMangaStatement(property),
-                              label: pickText(read.release.properties[property]!.labels, locale),
+                              label: pickText(
+                                read.release.properties[property]!.labels,
+                                locale,
+                              ),
                             },
                           ])
                         }
@@ -496,7 +635,12 @@ function MangaCreate({
           {read &&
             groups &&
             rows
-              .filter((row) => !Object.values(groups).flat().includes(row.statement.property.id))
+              .filter(
+                (row) =>
+                  !Object.values(groups)
+                    .flat()
+                    .includes(row.statement.property.id),
+              )
               .map((row) => (
                 <section
                   key={row.id}
@@ -504,7 +648,10 @@ function MangaCreate({
                   tabIndex={-1}
                   className="min-w-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
-                  <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
+                  <ContentItemFrame
+                    as="div"
+                    className="min-w-0 space-y-3 py-3 sm:py-4"
+                  >
                     <ContentItemHeading
                       level={3}
                       className="font-sans text-lg font-semibold"
@@ -518,7 +665,9 @@ function MangaCreate({
                       type="button"
                       variant="outline"
                       disabled={locked}
-                      onClick={() => changeRows(rows.filter((item) => item.id !== row.id))}
+                      onClick={() =>
+                        changeRows(rows.filter((item) => item.id !== row.id))
+                      }
                     >
                       {m.recipe_remove_field({}, o)}
                     </Button>
@@ -542,10 +691,16 @@ function MangaCreate({
                       onClick={(event) => {
                         event.preventDefault();
                         const target = event.currentTarget
-                          .closest('form')
-                          ?.querySelector<HTMLElement>(`[id="${CSS.escape(error.target)}"]`);
-                        const control = target?.hasAttribute('data-manga-picker')
-                          ? (target.querySelector<HTMLElement>('[role="combobox"]') ?? target)
+                          .closest("form")
+                          ?.querySelector<HTMLElement>(
+                            `[id="${CSS.escape(error.target)}"]`,
+                          );
+                        const control = target?.hasAttribute(
+                          "data-manga-picker",
+                        )
+                          ? (target.querySelector<HTMLElement>(
+                              '[role="combobox"]',
+                            ) ?? target)
                           : target;
                         control?.focus();
                       }}
@@ -553,9 +708,13 @@ function MangaCreate({
                       {error.label}
                     </a>
                     <p>{error.instruction}</p>
-                    {error.instruction.includes(m.correction_error_uneditable({}, o)) && (
+                    {error.instruction.includes(
+                      m.correction_error_uneditable({}, o),
+                    ) && (
                       <details>
-                        <summary>{m.catalogue_creation_technical_details({}, o)}</summary>
+                        <summary>
+                          {m.catalogue_creation_technical_details({}, o)}
+                        </summary>
                         <code>{failure.errors![index]!.pointer}</code>
                       </details>
                     )}
@@ -563,7 +722,7 @@ function MangaCreate({
                 ))}
               </ul>
             )}
-            {failure.reason === 'conflict' && (
+            {failure.reason === "conflict" && (
               <Button
                 className="h-auto min-h-11 max-w-full whitespace-normal text-start"
                 type="button"
@@ -581,9 +740,18 @@ function MangaCreate({
         <Button
           className="h-auto min-h-11 max-w-full whitespace-normal text-start"
           type="submit"
-          disabled={busy || disabled || !read?.release.types[type] || failure?.reason === 'conflict'}
+          disabled={
+            busy ||
+            disabled ||
+            !read?.release.types[type] ||
+            failure?.reason === "conflict"
+          }
         >
-          {busy ? m.catalogue_create_saving({}, o) : request.current ? m.correction_retry({}, o) : m.manga_title({}, o)}
+          {busy
+            ? m.catalogue_create_saving({}, o)
+            : request.current
+              ? m.correction_retry({}, o)
+              : m.manga_title({}, o)}
         </Button>
       </form>
     </>
@@ -605,26 +773,35 @@ function AddField({
   disabled: boolean;
   locale: string;
 }) {
-  const [property, setProperty] = useState('');
+  const [property, setProperty] = useState("");
   const selectId = useId();
   const o = { locale: locale as never };
   return (
     <div className="flex min-w-0 flex-wrap items-end gap-3">
       <Field className="min-w-0 basis-full sm:basis-48 sm:flex-1">
-        <FieldLabel htmlFor={selectId} className="whitespace-normal [overflow-wrap:anywhere]">
+        <FieldLabel
+          htmlFor={selectId}
+          className="whitespace-normal [overflow-wrap:anywhere]"
+        >
           {label}
         </FieldLabel>
         <NativeSelect
           id={selectId}
           className="w-full min-w-0"
           aria-label={label}
-          value={fields.includes(property) ? property : ''}
+          value={fields.includes(property) ? property : ""}
           disabled={disabled}
           onChange={(event) => setProperty(event.target.value)}
         >
-          <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
+          <NativeSelectOption value="">
+            {m.correction_choose({}, o)}
+          </NativeSelectOption>
           {fields.map((id) => (
-            <NativeSelectOption key={id} value={id} lang={name(id).lang ?? undefined}>
+            <NativeSelectOption
+              key={id}
+              value={id}
+              lang={name(id).lang ?? undefined}
+            >
               {name(id).text}
             </NativeSelectOption>
           ))}
@@ -637,7 +814,7 @@ function AddField({
         disabled={disabled || !fields.includes(property)}
         onClick={() => {
           onAdd(property);
-          setProperty('');
+          setProperty("");
         }}
       >
         {m.correction_add({}, o)}
