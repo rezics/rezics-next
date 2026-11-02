@@ -71,7 +71,10 @@ function render(plannedId: string, body: SubjectRead): string {
     licence: 'Licence',
     source: 'Source',
     sources: 'Sources',
-    sections: new Map([['cover', section], ['about', section]]),
+    sections: new Map([
+      ['cover', section],
+      ['about', section],
+    ]),
     relations: {},
     relationNodes: [],
   } as unknown as import('../src/features/pages/overview').OverviewValue;
