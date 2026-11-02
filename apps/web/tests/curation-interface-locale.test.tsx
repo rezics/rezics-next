@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement, createRef } from 'react';
+import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PROFILE_FORMAT, profileDigest, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
 import { presentationEditorDictionary } from '../src/features/pages/curate-view-editor-messages';
@@ -90,10 +90,10 @@ test('both departure warnings follow the editor locale while ambient English dif
     localStorage: window.localStorage,
     HTMLElement: window.HTMLElement,
     HTMLButtonElement: window.HTMLButtonElement,
-    HTMLAnchorElement: window.HTMLAnchorElement,
+    HTMLInputElement: window.HTMLInputElement,
+    HTMLIFrameElement: window.HTMLIFrameElement,
     Element: window.Element,
     Node: window.Node,
-    Document: window.Document,
     MutationObserver: window.MutationObserver,
     ResizeObserver: window.ResizeObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
@@ -106,45 +106,46 @@ test('both departure warnings follow the editor locale while ambient English dif
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
   const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } =
     await import('@tanstack/react-router');
-  const { CurationNavigationGuard } = await import('../src/features/pages/curation-navigation-guard');
+  const { PresentationViewEditor } = await import('../src/features/pages/curate-view-editor');
   const runtime = await import('../src/paraglide/runtime.js');
   const originalLocale = runtime.getLocale();
   runtime.setLocale('en', { reload: false });
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const fallbackFocus = createRef<HTMLElement>();
-  const show = (retainedPublication: boolean) => {
-    const rootRoute = createRootRoute({ component: Outlet });
-    const editorRoute = createRoute({
-      getParentRoute: () => rootRoute,
-      path: '/curate/presentation',
-      component: () =>
-        createElement(
-          'div',
-          null,
-          createElement(Link, { to: '/search' }, 'Search destination'),
-          createElement(CurationNavigationGuard, {
-            dirty: !retainedPublication,
-            retainedPublication,
-            fallbackFocus,
-            locale: 'ja',
-          }),
-        ),
-    });
-    const destinationRoute = createRoute({
-      getParentRoute: () => rootRoute,
-      path: '/search',
-      component: () => createElement('h1', null, 'Actual search destination'),
-    });
-    return createRouter({
-      routeTree: rootRoute.addChildren([editorRoute, destinationRoute]),
-      history: createMemoryHistory({ initialEntries: ['/search', '/curate/presentation'] }),
-    });
-  };
+  const initialLocation = '/curate/presentation';
+  const rootRoute = createRootRoute({ component: Outlet });
+  const editorRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: initialLocation,
+    component: () =>
+      createElement(
+        'div',
+        null,
+        createElement(Link, { to: '/search' }, 'Search destination'),
+        createElement(PresentationViewEditor, {
+          initial,
+          locale: 'ja',
+          transport: {
+            read: async () => initial,
+            publish: async () => ({ ok: false, reason: 'unavailable', outcome: 'unknown' }),
+          },
+        }),
+      ),
+  });
+  const destinationRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/search',
+    component: () => createElement('h1', null, 'Actual search destination'),
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([editorRoute, destinationRoute]),
+    history: createMemoryHistory({ initialEntries: ['/search', initialLocation] }),
+  });
   const settle = async (ready: () => boolean) => {
     for (let count = 0; count < 150 && !ready(); count++)
       await act(async () => {
@@ -152,11 +153,11 @@ test('both departure warnings follow the editor locale while ambient English dif
       });
     expect(ready()).toBe(true);
   };
-  const leave = async (retainedPublication: boolean, warning: string, ambient: string) => {
-    const router = show(retainedPublication);
-    await router.load();
-    await act(async () => root.render(createElement(RouterProvider, { router })));
-    await settle(() => !!host.querySelector('a'));
+  const button = (label: string) =>
+    [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === label)!;
+  const labeled = (name: string) =>
+    [...host.querySelectorAll('label')].find((label) => label.textContent === name)!.control as HTMLInputElement;
+  const leave = async (warning: string, ambient: string) => {
     await act(async () => {
       const link = host.querySelector('a') as HTMLElement;
       link.focus();
@@ -166,10 +167,29 @@ test('both departure warnings follow the editor locale while ambient English dif
     const dialog = window.document.querySelector('[role="alertdialog"]')!;
     expect(dialog.textContent).toContain(warning);
     expect(dialog.textContent).not.toContain(ambient);
+    return dialog;
   };
   try {
-    await leave(false, m.curation_leave_warning({}, ja), m.curation_leave_warning());
-    await leave(true, m.curation_leave_recovery({}, ja), m.curation_leave_recovery());
+    await router.load();
+    await act(async () => root.render(createElement(RouterProvider, { router })));
+    await settle(() => !!labeled(m.curation_key({}, ja)));
+    await act(async () => {
+      const field = labeled(m.curation_key({}, ja));
+      field.focus();
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(field, 'schema:Zine');
+      field.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    await act(async () => button(m.curation_add({}, ja)).click());
+    await settle(() => host.textContent?.includes(m.curation_added({}, ja)) === true);
+    const draftDialog = await leave(m.curation_leave_warning({}, ja), m.curation_leave_warning());
+    await act(async () => {
+      [...draftDialog.querySelectorAll('button')].find((item) => item.textContent?.trim() === m.curation_stay({}, ja))!.click();
+    });
+    await settle(() => !window.document.querySelector('[role="alertdialog"]'));
+    await act(async () => button(m.curation_close({}, ja)).click());
+    await act(async () => button(m.curation_publish({}, ja)).click());
+    await settle(() => host.textContent?.includes(m.curation_unknown()) === true);
+    await leave(m.curation_leave_recovery({}, ja), m.curation_leave_recovery());
   } finally {
     await act(async () => root.unmount());
     host.remove();
