@@ -318,7 +318,6 @@ export function CopyForm({
           };
     }
     const captured = intent.current;
-    if (captured.operation === 'delete') return;
     if (!current(operation)) return;
     const lease = { current: () => current(operation) };
     flight.current = lease;
