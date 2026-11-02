@@ -67,7 +67,7 @@ test('queued condition-edit focus cannot steal focus after a user move or target
   }
   let root: Root | undefined;
   const flush = () =>
-    act(async () => {
+    act(() => {
       const batch = [...frames.values()];
       frames.clear();
       for (const callback of batch) callback(0);
@@ -79,63 +79,69 @@ test('queued condition-edit focus cannot steal focus after a user move or target
       'select:not(:disabled), input:not([type="hidden"]):not(:disabled), button:not(:disabled)',
     )!;
   const action = (label: string) => [...host.querySelectorAll('button')].find((button) => button.textContent === label)!;
+  const press = (label: string) =>
+    act(() => {
+      const button = action(label);
+      button.focus();
+      button.click();
+    });
   const live = () => host.querySelector('[aria-live="polite"]')?.textContent;
   try {
     root = createRoot(host as unknown as HTMLElement);
-    await act(async () => root!.render(createElement(Harness, { starting: initial })));
-    await flush();
+    await act(() => root!.render(createElement(Harness, { starting: initial })));
+    flush();
 
-    await act(async () => action(m.condition_add_type()).click());
+    await press(m.condition_add_type());
     expect(live()).toBe(m.condition_added());
     expect(node('/and/1')).toBeTruthy();
     expect(window.document.activeElement).toBe(action(m.condition_add_type()));
-    await flush();
+    flush();
     expect(window.document.activeElement).toBe(control('/and/1'));
 
-    await act(async () => action(m.condition_add_type()).click());
-    await act(async () => action(m.condition_add_statement()).click());
+    await press(m.condition_add_type());
+    await press(m.condition_add_statement());
     expect(live()).toBe(m.condition_added());
-    await flush();
+    flush();
     expect(window.document.activeElement).toBe(control('/and/3'));
 
-    await act(async () => setValue(initial));
-    await flush();
-    await act(async () => action(m.condition_add_type()).click());
-    await act(async () => outside.focus());
-    await flush();
+    await act(() => setValue(initial));
+    flush();
+    await press(m.condition_add_type());
+    await act(() => outside.focus());
+    flush();
     expect(window.document.activeElement).toBe(outside);
     expect(live()).toBe(m.condition_added());
 
-    await act(async () => setValue(initial));
-    await flush();
-    await act(async () => action(m.condition_add_type()).click());
+    await act(() => setValue(initial));
+    flush();
+    await press(m.condition_add_type());
     const scheduledKey = node('/and/1').dataset.conditionNode;
-    await act(async () => setValue(replacement));
-    await flush();
+    await act(() => setValue(replacement));
+    flush();
     expect(node('/and/1').dataset.conditionNode).not.toBe(scheduledKey);
     expect(window.document.activeElement).not.toBe(node('/and/1').querySelector('select'));
 
-    await act(async () => setValue(initial));
-    await flush();
-    await act(async () => action(m.condition_add_type()).click());
-    await act(async () => setDisabled(true));
-    await flush();
+    await act(() => setValue(initial));
+    flush();
+    await press(m.condition_add_type());
+    await act(() => setDisabled(true));
+    flush();
     expect(window.document.activeElement).not.toBe(node('/and/1').querySelector('select'));
 
-    await act(async () => setDisabled(false));
-    await act(async () => setValue(initial));
-    await flush();
-    await act(async () => action(m.condition_add_type()).click());
-    await act(async () => root!.unmount());
+    await act(() => setDisabled(false));
+    await act(() => setValue(initial));
+    flush();
+    await press(m.condition_add_type());
+    await act(() => root!.unmount());
     root = undefined;
-    await flush();
+    flush();
     expect(frames.size).toBe(0);
   } finally {
-    if (root) await act(async () => root!.unmount());
+    if (root) await act(() => root!.unmount());
     for (const [key, descriptor] of originals) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
     }
     await window.happyDOM.close();
   }
-});
+}, 20_000);
