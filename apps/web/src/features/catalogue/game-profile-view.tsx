@@ -132,8 +132,8 @@ function GameProfileLive({
       return;
     }
     const target = id
-      ? (existingResult.current?.querySelector('h1') as HTMLElement | null) ?? existingFailure.current
-      : creationResult.current?.querySelector('h1') ?? creationFailure.current;
+      ? ((existingResult.current?.querySelector('h1') as HTMLElement | null) ?? existingFailure.current)
+      : (creationResult.current?.querySelector('h1') ?? creationFailure.current);
     if (target) {
       target.tabIndex = -1;
       target.focus();
