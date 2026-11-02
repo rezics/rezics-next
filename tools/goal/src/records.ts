@@ -1,5 +1,4 @@
 import { closeSync, fstatSync, openSync, readFileSync, readSync } from 'node:fs';
-import { join } from 'node:path';
 import type { Attempt, AttemptFailure, AttemptRecord, StepClass, Task, Tokens } from './types.ts';
 import { agentAdapter, allAgentAdapters, parseAgentExit, type AgentAdapter, type SessionUsage } from './agents.ts';
 

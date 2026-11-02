@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, readFileSync, watch, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, watch } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { StaleAttemptError } from './contracts.ts';

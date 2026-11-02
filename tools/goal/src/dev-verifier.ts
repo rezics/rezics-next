@@ -17,7 +17,7 @@ import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import { Database as SqliteDatabase } from 'bun:sqlite';
 import { readdirSync } from 'node:fs';
-import type { DevVerifierEvidence, DevVerifierFinding, DevVerifierRun } from './types.ts';
+import type { DevVerifierEvidence, DevVerifierFinding, DevVerifierResult, DevVerifierRun } from './types.ts';
 import { firstFailure, gateEnvironment } from './merge.ts';
 
 const ref = (branch: string) => `refs/heads/${branch}`;
@@ -27,7 +27,9 @@ const MAX_FINDING_ASSERTIONS = 64;
 const MAX_EXISTING_PROBES = 8;
 const FINDING_LIMIT = 2000;
 const RUN_LIMIT = 5000;
-type Check = { command: string[]; closure: string[]; taskId?: string };
+/** `cwd` is the repository-relative workspace a check runs from; command paths are relative to it. */
+export type DevVerifierCheck = { command: string[]; closure: string[]; taskId?: string; cwd?: string };
+type Check = DevVerifierCheck;
 type IndexedCheck = Check & { index: number; signature: string };
 type GateOutcome = { passed: boolean; output: string; timedOut: boolean };
 type ComparedCheck = {
@@ -58,8 +60,38 @@ function head(cwd: string, branch: string): string {
 function changedFiles(cwd: string, base: string, target: string): string[] {
   return git(cwd, 'diff', '--name-only', '-z', `${base}..${target}`).split('\0').filter(Boolean);
 }
-function siblingTestFilesAtCommit(changedPaths: readonly string[], cwd: string, commit: string): string[] {
-  const tracked = new Set(git(cwd, 'ls-tree', '-r', '--name-only', commit).split('\n').filter(Boolean));
+function trackedFilesAt(cwd: string, commit: string): Set<string> {
+  return new Set(git(cwd, 'ls-tree', '-r', '--name-only', commit).split('\n').filter(Boolean));
+}
+function bunWorkspace(path: string, tracked: ReadonlySet<string>): string | undefined {
+  const [area, name] = path.split('/');
+  if (!name || !['apps', 'services', 'packages'].includes(area!)) return undefined;
+  const workspace = `${area}/${name}`;
+  return path !== workspace && tracked.has(`${workspace}/bunfig.toml`) ? workspace : undefined;
+}
+/** Place a test command in its workspace so Bun loads that workspace's bunfig.toml. */
+export function placeInWorkspace(check: DevVerifierCheck, tracked: ReadonlySet<string>): DevVerifierCheck {
+  let index = 0;
+  if (check.command[0] === 'env') {
+    index++;
+    while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(check.command[index] ?? '')) index++;
+  }
+  if (check.command[index] !== 'bun' || check.command[index + 1] !== 'test') return check;
+  const files = check.command
+    .slice(index + 2)
+    .filter((argument) => !argument.startsWith('-') && argument.includes('/'));
+  const workspaces = new Set(files.map((file) => bunWorkspace(file, tracked)));
+  const [workspace] = workspaces;
+  if (!files.length || workspaces.size !== 1 || !workspace) return check;
+  return {
+    ...check,
+    cwd: workspace,
+    command: check.command.map((argument, position) =>
+      position > index + 1 && files.includes(argument) ? argument.slice(workspace.length + 1) : argument,
+    ),
+  };
+}
+function siblingTestFilesAtCommit(changedPaths: readonly string[], tracked: ReadonlySet<string>): string[] {
   const tests = new Set<string>();
   for (const source of changedPaths) {
     if (
@@ -154,15 +186,22 @@ function createChecks(
     const selected = files.some((file) => matches(file, affected.paths));
     if (selected) checks.push({ command: [...affected.command], closure: [...affected.paths] });
   }
+  const tracked = trackedFilesAt(checkout, candidate);
   if (settings.siblingTests) {
     const nonSpecFiles = files.filter((file) => !file.startsWith('spec/') && !file.startsWith('specs/'));
-    const siblingFiles = siblingTestFilesAtCommit(nonSpecFiles, checkout, candidate);
-    const siblingCommand = siblingTestCommand(siblingFiles, settings.siblingTests.command);
-    if (siblingCommand) checks.push({ command: siblingCommand, closure: siblingFiles });
+    const groups = new Map<string, string[]>();
+    for (const file of siblingTestFilesAtCommit(nonSpecFiles, tracked)) {
+      const workspace = bunWorkspace(file, tracked) ?? '';
+      groups.set(workspace, [...(groups.get(workspace) ?? []), file]);
+    }
+    for (const siblingFiles of groups.values()) {
+      const siblingCommand = siblingTestCommand(siblingFiles, settings.siblingTests.command);
+      if (siblingCommand) checks.push({ command: siblingCommand, closure: siblingFiles });
+    }
   }
   for (const task of taskLandings(settings, store, base, target))
     checks.push({ command: [...task.brief.acceptance.command], closure: [...task.brief.paths], taskId: task.id });
-  return checks;
+  return checks.map((check) => placeInWorkspace(check, tracked));
 }
 function infraFailure(output: string, timedOut: boolean): boolean {
   return (
@@ -201,6 +240,18 @@ function stableAssertions(output: string): string[] {
 function tooManyAssertions(output: string): boolean {
   return assertionLines(output).length > MAX_FINDING_ASSERTIONS;
 }
+export function classifyRun(result: Pick<DevVerifierEvidence, 'passed' | 'timedOut' | 'output'>): DevVerifierResult {
+  if (result.passed) return 'pass';
+  if (
+    infraFailure(result.output, result.timedOut) ||
+    unavailableFailure(result.output) ||
+    truncatedOutput(result.output) ||
+    tooManyAssertions(result.output) ||
+    !stableAssertions(result.output).length
+  )
+    return 'infrastructure';
+  return 'fail';
+}
 function environmentIdentity(settings: Settings): NodeJS.ProcessEnv {
   return Object.fromEntries(
     Object.entries(gateEnvironment(process.env, settings.stateDirectory)).sort(([left], [right]) =>
@@ -208,14 +259,38 @@ function environmentIdentity(settings: Settings): NodeJS.ProcessEnv {
     ),
   );
 }
-function toolchainIdentity(settings: Settings): unknown {
+function packageManagerPinAt(checkout: string, commit?: string): string | undefined {
+  try {
+    const source = commit
+      ? git(checkout, 'show', `${commit}:package.json`)
+      : readFileSync(join(checkout, 'package.json'), 'utf8');
+    const packageJson = JSON.parse(source) as { packageManager?: unknown };
+    return typeof packageJson.packageManager === 'string' && packageJson.packageManager.startsWith('bun@')
+      ? packageJson.packageManager.slice('bun@'.length)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function repositoryBun(tree: string, fallbackRoot = tree): string {
+  const pinnedVersion = packageManagerPinAt(tree);
+  for (const root of [...new Set([tree, fallbackRoot])]) {
+    if (pinnedVersion && packageManagerPinAt(root) !== pinnedVersion) continue;
+    const executable = join(root, 'node_modules/.bin/bun');
+    if (existsSync(executable)) return executable;
+  }
+  if (pinnedVersion) throw new Error(`Pinned Bun ${pinnedVersion} is not installed for verifier checks.`);
+  return 'bun';
+}
+function toolchainIdentity(settings: Settings, commit?: string): unknown {
   let remoteHosts: string | null = null;
+  const pinnedBun = packageManagerPinAt(settings.mainCheckout, commit);
   try {
     remoteHosts = readFileSync(join(settings.stateDirectory, 'remote-check-hosts.json'), 'utf8');
   } catch {}
   return {
-    bun: Bun.version,
-    bunRevision: Bun.revision,
+    bun: pinnedBun ?? Bun.version,
+    bunRevision: pinnedBun ? null : Bun.revision,
     platform: process.platform,
     arch: process.arch,
     host: hostname(),
@@ -225,32 +300,34 @@ function toolchainIdentity(settings: Settings): unknown {
 }
 function checkSignature(check: Check, index: number): string {
   return hash({
-    version: 1,
+    version: 2,
     index,
     command: check.command,
     closure: [...check.closure].sort(),
     taskId: check.taskId ?? null,
+    cwd: check.cwd ?? null,
   });
 }
 function findingSignature(check: Check, assertion: string): string {
   return hash({
-    version: 1,
+    version: 2,
     command: check.command.filter((argument) => !/^TYPECHECK_CHANGED=/.test(argument)),
     closure: [...check.closure].sort(),
     taskId: check.taskId ?? null,
+    cwd: check.cwd ?? null,
     assertion,
   });
 }
 function checkRunKey(settings: Settings, commit: string, check: Check, signature: string, selection: string): string {
   return hash({
-    version: 1,
+    version: 2,
     commit,
     signature,
     selection,
     command: check.command,
     closure: [...check.closure].sort(),
     environment: environmentIdentity(settings),
-    toolchain: toolchainIdentity(settings),
+    toolchain: toolchainIdentity(settings, commit),
   });
 }
 function checkSourcePaths(command: readonly string[]): string[] {
@@ -264,6 +341,7 @@ function checkSourcePaths(command: readonly string[]): string[] {
   const paths: string[] = [];
   for (let cursor = index + 1; cursor < command.length; cursor++) {
     const arg = command[cursor]!;
+    if (arg === '--') break;
     if (arg === '--cwd' || arg === '--config' || arg === '--loader' || arg === '-r' || arg === '--require') {
       cursor++;
       continue;
@@ -277,23 +355,58 @@ function checkSourcePaths(command: readonly string[]): string[] {
   }
   return paths;
 }
-function sourcePresentAt(cwd: string, commit: string, command: readonly string[]): boolean {
-  for (const candidate of checkSourcePaths(command)) {
-    if (candidate.startsWith('/')) continue;
-    const path = candidate.replace(/^[.][/\\]/, '').replaceAll('\\', '/');
+function checkSourceFiles(check: Check): string[] {
+  return checkSourcePaths(check.command)
+    .filter((candidate) => !candidate.startsWith('/'))
+    .map((candidate) => {
+      const path = candidate.replace(/^[.][/\\]/, '').replaceAll('\\', '/');
+      return check.cwd ? `${check.cwd}/${path}` : path;
+    });
+}
+function sourcePresentAt(cwd: string, commit: string, check: Check): boolean {
+  for (const path of checkSourceFiles(check)) {
     const result = spawnSync('git', ['cat-file', '-e', `${commit}:${path}`], { cwd, encoding: 'utf8' });
     if (result.status !== 0) return false;
   }
   return true;
 }
-function installDependencies(tree: string, stateDirectory: string): boolean {
+function checkInput(settings: Settings, commit: string, check: Check): string | undefined {
+  const areas = new Set(['package.json', 'bun.lock', ...(check.cwd ? [check.cwd] : [])]);
+  for (const path of [...check.closure, ...checkSourceFiles(check)]) {
+    const segments = path.split('/');
+    const workspace = ['apps', 'services', 'packages'].includes(segments[0]!);
+    const area = segments.slice(0, workspace ? 2 : 1);
+    if (area.some((segment) => !segment || /[*?{}]/.test(segment))) return undefined;
+    areas.add(area.join('/'));
+    if (workspace && segments[0] !== 'packages') areas.add('packages');
+  }
+  const trees = [...areas].sort().map((area) => {
+    const result = spawnSync('git', ['rev-parse', '--verify', '--quiet', `${commit}:${area}`], {
+      cwd: settings.mainCheckout,
+      encoding: 'utf8',
+    });
+    return [area, result.status === 0 ? result.stdout.trim() : null];
+  });
+  return hash({
+    version: 1,
+    phase: 'failed-input',
+    command: check.command,
+    cwd: check.cwd ?? null,
+    closure: [...check.closure].sort(),
+    taskId: check.taskId ?? null,
+    trees,
+    environment: environmentIdentity(settings),
+    toolchain: toolchainIdentity(settings, commit),
+  });
+}
+function installDependencies(tree: string, stateDirectory: string, fallbackRoot: string): boolean {
   if (!existsSync(join(tree, 'package.json')) || !existsSync(join(tree, 'bun.lock'))) return true;
   const installLog = join(stateDirectory, `dev-verify-install-${randomUUID()}.log`);
   for (let attempt = 0; attempt < 3; attempt++) {
     appendFileSync(installLog, `$ bun install --frozen-lockfile (attempt ${attempt + 1})\n`);
     try {
       const result = runBoundedInstallProcess({
-        command: 'bun',
+        command: repositoryBun(tree, fallbackRoot),
         args: ['install', '--frozen-lockfile'],
         cwd: tree,
         step: 'bun install --frozen-lockfile',
@@ -380,13 +493,13 @@ function installDependenciesCached(
 ): { passed: boolean; output: string; logPath: string } {
   const command = ['bun', 'install', '--frozen-lockfile'];
   const key = hash({
-    version: 1,
+    version: 2,
     phase: 'dependency-setup',
     commit,
     command,
     closure: ['package.json', 'bun.lock'],
     environment: environmentIdentity(options.settings),
-    toolchain: toolchainIdentity(options.settings),
+    toolchain: toolchainIdentity(options.settings, commit),
   });
   const cached = cachedRun(options.store, key);
   if (cached) return { passed: cached.passed, output: cached.output, logPath: cached.logPath };
@@ -407,7 +520,7 @@ function installDependenciesCached(
     const previousLogs = new Set(
       readdirSync(stateDirectory).filter((name) => name.startsWith(logPrefix) && name.endsWith(logSuffix)),
     );
-    const passed = installDependencies(tree, stateDirectory);
+    const passed = installDependencies(tree, stateDirectory, options.settings.mainCheckout);
     const logName = readdirSync(stateDirectory).find(
       (name) => name.startsWith(logPrefix) && name.endsWith(logSuffix) && !previousLogs.has(name),
     );
@@ -428,9 +541,10 @@ function installDependenciesCached(
       timedOut: false,
       output: result.output,
       logPath: result.logPath,
+      result: result.passed ? 'pass' : 'infrastructure',
     },
   };
-  saveRun(options.store, run);
+  if (result.passed) saveRun(options.store, run);
   return result;
 }
 function knownExisting(store: DevVerifierOptions['store'], signature: string): boolean {
@@ -487,6 +601,7 @@ function makeFinding(
   baseline: DevVerifierEvidence | null,
   headEvidence: DevVerifierEvidence | null,
   reason: string,
+  result: DevVerifierResult,
 ): DevVerifierFinding {
   const signature = findingSignature(check, assertion);
   const identity = signature;
@@ -498,10 +613,12 @@ function makeFinding(
     baseCommit: base,
     headCommit: target,
     status,
+    result,
     check: {
       command: [...check.command],
       closure: [...check.closure],
       ...(check.taskId ? { taskId: check.taskId } : {}),
+      ...(check.cwd ? { cwd: check.cwd } : {}),
     },
     assertion,
     baseline,
@@ -520,7 +637,46 @@ function evidence(commit: string, check: Check, result: GateOutcome, logPath: st
     timedOut: result.timedOut,
     output: result.output,
     logPath,
+    result: classifyRun(result),
+    ...(check.cwd ? { cwd: check.cwd } : {}),
   };
+}
+
+export function withTreeBun(command: readonly string[], tree: string, fallbackRoot = tree): string[] {
+  const executable = repositoryBun(tree, fallbackRoot);
+  if (executable === 'bun') return [...command];
+  let index = command[0] === 'env' ? 1 : 0;
+  while (command[index] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(command[index]!)) index++;
+  const bins = [...new Set([join(tree, 'node_modules/.bin'), join(fallbackRoot, 'node_modules/.bin')])];
+  const path = [...bins, process.env.PATH ?? ''].filter(Boolean).join(':');
+  return [
+    'env',
+    `PATH=${path}`,
+    ...command.map((argument, position) => (position === index && argument === 'bun' ? executable : argument)),
+  ];
+}
+
+function forCheckAtCommit(result: DevVerifierEvidence, commit: string, check: Check): DevVerifierEvidence {
+  return {
+    ...result,
+    commit,
+    command: [...check.command],
+    ...(check.cwd ? { cwd: check.cwd } : {}),
+  };
+}
+
+function reusableCheckResult(
+  store: DevVerifierOptions['store'],
+  settings: Settings,
+  commit: string,
+  check: IndexedCheck,
+  selection: string,
+): DevVerifierEvidence | undefined {
+  const cached = cachedRun(store, runCacheKey(settings, commit, check, selection));
+  if (cached && classifyRun(cached) !== 'infrastructure') return forCheckAtCommit(cached, commit, check);
+  const input = checkInput(settings, commit, check);
+  const failed = input ? cachedRun(store, input) : undefined;
+  return failed && classifyRun(failed) === 'fail' ? forCheckAtCommit(failed, commit, check) : undefined;
 }
 
 function runCacheKey(settings: Settings, commit: string, check: IndexedCheck, selection: string): string {
@@ -532,18 +688,25 @@ async function executeCheck(
   run: GateRunner,
   check: IndexedCheck,
   commit: string,
-  cwd: string,
+  tree: string,
   key: string,
+  input?: string,
 ): Promise<DevVerifierEvidence> {
   const cached = cachedRun(options.store, key);
-  if (cached) return cached;
+  if (cached && classifyRun(cached) !== 'infrastructure') return forCheckAtCommit(cached, commit, check);
+  const inputFailure = input ? cachedRun(options.store, input) : undefined;
+  if (inputFailure && classifyRun(inputFailure) === 'fail') return forCheckAtCommit(inputFailure, commit, check);
   const attempts: string[] = [];
   let final: GateOutcome = { passed: false, output: '', timedOut: false };
   let finalLog = '';
   for (let attempt = 0; attempt < 3; attempt++) {
     finalLog = join(options.settings.stateDirectory, `dev-verify-${randomUUID()}.log`);
     try {
-      final = await run(check.command, cwd, finalLog);
+      final = await run(
+        withTreeBun(check.command, tree, options.settings.mainCheckout),
+        check.cwd ? join(tree, check.cwd) : tree,
+        finalLog,
+      );
     } catch (error) {
       final = { passed: false, output: error instanceof Error ? error.message : String(error), timedOut: false };
     }
@@ -552,7 +715,9 @@ async function executeCheck(
   }
   const fullOutput = attempts.length > 1 ? attempts.join('\n') : final.output;
   const result = evidence(commit, check, { ...final, output: fullOutput }, finalLog);
-  saveRun(options.store, { key, createdAt: new Date().toISOString(), evidence: result });
+  const createdAt = new Date().toISOString();
+  if (classifyRun(result) !== 'infrastructure') saveRun(options.store, { key, createdAt, evidence: result });
+  if (input && classifyRun(result) === 'fail') saveRun(options.store, { key: input, createdAt, evidence: result });
   return result;
 }
 
@@ -560,7 +725,7 @@ function selectionIdentity(checks: readonly IndexedCheck[]): string {
   return hash(checks.map(({ command, closure, taskId, signature }) => ({ command, closure, taskId, signature })));
 }
 function commandPresentAt(settings: Settings, commit: string, check: Check): boolean {
-  return sourcePresentAt(settings.mainCheckout, commit, check.command);
+  return sourcePresentAt(settings.mainCheckout, commit, check);
 }
 
 async function compareRange(options: DevVerifierOptions, base: string, target: string): Promise<Comparison> {
@@ -583,7 +748,7 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
   mkdirSync(settings.stateDirectory, { recursive: true });
   try {
     const missingHeadRuns = checks.filter(
-      (check) => !headMissing.includes(check) && !cachedRun(store, runCacheKey(settings, target, check, selection)),
+      (check) => !headMissing.includes(check) && !reusableCheckResult(store, settings, target, check, selection),
     );
     let headSetup: { passed: boolean; output: string; logPath: string } | undefined;
     if (missingHeadRuns.length) {
@@ -595,8 +760,7 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
     const headJobs: { check: IndexedCheck; cwd: string }[] = [];
     for (const check of checks) {
       if (!headMissing.includes(check)) {
-        const key = runCacheKey(settings, target, check, selection);
-        const cached = cachedRun(store, key);
+        const cached = reusableCheckResult(store, settings, target, check, selection);
         if (cached) results[check.index]!.head = cached;
         else if (headSetup?.passed && headTree) headJobs.push({ check, cwd: headTree });
         else if (headSetup && !headSetup.passed)
@@ -605,7 +769,18 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
     }
     const headResults = await mapBounded(headJobs, VERIFY_CONCURRENCY, async (job) => {
       const key = runCacheKey(settings, target, job.check, selection);
-      return { check: job.check, result: await executeCheck(options, runner, job.check, target, job.cwd, key) };
+      return {
+        check: job.check,
+        result: await executeCheck(
+          options,
+          runner,
+          job.check,
+          target,
+          job.cwd,
+          key,
+          checkInput(settings, target, job.check),
+        ),
+      };
     });
     for (const item of headResults) results[item.check.index]!.head = item.result;
 
@@ -628,7 +803,7 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
     for (const check of baseMissing)
       results[check.index]!.baselineReason = 'The selected command source is absent at the exact verified baseline.';
     const missingBaselineRuns = baselineChecks.filter(
-      (check) => !baseMissing.includes(check) && !cachedRun(store, runCacheKey(settings, base, check, selection)),
+      (check) => !baseMissing.includes(check) && !reusableCheckResult(store, settings, base, check, selection),
     );
     let baseSetup: { passed: boolean; output: string; logPath: string } | undefined;
     if (missingBaselineRuns.length) {
@@ -639,8 +814,7 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
     const baseJobs: { check: IndexedCheck; cwd: string }[] = [];
     for (const check of baselineChecks) {
       if (baseMissing.includes(check)) continue;
-      const key = runCacheKey(settings, base, check, selection);
-      const cached = cachedRun(store, key);
+      const cached = reusableCheckResult(store, settings, base, check, selection);
       if (cached) results[check.index]!.baseline = cached;
       else if (baseSetup?.passed && baseTree) baseJobs.push({ check, cwd: baseTree });
       else if (baseSetup && !baseSetup.passed)
@@ -648,7 +822,18 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
     }
     const baselineResults = await mapBounded(baseJobs, VERIFY_CONCURRENCY, async (job) => {
       const key = runCacheKey(settings, base, job.check, selection);
-      return { check: job.check, result: await executeCheck(options, runner, job.check, base, job.cwd, key) };
+      return {
+        check: job.check,
+        result: await executeCheck(
+          options,
+          runner,
+          job.check,
+          base,
+          job.cwd,
+          key,
+          checkInput(settings, base, job.check),
+        ),
+      };
     });
     for (const item of baselineResults) results[item.check.index]!.baseline = item.result;
 
@@ -704,6 +889,7 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
           baseEv,
           headEv,
           message,
+          headEv ? classifyRun(headEv) : 'infrastructure',
         );
         saveFinding(store, finding);
         findings.push(finding);
@@ -724,6 +910,7 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
           status === 'existing'
             ? 'The same stable assertion failed at the exact previous verified baseline and current head.'
             : 'This stable assertion failed at the head and was absent at the exact previous verified baseline.',
+          'fail',
         );
         findings.push(finding);
       }

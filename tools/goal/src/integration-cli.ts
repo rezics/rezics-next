@@ -32,7 +32,7 @@ import { backlogStatus, formatBacklogStatus } from './backlog.ts';
 import { ManagerSessions, recordManagerDecision, type ManagerServices, type ManagerSpec } from './managers.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { ensureHostRunning, startHostSupervisor, recordHostLiveness } from './host-liveness.ts';
-import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
+import { sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager, type AuthenticatedManager } from './priority-authority.ts';
 
 /** Composition belongs to the caller; this module never reads worker configuration or tables. */

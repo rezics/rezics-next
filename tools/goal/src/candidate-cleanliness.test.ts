@@ -65,7 +65,7 @@ test('the real control-plane check boundary records a dirty candidate before bas
   const expected = git(task.worktree, 'rev-parse', 'HEAD');
   const mainBefore = git(h.main, 'rev-parse', 'main');
   const brief = parseBrief(
-    markdown.replace('goal: fixture', 'goal: control-plane'),
+    markdown.replace('goal: fixture', 'goal: control-plane\ntarget: main'),
     readRiskOwnership(join(import.meta.dir, '../risk-areas.json')),
   );
   const commands: string[][] = [];

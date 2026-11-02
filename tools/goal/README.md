@@ -724,11 +724,12 @@ existing transport retries, unverified environment classification and failure lo
 captured `dev-verified..dev` change set and advances `dev-verified` only after its selected checks pass.
 
 A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and tells the manager to
-split them into a dev task. Every control-plane landing that changes `tools/goal/` uses the same release path, including
-launch, settle, wake, retry, train and emergency changes. A control-plane task starts from `main`, the branch it
-integrates into, even when `dev` has different `tools/goal/` content. This rule also applies if a brief or later retarget
-names `stabilize`. It rebases onto current `main`, formats its changes, installs root and `tools/goal/` dependencies,
-then runs `bun run --cwd tools/goal typecheck` and the complete `bun test --timeout 30000 tools/goal/src` suite.
+split them into a dev task. A control-plane brief without a `target` line, including launch, settle, wake, retry, train
+and emergency changes, starts from `dev` and lands there mechanically like product work, with unlimited retries in the
+same session; [cp-sync](#control-plane-on-dev-cp-sync) is its release gate to `main`. A control-plane brief with
+`target: main` or `target: stabilize` uses the main release path below. It starts from `main`, rebases onto current
+`main`, formats its changes, installs root and `tools/goal/` dependencies, then runs
+`bun run --cwd tools/goal typecheck` and the complete `bun test --timeout 30000 tools/goal/src` suite.
 
 Changes to the worker launch path also run `tools/goal/scripts/launch-smoke.ts` on the candidate after the control-plane checks.
 The smoke builds a disposable worktree with the candidate merged on top of current `dev`, dispatches one tiny task through
@@ -815,8 +816,9 @@ controller. A durable release record lets a later train recover an interrupted l
 complete while a required branch is missing the recorded release.
 
 Use the normal train for a local emergency patch: have the supermanager write a `control-plane` brief naming the
-changed `tools/goal/` paths and a regression case, dispatch it, then land it through the controller. Do not patch
-`main`, `stabilize` or `dev` directly; [cp-sync](#control-plane-on-dev-cp-sync) publishes dev's control plane to main.
+changed `tools/goal/` paths and a regression case, dispatch it, land it on dev through the controller, then run
+[cp-sync](#control-plane-on-dev-cp-sync), which publishes dev's control plane to main. Do not patch `main`, `stabilize`
+or `dev` directly.
 
 ```sh
 bun tools/goal/src/cli.ts dispatch .temp/goal/control-plane-emergency.md
@@ -836,9 +838,10 @@ detached checks without provider calls. A failed step is returned to the task wi
 that change a file outside `tools/goal/` are not routed to `main`; historical tasks that declared such paths continue to
 use their recorded target. Tasks from other Goals continue to integrate into the integration branch as before.
 
-New tasks and retries branch from the integration branch, except control-plane tasks, which branch from `main`. The
-landing train routes control-plane changes under `tools/goal/` to `main` and measures their change set from their fork
-from `main`. If the integration branch does not exist, the controller creates it from `main`.
+New tasks and retries branch from the integration branch, except control-plane briefs with `target: main` or
+`target: stabilize`, which branch from `main`. The landing train routes such releases under `tools/goal/` to `main` and
+measures their change set from their fork from `main`. If the integration branch does not exist, the controller creates
+it from `main`.
 Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
 promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
 Task worktrees exist while an attempt can use them. A background control-plane sweep removes integrated, merged and
@@ -915,8 +918,8 @@ Scope growth, stalls, failure after consultation and the two-fix-round limit rea
 claim followed by a failed gate is recorded and continued.
 Generated files marked `linguist-generated=true` are excluded from estimate totals, while every changed file remains subject to declared-path checks.
 
-Product work integrating into dev (not control-plane, stabilize-target or verification work) has no retry limit and
-needs no approval to retry. A landing failure (a rebase conflict, or a type check or format failure at landing) or a
+Work integrating into dev, including control-plane work without a target (not control-plane releases, stabilize-target
+or verification work), has no retry limit and needs no approval to retry. A landing failure (a rebase conflict, or a type check or format failure at landing) or a
 tool blocker resumes the same session with the error, without a manager turn: the two-fix-round limit and consultation
 do not apply, each retry continues on the task's branch, in its session when the pool and model are unchanged, and
 environment failures do not count toward the three-failure model switch. The task stops and notifies its manager only
@@ -926,8 +929,8 @@ attempt records an `attempt-progress` event: whether its branch head moved from 
 or work was left uncommitted. Unknown progress never stops a task. A changed file outside its declared paths and a diff
 beyond twice its estimate do not stop it either: the attempt record lists such files in `outsidePaths` and the size in
 `estimateOverrun`. A scope-stage refusal for an undeclared risk area, a frozen acceptance change, a specification
-conflict and a stall still reach the owning manager. Control-plane, stabilize-target and verification work keep every
-limit above.
+conflict and a stall still reach the owning manager. Control-plane releases, stabilize-target and verification work keep
+every limit above.
 
 A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own
 outcome as a continuation brief at `.temp/continuation/<name>.md` in its worktree. When the attempt ends, settlement
@@ -1460,7 +1463,7 @@ The train keeps its current-attempt fence, source ref and commit checks, scope a
 attribution, lineage checks, target compare-and-swap, and durable outcome record. It retains the original worker
 acceptance evidence instead of scheduling that same task acceptance again before integration. The post-integration
 development verifier runs acceptance on its captured `dev` head, alongside typecheck and affected checks; that
-verification is recorded separately from the worker's original acceptance. A control-plane task still runs the full
+verification is recorded separately from the worker's original acceptance. A control-plane release still runs the full
 mandatory control-plane lifecycle checks on its `main` candidate before the controller advances `main`; promotion
 always gates its own frozen integration candidate.
 
@@ -1528,8 +1531,9 @@ CODEX_HOME="/absolute/path/to/<cli-config-directory>" bun tools/goal/scripts/smo
 
 ## Control plane on dev: cp-sync
 
-Control-plane changes iterate on `dev` with the products. `cp-sync` makes dev's `tools/goal` live on `main` without
-the main-release proof:
+Control-plane changes iterate on `dev` with the products: a `control-plane` brief without a `target` lands there
+mechanically, like product work. `cp-sync` is their release gate; it makes dev's `tools/goal` live on `main` without the
+main-release proof:
 
 ```sh
 bun tools/goal/scripts/cp-sync.ts --dry-run

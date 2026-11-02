@@ -10,13 +10,6 @@ import { integrationHarness } from './test-support.ts';
 type Harness = ReturnType<typeof integrationHarness>;
 const command = (script: string) => ['bun', '-e', script];
 const lines = (file: string) => (existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n').filter(Boolean) : []);
-async function until(condition: () => boolean) {
-  const deadline = Date.now() + 10_000;
-  while (!condition()) {
-    if (Date.now() > deadline) throw new Error('Fake check did not start');
-    await Bun.sleep(10);
-  }
-}
 function failureCheck(h: Harness, file: string, output: string, shared = false) {
   const runs = join(h.settings.stateDirectory, 'affected-runs');
   const argv = command(`

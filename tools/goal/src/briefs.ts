@@ -244,13 +244,16 @@ export function validateLocalAcceptanceCommand(command: readonly string[]): void
     'acceptance.placement local supports only Web typechecking, explicit unit/component tests, or the audited focused Web runner with its supported environment prefix',
   );
 }
+/** A control-plane brief that explicitly uses the main-release proof lane. */
+export function controlPlaneReleaseBrief(brief: { goal?: unknown; target?: unknown }): boolean {
+  return brief.goal === 'control-plane' && (brief.target === 'main' || brief.target === 'stabilize');
+}
 /**
- * Product work integrating into the integration branch. Its retries are unlimited and need no approval, and changes
- * outside its declared paths are recorded rather than stopping it. Control-plane, stabilize and proof work keep their
- * own lifecycle limits.
+ * Work integrating into dev, including untargeted control-plane work. Its retries are unlimited and need no approval;
+ * control-plane releases, stabilize and proof work keep their own lifecycle limits.
  */
 export function devProductBrief(brief: Pick<Brief, 'goal' | 'kind' | 'target'>): boolean {
-  return brief.goal !== 'control-plane' && brief.target !== 'stabilize' && brief.kind !== 'verification';
+  return !controlPlaneReleaseBrief(brief) && brief.target !== 'stabilize' && brief.kind !== 'verification';
 }
 /** Point an existing brief at the stabilize branch without changing its other front matter. */
 export function withStabilizeTarget(markdown: string): string {
@@ -299,8 +302,12 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
   for (const key of ['lines', 'files'])
     if (!Number.isSafeInteger(estimate[key]) || (estimate[key] as number) < 1)
       throw new Error(`estimate.${key} must be positive`);
-  if (raw.target !== undefined && raw.target !== 'stabilize')
-    throw new Error('brief target must be stabilize; a brief without a target line goes to dev');
+  if (raw.target === 'main' && raw.goal !== 'control-plane')
+    throw new Error('only a control-plane brief can target main; a brief without a target line goes to dev');
+  if (raw.target !== undefined && raw.target !== 'stabilize' && raw.target !== 'main')
+    throw new Error(
+      'brief target must be stabilize or, for control-plane, main; a brief without a target line goes to dev',
+    );
   const brief: Brief = {
     goal: text(raw.goal, 'goal'),
     manager: text(raw.manager ?? raw.goal, 'manager'),
@@ -308,7 +315,7 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
     paths: list(raw.paths ?? (raw.kind === 'verification' ? [] : undefined), 'paths', raw.kind !== 'verification'),
     ...(raw.kind === 'verification' ? { proof: parseProofMetadata(raw.proof) } : {}),
     riskAreas: list(raw.riskAreas, 'riskAreas'),
-    ...(raw.target === 'stabilize' ? { target: 'stabilize' as const } : {}),
+    ...(raw.target === 'stabilize' || raw.target === 'main' ? { target: raw.target } : {}),
     ...(raw.model === undefined ? {} : { model: text(raw.model, 'model') }),
     ...(raw.effort === undefined ? {} : { effort: text(raw.effort, 'effort') }),
     acceptance: {

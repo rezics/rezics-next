@@ -12,7 +12,7 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { migrate } from './db.ts';
 import { acquireDirectoryLease, type DirectoryLease } from './lease.ts';
 import { groupMembers, processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
@@ -238,8 +238,6 @@ type BootstrapInput = {
   records?: unknown;
   historyEvidencePaths?: unknown;
 };
-
-type BootstrapRecord = { path?: unknown; kind?: unknown; identityEvidencePath?: unknown; identityField?: unknown };
 
 type ProcessLikeChild = ChildProcess;
 

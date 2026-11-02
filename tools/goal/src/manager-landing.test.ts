@@ -90,6 +90,7 @@ function brief(goal: string, manager: string, path: string): Brief {
     citesSources: false,
     hostileInput: false,
     markdown: '',
+    ...(goal === 'control-plane' ? { target: 'main' as const } : {}),
   };
 }
 

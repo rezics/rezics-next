@@ -9,6 +9,7 @@ import type {
 import type { GateResult } from './merge.ts';
 import { migrate } from './db.ts';
 import { recordFlow } from './flow.ts';
+import { controlPlaneReleaseBrief } from './briefs.ts';
 
 export type LandingEntry = {
   id: number;
@@ -296,7 +297,7 @@ export class SqliteLandingQueue implements LandingQueue {
             JSON.stringify(entry.request) !== JSON.stringify(member.request) ||
             task?.state !== 'landing' ||
             task.brief.manager !== handoff.ownerId ||
-            task.brief.goal === 'control-plane' ||
+            controlPlaneReleaseBrief(task.brief) ||
             task.brief.target === 'main' ||
             task.brief.target === 'stabilize'
           )
@@ -336,6 +337,7 @@ export class SqliteLandingQueue implements LandingQueue {
             COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') = 'main'
             OR (
               json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.goal') = 'control-plane'
+              AND COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') = 'stabilize'
               AND json_array_length(request, '$.declaredPaths') > 0
               AND NOT EXISTS (
                 SELECT 1 FROM json_each(request, '$.declaredPaths')
@@ -347,6 +349,7 @@ export class SqliteLandingQueue implements LandingQueue {
             COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') = 'main'
             OR (
               json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.goal') = 'control-plane'
+              AND COALESCE(json_extract((SELECT body FROM worker_tasks WHERE id = task), '$.brief.target'), '') = 'stabilize'
               AND json_array_length(request, '$.declaredPaths') > 0
               AND NOT EXISTS (
                 SELECT 1 FROM json_each(request, '$.declaredPaths')

@@ -272,7 +272,7 @@ export function assertControlPlaneMember(store: WorkerStore, taskId: string, man
     task.brief.manager !== managerId ||
     task.brief.goal !== 'control-plane' ||
     task.workspace ||
-    task.brief.target === 'stabilize'
+    task.brief.target !== 'main'
   )
     throw new Error(`Task ${taskId} is not an owning manager's control-plane main source`);
 }
@@ -292,7 +292,7 @@ export function captureControlPlaneBatch(
       task.brief.manager !== managerId ||
       task.brief.goal !== 'control-plane' ||
       task.workspace ||
-      task.brief.target === 'stabilize' ||
+      task.brief.target !== 'main' ||
       excludedTaskIds.includes(task.id)
     )
       continue;

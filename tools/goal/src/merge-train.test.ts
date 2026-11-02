@@ -436,7 +436,7 @@ test('a gate does not inherit the identity of the process that drives the train'
   }
 });
 
-function controlPlaneLanding(path: string) {
+function controlPlaneLanding(path: string, mainRelease = true) {
   const s = setup();
   mkdirSync(join(s.main, path, '..'), { recursive: true });
   writeFileSync(join(s.main, path), 'base\n');
@@ -450,6 +450,7 @@ function controlPlaneLanding(path: string) {
   const brief = parseBrief(
     `---
 goal: control-plane
+${mainRelease ? 'target: main\n' : ''}
 kind: implementation
 paths: [${path}]
 riskAreas: []
@@ -483,6 +484,29 @@ Update the control plane.
 }
 
 describe('control-plane launch smoke gate', () => {
+  test('untargeted control-plane work lands on dev without the main release proof', async () => {
+    const s = controlPlaneLanding('tools/goal/src/dev-change.ts', false);
+    try {
+      let smokeRuns = 0;
+      await new MergeTrain({
+        ...s.options,
+        integrationBranch: 'dev',
+        runGate: async () => ({ passed: true, output: '', timedOut: false }),
+        runLaunchSmoke: async () => {
+          smokeRuns++;
+          return { passed: true, output: '', timedOut: false };
+        },
+      }).run();
+      expect(smokeRuns).toBe(0);
+      expect(s.outcomes[0]?.passed).toBe(true);
+      expect(git(s.main, 'show', 'dev:tools/goal/src/dev-change.ts')).toBe('candidate');
+      expect(readFileSync(join(s.main, 'tools/goal/src/dev-change.ts'), 'utf8')).toBe('base\n');
+    } finally {
+      s.goalDb.close();
+      s.close();
+    }
+  });
+
   test('runs after control-plane checks for a launch-path candidate', async () => {
     const s = controlPlaneLanding('tools/goal/src/launch.ts');
     try {

@@ -1021,7 +1021,7 @@ export class ManagerSessions {
             expectedTurnId: state.activeTurnId,
             input: textInput(event.event.summary),
           });
-        } catch (error) {
+        } catch {
           // A completion can race the steer precondition. Rejoin to learn the live turn, then start/steer.
           const resumed = await client.request('thread/resume', {
             ...FULL_ACCESS,

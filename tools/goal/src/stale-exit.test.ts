@@ -161,7 +161,7 @@ test('repeated waiting resume launch failures stop after two retries and alert t
 test('a resumed run with a new exit object settles from that object', async () => {
   const h = harness(successOnResumeCli());
   try {
-    const { task, ref } = await waitingAttempt(h);
+    const { ref } = await waitingAttempt(h);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
     await job.recoverOrphans();
 
