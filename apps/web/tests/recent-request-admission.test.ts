@@ -17,9 +17,10 @@ test('admits use, remove, clear and an optional native cursor', () => {
     kind: 'use',
     entry: query,
   });
-  expect(
-    admitRecentWrite(write({ kind: 'use', entry: { ...query, scope } })).pending.change,
-  ).toEqual({ kind: 'use', entry: { ...query, scope } });
+  expect(admitRecentWrite(write({ kind: 'use', entry: { ...query, scope } })).pending.change).toEqual({
+    kind: 'use',
+    entry: { ...query, scope },
+  });
   expect(admitRecentWrite(write({ kind: 'remove', id })).pending.change).toEqual({ kind: 'remove', id });
   expect(admitRecentWrite(write({ kind: 'clear' })).pending.change).toEqual({ kind: 'clear' });
   expect(

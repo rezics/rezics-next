@@ -2,10 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { NATIVE_RECENT_QUERY_TEXT_LIMIT } from './recent-history';
 
 export type RecentEntry = Parameters<KernelClient['recentSearches']['post']>[0]['entry'];
-export type RecentChange =
-  | { kind: 'use'; entry: RecentEntry }
-  | { kind: 'remove'; id: string }
-  | { kind: 'clear' };
+export type RecentChange = { kind: 'use'; entry: RecentEntry } | { kind: 'remove'; id: string } | { kind: 'clear' };
 export type RecentPending = { key: string; change: RecentChange; queuedAt: string };
 export type RecentWrite = { accountId: string; expectedRevision: number; pending: RecentPending };
 
@@ -43,11 +40,7 @@ function admitScope(value: unknown): NonNullable<Extract<RecentEntry, { kind: 'q
     if (!closed(scope, ['kind', 'route']) || scope.route !== 'library') fail();
     return { kind: 'route', route: 'library' };
   }
-  if (
-    (scope.kind === 'realm' || scope.kind === 'collection') &&
-    closed(scope, ['kind', 'id']) &&
-    nativeId(scope.id)
-  )
+  if ((scope.kind === 'realm' || scope.kind === 'collection') && closed(scope, ['kind', 'id']) && nativeId(scope.id))
     return { kind: scope.kind, id: scope.id };
   fail();
 }
@@ -79,7 +72,8 @@ export function admitRecentEntry(value: unknown): RecentEntry {
       ...(entry.scope !== undefined ? { scope: admitScope(entry.scope) } : {}),
     };
   }
-  if (entry.kind === 'scope' && closed(entry, ['kind', 'scope'])) return { kind: 'scope', scope: admitScope(entry.scope) };
+  if (entry.kind === 'scope' && closed(entry, ['kind', 'scope']))
+    return { kind: 'scope', scope: admitScope(entry.scope) };
   fail();
 }
 
