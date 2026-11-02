@@ -64,6 +64,7 @@ export function ProfileLinks({
                   className="min-h-11 min-w-0"
                   value={link.label}
                   required
+                  pattern={String.raw`.*\S.*`}
                   disabled={disabled}
                   aria-invalid={!!errors[`label-${index}`]}
                   aria-describedby={errors[`label-${index}`] ? `${ids}-label-${index}-error` : undefined}

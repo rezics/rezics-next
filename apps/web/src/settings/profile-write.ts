@@ -68,7 +68,8 @@ export function profileFieldErrors(profile: ProfileValues): Record<string, 'text
   if ((profile.biography?.length ?? 0) > 4096) errors.biography = 'text';
   if (profile.links.length > 5) errors.links = 'links';
   profile.links.forEach((link, index) => {
-    if (!link.label.length || Array.from(link.label).length > 64) errors[`label-${index}`] = 'label';
+    // A label must name the link; keep its exact text in the draft when validation fails.
+    if (!link.label.trim() || Array.from(link.label).length > 64) errors[`label-${index}`] = 'label';
     try {
       const url = new URL(link.url);
       if (

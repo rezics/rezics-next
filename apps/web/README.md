@@ -1541,6 +1541,7 @@ Profile name, biography, links and avatar remain a local draft until **Save prof
 indicator compares only those Profile fields, never Public activity. It yields to pending or unknown command
 outcomes; existing save, confirmed readback and recovery announcements retain their separate meanings.
 Local preview requires both supplied link approval and a safe HTTPS destination; stale approval keeps invalid destinations inert without rewriting them.
+Link labels must contain non-whitespace text; validation preserves the exact draft for correction before saving.
 Notifications, Collection visibility and Public activity explain automatic saving inside their own sections.
 Recovery still requires the existing explicit review and confirmation controls when indicated.
 Save and reload readbacks retain later explicit field edits, including a return to the original value; retries

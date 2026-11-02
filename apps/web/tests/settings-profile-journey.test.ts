@@ -349,7 +349,7 @@ test('invalid profile submission keeps the exact draft and local avatar without 
     displayName: 'x'.repeat(4097),
     biography: null,
     avatar: localAvatar,
-    links: [{ label: '😀'.repeat(65), url: 'http://example.test/exact draft' }],
+    links: [{ label: ' '.repeat(64), url: 'http://example.test/exact draft' }],
   });
   const draft = editor.snapshot().draft;
   await editor.submit('profile');
