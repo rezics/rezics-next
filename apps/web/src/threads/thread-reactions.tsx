@@ -309,6 +309,7 @@ function ReactionCaller({
         setFailed(null);
         setResolved({ snapshot, sourceCounts: controlled.current.counts, sourceValue: controlled.current.value });
       });
+      if (!current()) return;
       await onMutation?.(snapshot.value);
       return;
     }
