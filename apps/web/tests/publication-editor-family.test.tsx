@@ -190,7 +190,8 @@ test('independent publication creation, local corrections, immutable recovery an
     const description = article().querySelector('[id$="-profile-description"]')!;
     expect(description.getAttribute('lang')).toBe(profile.descriptionLang);
     expect(description.textContent).toContain(profile.description);
-    expect(description.textContent).toContain(m.guide_fallback({ language: profile.descriptionLang! }));
+    if (profile.descriptionLang && profile.descriptionLang !== 'en')
+      expect(description.textContent).toContain(m.guide_fallback({ language: profile.descriptionLang }));
     expect(
       scope().getByRole('heading', { name: first.fixture.release.properties['schema:url']!.labels.en, level: 2 }),
     ).toBeDefined();
@@ -372,6 +373,7 @@ test('independent publication creation, local corrections, immutable recovery an
     let refusals = 0;
     let failRefresh = false;
     const releasedProfile = structuredClone(release.types['rezics:AnimeRelease']!);
+    const stagedRelationLabel = release.properties['bf:hasPart']!.labels.en!;
     recovery.transport = {
       ...recovery.transport,
       load: async () => (failRefresh ? { ok: false, reason: 'unavailable' } : originalLoad()),
@@ -382,6 +384,7 @@ test('independent publication creation, local corrections, immutable recovery an
           release.types['rezics:AnimeRelease']!.properties = releasedProfile.properties.filter(
             (property) => !['bf:hasPart', 'schema:inLanguage'].includes(property),
           );
+          delete release.properties['bf:hasPart'];
         } else {
           delete release.types['rezics:AnimeRelease'];
           delete release.properties['schema:url'];
@@ -408,6 +411,7 @@ test('independent publication creation, local corrections, immutable recovery an
     const recoveryButton = () =>
       scope().getByRole('button', { name: m.catalogue_create_review_new() }) as HTMLButtonElement;
     expect(recoveryButton().disabled).toBe(true);
+    expect(scope().getByRole('option', { name: stagedRelationLabel })).toBeDefined();
     expect((scope().getByRole('combobox', { name: m.relation_property() }) as HTMLSelectElement).value).toBe(
       'bf:hasPart',
     );

@@ -66,6 +66,7 @@ function PublicationEditorLive({
   });
   const read = query.data?.ok ? query.data : undefined;
   const [draftProfile, setDraftProfile] = useState<PublicationProfile>();
+  const [draftNames, setDraftNames] = useState<Record<string, string>>({});
   const currentProfile = read?.profiles.find((entry) => !draftProfile || entry.id === draftProfile.id);
   const profile = currentProfile ?? draftProfile;
   const [reviewDefinitions, setReviewDefinitions] = useState(false);
@@ -87,7 +88,8 @@ function PublicationEditorLive({
   const uncertain = failure?.reason === 'unavailable' && command.current !== null;
   const locked = busy || uncertain || (failure?.reason === 'conflict' && !reviewDefinitions);
   const disabled = locked || session !== 'signed-in';
-  const name = (id: string) => pickText(read?.release.properties[id]?.labels ?? {}, locale).text;
+  const name = (id: string) =>
+    pickText(read?.release.properties[id]?.labels ?? {}, locale).text || draftNames[id] || '';
   const title = read ? pickText(read.public.subject.labels, locale).text : '';
   const back = read ? subjectHref({ id: work, label: title }, locale).href : `/${locale}/search`;
   // Reuse the producer's current profile and schema validation; never narrow the staged draft to fit it.
@@ -184,6 +186,11 @@ function PublicationEditorLive({
       }
       command.current = { work, relation, item: draft.item, key: crypto.randomUUID() };
       setDraftProfile(profile);
+      setDraftNames(
+        Object.fromEntries(
+          [relation, ...Object.keys(facts), 'schema:url'].map((property) => [property, name(property)]),
+        ),
+      );
       setRelation(relation);
     }
     running.current = true;
@@ -514,7 +521,7 @@ function PublicationEditorLive({
                             <details>
                               <summary className={linkClassName}>{m.publication_staged_value({}, o)}</summary>
                               <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-                                {JSON.stringify(value, null, 2)}
+                                {JSON.stringify({ property, value }, null, 2)}
                               </pre>
                             </details>
                           </>

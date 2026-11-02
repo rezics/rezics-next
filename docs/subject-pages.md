@@ -91,6 +91,7 @@ Definite refusal preserves the draft and key until an explicit edit; uncertain d
 for exact retry. A conflict requires explicit review before a new request. Rejected values refresh current definitions
 without discarding the draft. After a definite definitions refusal, keep the exact staged relation and all facts
 visible; validate them against the producer's current profile and schema, including selected publisher targets.
+Keep the original labels of staged choices when their definitions disappear, with exact property/value details for inspection.
 Unsupported choices require explicit change or removal, and a separate review starts a new command/key only after
 requirements reload successfully. A missing profile keeps the draft inspectable until a supported profile returns.
 The private editor is noindex and does not infer ownership or media permissions.
