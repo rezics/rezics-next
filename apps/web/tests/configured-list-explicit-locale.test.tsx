@@ -127,12 +127,14 @@ test('a configured list with an explicit non-English locale keeps recovery and c
     for (const [key, value] of Object.entries(globals))
       Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
-    const [{ createRoot }, { QueryClient, QueryClientProvider }, sessionModule, { ConfiguredList }] = await Promise.all([
-      import('react-dom/client'),
-      import('@tanstack/react-query'),
-      import('../src/session/query'),
-      import('../src/features/pages/type-list-page'),
-    ]);
+    const [{ createRoot }, { QueryClient, QueryClientProvider }, sessionModule, { ConfiguredList }] = await Promise.all(
+      [
+        import('react-dom/client'),
+        import('@tanstack/react-query'),
+        import('../src/session/query'),
+        import('../src/features/pages/type-list-page'),
+      ],
+    );
     const host = window.document.createElement('div');
     window.document.body.append(host);
     const root = createRoot(host as unknown as HTMLElement);
@@ -183,10 +185,7 @@ test('a configured list with an explicit non-English locale keeps recovery and c
       unavailableClient.clear();
 
       const failedClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-      await render(
-        failedClient,
-        createElement(ConfiguredList, { list: node, page: publicPage, locale: 'zh-Hans' }),
-      );
+      await render(failedClient, createElement(ConfiguredList, { list: node, page: publicPage, locale: 'zh-Hans' }));
       await until(
         () =>
           !!host.textContent?.includes(m.configured_list_recovery_unavailable({}, options['zh-Hans'])) &&
