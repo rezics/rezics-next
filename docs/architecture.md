@@ -15,6 +15,14 @@ database engine does for multiversion visibility, such as skipping versions from
 versions not yet vacuumed, belongs to the engine and its maintenance. Do not build product-level budgets or custom
 primitives to meter it; use ordinary indexed SQL and keep the engine's maintenance healthy.
 
+A composed operation's ceiling is the derived sum of its parts' finite bounds. Owners set and record the numbers; a
+number that does not fit is raised, not a blocker. Only a design whose work grows with data is escalated.
+
+Derive bounds on paper, enforce them with structural limits (full-key seeks, `LIMIT`, page and fan-out caps) and prove
+them with growth checks. Do not build runtime price protocols between owners: no pre-I/O quotes, prepaid funding,
+no-refill ledgers or per-profile dispatch allowances. When a contract needs a producer's cost, use the producer's
+documented static bound as a constant.
+
 Large jobs make bounded, resumable progress. Their total work may follow their finite input; individual steps may
 not discover work through unrestricted scans or recomputation.
 
