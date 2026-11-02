@@ -1,16 +1,15 @@
-import { isView, planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
+import { isView } from '@rezics/composition';
 import type { CoverSummary } from '@rezics/ui/cover';
 import { validVariant } from '../../media/cover-src';
 import { publicCardImage, type PublicCardImage } from '../../media/public-card';
 import { locales, type Locale } from '../../paraglide/runtime.js';
 import { originalLanguage } from '../../subject/language';
-import type { Subject } from '../../subject/types';
 import { pageHead, type PagePaths } from '../../shell/head';
 import { shareCardImage } from '../../shell/share-card';
 import type { ShareCardProjection } from '../../media/share-card';
 import type { AccountProfile } from './account-read';
 import { agentPath, pageProfile } from './agent';
-import { pageContext, type SubjectPageData } from './subject';
+import { subjectRead, type SubjectPageData } from './subject';
 import type { AccountView } from '../../accounts/public-profile/page-read';
 import { isRecord, pageText, webUrl } from './shared';
 
@@ -35,14 +34,6 @@ export function agentPagePaths(handle: string, view?: AccountView): PagePaths {
   return Object.fromEntries(
     locales.map((locale) => [locale, agentPath(locale, handle, view).slice(`/${locale}`.length)]),
   ) as PagePaths;
-}
-
-function subjectRead(page: AgentPage): { subject: Subject; body: Record<string, unknown> } | undefined {
-  const reads = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads;
-  const entry = Object.entries(reads).find(([, read]) => read.kind === 'subject' && read.id === page.subject);
-  const result = entry ? page.reads[entry[0]] : undefined;
-  if (result?.status !== 200 || !isRecord(result.body) || !isRecord(result.body.subject)) return;
-  return { subject: result.body.subject as unknown as Subject, body: result.body };
 }
 
 function displayName(page: AgentPage, profile: AccountProfile | undefined): string {
