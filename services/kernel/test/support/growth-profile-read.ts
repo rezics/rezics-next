@@ -139,10 +139,10 @@ function parseMeasurement(value: unknown, description: string): GrowthMeasuremen
   if (value === undefined) return null;
   const source = record(value, description);
   const version = source.version;
-  if (!Number.isSafeInteger(version) || version < 1)
+  if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1)
     throw new TypeError(`${description}.version must be a positive safe integer`);
   const indexProbes = source.indexProbes;
-  if (!Number.isSafeInteger(indexProbes) || indexProbes < 0)
+  if (typeof indexProbes !== 'number' || !Number.isSafeInteger(indexProbes) || indexProbes < 0)
     throw new TypeError(`${description}.indexProbes must be a non-negative safe integer`);
   if (source.source === undefined) return { version, indexProbes };
   if (typeof source.source !== 'string' || source.source.length === 0)
