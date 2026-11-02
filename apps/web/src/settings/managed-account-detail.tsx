@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { m } from '../paraglide/messages.js';
+import { initials } from '../threads/initials';
 import { useSession } from '../session/query';
 import { useManagedReaderLifetime, useManagedSessionReader } from './managed-session-reader';
 import { usePreferenceRetry } from './preference-failure-retry';
@@ -17,17 +19,74 @@ import {
   type ManagementIdentity,
 } from './managed-account-detail-read';
 
-function Identity({ account, accountId }: { account: ManagementIdentity | null; accountId: string }) {
+// These controls grow with localized labels instead of clipping at the shared button height.
+const recoveryButtonClassName =
+  'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal wrap-anywhere py-2 text-center';
+
+function identityName(account: ManagementIdentity | null) {
+  return account
+    ? account.displayName || (account.handle ? `@${account.handle}` : m.managed_unnamed())
+    : m.settings_managed_detail_identity_unavailable();
+}
+
+function IdentityAvatar({ account }: { account: ManagementIdentity | null }) {
   return (
-    <div className="min-w-0 break-words">
-      <p className="font-medium">{account?.displayName || (account?.handle ? `@${account.handle}` : accountId)}</p>
-      {account?.displayName && account.handle ? (
-        <p className="text-sm text-muted-foreground">@{account.handle}</p>
-      ) : null}
-      {!account ? (
-        <p className="text-sm text-muted-foreground">{m.settings_managed_detail_identity_unavailable()}</p>
-      ) : null}
+    <Avatar aria-hidden="true">
+      <AvatarFallback>{initials(account?.displayName || account?.handle || '')}</AvatarFallback>
+    </Avatar>
+  );
+}
+
+function AccountDetails({ accountId }: { accountId: string }) {
+  return (
+    <details className="min-w-0 max-w-full">
+      <summary className="min-h-11 cursor-pointer py-2 text-sm wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+        {m.lifecycle_identity_details()}
+      </summary>
+      <dl className="min-w-0 space-y-1">
+        <dt className="text-sm text-muted-foreground">{m.lifecycle_account_id()}</dt>
+        <dd className="select-all break-all font-mono text-sm">{accountId}</dd>
+      </dl>
+    </details>
+  );
+}
+
+function Identity({ account, accountId }: { account: ManagementIdentity; accountId: string }) {
+  return (
+    <div className="flex min-w-0 gap-3">
+      <IdentityAvatar account={account} />
+      <div className="min-w-0 flex-1 wrap-anywhere">
+        <p className="text-lg font-semibold">{identityName(account)}</p>
+        {account.displayName && account.handle ? (
+          <p className="text-sm text-muted-foreground">@{account.handle}</p>
+        ) : null}
+        <AccountDetails accountId={accountId} />
+      </div>
     </div>
+  );
+}
+
+function IdentityRow({
+  account,
+  accountId,
+  state,
+}: {
+  account: ManagementIdentity | null;
+  accountId: string;
+  state: ReactNode;
+}) {
+  return (
+    <ContentItem
+      className="min-w-0 max-w-full wrap-anywhere"
+      headingLevel={4}
+      title={identityName(account)}
+      visual={<IdentityAvatar account={account} />}
+      metadata={
+        account?.displayName && account.handle ? <p className="min-w-0 wrap-anywhere">@{account.handle}</p> : null
+      }
+      preview={<AccountDetails accountId={accountId} />}
+      state={state}
+    />
   );
 }
 
@@ -49,20 +108,21 @@ function Failure({
   return (
     <Alert
       variant="destructive"
+      className="min-w-0 max-w-full wrap-anywhere"
       data-response-status={failure.status ?? ''}
       data-response-code={failure.code ?? ''}
       data-retry-after={failure.retryAfter}
     >
-      <AlertTitle>{m.managed_unavailable_title()}</AlertTitle>
-      <AlertDescription className="space-y-3">
+      <AlertTitle className="min-w-0">{m.managed_unavailable_title()}</AlertTitle>
+      <AlertDescription className="min-w-0 space-y-3">
         <p>{m.settings_managed_unavailable()}</p>
-        {waiting ? <p>{m.settings_retry_wait()}</p> : null}
-        <div className="flex flex-wrap gap-2">
+        {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
+        <div className="flex min-w-0 max-w-full flex-wrap gap-2">
           {retry ? (
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 min-w-11 whitespace-normal"
+              className={recoveryButtonClassName}
               disabled={pending || waiting}
               aria-label={section ? `${m.settings_retry()} · ${label}` : undefined}
               onClick={retry}
@@ -74,7 +134,7 @@ function Failure({
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 min-w-11 whitespace-normal"
+              className={recoveryButtonClassName}
               disabled={pending || waiting}
               aria-label={`${m.settings_managed_start_first_page()} · ${label}`}
               onClick={restart}
@@ -103,12 +163,12 @@ function Paging({
 }) {
   const label = section === 'members' ? m.managed_holders_title() : m.managed_operated_title();
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex min-w-0 max-w-full flex-wrap gap-2">
       {cursor ? (
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 min-w-11 whitespace-normal"
+          className={recoveryButtonClassName}
           disabled={pending}
           aria-label={`${m.settings_managed_first_page()} · ${label}`}
           onClick={() => void reader.load(section)}
@@ -120,7 +180,7 @@ function Paging({
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 min-w-11 whitespace-normal"
+          className={recoveryButtonClassName}
           disabled={pending}
           aria-label={`${m.managed_next()} · ${label}`}
           onClick={() => void reader.load(section, next)}
@@ -150,17 +210,20 @@ export function ManagedAccountDetailCard({
   const responsibilities = state.responsibilities;
   const busy = state.pending || members.pending || responsibilities.pending;
   return (
-    <Card>
-      <CardHeader>
-        <a className="w-fit text-sm text-primary underline underline-offset-4" href={backHref}>
+    <Card className="min-w-0 max-w-full wrap-anywhere">
+      <CardHeader className="min-w-0">
+        <a
+          className="flex min-h-11 min-w-11 w-fit max-w-full items-center py-2 text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+          href={backHref}
+        >
           {m.managed_back()}
         </a>
-        <CardTitle>
+        <CardTitle className="min-w-0">
           <h2 id="settings-account-heading">{m.managed_detail_title()}</h2>
         </CardTitle>
         <CardDescription>{m.settings_managed_read_only()}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="min-w-0 space-y-6">
         {state.pending || (reader && !detail && !state.failure) ? (
           <p role="status">{m.settings_managed_detail_loading()}</p>
         ) : null}
@@ -173,7 +236,7 @@ export function ManagedAccountDetailCard({
         ) : null}
         {detail && reader ? (
           <>
-            <section className="space-y-3" aria-label={m.managed_target_title()}>
+            <section className="min-w-0 space-y-3" aria-label={m.managed_target_title()}>
               <Identity account={detail.account} accountId={detail.account.id} />
               <p className="text-sm text-muted-foreground">
                 {detail.account.kind === 'organization'
@@ -196,9 +259,10 @@ export function ManagedAccountDetailCard({
                 </div>
               ) : null}
             </section>
-            <section className="space-y-3" aria-label={m.managed_holders_title()} aria-busy={members.pending}>
+            <section className="min-w-0 space-y-3" aria-label={m.managed_holders_title()} aria-busy={members.pending}>
               <h3 className="font-medium">{m.managed_holders_title()}</h3>
               <p className="text-sm text-muted-foreground">{m.managed_holders_text()}</p>
+              {members.pending ? <p role="status">{m.settings_managed_detail_loading()}</p> : null}
               {members.failure ? (
                 <Failure
                   failure={members.failure}
@@ -215,20 +279,10 @@ export function ManagedAccountDetailCard({
                   {members.page.items.length ? (
                     <ul>
                       {members.page.items.map((item) => (
-                        <ContentItem
+                        <IdentityRow
                           key={item.accountId}
-                          headingLevel={4}
-                          title={
-                            item.account?.displayName ||
-                            (item.account?.handle ? `@${item.account.handle}` : item.accountId)
-                          }
-                          metadata={
-                            item.account?.displayName && item.account.handle ? (
-                              <p>@{item.account.handle}</p>
-                            ) : !item.account ? (
-                              <p>{m.settings_managed_detail_identity_unavailable()}</p>
-                            ) : null
-                          }
+                          account={item.account}
+                          accountId={item.accountId}
                           state={
                             <span className="text-sm">
                               {item.role === 'owner' ? m.managed_owner() : m.managed_member()}
@@ -252,9 +306,14 @@ export function ManagedAccountDetailCard({
                 </>
               ) : null}
             </section>
-            <section className="space-y-3" aria-label={m.managed_operated_title()} aria-busy={responsibilities.pending}>
+            <section
+              className="min-w-0 space-y-3"
+              aria-label={m.managed_operated_title()}
+              aria-busy={responsibilities.pending}
+            >
               <h3 className="font-medium">{m.managed_operated_title()}</h3>
               <p className="text-sm text-muted-foreground">{m.managed_responsibility_text()}</p>
+              {responsibilities.pending ? <p role="status">{m.settings_managed_detail_loading()}</p> : null}
               {responsibilities.failure ? (
                 <Failure
                   failure={responsibilities.failure}
@@ -271,20 +330,10 @@ export function ManagedAccountDetailCard({
                   {responsibilities.page.items.length ? (
                     <ul>
                       {responsibilities.page.items.map((item) => (
-                        <ContentItem
+                        <IdentityRow
                           key={item.reservationId}
-                          headingLevel={4}
-                          title={
-                            item.account?.displayName ||
-                            (item.account?.handle ? `@${item.account.handle}` : item.accountId)
-                          }
-                          metadata={
-                            item.account?.displayName && item.account.handle ? (
-                              <p>@{item.account.handle}</p>
-                            ) : !item.account ? (
-                              <p>{m.settings_managed_detail_identity_unavailable()}</p>
-                            ) : null
-                          }
+                          account={item.account}
+                          accountId={item.accountId}
                           state={
                             <p className="text-sm">
                               {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
@@ -317,9 +366,17 @@ export function ManagedAccountDetailCard({
               authNavigation={state.authNavigation}
               authCsrfToken={reader.csrfToken}
             />
-            <Button type="button" variant="outline" disabled={busy} onClick={() => void reader.load()}>
-              {m.managed_refresh()}
-            </Button>
+            {!state.failure ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={recoveryButtonClassName}
+                disabled={busy}
+                onClick={() => void reader.load()}
+              >
+                {m.managed_refresh()}
+              </Button>
+            ) : null}
           </>
         ) : null}
       </CardContent>

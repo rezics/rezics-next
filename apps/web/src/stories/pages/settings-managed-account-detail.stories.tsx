@@ -17,9 +17,17 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function Example({ member = false }: { member?: boolean }) {
-  selectManagementStory(member ? 'member' : 'populated');
-  return <PageStory visitor="Signed In" path={`/settings?managedAccount=${organization.id}&view=accounts#account`} />;
+function Example({
+  member = false,
+  mode = 'populated',
+  accountId = organization.id,
+}: {
+  member?: boolean;
+  mode?: Parameters<typeof selectManagementStory>[0];
+  accountId?: string;
+}) {
+  selectManagementStory(member ? 'member' : mode);
+  return <PageStory visitor="Signed In" path={`/settings?managedAccount=${accountId}&view=accounts#account`} />;
 }
 
 export const Manager: Story = {
@@ -100,5 +108,75 @@ export const SessionRecovery: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Restore session' }));
     await canvas.findByText(organization.displayName);
     await canvas.findByText(m.managed_current());
+  },
+};
+
+// Connected settings examples retain the actual read boundary and independently owned action catalogue.
+export const LongIdentityPhone: Story = {
+  render: () => <Example mode="long" />,
+  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    const target = await canvas.findByRole('region', { name: m.managed_target_title() });
+    const details = target.querySelector('details')!;
+    await expect(details.open).toBe(false);
+    const summary = within(target).getByText(m.lifecycle_identity_details());
+    summary.focus();
+    await expect(summary).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(details.open).toBe(true);
+    await expect(within(target).getByText(organization.id)).toBeVisible();
+    const card = canvasElementCard(context.canvasElement);
+    await expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth + 1);
+    const back = canvas.getByRole('link', { name: m.managed_back() });
+    await expect(back.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    await userEvent.click(back);
+    await canvas.findByRole('link', { name: organization.displayName });
+  },
+};
+
+function canvasElementCard(canvasElement: HTMLElement) {
+  return canvasElement
+    .querySelector<HTMLElement>('#settings-account-heading')!
+    .closest<HTMLElement>('[data-slot="card"]')!;
+}
+
+export const UnnamedAccount: Story = {
+  render: () => <Example mode="handleless" />,
+  globals: { viewport: { value: 'phone390' } },
+  play: async (context) => {
+    await pageReady(context);
+    const target = within(await within(context.canvasElement).findByRole('region', { name: m.managed_target_title() }));
+    await expect(target.getByText(m.managed_unnamed())).toBeVisible();
+    await expect(target.queryByRole('heading', { name: organization.id })).toBeNull();
+  },
+};
+
+export const OperatedAccount: Story = {
+  render: () => <Example accountId={automation.id} />,
+  play: async (context) => {
+    await pageReady(context);
+    const target = within(await within(context.canvasElement).findByRole('region', { name: m.managed_target_title() }));
+    await expect(target.getByText(automation.displayName)).toBeVisible();
+    await expect(target.getByText(organization.displayName)).toBeVisible();
+    await expect(target.getByText(m.managed_operator_title())).toBeVisible();
+  },
+};
+
+export const InitialReadRecovery: Story = {
+  render: () => <Example mode="unavailable" />,
+  globals: { locale: 'fr', viewport: { value: 'phone390' } },
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await canvas.findByRole('alert');
+    selectManagementStory('populated');
+    const retry = canvas.getByRole('button', { name: m.settings_retry(), exact: true });
+    retry.focus();
+    await expect(retry).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await canvas.findByText(organization.displayName);
+    await expect(canvas.queryByRole('alert')).toBeNull();
   },
 };

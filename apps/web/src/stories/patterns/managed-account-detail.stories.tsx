@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { automation, detailExample, human, inventoryExample, organization } from '../../accounts/management/story-api';
+import { automation, detailExample, human, organization } from '../../accounts/management/story-api';
 import { m } from '../../paraglide/messages.js';
 import { ManagedAccountDetailCard } from '../../settings/managed-account-detail';
 import { ManagedAccountReader, type DetailRead, type DetailSection } from '../../settings/managed-account-detail-read';
@@ -14,6 +14,7 @@ type ExampleProps = {
   paging?: boolean;
   failed?: DetailSection;
   waiting?: boolean;
+  long?: boolean;
 };
 
 function Example(props: ExampleProps) {
@@ -25,7 +26,7 @@ function Example(props: ExampleProps) {
 }
 
 // Illustrative native DTOs for component review, not proof of native authorization or completed operations.
-function ConnectedDetail({ member = false, paging = false, failed, waiting = false }: ExampleProps) {
+function ConnectedDetail({ member = false, paging = false, failed, waiting = false, long = false }: ExampleProps) {
   const client = useQueryClient();
   useState(() => {
     client.setQueryData(sessionQuery.queryKey, {
@@ -37,6 +38,11 @@ function ConnectedDetail({ member = false, paging = false, failed, waiting = fal
   const reader = useMemo(() => {
     const read: DetailRead = async (input) => {
       const value = detailExample(organization.id);
+      if (long) {
+        const label = 'InternationaleLesegemeinschaftFürUnabhängigeVeröffentlichungen'.repeat(5);
+        value.account = { ...value.account, displayName: label, handle: label.toLowerCase() };
+        value.members.items[0]!.account = { ...human, displayName: label, handle: label.toLowerCase() };
+      }
       if (member) {
         value.role = 'member';
         value.members = { state: 'denied', items: [], next: null };
@@ -69,7 +75,7 @@ function ConnectedDetail({ member = false, paging = false, failed, waiting = fal
       return { ok: true, viewerId: input.viewerId, value };
     };
     return new ManagedAccountReader(human.id, organization.id, read);
-  }, [member, paging, failed, waiting]);
+  }, [member, paging, failed, waiting, long]);
   useEffect(() => {
     let active = true;
     void reader.load().then(() => {
@@ -81,7 +87,7 @@ function ConnectedDetail({ member = false, paging = false, failed, waiting = fal
     };
   }, [reader, failed]);
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto min-w-0 max-w-3xl">
       <ManagedAccountDetailCard reader={reader} backHref="/en/settings?view=accounts#account" />
     </div>
   );
@@ -129,7 +135,7 @@ export const ManagerObservations: Story = {
     const responsibilities = within(canvas.getByRole('region', { name: m.managed_operated_title() }));
     await expect(responsibilities.getAllByRole('heading', { level: 4 }).map((heading) => heading.textContent)).toEqual([
       automation.displayName,
-      inventoryExample().responsibilities.items[1]!.accountId,
+      m.settings_managed_detail_identity_unavailable(),
     ]);
     await expect(responsibilities.queryByRole('link')).toBeNull();
     await expect(responsibilities.getByText(m.settings_managed_detail_identity_unavailable())).toBeVisible();
@@ -195,6 +201,13 @@ export const ResponsibilitiesContinuationFailure: Story = {
     await expect(responsibilities.queryByText(m.managed_current())).toBeNull();
     await expect(responsibilities.queryByText(m.managed_no_responsibilities())).toBeNull();
     await expect(canvas.getByText(human.displayName)).toBeVisible();
+    await userEvent.click(
+      responsibilities.getByRole('button', {
+        name: `${m.settings_managed_start_first_page()} · ${m.managed_operated_title()}`,
+      }),
+    );
+    await responsibilities.findByText(m.managed_current());
+    await expect(responsibilities.queryByRole('alert')).toBeNull();
   },
 };
 
@@ -213,5 +226,34 @@ export const ContinuationRetryAfter: Story = {
     }
     await expect(responsibilities.getByText(m.managed_current())).toBeVisible();
     await expect(canvas.getByText(human.displayName)).toBeVisible();
+  },
+};
+
+export const LongLocaleRecoveryPhone: Story = {
+  args: { failed: 'members', long: true },
+  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('alert');
+    const card = canvasElement
+      .querySelector<HTMLElement>('#settings-account-heading')!
+      .closest<HTMLElement>('[data-slot="card"]')!;
+    const members = within(canvas.getByRole('region', { name: m.managed_holders_title() }));
+    for (const label of [m.settings_retry(), m.settings_managed_start_first_page()]) {
+      const button = members.getByRole('button', { name: `${label} · ${m.managed_holders_title()}` });
+      await expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      await expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+      await expect(getComputedStyle(button).whiteSpace).toBe('normal');
+      await expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
+    }
+    await expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth + 1);
+    await userEvent.click(
+      members.getByRole('button', {
+        name: `${m.settings_managed_start_first_page()} · ${m.managed_holders_title()}`,
+      }),
+    );
+    await members.findByRole('heading', { level: 4 });
+    await expect(members.queryByRole('alert')).toBeNull();
+    await expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth + 1);
   },
 };

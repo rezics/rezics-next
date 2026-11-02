@@ -121,6 +121,15 @@ profile/verification delivery slices for Web, Accounts and Semantic, not new ide
 released identity coordinator must publish verification and exact reversal; local merge primitives or stored
 verification state alone do not establish the final public-page outcome.
 
+### Managed-account detail presentation
+
+Managed-account settings lead with the supplied display name or handle and an initials avatar. A supplied
+identity without either label uses the unnamed-account treatment; an absent identity uses Identity unavailable.
+Exact supplied account IDs remain selectable inside closed account-detail disclosures for the target, operator,
+members and responsibilities. Back navigation and read recovery controls wrap localized labels and retain
+phone-sized targets. Feed recovery remains independent; this presentation grants no management authority and
+does not change the separately owned action catalogue.
+
 ## 2. Operators and automated accounts
 
 An automated actor has exactly one operator: a human actor without an operator, or an organization. Automation
