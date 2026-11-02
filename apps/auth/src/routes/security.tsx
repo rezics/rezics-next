@@ -16,6 +16,7 @@ import { AccountIdentitySummary } from '../account-identity-view';
 import { failureMessage } from '../api';
 import { ErrorAlert } from '../alert';
 import { SecurityInventory, type InventorySource } from '../security-inventory-view';
+import type { ConsentReviewOperation } from '../security-inventory';
 import { addPasskey, passkeysSupported, removePasskey } from '../passkeys';
 import {
   readSecurityTarget,
@@ -42,7 +43,7 @@ export const Route = createFileRoute('/security')({
 
 type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
 type SecurityOperation =
-  | { kind: 'password' | 'passkey-add' }
+  | { kind: 'password' | 'passkey-add' | 'consent' }
   | { kind: 'target'; target: SecurityTarget }
   | { kind: 'recovery'; target: SecurityTarget; phase: 'unknown' | 'accepted' | 'present'; reading: boolean };
 
@@ -188,6 +189,21 @@ export function SecurityPage({
   function updateOperation(next: SecurityOperation | null) {
     activeOperation.current = next;
     setOperation(next);
+  }
+
+  function beginConsentReview(): ConsentReviewOperation | null {
+    if (activeOperation.current || !activeAccount.current) return null;
+    const held: SecurityOperation = { kind: 'consent' };
+    const generation = authorityGeneration.current;
+    updateOperation(held);
+    const isCurrent = () => authorityGeneration.current === generation && activeOperation.current === held;
+    return {
+      isCurrent,
+      finish: () => {
+        // A disposed review cannot release a later page authority's operation.
+        if (isCurrent()) updateOperation(null);
+      },
+    };
   }
 
   function clearPrivateData(state: Exclude<LoadState, 'ready'>, notice = '') {
@@ -659,6 +675,7 @@ export function SecurityPage({
             <SecurityInventory
               lifetime={lifetime.current.signal}
               {...(inventorySource ? { source: inventorySource } : {})}
+              operation={{ blocked: operationBlocked, begin: beginConsentReview }}
               onSessionEnded={(reduced) => {
                 setConsentReduced(reduced);
                 clearPrivateData('signed-out');

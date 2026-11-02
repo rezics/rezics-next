@@ -172,6 +172,18 @@ export async function loadPasskeyInventory() {
 export type ConsentReductionResult = {
   kind: 'accepted' | 'pending' | 'signed-out' | 'denied' | 'unknown' | 'unavailable';
 };
+/** The page lends its existing write boundary to a mounted consent review.
+ * Acquisition is synchronous; release only ends the operation that acquired it.
+ * An uncertain write keeps the lease and must never be automatically replayed.
+ */
+export type ConsentReviewOperation = {
+  isCurrent: () => boolean;
+  finish: () => void;
+};
+export type ConsentOperationBoundary = {
+  blocked: boolean;
+  begin: () => ConsentReviewOperation | null;
+};
 /** Closed, memory-only target. Native Auth remains the sole consent/barrier authority. */
 export type ConsentReduction = Readonly<{
   clientId: string;

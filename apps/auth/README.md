@@ -154,6 +154,8 @@ Only an unresolved destructive target's original account, kind and native id sur
 account, return requires fresh explicit readback and confirmation; a different account discards that target. Failed
 reads offer Reload, ended sessions offer sign-in, and return never replays a credential or consent command.
 
+Connected-application reviews acquire that same boundary until cancellation or a determinate result; uncertain reductions keep all security writes blocked without replay, while independent owned-client navigation remains available and consent navigation cannot discard a review.
+
 Password changes accept 8 to 128 characters and use one random key for the staged credential effect: stage, approve,
 then apply. A failed network request retries only its step with the same key, and a replayed apply receipt counts as
 success. A `step_up_required` response sends the person to `/step-up?return_to=%2Fsecurity` and clears the password

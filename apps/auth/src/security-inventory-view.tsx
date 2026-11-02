@@ -14,6 +14,8 @@ import {
   type InventoryPage,
   type InventoryView,
   type InventoryRows,
+  type ConsentOperationBoundary,
+  type ConsentReviewOperation,
 } from './security-inventory';
 
 export type InventorySource = typeof loadInventory;
@@ -30,12 +32,14 @@ function InventoryList<V extends InventoryView>({
   view,
   source,
   preflight,
+  operation,
   onSessionEnded,
   lifetime,
 }: {
   view: V;
   source: InventorySource;
   preflight: boolean;
+  operation?: ConsentOperationBoundary;
   onSessionEnded?: (reduced: boolean) => void;
   lifetime?: AbortSignal;
 }) {
@@ -48,7 +52,8 @@ function InventoryList<V extends InventoryView>({
   const [selection, setSelection] = useState<Selection | null>(null);
   const [reducing, setReducing] = useState(false);
   const generation = useRef(0);
-  const submitting = useRef(false);
+  const phase = useRef<'idle' | 'review' | 'submitting' | 'unknown'>('idle');
+  const reviewOperation = useRef<ConsentReviewOperation | null>(null);
   const reviewElement = useRef<HTMLFieldSetElement>(null);
   const heading = view === 'clients' ? m.auth_inventory_clients_heading() : m.auth_inventory_consents_heading();
   const headingId = `inventory-${view}-heading`;
@@ -95,7 +100,7 @@ function InventoryList<V extends InventoryView>({
   }, [selection]);
 
   async function navigate(target?: string, direction: 'next' | 'previous' | 'reset' = 'reset') {
-    if (lifetime?.aborted || pending || reducing) return;
+    if (lifetime?.aborted || pending || phase.current !== 'idle') return;
     const current = ++generation.current;
     setPending(true);
     setError('');
@@ -116,7 +121,11 @@ function InventoryList<V extends InventoryView>({
   }
 
   function select(consent: GrantedConsent, removeAll: boolean) {
-    if (lifetime?.aborted) return;
+    if (lifetime?.aborted || preflight || pending || phase.current !== 'idle') return;
+    const held = operation?.begin();
+    if (operation && !held) return;
+    reviewOperation.current = held ?? null;
+    phase.current = 'review';
     // Keep only public inventory fields; drafts never leave this mounted row.
     const snapshot: GrantedConsent = {
       client_id: consent.client_id,
@@ -130,21 +139,33 @@ function InventoryList<V extends InventoryView>({
     setError('');
   }
 
+  function finishReview() {
+    phase.current = 'idle';
+    setSelection(null);
+    reviewOperation.current?.finish();
+    reviewOperation.current = null;
+  }
+
+  function cancelReview() {
+    if (phase.current !== 'review') return;
+    finishReview();
+    setError('');
+  }
+
   async function reduce() {
-    if (lifetime?.aborted || !selection?.confirming || preflight || pending || submitting.current) return;
+    if (lifetime?.aborted || !selection?.confirming || preflight || pending || phase.current !== 'review') return;
+    if (reviewOperation.current && !reviewOperation.current.isCurrent()) return;
     const { consent, retained } = selection;
     const target = createConsentReduction(consent, retained);
     if (!target) return;
-    submitting.current = true;
+    phase.current = 'submitting';
     setReducing(true);
     setError('');
     const current = generation.current;
     // Refresh the same bounded native inventory page, including current pending,
     // first-party/reducible and availability rules, before the exact native read.
     const fresh = await source(view, cursor).catch(() => ({ kind: 'unavailable' as const }));
-    if (generation.current !== current) {
-      submitting.current = false;
-      setReducing(false);
+    if (generation.current !== current || (reviewOperation.current && !reviewOperation.current.isCurrent())) {
       return;
     }
     const row = fresh.kind === 'ready' ? fresh.rows.find((entry) => entry.client_id === target.clientId) : null;
@@ -167,10 +188,16 @@ function InventoryList<V extends InventoryView>({
         : matches
           ? await reduceConsent(consent, target.retained)
           : { kind: 'denied' as const };
-    submitting.current = false;
-    if (generation.current !== current) return;
+    if (generation.current !== current || (reviewOperation.current && !reviewOperation.current.isCurrent())) return;
     setReducing(false);
-    setSelection(null);
+    if (result.kind === 'unknown') {
+      // The native barrier may have ended the session. Keep every page write
+      // blocked; neither an inventory reload nor a second click may replay it.
+      phase.current = 'unknown';
+      setSelection(null);
+    } else {
+      finishReview();
+    }
     if (result.kind === 'accepted') {
       // A historical acknowledgement cannot be patched into the old inventory.
       setNotice(m.auth_inventory_reduced());
@@ -265,7 +292,7 @@ function InventoryList<V extends InventoryView>({
               {m.auth_inventory_review_removal()}
             </Button>
           )}
-          <Button type="button" variant="outline" disabled={reducing || pending} onClick={() => setSelection(null)}>
+          <Button type="button" variant="outline" disabled={reducing || pending} onClick={cancelReview}>
             {m.auth_inventory_cancel()}
           </Button>
         </div>
@@ -360,7 +387,7 @@ function InventoryList<V extends InventoryView>({
                         <Button
                           type="button"
                           variant="outline"
-                          disabled={pending || reducing || !!selection}
+                          disabled={pending || reducing || !!selection || operation?.blocked}
                           onClick={() => select(row, false)}
                         >
                           {m.auth_inventory_review_named({
@@ -370,7 +397,7 @@ function InventoryList<V extends InventoryView>({
                         <Button
                           type="button"
                           variant="outline"
-                          disabled={pending || reducing || !!selection}
+                          disabled={pending || reducing || !!selection || operation?.blocked}
                           onClick={() => select(row, true)}
                         >
                           {m.auth_inventory_remove_named({
@@ -390,7 +417,7 @@ function InventoryList<V extends InventoryView>({
               <Button
                 type="button"
                 variant="outline"
-                disabled={pending || reducing}
+                disabled={pending || reducing || !!selection}
                 onClick={() => void navigate(history.at(-1), 'previous')}
               >
                 {m.auth_inventory_previous()}
@@ -400,13 +427,18 @@ function InventoryList<V extends InventoryView>({
               <Button
                 type="button"
                 variant="outline"
-                disabled={pending || reducing}
+                disabled={pending || reducing || !!selection}
                 onClick={() => void navigate(page.next!, 'next')}
               >
                 {m.auth_inventory_next()}
               </Button>
             ) : null}
-            <Button type="button" variant="outline" disabled={pending || reducing} onClick={() => void navigate()}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending || reducing || !!selection}
+              onClick={() => void navigate()}
+            >
               {m.auth_inventory_reload()}
             </Button>
           </nav>
@@ -420,11 +452,13 @@ function InventoryList<V extends InventoryView>({
 export function SecurityInventory({
   source = loadInventory,
   preflight = false,
+  operation,
   onSessionEnded,
   lifetime,
 }: {
   source?: InventorySource;
   preflight?: boolean;
+  operation?: ConsentOperationBoundary;
   onSessionEnded?: (reduced: boolean) => void;
   lifetime?: AbortSignal;
 }) {
@@ -436,6 +470,7 @@ export function SecurityInventory({
         source={source}
         preflight={preflight}
         {...(lifetime ? { lifetime } : {})}
+        {...(operation ? { operation } : {})}
         {...(onSessionEnded ? { onSessionEnded } : {})}
       />
     </div>
