@@ -236,9 +236,18 @@ actual Core allowance debit, lost admission/debit replies, failed effect
 rollback, copied/escaped handles, immutable deadline replay, owner refusal,
 native ACK retirement, retained failed cleanup and SQL refill refusal. Existing
 chain/race/shared-suffix/growth acceptance is preserved byte-for-byte. All
-native/unit/growth/full acceptance remains UNRUN. The current compiler receipt
-will be recorded after the sole permitted invocation; typing cannot establish
-product completion.
+native/unit/growth/full acceptance remains UNRUN.
+
+The sole permitted `bun run --cwd services/kernel typecheck --emit-schema=semantic`
+ran on compiler host b against source commit b7466413b4 and exited 2. Its first
+reported error was `identity-terminal-closure-delete-empty-slot.sql(2,52): error
+reylo3: The parameter $2 appears more than once`; the remaining diagnostics were
+the same repeated-parameter defect for `$1` and `$2`. The query now projects each
+parameter once through a typed input CTE. No second compiler invocation was
+started, so this correction and final typing remain unverified. The compiler
+reported 237.723 seconds command time, 327.429 CPU seconds and 6947 MiB peak
+memory. It did not reach construct or schema emission. No passing typing or
+product completion is claimed.
 
 ## Reference sources
 
