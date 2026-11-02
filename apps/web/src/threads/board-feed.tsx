@@ -132,11 +132,7 @@ export function BoardFeed({
     const currentIndex = state.__TSR_index;
     const previousIndex = lastObservedHistoryIndex;
     lastObservedHistoryIndex = currentIndex;
-    if (
-      continuationState.__boardNextPage !== true ||
-      consumedContinuationStates.has(state)
-    )
-      return;
+    if (continuationState.__boardNextPage !== true || consumedContinuationStates.has(state)) return;
     if (previousIndex !== null && currentIndex > previousIndex) {
       consumedContinuationStates.add(state);
       heading.current?.focus();
@@ -144,8 +140,7 @@ export function BoardFeed({
     const browserState = window.history.state;
     if (browserState && typeof browserState === 'object') {
       const current = browserState as Record<string, unknown>;
-      if (current.__boardNextPage === true)
-        window.history.replaceState({ ...current, __boardNextPage: false }, '');
+      if (current.__boardNextPage === true) window.history.replaceState({ ...current, __boardNextPage: false }, '');
     }
   }, [location.state]);
   const refreshedAt =
