@@ -218,22 +218,16 @@ describe('Complete Realm publication original caller lifetime', () => {
     const { AuthoringDepartureState } = await import('../src/threads/authoring-departure');
     const { createPublicationDraft } = await import('../src/community/publication-subject-picker');
     const calls: Write['input'][] = [];
-    const draft = createPublicationDraft(
-      realmId,
-      async (input) => {
-        calls.push(structuredClone(input));
-        return { kind: 'unavailable' };
-      },
-      () => undefined,
-      subjects,
-    );
-    draft.connect();
-    draft.choose(target());
+    const draft = createPublicationDraft(realmId, async (input) => {
+      calls.push(structuredClone(input));
+      return { kind: 'unavailable' as const };
+    }, () => undefined, subjects);
+    draft.connect(); draft.choose(target());
     await draft.change('publish');
     const exact = calls[0];
     const owner = new AuthoringDepartureState();
     owner.register({
-      needsDecision: () => draft.getSnapshot().target !== null && draft.getSnapshot().outcome?.kind !== 'saved',
+      needsDecision: () => draft.getSnapshot().target !== null,
       unresolved: () => draft.getSnapshot().outcome?.kind === 'unavailable',
       discard: () => undefined,
       leave: draft.retire,
