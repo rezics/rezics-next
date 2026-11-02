@@ -200,7 +200,10 @@ test('initial qualifiers reconcile current choices and preserve private holders,
     const action = () => within(host).getByRole('button', { name: m.relation_add_qualifier({}, { locale: 'en' }) });
     const oldAction = () => {
       const button = action();
-      return Reflect.get(button, Object.keys(button).find((key) => key.startsWith('__reactProps$'))!).onClick;
+      return Reflect.get(
+        button,
+        Object.keys(button).find((key) => key.startsWith('__reactProps$'))!,
+      ).onClick;
     };
     for (const withdrawal of ['unlisted', 'missing', 'unsupported', 'occupied']) {
       read = { ok: true, release: structuredClone(recorded.release) as Release };
@@ -219,7 +222,10 @@ test('initial qualifiers reconcile current choices and preserve private holders,
         await act(async () =>
           replace({
             ...probe,
-            statement: { ...probe.statement, qualifiers: [...probe.statement.qualifiers!, snak('schema:position', '2')] },
+            statement: {
+              ...probe.statement,
+              qualifiers: [...probe.statement.qualifiers!, snak('schema:position', '2')],
+            },
           }),
         );
       await show();
