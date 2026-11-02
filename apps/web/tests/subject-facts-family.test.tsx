@@ -99,9 +99,15 @@ test('Complete Subject facts family: same-property mounted FactFields keep indep
   await mounted(async ({ host, render, choose, enter }) => {
     const { FactField } = await import('../src/features/catalogue/subject-facts-view');
     const { stageFact } = await import('../src/features/catalogue/subject-facts');
+    const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
     const { identifiersProfileFixture, identifiersCitation } =
       await import('../src/kernel/fake/catalogue-identifiers-profile');
     const { m } = await import('../src/paraglide/messages.js');
+    const require = createRequire(import.meta.url);
+    const { default: userEvent } = await import(
+      createRequire(require.resolve('storybook/test')).resolve('@testing-library/user-event')
+    );
+    const user = userEvent.setup({ document: host.ownerDocument });
     const fixture = identifiersProfileFixture();
     const read = await fixture.transport.read();
     if (!read.ok) throw new Error('Expected current identifier evidence');
@@ -127,13 +133,20 @@ test('Complete Subject facts family: same-property mounted FactFields keep indep
     const initialCalls = structuredClone(fixture.calls);
     const stages: (string | null)[][] = [[], []];
     const edits: FactDraft[][] = [[], []];
-    function Pair() {
-      const [drafts, setDrafts] = useState<(FactDraft | undefined)[]>([undefined, undefined]);
+    let deliver!: () => void;
+    function Pair({ mode = 'normal' }: { mode?: string }) {
+      const [drafts, setDrafts] = useState<(FactDraft | undefined)[]>([
+        mode === 'initial' ? stageFact(read, property, first.id)! : undefined,
+        undefined,
+      ]);
+      const [phase, setPhase] = useState('current');
+      deliver = () => setDrafts([stageFact(read, property, first.id)!, undefined]);
       return (
-        <>
+        <CatalogueCurrentReading visible ready={phase !== 'retired'} revision={phase}>
+          <button type="button">Other</button>
           {[0, 1].map((index) => (
             <FactField
-              key={index}
+              key={`${phase}:${index}`}
               property={property}
               read={read}
               locale="en"
@@ -146,6 +159,9 @@ test('Complete Subject facts family: same-property mounted FactFields keep indep
               }}
               onStage={(source) => {
                 stages[index]!.push(source);
+                if (mode === 'rejected') return;
+                if (mode === 'moved') button(host, 'Other').focus();
+                if (mode === 'retired' || mode === 'replaced') setPhase(mode);
                 setDrafts((previous) =>
                   previous.map((draft, slot) => (slot === index ? stageFact(read, property, source)! : draft)),
                 );
@@ -156,7 +172,7 @@ test('Complete Subject facts family: same-property mounted FactFields keep indep
               }}
             />
           ))}
-        </>
+        </CatalogueCurrentReading>
       );
     }
     await render(<Pair />);
@@ -189,8 +205,14 @@ test('Complete Subject facts family: same-property mounted FactFields keep indep
     expect(button(fields[0]!, m.facts_edit_field()).disabled).toBe(true);
     expect(stages).toEqual([[], []]);
     await choose(selects[0]!, first.id);
-    await act(async () => button(fields[0]!, m.facts_edit_field()).click());
+    const opener = button(fields[0]!, m.facts_edit_field());
+    opener.focus();
+    await act(async () => user.keyboard('{Enter}'));
+    const privateHeading = fields[0]!.querySelector('h4[tabindex="-1"]');
+    expect(host.ownerDocument.activeElement).toBe(privateHeading);
+    expect(fields[1]!.querySelector('select')).toBe(selects[1]);
     await act(async () => button(fields[1]!, m.facts_edit_field()).click());
+    expect(host.ownerDocument.activeElement).toBe(privateHeading);
     expect(stages).toEqual([[first.id], [second.id]]);
     const controls = fields.map(include);
     expect(controls[0]!.input.id).not.toBe(controls[1]!.input.id);
@@ -225,6 +247,31 @@ test('Complete Subject facts family: same-property mounted FactFields keep indep
     expect(include(fields[1]!).control.getAttribute('aria-checked')).toBe('false');
     expect(read.public).toEqual(before);
     expect(fixture.calls).toEqual(initialCalls);
+    for (const mode of ['add', 'pointer', 'rejected', 'moved', 'retired', 'replaced', 'initial']) {
+      await render(<Pair mode={mode} />);
+      const heading = () => host.querySelector('h4[tabindex="-1"]');
+      if (mode !== 'initial') {
+        const opener = button(host, m.facts_add_value());
+        opener.focus();
+        await act(async () => {
+          opener.dispatchEvent(
+            new host.ownerDocument.defaultView!.MouseEvent('click', {
+              bubbles: true,
+              detail: mode === 'pointer' ? 1 : 0,
+            }),
+          );
+        });
+        expect(host.ownerDocument.activeElement === heading()).toBe(mode === 'add');
+        if (mode === 'rejected') {
+          expect(host.ownerDocument.activeElement).toBe(opener);
+          await act(async () => deliver());
+          expect(host.ownerDocument.activeElement).not.toBe(heading());
+        }
+      } else expect(host.ownerDocument.activeElement).not.toBe(heading());
+      button(host, 'Other').focus();
+      await render(<Pair mode={mode} />, true);
+      expect(host.ownerDocument.activeElement).toBe(button(host, 'Other'));
+    }
   });
 });
 
@@ -475,102 +522,5 @@ test('A withdrawn fact source needs an explicit replacement, including after an 
     await act(async () => edit().click());
     expect(staged[0]?.source).toBe(replacement.id);
     expect(staged[0]?.baseline?.value).toEqual(replacement.value);
-  });
-});
-
-test('Scalar keyboard opening reaches only its admitted private draft and leaves siblings intact', async () => {
-  await mounted(async ({ host, render }) => {
-    const { FactField } = await import('../src/features/catalogue/subject-facts-view');
-    const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
-    const { identifiersProfileFixture } = await import('../src/kernel/fake/catalogue-identifiers-profile');
-    const { m } = await import('../src/paraglide/messages.js');
-    const require = createRequire(import.meta.url);
-    const { default: userEvent } = await import(
-      createRequire(require.resolve('storybook/test')).resolve('@testing-library/user-event')
-    );
-    const user = userEvent.setup({ document: host.ownerDocument });
-    const fixture = identifiersProfileFixture();
-    const read = await fixture.transport.read();
-    if (!read.ok) throw new Error('Expected current facts');
-    const property = 'schema:sameAs',
-      source = read.public.subject.statements[property]![0]!.id;
-    const sibling = stageFact(read, property, source)!;
-    sibling.command = { id: read.public.subject.id, key: 'original-key', statement: sibling.statement };
-    sibling.result = { ok: false, reason: 'uncertain' };
-    const command = sibling.command,
-      calls = structuredClone(fixture.calls);
-    const common = {
-      property,
-      read,
-      locale: 'en',
-      href: '/en/subjects/edition',
-      busy: false,
-      canStage: true,
-      onReview() {},
-      onChange() {
-        throw new Error('Opening must preserve drafts and commands');
-      },
-    };
-    for (const mode of ['edit', 'add', 'pointer', 'rejected', 'moved', 'retired', 'replaced', 'initial']) {
-      let deliver!: () => void;
-      const stages: (string | null)[] = [];
-      function Workspace() {
-        const [draft, setDraft] = useState<FactDraft | undefined>(() =>
-          mode === 'initial' ? stageFact(read, property, source)! : undefined,
-        );
-        const [retired, retire] = useState(false),
-          [replaced, replace] = useState(false);
-        deliver = () => setDraft(stageFact(read, property, source)!);
-        return (
-          <CatalogueCurrentReading visible ready={!retired} revision={String(retired)}>
-            <button type="button">Other</button>
-            <FactField
-              key={String(replaced)}
-              {...common}
-              draft={draft}
-              onStage={(selected) => {
-                stages.push(selected);
-                if (mode === 'rejected') return;
-                setDraft(stageFact(read, property, selected)!);
-                if (mode === 'moved') button(host, 'Other').focus();
-                if (mode === 'retired') retire(true);
-                if (mode === 'replaced') replace(true);
-              }}
-            />
-            <FactField
-              {...common}
-              draft={sibling}
-              onStage={() => {
-                throw new Error('Wrong sibling');
-              }}
-            />
-          </CatalogueCurrentReading>
-        );
-      }
-      await render(<Workspace />);
-      const fields = host.querySelectorAll<HTMLElement>('section[aria-label]');
-      const input = fields[1]!.querySelector<HTMLInputElement>('input[aria-label]')!;
-      const value = input.value;
-      const heading = () => fields[0]!.querySelector<HTMLElement>('h4[tabindex="-1"]');
-      if (mode !== 'initial') {
-        const opener = button(fields[0]!, mode === 'add' ? m.facts_add_value() : m.facts_edit_field());
-        opener.focus();
-        await act(async () => (mode === 'pointer' ? user.click(opener) : user.keyboard('{Enter}')));
-        expect(stages).toEqual([mode === 'add' ? null : source]);
-        expect(host.ownerDocument.activeElement === heading()).toBe(mode === 'edit' || mode === 'add');
-        if (mode === 'rejected') {
-          expect(host.ownerDocument.activeElement).toBe(opener);
-          await act(async () => deliver());
-          expect(host.ownerDocument.activeElement).not.toBe(heading());
-        }
-      } else expect(host.ownerDocument.activeElement).not.toBe(heading());
-      button(host, 'Other').focus();
-      await render(<Workspace />, true);
-      expect(host.ownerDocument.activeElement).toBe(button(host, 'Other'));
-      expect(fields[1]!.querySelector('input[aria-label]')).toBe(input);
-      expect(input.value).toBe(value);
-      expect(sibling.command).toBe(command);
-      expect(fixture.calls).toEqual(calls);
-    }
   });
 });
