@@ -207,9 +207,7 @@ test('three distinct tasks with one normalized blocker open one incident and hol
     ]);
     expect(status.tasks.map((task) => task.currentAttempt)).toEqual([1, 1, 1]);
     expect(inbox.filter((event) => event.kind === 'blocker')).toHaveLength(1);
-    const alert = inbox.find((event) => event.kind === 'blocker');
-    expect(alert?.managerId).toBe(h.settings.integration.operationsManager);
-    expect(alert?.summary).toContain('Source location (git grep):');
+    expect(inbox.find((event) => event.kind === 'blocker')?.summary).toContain('Source location (git grep):');
   });
 });
 

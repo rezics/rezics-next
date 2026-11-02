@@ -169,7 +169,6 @@ test('hourly report notifier is optional and its command and timeout are bounded
   try {
     const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
     const defaults = loadSettings({ cwd: h.root, env: {} });
-    expect(defaults.integration.operationsManager).toBe('control-plane');
     expect(defaults.integration.hourlyReportNotifier).toBeUndefined();
     expect(defaults.integration.hourlyReportTimeoutMs).toBe(20_000);
 

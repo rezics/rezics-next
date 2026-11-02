@@ -465,7 +465,6 @@ export type RuntimeOptions = {
 export const LANDING_CHECK_ENVIRONMENT = { REMOTE_CHECK_PRIORITY: 'landing' } as const;
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const settings = options.settings ?? options.tasks?.settings ?? loadSettings();
-  const operationsManager = settings.integration.operationsManager ?? 'control-plane';
   const flowThresholds = settings.flowThresholds ?? DEFAULT_FLOW_THRESHOLDS;
   // Synthetic runtime fixtures may not contain the control-plane tree in their main checkout.
   const startedCodeVersion = existsSync(join(settings.mainCheckout, 'tools/goal'))
@@ -497,7 +496,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     enabled: settings.integration.checkResultReuse,
     alert: (summary: string) =>
       inbox.deliver({
-        managerId: operationsManager,
+        managerId: settings.integration.supermanager,
         kind: 'instruction',
         summary: `Check result reuse alert: ${summary}`,
       }),
@@ -785,7 +784,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       checkFlowAlarms(
         db,
         flow,
-        (summary) => flowInbox.deliver({ managerId: operationsManager, kind: 'environment', summary }),
+        (summary) => flowInbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
         now,
         flowThresholds,
       );
@@ -797,7 +796,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         store.tasks(),
         () => tasks.dispatch(template),
         new Date(),
-        (summary) => inbox.deliver({ managerId: operationsManager, kind: 'environment', summary }),
+        (summary) => inbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
       );
     },
     recoverOrphans: async (options?: { adoptRunning?: boolean }) => {

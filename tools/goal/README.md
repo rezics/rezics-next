@@ -440,13 +440,12 @@ as a local command and the host sends nothing. Add `--send` to deliver a report 
 prints it.
 
 The manager host evaluates absolute flow targets each hour and sends one `environment` event to the configured
-operations manager for each breached threshold: efficiency below 40%, any queue older than 60 minutes, landing p90 above
+supermanager for each breached threshold: efficiency below 40%, any queue older than 60 minutes, landing p90 above
 30 minutes, or more than 1.5 attempts per integrated task. `flow` in local settings can override `efficiencyBelow`,
 `oldestQueueMs`, `landingP90Ms` and `attemptsPerIntegrated`; the defaults are `0.4`, `3600000`, `1800000` and `1.5`.
 Alarm summaries name the stage, measurement and up to three oldest waiting task IDs. A threshold can alert again after
-one hour. Operational alerts go to `integration.operationsManager` (default `control-plane`); priority grants and scope
-These flow alarms and shared environment incidents go to delivery operations; priority grants and scope decisions remain
-with the supermanager.
+one hour. Flow alarms, daily audit notices, check-result reuse alerts and shared environment incidents go to the
+configured supermanager; priority grants and scope decisions remain with the supermanager.
 
 Once per UTC day the manager host dispatches the research brief at
 [`templates/daily-step-audit.md`](templates/daily-step-audit.md), unless a daily audit task is already open. It
@@ -1065,9 +1064,8 @@ The supermanager sets direction and the managers own the work. This applies to e
   are owned by the manager of the Goal that owns `tools/goal`; check-host health is owned by the Goal
   that owns the check scripts. System alerts go to those owners.
 - **Efficiency is measured by scripts.** The hourly report, operational alarms and the supermanager watchdog run without
-  model tokens ([delivery ownership](../../docs/development/delivery.md#delivery-ownership)). Operational alerts go to
-  delivery operations; the supermanager retains direction, priority and scope and acts on watchdog alarms. Performance
-  owns check-host health and its own Goal.
+  model tokens ([delivery ownership](../../docs/development/delivery.md#delivery-ownership)). The supermanager acts on
+  alarms; Performance owns check-host health and its own Goal.
 - **Visual review belongs to the design-authority Goal.** The Goal that owns the shell and design system reviews every
   visible slice by screenshot against the maintainer's references and reopens defects with the owning Goal; each
   product Goal owns its user journeys end to end, pages included.

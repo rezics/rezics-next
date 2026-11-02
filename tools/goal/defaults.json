@@ -137,7 +137,6 @@
     "managerCompactTokens": 300000,
     "checkResultReuse": false,
     "supermanager": "supermanager",
-    "operationsManager": "control-plane",
     "hourlyReportTimeoutMs": 20000,
     "managerLimits": {
       "turns": 100,
