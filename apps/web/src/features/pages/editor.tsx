@@ -18,7 +18,7 @@ import { layoutComponents, PageRoot } from './layout';
 import { editorConfig, fromComposition, publishErrors, toComposition, type PageEditorData } from './editor-config';
 import { PageLocaleProvider } from './data';
 import { m } from '../../paraglide/messages.js';
-import { presentationEditorDictionary } from './curate-view-editor-messages';
+import { presentationEditorDictionary, presentationMessageOptions } from './curate-view-editor-messages';
 import type { CorrectionTarget } from './curate-view-editor-state';
 
 const CorrectionContext = createContext<{
@@ -162,15 +162,16 @@ function layoutRenderer(component: ComponentType<RenderProps>, slots: readonly s
   };
 }
 
-function dataPlaceholder(type: string) {
+function dataPlaceholder(type: string, locale: string) {
+  const options = presentationMessageOptions(locale);
   return () => (
     <div
-      aria-label={m.curation_placeholder_label({ type })}
+      aria-label={m.curation_placeholder_label({ type }, options)}
       className="rounded-lg border border-dashed border-border bg-muted/40 p-4 text-sm text-muted-foreground"
       role="note"
     >
       <strong className="font-semibold text-foreground">{type}</strong>
-      <span className="ms-2">{m.curation_placeholder()}</span>
+      <span className="ms-2">{m.curation_placeholder({}, options)}</span>
     </div>
   );
 }
@@ -183,7 +184,7 @@ function editorConfiguration(registry: CompositionRegistry, locale: string): Con
     const layout = (layoutComponents as Record<string, ComponentType<RenderProps>>)[definition.type];
     components[definition.type] = {
       ...baseComponent,
-      render: layout ? layoutRenderer(layout, definition.slots) : dataPlaceholder(definition.type),
+      render: layout ? layoutRenderer(layout, definition.slots) : dataPlaceholder(definition.type, locale),
     };
   }
 
@@ -208,15 +209,21 @@ function editorConfiguration(registry: CompositionRegistry, locale: string): Con
 // Resource editors share the same registry fields, layout renderers and data placeholders.
 export { editorConfiguration };
 
-function violationsHeader(children: ReactNode, errors: CompositionViolation[], pointerPrefix: string) {
+function violationsHeader(
+  children: ReactNode,
+  errors: CompositionViolation[],
+  pointerPrefix: string,
+  locale: string,
+) {
+  const options = presentationMessageOptions(locale);
   return (
     <>
       {children}
       {errors.length > 0 && (
         <div className="border-t border-destructive/30 bg-destructive/5 px-4 py-3 text-sm" role="alert">
-          <p className="mb-2 font-semibold">{m.curation_invalid()}</p>
+          <p className="mb-2 font-semibold">{m.curation_invalid({}, options)}</p>
           <details>
-            <summary>{m.curation_diagnostics()}</summary>
+            <summary>{m.curation_diagnostics({}, options)}</summary>
             <ul className="list-disc space-y-1 ps-5">
               {errors.map(({ pointer, code }, index) => (
                 <li key={`${pointer}:${code}:${index}`}>
@@ -258,6 +265,7 @@ export function PageEditor({
   const focusedCorrection = useRef<CorrectionTarget | null>(null);
   const correctionContext = useMemo(() => ({ target: correction, focused: focusedCorrection }), [correction]);
   const config = useMemo(() => editorConfiguration(platformRegistry, locale), [locale]);
+  const options = presentationMessageOptions(locale);
   // Puck owns the current mounted editor. A keyed remount restores the parent's per-view snapshot.
   const [data] = useState(() => draft ?? fromComposition(document));
 
@@ -280,11 +288,11 @@ export function PageEditor({
       <Puck
         config={config}
         data={data}
-        dictionary={presentationEditorDictionary()}
+        dictionary={presentationEditorDictionary(locale)}
         onPublish={(edited) => handlePublish(edited as PageEditorData)}
         renderHeaderActions={({ state }) => (
           <Button disabled={publishDisabled} onClick={() => handlePublish(state.data as PageEditorData)}>
-            {m.curation_publish()}
+            {m.curation_publish({}, options)}
           </Button>
         )}
         onChange={(edited) => {
@@ -292,7 +300,7 @@ export function PageEditor({
           onChange?.(edited as PageEditorData);
         }}
         overrides={{
-          header: ({ children }) => violationsHeader(children, errors, pointerPrefix),
+          header: ({ children }) => violationsHeader(children, errors, pointerPrefix, locale),
           puck: CorrectionSelection,
           fields: CorrectionFields,
           fieldTypes: { array: CorrectionArray },

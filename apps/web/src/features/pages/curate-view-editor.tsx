@@ -73,6 +73,7 @@ import {
 import { type CurationAdmissionLease, CurationReaderAdmission } from './curation-reader-admission';
 import { CurationFailureNotice, CurationPublicationRecovery } from './curation-publish-view';
 import { CurationNavigationGuard } from './curation-navigation-guard';
+import { presentationMessageOptions } from './curate-view-editor-messages';
 import { removeKeyedTemplate, type KeyedTemplate } from './curation-template-removal';
 import { CurationCompanionViews } from './curation-companion-views';
 
@@ -110,22 +111,23 @@ const editorTheme = {
   '--puck-font-family': 'var(--font-interface)',
 } as CSSProperties;
 
-export function presentationViewNames(): Record<View, string> {
+export function presentationViewNames(locale?: string): Record<View, string> {
+  const options = presentationMessageOptions(locale);
   return {
-    overview: m.subject_overview(),
-    editions: m.subject_editions(),
-    contents: m.subject_contents(),
-    characters: m.subject_characters(),
-    appearances: m.subject_appearances(),
-    credits: m.subject_credits(),
-    works: m.subject_works(),
-    relations: m.subject_relations(),
-    posts: m.subject_posts(),
-    reviews: m.subject_reviews(),
-    discussion: m.subject_discussion(),
-    lists: m.subject_lists(),
-    collections: m.subject_collections(),
-    details: m.subject_details(),
+    overview: m.subject_overview({}, options),
+    editions: m.subject_editions({}, options),
+    contents: m.subject_contents({}, options),
+    characters: m.subject_characters({}, options),
+    appearances: m.subject_appearances({}, options),
+    credits: m.subject_credits({}, options),
+    works: m.subject_works({}, options),
+    relations: m.subject_relations({}, options),
+    posts: m.subject_posts({}, options),
+    reviews: m.subject_reviews({}, options),
+    discussion: m.subject_discussion({}, options),
+    lists: m.subject_lists({}, options),
+    collections: m.subject_collections({}, options),
+    details: m.subject_details({}, options),
   };
 }
 
@@ -173,6 +175,7 @@ function ActualPresentationViewEditor({
   admission,
   preview,
 }: PresentationViewEditorProps & { admission: CurationReaderAdmission }) {
+  const options = presentationMessageOptions(locale);
   const snapshot = useSyncExternalStore(admission.subscribe, admission.getSnapshot, admission.getSnapshot);
   const lease = snapshot.lease;
   const reader = lease?.reader ?? (snapshot.session.state === 'signed-in' ? (snapshot.session.subject ?? null) : null);
@@ -289,21 +292,21 @@ function ActualPresentationViewEditor({
         <div className="space-y-4">
           {failureView(failedRead)}
           <Button className={editorControlClass} onClick={retryAdmission}>
-            {m.curation_reload()}
+            {m.curation_reload({}, options)}
           </Button>
         </div>
       ) : (
         failureView(failedRead)
       );
     if (!needsRead) return !initial.ok ? failureView(initial) : failureView({ ok: false, reason: 'unavailable' });
-    return <p role="status">{m.curation_loading()}</p>;
+    return <p role="status">{m.curation_loading({}, options)}</p>;
   }
   if (!currentAdmission.ok)
     return currentAdmission.reason === 'unavailable' && needsRead ? (
       <div className="space-y-4">
         {failureView(currentAdmission)}
         <Button className={editorControlClass} onClick={retryAdmission}>
-          {m.curation_reload()}
+          {m.curation_reload({}, options)}
         </Button>
       </div>
     ) : (
@@ -341,6 +344,7 @@ function StandalonePresentationViewEditor({
   observedSession = { state: 'unknown' },
   preview,
 }: PresentationViewEditorProps) {
+  const options = presentationMessageOptions(locale);
   const publications = useRef(new Map<string, RetainedPublication>());
   const [lifecycle, setLifecycle] = useState<EditorLifecycle>(() => ({
     identity: null,
@@ -457,14 +461,14 @@ function StandalonePresentationViewEditor({
     return !initial.ok ? failureView(initial) : failureView({ ok: false, reason: 'forbidden' });
   if (!currentAdmission) {
     if (!needsRead) return !initial.ok ? failureView(initial) : failureView({ ok: false, reason: 'unavailable' });
-    return <p role="status">{m.curation_loading()}</p>;
+    return <p role="status">{m.curation_loading({}, options)}</p>;
   }
   if (!currentAdmission.ok)
     return currentAdmission.reason === 'unavailable' && needsRead ? (
       <div className="space-y-4">
         {failureView(currentAdmission)}
         <Button className={editorControlClass} onClick={retryAdmission}>
-          {m.curation_reload()}
+          {m.curation_reload({}, options)}
         </Button>
       </div>
     ) : (
@@ -582,15 +586,21 @@ function AdmittedPresentationViewEditor({
     setOwned(setMessage, '');
     setOwned(setGeneration, (value) => value + 1);
   }, [initialVersion]);
+  const options = presentationMessageOptions(locale);
   const navigationGuard = (
-    <CurationNavigationGuard dirty={dirty} retainedPublication={pendingPublication} fallbackFocus={pageRegion} />
+    <CurationNavigationGuard
+      dirty={dirty}
+      retainedPublication={pendingPublication}
+      fallbackFocus={pageRegion}
+      locale={locale}
+    />
   );
-  const viewNames = presentationViewNames();
+  const viewNames = presentationViewNames(locale);
   const scopeNames = {
-    generic: m.curation_generic(),
-    base: m.curation_base(),
-    type: m.curation_type(),
-    route: m.curation_route(),
+    generic: m.curation_generic({}, options),
+    base: m.curation_base({}, options),
+    type: m.curation_type({}, options),
+    route: m.curation_route({}, options),
   };
   const templateLabel = (template: Template) =>
     template.key === null ? scopeNames.generic : `${scopeNames[template.scope]}: ${template.key}`;
@@ -610,7 +620,12 @@ function AdmittedPresentationViewEditor({
   if (admissionFailure)
     return (
       <>
-        <CurationNavigationGuard dirty={false} retainedPublication={pendingPublication} fallbackFocus={pageRegion} />
+        <CurationNavigationGuard
+          dirty={false}
+          retainedPublication={pendingPublication}
+          fallbackFocus={pageRegion}
+          locale={locale}
+        />
         <CurationFailureNotice failure={admissionFailure} />
       </>
     );
@@ -623,10 +638,10 @@ function AdmittedPresentationViewEditor({
           ? m.curation_correction_target({
               template: templateLabel(target.template),
               view: viewNames[target.view],
-              component: target.component?.type ?? m.curation_page_settings(),
+              component: target.component?.type ?? m.curation_page_settings({}, options),
               field: target.label,
-            })
-          : m.curation_correction_unknown();
+            }, options)
+          : m.curation_correction_unknown({}, options);
       },
       correct(pointer: string) {
         if (!isCurrent() || !draft || busy) return;
@@ -638,11 +653,11 @@ function AdmittedPresentationViewEditor({
           setMessage,
           target
             ? source && JSON.stringify(source) !== JSON.stringify(draft.profile)
-              ? m.curation_correction_later()
-              : m.curation_correction_help()
+              ? m.curation_correction_later({}, options)
+              : m.curation_correction_help({}, options)
             : original
-              ? m.curation_correction_missing()
-              : m.curation_correction_unknown(),
+              ? m.curation_correction_missing({}, options)
+              : m.curation_correction_unknown({}, options),
         );
         if (target)
           setOwned(
@@ -689,7 +704,7 @@ function AdmittedPresentationViewEditor({
         setOwned(setCurrent, next);
         setOwned(setDraft, presentationDraft(next));
         setOwned(setGeneration, (value) => value + 1);
-        setOwned(setMessage, m.curation_reloaded());
+        setOwned(setMessage, m.curation_reloaded({}, options));
       } else if (next.reason === 'signed-out') {
         setOwned(setCurrent, next);
         setOwned(setDraft, null);
@@ -797,7 +812,7 @@ function AdmittedPresentationViewEditor({
     setOwned(setEditorOpen, true);
     setOwned(setKey, '');
     setOwned(setFailure, null);
-    setOwned(setMessage, m.curation_added());
+    setOwned(setMessage, m.curation_added({}, options));
   }
 
   function published(confirmation: PublicationConfirmation) {
@@ -836,7 +851,7 @@ function AdmittedPresentationViewEditor({
         {navigationGuard}
         <CurationFailureNotice failure={failure ?? (current.ok ? { ok: false, reason: 'unavailable' } : current)} />
         <Button className={editorControlClass} disabled={busy} onClick={() => void reload()}>
-          {m.curation_reload()}
+          {m.curation_reload({}, options)}
         </Button>
       </div>
     );
@@ -849,7 +864,7 @@ function AdmittedPresentationViewEditor({
   const editorKey = selectionKey(selection);
   const loading = (
     <p className="p-4" role="status">
-      {m.curation_loading()}
+      {m.curation_loading({}, options)}
     </p>
   );
 
@@ -862,22 +877,22 @@ function AdmittedPresentationViewEditor({
     >
       {navigationGuard}
       <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">{m.curation_heading()}</h1>
-        <p className="text-muted-foreground">{m.presentation_editor_draft_summary()}</p>
-        <p className="text-sm text-muted-foreground">{m.curation_instructions()}</p>
+        <h1 className="text-3xl font-semibold tracking-tight">{m.curation_heading({}, options)}</h1>
+        <p className="text-muted-foreground">{m.presentation_editor_draft_summary({}, options)}</p>
+        <p className="text-sm text-muted-foreground">{m.curation_instructions({}, options)}</p>
         <p role="status" className="text-sm">
           {invalidPublication && pendingPublication
             ? laterChanges && dirty
-              ? m.curation_invalid_later()
-              : m.curation_invalid_retained()
+              ? m.curation_invalid_later({}, options)
+              : m.curation_invalid_retained({}, options)
             : dirty
-              ? m.curation_unsaved()
-              : m.curation_saved()}
+              ? m.curation_unsaved({}, options)
+              : m.curation_saved({}, options)}
         </p>
         <details className="text-sm">
-          <summary className={editorDisclosureClass}>{m.presentation_editor_saved_version_details()}</summary>
+          <summary className={editorDisclosureClass}>{m.presentation_editor_saved_version_details({}, options)}</summary>
           <p className="mt-2 break-all font-mono">
-            {m.presentation_editor_version_reference({ head: saved.head, digest: saved.digest })}
+            {m.presentation_editor_version_reference({ head: saved.head, digest: saved.digest }, options)}
           </p>
         </details>
       </header>
@@ -909,7 +924,7 @@ function AdmittedPresentationViewEditor({
             setOwned(setDraft, (value) => value && reviewPresentationDraft(value, active, choice));
             if (choice === 'discard') setOwned(setGeneration, (value) => value + 1);
             setOwned(setFailure, null);
-            setOwned(setMessage, choice === 'keep' ? m.curation_reconciled() : m.curation_discarded());
+            setOwned(setMessage, choice === 'keep' ? m.curation_reconciled({}, options) : m.curation_discarded({}, options));
           }}
         />
       </div>
@@ -921,7 +936,7 @@ function AdmittedPresentationViewEditor({
               disabled={!dirty || unresolvedPublication || (invalidPublication && !laterChanges)}
               onClick={() => void publish()}
             >
-              {m.curation_publish()}
+              {m.curation_publish({}, options)}
             </Button>
           )}
           <Button
@@ -930,7 +945,7 @@ function AdmittedPresentationViewEditor({
             disabled={!dirty}
             onClick={() => isCurrent() && setOwned(setConfirm, 'discard')}
           >
-            {m.curation_view_discard()}
+            {m.curation_view_discard({}, options)}
           </Button>
           <Button
             className={editorControlClass}
@@ -939,16 +954,16 @@ function AdmittedPresentationViewEditor({
               isCurrent() && (!pendingPublication && dirty ? setOwned(setConfirm, 'reload') : void reload())
             }
           >
-            {m.curation_reload()}
+            {m.curation_reload({}, options)}
           </Button>
         </div>
         <section
           className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4"
-          aria-label={m.curation_templates()}
+          aria-label={m.curation_templates({}, options)}
         >
           <div className="grid min-w-0 gap-4 sm:grid-cols-2">
             <Field className="min-w-0">
-              <FieldLabel htmlFor={`${formId}-template`}>{m.curation_template()}</FieldLabel>
+              <FieldLabel htmlFor={`${formId}-template`}>{m.curation_template({}, options)}</FieldLabel>
               <NativeSelect
                 id={`${formId}-template`}
                 className="w-full min-w-0 max-w-full"
@@ -984,12 +999,12 @@ function AdmittedPresentationViewEditor({
                   variant="outline"
                   onClick={() => isCurrent() && setOwned(setRemoveConfirm, { ...removableTemplate })}
                 >
-                  {m.curation_remove()}
+                  {m.curation_remove({}, options)}
                 </Button>
               )}
             </Field>
             <Field className="min-w-0">
-              <FieldLabel htmlFor={`${formId}-view`}>{m.curation_view()}</FieldLabel>
+              <FieldLabel htmlFor={`${formId}-view`}>{m.curation_view({}, options)}</FieldLabel>
               <NativeSelect
                 id={`${formId}-view`}
                 className="w-full min-w-0 max-w-full"
@@ -1022,8 +1037,8 @@ function AdmittedPresentationViewEditor({
             onReset={resetCompanion}
           />
           <details className="text-sm">
-            <summary className={editorDisclosureClass}>{m.presentation_editor_resolver_details()}</summary>
-            <p className="mt-2 text-muted-foreground">{m.curation_fallback()}</p>
+            <summary className={editorDisclosureClass}>{m.presentation_editor_resolver_details({}, options)}</summary>
+            <p className="mt-2 text-muted-foreground">{m.curation_fallback({}, options)}</p>
           </details>
         </section>
         {editorOpen ? (
@@ -1031,7 +1046,7 @@ function AdmittedPresentationViewEditor({
             ref={editorRegion}
             tabIndex={-1}
             className="min-w-0 space-y-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label={m.curation_editor()}
+            aria-label={m.curation_editor({}, options)}
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="min-w-0 flex-1 font-semibold [overflow-wrap:anywhere]">
@@ -1042,7 +1057,7 @@ function AdmittedPresentationViewEditor({
                 variant="outline"
                 onClick={() => isCurrent() && setOwned(setEditorOpen, false)}
               >
-                {m.curation_close()}
+                {m.curation_close({}, options)}
               </Button>
             </div>
             <div
@@ -1086,17 +1101,17 @@ function AdmittedPresentationViewEditor({
             variant="outline"
             onClick={() => isCurrent() && setOwned(setEditorOpen, true)}
           >
-            {selection.template.scope}: {selection.template.key ?? m.curation_generic()}
+            {selection.template.scope}: {selection.template.key ?? m.curation_generic({}, options)}
           </Button>
         )}
         <form className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4" onSubmit={addTemplate}>
-          <h2 className="font-semibold">{m.curation_add()}</h2>
+          <h2 className="font-semibold">{m.curation_add({}, options)}</h2>
           <p id={`${formId}-add-hint`} className="text-sm text-muted-foreground">
-            {m.curation_add_hint()}
+            {m.curation_add_hint({}, options)}
           </p>
           <div className="grid min-w-0 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
             <Field className="min-w-0">
-              <FieldLabel htmlFor={`${formId}-scope`}>{m.curation_scope()}</FieldLabel>
+              <FieldLabel htmlFor={`${formId}-scope`}>{m.curation_scope({}, options)}</FieldLabel>
               <NativeSelect
                 id={`${formId}-scope`}
                 className="w-full min-w-0 max-w-full"
@@ -1109,7 +1124,7 @@ function AdmittedPresentationViewEditor({
               </NativeSelect>
             </Field>
             <Field className="min-w-0">
-              <FieldLabel htmlFor={`${formId}-key`}>{m.curation_key()}</FieldLabel>
+              <FieldLabel htmlFor={`${formId}-key`}>{m.curation_key({}, options)}</FieldLabel>
               <Input
                 id={`${formId}-key`}
                 aria-describedby={key ? `${formId}-add-hint ${formId}-key-value` : `${formId}-add-hint`}
@@ -1125,7 +1140,7 @@ function AdmittedPresentationViewEditor({
               )}
             </Field>
             <Button className={`${editorControlClass} w-full sm:mt-7 sm:w-auto`} type="submit" variant="outline">
-              {m.curation_add()}
+              {m.curation_add({}, options)}
             </Button>
           </div>
         </form>
@@ -1139,11 +1154,11 @@ function AdmittedPresentationViewEditor({
         {removeConfirm && (
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>{m.curation_remove_title({ template: templateLabel(removeConfirm) })}</AlertDialogTitle>
-              <AlertDialogDescription>{m.curation_remove_warning()}</AlertDialogDescription>
+              <AlertDialogTitle>{m.curation_remove_title({ template: templateLabel(removeConfirm) }, options)}</AlertDialogTitle>
+              <AlertDialogDescription>{m.curation_remove_warning({}, options)}</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className={editorControlClass}>{m.action_cancel()}</AlertDialogCancel>
+              <AlertDialogCancel className={editorControlClass}>{m.action_cancel({}, options)}</AlertDialogCancel>
               <AlertDialogAction
                 className={editorControlClass}
                 onClick={() => {
@@ -1155,7 +1170,7 @@ function AdmittedPresentationViewEditor({
                   setOwned(setRemoveConfirm, null);
                 }}
               >
-                {m.curation_remove()}
+                {m.curation_remove({}, options)}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -1169,13 +1184,13 @@ function AdmittedPresentationViewEditor({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{m.curation_discard_title()}</AlertDialogTitle>
+            <AlertDialogTitle>{m.curation_discard_title({}, options)}</AlertDialogTitle>
             <AlertDialogDescription>
-              {confirm === 'reload' ? m.curation_reload_warning() : m.curation_discard_warning()}
+              {confirm === 'reload' ? m.curation_reload_warning({}, options) : m.curation_discard_warning({}, options)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className={editorControlClass}>{m.curation_keep()}</AlertDialogCancel>
+            <AlertDialogCancel className={editorControlClass}>{m.curation_keep({}, options)}</AlertDialogCancel>
             <AlertDialogAction
               className={editorControlClass}
               onClick={() => {
@@ -1186,12 +1201,12 @@ function AdmittedPresentationViewEditor({
                   setOwned(setGeneration, (value) => value + 1);
                   setOwned(setCorrection, null);
                   setOwned(setFailure, null);
-                  setOwned(setMessage, m.curation_view_discarded());
+                  setOwned(setMessage, m.curation_view_discarded({}, options));
                 }
                 setOwned(setConfirm, null);
               }}
             >
-              {confirm === 'reload' ? m.curation_discard_reload() : m.curation_view_discard()}
+              {confirm === 'reload' ? m.curation_discard_reload({}, options) : m.curation_view_discard({}, options)}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

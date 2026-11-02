@@ -11,11 +11,13 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../../paraglide/messages.js';
+import { presentationMessageOptions } from './curate-view-editor-messages';
 
 type GuardProps = {
   dirty: boolean;
   retainedPublication: boolean;
   fallbackFocus: RefObject<HTMLElement | null>;
+  locale?: string;
 };
 
 /** Protect only this mounted editor; publication recovery remains owned by its publication instance. */
@@ -36,7 +38,13 @@ export function CurationNavigationGuard(props: GuardProps) {
   return router ? <RouterDepartureGuard {...props} protect={protect} /> : null;
 }
 
-function RouterDepartureGuard({ protect, retainedPublication, fallbackFocus }: GuardProps & { protect: boolean }) {
+function RouterDepartureGuard({
+  protect,
+  retainedPublication,
+  fallbackFocus,
+  locale,
+}: GuardProps & { protect: boolean }) {
+  const options = presentationMessageOptions(locale);
   const returnFocus = useRef<HTMLElement | null>(null);
   const stayButton = useRef<HTMLButtonElement>(null);
   const resolved = useRef(false);
@@ -99,15 +107,15 @@ function RouterDepartureGuard({ protect, retainedPublication, fallbackFocus }: G
         }
       >
         <AlertDialogHeader>
-          <AlertDialogTitle>{m.curation_leave_title()}</AlertDialogTitle>
+          <AlertDialogTitle>{m.curation_leave_title({}, options)}</AlertDialogTitle>
           <AlertDialogDescription>
-            {retainedPublication ? m.curation_leave_recovery() : m.curation_leave_warning()}
+            {retainedPublication ? m.curation_leave_recovery({}, options) : m.curation_leave_warning({}, options)}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel ref={stayButton}>{m.curation_stay()}</AlertDialogCancel>
+          <AlertDialogCancel ref={stayButton}>{m.curation_stay({}, options)}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={() => resolve(true)}>
-            {m.curation_leave()}
+            {m.curation_leave({}, options)}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
