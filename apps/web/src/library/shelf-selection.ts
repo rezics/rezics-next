@@ -4,6 +4,9 @@ import type { SubjectLabelMutationInput } from './subject-labels.ts';
 
 export const shelfSelectionLimit = 100;
 export type ShelfStateIntent = LibraryChangeInput & { revision: number };
+export type ShelfSelectionCandidate = Pick<PersonalLibraryEntry, 'subjectId' | 'stateOptions'> & {
+  subject: { id: string } | null;
+};
 export type ShelfOutcome = {
   subjectId: string;
   title: string;
@@ -40,12 +43,12 @@ export function matchesShelfLabelIntent(
   );
 }
 
-export function selectableEntry(entry: PersonalLibraryEntry): boolean {
+export function selectableEntry(entry: ShelfSelectionCandidate): boolean {
   return entry.subject !== null && !!entry.stateOptions?.some((option) => libraryEntryStateWrite(option.id));
 }
 
 /** Exact IDs and visible meanings must agree across every selected current profile. */
-export function commonShelfStates(entries: PersonalLibraryEntry[]): LibraryStateChoice[] {
+export function commonShelfStates(entries: readonly ShelfSelectionCandidate[]): LibraryStateChoice[] {
   if (!entries.length || entries.some((entry) => !selectableEntry(entry))) return [];
   return (entries[0]!.stateOptions ?? []).filter(
     (choice, index, choices) =>
