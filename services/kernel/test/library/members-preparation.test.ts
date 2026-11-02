@@ -17,7 +17,11 @@ afterAll(async () => {
 test('mixed admission at quota returns live reused episodes without rewriting their LRU time', async () => {
   const f = await native.fixture();
   for (const start of [0, 16])
-    await f.store.reserve(f.actor, f.collectionId, Array.from({ length: 16 }, (_, i) => definition(start + i)));
+    await f.store.reserve(
+      f.actor,
+      f.collectionId,
+      Array.from({ length: 16 }, (_, i) => definition(start + i)),
+    );
   const initial = (await native.rows(f.owner)).sort(
     (a, b) =>
       new Date(a.last_read_at).getTime() - new Date(b.last_read_at).getTime() ||
@@ -44,7 +48,10 @@ test('mixed admission at quota returns live reused episodes without rewriting th
   expect(result.episodes.slice(0, 2).map((e) => e.locator.episodeId)).toEqual(reused.map((r) => r.episode_id));
   expect(result.intent!.input.episodes).toHaveLength(2);
   expect(result.intent!.input.cleanup.map((e) => e.episodeId).sort()).toEqual(
-    initial.slice(2, 4).map((r) => r.episode_id).sort(),
+    initial
+      .slice(2, 4)
+      .map((r) => r.episode_id)
+      .sort(),
   );
   const saved = await native.rows(f.owner);
   expect(saved).toHaveLength(98);
