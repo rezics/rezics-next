@@ -41,6 +41,8 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 - A blocker is only one of these: two requirements that cannot both hold (quote both), or a tool or access failure
   that persists after two retries (quote the error line). Missing authority, a missing receipt and unfinished work
   are not blockers.
+- On dev, finished and committed work whose checks cannot run because the shared check infrastructure fails is a
+  success: name each check that did not run and its error line. Dev is verified after the merge.
 - If the work does not fit in one attempt, land a coherent working part and write the remainder as a continuation
   brief.
 - Never ask a human from an unattended session.
