@@ -4348,5 +4348,7 @@
   "library_progress_history_reader_changes_page_empty": "此页没有进度变更记录。",
   "library_progress_history_reader_units_page_empty": "此页没有已完成的单位。",
   "library_dynamic_page_reader_empty": "此页没有成员。",
-  "library_dynamic_page_reader_first_page": "成员首页"
+  "library_dynamic_page_reader_first_page": "成员首页",
+  "space_setup_details_heading": "了解更多设置说明",
+  "space_setup_details_name_unavailable": "名称暂不可用"
 }

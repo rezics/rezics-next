@@ -4347,5 +4347,7 @@
   "library_progress_history_reader_changes_page_empty": "此頁沒有進度變更紀錄。",
   "library_progress_history_reader_units_page_empty": "此頁沒有已完成的單位。",
   "library_dynamic_page_reader_empty": "此頁沒有成員。",
-  "library_dynamic_page_reader_first_page": "成員首頁"
+  "library_dynamic_page_reader_first_page": "成員首頁",
+  "space_setup_details_heading": "進一步瞭解設定",
+  "space_setup_details_name_unavailable": "名稱暫不可用"
 }

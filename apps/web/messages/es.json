@@ -4347,5 +4347,7 @@
   "library_progress_history_reader_changes_page_empty": "No hay cambios de progreso en esta página.",
   "library_progress_history_reader_units_page_empty": "No hay unidades completadas en esta página.",
   "library_dynamic_page_reader_empty": "No hay elementos en esta página.",
-  "library_dynamic_page_reader_first_page": "Primera página de elementos"
+  "library_dynamic_page_reader_first_page": "Primera página de elementos",
+  "space_setup_details_heading": "Más sobre la configuración",
+  "space_setup_details_name_unavailable": "Nombre no disponible"
 }

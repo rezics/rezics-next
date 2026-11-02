@@ -314,3 +314,68 @@ export const Created: Story = {
     await expect(view.queryByRole('button', { name: m.space_setup_create_board() })).toBeNull();
   },
 };
+
+// Illustrative display text over the existing transport fixtures; no new recording or native proof.
+const longTitle = 'A community for reading together across languages — ' + 'ReadingWithoutABreak'.repeat(12);
+export const LongSavedSummary: Story = {
+  args: {
+    initial: { ...recorded, space: { ...recorded.space!, title: longTitle } },
+    transport: boundary(503, recorded),
+  },
+  render,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getByRole('heading', { level: 3, name: longTitle })).toBeVisible();
+    const disclosure = view.getByText(m.space_setup_details_heading());
+    view.getByRole('button', { name: m.space_setup_identity() }).focus();
+    await userEvent.tab();
+    await expect(disclosure).toHaveFocus();
+    await expect(disclosure.closest('details')).not.toHaveAttribute('open');
+    await userEvent.click(disclosure);
+    await expect(view.getByText(m.space_setup_identity_hint())).toBeVisible();
+    await expect(view.getByText(m.space_setup_saved_hint())).toBeVisible();
+    await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth);
+  },
+};
+export const LongResult: Story = {
+  args: Rest.args,
+  render: () => journeyRender(),
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await reachRealm(view);
+    await userEvent.click(view.getByRole('button', { name: m.space_setup_create_realm() }));
+    await userEvent.click(await view.findByRole('radio', { name: 'Discussion' }));
+    await userEvent.click(view.getByRole('button', { name: m.space_setup_save_scheme() }));
+    await view.findByRole('button', { name: m.space_setup_create_board() });
+    await userEvent.type(view.getByRole('textbox', { name: m.space_setup_title() }), longTitle);
+    await userEvent.click(await view.findByRole('radio', { name: 'Introductions' }));
+    await userEvent.click(view.getByRole('button', { name: m.space_setup_create_board() }));
+    await expect(await view.findByRole('heading', { level: 3, name: longTitle })).toBeVisible();
+    const result = view.getByRole('article', { name: m.space_setup_complete() });
+    await expect(within(result).getByText(m.space_setup_visibility())).toBeVisible();
+    const open = view.getByRole('link', { name: m.space_setup_open_board() });
+    const home = view.getByRole('link', { name: m.space_setup_home() });
+    open.focus();
+    await expect(open).toHaveFocus();
+    await userEvent.tab();
+    await expect(home).toHaveFocus();
+    for (const control of [open, home]) {
+      await expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    }
+    await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth);
+  },
+};
+export const LongSavedSummaryRtl: Story = {
+  ...LongSavedSummary,
+  render: (args) => (
+    <PatternStory visitor="Signed In" path="/realms/new">
+      <div dir="rtl" className="mx-auto max-w-5xl p-4 sm:p-8">
+        <SpaceSetupForm {...args} />
+      </div>
+    </PatternStory>
+  ),
+};
+export const LongResultRtl: Story = {
+  ...LongResult,
+  render: () => <div dir="rtl">{journeyRender()}</div>,
+};

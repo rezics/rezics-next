@@ -12,6 +12,8 @@ import {
 import { Check, ArrowRight, ArrowLeft, MapPin, Users, LayoutList, MessageSquare } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { ListRowControl } from '@rezics/ui/list-row';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { NativeSelect } from '@rezics/ui/shadcn/native-select';
@@ -70,6 +72,16 @@ function problemText(problem: SetupFailure) {
       : problem.reason === 'invalid'
         ? m.space_setup_invalid()
         : m.space_setup_unavailable();
+}
+function SetupDetails({ children }: { children: ReactNode }) {
+  return (
+    <details className="min-w-0 text-sm text-muted-foreground">
+      <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        {m.space_setup_details_heading()}
+      </summary>
+      <p className="mt-2 leading-relaxed">{children}</p>
+    </details>
+  );
 }
 function TextField({
   label,
@@ -478,7 +490,7 @@ function SpaceSetupFormVisit({
     return (
       <Button type="button" disabled={locked} onClick={() => advance(next)}>
         {m.space_setup_continue()}
-        <ArrowRight aria-hidden="true" />
+        <ArrowRight className="shrink-0 rtl:rotate-180" aria-hidden="true" />
       </Button>
     );
   }
@@ -546,10 +558,13 @@ function SpaceSetupFormVisit({
       </div>
     );
   return (
-    <div className="space-y-6" aria-busy={busy}>
+    <div
+      className="min-w-0 space-y-6 [overflow-wrap:anywhere] [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:h-auto [&_button]:whitespace-normal [&_button]:text-start [&_input]:min-w-0 [&_select]:min-w-0 [&_p]:text-start [&_summary]:min-h-11 [&_summary]:content-center"
+      aria-busy={busy}
+    >
       <p className="max-w-2xl text-base leading-relaxed text-muted-foreground">{m.space_setup_journey_intro()}</p>
       <nav aria-label={m.space_setup_steps()}>
-        <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 [&>li]:min-w-0">
           {steps.map((label, index) => {
             const Icon = icons[index] ?? MapPin;
             return (
@@ -559,14 +574,14 @@ function SpaceSetupFormVisit({
                   disabled={!reachable[index] || locked || paused || Boolean(boardId)}
                   aria-current={index === step ? 'step' : undefined}
                   onClick={() => advance(index)}
-                  className="flex min-h-14 w-full items-center gap-2 rounded-xl border border-border px-3 py-3 text-start text-sm font-medium aria-[current=step]:border-primary aria-[current=step]:bg-primary/5 aria-[current=step]:text-primary disabled:opacity-50"
+                  className="flex min-h-14 min-w-0 w-full items-center gap-2 rounded-xl border border-border px-3 py-3 text-start text-sm font-medium aria-[current=step]:border-primary aria-[current=step]:bg-primary/5 aria-[current=step]:text-primary disabled:opacity-50"
                 >
                   {completed[index] ? (
                     <Check className="size-4 shrink-0" aria-hidden="true" />
                   ) : (
                     <Icon className="size-4 shrink-0" aria-hidden="true" />
                   )}
-                  <span>{label}</span>
+                  <span className="min-w-0">{label}</span>
                 </button>
               </li>
             );
@@ -574,7 +589,7 @@ function SpaceSetupFormVisit({
         </ol>
       </nav>
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
-        <section className="min-w-0 rounded-2xl border border-border bg-card p-5 sm:p-7" aria-labelledby={titleId}>
+        <section className="min-w-0" aria-labelledby={titleId}>
           <div className="mb-6 space-y-2">
             <p className="text-xs font-medium tracking-wide text-muted-foreground">
               {m.space_setup_step_number({ current: step + 1, total: steps.length })}
@@ -582,19 +597,21 @@ function SpaceSetupFormVisit({
             <h2 ref={heading} tabIndex={-1} id={titleId} className="text-2xl font-semibold tracking-tight outline-none">
               {boardId ? m.space_setup_complete() : paused ? m.space_setup_paused() : steps[step]}
             </h2>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              {boardId
-                ? m.space_setup_created_hint()
-                : paused
-                  ? m.space_setup_paused_hint()
-                  : step === 0
-                    ? m.space_setup_identity_hint()
-                    : step === 1
-                      ? m.space_setup_realm_hint()
-                      : step === 2
-                        ? m.space_setup_scheme_hint()
-                        : m.space_setup_board_hint()}
-            </p>
+            <div className="text-sm leading-relaxed text-muted-foreground">
+              {boardId ? (
+                <p>{m.space_setup_created_hint()}</p>
+              ) : paused ? (
+                <p>{m.space_setup_paused_hint()}</p>
+              ) : step === 0 ? (
+                <SetupDetails>{m.space_setup_identity_hint()}</SetupDetails>
+              ) : step === 1 ? (
+                <SetupDetails>{m.space_setup_realm_hint()}</SetupDetails>
+              ) : step === 2 ? (
+                <p>{m.space_setup_scheme_hint()}</p>
+              ) : (
+                <p>{m.space_setup_board_hint()}</p>
+              )}
+            </div>
           </div>
           {problem ? (
             <div className="mb-6 space-y-3 rounded-xl border border-border bg-muted p-4" role="alert">
@@ -616,15 +633,51 @@ function SpaceSetupFormVisit({
           ) : null}
           {boardId ? (
             <div role="status" className="space-y-4">
-              <p className="font-medium">{boardTitle}</p>
-              <Link
-                to="/boards/$id"
-                params={{ id: boardId }}
-                className="inline-flex min-h-11 items-center gap-2 font-medium text-primary underline underline-offset-4"
-              >
-                {m.space_setup_open_board()}
-                <ArrowRight className="size-4" aria-hidden="true" />
-              </Link>
+              <ContentItemFrame className="min-w-0 space-y-4 py-3 sm:py-4" aria-label={m.space_setup_complete()}>
+                <ContentItemHeading level={3} className="text-xl font-semibold leading-snug">
+                  {boardTitle}
+                </ContentItemHeading>
+                <dl className="grid min-w-0 gap-4 text-sm sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">{m.space_setup_space()}</dt>
+                    <dd className="mt-1 font-medium">{space?.title}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">{m.space_setup_realm()}</dt>
+                    <dd className="mt-1 font-medium">{realm?.title}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">{m.space_setup_context_label()}</dt>
+                    <dd className="mt-1 font-medium">
+                      {contextState.current?.choice?.label ?? m.space_setup_details_name_unavailable()}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">{m.space_setup_concept_label()}</dt>
+                    <dd className="mt-1 font-medium">{concept?.label ?? m.space_setup_details_name_unavailable()}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">{m.space_setup_visibility()}</dt>
+                    <dd className="mt-1 font-medium">
+                      {boardVisibility === 'published'
+                        ? m.space_setup_public()
+                        : boardVisibility === 'protected'
+                          ? m.space_setup_protected()
+                          : m.space_setup_draft()}
+                    </dd>
+                  </div>
+                </dl>
+                <ListRowControl className="flex min-w-0 flex-wrap gap-2" data-content-item-slot="actions">
+                  <Link
+                    to="/boards/$id"
+                    params={{ id: boardId }}
+                    className="inline-flex min-h-11 max-w-full items-center gap-2 font-medium text-primary underline underline-offset-4"
+                  >
+                    {m.space_setup_open_board()}
+                    <ArrowRight className="size-4 shrink-0 rtl:rotate-180" aria-hidden="true" />
+                  </Link>
+                </ListRowControl>
+              </ContentItemFrame>
             </div>
           ) : paused ? (
             <Button onClick={() => setPaused(false)}>{m.space_setup_resume()}</Button>
@@ -635,14 +688,17 @@ function SpaceSetupFormVisit({
                   {m.space_setup_board_choice_scheme_changed()}
                 </p>
               ) : null}
-              <fieldset disabled={locked || !loaded || !canEdit} className="space-y-5">
+              <fieldset disabled={locked || !loaded || !canEdit} className="min-w-0 space-y-5">
                 {step === 0 ? (
                   space ? (
                     <>
-                      <div className="rounded-xl bg-muted p-4">
-                        <p className="text-xs text-muted-foreground">{m.space_setup_saved_space()}</p>
-                        <p className="mt-1 break-words font-medium">{space.title}</p>
-                      </div>
+                      <ContentItemFrame className="min-w-0 space-y-2 py-3 sm:py-4">
+                        <p className="text-sm text-muted-foreground">{m.space_setup_saved_space()}</p>
+                        <ContentItemHeading level={3} className="text-lg font-semibold leading-snug">
+                          {space.title}
+                        </ContentItemHeading>
+                        <p className="text-sm leading-relaxed text-muted-foreground">{space.summary}</p>
+                      </ContentItemFrame>
                       {permitted.address ? (
                         <TextField
                           label={m.space_setup_address()}
@@ -786,10 +842,10 @@ function SpaceSetupFormVisit({
                 </div>
               ) : null}
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   {step > 0 ? (
                     <Button variant="ghost" type="button" disabled={locked} onClick={() => advance(step - 1)}>
-                      <ArrowLeft aria-hidden="true" />
+                      <ArrowLeft className="shrink-0 rtl:rotate-180" aria-hidden="true" />
                       {m.space_setup_back()}
                     </Button>
                   ) : null}
@@ -811,7 +867,7 @@ function SpaceSetupFormVisit({
                 ) : (
                   <Button type="submit" disabled={locked || !loaded || !canEdit || !commandReady || choiceMissing}>
                     {primaryLabel}
-                    <ArrowRight aria-hidden="true" />
+                    <ArrowRight className="shrink-0 rtl:rotate-180" aria-hidden="true" />
                   </Button>
                 )}
               </div>
@@ -823,59 +879,61 @@ function SpaceSetupFormVisit({
             </p>
           ) : null}
         </section>
-        <aside className="space-y-5 rounded-2xl bg-muted/50 p-5" aria-label={m.space_setup_overview()}>
-          <h2 className="text-sm font-semibold">{m.space_setup_overview()}</h2>
-          <dl className="space-y-4 text-sm">
-            <div>
-              <dt className="text-muted-foreground">{m.space_setup_space()}</dt>
-              <dd className="mt-1 break-words font-medium">
-                {space?.title || spaceTitle || m.space_setup_not_saved()}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">{m.space_setup_address()}</dt>
-              <dd className="mt-1 break-all font-medium">
-                {space?.address ? `/spaces/${space.address}` : m.space_setup_not_saved()}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">{m.space_setup_realm()}</dt>
-              <dd className="mt-1 break-words font-medium">{realm?.title || m.space_setup_not_saved()}</dd>
-            </div>
-            {realm ? (
+        <aside className="min-w-0" aria-label={m.space_setup_overview()}>
+          <ContentItemFrame as="div" className="min-w-0 space-y-5 py-3 sm:py-4">
+            <ContentItemHeading className="text-lg font-semibold">{m.space_setup_overview()}</ContentItemHeading>
+            <dl className="space-y-4 text-sm">
               <div>
-                <dt className="text-muted-foreground">{m.space_setup_visibility()}</dt>
-                <dd className="mt-1 font-medium">
-                  {realm.visibility === 'public' ? m.space_setup_public() : m.space_setup_protected()}
+                <dt className="text-muted-foreground">{m.space_setup_space()}</dt>
+                <dd className="mt-1 break-words font-medium">
+                  {space?.title || spaceTitle || m.space_setup_not_saved()}
                 </dd>
               </div>
-            ) : null}
-            {context ? (
               <div>
-                <dt className="text-muted-foreground">{m.space_setup_context_label()}</dt>
-                <dd className="mt-1 break-words font-medium">{context.label}</dd>
+                <dt className="text-muted-foreground">{m.space_setup_address()}</dt>
+                <dd className="mt-1 break-all font-medium">
+                  {space?.address ? `/spaces/${space.address}` : m.space_setup_not_saved()}
+                </dd>
               </div>
-            ) : null}
-            {scheme ? (
               <div>
-                <dt className="text-muted-foreground">{m.space_setup_scheme_label()}</dt>
-                <dd className="mt-1 break-words font-medium">{scheme.label}</dd>
+                <dt className="text-muted-foreground">{m.space_setup_realm()}</dt>
+                <dd className="mt-1 break-words font-medium">{realm?.title || m.space_setup_not_saved()}</dd>
               </div>
+              {realm ? (
+                <div>
+                  <dt className="text-muted-foreground">{m.space_setup_visibility()}</dt>
+                  <dd className="mt-1 font-medium">
+                    {realm.visibility === 'public' ? m.space_setup_public() : m.space_setup_protected()}
+                  </dd>
+                </div>
+              ) : null}
+              {context ? (
+                <div>
+                  <dt className="text-muted-foreground">{m.space_setup_context_label()}</dt>
+                  <dd className="mt-1 break-words font-medium">{context.label}</dd>
+                </div>
+              ) : null}
+              {scheme ? (
+                <div>
+                  <dt className="text-muted-foreground">{m.space_setup_scheme_label()}</dt>
+                  <dd className="mt-1 break-words font-medium">{scheme.label}</dd>
+                </div>
+              ) : null}
+            </dl>
+            <p className="border-t border-border pt-4 text-xs leading-relaxed text-muted-foreground">
+              {m.space_setup_saved_hint()}
+            </p>
+            {space?.address ? (
+              <Link
+                to="/spaces/$address"
+                params={{ address: space.address }}
+                className="inline-flex min-h-11 max-w-full items-center gap-2 text-sm font-medium text-primary underline underline-offset-4"
+              >
+                {m.space_setup_home()}
+                <ArrowRight className="size-4 shrink-0 rtl:rotate-180" aria-hidden="true" />
+              </Link>
             ) : null}
-          </dl>
-          <p className="border-t border-border pt-4 text-xs leading-relaxed text-muted-foreground">
-            {m.space_setup_saved_hint()}
-          </p>
-          {space?.address ? (
-            <Link
-              to="/spaces/$address"
-              params={{ address: space.address }}
-              className="inline-flex min-h-10 items-center gap-2 text-sm font-medium text-primary underline underline-offset-4"
-            >
-              {m.space_setup_home()}
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Link>
-          ) : null}
+          </ContentItemFrame>
         </aside>
       </div>
     </div>
