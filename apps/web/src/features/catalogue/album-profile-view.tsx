@@ -6,6 +6,7 @@ import {
 } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
+import type { Release } from '@rezics/definitions';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { useEffect, useRef, useState } from 'react';
@@ -69,14 +70,36 @@ function AlbumProfileLive({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const read = query.data?.ok ? query.data : undefined;
+  const [refreshingMetadata, setRefreshingMetadata] = useState(false);
+  // The private holder survives a retired observation; only a fresh read supplies authority.
+  const retainedRelease = useRef<Release | undefined>(undefined);
+  const metadata = useRef<Release | undefined>(undefined);
+  const metadataReloading = useRef(false);
+  const creationReady = !query.isError && !query.isFetching && !refreshingMetadata;
+  const read = query.data?.ok && (id || creationReady) ? query.data : undefined;
   const admitted = !!read?.release.types[albumType];
+  metadata.current = !id && admitted ? read?.release : undefined;
+  if (metadata.current) retainedRelease.current = metadata.current;
+  const reloadMetadata = async () => {
+    if (!lifetime.active() || metadataReloading.current || query.isFetching) return;
+    metadataReloading.current = true;
+    metadata.current = undefined;
+    setRefreshingMetadata(true);
+    try {
+      await query.refetch();
+    } finally {
+      if (lifetime.active()) {
+        metadataReloading.current = false;
+        setRefreshingMetadata(false);
+      }
+    }
+  };
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
       <header className="space-y-3">
         <PageHeading className="font-sans">{id ? m.album_edit({}, o) : m.album_title({}, o)}</PageHeading>
         {!id && <p className="max-w-prose text-muted-foreground">{m.album_grain({}, o)}</p>}
-        {read && !id && (
+        {read && admitted && !id && (
           <div className="flex flex-wrap items-center gap-3">
             <DefinitionMeaning values={read.release.types[albumType]?.labels} locale={locale} />
             <DefinitionGuideLink
@@ -110,21 +133,34 @@ function AlbumProfileLive({
           ) : (
             <EditorFailure reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} locale={locale} />
           )}
-          <Button onClick={() => void query.refetch()}>{m.correction_retry({}, o)}</Button>
+          {(id || !retainedRelease.current) && (
+            <Button onClick={() => void query.refetch()}>{m.correction_retry({}, o)}</Button>
+          )}
         </div>
       )}
-      {read && !admitted && <p role="status">{m.album_missing({}, o)}</p>}
-      {read &&
+      {read && !admitted && (
+        <div className="space-y-3">
+          <p role="status">{m.album_missing({}, o)}</p>
+          {!id && !retainedRelease.current && (
+            <Button onClick={() => void reloadMetadata()}>{m.correction_reload({}, o)}</Button>
+          )}
+        </div>
+      )}
+      {!id && retainedRelease.current && (
+        <AlbumProfileCreate
+          release={retainedRelease.current}
+          metadataCurrent={(release) => metadata.current === release}
+          onReload={reloadMetadata}
+          locale={locale}
+          transport={transport}
+          search={search}
+          enabled={session === 'signed-in'}
+        />
+      )}
+      {id &&
+        read &&
         admitted &&
-        (!id ? (
-          <AlbumProfileCreate
-            release={read.release}
-            locale={locale}
-            transport={transport}
-            search={search}
-            enabled={session === 'signed-in'}
-          />
-        ) : read.public && editors ? (
+        (read.public && editors ? (
           <AlbumCorrections
             initial={{ ...read, public: read.public, source: null }}
             locale={locale}

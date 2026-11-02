@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { act } from 'react';
 import type { FactCommand, FactsCurrent, FactResult } from '../src/features/catalogue/subject-facts';
 import type { EditorRead } from '../src/features/catalogue/statement-editor';
+import type { AlbumCommand, AlbumRead } from '../src/features/catalogue/album-profile';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 test('Album recovery retires every current surface and retains private drafts and exact unresolved proposals', async () => {
@@ -36,7 +37,7 @@ test('Album recovery retires every current surface and retains private drafts an
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { AlbumProfile } = await import('../src/features/catalogue/album-profile-view');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
-  const { albumFixture, albumId } = await import('../src/kernel/fake/catalogue-album-profile');
+  const { albumFixture, albumId, artistId } = await import('../src/kernel/fake/catalogue-album-profile');
   const { m } = await import('../src/paraglide/messages.js');
   const testing = createRequire(require.resolve('storybook/test'));
   const { within } = await import(testing.resolve('@testing-library/dom'));
@@ -193,6 +194,166 @@ test('Album recovery retires every current surface and retains private drafts an
     await show('second', 'another-viewer');
     await settle();
     expect(within(field(properties[1]!)).queryByRole('textbox')).toBeNull();
+
+    // Creation keeps its private holder independently of metadata and the created reader.
+    const creation = albumFixture();
+    creation.release.types['schema:MusicAlbum']!.labels.en = 'Original Album authority';
+    creation.release.properties['schema:inLanguage']!.labels.en = 'Original language authority';
+    const admitted: AlbumRead = { ok: true, release: creation.release, public: null };
+    let metadata: AlbumRead | Error = admitted;
+    const submitted: AlbumCommand[] = [];
+    let finishReader!: (reader: { state: 'ready'; href: string }) => void;
+    let finishCreate!: (result: { ok: true; id: string; reader: { state: 'ready'; href: string } }) => void;
+    const transport = {
+      load: async () => {
+        if (metadata instanceof Error) throw metadata;
+        return metadata;
+      },
+      create: async (command: AlbumCommand) => {
+        submitted.push(command);
+        if (submitted.length === 1) return { ok: false as const, reason: 'invalid' as const, refreshDefinitions: true };
+        if (submitted.length === 2) {
+          Object.assign(command, { credential: 'original-native-credential' });
+          return { ok: false as const, reason: 'unavailable' as const };
+        }
+        if (submitted.length === 4)
+          return new Promise<{ ok: true; id: string; reader: { state: 'ready'; href: string } }>((resolve) => {
+            finishCreate = resolve;
+          });
+        return { ok: true as const, id: albumId, reader: { state: 'unavailable' as const } };
+      },
+      read: async () =>
+        new Promise<{ state: 'ready'; href: string }>((resolve) => {
+          finishReader = resolve;
+        }),
+    };
+    const showCreation = (csrfToken = 'creation') =>
+      act(async () =>
+        root.render(
+          <QueryClientProvider client={client}>
+            <CandidateReaderBoundary
+              observed={{ state: 'signed-in', subject: 'viewer', csrfToken }}
+              address="album-create"
+            >
+              <AlbumProfile
+                locale="en"
+                session="signed-in"
+                transport={transport}
+                search={async () => [
+                  {
+                    id: artistId,
+                    title: 'Private artist',
+                    types: [creation.publicRead.related[artistId]!.type!],
+                    typeLabel: '',
+                    cover: null,
+                  },
+                ]}
+              />
+            </CandidateReaderBoundary>
+          </QueryClientProvider>,
+        ),
+      );
+    await showCreation();
+    await settle();
+    const form = host.querySelector('form')!;
+    const text = (name: string, scope = host) => within(scope).getByRole('textbox', { name }) as HTMLInputElement;
+    const type = (control: HTMLElement, value: string) => act(async () => user.type(control, value));
+    await type(text(m.catalogue_create_label()), 'Private Album');
+    await type(text(m.catalogue_create_description()), 'Private description');
+    await type(text(m.catalogue_create_aliases()), 'Private alias');
+    await click(m.catalogue_create_add_language());
+    const secondTerms = host.querySelectorAll<HTMLElement>('#album-terms fieldset')[1]!;
+    await type(text(m.catalogue_create_language(), secondTerms), 'fr');
+    await type(text(m.catalogue_create_label(), secondTerms), 'Album privé');
+    const addFact = async (id: string) => {
+      await act(async () =>
+        user.selectOptions(within(host).getByRole('combobox', { name: m.character_add_fact() }), id),
+      );
+      await click(m.correction_add());
+      return [...host.querySelectorAll<HTMLElement>('fieldset[id^="album-row-"]')].at(-1)!;
+    };
+    const scalar = await addFact('schema:inLanguage');
+    await type(text(m.correction_value(), scalar), 'fr');
+    await type(text(m.relation_citation(), scalar), 'https://private.test/citation');
+    const contributor = await addFact('schema:contributor');
+    await type(within(contributor).getByRole('combobox'), 'Private');
+    await settle();
+    await act(async () =>
+      user.click(
+        within(window.document.body as unknown as HTMLElement).getByRole('option', { name: /Private artist/ }),
+      ),
+    );
+    metadata = new Error('metadata offline');
+    await click(m.album_create());
+    await settle();
+    const retiredCreation = () => {
+      expect(host.querySelector('form')).toBe(form);
+      expect(host.textContent).not.toContain('Original Album authority');
+      expect(host.textContent).not.toContain('Original language authority');
+      expect(host.querySelector('a[href*="/catalogue/definitions"]')).toBeNull();
+      expect(host.textContent).toContain(artistId);
+      expect(host.textContent).toContain('https://private.test/citation');
+      expect(text(m.catalogue_create_label()).value).toBe('Private Album');
+      expect(text(m.catalogue_create_description()).value).toBe('Private description');
+      expect(text(m.catalogue_create_aliases()).value).toBe('Private alias');
+      expect(text(m.catalogue_create_label(), secondTerms).value).toBe('Album privé');
+    };
+    retiredCreation();
+    await click(m.catalogue_create_review_new());
+    expect((within(host).getByRole('button', { name: m.album_create() }) as HTMLButtonElement).disabled).toBe(true);
+    for (const refusal of [
+      { ok: false, reason: 'denied' },
+      { ...admitted, release: { ...creation.release, types: {} } },
+    ] as AlbumRead[]) {
+      metadata = refusal;
+      await click(m.correction_reload());
+      await settle();
+      retiredCreation();
+      expect(submitted).toHaveLength(1);
+    }
+    const fresh = structuredClone(creation.release);
+    fresh.types['schema:MusicAlbum']!.labels.en = 'Fresh Album authority';
+    fresh.types['schema:MusicAlbum']!.properties = fresh.types['schema:MusicAlbum']!.properties.filter(
+      (id) => id !== 'schema:inLanguage',
+    );
+    delete fresh.properties['schema:inLanguage'];
+    metadata = { ok: true, release: fresh, public: null };
+    await click(m.correction_reload());
+    await settle();
+    expect(host.textContent).toContain('Fresh Album authority');
+    expect(host.textContent).toContain('https://private.test/citation');
+    await click(m.album_create()); // Fresh validation rejects the retained retired fact.
+    expect(submitted).toHaveLength(1);
+    await click(m.recipe_remove_field(), host.querySelector<HTMLElement>(`#${scalar.id}`)!);
+    await click(m.album_create());
+    expect(submitted).toHaveLength(2);
+    const exact = structuredClone(submitted[1]);
+    metadata = new Error('metadata offline again');
+    await click(m.correction_reload());
+    await settle();
+    await click(m.catalogue_create_retry());
+    expect(submitted).toHaveLength(3);
+    expect(submitted[2]).toBe(submitted[1]);
+    expect(submitted[2]).toEqual(exact);
+    await click(m.catalogue_create_retry());
+    await settle(() => finishReader({ state: 'ready', href: '/en/exact-returned-reader?session=kept' }));
+    expect(within(host).getByRole('link', { name: m.catalogue_create_open() }).getAttribute('href')).toBe(
+      '/en/exact-returned-reader?session=kept',
+    );
+    expect(submitted).toHaveLength(3);
+    metadata = admitted;
+    await showCreation('new-csrf-session');
+    await settle();
+    expect(text(m.catalogue_create_label()).value).toBe('');
+    expect(host.textContent).not.toContain(artistId);
+    await type(text(m.catalogue_create_label()), 'Retired private Album');
+    await click(m.album_create());
+    await showCreation('third-csrf-session');
+    await settle(() =>
+      finishCreate({ ok: true, id: albumId, reader: { state: 'ready', href: '/en/late-created-reader' } }),
+    );
+    expect(text(m.catalogue_create_label()).value).toBe('');
+    expect(host.innerHTML).not.toContain('late-created-reader');
   } finally {
     await act(async () => root.unmount());
     client.clear();

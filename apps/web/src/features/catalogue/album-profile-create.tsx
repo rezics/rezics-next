@@ -48,13 +48,17 @@ const qualifierClassName =
 export const AlbumProfileCreate = catalogueEditor(AlbumProfileCreateLive);
 
 function AlbumProfileCreateLive({
-  release: initialRelease,
+  release,
+  metadataCurrent,
+  onReload,
   locale,
   transport,
   search,
   enabled,
 }: {
   release: Release;
+  metadataCurrent: (release: Release) => boolean;
+  onReload: () => Promise<void>;
   locale: string;
   transport: AlbumTransport;
   search: EntityPickerSearch;
@@ -62,8 +66,7 @@ function AlbumProfileCreateLive({
 }) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
-  const [release, setRelease] = useState(initialRelease);
-  const [metadataFailure, setMetadataFailure] = useState(false);
+  const metadataReady = metadataCurrent(release);
   const termsId = useId();
   const nextTermId = useRef(1);
   const [terms, setTerms] = useState<(TermDraft & { id: number })[]>([
@@ -79,13 +82,14 @@ function AlbumProfileCreateLive({
   const running = useRef(false);
   const fields = albumFields(release);
   const choices = [...fields.scalar, ...fields.relations, ...fields.classifications];
-  const locked = busy || !!pending.current || !enabled || metadataFailure;
+  const locked = busy || !!pending.current || !enabled || !metadataReady;
   const definiteFailure = failure && failure.reason !== 'unavailable';
 
   async function submit() {
     if (!lifetime.active()) return;
-    if (running.current || created || !enabled || metadataFailure || (pending.current && definiteFailure)) return;
+    if (running.current || created || !enabled || (pending.current && definiteFailure)) return;
     if (!pending.current) {
+      if (!metadataCurrent(release)) return;
       const draft = albumDraft(
         release,
         terms,
@@ -108,19 +112,7 @@ function AlbumProfileCreateLive({
       else {
         setFailure(result);
         setCorrections(albumCreateCorrections(result.errors ?? [], terms, rows, release, locale, termsId));
-        if (result.refreshDefinitions) {
-          try {
-            const next = await transport.load();
-            if (!lifetime.active()) return;
-            if (next.ok && next.release.types[albumType]) {
-              setRelease(next.release);
-              setMetadataFailure(false);
-            } else setMetadataFailure(true);
-          } catch {
-            if (!lifetime.active()) return;
-            setMetadataFailure(true);
-          }
-        }
+        if (result.refreshDefinitions) await onReload();
       }
     } catch {
       if (!lifetime.active()) return;
@@ -282,6 +274,7 @@ function AlbumProfileCreateLive({
             row={row}
             index={index}
             release={release}
+            metadataReady={metadataReady}
             locale={locale}
             search={search}
             disabled={locked}
@@ -341,39 +334,18 @@ function AlbumProfileCreateLive({
           </Button>
         </fieldset>
       </section>
-      {metadataFailure && (
-        <div className="space-y-3">
-          <p role="alert">{m.album_missing({}, o)}</p>
-          <Button
-            className={actionClassName}
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={async () => {
-              if (!lifetime.active() || running.current) return;
-              running.current = true;
-              setBusy(true);
-              try {
-                const next = await transport.load();
-                if (!lifetime.active()) return;
-                if (next.ok && next.release.types[albumType]) {
-                  setRelease(next.release);
-                  setMetadataFailure(false);
-                }
-              } catch {
-                if (!lifetime.active()) return;
-                setMetadataFailure(true);
-              } finally {
-                if (!lifetime.active()) return;
-                running.current = false;
-                setBusy(false);
-              }
-            }}
-          >
-            {m.correction_reload({}, o)}
-          </Button>
-        </div>
-      )}
+      <div className="space-y-3">
+        {!metadataReady && <p role="alert">{m.album_missing({}, o)}</p>}
+        <Button
+          className={actionClassName}
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => void onReload()}
+        >
+          {m.correction_reload({}, o)}
+        </Button>
+      </div>
       {failure && (
         <div role="alert" className="space-y-3 rounded-xl border border-destructive/40 p-4">
           <p>
@@ -389,7 +361,8 @@ function AlbumProfileCreateLive({
           </p>
           {corrections.map((correction, index) => (
             <p key={index}>
-              {correction.target &&
+              {metadataReady &&
+              correction.target &&
               (terms.some((term) =>
                 ['language', 'label', 'description', 'aliases'].some(
                   (field) => correction.target === `${termsId}-${field}-${term.id}`,
@@ -408,7 +381,7 @@ function AlbumProfileCreateLive({
                     event.preventDefault();
                     if (!lifetime.active()) return;
                     // Following an invalid-field correction explicitly reviews a new command.
-                    if (failure.reason === 'invalid' && !busy && !metadataFailure) {
+                    if (failure.reason === 'invalid' && !busy && metadataCurrent(release)) {
                       flushSync(() => {
                         pending.current = null;
                         setFailure({ ...failure });
@@ -453,7 +426,7 @@ function AlbumProfileCreateLive({
       <Button
         className={actionClassName}
         type="submit"
-        disabled={busy || !enabled || metadataFailure || (!!pending.current && !!definiteFailure)}
+        disabled={busy || !enabled || (!pending.current && !metadataReady) || (!!pending.current && !!definiteFailure)}
       >
         {busy
           ? m.catalogue_create_saving({}, o)
@@ -469,6 +442,7 @@ function AlbumInitialField({
   row,
   index,
   release,
+  metadataReady,
   locale,
   search,
   disabled,
@@ -478,6 +452,7 @@ function AlbumInitialField({
   row: Row;
   index: number;
   release: Release;
+  metadataReady: boolean;
   locale: string;
   search: EntityPickerSearch;
   disabled: boolean;
@@ -488,6 +463,21 @@ function AlbumInitialField({
   const [picked, setPicked] = useState<Record<string, EntityPickerSubject>>({});
   const statement = row.statement;
   const definition = release.properties[statement.property.id];
+  // Retired metadata cannot describe private values as current. Keep the complete assertion
+  // inspectable, including qualifiers and citations, until it can be reconciled deliberately.
+  if (!metadataReady || !definition || !release.types[albumType]?.properties.includes(statement.property.id))
+    return (
+      <fieldset id={`album-row-${row.id}`} disabled={disabled} className="min-w-0 space-y-3">
+        <legend>{statement.property.id}</legend>
+        <p role="status">{m.correction_preserved({}, o)}</p>
+        <pre className="whitespace-pre-wrap break-all text-sm" dir="ltr">
+          {JSON.stringify(statement, null, 2)}
+        </pre>
+        <Button className={actionClassName} type="button" variant="ghost" onClick={remove}>
+          {m.recipe_remove_field({}, o)}
+        </Button>
+      </fieldset>
+    );
   const qualifiers = statement.qualifiers ?? [];
   const named = (id: string) => pickText(release.properties[id]?.labels ?? {}, locale).text;
   const target = (value: unknown): EntityPickerSubject[] =>

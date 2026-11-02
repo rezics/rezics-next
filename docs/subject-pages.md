@@ -50,6 +50,7 @@ require row-local removal confirmation with Cancel; surviving inputs retain thei
 submissions keep removal and editing locked to the original request.
 
 Album creation resolves rejected submitted indices to stable assertion rows and authored language controls; following an invalid correction explicitly reviews a new command, while conflicts still require Review and uncertain commands remain sealed. Unknown addresses remain inspectable without a correction link.
+Album creation freezes retained private controls and shows complete assertion snapshots while metadata is retired; explicit refresh restores only admitted definitions, keeps retired facts for deliberate removal, and leaves exact uncertain retries and created-reader recovery independent.
 Manga creation resolves rejection addresses by decoded property and assertion index to stable draft rows and
 supported inner controls; ambiguous or unsupported addresses stay at their named section with technical details,
 duplicate-language feedback targets the later row, and unavailable sessions offer a sign-in check retry.
