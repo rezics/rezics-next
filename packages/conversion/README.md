@@ -212,8 +212,9 @@ silently truncating them. The main caps are:
 
 - Bangumi: 64 KiB normalized projection, at most 64 tags, and a serialized Text
   snapshot no larger than 32 KiB.
-- VNDB: 64 KiB projection, at most 64 titles, at most 32 external links, and at
-  most 98 commands (1 identifier + 64 names + 32 URLs + 1 original language).
+- VNDB: 64 KiB projection, at most 64 titles, 64 alias lines, and 32 external
+  links; at most 162 commands (1 identifier + 64 names + 64 alternate names +
+  32 URLs + 1 original language).
 - Open Library: 2 MiB projection, at most 64 entries per collection and 64
   combined author/work relations, at most 1 MiB of unlicensed prose retained as
   metadata, and at most 100 commands.
@@ -226,7 +227,7 @@ See the source implementations for detailed field validation and limits:
 The canonical digest and source-envelope helpers are in
 [`support.ts`](src/support.ts).
 
-VNDB revision `vndb@6` cites the required native `entry_meta.revision` as
+VNDB revision `vndb@8` cites the required native `entry_meta.revision` as
 `schema:version` on every bound fact, alongside its identifier and revision URL.
 When available, `entry_meta.lastmod` is retained exactly in the sanitized source
 projection and digest, and cited as a Gregorian day-precision
@@ -260,12 +261,24 @@ empty or whitespace-only Latin values. Exact-empty acceptance is therefore a
 synthetic schema-edge requirement, not an observed source-record replay.
 The report supplies evidence; this README owns the adopted source contract.
 
-The converter at `vndb@7` now accepts this exact-empty source edge and preserves
-it in the normalized projection and data digest. Pure tests verify the name
+The converter at `vndb@8` accepts this exact-empty source edge and preserves it
+in the normalized projection and data digest. Pure tests verify the name
 omission, null distinction, digest stability, and strict invalid controls. The
 frozen native COPY acceptance verifies staged empty-cell composition and public
 bulk effects. This narrow result does not establish every discovery,
 statistics, or publication capability.
+
+### VNDB native alternate-name contract
+
+The scalar `vn.alias` field contains newline-separated alternate names. Use
+`und` for nonempty lines in bootstrap aliases and cited `schema:alternateName`
+proposals; omit empty lines and never infer from `vn.olang`. At most 64 lines are accepted,
+each under the existing 4,096-byte and 1,500-codepoint title bounds, with the
+whole projection still capped at 64 KiB. Empty cells and empty lines mean no
+alias; whitespace-only lines remain invalid. Aliases remain in the source
+digest, and bound changes/removals flow through ordinary importer reconciliation.
+The 162-command worst case fits the importer's 300-command per-record plan and
+is sent in its existing 100-command batches.
 
 ### Provider facts required for catalogue use
 

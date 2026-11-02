@@ -28,7 +28,7 @@ type Metadata = {
   num_users: number;
 };
 type GroupedRecord = {
-  vn: { id: string; olang: string; c_votecount: number; c_average: number | null };
+  vn: { id: string; olang: string; c_votecount: number; c_average: number | null; alias: string | null };
   vn_titles: Title[];
   entry_meta: Metadata;
 };
@@ -432,7 +432,7 @@ export class VndbTablesStore {
       const c_average = cells.c_average === null ? null : integer(cells.c_average, 1000);
       integer(cells.length, 5);
       integer(cells.devstatus, 2);
-      record = { id, olang, c_votecount, c_average };
+      record = { id, olang, c_votecount, c_average, alias: cells.alias };
     } else if (table === 'vn_titles') {
       child = language(cells.lang);
       check(cells.official === 't' || cells.official === 'f');

@@ -18,6 +18,11 @@ function input(latin: unknown = null, title = '港の物語') {
   };
 }
 
+function inputWithAlias(alias: unknown) {
+  const value = input('');
+  return { ...value, record: { ...value.record, vn: { ...value.record.vn, alias } } };
+}
+
 function expectInvalid(value: ReturnType<typeof input>, pointer: string) {
   try {
     convertVndb(value);
@@ -77,4 +82,41 @@ test('optional Latin and required primary title retain strict invalid controls a
   for (const invalid of [' ', '\t', '\n', '\r\n']) expectInvalid(input(invalid), '/vn_titles/0/latin');
   for (const invalid of [undefined, 7, false, {}]) expectInvalid(input(invalid), '/vn_titles/0/latin');
   for (const title of ['', '  ', null as unknown as string]) expectInvalid(input('', title), '/vn_titles/0/title');
+  expectInvalid(inputWithAlias('  '), '/vn/alias/0');
+  expectInvalid(inputWithAlias(Array.from({ length: 65 }, (_, i) => `Alias ${i}`).join('\n')), '/vn/alias');
+});
+
+test('native alias lines remain undetermined alternate names with source citations', () => {
+  const native = inputWithAlias('Harbor Watch\nSentinel Watch');
+  const bootstrap = convertVndb(native);
+  const resolved = convertVndb(native, { subjectId });
+  expect(bootstrap.normalizedRecord.vn.aliases).toEqual(['Harbor Watch', 'Sentinel Watch']);
+  expect(bootstrap.proposals[0]).toMatchObject({
+    op: 'create',
+    subject: { labels: { ja: '港の物語' }, aliases: { und: ['Harbor Watch', 'Sentinel Watch'] } },
+  });
+  const alternateNames = resolved.proposals.filter(
+    (command) => command.op === 'propose' && command.statement.property.id === 'schema:alternateName',
+  );
+  expect(alternateNames.map((command) => command.op === 'propose' ? command.statement.value : null)).toEqual([
+    { type: 'value', content: { language: 'und', text: 'Harbor Watch' } },
+    { type: 'value', content: { language: 'und', text: 'Sentinel Watch' } },
+  ]);
+  expect(alternateNames[0]).toMatchObject({
+    source: { source: 'vndb', external_id: 'v124', record_revision: '19', converter_revision },
+    statement: {
+      references: [{ parts: expect.arrayContaining([
+        { property: { id: 'wdt:P3180' }, value: { type: 'value', content: 'v124' } },
+        { property: { id: 'schema:version' }, value: { type: 'value', content: '19' } },
+      ]) }],
+    },
+  });
+  expect(resolved.digest).toBe(bootstrap.digest);
+  expect(bootstrap.digest).not.toBe(convertVndb(input('')).digest);
+  expect(bootstrap.sourceMetadata).toEqual({
+    databaseLicense: 'ODbL-1.0',
+    contentsLicense: 'LicenseRef-DbCL-1.0',
+    attribution: 'VNDB',
+  });
+  expect(checkBatchWrite({ commands: resolved.proposals })).toEqual([]);
 });

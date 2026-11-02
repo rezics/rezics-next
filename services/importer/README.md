@@ -877,6 +877,13 @@ resume publication or replace that baseline. Unchanged publication retains the
 original acquisition, while interrupted sealed work resumes with its own original
 acquisition even if a subsequent invocation supplies a different archive.
 
+The staged `vn.alias` field is newline-separated text and survives COPY
+materialization into the pure converter. Nonempty lines become undetermined
+alternate names; alias changes and removals participate in the ordinary
+importer's source digest, candidate reconciliation and durable replay. The
+converter caps a record at 64 alias lines and 162 commands; the importer sends
+those commands in its existing 100-command batches.
+
 The native materialization acceptance binds all fourteen portable table outcomes
 and the account-key CLI publication/reopen/late-invalid journey. Its local SQLite
 row, byte, execution and EQP evidence does not add canonical server growth claims.

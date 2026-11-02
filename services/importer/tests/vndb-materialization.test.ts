@@ -10,13 +10,14 @@ import { Importer, type ImporterOptions } from '../src/importer.ts';
 import { VndbInputError, VndbMaterialization } from '../src/vndb-materialization.ts';
 
 const names = ['vn.header', 'vn', 'vn_titles.header', 'vn_titles', 'entry_meta.header', 'entry_meta'];
-async function* entries(change = false, lateInvalid = false, children?: number) {
+async function* entries(change = false, lateInvalid = false, children?: number, alias?: string) {
   for (const name of [...names, ...(lateInvalid ? ['entry_meta'] : [])]) {
     let text = await readFile(
       new URL(`../../../specs/fixtures/imports/vndb-tables/db/${name}`, import.meta.url),
       'utf8',
     );
     if (change && name === 'vn_titles') text = text.replace('Sentinel Harbor', 'Changed Harbor');
+    if (alias !== undefined && name === 'vn') text = text.replace('Harbor Sentinel', alias);
     if (children !== undefined && name === 'vn_titles')
       text =
         ['en', 'de', 'ja', 'fr', 'es', 'it', 'ru', 'ko']
@@ -84,9 +85,9 @@ async function local(instrumentDatabase?: ImporterOptions['instrumentDatabase'])
     deny(value: boolean) {
       deny = value;
     },
-    async stage(change = false) {
+    async stage(change = false, alias?: string) {
       const run = facade.begin();
-      await facade.stage(run, entries(change));
+      await facade.stage(run, entries(change, false, undefined, alias));
       return run;
     },
     async reopen() {
@@ -106,7 +107,13 @@ test('materialization baseline is the actual completed RunStore row and acquisit
   try {
     const run = await f.stage();
     const grouped = f.facade.page(run, null, 1).records[0]!;
-    expect(grouped.record.vn).toEqual({ id: 'v123', olang: 'en', c_votecount: 2, c_average: 700 });
+    expect(grouped.record.vn).toEqual({
+      id: 'v123',
+      olang: 'en',
+      c_votecount: 2,
+      c_average: 700,
+      alias: 'Harbor Sentinel',
+    });
     expect((await f.facade.commit(run)).status).toBe('committed');
     const before = f.facade.baseline('v123');
     expect(before).toEqual({
@@ -172,20 +179,65 @@ test('new and late-invalid table generations cannot publish or replace a complet
   }
 });
 
-test('failed ordinary publication retains its original durable acquisition when a later invocation resumes it', async () => {
+test('native aliases survive bootstrap, bound refresh, removal and durable replay', async () => {
   const f = await local();
   try {
     const original = await f.stage();
+    const originalRow = f.facade.page(original, null, 16).records.find((row) => row.key === 'v123')!;
+    expect(originalRow.output.normalizedRecord.vn.aliases).toEqual(['Harbor Sentinel']);
+    expect(originalRow.record.vn_titles.map((title) => title.title)).toContain('Sentinel Harbor');
+    expect(originalRow.output.sourceMetadata.contentsLicense).toBe('LicenseRef-DbCL-1.0');
+    const originalDigest = originalRow.output.digest;
+    expect((await f.facade.commit(original)).status).toBe('committed');
+    const bootstrap = f.calls
+      .flatMap((request) => request.commands)
+      .find((command) => command.op === 'create' && command.source.external_id === 'v123');
+    expect(bootstrap).toMatchObject({
+      op: 'create',
+      subject: { labels: { en: 'Sentinel Harbor' }, aliases: { und: ['Harbor Sentinel'] } },
+    });
+
+    f.calls.length = 0;
     f.deny(true);
-    expect((await f.facade.commit(original)).status).toBe('bulk-failed');
-    expect(f.facade.baseline('v123')).toBeNull();
+    const changed = await f.stage(false, 'Harbor Watch\\nHarbor Guard');
+    const changedRow = f.facade.page(changed, null, 16).records.find((row) => row.key === 'v123')!;
+    expect(changedRow.record.vn.alias).toBe('Harbor Watch\nHarbor Guard');
+    expect(changedRow.output.normalizedRecord.vn.aliases).toEqual(['Harbor Watch', 'Harbor Guard']);
+    expect(changedRow.output.digest).not.toBe(originalDigest);
+    expect(changedRow.output.record_revision).toBe('7');
+    expect(changedRow.record.vn_titles.map((title) => title.title)).toContain('Sentinel Harbor');
+    expect((await f.facade.commit(changed)).status).toBe('bulk-failed');
+    const replay = structuredClone(f.calls[0]!);
+    const alternate = f.calls
+      .flatMap((request) => request.commands)
+      .find((command) => command.op === 'propose' && command.statement.property.id === 'schema:alternateName');
+    expect(alternate).toMatchObject({
+      source: { source: 'vndb', external_id: 'v123', record_revision: '7', converter_revision: 'vndb@8' },
+      statement: {
+        value: { type: 'value', content: { language: 'und', text: 'Harbor Watch' } },
+        references: [
+          {
+            parts: expect.arrayContaining([
+              { property: { id: 'wdt:P3180' }, value: { type: 'value', content: 'v123' } },
+              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://vndb.org/v123.7' } },
+              { property: { id: 'schema:version' }, value: { type: 'value', content: '7' } },
+            ]),
+          },
+        ],
+      },
+    });
+
     await f.reopen();
     f.deny(false);
-    // The ordinary importer finishes the earlier sealed run before this newer
-    // supplied generation. Its completed pointer must still name the old archive.
-    const newer = await f.stage(true);
-    expect((await f.facade.commit(newer)).status).toBe('committed');
-    expect(f.facade.baseline('v123')!.run).toBe(original);
+    f.calls.length = 0;
+    const removed = await f.stage(false, '\\N');
+    expect((await f.facade.commit(removed)).status).toBe('committed');
+    expect(f.calls[0]).toEqual(replay);
+    expect(f.facade.baseline('v123')!.run).toBe(changed);
+    f.calls.length = 0;
+    expect((await f.facade.commit(removed)).status).toBe('committed');
+    expect(f.facade.baseline('v123')!.run).toBe(removed);
+    expect(f.calls.flatMap((request) => request.commands).some((command) => command.op === 'retract')).toBe(true);
   } finally {
     await f.close();
   }
