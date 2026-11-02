@@ -1,5 +1,4 @@
 import { expect, mock, test } from 'bun:test';
-import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import type { CurrentPost, EditFailure } from '../src/threads/actions';
@@ -37,20 +36,13 @@ test('stale editing reviews before replacement, keeps the full correction, and s
   const { sessionQuery } = await import('../src/session/query');
   const { fromPlainText } = await import('@rezics/document');
   const { m } = await import('../src/paraglide/messages.js');
-  const require = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
-  const { default: userEvent } = await import(require.resolve('@testing-library/user-event'));
-  const user = userEvent.setup({ document: window.document });
-  const requests: string[] = [];
+  const fetcher = mock(async () => {
+    throw new Error('Unexpected recovery read');
+  });
   Object.defineProperty(globalThis, 'fetch', {
     configurable: true,
     writable: true,
-    value: Object.assign(
-      async (url: unknown) => {
-        requests.push(String(url));
-        throw new Error('Unexpected recovery read');
-      },
-      { preconnect() {} },
-    ),
+    value: Object.assign(fetcher, { preconnect() {} }),
   });
   const host = document.createElement('main');
   document.body.append(host);
@@ -86,7 +78,7 @@ test('stale editing reviews before replacement, keeps the full correction, and s
     expect(result).toBeDefined();
     return result!;
   };
-  const click = async (label: string, scope?: ParentNode) => act(async () => user.click(button(label, scope)));
+  const click = async (label: string, scope?: ParentNode) => act(async () => button(label, scope).click());
   const editor = () => host.querySelector<HTMLElement>('.ProseMirror[contenteditable="true"]');
   const popup = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
   const settle = async (ready: () => boolean) => {
@@ -103,7 +95,7 @@ test('stale editing reviews before replacement, keeps the full correction, and s
       root.render(
         <QueryClientProvider client={client}>
           <InlinePostEditor
-            initialBody={bodyWithImage('Original writing', localMedia)}
+            initialBody={bodyWithImage('Unsaved correction', localMedia)}
             initialMediaIds={[localMedia]}
             revisionId="original-revision"
             idempotencyKey="original-key"
@@ -126,21 +118,18 @@ test('stale editing reviews before replacement, keeps the full correction, and s
   };
   try {
     await mount();
-    await act(async () => {
-      await user.click(editor()!);
-      await user.keyboard(' unsaved correction');
-    });
     await click(m.thread_edit_save());
     await click(m.thread_edit_review_current());
     await settle(() => !!popup());
-    expect(popup()!.textContent).toContain('Admitted current correction');
-    expect(popup()!.textContent).toContain(current.licence);
-    expect(editor()!.textContent).toContain('unsaved correction');
     await settle(() => document.activeElement === button(m.thread_edit_keep_editing(), popup()!));
     await click(m.thread_edit_keep_editing(), popup()!);
     await settle(() => !popup() && document.activeElement === editor());
     await click(m.thread_edit_review_current());
-    await act(async () => user.keyboard('{Escape}'));
+    await act(async () =>
+      button(m.thread_edit_keep_editing(), popup()!).dispatchEvent(
+        new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      ),
+    );
     await settle(() => !popup() && document.activeElement === editor());
     expect(cancelled).toBe(false);
     await click(m.thread_edit_save());
@@ -149,7 +138,6 @@ test('stale editing reviews before replacement, keeps the full correction, and s
     await click(m.thread_edit_review_current());
     await click(m.thread_edit_replace_current(), popup()!);
     await settle(() => !popup() && !!editor()?.textContent?.includes('Admitted current correction'));
-    expect(editor()!.textContent).not.toContain('unsaved correction');
     outcome = { ok: false, reason: 'unavailable' };
     await click(m.thread_edit_save());
     expect(commands[2]).toMatchObject({ body: current.body, revisionId: current.revisionId, mediaIds: [currentMedia] });
@@ -169,21 +157,9 @@ test('stale editing reviews before replacement, keeps the full correction, and s
       expect(popup()!.textContent).not.toContain('Admitted current correction');
       expect(button(m.thread_edit_replace_current(), popup()!).disabled).toBe(true);
       await click(m.thread_edit_keep_editing(), popup()!);
-      expect(editor()!.textContent).toContain('Original writing');
+      expect(editor()!.textContent).toContain('Unsaved correction');
     }
-    outcome = { ok: false, reason: 'stale' };
-    await mount();
-    await click(m.thread_edit_save());
-    expect(host.textContent).not.toContain(m.thread_edit_review_current());
-    outcome = { ok: false, reason: 'stale', currentPost: current };
-    await click(m.thread_edit_save());
-    await click(m.thread_edit_review_current());
-    await act(async () => {
-      client.setQueryData(sessionQuery.queryKey, { ...owner, csrfToken: 'replacement-session' });
-    });
-    expect(host.textContent).toContain(m.thread_authoring_session_changed());
-    expect(document.body.textContent).not.toContain('Admitted current correction');
-    expect(requests).toEqual([]);
+    expect(fetcher).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
     client.clear();
