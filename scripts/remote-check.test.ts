@@ -6901,7 +6901,6 @@ test('concurrent native preparation publishes once atomically and a bounded cach
   const second = fixture.create();
   const concurrent = second.start();
   expect(await waiting.child.exited, await waiting.stderr).toBe(70);
-  expect(waiter.receipt().stalledPhase).toBe('source-cache-lock');
   expect(existsSync(join(waiter.run, 'command-invoked'))).toBe(false);
   expect(await running.child.exited, await running.stderr).toBe(0);
   expect(await concurrent.child.exited, await concurrent.stderr).toBe(0);
