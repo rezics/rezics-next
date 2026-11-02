@@ -96,12 +96,20 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     await act(async () => user.keyboard('{ArrowDown}{Enter}'));
   };
   const inputChange = (node: Element) =>
-    (Reflect.get(node, Object.keys(node).find((key) => key.startsWith('__reactProps$'))!) as {
-      onChange: (event: { target: { value: string } }) => void;
-    }).onChange;
+    (
+      Reflect.get(
+        node,
+        Object.keys(node).find((key) => key.startsWith('__reactProps$'))!,
+      ) as {
+        onChange: (event: { target: { value: string } }) => void;
+      }
+    ).onChange;
   const pickerChange = (node: Element) => {
-    type Fiber = { memoizedProps: { onValueChange?: (items: typeof selected[]) => void }; return?: Fiber };
-    let fiber = Reflect.get(node, Object.keys(node).find((key) => key.startsWith('__reactFiber$'))!) as Fiber;
+    type Fiber = { memoizedProps: { onValueChange?: (items: (typeof selected)[]) => void }; return?: Fiber };
+    let fiber = Reflect.get(
+      node,
+      Object.keys(node).find((key) => key.startsWith('__reactFiber$'))!,
+    ) as Fiber;
     while (!fiber.memoizedProps.onValueChange) fiber = fiber.return!;
     return fiber.memoizedProps.onValueChange;
   };

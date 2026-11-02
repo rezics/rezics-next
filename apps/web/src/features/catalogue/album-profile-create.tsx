@@ -4,7 +4,7 @@ import type { Release } from '@rezics/definitions';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Field, FieldLabel, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
@@ -31,6 +31,7 @@ import { InitialFieldChoice } from './initial-field-choice';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 
 type Row = AlbumRow;
+type StatementEdit = (current: StatementInput) => StatementInput | undefined;
 
 // Semantic form owners retain their native controls; the lower family supplies only presentation.
 const panelClassName =
@@ -83,6 +84,11 @@ function AlbumProfileCreateLive({
     { id: 0, language: locale, label: '', description: '', aliases: '' },
   ]);
   const [rows, setRows] = useState<Row[]>([]);
+  const currentRows = useRef(rows);
+  const replaceRows = (next: Row[]) => {
+    currentRows.current = next;
+    setRows(next);
+  };
   const [failure, setFailure] = useState<CreateFailure>();
   const [corrections, setCorrections] = useState<AlbumCorrection[]>([]);
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
@@ -92,6 +98,15 @@ function AlbumProfileCreateLive({
   const fields = albumFields(release);
   const choices = metadataReady ? [...fields.scalar, ...fields.relations, ...fields.classifications] : [];
   const locked = busy || !!pending.current || !enabled || !metadataReady;
+  const admission = useRef({ locked, created });
+  admission.current = { locked, created };
+  const editable = () =>
+    lifetime.active() &&
+    !admission.current.locked &&
+    !admission.current.created &&
+    !running.current &&
+    !pending.current &&
+    metadataCurrent(release);
   const definiteFailure = failure && failure.reason !== 'unavailable';
   const [departed, setDeparted] = useState(false);
   // Observe the producer's retained state, including rows whose metadata is unavailable.
@@ -115,7 +130,7 @@ function AlbumProfileCreateLive({
       pending.current = null;
       running.current = false;
       setTerms([]);
-      setRows([]);
+      replaceRows([]);
       setFailure(undefined);
       setCorrections([]);
       setDeparted(true);
@@ -327,25 +342,29 @@ function AlbumProfileCreateLive({
             locale={locale}
             search={search}
             disabled={locked}
-            change={(statement) => {
-              if (!lifetime.active() || locked || running.current || pending.current) return;
-              if (statement.qualifiers?.length !== row.statement.qualifiers?.length) setFailure(undefined);
-              setRows((previous) =>
-                previous.map((item) => {
-                  if (item.id !== row.id) return item;
-                  const before = item.statement.qualifiers ?? [];
-                  let nextQualifierId = item.nextQualifierId ?? before.length;
-                  const qualifierIds = (statement.qualifiers ?? []).map((part) => {
-                    const at = before.findIndex((old) => old.property.id === part.property.id);
-                    return at < 0 ? nextQualifierId++ : (item.qualifierIds?.[at] ?? at);
-                  });
-                  return { ...item, statement, qualifierIds, nextQualifierId };
-                }),
+            change={(update) => {
+              if (!editable()) return false;
+              const item = currentRows.current.find((item) => item.id === row.id);
+              if (!item) return false;
+              const statement = update(item.statement);
+              if (!statement) return false;
+              const before = item.statement.qualifiers ?? [];
+              if (statement.qualifiers?.length !== item.statement.qualifiers?.length) setFailure(undefined);
+              let nextQualifierId = item.nextQualifierId ?? before.length;
+              const qualifierIds = (statement.qualifiers ?? []).map((part) => {
+                const at = before.findIndex((old) => old.property.id === part.property.id);
+                return at < 0 ? nextQualifierId++ : (item.qualifierIds?.[at] ?? at);
+              });
+              replaceRows(
+                currentRows.current.map((current) =>
+                  current === item ? { ...item, statement, qualifierIds, nextQualifierId } : current,
+                ),
               );
+              return true;
             }}
             remove={() => {
-              if (!lifetime.active() || locked || running.current || pending.current) return;
-              setRows((previous) => previous.filter((item) => item.id !== row.id));
+              if (!editable()) return;
+              replaceRows(currentRows.current.filter((item) => item.id !== row.id));
             }}
           />
         ))}
@@ -364,8 +383,8 @@ function AlbumProfileCreateLive({
             add={(property) => {
               if (!lifetime.active() || locked || running.current || pending.current || !metadataCurrent(release))
                 return;
-              setRows([
-                ...rows,
+              replaceRows([
+                ...currentRows.current,
                 {
                   id: crypto.randomUUID(),
                   statement: {
@@ -501,7 +520,7 @@ function AlbumInitialField({
   locale: string;
   search: EntityPickerSearch;
   disabled: boolean;
-  change: (statement: StatementInput) => void;
+  change: (update: StatementEdit) => boolean;
   remove: () => void;
 }) {
   const o = { locale: locale as never };
@@ -639,6 +658,14 @@ function AlbumInitialField({
       : [];
   const remember = (items: EntityPickerSubject[]) =>
     setPicked((previous) => ({ ...previous, ...Object.fromEntries(items.map((item) => [item.id, item])) }));
+  // Admission happens before either private values or picker descriptors change. Each
+  // callback compares only its own part, then patches the latest surviving statement.
+  const edit = (update: StatementEdit, items?: EntityPickerSubject[]) => {
+    if (!editable() || !section.current?.isConnected || !change(update)) return;
+    if (items) remember(items);
+  };
+  const editValue = (value: StatementInput['value'], items?: EntityPickerSubject[]) =>
+    edit((latest) => (latest.value === statement.value ? { ...latest, value } : undefined), items);
   const targetSearch =
     (property: string): EntityPickerSearch =>
     async (text, signal) =>
@@ -668,8 +695,7 @@ function AlbumInitialField({
                 disabled={disabled}
                 value={statement.value.type === 'value' ? target(statement.value.content) : []}
                 onValueChange={(items) => {
-                  remember(items);
-                  change({ ...statement, value: { type: 'value', content: items[0]?.id ?? '' } });
+                  editValue({ type: 'value', content: items[0]?.id ?? '' }, items);
                 }}
               />
             ) : (
@@ -679,7 +705,7 @@ function AlbumInitialField({
                 definition={definition}
                 read={{ release, public: { related: {} } }}
                 locale={locale}
-                onChange={(value) => change({ ...statement, value })}
+                onChange={(value) => editValue(value)}
               />
             )}
           </div>
@@ -694,41 +720,70 @@ function AlbumInitialField({
           {qualifiers.map((part, at) => {
             const metadata = release.properties[part.property.id];
             const identity = qualifierId(at);
+            const editQualifier = (value: typeof part.value, items?: EntityPickerSubject[]) =>
+              edit(
+                (latest) =>
+                  latest.qualifiers?.includes(part)
+                    ? {
+                        ...latest,
+                        qualifiers: latest.qualifiers.map((item) => (item === part ? { ...item, value } : item)),
+                      }
+                    : undefined,
+                items,
+              );
             return (
               <div key={identity} className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
                 <div id={qualifierControlId(at)} tabIndex={-1} className={qualifierClassName}>
-                  <QualifierInput
-                    definition={
-                      metadata
-                        ? {
-                            id: part.property.id,
-                            label: named(part.property.id),
-                            datatype: metadata.datatype,
-                            targets: metadata.targets ?? [],
-                          }
-                        : undefined
-                    }
-                    snak={{ ...part, property: { ...part.property, data_type: metadata?.datatype ?? 'string' } }}
-                    index={identity}
-                    label={named(part.property.id)}
-                    search={targetSearch(part.property.id)}
-                    target={target}
-                    remember={remember}
-                    disabled={disabled}
-                    onChange={(value) =>
-                      change({
-                        ...statement,
-                        qualifiers: qualifiers.map((item, pos) => (pos === at ? { ...item, value } : item)),
-                      })
-                    }
-                  />
+                  {metadata?.datatype === 'wikibase-item' ? (
+                    <Field className="gap-2">
+                      <FieldTitle>{named(part.property.id)}</FieldTitle>
+                      <EntityPicker
+                        label={named(part.property.id)}
+                        search={targetSearch(part.property.id)}
+                        src={coverSrc}
+                        disabled={disabled}
+                        value={part.value.type === 'value' ? target(part.value.content) : []}
+                        onValueChange={(items) => editQualifier({ type: 'value', content: items[0]?.id ?? '' }, items)}
+                      />
+                    </Field>
+                  ) : (
+                    <QualifierInput
+                      definition={
+                        metadata
+                          ? {
+                              id: part.property.id,
+                              label: named(part.property.id),
+                              datatype: metadata.datatype,
+                              targets: metadata.targets ?? [],
+                            }
+                          : undefined
+                      }
+                      snak={{ ...part, property: { ...part.property, data_type: metadata?.datatype ?? 'string' } }}
+                      index={identity}
+                      label={named(part.property.id)}
+                      search={targetSearch(part.property.id)}
+                      target={target}
+                      remember={() => {}}
+                      disabled={disabled}
+                      onChange={(value) => editQualifier(value)}
+                    />
+                  )}
                 </div>
                 <AlbumQualifierRemoval
                   locale={locale}
                   label={named(part.property.id)}
                   populated={meaningful(part)}
                   disabled={disabled}
-                  onRemove={() => change({ ...statement, qualifiers: qualifiers.filter((_, pos) => pos !== at) })}
+                  onRemove={() =>
+                    edit((latest) =>
+                      latest.qualifiers?.includes(part)
+                        ? {
+                            ...latest,
+                            qualifiers: latest.qualifiers.filter((item) => item !== part),
+                          }
+                        : undefined,
+                    )
+                  }
                   focusId={
                     qualifiers.length > 1
                       ? qualifierControlId(at + 1 < qualifiers.length ? at + 1 : at - 1)
@@ -750,10 +805,14 @@ function AlbumInitialField({
                 onChange={(event) => {
                   const id = event.target.value;
                   if (definition.qualifiers.includes(id))
-                    change({
-                      ...statement,
-                      qualifiers: [...qualifiers, { property: { id }, value: { type: 'value', content: '' } }],
-                    });
+                    edit((latest) =>
+                      latest.qualifiers === statement.qualifiers
+                        ? {
+                            ...latest,
+                            qualifiers: [...qualifiers, { property: { id }, value: { type: 'value', content: '' } }],
+                          }
+                        : undefined,
+                    );
                 }}
               >
                 <NativeSelectOption value="">{m.relation_add_qualifier({}, o)}</NativeSelectOption>
@@ -781,18 +840,25 @@ function AlbumInitialField({
                   : ''
               }
               onChange={(event) =>
-                change({
-                  ...statement,
-                  references: event.target.value
-                    ? [
-                        {
-                          parts: [
-                            { property: { id: 'schema:url' }, value: { type: 'value', content: event.target.value } },
-                          ],
-                        },
-                      ]
-                    : [],
-                })
+                edit((latest) =>
+                  latest.references === statement.references
+                    ? {
+                        ...latest,
+                        references: event.target.value
+                          ? [
+                              {
+                                parts: [
+                                  {
+                                    property: { id: 'schema:url' },
+                                    value: { type: 'value', content: event.target.value },
+                                  },
+                                ],
+                              },
+                            ]
+                          : [],
+                      }
+                    : undefined,
+                )
               }
             />
             <p
