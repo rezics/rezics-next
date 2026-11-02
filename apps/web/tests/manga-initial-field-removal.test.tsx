@@ -41,9 +41,7 @@ test('Manga draft removal preserves complete rows on Cancel, removes only stable
     globals[key] = Reflect.get(window, key);
   for (const key of ['getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame'])
     globals[key] = Reflect.get(window, key).bind(window);
-  const previous = new Map(
-    Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
-  );
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, {
       configurable: true,
@@ -211,9 +209,9 @@ test('Manga draft removal preserves complete rows on Cancel, removes only stable
     );
     expect(rows).toEqual(sealed);
     expect(changes).toBe(0);
-    expect(
-      within(region('scalar')).getByRole('button', { name: m.recipe_remove_field() }).matches(':disabled'),
-    ).toBe(true);
+    expect(within(region('scalar')).getByRole('button', { name: m.recipe_remove_field() }).matches(':disabled')).toBe(
+      true,
+    );
     disabled = false;
     await render();
     await act(async () => user.keyboard('{Escape}'));

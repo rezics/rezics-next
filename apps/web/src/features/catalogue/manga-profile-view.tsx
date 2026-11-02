@@ -86,10 +86,7 @@ function MangaProfileEditorLive({
   const read = !query.isError && (!id || !query.isFetching) && matches ? candidate : undefined;
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
-      <ViewHeadingActions
-        headingClassName="font-sans"
-        label={id ? m.manga_edit({}, o) : m.manga_title({}, o)}
-      />
+      <ViewHeadingActions headingClassName="font-sans" label={id ? m.manga_edit({}, o) : m.manga_title({}, o)} />
       <p className="max-w-prose text-muted-foreground">{m.manga_intro({}, o)}</p>
       {session !== 'signed-in' &&
         (session === 'unavailable' ? (
@@ -113,10 +110,7 @@ function MangaProfileEditorLive({
           {query.data && !query.data.ok && query.data.reason === 'concealed' ? (
             <p role="alert">{m.catalogue_create_concealed({}, o)}</p>
           ) : (
-            <EditorFailure
-              locale={locale}
-              reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'}
-            />
+            <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
           )}
           <Button onClick={() => void query.refetch()}>{m.correction_reload({}, o)}</Button>
         </div>
@@ -358,9 +352,7 @@ function MangaCreate({
       >
         <fieldset disabled={locked} className="min-w-0 space-y-4">
           <legend className="mb-3 max-w-full">
-            <ContentItemHeading className="font-sans text-xl font-semibold">
-              {m.manga_grain({}, o)}
-            </ContentItemHeading>
+            <ContentItemHeading className="font-sans text-xl font-semibold">{m.manga_grain({}, o)}</ContentItemHeading>
           </legend>
           <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
             <Field className="min-w-0">
@@ -393,10 +385,7 @@ function MangaCreate({
             </Field>
             <p className="text-sm text-muted-foreground">{m.manga_grain_help({}, o)}</p>
             {read?.release.types[type] && (
-              <DefinitionGuideLink
-                locale={locale}
-                address={{ type, returnTo: `/${locale}/catalogue/manga` }}
-              />
+              <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/manga` }} />
             )}
             {type === 'schema:PublicationVolume' && (
               <Field orientation="horizontal">
@@ -452,9 +441,7 @@ function MangaCreate({
                       .join(' ') || undefined,
                   onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
                     setTerms((previous) =>
-                      previous.map((item) =>
-                        item.id === term.id ? { ...item, [field]: event.target.value } : item,
-                      ),
+                      previous.map((item) => (item.id === term.id ? { ...item, [field]: event.target.value } : item)),
                     );
                     setFailure(undefined);
                   },
@@ -471,11 +458,7 @@ function MangaCreate({
                   locale={locale}
                   populated={!!(term.language || term.label || term.description || term.aliases)}
                   rowId={`${termsId}-row-${term.id}`}
-                  focusId={
-                    terms[index + 1]
-                      ? `${termsId}-language-${terms[index + 1]!.id}`
-                      : `${termsId}-add-language`
-                  }
+                  focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add-language`}
                   disabled={locked}
                   onRemove={() => {
                     if (locked || running.current || request.current) return false;
@@ -545,9 +528,7 @@ function MangaCreate({
                               id: `manga-row-${row.id}`,
                               errors: feedback,
                             }}
-                            onChange={(next) =>
-                              changeRows(rows.map((item) => (item.id === row.id ? next : item)))
-                            }
+                            onChange={(next) => changeRows(rows.map((item) => (item.id === row.id ? next : item)))}
                             onRemove={() => changeRows(rows.filter((item) => item.id !== row.id))}
                           />
                         ))}
@@ -664,11 +645,7 @@ function MangaCreate({
           type="submit"
           disabled={busy || disabled || !read?.release.types[type] || failure?.reason === 'conflict'}
         >
-          {busy
-            ? m.catalogue_create_saving({}, o)
-            : request.current
-              ? m.correction_retry({}, o)
-              : m.manga_title({}, o)}
+          {busy ? m.catalogue_create_saving({}, o) : request.current ? m.correction_retry({}, o) : m.manga_title({}, o)}
         </Button>
       </form>
     </>
@@ -676,15 +653,7 @@ function MangaCreate({
 }
 
 /** Use router navigation in the page and ordinary links in isolated editor compositions. */
-function MangaNavigationLink({
-  href,
-  children,
-  className,
-}: {
-  href: string;
-  children: ReactNode;
-  className: string;
-}) {
+function MangaNavigationLink({ href, children, className }: { href: string; children: ReactNode; className: string }) {
   const router = useRouter({ warn: false });
   return router ? (
     <Link to={href} className={className}>

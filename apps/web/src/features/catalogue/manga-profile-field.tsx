@@ -133,11 +133,7 @@ export function MangaInitialField({
     )?.focus();
   };
   const name = (id: string) => pickText(read.release.properties[id]?.labels ?? {}, locale).text;
-  const control = (
-    part: SnakInput,
-    address: string,
-    statement: (value: SnakInput['value']) => StatementInput,
-  ) => {
+  const control = (part: SnakInput, address: string, statement: (value: SnakInput['value']) => StatementInput) => {
     const definition = read.release.properties[part.property.id];
     return definition?.datatype === 'wikibase-item' ? (
       <PickedTarget
@@ -179,11 +175,7 @@ export function MangaInitialField({
       className="min-w-0 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
-        <ContentItemHeading
-          level={3}
-          className="font-sans text-lg font-semibold"
-          lang={title.lang ?? undefined}
-        >
+        <ContentItemHeading level={3} className="font-sans text-lg font-semibold" lang={title.lang ?? undefined}>
           {title.text}
         </ContentItemHeading>
         <fieldset
@@ -269,18 +261,13 @@ export function MangaInitialField({
                 <ContentItemHeading
                   level={4}
                   className="font-sans text-sm font-medium"
-                  lang={
-                    pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).lang ??
-                    undefined
-                  }
+                  lang={pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).lang ?? undefined}
                 >
                   {name(part.property.id)}
                 </ContentItemHeading>
                 {control(part, `qualifier-${qualifierIds[index]}`, (value) => ({
                   ...row.statement,
-                  qualifiers: row.statement.qualifiers!.map((snak, at) =>
-                    at === index ? { ...snak, value } : snak,
-                  ),
+                  qualifiers: row.statement.qualifiers!.map((snak, at) => (at === index ? { ...snak, value } : snak)),
                 }))}
                 <Button
                   id={`${feedback.id}-qualifier-${qualifierIds[index]}-remove`}
@@ -303,12 +290,7 @@ export function MangaInitialField({
                   >
                     <p>{m.curation_remove_title({ template: name(part.property.id) }, o)}</p>
                     <div className="flex flex-wrap gap-3">
-                      <Button
-                        type="button"
-                        autoFocus
-                        disabled={disabled}
-                        onClick={() => removeQualifier(index)}
-                      >
+                      <Button type="button" autoFocus disabled={disabled} onClick={() => removeQualifier(index)}>
                         {m.contribution_confirm({}, o)}
                       </Button>
                       <Button
@@ -318,9 +300,7 @@ export function MangaInitialField({
                         onClick={() => {
                           if (!editable()) return;
                           setRemovingQualifier(undefined);
-                          document
-                            .getElementById(`${feedback.id}-qualifier-${qualifierIds[index]}-remove`)
-                            ?.focus();
+                          document.getElementById(`${feedback.id}-qualifier-${qualifierIds[index]}-remove`)?.focus();
                         }}
                       >
                         {m.action_cancel({}, o)}
@@ -333,8 +313,7 @@ export function MangaInitialField({
           </div>
           {!!property.qualifiers.filter(
             (id) =>
-              read.release.properties[id]?.datatype === 'wikibase-item' ||
-              editableScalar(read.release.properties[id]),
+              read.release.properties[id]?.datatype === 'wikibase-item' || editableScalar(read.release.properties[id]),
           ).length && (
             <div className="flex min-w-0 flex-wrap items-end gap-3">
               <Field className="min-w-0 basis-full sm:basis-48 sm:flex-1">
@@ -471,8 +450,7 @@ function PickedTarget({
         (await search(query, signal)).filter((entry) =>
           entry.types.some(
             (type) =>
-              mangaTarget(read.release, part.property.id, type) &&
-              (!mangaWork || type === 'schema:ComicSeries'),
+              mangaTarget(read.release, part.property.id, type) && (!mangaWork || type === 'schema:ComicSeries'),
           ),
         )
       }
