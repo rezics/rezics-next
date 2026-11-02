@@ -4484,6 +4484,66 @@ CREATE TABLE semantic.definition_release (
 
 
 --
+-- Name: definition_type_build; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_type_build (
+    route integer NOT NULL,
+    catalogue text NOT NULL,
+    after_release text DEFAULT ''::text NOT NULL,
+    after_key text DEFAULT ''::text NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT definition_type_build_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: definition_type_edge; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_type_edge (
+    route integer NOT NULL,
+    catalogue text NOT NULL,
+    locale text NOT NULL,
+    parent_key text NOT NULL,
+    chunk bytea NOT NULL,
+    node_key text NOT NULL,
+    entry_key text,
+    CONSTRAINT definition_type_edge_chunk_check CHECK (((octet_length(chunk) >= 1) AND (octet_length(chunk) <= 128))),
+    CONSTRAINT definition_type_edge_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: definition_type_entry; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_type_entry (
+    route integer NOT NULL,
+    catalogue text NOT NULL,
+    id_key text NOT NULL,
+    id json NOT NULL,
+    release_digest text NOT NULL,
+    body json NOT NULL,
+    CONSTRAINT definition_type_entry_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: definition_type_property; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_type_property (
+    route integer NOT NULL,
+    release_digest text NOT NULL,
+    id_key text NOT NULL,
+    id json NOT NULL,
+    body json NOT NULL,
+    CONSTRAINT definition_type_property_route_check CHECK ((route = 0))
+);
+
+
+--
 -- Name: erasure_copy_role; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -8513,6 +8573,46 @@ ALTER TABLE ONLY semantic.definition_release
 
 
 --
+-- Name: definition_type_build definition_type_build_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_type_build
+    ADD CONSTRAINT definition_type_build_pkey PRIMARY KEY (route, catalogue);
+
+
+--
+-- Name: definition_type_edge definition_type_edge_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_type_edge
+    ADD CONSTRAINT definition_type_edge_pkey PRIMARY KEY (route, catalogue, locale, parent_key, chunk);
+
+
+--
+-- Name: definition_type_edge definition_type_edge_route_catalogue_locale_node_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_type_edge
+    ADD CONSTRAINT definition_type_edge_route_catalogue_locale_node_key_key UNIQUE (route, catalogue, locale, node_key);
+
+
+--
+-- Name: definition_type_entry definition_type_entry_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_type_entry
+    ADD CONSTRAINT definition_type_entry_pkey PRIMARY KEY (route, catalogue, id_key);
+
+
+--
+-- Name: definition_type_property definition_type_property_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_type_property
+    ADD CONSTRAINT definition_type_property_pkey PRIMARY KEY (route, release_digest, id_key);
+
+
+--
 -- Name: erasure_copy_role erasure_copy_role_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -10509,6 +10609,13 @@ CREATE INDEX definition_catalogue_position_original ON semantic.definition_catal
 --
 
 CREATE UNIQUE INDEX definition_release_erasure_key ON semantic.definition_release USING btree (erasure_key, route);
+
+
+--
+-- Name: definition_type_member_page; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX definition_type_member_page ON semantic.definition_catalogue_member USING btree (route, root_digest, category, release_digest, id_key);
 
 
 --
