@@ -67,7 +67,11 @@ test('First and later empty buyer pages use bounded localized navigation in ever
       const show = (continuation?: boolean, cursor: string | null = null) => {
         host.innerHTML = renderToStaticMarkup(
           kind === 'orders' ? (
-            <OrdersPage page={{ orders: [], next: cursor }} locale={locale} {...(continuation ? { continuation } : {})} />
+            <OrdersPage
+              page={{ orders: [], next: cursor }}
+              locale={locale}
+              {...(continuation ? { continuation } : {})}
+            />
           ) : (
             <EntitlementsPage
               page={{ kind: 'ready', data: { entitlements: [], next: cursor } }}
@@ -198,14 +202,22 @@ test('Current list recovery follows exact private address and retires without an
   let cursor: string | undefined = 'private-page';
   let locale = 'en';
   const show = () =>
-    act(() => flushSync(() => root.render(
-      <StrictMode>
-        <QueryClientProvider client={client}>
-          <OrdersCurrent initial={emptyOrders('A', 'private-page')} search={cursor ? { cursor } : {}} locale={locale} />
-          <EntitlementsCurrent initial={emptyEntitlements('A', 'private-page')} locale={locale} cursor={cursor} />
-        </QueryClientProvider>
-      </StrictMode>,
-    )));
+    act(() =>
+      flushSync(() =>
+        root.render(
+          <StrictMode>
+            <QueryClientProvider client={client}>
+              <OrdersCurrent
+                initial={emptyOrders('A', 'private-page')}
+                search={cursor ? { cursor } : {}}
+                locale={locale}
+              />
+              <EntitlementsCurrent initial={emptyEntitlements('A', 'private-page')} locale={locale} cursor={cursor} />
+            </QueryClientProvider>
+          </StrictMode>,
+        ),
+      ),
+    );
   const recovery = () => [...host.querySelectorAll('nav a')];
   const counts = () => [orderReads.length, entitlementReads.length];
   const settle = async (subject: string, requestedCursor: string | null, requestedLocale = locale) => {

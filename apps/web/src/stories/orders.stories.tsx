@@ -99,10 +99,13 @@ export const LongTitlesNarrow: Story = {
   render: () => (
     <OrdersStory
       page={{
-        orders: [{
-          ...order,
-          title: 'The Little Prince: annotated edition with historical notes, illustrations, translations and extended commentary for readers',
-        }],
+        orders: [
+          {
+            ...order,
+            title:
+              'The Little Prince: annotated edition with historical notes, illustrations, translations and extended commentary for readers',
+          },
+        ],
         next,
       }}
       continuation
@@ -111,16 +114,20 @@ export const LongTitlesNarrow: Story = {
 };
 export const UnknownSettlementAndMoney: Story = {
   render: () => (
-    <OrdersStory page={{
-      orders: [{
-        ...order,
-        settlement: 'unknown',
-        entitlementId: null,
-        moneyUnit: null,
-        taxBehavior: null,
-      }],
-      next: null,
-    }} />
+    <OrdersStory
+      page={{
+        orders: [
+          {
+            ...order,
+            settlement: 'unknown',
+            entitlementId: null,
+            moneyUnit: null,
+            taxBehavior: null,
+          },
+        ],
+        next: null,
+      }}
+    />
   ),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);

@@ -99,10 +99,7 @@ export function OrdersPage({
       {continuation || page.next ? (
         <nav aria-label={m.orders_pagination()} className="flex flex-wrap gap-3">
           {continuation ? (
-            <a
-              href={`/${locale}/orders`}
-              className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
-            >
+            <a href={`/${locale}/orders`} className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}>
               {m.entitlements_restart()}
             </a>
           ) : null}
