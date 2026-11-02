@@ -189,6 +189,7 @@ test('native aliases survive bootstrap, bound refresh, removal and durable repla
     expect(row.output.digest).not.toBe(digest);
     expect(row.output.record_revision).toBe('7');
     expect((await f.facade.commit(changed)).status).toBe('bulk-failed');
+    expect(f.facade.baseline('v123')!.digest).toBe(digest);
     const replay = structuredClone(f.calls[0]!);
     expect(commands()).toEqual(expect.arrayContaining([expect.objectContaining({ op: 'propose', source: expect.objectContaining({ external_id: 'v123' }), statement: expect.objectContaining({ property: { id: 'schema:alternateName' }, value: { type: 'value', content: { language: 'und', text: 'Harbor Watch' } } }) })]));
 
