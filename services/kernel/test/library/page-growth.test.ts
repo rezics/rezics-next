@@ -63,10 +63,11 @@ async function refreshDeepCursor() {
 }
 
 async function resetFollowWrites() {
-  await db.admin.query(
-    'DELETE FROM library.follow WHERE route=$1 AND account_id=$2 AND target_id=ANY($3::uuid[])',
-    [route, owner.actor.accountId, [followSubject, inProgressSubject]],
-  );
+  await db.admin.query('DELETE FROM library.follow WHERE route=$1 AND account_id=$2 AND target_id=ANY($3::uuid[])', [
+    route,
+    owner.actor.accountId,
+    [followSubject, inProgressSubject],
+  ]);
   await db.admin.query('DELETE FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3', [
     route,
     owner.actor.accountId,
@@ -97,9 +98,7 @@ async function growAxis(axis: GrowthAxis, database: GrowthDatabase, scale: numbe
         if (axis === 'same-owner entries') {
           const subjectId = growthSubjects[index++]!;
           return {
-            'library.entry': [
-              { ...entryTemplate, route, account_id: owner.actor.accountId, subject_id: subjectId },
-            ],
+            'library.entry': [{ ...entryTemplate, route, account_id: owner.actor.accountId, subject_id: subjectId }],
           };
         }
         if (axis === 'same-owner sessions') {
@@ -163,10 +162,7 @@ async function measuredPagesAndFollows() {
   expect(entries.libraryEntries).toHaveLength(entryLimit);
   expect(entries.next).not.toBeNull();
 
-  const unitPage = await request(
-    'GET',
-    `/v1/progressSessions/${sessionId}/completedUnits?limit=${unitLimit}`,
-  );
+  const unitPage = await request('GET', `/v1/progressSessions/${sessionId}/completedUnits?limit=${unitLimit}`);
   expect(unitPage.status).toBe(200);
   const units = (await unitPage.json()) as { completedUnits: string[]; next: string | null };
   expect(units.completedUnits).toHaveLength(unitLimit);
@@ -267,48 +263,37 @@ afterAll(async () => {
   await db?.close();
 });
 
-test(
-  'Library pages and follows stay bounded across independently growing owner histories',
-  async () => {
-    for (const axis of [
-      'same-owner entries',
-      'same-owner sessions',
-      'same-owner follows',
-      'other owners',
-    ] as const) {
-      const report = await checkGrowth(db, {
-        name: `tracked entries, progress units and Library follows with growing ${axis}`,
-        scales: [1, 8, 64],
-        bounds: { statements: 'constant', rows: 'constant', blocks: 'logarithmic' },
-        includeBackends: true,
-        repetitions: 1,
-        async grow(database, scale, previous) {
-          await growAxis(axis, database, scale, previous);
-        },
-        async warmup() {
-          await resetFollowWrites();
-          await refreshDeepCursor();
-          await measuredPagesAndFollows();
-        },
-        async prepare() {
-          await resetFollowWrites();
-          await refreshDeepCursor();
-        },
-        operation: measuredPagesAndFollows,
-      });
-      expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
-      expect(report.verdicts.statements.outcome).toBe('compatible');
-      expect(report.verdicts.rows.outcome).toBe('compatible');
-      expect(report.verdicts.blocks.outcome).toBe('compatible');
-      const relations = [
-        ...new Set(
-          report.samples.flatMap(({ repetitions }) =>
-            repetitions.flatMap(({ relations }) => Object.keys(relations)),
-          ),
-        ),
-      ];
-      assertGrowthAccessPaths(report.name, report.samples, relations);
-    }
-  },
-  1_800_000,
-);
+test('Library pages and follows stay bounded across independently growing owner histories', async () => {
+  for (const axis of ['same-owner entries', 'same-owner sessions', 'same-owner follows', 'other owners'] as const) {
+    const report = await checkGrowth(db, {
+      name: `tracked entries, progress units and Library follows with growing ${axis}`,
+      scales: [1, 8, 64],
+      bounds: { statements: 'constant', rows: 'constant', blocks: 'logarithmic' },
+      includeBackends: true,
+      repetitions: 1,
+      async grow(database, scale, previous) {
+        await growAxis(axis, database, scale, previous);
+      },
+      async warmup() {
+        await resetFollowWrites();
+        await refreshDeepCursor();
+        await measuredPagesAndFollows();
+      },
+      async prepare() {
+        await resetFollowWrites();
+        await refreshDeepCursor();
+      },
+      operation: measuredPagesAndFollows,
+    });
+    expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
+    expect(report.verdicts.statements.outcome).toBe('compatible');
+    expect(report.verdicts.rows.outcome).toBe('compatible');
+    expect(report.verdicts.blocks.outcome).toBe('compatible');
+    const relations = [
+      ...new Set(
+        report.samples.flatMap(({ repetitions }) => repetitions.flatMap(({ relations }) => Object.keys(relations))),
+      ),
+    ];
+    assertGrowthAccessPaths(report.name, report.samples, relations);
+  }
+}, 1_800_000);
