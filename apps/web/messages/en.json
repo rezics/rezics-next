@@ -3277,6 +3277,8 @@
   "value_candidate_revision": "Returned proposal revision: {revision}",
   "value_adoption_unavailable": "No explicit adoption metadata was returned.",
   "value_more": "Load next review page",
+  "value_retry": "Retry this page",
+  "value_restart": "Back to first page",
   "value_page_bound": "The value above remains the current reading; this page does not include its review decision.",
   "value_change": "Change explanation",
   "value_change_unavailable": "A safe change explanation is unavailable. Changes lists only the metadata actually returned.",

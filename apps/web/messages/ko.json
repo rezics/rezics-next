@@ -3137,6 +3137,8 @@
   "value_candidate_revision": "반환된 제안 리비전: {revision}",
   "value_adoption_unavailable": "명시적인 채택 정보가 반환되지 않았습니다.",
   "value_more": "다음 검토 페이지 불러오기",
+  "value_retry": "이 페이지 다시 시도",
+  "value_restart": "첫 페이지로 돌아가기",
   "value_page_bound": "위 값은 현재 표시되는 값입니다. 이 페이지에는 해당 값에 대한 검토 결정이 포함되어 있지 않습니다.",
   "value_change": "변경 설명",
   "value_change_unavailable": "안전하게 표시할 변경 설명을 사용할 수 없습니다. 변경 페이지에는 실제 반환된 정보만 표시됩니다.",

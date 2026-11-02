@@ -3137,6 +3137,8 @@
   "value_candidate_revision": "返された提案のリビジョン：{revision}",
   "value_adoption_unavailable": "明示的な採用情報は返されませんでした。",
   "value_more": "次の審査ページを読み込む",
+  "value_retry": "このページを再試行",
+  "value_restart": "最初のページに戻る",
   "value_page_bound": "上の値は現在の表示内容です。このページには、その値に対する審査の判断は含まれていません。",
   "value_change": "変更の説明",
   "value_change_unavailable": "安全に表示できる変更の説明は利用できません。変更ページには実際に返された情報だけが表示されます。",

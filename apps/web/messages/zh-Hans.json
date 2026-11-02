@@ -3138,6 +3138,8 @@
   "value_candidate_revision": "返回的提议修订：{revision}",
   "value_adoption_unavailable": "未返回明确的选用元数据。",
   "value_more": "加载下一页审核信息",
+  "value_retry": "重试此页",
+  "value_restart": "返回第一页",
   "value_page_bound": "上方的值仍是当前显示的内容；此页未包含对它的审核决定。",
   "value_change": "变更说明",
   "value_change_unavailable": "安全的变更说明不可用。变更页只列出实际返回的元数据。",

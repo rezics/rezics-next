@@ -3137,6 +3137,8 @@
   "value_candidate_revision": "Zurückgegebene Vorschlagsrevision: {revision}",
   "value_adoption_unavailable": "Es wurden keine ausdrücklichen Übernahmeinformationen zurückgegeben.",
   "value_more": "Nächste Prüfseite laden",
+  "value_retry": "Diese Seite erneut laden",
+  "value_restart": "Zurück zur ersten Seite",
   "value_page_bound": "Der Wert oben wird weiterhin aktuell angezeigt; seine Prüfentscheidung ist auf dieser Seite nicht enthalten.",
   "value_change": "Änderungserklärung",
   "value_change_unavailable": "Eine sichere Änderungserklärung ist nicht verfügbar. Änderungen zeigt nur tatsächlich zurückgegebene Informationen.",

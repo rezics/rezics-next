@@ -406,15 +406,15 @@ test('selected-value evidence has independent family sections, complete supplied
       expect(calls.at(-1)).toEqual({ cursor, session: 'value-session' });
       expect(container.querySelector('article')?.getAttribute('aria-busy')).toBe('true');
       expect(text(container)).not.toContain('9780156012195');
-      expect(button(container, m.candidate_reload()).disabled).toBe(true);
-      await act(async () => button(container, m.candidate_reload()).click());
+      expect(button(container, m.value_restart()).disabled).toBe(true);
+      await act(async () => button(container, m.value_restart()).click());
       expect(calls).toHaveLength(cursor === valueCursor ? 1 : 2);
       await complete();
       privateAbsent();
     }
     expect(text(container)).toContain(m.value_accepted());
     expect(container.querySelectorAll('button')).toHaveLength(1);
-    await act(async () => button(container, m.candidate_reload()).click());
+    await act(async () => button(container, m.value_restart()).click());
     expect(calls.at(-1)).toEqual({ session: 'value-session' });
     await complete();
     expect(text(container)).toContain(m.value_page_bound());
@@ -432,6 +432,90 @@ test('selected-value evidence has independent family sections, complete supplied
         .every((call) => new URLSearchParams(call.query).get('limit') === '20'),
     ).toBe(true);
     privateAbsent();
+    // Recover the failed continuation, including a refreshed producer session, without traversing again.
+    const requests: { cursor: string | undefined; session: string | undefined }[] = [];
+    const pending: ((result: ValueRead) => void)[] = [];
+    const recover = (cursor?: string, session?: string) => {
+      requests.push({ cursor, session });
+      return new Promise<ValueRead>((resolve) => pending.push(resolve));
+    };
+    const resolve = async (result: ValueRead) => act(async () => pending.shift()!(result));
+    await render(h(ValueExplanation, { locale: 'en', transport: recover, initial: first }));
+    await act(async () => button(container, m.value_more()).click());
+    await resolve(await native.transport(valueCursor, 'value-session'));
+    await act(async () => button(container, m.value_more()).click());
+    expect(text(container)).not.toContain('9780156012195');
+    await resolve({ kind: 'unavailable' });
+    expect(container.querySelector('details,section,nav')).toBeNull();
+    expect(requests).toHaveLength(2);
+    await act(async () => button(container, m.value_retry()).click());
+    expect(requests.at(-1)).toEqual({ cursor: valueLastCursor, session: 'value-session' });
+    expect(button(container, m.value_restart()).disabled).toBe(true);
+    if (first.kind !== 'ready') throw new Error('Expected first page');
+    await resolve({
+      ...first,
+      session: 'refreshed-session',
+      page: {
+        ...first.page,
+        competition: { kind: 'unavailable' },
+      },
+    });
+    await act(async () => button(container, m.value_retry()).click());
+    expect(requests.at(-1)).toEqual({ cursor: valueLastCursor, session: 'refreshed-session' });
+    await resolve(await native.transport(valueLastCursor, 'refreshed-session'));
+    expect(text(container)).toContain(m.value_accepted());
+    expect(requests.map(({ cursor }) => cursor)).toEqual([
+      valueCursor,
+      valueLastCursor,
+      valueLastCursor,
+      valueLastCursor,
+    ]);
+    expect([...container.querySelectorAll('button')].some((node) => node.textContent === m.value_retry())).toBe(false);
+    await act(async () => button(container, m.value_restart()).click());
+    expect(requests.at(-1)).toEqual({ cursor: undefined, session: 'value-session' });
+    await resolve({ kind: 'denied' });
+    expect(container.querySelector('details,section,nav')).toBeNull();
+    await act(async () => button(container, m.candidate_reload()).click());
+    expect(requests.at(-1)).toEqual({ cursor: undefined, session: undefined });
+    await resolve({ kind: 'unavailable' });
+    await act(async () => button(container, m.value_retry()).click());
+    expect(requests.at(-1)).toEqual({ cursor: undefined, session: undefined });
+    await resolve(first);
+
+    // Transport, locale and supplied-reading replacement each retire an outstanding read and its recovery.
+    for (const changed of ['transport', 'locale', 'initial'] as const) {
+      const seed = { ...first };
+      await render(h(ValueExplanation, { locale: 'en', transport: recover, initial: seed }));
+      await act(async () => button(container, m.value_more()).click());
+      await render(
+        h(ValueExplanation, {
+          locale: changed === 'locale' ? 'fr' : 'en',
+          transport: changed === 'transport' ? (cursor, session) => recover(cursor, session) : recover,
+          initial: changed === 'initial' ? { kind: 'denied' } : seed,
+        }),
+      );
+      const current = container.innerHTML;
+      expect(text(container)).not.toContain('9780156012195');
+      await resolve(await native.transport(valueLastCursor, 'value-session'));
+      expect(container.innerHTML).toBe(current);
+      expect([...container.querySelectorAll('button')].some((node) => node.textContent === m.value_retry())).toBe(
+        false,
+      );
+      if (changed !== 'initial') {
+        expect(requests.at(-1)).toEqual({ cursor: undefined, session: undefined });
+        await resolve({ kind: 'denied' });
+      }
+      expect(container.querySelector('details,section,nav')).toBeNull();
+    }
+    // Even a read started without an initial result is fenced when its transport changes.
+    await render(h(ValueExplanation, { locale: 'en', transport: recover }));
+    const replacement = (cursor?: string, session?: string) => recover(cursor, session);
+    await render(h(ValueExplanation, { locale: 'en', transport: replacement }));
+    expect(requests.at(-1)).toEqual({ cursor: undefined, session: undefined });
+    await resolve(first);
+    expect(text(container)).not.toContain('9780156012195');
+    await resolve({ kind: 'denied' });
+    expect(container.querySelector('details,section,nav')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     await window.happyDOM.abort();

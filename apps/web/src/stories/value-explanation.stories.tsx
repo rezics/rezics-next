@@ -82,7 +82,7 @@ export const DecisionNotIncluded: Story = {
     await userEvent.click(next);
     await expect(await canvas.findByText(m.value_page_bound())).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.value_more() })).toBeEnabled();
-    await expect(canvas.getByRole('button', { name: m.candidate_reload() })).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: m.value_restart() })).toBeEnabled();
     await userEvent.click(canvas.getByRole('button', { name: m.value_more() }));
     await expect(await canvas.findByText(m.value_accepted())).toBeVisible();
     expect(canvas.queryByText(m.value_page_bound())).toBeNull();

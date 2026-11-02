@@ -252,7 +252,7 @@ test('Value keeps a genuinely omitted decision incomplete through both actual Ne
     const requests = fixture.calls.length;
     technical.open = true;
     expect(fixture.calls).toHaveLength(requests);
-    await click(m.candidate_reload());
+    await click(m.value_restart());
     expect(fixture.calls.at(-1)?.cursor).toBeNull();
     expect(readingText(host)).toContain(m.value_page_bound());
 

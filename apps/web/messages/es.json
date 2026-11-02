@@ -3137,6 +3137,8 @@
   "value_candidate_revision": "Revisión de propuesta devuelta: {revision}",
   "value_adoption_unavailable": "No se devolvieron metadatos explícitos de adopción.",
   "value_more": "Cargar la siguiente página de revisión",
+  "value_retry": "Reintentar esta página",
+  "value_restart": "Volver a la primera página",
   "value_page_bound": "El valor de arriba sigue siendo el que se muestra actualmente; esta página no incluye su decisión de revisión.",
   "value_change": "Explicación del cambio",
   "value_change_unavailable": "No hay una explicación segura del cambio disponible. Cambios solo muestra los metadatos realmente devueltos.",

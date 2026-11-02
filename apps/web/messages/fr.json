@@ -3137,6 +3137,8 @@
   "value_candidate_revision": "Révision de proposition renvoyée : {revision}",
   "value_adoption_unavailable": "Aucune métadonnée d’adoption explicite n’a été renvoyée.",
   "value_more": "Charger la page de révision suivante",
+  "value_retry": "Réessayer cette page",
+  "value_restart": "Revenir à la première page",
   "value_page_bound": "La valeur ci-dessus reste celle affichée actuellement ; cette page ne contient pas la décision de son examen.",
   "value_change": "Explication du changement",
   "value_change_unavailable": "Une explication sûre du changement est indisponible. La page Changements ne liste que les métadonnées réellement renvoyées.",

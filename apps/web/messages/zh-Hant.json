@@ -3137,6 +3137,8 @@
   "value_candidate_revision": "傳回的提議修訂：{revision}",
   "value_adoption_unavailable": "未傳回明確的選用中繼資料。",
   "value_more": "載入下一頁審核資訊",
+  "value_retry": "重試此頁",
+  "value_restart": "返回第一頁",
   "value_page_bound": "上方的值仍是目前顯示的內容；此頁未包含對它的審核決定。",
   "value_change": "變更說明",
   "value_change_unavailable": "安全的變更說明無法使用。變更頁只列出實際傳回的中繼資料。",

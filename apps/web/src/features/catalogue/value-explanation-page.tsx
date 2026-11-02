@@ -29,12 +29,16 @@ export function ValueExplanationPage({
   busy = false,
   onMore,
   onReload,
+  onRetry,
+  reloadFromFirstPage = false,
 }: {
   result?: ValueRead | undefined;
   locale: string;
   busy?: boolean;
   onMore?: (cursor: string) => void;
   onReload?: () => void;
+  onRetry?: (() => void) | undefined;
+  reloadFromFirstPage?: boolean;
 }) {
   const headingId = useId();
   const o = { locale: locale as never };
@@ -282,41 +286,73 @@ export function ValueExplanationPage({
           </details>
         </>
       )}
-      {onReload && (
-        <div>
-          <Button
-            variant="outline"
-            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
-            disabled={busy}
-            onClick={onReload}
-          >
-            {m.candidate_reload({}, o)}
-          </Button>
+      {(onReload || onRetry) && (
+        <div className="flex flex-wrap gap-3">
+          {onRetry && (
+            <Button
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
+              disabled={busy}
+              onClick={onRetry}
+            >
+              {m.value_retry({}, o)}
+            </Button>
+          )}
+          {onReload && (
+            <Button
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
+              disabled={busy}
+              onClick={onReload}
+            >
+              {reloadFromFirstPage ? m.value_restart({}, o) : m.candidate_reload({}, o)}
+            </Button>
+          )}
         </div>
       )}
     </article>
   );
 }
 
-/** Ephemeral state is discarded before a fresh read; private competition never enters a shared query cache. */
-export function ValueExplanation({
-  transport,
-  locale,
-  initial,
-  episode = initial,
-}: {
+type ReadingInputs = {
   transport: ValueTransport;
   locale: string;
   initial?: ValueRead;
   /** A loader refresh starts a new read even when the native address has not changed. */
   episode?: unknown;
-}) {
-  const previous = useRef({ episode, version: 0 });
-  if (previous.current.episode !== episode) previous.current = { episode, version: previous.current.version + 1 };
-  const work = useCatalogueLifetime(JSON.stringify(['value-explanation', locale, previous.current.version]));
-  return <ValueEpisode key={work.generation} {...{ transport, locale, initial, work }} />;
+};
+type PageRequest = { cursor: string | undefined; session: string | undefined };
+
+function unavailable(result: ValueRead | undefined) {
+  return (
+    result?.kind === 'unavailable' || (result?.kind === 'ready' && result.page.competition?.kind === 'unavailable')
+  );
 }
 
+/** Replaced readings and viewer/session epochs discard every held page and recovery request. */
+export function ValueExplanation({ transport, locale, initial, episode = initial }: ReadingInputs) {
+  const [reading, setReading] = useState({ transport, locale, initial, episode, seed: initial, version: 0 });
+  if (
+    reading.transport !== transport ||
+    reading.locale !== locale ||
+    reading.initial !== initial ||
+    reading.episode !== episode
+  ) {
+    setReading({
+      transport,
+      locale,
+      initial,
+      episode,
+      // An unchanged initial result belongs to the retired reading, not the replacement read.
+      seed: initial !== reading.initial ? initial : undefined,
+      version: reading.version + 1,
+    });
+  }
+  const work = useCatalogueLifetime(JSON.stringify(['value-explanation', locale, reading.version]));
+  return <ValueEpisode key={work.generation} {...{ transport, locale, initial: reading.seed, work }} />;
+}
+
+/** Reads hide the old explanation; only an unavailable read retains its exact recovery request. */
 function ValueEpisode({
   transport,
   locale,
@@ -331,21 +367,31 @@ function ValueEpisode({
   const [result, setResult] = useState<ValueRead | undefined>(initial);
   const [busy, setBusy] = useState(false);
   const session = useRef<string | undefined>(initial?.kind === 'ready' ? initial.session : undefined);
+  const [cursor, setCursor] = useState<string | undefined>();
+  const [retry, setRetry] = useState<PageRequest | undefined>(() =>
+    unavailable(initial) ? { cursor: undefined, session: session.current } : undefined,
+  );
   const running = useRef(false);
   const generation = useRef(0);
-  const currentTransport = useRef(transport);
-  currentTransport.current = transport;
-  async function load(cursor?: string) {
+  async function load(request: PageRequest = { cursor: undefined, session: session.current }) {
     if (!work.active() || running.current) return;
     running.current = true;
     const version = ++generation.current;
     setBusy(true);
     setResult(undefined);
-    const next = await currentTransport
-      .current(cursor, session.current)
-      .catch((): ValueRead => ({ kind: 'unavailable' }));
+    setRetry(undefined);
+    setCursor(request.cursor);
+    const next = await transport(request.cursor, request.session).catch((): ValueRead => ({ kind: 'unavailable' }));
     if (!work.active() || version !== generation.current) return;
     session.current = next.kind === 'ready' ? next.session : undefined;
+    setRetry(
+      unavailable(next)
+        ? {
+            cursor: request.cursor,
+            session: next.kind === 'ready' ? next.session : request.session,
+          }
+        : undefined,
+    );
     setResult(next);
     setBusy(false);
     running.current = false;
@@ -366,11 +412,19 @@ function ValueEpisode({
       locale={locale}
       busy={busy}
       onMore={(cursor) => {
-        if (offered === generation.current) void load(cursor);
+        if (offered === generation.current) void load({ cursor, session: session.current });
       }}
       onReload={() => {
         if (offered === generation.current) void load();
       }}
+      onRetry={
+        retry
+          ? () => {
+              if (offered === generation.current) void load(retry);
+            }
+          : undefined
+      }
+      reloadFromFirstPage={cursor !== undefined}
     />
   );
 }

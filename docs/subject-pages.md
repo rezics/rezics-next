@@ -238,6 +238,11 @@ The private review remains explicitly opened after session preparation and uses 
 no candidate or authenticated overlay enters the public sources response. Back to subject returns to that same
 public subject. Relation-edge slots continue through their existing target-aware readers.
 
+Unavailable value-explanation reads offer Retry this page with the exact attempted cursor and the producer's
+returned session, or the attempted session when no page returned; Back to first page deliberately abandons the
+continuation. Denied, missing, invalid or changed readings retire recovery, and every reread hides the prior explanation.
+A changed transport or locale rereads from the first page unless it also supplies a new initial reading.
+
 ### Recorded changes
 
 The subject header offers Changes at `/subjects/{id}/{slug}/changes`. This private, no-store, noindex
