@@ -24,6 +24,7 @@ import { EllipsisIcon } from 'lucide-react';
 
 import type { CopyProfile, CopySubjectResult } from './copies-profiles';
 import { CopyEditionPicker } from './copy-edition-picker';
+import { CopyDraftNavigation, type CopyDraftNavigationHandle } from './copy-draft-navigation';
 import { CopiesFallback } from './copies-fallback';
 import { UndoNotice } from './copies-undo';
 import type { CopyRemoved } from './copies-read';
@@ -189,6 +190,13 @@ export function CopyForm({
     ...draftOf(copy),
     status: copy?.status ?? selected?.statuses[0]?.id ?? '',
   }));
+  const originalDraft = useRef({ draft, kind, editionId: edition?.id ?? null });
+  const meaningfulChanges =
+    (Object.keys(originalDraft.current.draft) as (keyof Draft)[]).some(
+      (key) => draft[key] !== originalDraft.current.draft[key],
+    ) ||
+    (!copy &&
+      (kind !== originalDraft.current.kind || (edition?.id ?? null) !== originalDraft.current.editionId));
   const [more, setMore] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -197,6 +205,7 @@ export function CopyForm({
   const confirmationId = useId();
   const deleteControl = useRef<HTMLButtonElement>(null);
   const cancelDelete = useRef<HTMLButtonElement>(null);
+  const departure = useRef<CopyDraftNavigationHandle>(null);
   const wasConfirming = useRef(false);
   useLayoutEffect(() => {
     if (confirming) cancelDelete.current?.focus();
@@ -242,6 +251,11 @@ export function CopyForm({
     active.current = false;
     lookup.current += 1;
     onClose();
+  }
+  function requestClose() {
+    if (!current()) return;
+    if (departure.current) departure.current.requestClose();
+    else close();
   }
 
   async function chooseEdition(subject: EntityPickerSubject | null) {
@@ -456,7 +470,7 @@ export function CopyForm({
   const content: ReactNode = !readable ? (
     <div className="space-y-4">
       <p role="alert">{m.library_copy_detail_forbidden()}</p>
-      <button type="button" className={quiet} onClick={close}>
+      <button type="button" className={quiet} onClick={requestClose}>
         {m.library_copy_cancel()}
       </button>
     </div>
@@ -672,22 +686,33 @@ export function CopyForm({
             {m.library_copy_delete()}
           </button>
         ) : null}
-        <button type="button" className={quiet} onClick={close}>
+        <button type="button" className={quiet} onClick={requestClose}>
           {m.library_copy_cancel()}
         </button>
       </div>
     </form>
   );
 
-  if (inline) return content;
+  const navigation = (
+    <CopyDraftNavigation
+      ref={departure}
+      authorized={current()}
+      dirty={meaningfulChanges}
+      locked={pending || intent.current !== null}
+      routeProtection={Boolean(originating)}
+      onDiscard={close}
+    />
+  );
+  if (inline) return <>{navigation}{content}</>;
   return (
     <Exposure operation={copy ? 'copy.get' : 'copy.create'}>
+      {navigation}
       {mobile ? (
-        <BottomSheet open onOpenChange={(open) => !open && close()} title={title}>
+        <BottomSheet open onOpenChange={(open) => !open && requestClose()} title={title}>
           {content}
         </BottomSheet>
       ) : (
-        <Dialog open onOpenChange={(open) => !open && close()}>
+        <Dialog open onOpenChange={(open) => !open && requestClose()}>
           <DialogContent className="[&_[data-slot=dialog-close]]:min-h-11 [&_[data-slot=dialog-close]]:min-w-11">
             <DialogHeader>
               <DialogTitle>{title}</DialogTitle>
@@ -900,8 +925,6 @@ function LoadedCopiesPage({
   const [addKey, setAddKey] = useState(page.addKey);
   const [removed, setRemoved] = useState<{ copy: CopyItem; result: CopyRemoved; deadline: number } | null>(null);
   const [editing, setEditing] = useState<CopyItem | null | undefined>(undefined);
-  const editorOpen = useRef(false);
-  editorOpen.current = editing !== undefined;
   const [detailState, setDetailState] = useState<'loading' | 'ready' | 'unavailable' | 'forbidden'>('ready');
   const inspection = useRef(0);
   const active = useRef(true);
@@ -1062,10 +1085,8 @@ function LoadedCopiesPage({
               <Link
                 to="/library/copies"
                 search={{ ...(page.subjectId ? { subjectId: page.subjectId } : {}) }}
-                aria-disabled={editing !== undefined || undefined}
                 onClick={(event) => {
-                  // Recovery is navigation. It cannot discard an open draft or uncertain command.
-                  if (!currentPage('copy.list') || editorOpen.current) event.preventDefault();
+                  if (!currentPage('copy.list')) event.preventDefault();
                 }}
                 className={`${quiet} text-primary`}
               >

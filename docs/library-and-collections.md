@@ -188,7 +188,8 @@ perform no copy or subject read. Decision: address recovery uses explicit read-o
 correcting a selector starts page one, while correcting or restarting a page position preserves its valid subject.
 The existing native invalid-cursor fallback remains bounded to one retry with the same subject and credentials,
 and visibly announces that it restarted at page one.
-Detail/edit return and page recovery keep that subject; recovery cannot discard an open draft or uncertain write.
+Detail/edit return and page recovery keep that subject. Decision: changed drafts prompt before closure or internal
+navigation; an unresolved command allows only Stay until its exact intent resolves.
 
 The destinations are **Library**, **Following** and **History**. Library contains a bounded Continue row, Everything,
 Liked, pinned Collections and All Collections. Desktop uses a short pinned sidebar; phone uses a Collection selector
