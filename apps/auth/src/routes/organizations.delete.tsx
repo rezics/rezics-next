@@ -1,8 +1,17 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
+import { useCallback, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
 import { AuthButton as Button } from '../button';
 import { ErrorAlert } from '../alert';
 import { AuthPage } from '../frame';
@@ -46,6 +55,56 @@ export const Route = createFileRoute('/organizations/delete')({
   component: OrganizationDeletePage,
 });
 
+function OrganizationDeleteDeparture({
+  shouldWarn,
+  leave,
+  focus,
+}: {
+  shouldWarn: () => boolean;
+  leave: () => void;
+  focus: () => void;
+}) {
+  const blocker = useBlocker({ shouldBlockFn: shouldWarn, enableBeforeUnload: false, withResolver: true });
+  useLayoutEffect(() => {
+    if (blocker.status === 'blocked' && !shouldWarn()) blocker.proceed();
+  });
+  const stay = () => {
+    if (blocker.status === 'blocked') blocker.reset();
+  };
+  return (
+    <AlertDialog
+      open={blocker.status === 'blocked'}
+      onOpenChange={(open) => {
+        if (!open) stay();
+      }}
+    >
+      <AlertDialogContent
+        finalFocus={() => {
+          focus();
+          return false;
+        }}
+      >
+        <AlertDialogTitle>{m.auth_organization_delete_departure_heading()}</AlertDialogTitle>
+        <AlertDialogDescription>
+          {m.auth_organization_delete_departure_description()} {m.auth_account_operation_leave_notice()}
+        </AlertDialogDescription>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={stay}>{m.auth_organization_departure_stay()}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (blocker.status !== 'blocked') return;
+              leave();
+              blocker.proceed();
+            }}
+          >
+            {m.auth_organization_departure_leave()}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function OrganizationDeletePage() {
   return (
     <OrganizationDeleteContent
@@ -71,10 +130,43 @@ export function OrganizationDeleteContent({
   const [message, setMessage] = useState('');
   const [outcome, setOutcome] = useState<'form' | 'accepted' | 'unknown'>('form');
   const submitting = useRef<object | null>(null);
-  const review = useRef<(OrganizationDeletionReview & { selected?: string | undefined; active: boolean }) | null>(null);
+  const review = useRef<
+    (OrganizationDeletionReview & {
+      selected?: string | undefined;
+      active: boolean;
+      source: string | undefined;
+      reader: OrganizationDeletionReader;
+    }) | null
+  >(null);
   const selectedId = useRef<string | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
   const alert = useRef<HTMLDivElement>(null);
+  const router = useRouter({ warn: false });
+  const bypassDeparture = useRef(false);
+  const departureState = useRef({ confirmation, pending, outcome, loaded, organizationId, read });
+  departureState.current = { confirmation, pending, outcome, loaded, organizationId, read };
+
+  const shouldWarn = useCallback(() => {
+    const state = departureState.current;
+    const current = review.current;
+    const continuation = readOrganizationDeleteStepUp();
+    const hasAuthority =
+      state.loaded === null || state.loaded.kind === 'ready' || state.loaded.kind === 'unavailable';
+    const unfinished =
+      Boolean(state.confirmation.trim()) ||
+      state.pending ||
+      submitting.current !== null ||
+      state.outcome === 'unknown' ||
+      continuation.kind === 'pending';
+    return Boolean(
+      !bypassDeparture.current &&
+        current?.active &&
+        current.source === state.organizationId &&
+        current.reader === state.read &&
+        hasAuthority &&
+        unfinished,
+    );
+  }, []);
 
   function resetReview() {
     submitting.current = null;
@@ -86,11 +178,31 @@ export function OrganizationDeleteContent({
     setOutcome('form');
   }
 
+  function invalidateReview(current: NonNullable<typeof review.current>) {
+    current.active = false;
+    if (review.current === current) {
+      submitting.current = null;
+      setPending(false);
+    }
+  }
+
+  function leaveReview() {
+    bypassDeparture.current = true;
+    if (review.current) review.current.active = false;
+    selectedId.current = undefined;
+    resetReview();
+  }
+
   async function loadReview(current: NonNullable<typeof review.current>) {
     const result = current.selected
       ? await loadOrganizationDeletion(current.selected, read, current)
       : { kind: 'missing' as const };
     if (!current.isCurrent()) return;
+    if (result.kind === 'signed-out' || result.kind === 'denied' || result.kind === 'missing') {
+      invalidateReview(current);
+      setLoaded(result);
+      return;
+    }
     const continuation = readOrganizationDeleteStepUp();
     if (
       continuation.kind === 'pending' &&
@@ -99,6 +211,7 @@ export function OrganizationDeleteContent({
     ) {
       if (!organizationDeleteSessionMatches(result.target.session, continuation.value)) {
         clearOrganizationDeleteStepUp();
+        invalidateReview(current);
         setLoaded({ kind: 'denied' });
         return;
       }
@@ -108,6 +221,8 @@ export function OrganizationDeleteContent({
   }
 
   useLayoutEffect(() => {
+    if (review.current) review.current.active = false;
+    bypassDeparture.current = false;
     resetReview();
     const continuation = readOrganizationDeleteStepUp();
     const saved = continuation.kind === 'pending' ? continuation.value : null;
@@ -117,6 +232,8 @@ export function OrganizationDeleteContent({
     const current = {
       selected,
       active: true,
+      source: organizationId,
+      reader: read,
       humanAccountId:
         uncertain.kind === 'pending'
           ? uncertain.value.humanAccountId
@@ -148,6 +265,16 @@ export function OrganizationDeleteContent({
       window.removeEventListener('pageshow', restore);
     };
   }, [organizationId, read]);
+
+  useLayoutEffect(() => {
+    const unload = (event: BeforeUnloadEvent) => {
+      if (!shouldWarn()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', unload);
+    return () => window.removeEventListener('beforeunload', unload);
+  }, [shouldWarn]);
 
   async function recover() {
     const previous = review.current;
@@ -217,6 +344,7 @@ export function OrganizationDeleteContent({
             operationKey: key,
           })
         ) {
+          bypassDeparture.current = true;
           window.location.assign(organizationDeleteStepUpUrl);
           return;
         }
@@ -231,10 +359,12 @@ export function OrganizationDeleteContent({
         setOutcome('unknown');
         setMessage(m.auth_organization_delete_unknown());
       } else if (result.reason === 'changed') {
+        invalidateReview(current);
         clearOrganizationDeleteStepUp();
         setLoaded({ kind: 'unavailable' });
         setMessage(m.auth_organization_delete_changed());
       } else if (result.reason === 'denied') {
+        invalidateReview(current);
         setLoaded({ kind: 'denied' });
         setMessage(m.auth_organization_delete_denied());
       } else if (result.reason === 'platform-closed') setMessage(m.auth_organization_not_open());
@@ -249,14 +379,31 @@ export function OrganizationDeleteContent({
   }
 
   async function readback(currentOrganizationId: string) {
-    const current = review.current;
-    if (!current?.isCurrent() || submitting.current) return;
+    const previous = review.current;
+    if (
+      !previous ||
+      previous.selected !== currentOrganizationId ||
+      previous.source !== organizationId ||
+      previous.reader !== read ||
+      submitting.current
+    )
+      return;
+    const current = previous.isCurrent()
+      ? previous
+      : {
+          ...previous,
+          active: true,
+          isCurrent: (): boolean => review.current === current && current.active,
+        };
+    review.current = current;
     const operationToken = {};
     submitting.current = operationToken;
     setPending(true);
     try {
       const result = await loadOrganizationDeletion(currentOrganizationId, read, current);
       if (!current.isCurrent()) return;
+      if (result.kind === 'signed-out' || result.kind === 'denied' || result.kind === 'missing')
+        invalidateReview(current);
       // A missing/denied read is not proof of deletion; a readable target is not
       // proof that an earlier command failed. Preserve the unknown command state.
       setLoaded(result);
@@ -278,9 +425,13 @@ export function OrganizationDeleteContent({
   const [privacyBefore, privacyAfter] = privacyContact
     ? m.auth_account_delete_privacy_contact({ contact: privacyContact }).split(privacyContact)
     : [];
+  const departure = router ? (
+    <OrganizationDeleteDeparture shouldWarn={shouldWarn} leave={leaveReview} focus={() => input.current?.focus()} />
+  ) : null;
 
   return (
     <AuthPage heading={m.auth_organization_delete_heading()}>
+      {departure}
       <div className="auth-login-form">
         <p>{m.auth_organization_delete_effect()}</p>
         <p>{m.auth_organization_delete_remedies()}</p>

@@ -166,6 +166,8 @@
   "auth_organization_handle_invalid": "Usa entre 3 y 64 caracteres: letras a–z, números, guiones o guiones bajos. El primer y el último carácter deben ser una letra o un número.",
   "auth_organization_departure_heading": "¿Salir de la creación de la organización?",
   "auth_organization_departure_description": "Se descartarán los datos que aún no hayas enviado.",
+  "auth_organization_delete_departure_heading": "¿Salir de la revisión de eliminación de la organización?",
+  "auth_organization_delete_departure_description": "Se borrará la confirmación escrita si sales.",
   "auth_organization_departure_stay": "Quedarse",
   "auth_organization_departure_leave": "Salir",
   "auth_organization_heading": "Crear una organización",

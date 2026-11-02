@@ -236,7 +236,9 @@ denied and readable readback never establish success or permit a fresh deletion.
 
 Departure and selection changes retire private reviews, pending browser stages, completions and operation locks;
 already dispatched native work continues. Decision: cached-page recovery is explicit Retry with fresh confirmation,
-retaining the initiating human and any original uncertainty identity.
+retaining the initiating human and any original uncertainty identity. Decision: warn on nonblank confirmation or a
+pending or uncertain deletion; Stay preserves the exact in-memory review, while Leave retires callbacks without
+cancelling or replaying native work. Authority changes release an open prompt immediately.
 
 ## Create organization
 

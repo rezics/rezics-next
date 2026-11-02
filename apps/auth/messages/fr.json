@@ -166,6 +166,8 @@
   "auth_organization_handle_invalid": "Utilisez 3 à 64 caractères : lettres a–z, chiffres, tirets ou traits de soulignement. Le premier et le dernier caractère doivent être une lettre ou un chiffre.",
   "auth_organization_departure_heading": "Quitter la création de l’organisation ?",
   "auth_organization_departure_description": "Les informations non envoyées seront abandonnées.",
+  "auth_organization_delete_departure_heading": "Quitter l’examen de la suppression de l’organisation ?",
+  "auth_organization_delete_departure_description": "La confirmation saisie sera effacée si vous quittez cette page.",
   "auth_organization_departure_stay": "Rester",
   "auth_organization_departure_leave": "Quitter",
   "auth_organization_heading": "Créer une organisation",

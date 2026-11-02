@@ -166,6 +166,8 @@
   "auth_organization_handle_invalid": "請輸入 3 至 64 個字元：字母 a–z、數字、連字號或底線。開頭和結尾必須是字母或數字。",
   "auth_organization_departure_heading": "離開組織建立頁面？",
   "auth_organization_departure_description": "尚未送出的內容將被捨棄。",
+  "auth_organization_delete_departure_heading": "要離開組織刪除審閱嗎？",
+  "auth_organization_delete_departure_description": "離開頁面後，已輸入的確認內容會清除。",
   "auth_organization_departure_stay": "留下",
   "auth_organization_departure_leave": "離開",
   "auth_organization_heading": "建立組織",

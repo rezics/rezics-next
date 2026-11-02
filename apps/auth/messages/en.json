@@ -166,6 +166,8 @@
   "auth_organization_handle_invalid": "Use 3 to 64 characters: letters a–z, numbers, hyphens or underscores. Start and end with a letter or number.",
   "auth_organization_departure_heading": "Leave organization creation?",
   "auth_organization_departure_description": "Your unsent review will be discarded.",
+  "auth_organization_delete_departure_heading": "Leave organization deletion review?",
+  "auth_organization_delete_departure_description": "Your typed confirmation will be cleared if you leave.",
   "auth_organization_departure_stay": "Stay",
   "auth_organization_departure_leave": "Leave",
   "auth_organization_heading": "Create an organization",

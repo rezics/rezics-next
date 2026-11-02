@@ -166,6 +166,8 @@
   "auth_organization_handle_invalid": "Verwende 3 bis 64 Zeichen: Buchstaben a–z, Zahlen, Bindestriche oder Unterstriche. Das erste und letzte Zeichen muss ein Buchstabe oder eine Zahl sein.",
   "auth_organization_departure_heading": "Organisationserstellung verlassen?",
   "auth_organization_departure_description": "Deine noch nicht gesendeten Angaben werden verworfen.",
+  "auth_organization_delete_departure_heading": "Überprüfung der Organisationslöschung verlassen?",
+  "auth_organization_delete_departure_description": "Deine eingegebene Bestätigung wird beim Verlassen gelöscht.",
   "auth_organization_departure_stay": "Bleiben",
   "auth_organization_departure_leave": "Verlassen",
   "auth_organization_heading": "Organisation erstellen",

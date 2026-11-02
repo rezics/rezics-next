@@ -166,6 +166,8 @@
   "auth_organization_handle_invalid": "3〜64文字で入力してください。使える文字は英字 a–z、数字、ハイフン、アンダースコアです。先頭と末尾は英字または数字にしてください。",
   "auth_organization_departure_heading": "組織の作成を中断しますか？",
   "auth_organization_departure_description": "未送信の入力内容は破棄されます。",
+  "auth_organization_delete_departure_heading": "組織削除の確認を中断しますか？",
+  "auth_organization_delete_departure_description": "ページを離れると、入力した確認文は消去されます。",
   "auth_organization_departure_stay": "このページに留まる",
   "auth_organization_departure_leave": "ページを離れる",
   "auth_organization_heading": "組織を作成",
