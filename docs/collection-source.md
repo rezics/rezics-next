@@ -322,85 +322,27 @@ native cursor restart/session/cache. Full persona/API/default/growth and unrelat
 
 ## Bulk selection capture and confirmation
 
-The complete [integrated capture report](research/search-bulk-confirmation-capture.md) and
-[independent capture report](research/search-bulk-confirmation-capture-independent.md) are inspection evidence;
-both record execution as **UNRUN**. This owner adopts their Source direction and obligations, not a new ABI,
-native readiness claim, or competing authority. Their source inspection does not release stopped source custody,
-restart an old episode, or remove any existing failure or historical scope deviation.
+Commerce decision L2 supersedes the cross-home confirmation-cut protocol. An explicit selection or admitted
+indexed filter yields at most 1,000 exact targets, each written once to installed `library.bulk_target` rows.
+Read no more than the first 1,001 matching targets; a larger population refuses preview and asks the user to narrow
+the selection. The source uses its existing direct or ready-result reader and current disclosure checks. This
+adds neither a new Members preparation protocol nor public-source access.
 
-### Owner boundaries and conditional placement
+Confirmation changes the native operation state and executes only persisted target rows. It never reruns the
+filter, validates the entire population at a common cross-home cut, or adds later arrivals. Each native effect
+checks its captured entry or occurrence revision/incarnation atomically. A changed target receives
+`conflict/revision_mismatch`, displayed as “Changed since preview; skipped”; the remaining targets continue.
+Current authorization remains mandatory for preview, confirmation, effects and recovered results.
 
-Search owns predicate, population and meaning capture. Semantic owns original and terminal identity operands and
-their currentness. Library owns actual actionable occurrences and native target expectations. Commerce owns the
-single immutable action manifest, explicit confirmation, and its actual operation transition and cut/root
-decision. A capture or currentness witness is never permission and cannot certify another owner's missing body.
+Decision: explicit subject targets are canonical and unique; occurrence selections preserve each selected member,
+including duplicate subjects, and retain the occurrence revision. Persist only action/filter provenance in the
+operation header; the target rows are the sole membership manifest.
 
-The preferred conditional Source direction is a genuine finite members-preparation result with an explicitly
-admitted bounded durable reader. Its actual immutable result, reservation/admission, provenance, current-owner
-restoration, retention, reader and inclusive price bodies remain missing. A real same-client bulk-work episode
-is a possible alternative only after its native role and lifecycle are explicitly adopted and built; it is not a
-selected role, export or substitute currentness mechanism. Neither placement exists merely because current
-preparation, prefixes or Work roles exist.
+The [bulk owner contract](../services/kernel/src/library/bulk-contract.md) owns persistence and delivery.
+Preparation keeps its existing native implementation. Account erasure remains composed through Accounts 27af;
+this operation does not grant an alternative erasure or disclosure path.
 
-Keep Commerce's one manifest and explicit confirmation, the authentic Core atomic outbox with registered
-deterministic effects, and the existing Library Work module and one worker. Do not cast Command into an
-Operational transaction, borrow kind/publication authority, add another manifest or introduce a second
-scheduler. Source called hooks and aggregate calls remain distinct from separately admitted autonomous Work
-scheduling.
-
-### Complete capture and sticky dependencies
-
-Enroll the complete dependency cover before scanning: empty and new population ranges and behind-frontier
-arrivals; positive and negative predicates, NOT, exclusions and order; canonical/dedup originals and terminals;
-meaning and release; and foreign-source and privacy dependencies. Coverage is not just the selected subjects or
-their positive facts. Preserve lossless committed OLD/NEW routing and stable finite frontiers. A dependency
-registered late must cover changes since the original baseline.
-
-A mutable scan plus changed anchors cannot reconstruct a lost old value. Completion therefore needs an admitted
-immutable baseline/history, or complete dependency-local sticky change detection that makes relevant drift
-stale/unavailable. Do not use coarse global/account invalidation. Repair may finish the admitted build; after a
-target expectation is captured or preview is exposed, relevant drift remains sticky through value restoration
-or repair acknowledgement. Do not renew membership or replace the captured basis.
-
-Keep canonical result subjects distinct from actual actionable occurrences and non-ABA absent-slot witnesses.
-The Source handoff still owes immutable capture definition and provenance; complete dependency, change and
-frontier indexes; bounded stable paging; completion receipts; exact page equality, checkpoint and ACK; and
-owner/due/phase/unfinished/erasure copy locators. Library supplies actual occurrence expansion and present
-incarnation/revision or an authoritative absent-slot lifecycle witness. Every relevant expectation writer
-participates even when selected subjects do not change. Empty capture has the same completeness obligation.
-
-Eviction must preserve separately admitted exact proof custody or make unfinished capture unavailable. Existing
-32-result and 24h-idle preparation policy is neither 48h bulk custody nor a byte allowance. Page, ACK or preview
-cannot renew the absolute proposed 24h execution deadline, 48h result horizon or shared proof expiry.
-
-### Confirmation cut and conditional writer ordering
-
-The whole-selection cut includes pre-cut drift in captured target expectations as well as population, meaning,
-identity and source dependencies. Relevant pre-cut drift means stale confirmation with no dispatch. Strictly
-post-cut target drift produces exact partial target conflicts; operation-wide authority loss stops remaining
-work. Completed effects remain. Current authorization, consent and delegation, source, identity, foreign and
-privacy checks, and original, terminal and exclusion checks remain independent before disclosure and effects.
-Unknown or incomplete evidence, including an empty result, is unavailable.
-
-Independent local validation followed by Commerce root CAS leaves the Q-validate/P-change race. A conditional
-dependency-local writer-interlock proposal would serialize every final writer against the exact complete cut
-participants, including already-started writers and writers using old snapshots. Each home visit releases its
-connection; each committed interlock remains until the exact definitive committed root disposition is known.
-Root counters or ACKs cannot prove participant coverage that the producer never established.
-
-The independent report's ticket/pending-root refinement is also conditional: a writer needs a native pre-effect
-ticket, registration serialized with confirmation, and original-owner terminal-abort/no-inflight evidence
-before pending can clear. Unknown remains pending. No dispatch follows a validating, unproved or unknown state.
-This protocol is not selected or available: immediate authority writes during root unavailability, in-doubt
-retention and recovery, terminal erasure, and indexed finite fanout/admission remain unresolved.
-
-Another real cross-home ordering protocol remains possible. One-connection placement alone is not an
-impossibility proof: prepared PostgreSQL transactions can retain locks after releasing a connection, but no
-two-phase commit coordinator is adopted. Do not use long-lived snapshots, global locks, permission freezes, new
-epochs, narrowed common cross-home support, timeout-as-release, digests or revision vectors as substitutes.
-These proposals confer no native readiness.
-
-### Cost
+## Cost
 
 Keep the existing direct, preparation, page, backend and raw-100-key ceilings, actual one-connection placement
 and each invocation's original frame and deadline. The comparison normalizes local vectors as

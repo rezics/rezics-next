@@ -231,8 +231,11 @@ The same abstraction must support following a readable unlisted Collection, perm
 into a Zone through the Semantic-owned [Collection source](collection-source.md) contract. Curated export preserves
 permitted occurrence notes, order and multiplicity; dynamic export emits unique subjects. Neither export nor mount
 discloses private predicates/facts or grants subject access. Common bulk preview and execution bind the same admitted
-filtered or selected population, reject stale selection, prevent replay effects and retain inspectable partial failures.
-This document invents no bulk/export ABI and does not make existing stub factories functional.
+filtered or selected population in at most 1,000 persisted targets. Larger selections refuse preview and ask the
+user to narrow the selection. Confirmation executes those rows without rerunning the filter; changed entries are
+skipped individually as changed since preview while other targets continue. Durable operation identity and per-target
+results support navigation and retries without repeating completed effects. The
+[bulk owner contract](../services/kernel/src/library/bulk-contract.md) defines the native boundary.
 
 Web's public download controls admit a detached first-page capture of viewer, native metadata revision and exact
 occurrences, then compare it with current native FULL reads at admission and terminal delivery. Each read uses the
