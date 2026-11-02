@@ -87,9 +87,13 @@ test('seeds through a production write path when the population supplies write',
 test('stops admitting production writes after failure and waits for admitted writes', async () => {
   const failure = new Error('write failed');
   let release!: () => void;
-  const pending = new Promise<void>((resolve) => { release = resolve; });
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   let signalStarted!: () => void;
-  const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+  const started = new Promise<void>((resolve) => {
+    signalStarted = resolve;
+  });
   const ordinals: number[] = [];
   let finishCalls = 0;
   const population: Population = {
@@ -101,11 +105,20 @@ test('stops admitting production writes after failure and waits for admitted wri
       if (ordinal === 0) throw failure;
       await pending;
     },
-    finish: async () => { finishCalls++; },
+    finish: async () => {
+      finishCalls++;
+    },
   };
   const seeding = seed({ pool, admin: database.admin }, population, { from: 0, to: 8 });
   let settled = false;
-  void seeding.then(() => { settled = true; }, () => { settled = true; });
+  void seeding.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
   await started;
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   const settledBeforeRelease = settled;
