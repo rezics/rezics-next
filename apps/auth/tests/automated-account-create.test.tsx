@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
-import { approval, button, fill, flush, leave, open, send } from './creation-page-fixture';
+import { creationFixture, approval, button, fill, flush, leave, open, send } from './creation-page-fixture';
 import { AutomatedAccountCreatePage } from '../src/routes/automated.new';
 import { AUTOMATED_PROFILE, createAutomatedAttempt, restoreAutomatedAttempt, saveAutomatedAttempt } from '../src/automated-account-create';
+creationFixture();
 const human = '11111111-1111-4111-8111-111111111111';
 const operator = { id: '22222222-2222-4222-8222-222222222222', kind: 'organization' as const, handle: 'operator', displayName: null };
 const initial = { kind: 'ready' as const, accountId: human, clientId: AUTOMATED_PROFILE.client_id, scopes: AUTOMATED_PROFILE.scope, authTime: Math.floor(Date.now() / 1000), authnEpoch: 1, amr: ['pwd' as const] };

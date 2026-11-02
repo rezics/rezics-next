@@ -1,13 +1,14 @@
-import { afterAll, afterEach } from 'bun:test';
+import { afterAll, afterEach, beforeAll } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
 export { fill, button, session } from '../src/stories/accounts-operations/story';
 const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`))));
 export const dom = new Window({ url: 'https://auth.test/organizations/new' });
 const previous = new Map<string, PropertyDescriptor | undefined>();
-for (const [key, value] of Object.entries({ window: dom, document: dom.document, navigator: dom.navigator,
+const globals = { window: dom, document: dom.document, navigator: dom.navigator,
   HTMLElement: dom.HTMLElement, Event: dom.Event, HTMLInputElement: dom.HTMLInputElement, Element: dom.Element, Node: dom.Node,
-  IS_REACT_ACT_ENVIRONMENT: true, fetch: globalThis.fetch })) {
+  IS_REACT_ACT_ENVIRONMENT: true, fetch: globalThis.fetch };
+for (const [key, value] of Object.entries(globals)) {
   previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
   Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
 }
@@ -15,15 +16,20 @@ const { createRoot } = await import('react-dom/client');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 overwriteGetLocale(() => 'en');
 export const flush = (action: () => void) => act(async () => { action(); });
-let close: () => Promise<void>;
-afterEach(async () => { await close?.(); window.sessionStorage.clear(); });
+let close: (() => Promise<void>) | undefined;
+export function creationFixture() {
+beforeAll(() => {
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+});
+afterEach(async () => { await close?.(); close = undefined; window.sessionStorage.clear(); });
 afterAll(async () => {
   for (const [key, descriptor] of previous) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
   }
-  await dom.happyDOM.close();
 });
+}
 export async function open(page: ReactNode, sessionBody: object) {
   const calls: { path: string; body: any; resolve: (response: Response) => void }[] = [];
   globalThis.fetch = ((path, init) => {

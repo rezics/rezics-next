@@ -1,8 +1,9 @@
 import { expect, spyOn, test } from 'bun:test';
-import { approval, button, fill, flush, leave, open, send, session } from './creation-page-fixture';
+import { creationFixture, approval, button, fill, flush, leave, open, send, session } from './creation-page-fixture';
 import { NewOrganizationPage } from '../src/routes/organizations.new';
 import { readPendingAccountOperationStepUp, storePendingAccountOperationStepUp } from '../src/account-operation-step-up';
 import { readPendingOrganizationHandle, storePendingOrganizationHandle } from '../src/account-operations';
+creationFixture();
 const initial = session('organization');
 const body = { account_id: initial.accountId, client_id: initial.clientId, scope: initial.scopes };
 
