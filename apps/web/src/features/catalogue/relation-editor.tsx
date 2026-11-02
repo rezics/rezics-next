@@ -151,8 +151,12 @@ function RelationEditorLive({
       }
     | undefined
   >(undefined);
-  const candidateReadFocus = useRef<'boundary' | 'failure' | undefined>(undefined);
-  const failedCandidateRead = useRef(false);
+  const candidateReadFocus = useRef<{
+    opener: HTMLButtonElement;
+    active: () => boolean;
+    generation: number;
+    outcome?: 'boundary' | 'failure';
+  } | undefined>(undefined);
   const [result, setResult] = useState<Extract<RelationResult, { ok: true }>>();
   const [proposed, setProposed] = useState(false);
   const [proposedId, setProposedId] = useState<string>();
@@ -182,7 +186,6 @@ function RelationEditorLive({
       running.current = false;
       candidateReadFocus.current = undefined;
       openingIntent.current = undefined;
-      failedCandidateRead.current = false;
       setBusy(false);
       setRead(undefined);
       setCandidate(undefined);
@@ -315,15 +318,44 @@ function RelationEditorLive({
       candidateReadFocus.current = undefined;
       return;
     }
-    const focus = candidateReadFocus.current;
-    if (!focus) return;
+    const intent = candidateReadFocus.current;
+    if (!intent) return;
+    if (!visible || !intent.active() || readGeneration.current !== intent.generation) {
+      candidateReadFocus.current = undefined;
+      return;
+    }
+    if (busy || !intent.outcome) return;
     candidateReadFocus.current = undefined;
-    if (!visible || !mount.active()) return;
-    if (focus === 'failure') candidateReadFailure.current?.focus();
+    const active = document.activeElement;
+    // A still-focused native action remains a meaningful place to continue reading.
+    if (active === intent.opener && intent.opener.isConnected && !intent.opener.disabled) return;
+    if (active !== intent.opener && active !== document.body && active !== document.documentElement) return;
+    if (intent.outcome === 'failure') candidateReadFailure.current?.focus();
     else if (read?.ok && read.page && !read.page.candidates.length) candidatePageEmpty.current?.focus();
-    else candidatePageBoundary.current?.focus();
-  }, [closeConfirmation, read, failure, visible]);
+    else (candidatePageBoundary.current ?? openingBoundary.current ?? openingControl.current)?.focus();
+  }, [busy, closeConfirmation, read, failure, visible]);
   const closeLocked = compositionCloseLocked();
+
+  // Removal of the action during I/O is expected; deliberate interaction permanently
+  // cancels this read's handoff, even when the reader later returns to the action.
+  useEffect(() => {
+    const cancel = (event: Event) => {
+      const intent = candidateReadFocus.current;
+      if (intent && (event.type !== 'focusin' || event.target !== intent.opener))
+        candidateReadFocus.current = undefined;
+    };
+    document.addEventListener('focusin', cancel, true);
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', cancel, true);
+    window.addEventListener('blur', cancel);
+    return () => {
+      candidateReadFocus.current = undefined;
+      document.removeEventListener('focusin', cancel, true);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', cancel, true);
+      window.removeEventListener('blur', cancel);
+    };
+  }, [mount]);
 
   // The initial opener disappears while reading. Only its admitted keyboard intent
   // may orient to the result; candidate-page and composition opening keep their owners.
@@ -440,7 +472,6 @@ function RelationEditorLive({
     pageCursor.current = undefined;
     reading.current = undefined;
     candidateReadFocus.current = undefined;
-    failedCandidateRead.current = false;
     readGeneration.current++;
   }
   function failed(next: CandidateFailure) {
@@ -461,9 +492,17 @@ function RelationEditorLive({
     cursor?: string,
     session?: string,
     proposedId?: string,
-    focusCandidateRead = false,
+    event?: MouseEvent<HTMLButtonElement>,
   ) {
     const generation = ++readGeneration.current;
+    const intent =
+      event?.detail === 0 && event.currentTarget === document.activeElement
+        ? { opener: event.currentTarget, active: mount.active, generation, outcome: undefined as 'boundary' | 'failure' | undefined }
+        : undefined;
+    candidateReadFocus.current = intent;
+    const orient = (outcome: 'boundary' | 'failure') => {
+      if (intent && candidateReadFocus.current === intent) intent.outcome = outcome;
+    };
     const destination = { slot: address && { ...address }, cursor, session };
     reading.current = destination;
     // A previous page is never fresh authority after another read starts or fails.
@@ -477,13 +516,11 @@ function RelationEditorLive({
       const next = await transport.read(destination.slot, destination.cursor, destination.session);
       if (!active()) return;
       if (!next.ok) {
-        failedCandidateRead.current = !!destination.slot;
-        if (focusCandidateRead) candidateReadFocus.current = 'failure';
+        orient('failure');
         failed(next);
         return;
       }
-      failedCandidateRead.current = false;
-      if (focusCandidateRead) candidateReadFocus.current = 'boundary';
+      orient('boundary');
       nativeSession.current = next.session ?? nativeSession.current;
       setRead(next);
       pageCursor.current = cursor;
@@ -491,13 +528,12 @@ function RelationEditorLive({
       if (proposedId) setCandidate(next.page?.candidates.find((item) => item.id === proposedId));
     } catch {
       if (active()) {
-        failedCandidateRead.current = !!destination.slot;
-        if (focusCandidateRead) candidateReadFocus.current = 'failure';
+        orient('failure');
         failed({ ok: false, reason: 'unavailable' });
       }
     }
   }
-  async function load(address = slot, cursor?: string, session = nativeSession.current, focusCandidateRead = false) {
+  async function load(address = slot, cursor?: string, session = nativeSession.current, event?: MouseEvent<HTMLButtonElement>) {
     if (!lifetime.active() || running.current || uncertain) return;
     running.current = true;
     setBusy(true);
@@ -506,7 +542,7 @@ function RelationEditorLive({
     setConfirmation(undefined);
     request.current = undefined;
     try {
-      await readPage(address, cursor, session, proposedCandidate.current, focusCandidateRead);
+      await readPage(address, cursor, session, proposedCandidate.current, event);
     } finally {
       if (mount.active()) {
         setBusy(false);
@@ -514,13 +550,13 @@ function RelationEditorLive({
       }
     }
   }
-  function reload() {
+  function reload(event?: MouseEvent<HTMLButtonElement>) {
     const destination = reading.current;
     void load(
       destination?.slot ?? slot,
       destination?.cursor,
       destination?.session ?? nativeSession.current,
-      failedCandidateRead.current && !!destination?.slot,
+      event,
     );
   }
   async function confirm() {
@@ -1078,7 +1114,7 @@ function RelationEditorLive({
                       <Button
                         variant="outline"
                         disabled={frozen}
-                        onClick={() => load(slot, current.page!.next!, nativeSession.current, true)}
+                        onClick={(event) => load(slot, current.page!.next!, nativeSession.current, event)}
                       >
                         {m.candidate_more({}, options)}
                       </Button>
@@ -1272,7 +1308,7 @@ function RelationEditorLive({
             {failure && reading.current ? m.statement_consent_retry_page({}, options) : m.candidate_reload({}, options)}
           </Button>
           {reading.current?.slot && (
-            <Button variant="outline" disabled={busy} onClick={() => load(slot)}>
+            <Button variant="outline" disabled={busy} onClick={(event) => load(slot, undefined, nativeSession.current, event)}>
               {m.statement_consent_restart({}, options)}
             </Button>
           )}

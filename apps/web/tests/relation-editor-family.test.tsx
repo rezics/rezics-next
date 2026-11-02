@@ -827,6 +827,70 @@ test('Relation candidate recovery repeats the failed page and explicitly restart
   }
 });
 
+test('Relation page completion belongs only to its initiating current keyboard reader', async () => {
+  const ui = await mounted();
+  const { render, region, within, user, m, RelationEditor, relationFixture, window } = ui;
+  const outside = window.document.createElement('button');
+  window.document.body.append(outside);
+  try {
+    const fixture = relationFixture();
+    const ready = await fixture.transport.read(fixture.slot);
+    if (!ready.ok || !ready.page) throw new Error('Expected candidate page');
+    const page = { ...ready, page: { ...ready.page, next: 'next-page' } };
+    for (const scenario of `more:page more:empty more:failed more:pointer more:background more:moved
+      more:tab more:blur more:retired more:replaced retry:keep retry:lost retry:return retry:failed
+      retry:pointer restart:keep restart:lost reload:keep reload:lost`.split(/\s+/)) {
+      const [action, mode] = scenario.split(':');
+      const calls: unknown[][] = [];
+      let finish!: (read: Awaited<ReturnType<RelationTransport['read']>>) => void;
+      const transport: RelationTransport = { ...fixture.transport, read: (...args) => {
+        calls.push(structuredClone(args));
+        return new Promise((resolve) => { finish = resolve; });
+      } };
+      const editor = (key: string) => h(RelationEditor, { key, id: fixture.id, locale: 'en', initial: page,
+        transport, search: async () => [], composition: {
+          statement: fixture.draft, slot: fixture.slot, positionEditable: true, session: 'original-token',
+        } });
+      outside.focus();
+      await render(editor(scenario));
+      if (action === 'retry') {
+        await ui.click(region(), m.candidate_more());
+        await act(async () => finish({ ok: false, reason: 'unavailable' }));
+      }
+      const label = action === 'more' ? m.candidate_more() : action === 'retry'
+        ? m.statement_consent_retry_page() : action === 'restart' ? m.statement_consent_restart() : m.candidate_reload();
+      const opener = within(region()).getByRole('button', { name: label });
+      if (mode !== 'background') opener.focus();
+      await act(async () => mode === 'pointer' ? user.click(opener) : mode === 'background'
+        ? opener.click() : user.keyboard('{Enter}'));
+      if (mode === 'moved' || mode === 'return') outside.focus();
+      if (mode === 'return') opener.focus();
+      if (mode === 'lost') opener.blur(); // Native disabling can leave focus on the document.
+      if (mode === 'tab') await act(async () => user.tab());
+      if (mode === 'blur') window.dispatchEvent(new window.Event('blur'));
+      if (mode === 'retired' || mode === 'replaced') {
+        await render(mode === 'retired' ? null : editor('replacement'));
+        outside.focus();
+      }
+      const before = window.document.activeElement;
+      await act(async () => finish(mode === 'failed' ? { ok: false, reason: 'unavailable' }
+        : mode === 'empty' ? { ...page, page: { ...page.page, candidates: [] } } : page));
+      expect(calls).toHaveLength(action === 'retry' ? 2 : 1);
+      expect(calls.at(-1)).toEqual([fixture.slot, action === 'more' || action === 'retry'
+        ? 'next-page' : undefined, 'original-token']);
+      if (mode === 'page' || mode === 'lost')
+        expect(window.document.activeElement).toBe(within(region()).getByRole('region', { name: m.relation_review_slot() }));
+      else if (mode === 'empty') expect(window.document.activeElement?.textContent).toBe(m.candidate_empty());
+      else if (mode === 'failed' && action === 'more')
+        expect(window.document.activeElement).toBe(within(region()).getByRole('alert'));
+      else expect(window.document.activeElement).toBe(before);
+    }
+  } finally {
+    outside.remove();
+    await ui.close();
+  }
+});
+
 test('relation editor keeps an edited proposal on Stay and leaves only after an explicit choice', async () => {
   const ui = await mounted();
   const { host, window, render, user, within, RelationEditor, relationFixture, m, confirm } = ui;
