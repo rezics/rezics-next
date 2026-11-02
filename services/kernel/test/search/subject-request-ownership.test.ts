@@ -102,9 +102,7 @@ function engine(prefix: string, hold: ReturnType<typeof held<unknown>>) {
             timed_out: false,
             _shards: { total: 1, successful: 1, skipped: 0, failed: 0 },
             hits: {
-              hits: suggest
-                ? [{ _id: book, _index: index, _source: { partition: 10, security_revision: 1 } }]
-                : [],
+              hits: suggest ? [{ _id: book, _index: index, _source: { partition: 10, security_revision: 1 } }] : [],
             },
           },
         };
@@ -229,7 +227,10 @@ test('mutating caller-owned search, facet or suggestion data during admission ca
   release.open();
   expect((await faceting).facets[0]!.values[0]!.labels).toEqual({ en: 'En0' });
   await expect(service.facets('anonymous', facetRequest)).rejects.toBeInstanceOf(ProblemError);
-  const laterFacets = await service.facets('anonymous', { languages: ['ja'], facets: [{ property: 'type', size: 10 }] });
+  const laterFacets = await service.facets('anonymous', {
+    languages: ['ja'],
+    facets: [{ property: 'type', size: 10 }],
+  });
   expect(laterFacets.facets[0]!.values[0]!.labels).toEqual({ ja: 'Ja0' });
 
   clientHold.arm();
