@@ -25,7 +25,7 @@ import { localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
 import { useRouter } from '@tanstack/react-router';
-import { reportReviewNavigationContext } from '../stories/patterns/board-report-queue/board-report-queue';
+import { reportReviewNavigationContext } from './reports-bulk-controls';
 
 export { moderationTargetContent } from './target-content';
 export type ModerationTarget = ResolvedReportTarget;

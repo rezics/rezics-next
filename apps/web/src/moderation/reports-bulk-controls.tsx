@@ -1,9 +1,13 @@
 import { useEffect, useId, useRef } from 'react';
+import type { AuthoringLocation } from '../threads/authoring-departure';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import type { BulkItemState, BulkSnapshot, ReportsBulkAction } from './reports-bulk-action';
 import type { ReportQueueAction } from './reports-view-action';
+
+export const reportReviewNavigationContext = ({ pathname, search }: AuthoringLocation) =>
+  JSON.stringify([pathname, search]);
 
 export const reportReviewDepartureMessages = () => ({
   title: m.moderation_review_leave_title(),

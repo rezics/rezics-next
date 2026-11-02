@@ -555,3 +555,72 @@ test('Individual browsing and receipts do not warn; Stay preserves the reason an
     await act(async () => release());
   });
 });
+
+test('An enclosing shared owner blocks search-only route reads and retires report continuations before Leave proceeds', async () => {
+  await withView(async ({ host, render, user }) => {
+    const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
+      await import('@tanstack/react-router');
+    const { AuthoringDepartureProvider } = await import('../src/threads/authoring-departure');
+    let reads = 0,
+      calls = 0;
+    let stale!: HTMLButtonElement;
+    const shell = createRootRoute({
+      component: () => (
+        <AuthoringDepartureProvider sessionBound={false}>
+          <Outlet />
+        </AuthoringDepartureProvider>
+      ),
+    });
+    const route = createRoute({
+      getParentRoute: () => shell,
+      path: '/review',
+      validateSearch: (search: Record<string, unknown>) => ({
+        tab: search.tab === 'appeals' ? ('appeals' as const) : ('reports' as const),
+      }),
+      loaderDeps: ({ search }) => search,
+      loader: () => {
+        reads++;
+        if (stale) stale.click();
+        return null;
+      },
+      component: Review,
+    });
+    function Review() {
+      return (
+        <ModerationReportsView
+          {...moderationQueueFixture}
+          tab={route.useSearch().tab}
+          onAction={async () => {
+            calls++;
+            return { ok: true };
+          }}
+        />
+      );
+    }
+    const router = createRouter({
+      routeTree: shell.addChildren([route]),
+      history: createMemoryHistory({ initialEntries: ['/review'] }),
+    });
+    await router.load();
+    await render(<RouterProvider router={router} />);
+    await act(async () => user.click(host.querySelector<HTMLElement>('[role="checkbox"]')!));
+    stale = [...host.querySelectorAll('button')].filter((node) => node.textContent === m.moderation_dismiss())[1]!;
+    let navigation!: Promise<void>;
+    await act(async () => {
+      navigation = router.navigate({ to: '/review', search: { tab: 'appeals' } });
+    });
+    expect(departure(host).textContent).toContain(m.moderation_review_leave_unsaved());
+    expect(reads).toBe(1);
+    await act(async () => user.click(button(departure(host), m.thread_authoring_stay())));
+    await navigation;
+    expect(reads).toBe(1);
+    expect(host.querySelector('[role="checkbox"]')?.getAttribute('aria-checked')).toBe('true');
+    await act(async () => {
+      navigation = router.navigate({ to: '/review', search: { tab: 'appeals' } });
+    });
+    await act(async () => user.click(button(departure(host), m.thread_authoring_leave())));
+    await act(async () => navigation);
+    expect(reads).toBe(2);
+    expect(calls).toBe(0);
+  });
+});

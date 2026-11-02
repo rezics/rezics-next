@@ -13,7 +13,7 @@ import type { ReportQueueAction } from '../stories/patterns/board-report-queue/b
 import type { ReportsBulkAction } from './reports-bulk-action';
 import { moderationTargetContent } from './target-content';
 import { useAuthoringDeparture } from '../threads/authoring-departure';
-import { reportReviewDepartureMessages } from './reports-bulk-controls';
+import { reportReviewDepartureMessages, reportReviewNavigationContext } from './reports-bulk-controls';
 
 type Confirmation = { action: 'dismiss' } | { action: 'take-down'; reason: string };
 const utcSuffix = /Z$/;
@@ -84,6 +84,7 @@ export function ReportReviewCard({
     reviewAction.retire,
     undefined,
     reportReviewDepartureMessages(),
+    reportReviewNavigationContext,
   );
   const confirmationRef = useRef<HTMLDivElement>(null);
   useEffect(() => {

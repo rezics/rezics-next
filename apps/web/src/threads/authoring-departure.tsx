@@ -32,6 +32,7 @@ type Draft = {
   discard: () => void;
   leave?: () => void;
   messages?: () => NavigationMessages | undefined;
+  navigationContext?: NavigationContext | undefined;
   kind?: DepartureKind | undefined;
 };
 type Decision = { kind: 'navigation'; resolve: (stay: boolean) => void } | { kind: 'discard'; draftId: number };
@@ -169,6 +170,19 @@ export class AuthoringDepartureState {
       this.decision = { kind: 'navigation', resolve };
       this.notify();
     });
+  };
+
+  blockLocation = (
+    current: AuthoringLocation,
+    next: AuthoringLocation,
+    defaultContext: NavigationContext,
+    focused: HTMLElement | null,
+  ) => {
+    const changed = [...this.drafts.values()].some((draft) => {
+      const context = draft.navigationContext ?? defaultContext;
+      return draft.needsDecision() && context(current) !== context(next);
+    });
+    return changed ? this.block('current', 'next', focused) : false;
   };
 
   requestDiscard = (draftId: number, focused: HTMLElement | null) => {
@@ -333,9 +347,10 @@ function RouterDeparture({
 }) {
   useBlocker({
     shouldBlockFn: ({ current, next }) =>
-      navigation.block(
-        navigationContext(current),
-        navigationContext(next),
+      navigation.blockLocation(
+        current,
+        next,
+        navigationContext,
         document.activeElement instanceof HTMLElement ? document.activeElement : null,
       ),
     withResolver: false,
@@ -454,6 +469,7 @@ export function useAuthoringDeparture(
   onLeave?: () => void,
   kind?: DepartureKind,
   messages?: NavigationMessages,
+  navigationContext?: NavigationContext,
 ) {
   const navigation = useContext(DepartureContext);
   const latest = useRef({ needsDecision, unresolved, signature, onDiscard, onLeave, kind, messages, released: false });
@@ -465,6 +481,8 @@ export function useAuthoringDeparture(
   latest.current.onLeave = onLeave;
   latest.current.kind = kind;
   latest.current.messages = messages;
+  const context = useRef(navigationContext);
+  context.current = navigationContext;
   const needsProtection = protectedNow(needsDecision);
   const pending = protectedNow(unresolved);
   const registration = useRef<{ owner: AuthoringDepartureState; id: number; remove: () => void } | null>(null);
@@ -477,6 +495,9 @@ export function useAuthoringDeparture(
       discard: () => latest.current.onDiscard?.(),
       messages: () => latest.current.messages,
       kind: latest.current.kind,
+      get navigationContext() {
+        return context.current;
+      },
       leave: () => {
         latest.current.released = true;
         latest.current.onLeave?.();

@@ -13,16 +13,13 @@ import {
   ReportsBulkControls,
   ReportsBulkRefreshFailure,
   reportReviewDepartureMessages,
+  reportReviewNavigationContext,
 } from '../../../moderation/reports-bulk-controls';
 import { m } from '../../../paraglide/messages.js';
 import type { ReportQueueAction } from '../../../moderation/reports-view-action';
 import type { ReportReadState, Report, ReportedRevision, ResolvedReportTarget } from '../../../moderation/reports-read';
 import { ReportReviewCard } from '../../../moderation/reports-view-card';
-import {
-  AuthoringDepartureBoundary,
-  useAuthoringDeparture,
-  type AuthoringLocation,
-} from '../../../threads/authoring-departure';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../../threads/authoring-departure';
 
 export type { ReportQueueAction } from '../../../moderation/reports-view-action';
 export type ReportQueueProps = {
@@ -43,9 +40,6 @@ export type ReportQueueProps = {
 };
 
 const emptyRevisions: ReportedRevision[] = [];
-
-export const reportReviewNavigationContext = ({ pathname, search }: AuthoringLocation) =>
-  JSON.stringify([pathname, search]);
 
 /** Injected queues keep the same decision UI without requiring a route or private reader. */
 export function BoardReportQueue(props: ReportQueueProps) {
@@ -131,6 +125,7 @@ function QueueGeneration({
     },
     undefined,
     reportReviewDepartureMessages(),
+    reportReviewNavigationContext,
   );
   const [takenDown, setTakenDown] = useState<ReadonlySet<string>>(() => new Set());
   const targetByKey = new Map(targets.map((target) => [target.key, target]));
