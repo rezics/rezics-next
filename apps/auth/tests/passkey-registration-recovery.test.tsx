@@ -1,39 +1,26 @@
-import { afterAll, afterEach, expect, test } from 'bun:test';
-import { dirname } from 'node:path';
-import { act } from 'react';
-import type { Root } from 'react-dom/client';
+import { afterAll, expect, test } from 'bun:test';
+import { act, type ReactNode } from 'react';
 import type { PasskeyRegistrationReview } from '../src/security';
+import { creationFixture, dom, flush, open, button } from './creation-page-fixture';
 
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
-);
-const dom = new Window({ url: 'https://auth.test/security' });
-const globals = {
-  ...Object.fromEntries(
-    ['window', 'document', 'navigator', 'HTMLElement', 'HTMLInputElement', 'Element', 'Node', 'Event'].map((key) => [
-      key,
-      dom[key as keyof typeof dom],
-    ]),
-  ),
-  getComputedStyle: dom.getComputedStyle.bind(dom),
-  IS_REACT_ACT_ENVIRONMENT: true,
-  PublicKeyCredential: class {},
-};
-const originals = new Map(
-  [...Object.keys(globals), 'fetch'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
-);
-for (const [key, value] of Object.entries(globals))
+creationFixture();
+const additions = { getComputedStyle: dom.getComputedStyle.bind(dom), PublicKeyCredential: class {} };
+const originals = new Map(Object.keys(additions).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+for (const [key, value] of Object.entries(additions))
   Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
-const { createRoot } = await import('react-dom/client');
+afterAll(() => {
+  for (const [key, descriptor] of originals) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+});
 const { SecurityPage } = await import('../src/routes/security');
 const { initial } = await import('../src/stories/accounts-security/security/security.stories');
-const { emptyInventory, button } = await import('../src/stories/accounts-operations/story');
-const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
+const { emptyInventory } = await import('../src/stories/accounts-operations/story');
 const { m } = await import('../src/paraglide/messages.js');
 const { AUTH_POST_TIMEOUT_MS } = await import('../src/api');
-overwriteGetLocale(() => 'en');
-const flush = (action: () => void) => act(async () => action());
-let host: HTMLDivElement, root: Root, ceremonies: number, requests: { path: string; init: RequestInit }[];
+let host: HTMLDivElement, ceremonies: number, requests: { path: string; init: RequestInit }[];
+let rerender: (page: ReactNode) => Promise<void>;
 let response: ReturnType<typeof Promise.withResolvers<Response>>;
 let review: ReturnType<typeof Promise.withResolvers<PasskeyRegistrationReview>>;
 let reviews: string[];
@@ -50,7 +37,7 @@ const props = {
   inventorySource: emptyInventory,
   identitySource: async () => ({ kind: 'unavailable' as const }),
 };
-const render = (value = initial) => flush(() => root.render(<SecurityPage initial={value} {...props} />));
+const render = (value = initial) => rerender(<SecurityPage initial={value} {...props} />);
 const submit = () =>
   host
     .querySelectorAll('form')[1]!
@@ -60,21 +47,8 @@ const locked = () =>
   [...host.querySelectorAll<HTMLButtonElement>('form button[type="submit"], li button')].every(
     (control) => control.disabled,
   );
-afterEach(async () => {
-  await flush(() => root.unmount());
-  host.remove();
-});
-afterAll(async () => {
-  for (const [key, descriptor] of originals) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
 async function mount() {
-  host = document.createElement('div');
-  document.body.append(host);
-  root = createRoot(host);
+  ({ host, render: rerender } = await open(<SecurityPage initial={initial} {...props} />, {}));
   ceremonies = 0;
   requests = [];
   reviews = [];
@@ -107,7 +81,6 @@ async function mount() {
       });
     return response.promise;
   }) as typeof fetch;
-  await render();
 }
 
 test.each(['headers', 'created body', 'error body'])(
