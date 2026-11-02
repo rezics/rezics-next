@@ -1,11 +1,11 @@
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
-import type { CommandTransaction } from '../command/command.ts';
+import { noEffect, type CommandTransaction } from '../command/command.ts';
 import { createLibraryCommandRunner } from '../library/command-support.ts';
 import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { RATING_IDENTITY_PAGE, type RatingIdentityPageEvent } from './events.ts';
+import { RATING_IDENTITY_PAGE, RATING_IDENTITY_WORK, type RatingIdentityPageEvent } from './events.ts';
 import {
   identityPageDigest,
   identityRoute,
@@ -68,18 +68,32 @@ export function createRatingIdentityRepairCommands(config: {
     identityRoute(actor.accountId);
     return actor.accountId;
   };
-  const run = <T>(
+  const run = <T extends FrameResult | SelectionResult>(
     actor: Actor,
-    kind: string,
+    kind: 'admit' | 'select' | 'cancel',
     input: unknown,
     key: string,
     body: (tx: CommandTransaction, transactionId: string) => Promise<T>,
   ) => {
-    owner(actor);
-    return runner.ownAccount(
+    const voterId = owner(actor);
+    return runner.ownAccount<T>(
       actor,
       { action: 'rating:vote', kind: `rating.identity.${kind}`, requestKey: key, input },
-      async (tx, command) => ({ value: await body(tx, command.transactionId), events: [] }),
+      async (tx, command) => {
+        const value = await body(tx, command.transactionId);
+        if (value.status === 'pending') return noEffect(value);
+        const ref = value.status === 'selected' ? value.page : value.frame;
+        return {
+          value,
+          events: [
+            {
+              type: RATING_IDENTITY_WORK,
+              subject: voterId,
+              data: { voterId, workId: ref.workId, generation: ref.generation, action: kind },
+            },
+          ],
+        };
+      },
     );
   };
   const eligible = async (tx: CommandTransaction, voterId: string) => {
@@ -156,8 +170,8 @@ export function createRatingIdentityRepairCommands(config: {
               receipt.workId !== input.workId ||
               receipt.generation !== input.generation
             )
-              return { value: { status: 'pending', reason: 'receipt-binding-mismatch' }, events: [] };
-            return { value: { status: 'committed', receipt }, events: [] };
+              return noEffect<CommitResult>({ status: 'pending', reason: 'receipt-binding-mismatch' });
+            return noEffect<CommitResult>({ status: 'committed', receipt });
           }
           const frame = await readIdentityFrame(tx, voterId);
           if (!sameIdentityWork(frame, input) || frame.state !== 'active') throw new RepairPending('stale-work');
@@ -173,7 +187,16 @@ export function createRatingIdentityRepairCommands(config: {
           if (identityPageDigest({ ...page, votes }) !== page.digest) {
             frame.selected = null;
             await saveIdentityFrame(tx, voterId, frame);
-            return { value: { status: 'pending', reason: 'vote-changed' }, events: [] };
+            return {
+              value: { status: 'pending', reason: 'vote-changed' },
+              events: [
+                {
+                  type: RATING_IDENTITY_WORK,
+                  subject: voterId,
+                  data: { voterId, workId: frame.workId, generation: frame.generation, action: 'invalidate' },
+                },
+              ],
+            };
           }
           const active = await eligible(tx, voterId);
           if (active !== (page.mode === 'repair')) throw new RepairPending('voter-eligibility-changed');

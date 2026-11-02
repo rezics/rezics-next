@@ -36,6 +36,7 @@ const populationTotalDelivery = Type.Union([
 export type PopulationTotalEvent = Static<typeof populationTotalDelivery>;
 export type PopulationTotalDelivery = Extract<PopulationTotalEvent, { action: 'deliver' }>;
 
+export const RATING_IDENTITY_WORK = 'com.rezics.rating.identity-work.changed.v1';
 export const RATING_IDENTITY_PAGE = 'com.rezics.rating.identity-repair.page.v1';
 const identityPage = Type.Object(
   {
@@ -53,6 +54,20 @@ export type RatingIdentityPageEvent = Static<typeof identityPage>;
 
 export const RATING_EVENTS = {
   [RATING_IDENTITY_PAGE]: identityPage,
+  [RATING_IDENTITY_WORK]: Type.Object(
+    {
+      voterId: Type.String({ pattern: UUID }),
+      workId: Type.String({ pattern: UUID }),
+      generation: serial,
+      action: Type.Union([
+        Type.Literal('admit'),
+        Type.Literal('select'),
+        Type.Literal('cancel'),
+        Type.Literal('invalidate'),
+      ]),
+    },
+    { additionalProperties: false },
+  ),
   [POPULATION_TOTAL_DELIVERY]: populationTotalDelivery,
   'com.rezics.rating.erasure-page.applied.v1': Type.Object(
     { voterId: Type.String({ pattern: UUID }), pageId: Type.String({ pattern: UUID }) },
