@@ -1,34 +1,47 @@
-import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { pickText } from '@rezics/composition';
-import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
-import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { m } from '../../paraglide/messages.js';
-import { subjectHref } from '../../subject/subject-href';
-import type { CandidateTransport } from '../../subject/candidate-review';
-import { relationFields, type RelationTransport } from '../../subject/relation-candidates';
-import { ViewHeading } from '../pages/view-heading';
-import { CandidateValue } from '../pages/data';
-import { CreateSubjectForm } from './create-subject-form';
-import type { CreatedReader, CreateResult } from './create-subject';
-import { SubjectTermsEntry } from './subject-terms-entry';
-import { PublicationEditorEntry } from './publication-editor-entry';
-import { AuthoredFieldEntry } from './authored-field-entry';
-import { SubjectFacts } from './subject-facts-view';
-import type { FactsTransport } from './subject-facts';
-import { RelationEditor } from './relation-editor';
-import { DefinitionGuideLink } from './definition-guide-view';
-import { EditorFailure } from './statement-editor-view';
-import type { StatementInput } from './statement-editor';
-import { gameCreationAddress } from './game-creation-address';
-import { GameClassifications, GameInitialFacts, gameGroupLabel } from './game-profile-fields';
-import { gameDefinitions, gameDraft, gameGroups, type GameCommand, type GameRead } from './game-profile';
+import { catalogueEditor, useEditorLifetime } from "./editor-lifetime";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { pickText } from "@rezics/composition";
+import type { EntityPickerSearch } from "@rezics/ui/entity-picker";
+import { Button, buttonVariants } from "@rezics/ui/shadcn/button";
+import { m } from "../../paraglide/messages.js";
+import { subjectHref } from "../../subject/subject-href";
+import type { CandidateTransport } from "../../subject/candidate-review";
+import {
+  relationFields,
+  type RelationTransport,
+} from "../../subject/relation-candidates";
+import { ViewHeading } from "../pages/view-heading";
+import { CandidateValue } from "../pages/data";
+import { CreateSubjectForm } from "./create-subject-form";
+import type { CreatedReader, CreateResult } from "./create-subject";
+import { SubjectTermsEntry } from "./subject-terms-entry";
+import { PublicationEditorEntry } from "./publication-editor-entry";
+import { AuthoredFieldEntry } from "./authored-field-entry";
+import { SubjectFacts } from "./subject-facts-view";
+import type { FactsTransport } from "./subject-facts";
+import { RelationEditor } from "./relation-editor";
+import { DefinitionGuideLink } from "./definition-guide-view";
+import { EditorFailure } from "./statement-editor-view";
+import type { StatementInput } from "./statement-editor";
+import { gameCreationAddress } from "./game-creation-address";
+import {
+  GameClassifications,
+  GameInitialFacts,
+  gameGroupLabel,
+} from "./game-profile-fields";
+import {
+  gameDefinitions,
+  gameDraft,
+  gameGroups,
+  type GameCommand,
+  type GameRead,
+} from "./game-profile";
 
 const gameActionClass =
-  'min-h-8 min-w-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
+  "min-h-8 min-w-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11";
 const gameDisclosureSummaryClass =
-  'max-w-full cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:py-3';
+  "max-w-full cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:py-3";
 
 export type GameProfileTransport = {
   load: () => Promise<GameRead>;
@@ -38,11 +51,14 @@ export type GameProfileTransport = {
   classifications: FactsTransport;
   relations: RelationTransport;
   review: (property: string, session?: string) => CandidateTransport;
-  classificationReview: (property: string, session?: string) => CandidateTransport;
+  classificationReview: (
+    property: string,
+    session?: string,
+  ) => CandidateTransport;
 };
 export const GameProfile = catalogueEditor(GameProfileLive);
 type ReadyGame = Extract<GameRead, { ok: true }> & {
-  public: NonNullable<Extract<GameRead, { ok: true }>['public']>;
+  public: NonNullable<Extract<GameRead, { ok: true }>["public"]>;
 };
 
 function GameProfileLive({
@@ -55,22 +71,24 @@ function GameProfileLive({
 }: {
   id?: string;
   locale: string;
-  session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
+  session: "unknown" | "signed-in" | "signed-out" | "unavailable";
   transport: GameProfileTransport;
   search: EntityPickerSearch;
   onNavigate: (href: string) => void;
 }) {
   const lifetime = useEditorLifetime();
   const query = useQuery({
-    queryKey: [...['game-profile', id ?? 'new', locale], lifetime.generation],
+    queryKey: [...["game-profile", id ?? "new", locale], lifetime.generation],
     queryFn: transport.load,
     retry: false,
   });
-  const [drafts, setDrafts] = useState<Record<string, { key: string; statement: StatementInput }[]>>({});
+  const [drafts, setDrafts] = useState<
+    Record<string, { key: string; statement: StatementInput }[]>
+  >({});
   const [observed, setObserved] = useState(query.data);
-  const [lastReading, setLastReading] = useState<Extract<GameRead, { ok: true }> | undefined>(
-    query.data?.ok && (!id || query.data.public) ? query.data : undefined,
-  );
+  const [lastReading, setLastReading] = useState<
+    Extract<GameRead, { ok: true }> | undefined
+  >(query.data?.ok && (!id || query.data.public) ? query.data : undefined);
   // Retain one admitted reading within this editor lifetime, only across transient failures.
   // Retiring responses clear it synchronously, so a later outage cannot revive concealed content.
   if (observed !== query.data) {
@@ -78,24 +96,36 @@ function GameProfileLive({
     setLastReading(
       query.data?.ok && (!id || query.data.public)
         ? query.data
-        : query.data && !query.data.ok && query.data.reason === 'unavailable'
+        : query.data && !query.data.ok && query.data.reason === "unavailable"
           ? lastReading
           : undefined,
     );
   }
-  const refreshFailed = query.isError || (!!query.data && !query.data.ok && query.data.reason === 'unavailable');
+  const refreshFailed =
+    query.isError ||
+    (!!query.data && !query.data.ok && query.data.reason === "unavailable");
   const o = { locale: locale as never };
   const read = refreshFailed ? lastReading : query.data;
   if (!read || !read.ok)
     return (
       <article className="mx-auto min-w-0 max-w-4xl space-y-5">
-        <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
+        <ViewHeading
+          label={m.game_profile_title({}, o)}
+          headingClassName="font-sans"
+        />
         {query.isPending ? (
           <p role="status">{m.catalogue_create_loading({}, o)}</p>
         ) : (
           <>
-            <EditorFailure reason={read && !read.ok ? read.reason : 'unavailable'} locale={locale} />
-            <Button className={gameActionClass} disabled={query.isFetching} onClick={() => void query.refetch()}>
+            <EditorFailure
+              reason={read && !read.ok ? read.reason : "unavailable"}
+              locale={locale}
+            />
+            <Button
+              className={gameActionClass}
+              disabled={query.isFetching}
+              onClick={() => void query.refetch()}
+            >
               {id ? m.game_profile_refresh({}, o) : m.correction_reload({}, o)}
             </Button>
           </>
@@ -105,18 +135,29 @@ function GameProfileLive({
   if (!id)
     return (
       <div className="space-y-6">
-        <p className="mx-auto max-w-3xl text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
+        <p className="mx-auto max-w-3xl text-sm text-muted-foreground">
+          {m.game_profile_grain({}, o)}
+        </p>
         <CreateSubjectForm
           locale={locale}
           session={session}
           onNavigate={onNavigate}
           profile={{
             title: m.game_profile_title({}, o),
-            scope: 'game',
-            control: (pointer, type) => gameCreationAddress(pointer, drafts[type] ?? [], read.release, locale),
-            labelLanguage: (type) => pickText(read.release.types[type]?.labels ?? {}, locale).lang ?? undefined,
+            scope: "game",
+            control: (pointer, type) =>
+              gameCreationAddress(
+                pointer,
+                drafts[type] ?? [],
+                read.release,
+                locale,
+              ),
+            labelLanguage: (type) =>
+              pickText(read.release.types[type]?.labels ?? {}, locale).lang ??
+              undefined,
             descriptionLanguage: (type) =>
-              pickText(read.release.types[type]?.descriptions ?? {}, locale).lang ?? undefined,
+              pickText(read.release.types[type]?.descriptions ?? {}, locale)
+                .lang ?? undefined,
             prepare: (initial) =>
               gameDraft(
                 read.release,
@@ -132,20 +173,29 @@ function GameProfileLive({
                 search={search}
                 statements={drafts[type] ?? []}
                 disabled={disabled}
-                change={(rows) => setDrafts((previous) => ({ ...previous, [type]: rows }))}
+                change={(rows) =>
+                  setDrafts((previous) => ({ ...previous, [type]: rows }))
+                }
               />
             ),
           }}
           transport={{
             definitions: async (refresh) => {
               const refreshed = refresh ? await query.refetch() : undefined;
-              const current = refreshed ? (refreshed.isError ? undefined : refreshed.data) : read;
-              if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
-              return current?.ok ? { ok: true, types: gameDefinitions(current.release, locale) } : { ok: false };
+              const current = refreshed
+                ? refreshed.isError
+                  ? undefined
+                  : refreshed.data
+                : read;
+              if (!lifetime.active())
+                return { ok: false as const, reason: "denied" as const };
+              return current?.ok
+                ? { ok: true, types: gameDefinitions(current.release, locale) }
+                : { ok: false };
             },
             submit: (command) => {
               // The common form seals the augmented native ItemInput and its key before the first request.
-              const item = command.item as GameCommand['item'];
+              const item = command.item as GameCommand["item"];
               return transport.create({ item, key: command.key });
             },
             read: transport.read,
@@ -157,7 +207,11 @@ function GameProfileLive({
     return (
       <article className="mx-auto max-w-4xl space-y-4">
         <EditorFailure reason="denied" locale={locale} />
-        <Button className={gameActionClass} disabled={query.isFetching} onClick={() => void query.refetch()}>
+        <Button
+          className={gameActionClass}
+          disabled={query.isFetching}
+          onClick={() => void query.refetch()}
+        >
           {m.game_profile_refresh({}, o)}
         </Button>
       </article>
@@ -211,14 +265,22 @@ function GameCorrection({
       public: read.public,
       fields,
       page: null,
-      names: Object.fromEntries(Object.entries(read.release.properties).map(([id, field]) => [id, field.labels])),
+      names: Object.fromEntries(
+        Object.entries(read.release.properties).map(([id, field]) => [
+          id,
+          field.labels,
+        ]),
+      ),
     }),
     [read.public, read.release, fields],
   );
   return (
     <article className="mx-auto min-w-0 w-full max-w-4xl space-y-8">
       <header className="space-y-4">
-        <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
+        <ViewHeading
+          label={m.game_profile_title({}, o)}
+          headingClassName="font-sans"
+        />
         <h2 className="min-w-0 font-sans text-2xl font-semibold [overflow-wrap:anywhere]">
           <a
             className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans text-xl underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -228,24 +290,49 @@ function GameCorrection({
             {title.text || m.subject_value_unlabelled({}, o)}
           </a>
         </h2>
-        <p className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]" lang={type.lang ?? undefined}>
+        <p
+          className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+          lang={type.lang ?? undefined}
+        >
           {type.text || m.guide_missing({}, o)}
         </p>
-        <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
-        <p className="text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
+        <p className="text-sm font-medium">
+          {m.specialist_identity_scope({}, o)}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          {m.game_profile_grain({}, o)}
+        </p>
         <nav
           className="flex min-w-0 max-w-full flex-wrap gap-2 [overflow-wrap:anywhere]"
           aria-label={m.facts_other_editors({}, o)}
         >
-          <a className={`${buttonVariants({ variant: 'outline' })} ${gameActionClass}`} href={href}>
+          <a
+            className={`${buttonVariants({ variant: "outline" })} ${gameActionClass}`}
+            href={href}
+          >
             {m.candidate_view_public({}, o)}
           </a>
-          <SubjectTermsEntry id={subject.id} label={title.text} locale={locale} />
+          <SubjectTermsEntry
+            id={subject.id}
+            label={title.text}
+            locale={locale}
+          />
           {read.release.types[subject.type]!.properties.some(
-            (id) => read.release.properties[id]?.datatype === 'document',
-          ) && <AuthoredFieldEntry id={subject.id} title={title.text} locale={locale} />}
-          {subject.type !== 'wd:Q20631656' && <PublicationEditorEntry work={subject.id} locale={locale} />}
-          <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: `${href}/game` }} />
+            (id) => read.release.properties[id]?.datatype === "document",
+          ) && (
+            <AuthoredFieldEntry
+              id={subject.id}
+              title={title.text}
+              locale={locale}
+            />
+          )}
+          {subject.type !== "wd:Q20631656" && (
+            <PublicationEditorEntry work={subject.id} locale={locale} />
+          )}
+          <DefinitionGuideLink
+            locale={locale}
+            address={{ type: subject.type, returnTo: `${href}/game` }}
+          />
           <Button
             className={gameActionClass}
             type="button"
@@ -253,39 +340,66 @@ function GameCorrection({
             disabled={refreshing}
             onClick={() => void refresh()}
           >
-            {refreshFailed ? m.catalogue_create_retry({}, o) : m.game_profile_refresh({}, o)}
+            {refreshFailed
+              ? m.catalogue_create_retry({}, o)
+              : m.game_profile_refresh({}, o)}
           </Button>
         </nav>
-        <p role={refreshing || refreshFailed ? 'status' : undefined} className="text-sm">
+        <p
+          role={refreshing || refreshFailed ? "status" : undefined}
+          className="text-sm"
+        >
           {refreshing
             ? m.game_profile_refreshing({}, o)
             : refreshFailed
               ? m.game_profile_refresh_failed({}, o)
               : m.game_profile_current({}, o)}
         </p>
-        <p className="text-sm text-muted-foreground">{m.game_profile_support({}, o)}</p>
+        <p className="text-sm text-muted-foreground">
+          {m.game_profile_support({}, o)}
+        </p>
       </header>
       {Object.entries(groups)
         .filter(([, ids]) => ids.length)
         .map(([group, ids]) => (
           <section key={group} className="space-y-4">
-            <h2 className="font-sans text-xl font-semibold">{gameGroupLabel(group, locale)}</h2>
+            <h2 className="font-sans text-xl font-semibold">
+              {gameGroupLabel(group, locale)}
+            </h2>
             <dl className="divide-y divide-border rounded-xl border border-border bg-card px-4">
               {ids.map((property) => {
-                const label = pickText(read.release.properties[property]!.labels, locale);
+                const label = pickText(
+                  read.release.properties[property]!.labels,
+                  locale,
+                );
                 return (
-                  <div key={property} className="grid min-w-0 gap-2 py-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
-                    <dt className="text-sm font-medium" lang={label.lang ?? undefined}>
+                  <div
+                    key={property}
+                    className="grid min-w-0 gap-2 py-4 sm:grid-cols-[12rem_minmax(0,1fr)]"
+                  >
+                    <dt
+                      className="text-sm font-medium"
+                      lang={label.lang ?? undefined}
+                    >
                       {label.text}
                     </dt>
                     <dd className="min-w-0 space-y-3 break-words">
                       {!subject.statements[property]?.length && (
-                        <span className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {m.facts_no_value({}, o)}
+                        </span>
                       )}
                       <ol className="space-y-3">
-                        {(subject.statements[property] ?? []).map((statement) => (
-                          <GameStatement key={statement.id} statement={statement} read={read} locale={locale} />
-                        ))}
+                        {(subject.statements[property] ?? []).map(
+                          (statement) => (
+                            <GameStatement
+                              key={statement.id}
+                              statement={statement}
+                              read={read}
+                              locale={locale}
+                            />
+                          ),
+                        )}
                       </ol>
                     </dd>
                   </div>
@@ -294,21 +408,32 @@ function GameCorrection({
             </dl>
           </section>
         ))}
-      {session !== 'signed-in' ? (
-        session === 'unavailable' ? (
+      {session !== "signed-in" ? (
+        session === "unavailable" ? (
           <div role="alert" className="space-y-3">
             <p>{m.catalogue_create_unavailable({}, o)}</p>
-            <Button className={gameActionClass} onClick={() => void client.invalidateQueries({ queryKey: ['session'] })}>
+            <Button
+              className={gameActionClass}
+              onClick={() =>
+                void client.invalidateQueries({ queryKey: ["session"] })
+              }
+            >
               {m.catalogue_create_retry({}, o)}
             </Button>
           </div>
         ) : (
-          <p role="status">{session === 'signed-out' ? m.relation_sign_in({}, o) : m.catalogue_create_loading({}, o)}</p>
+          <p role="status">
+            {session === "signed-out"
+              ? m.relation_sign_in({}, o)
+              : m.catalogue_create_loading({}, o)}
+          </p>
         )
       ) : (
         <>
           <details className="min-w-0 max-w-full rounded-xl border border-border p-4">
-            <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
+            <summary
+              className={`${gameDisclosureSummaryClass} font-sans font-semibold`}
+            >
               {m.game_profile_facts({}, o)}
             </summary>
             <SubjectFacts
@@ -320,7 +445,9 @@ function GameCorrection({
           </details>
           {!!groups.classification.length && (
             <details className="min-w-0 max-w-full space-y-4 rounded-xl border border-border p-4">
-              <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
+              <summary
+                className={`${gameDisclosureSummaryClass} font-sans font-semibold`}
+              >
                 {m.game_profile_classification({}, o)}
               </summary>
               <GameClassifications
@@ -334,7 +461,9 @@ function GameCorrection({
           )}
           {!!fields.length && (
             <details className="min-w-0 max-w-full rounded-xl border border-border p-4">
-              <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
+              <summary
+                className={`${gameDisclosureSummaryClass} font-sans font-semibold`}
+              >
                 {m.game_profile_relations({}, o)}
               </summary>
               <RelationEditor
@@ -362,7 +491,10 @@ function GameCorrection({
           ).map((language) => (
             <div key={language} className="min-w-0">
               <dt className="text-sm text-muted-foreground">{language}</dt>
-              <dd lang={language} className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">
+              <dd
+                lang={language}
+                className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+              >
                 {subject.labels[language]}
               </dd>
               {subject.descriptions[language] && (
@@ -378,7 +510,7 @@ function GameCorrection({
                   lang={language}
                   className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm text-muted-foreground"
                 >
-                  {subject.aliases[language]!.join(' · ')}
+                  {subject.aliases[language]!.join(" · ")}
                 </dd>
               )}
             </div>
@@ -386,26 +518,40 @@ function GameCorrection({
         </dl>
       </details>
       <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
-        <summary className={gameDisclosureSummaryClass}>{m.specialist_identity_reference({}, o)}</summary>
+        <summary className={gameDisclosureSummaryClass}>
+          {m.specialist_identity_reference({}, o)}
+        </summary>
         <dl className="mt-3 min-w-0 space-y-3">
           <div className="min-w-0">
-            <dt className="text-sm text-muted-foreground">{m.specialist_identity_subject_id({}, o)}</dt>
+            <dt className="text-sm text-muted-foreground">
+              {m.specialist_identity_subject_id({}, o)}
+            </dt>
             <dd className="min-w-0">
-              <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+              <code
+                dir="ltr"
+                className="select-text whitespace-normal break-words [overflow-wrap:anywhere]"
+              >
                 {subject.id}
               </code>
             </dd>
           </div>
           <div className="min-w-0">
-            <dt className="text-sm text-muted-foreground">{m.specialist_identity_type({}, o)}</dt>
+            <dt className="text-sm text-muted-foreground">
+              {m.specialist_identity_type({}, o)}
+            </dt>
             <dd className="min-w-0">
-              <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+              <code
+                dir="ltr"
+                className="select-text whitespace-normal break-words [overflow-wrap:anywhere]"
+              >
                 {subject.type}
               </code>
             </dd>
           </div>
         </dl>
-        <p className="text-sm text-muted-foreground">{m.game_profile_terms_help({}, o)}</p>
+        <p className="text-sm text-muted-foreground">
+          {m.game_profile_terms_help({}, o)}
+        </p>
       </details>
     </article>
   );
@@ -417,14 +563,18 @@ function GameStatement({
   read,
   locale,
 }: {
-  statement: ReadyGame['public']['subject']['statements'][string][number];
+  statement: ReadyGame["public"]["subject"]["statements"][string][number];
   read: ReadyGame;
   locale: string;
 }) {
   const o = { locale: locale as never };
   return (
     <li className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
-      <CandidateValue snak={statement} related={read.public.related} locale={locale} />
+      <CandidateValue
+        snak={statement}
+        related={read.public.related}
+        locale={locale}
+      />
       <dl className="space-y-2 text-sm">
         {statement.qualifiers.map((part, index) => (
           <GamePart key={index} part={part} read={read} locale={locale} />
@@ -438,7 +588,12 @@ function GameStatement({
             </p>
             <dl className="space-y-2">
               {reference.parts.map((part, partIndex) => (
-                <GamePart key={partIndex} part={part} read={read} locale={locale} />
+                <GamePart
+                  key={partIndex}
+                  part={part}
+                  read={read}
+                  locale={locale}
+                />
               ))}
             </dl>
           </li>
@@ -453,12 +608,14 @@ function GamePart({
   read,
   locale,
 }: {
-  part: ReadyGame['public']['subject']['statements'][string][number]['qualifiers'][number];
+  part: ReadyGame["public"]["subject"]["statements"][string][number]["qualifiers"][number];
   read: ReadyGame;
   locale: string;
 }) {
   const label = pickText(
-    read.release.properties[part.property.id]?.labels ?? read.public.related[part.property.id]?.labels ?? {},
+    read.release.properties[part.property.id]?.labels ??
+      read.public.related[part.property.id]?.labels ??
+      {},
     locale,
   );
   return (
@@ -467,7 +624,11 @@ function GamePart({
         {label.text || <code>{part.property.id}</code>}
       </dt>
       <dd className="min-w-0">
-        <CandidateValue snak={part} related={read.public.related} locale={locale} />
+        <CandidateValue
+          snak={part}
+          related={read.public.related}
+          locale={locale}
+        />
       </dd>
     </div>
   );
