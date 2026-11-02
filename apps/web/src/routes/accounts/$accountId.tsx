@@ -11,7 +11,8 @@ export const Route = createFileRoute('/accounts/$accountId')({
   beforeLoad: requireSignedIn,
   validateSearch: readCursors,
   loaderDeps: ({ search }) => search,
-  loader: ({ params, deps }) => readAccountManagement({ data: { accountId: params.accountId, ...deps } }),
+  loader: ({ params, deps, abortController }) =>
+    readAccountManagement({ data: { accountId: params.accountId, ...deps }, signal: abortController.signal }),
   head: ({ match }) =>
     pageHead({ title: m.managed_detail_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: AccountRoute,

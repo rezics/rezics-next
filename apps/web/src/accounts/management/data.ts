@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { readWithin } from './read-deadline';
 
 // Page contracts follow the generated client rather than introducing a second HTTP interface.
 type InventoryResponse = Awaited<ReturnType<KernelClient['me']['managedAccounts']['get']>>;
@@ -30,30 +31,75 @@ export function failure(status: number, body?: unknown): PageFailure {
   return { state: 'unavailable' };
 }
 
-export async function loadInventory(client: KernelClient, authorization: string, cursors: Cursors) {
-  const result = await client.me.managedAccounts.get({
-    headers: { authorization },
-    query: {
-      ...(cursors.organizationsCursor ? { organizationsCursor: cursors.organizationsCursor } : {}),
-      ...(cursors.operatorsCursor ? { operatorsCursor: cursors.operatorsCursor } : {}),
-    },
-  });
-  return result.error || !result.data
-    ? failure(result.status, result.error?.value)
-    : { state: 'ready' as const, value: result.data };
+export async function loadInventory(
+  client: KernelClient,
+  authorization: string,
+  cursors: Cursors,
+  signal?: AbortSignal,
+) {
+  try {
+    const result = await readWithin(
+      (signal) =>
+        client.me.managedAccounts.get({
+          fetch: { signal },
+          headers: { authorization },
+          query: {
+            ...(cursors.organizationsCursor ? { organizationsCursor: cursors.organizationsCursor } : {}),
+            ...(cursors.operatorsCursor ? { operatorsCursor: cursors.operatorsCursor } : {}),
+          },
+        }),
+      signal,
+      10_000,
+    );
+    return result.error || !result.data
+      ? failure(result.status, result.error?.value)
+      : { state: 'ready' as const, value: result.data };
+  } catch {
+    return { state: 'unavailable' as const };
+  }
 }
 
-export async function loadDetail(client: KernelClient, authorization: string, accountId: string, cursors: Cursors) {
-  const result = await client.accounts({ accountId }).management.get({
-    headers: { authorization },
-    query: {
-      ...(cursors.membersCursor ? { membersCursor: cursors.membersCursor } : {}),
-      ...(cursors.operatorsCursor ? { operatorsCursor: cursors.operatorsCursor } : {}),
-    },
-  });
-  return result.error || !result.data
-    ? failure(result.status, result.error?.value)
-    : { state: 'ready' as const, value: result.data };
+export async function loadDetail(
+  client: KernelClient,
+  authorization: string,
+  accountId: string,
+  cursors: Cursors,
+  signal?: AbortSignal,
+) {
+  try {
+    const result = await readWithin(
+      (signal) =>
+        client.accounts({ accountId }).management.get({
+          fetch: { signal },
+          headers: { authorization },
+          query: {
+            ...(cursors.membersCursor ? { membersCursor: cursors.membersCursor } : {}),
+            ...(cursors.operatorsCursor ? { operatorsCursor: cursors.operatorsCursor } : {}),
+          },
+        }),
+      signal,
+      10_000,
+    );
+    return result.error || !result.data
+      ? failure(result.status, result.error?.value)
+      : { state: 'ready' as const, value: result.data };
+  } catch {
+    return { state: 'unavailable' as const };
+  }
+}
+
+/** Discovery controls exposure only; unknown capability information grants nothing. */
+export async function loadOrganizationsAvailable(client: KernelClient, authorization: string, signal?: AbortSignal) {
+  try {
+    const result = await readWithin(
+      (signal) => client.platform.exposure.get({ headers: { authorization }, fetch: { signal } }),
+      signal,
+      2_000,
+    );
+    return result.error || !result.data ? null : result.data.admitted.includes('organizations');
+  } catch {
+    return null;
+  }
 }
 
 export function issuerPage(issuer: string | null, path: '/organizations/new' | '/account/delete'): string | null {

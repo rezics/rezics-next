@@ -126,6 +126,8 @@ verification state alone do not establish the final public-page outcome.
 
 ### Managed-account detail presentation
 
+Standalone management inventory and detail reads use a ten-second deadline through response decoding, composed with caller cancellation; optional exposure discovery uses two seconds and returns unknown on failure, preserving valid inventory and the existing localized unavailable/retry controls without granting permission.
+
 Managed-account settings lead with the supplied display name or handle and an initials avatar. A supplied
 identity without either label uses the unnamed-account treatment; an absent identity uses Identity unavailable.
 Exact supplied account IDs remain selectable inside closed account-detail disclosures for the target, operator,

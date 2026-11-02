@@ -4,18 +4,22 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import type { SessionEnv } from '../../session/client';
-import { loadDetail, loadInventory, readCursors, type Cursors, type Page, type Detail, type Inventory } from './data';
+import {
+  loadDetail,
+  loadInventory,
+  loadOrganizationsAvailable,
+  readCursors,
+  type Cursors,
+  type Page,
+  type Detail,
+  type Inventory,
+} from './data';
 
 async function reader() {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
   await prepareSession(request, env as Partial<SessionEnv>);
   return viewerCredential(request);
-}
-async function capabilities(authorization: string) {
-  // Discovery controls exposure only. Every private read still evaluates native current authority.
-  const result = await kernelClient().platform.exposure.get({ headers: { authorization } });
-  return result.error || !result.data ? null : result.data.admitted.includes('organizations');
 }
 function validateCursors(value: unknown): Cursors {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid page');
@@ -26,16 +30,13 @@ export const readManagedAccounts = createServerFn({ method: 'GET' })
   .validator(validateCursors)
   .handler(async ({ data }): Promise<Page<Inventory>> => {
     try {
+      const signal = getRequest().signal;
       const authorization = await reader();
       if (!authorization) return { state: 'signed-out' };
-      const page = await loadInventory(kernelClient(), authorization, data);
+      const page = await loadInventory(kernelClient(), authorization, data, signal);
       if (page.state !== 'ready') return page;
-      let organizationsAvailable: boolean | null = null;
-      try {
-        organizationsAvailable = await capabilities(authorization);
-      } catch {
-        /* Discovery is independently unavailable. */
-      }
+      const organizationsAvailable = await loadOrganizationsAvailable(kernelClient(), authorization, signal);
+      if (signal.aborted) return { state: 'unavailable' };
       return { ...page, issuer: (env as Partial<SessionEnv>).AUTH_ISSUER ?? null, organizationsAvailable };
     } catch {
       return { state: 'unavailable' };
@@ -56,9 +57,10 @@ export const readAccountManagement = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }): Promise<Page<Detail>> => {
     try {
+      const signal = getRequest().signal;
       const authorization = await reader();
       if (!authorization) return { state: 'signed-out' };
-      const page = await loadDetail(kernelClient(), authorization, data.accountId, data);
+      const page = await loadDetail(kernelClient(), authorization, data.accountId, data, signal);
       return page.state === 'ready'
         ? { ...page, issuer: (env as Partial<SessionEnv>).AUTH_ISSUER ?? null, organizationsAvailable: null }
         : page;
