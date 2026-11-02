@@ -67,11 +67,11 @@ export function reusableDerivedDatabase(
 ): boolean {
   return Boolean(
     state?.version === 1 &&
-      state.checkout === checkout &&
-      state.migrations === migrations &&
-      container?.running &&
-      container.id === state.container &&
-      container.checkout === checkout,
+    state.checkout === checkout &&
+    state.migrations === migrations &&
+    container?.running &&
+    container.id === state.container &&
+    container.checkout === checkout,
   );
 }
 
@@ -99,16 +99,22 @@ export function openApiSourceFingerprint(kernelDirectory = directory, repository
     ...[...new Bun.Glob('packages/*/package.json').scanSync({ cwd: repositoryRoot })],
   ].filter((file) => existsSync(resolve(repositoryRoot, file)));
   const entries = [
-    ...sourceFiles(kernelDirectory, 'src/**/*').map((file) => [
-      relative(repositoryRoot, resolve(kernelDirectory, file)).split(sep).join('/'),
-      resolve(kernelDirectory, file),
-    ] as const),
+    ...sourceFiles(kernelDirectory, 'src/**/*').map(
+      (file) =>
+        [
+          relative(repositoryRoot, resolve(kernelDirectory, file)).split(sep).join('/'),
+          resolve(kernelDirectory, file),
+        ] as const,
+    ),
     ...['scripts/openapi.ts', 'test/support/receipt-keys.ts']
       .filter((file) => existsSync(resolve(kernelDirectory, file)))
-      .map((file) => [
-        relative(repositoryRoot, resolve(kernelDirectory, file)).split(sep).join('/'),
-        resolve(kernelDirectory, file),
-      ] as const),
+      .map(
+        (file) =>
+          [
+            relative(repositoryRoot, resolve(kernelDirectory, file)).split(sep).join('/'),
+            resolve(kernelDirectory, file),
+          ] as const,
+      ),
     ...sourceFiles(repositoryRoot, 'packages/*/src/**/*')
       .filter((file) => !file.startsWith('packages/client/src/kernel/'))
       .map((file) => [file, resolve(repositoryRoot, file)] as const),
@@ -227,7 +233,9 @@ function inspectDerivedContainer(name: string): DerivedContainer | undefined {
     '--format',
     '{{.Id}}|{{.State.Running}}|{{ index .Config.Labels "rezics.kernel.derived.checkout" }}',
     id,
-  ]).trim().split('|');
+  ])
+    .trim()
+    .split('|');
   return { id: fullId!, running: running === 'true', checkout: checkout ?? '' };
 }
 

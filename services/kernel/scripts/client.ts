@@ -94,10 +94,7 @@ function publishSqlDeclarations(directory: string): void {
 const declarationSourceExtensions = new Set(['.ts', '.tsx', '.mts', '.cts', '.sql', '.json']);
 
 /** Keep emitted files and compiler state stable for content edits, but isolate changes to the source file set. */
-export function clientDeclarationCacheDirectory(
-  repositoryRoot = ROOT,
-  kernelDirectory = KERNEL,
-): string {
+export function clientDeclarationCacheDirectory(repositoryRoot = ROOT, kernelDirectory = KERNEL): string {
   const sourceRoot = resolve(kernelDirectory, 'src');
   const files = [...new Bun.Glob('**/*').scanSync({ cwd: sourceRoot })]
     .filter((file) => declarationSourceExtensions.has(file.slice(file.lastIndexOf('.'))))
