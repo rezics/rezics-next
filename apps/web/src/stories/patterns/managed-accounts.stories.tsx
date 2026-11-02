@@ -6,6 +6,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { ManagedAccounts } from '../../settings/managed-accounts';
 import {
   managedAccountsFailure,
+  type ManagedAccountsCursors,
   type ManagedAccountsIO,
   type ManagedAccountsResult,
 } from '../../settings/managed-accounts-read';
@@ -386,7 +387,7 @@ function LongInventoryExample({ preparing = false, empty = false, waiting = fals
   const [io] = useState<ManagedAccountsIO>(() => {
     let initial = true;
     const failed = new Set<string>();
-    return async (cursors) => {
+    return async (cursors: ManagedAccountsCursors): Promise<ManagedAccountsResult> => {
       if (waiting && initial) {
         initial = false;
         return managedAccountsFailure(429, { code: 'rate_limited' }, { 'Retry-After': '1' });
