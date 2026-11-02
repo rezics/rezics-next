@@ -184,12 +184,11 @@ export function LibraryBulkOperationRecoveryView({
         <button type="button" disabled={busy} onClick={retryCancel}>
           {m.library_bulk_recovery_cancel_retry()}
         </button>
-      ) : cancelAvailable && canCancelBulkOperation(operation) && cancelState !== 'refused' && cancelState !== 'accepted' ? (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={cancel}
-        >
+      ) : cancelAvailable &&
+        canCancelBulkOperation(operation) &&
+        cancelState !== 'refused' &&
+        cancelState !== 'accepted' ? (
+        <button type="button" disabled={busy} onClick={cancel}>
           {cancelState === 'capturing' || cancelState === 'pending'
             ? m.library_bulk_recovery_cancel_pending()
             : m.library_bulk_recovery_cancel()}

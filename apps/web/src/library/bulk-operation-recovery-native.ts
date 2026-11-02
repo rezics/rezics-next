@@ -76,7 +76,6 @@ export async function cancelNativeOperation(
   }
 }
 
-
 export type CapturedCancelCommand = {
   version: 1;
   operationId: string;

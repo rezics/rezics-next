@@ -30,7 +30,8 @@ const operationIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9
 const recoveryDomain = 'rezics.library-bulk-cancel.v1';
 
 function validateOperationId(input: unknown): { operationId: string } {
-  if (!input || typeof input !== 'object' || !('operationId' in input)) throw new TypeError('Invalid operation address');
+  if (!input || typeof input !== 'object' || !('operationId' in input))
+    throw new TypeError('Invalid operation address');
   const operationId = input.operationId;
   if (typeof operationId !== 'string' || !operationIdPattern.test(operationId))
     throw new TypeError('Invalid operation address');
@@ -81,12 +82,17 @@ async function recoveryKey(sessionEnv: Partial<SessionEnv>): Promise<CryptoKey> 
 }
 
 function encodeCapture(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }
 
 function decodeCapture(value: string): Uint8Array {
-  return Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4)),
-    (character) => character.charCodeAt(0));
+  return Uint8Array.from(
+    atob(value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4)),
+    (character) => character.charCodeAt(0),
+  );
 }
 
 async function sealCancelCommand(
@@ -164,7 +170,8 @@ export const readBulkOperationRecovery = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     recordPageReadCacheControl(request, 'private, no-store');
     try {
-      if (await prepareSession(request, env as Partial<SessionEnv>)) return { state: 'forbidden', operationId: data.operationId };
+      if (await prepareSession(request, env as Partial<SessionEnv>))
+        return { state: 'forbidden', operationId: data.operationId };
       const authorization = viewerCredential(request);
       if (!authorization) return { state: 'forbidden', operationId: data.operationId };
       return await readBulkOperationFromNative(kernelClient(), data.operationId, authorization);
@@ -192,86 +199,93 @@ export const readBulkOperationRecoveryPage = createServerFn({ method: 'GET' })
 
 export const captureBulkOperationCancel = createServerFn({ method: 'GET' })
   .validator(validateOperationId)
-  .handler(async ({ data }): Promise<
-    | { state: 'ready'; intent: LibraryBulkCancelIntent; csrfToken: string }
-    | { state: 'csrf_unavailable' | 'forbidden' | 'unavailable' }
-  > => {
-    const request = getRequest();
-    setResponseHeader('cache-control', 'private, no-store');
-    recordPageReadCacheControl(request, 'private, no-store');
-    try {
-      if (await prepareSession(request, env as Partial<SessionEnv>)) return { state: 'forbidden' };
-      const authorization = viewerCredential(request);
-      const sender = sessionSubject(request);
-      const csrfToken = requestCsrfToken(request);
-      const sessionEnv = env as Partial<SessionEnv>;
-      if (!authorization || !sender) return { state: 'forbidden' };
-      if (!csrfToken) return { state: 'csrf_unavailable' };
-      const locale = requestLocale(request) ?? 'en';
-      const idempotencyKey = crypto.randomUUID();
-      const command: CapturedCancelCommand = {
-        version: 1,
-        operationId: data.operationId,
-        sender,
-        method: 'POST',
-        path: `/v1/libraryOperations/${data.operationId}:cancel`,
-        locale,
-        headers: {
-          authorization,
-          'idempotency-key': idempotencyKey,
-          'accept-language': acceptLanguage(locale),
-          'content-type': 'application/json',
-        },
-        body: {},
-      };
-      const capture = await sealCancelCommand(request, sessionEnv, command);
-      return {
-        state: 'ready',
-        intent: { operationId: data.operationId, sender, idempotencyKey, locale, capture },
-        csrfToken,
-      };
-    } catch {
-      return { state: 'unavailable' };
-    }
-  });
+  .handler(
+    async ({
+      data,
+    }): Promise<
+      | { state: 'ready'; intent: LibraryBulkCancelIntent; csrfToken: string }
+      | { state: 'csrf_unavailable' | 'forbidden' | 'unavailable' }
+    > => {
+      const request = getRequest();
+      setResponseHeader('cache-control', 'private, no-store');
+      recordPageReadCacheControl(request, 'private, no-store');
+      try {
+        if (await prepareSession(request, env as Partial<SessionEnv>)) return { state: 'forbidden' };
+        const authorization = viewerCredential(request);
+        const sender = sessionSubject(request);
+        const csrfToken = requestCsrfToken(request);
+        const sessionEnv = env as Partial<SessionEnv>;
+        if (!authorization || !sender) return { state: 'forbidden' };
+        if (!csrfToken) return { state: 'csrf_unavailable' };
+        const locale = requestLocale(request) ?? 'en';
+        const idempotencyKey = crypto.randomUUID();
+        const command: CapturedCancelCommand = {
+          version: 1,
+          operationId: data.operationId,
+          sender,
+          method: 'POST',
+          path: `/v1/libraryOperations/${data.operationId}:cancel`,
+          locale,
+          headers: {
+            authorization,
+            'idempotency-key': idempotencyKey,
+            'accept-language': acceptLanguage(locale),
+            'content-type': 'application/json',
+          },
+          body: {},
+        };
+        const capture = await sealCancelCommand(request, sessionEnv, command);
+        return {
+          state: 'ready',
+          intent: { operationId: data.operationId, sender, idempotencyKey, locale, capture },
+          csrfToken,
+        };
+      } catch {
+        return { state: 'unavailable' };
+      }
+    },
+  );
 
 export const cancelBulkOperationRecovery = createServerFn({ method: 'POST' })
   .validator(validateCancelInput)
-  .handler(async ({ data }): Promise<
-    | { state: 'accepted'; operation: LibraryBulkOperation }
-    | { state: 'forbidden' | 'unavailable' | 'uncertain' | 'refused'; operationId: string }
-  > => {
-    const request = getRequest();
-    setResponseHeader('cache-control', 'private, no-store');
-    recordPageReadCacheControl(request, 'private, no-store');
-    let command: CapturedCancelCommand | null = null;
-    try {
-      const sessionEnv = env as Partial<SessionEnv>;
-      if (await prepareSession(request, sessionEnv)) return { state: 'forbidden', operationId: data.operationId };
-      const sender = sessionSubject(request);
-      if (!sender || !viewerCredential(request) || !requestCsrfToken(request))
+  .handler(
+    async ({
+      data,
+    }): Promise<
+      | { state: 'accepted'; operation: LibraryBulkOperation }
+      | { state: 'forbidden' | 'unavailable' | 'uncertain' | 'refused'; operationId: string }
+    > => {
+      const request = getRequest();
+      setResponseHeader('cache-control', 'private, no-store');
+      recordPageReadCacheControl(request, 'private, no-store');
+      let command: CapturedCancelCommand | null = null;
+      try {
+        const sessionEnv = env as Partial<SessionEnv>;
+        if (await prepareSession(request, sessionEnv)) return { state: 'forbidden', operationId: data.operationId };
+        const sender = sessionSubject(request);
+        if (!sender || !viewerCredential(request) || !requestCsrfToken(request))
+          return { state: 'forbidden', operationId: data.operationId };
+        command = await openCancelCommand(request, sessionEnv, sender, data.capture);
+        if (!command || command.operationId !== data.operationId)
+          return { state: 'forbidden', operationId: data.operationId };
+      } catch {
         return { state: 'forbidden', operationId: data.operationId };
-      command = await openCancelCommand(request, sessionEnv, sender, data.capture);
-      if (!command || command.operationId !== data.operationId)
-        return { state: 'forbidden', operationId: data.operationId };
-    } catch {
-      return { state: 'forbidden', operationId: data.operationId };
-    }
+      }
 
-    try {
-      const result = await sendCapturedBulkCancelCommand(kernelClient(command.locale), command);
-      if (result.status === 200 && !result.error && result.data?.operation)
-        return { state: 'accepted', operation: result.data.operation };
-      if (result.status === 401 || result.status === 403) return { state: 'forbidden', operationId: data.operationId };
-      if (result.status === 404) return { state: 'unavailable', operationId: data.operationId };
-      if (result.status >= 500 || result.status === 0) return { state: 'uncertain', operationId: data.operationId };
-      return { state: 'refused', operationId: data.operationId };
-    } catch {
-      return { state: 'uncertain', operationId: data.operationId };
-    }
-  });
-
-
+      try {
+        const result = await sendCapturedBulkCancelCommand(kernelClient(command.locale), command);
+        if (result.status === 200 && !result.error && result.data?.operation)
+          return { state: 'accepted', operation: result.data.operation };
+        if (result.status === 401 || result.status === 403)
+          return { state: 'forbidden', operationId: data.operationId };
+        if (result.status === 404) return { state: 'unavailable', operationId: data.operationId };
+        if (result.status >= 500 || result.status === 0) return { state: 'uncertain', operationId: data.operationId };
+        return { state: 'refused', operationId: data.operationId };
+      } catch {
+        return { state: 'uncertain', operationId: data.operationId };
+      }
+    },
+  );
 
 /** Compatibility transport for the existing private in-memory recovery model. */
 async function credential(viewer: string, csrf?: string) {

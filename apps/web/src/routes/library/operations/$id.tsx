@@ -40,7 +40,11 @@ function addressPath(href: string): string {
   }
 }
 
-function RecoveryReader({ operationId, pathname, requestedId }: {
+function RecoveryReader({
+  operationId,
+  pathname,
+  requestedId,
+}: {
   operationId: string;
   pathname: string;
   requestedId: string | undefined;
@@ -59,7 +63,9 @@ function RecoveryReader({ operationId, pathname, requestedId }: {
   const [read, setRead] = useState<LibraryBulkRecoveryRead>({ state: 'unavailable', operationId });
   const [readOwner, setReadOwner] = useState('');
   const [readBusy, setReadBusy] = useState(false);
-  const [cancelState, setCancelState] = useState<'idle' | 'capturing' | 'pending' | 'uncertain' | 'refused' | 'accepted'>('idle');
+  const [cancelState, setCancelState] = useState<
+    'idle' | 'capturing' | 'pending' | 'uncertain' | 'refused' | 'accepted'
+  >('idle');
   const [cancelOwner, setCancelOwner] = useState('');
   const [cancelIntent, setCancelIntent] = useState<LibraryBulkCancelIntent | null>(null);
   const [cancelCsrf, setCancelCsrf] = useState<string | null>(null);
@@ -74,9 +80,12 @@ function RecoveryReader({ operationId, pathname, requestedId }: {
   const visibleRead = readOwner === ownerKey ? read : { state: 'unavailable' as const, operationId };
   const visibleCancelState = cancelOwner === ownerKey ? cancelState : 'idle';
 
-  useEffect(() => () => {
-    live.current = false;
-  }, []);
+  useEffect(
+    () => () => {
+      live.current = false;
+    },
+    [],
+  );
 
   function addressCurrent(path: string, owner: string, lease: () => boolean): boolean {
     return (
@@ -175,12 +184,7 @@ function RecoveryReader({ operationId, pathname, requestedId }: {
     }
   }
 
-  async function sendCancel(
-    intent: LibraryBulkCancelIntent,
-    csrfToken: string,
-    owner: string,
-    lease: () => boolean,
-  ) {
+  async function sendCancel(intent: LibraryBulkCancelIntent, csrfToken: string, owner: string, lease: () => boolean) {
     if (!current(pathname, owner, lease) || intent.operationId !== operationId || busy.current) return;
     busy.current = true;
     setCancelState('pending');
@@ -317,7 +321,12 @@ function RecoveryReader({ operationId, pathname, requestedId }: {
     }
   }, [authorized, operationId]);
 
-  if (requestedId !== operationId || !hydrated || value.state === 'unknown' || (value.state === 'signed-in' && !value.authority && !value.unavailable))
+  if (
+    requestedId !== operationId ||
+    !hydrated ||
+    value.state === 'unknown' ||
+    (value.state === 'signed-in' && !value.authority && !value.unavailable)
+  )
     return <p role="status">{m.library_bulk_recovery_address_pending()}</p>;
 
   return (
@@ -352,12 +361,7 @@ export const Route = createFileRoute('/library/operations/$id')({
     const location = useLocation();
     const requestedId = addressOperationId(location.pathname);
     return (
-      <RecoveryReader
-        key={location.pathname}
-        operationId={id}
-        pathname={location.pathname}
-        requestedId={requestedId}
-      />
+      <RecoveryReader key={location.pathname} operationId={id} pathname={location.pathname} requestedId={requestedId} />
     );
   },
 });
