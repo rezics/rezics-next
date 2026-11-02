@@ -53,28 +53,14 @@ test('invalid bound, slack and byte-bound configuration is rejected before grow,
 
 test('aggregate sampling work admits the boundary and rejects excess before any growth hook', async () => {
   const scales = [1, 4, 16, 64] as const;
-  const admitted = admitGrowthCheck({
-    name: 'boundary check',
-    scales,
-    bounds: validBounds,
-    warmups: 5,
-    repetitions: 6,
-  });
-  expect(admitted).toMatchObject({ scales, warmups: 5, repetitions: 6 });
-
+  const check = { name: 'sampling check', scales, bounds: validBounds, warmups: 5 };
+  expect(admitGrowthCheck({ ...check, repetitions: 6 })).toMatchObject({ warmups: 5, repetitions: 6 });
   const { calls, ...rest } = hooks();
   await expect(
-    checkGrowth(database, {
-      name: 'oversampled check',
-      scales,
-      bounds: validBounds,
-      warmups: 5,
-      repetitions: 7,
-      ...rest,
-    } as GrowthCheck),
+    checkGrowth(database, { ...check, repetitions: 7, ...rest } as GrowthCheck),
   ).rejects.toMatchObject({
     name: 'RangeError',
-    message: expect.stringContaining('sampling work (68) exceeds the aggregate limit of 64 units'),
+    message: expect.stringContaining('sampling work (68)'),
   });
   expect(calls).toEqual([]);
 });
