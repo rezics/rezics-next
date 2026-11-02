@@ -2,6 +2,7 @@
 import { readFile } from 'node:fs/promises';
 import { basename, extname, posix } from 'node:path';
 import {
+  GROWTH_CALIBRATION_LIMITS,
   calibrateUncertainty,
   detectableSlope,
   type CalibratedUncertainty,
@@ -409,7 +410,8 @@ function methodTable(
     '| Reference | Per check and scale, median of the run medians. |',
     '| Noise need | max(absolute run-median deviation, half the within-run range). |',
     '| Fit | Search relative E from 0% to 100% in 1% steps; choose the least average max(absolute E, relative E × reference) covering the requested share of calibration points. |',
-    '| Held-out | Leave out each check run, refit E, and measure covered points. |',
+    '| Held-out | Leave out each check run, refit E from indexed per-run medians and spreads, and measure covered points. |',
+    `| Admission | At most ${GROWTH_CALIBRATION_LIMITS.checks} checks, ${GROWTH_CALIBRATION_LIMITS.runsPerCheck} runs per check, ${GROWTH_CALIBRATION_LIMITS.points} points and ${GROWTH_CALIBRATION_LIMITS.heldOutRuns} leave-one-run-out folds; excess input is refused with the supported capacity. |`,
     '| Coverage run | Classify each coverage profile separately under both calibrated E values. |',
   ];
 }

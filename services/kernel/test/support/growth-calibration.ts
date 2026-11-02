@@ -52,6 +52,21 @@ type CalibrationPoint = Readonly<{
 
 type Fit = Readonly<{ absolute: number; relative: number; mean: number }>;
 
+type IndexedCheck = Readonly<{
+  check: string;
+  runCount: number;
+  summaries: readonly RunSummary[];
+  points: readonly CalibrationPoint[];
+}>;
+
+/** Finite calibration work admitted after profile-byte admission and before fitting. */
+export const GROWTH_CALIBRATION_LIMITS = {
+  checks: 256,
+  runsPerCheck: 32,
+  points: 4_096,
+  heldOutRuns: 2_048,
+} as const;
+
 function medianCost(values: readonly number[]): number {
   return [...values].sort((left, right) => left - right)[(values.length - 1) >> 1]!;
 }
@@ -60,14 +75,24 @@ function validateSeries(series: readonly CalibrationCheck[], coverage: number): 
   if (series.length === 0) throw new TypeError('Calibration requires at least one check');
   if (!Number.isFinite(coverage) || coverage <= 0 || coverage > 1)
     throw new TypeError('Calibration coverage must be greater than 0 and at most 1');
+  if (series.length > GROWTH_CALIBRATION_LIMITS.checks)
+    throw new TypeError(
+      `Calibration exceeds the ${GROWTH_CALIBRATION_LIMITS.checks} check capacity (${series.length} checks)`,
+    );
 
   const names = new Set<string>();
+  let heldOutRuns = 0;
+  let points = 0;
   for (const item of series) {
     if (typeof item.check !== 'string' || item.check.length === 0)
       throw new TypeError('Each calibration check requires a name');
     if (names.has(item.check)) throw new TypeError(`Calibration check names must be unique: ${item.check}`);
     names.add(item.check);
     if (item.runs.length < 2) throw new TypeError(`Calibration check ${item.check} requires at least two runs`);
+    if (item.runs.length > GROWTH_CALIBRATION_LIMITS.runsPerCheck)
+      throw new TypeError(
+        `Calibration check ${item.check} exceeds the ${GROWTH_CALIBRATION_LIMITS.runsPerCheck} run capacity (${item.runs.length} runs)`,
+      );
 
     let scales: number[] | undefined;
     for (const run of item.runs) {
@@ -88,25 +113,43 @@ function validateSeries(series: readonly CalibrationCheck[], coverage: number): 
         throw new TypeError(`Calibration runs for ${item.check} must use the same scales`);
       scales ??= runScales;
     }
+
+    heldOutRuns += item.runs.length;
+    points += item.runs.length * item.runs[0]!.length;
+    if (heldOutRuns > GROWTH_CALIBRATION_LIMITS.heldOutRuns)
+      throw new TypeError(
+        `Calibration check ${item.check} exceeds the ${GROWTH_CALIBRATION_LIMITS.heldOutRuns} leave-one-run-out capacity (${heldOutRuns} runs)`,
+      );
+    if (points > GROWTH_CALIBRATION_LIMITS.points)
+      throw new TypeError(
+        `Calibration check ${item.check} exceeds the ${GROWTH_CALIBRATION_LIMITS.points} point capacity (${points} check×run×scale points)`,
+      );
   }
 }
 
-function summarizeRuns(
-  series: readonly CalibrationCheck[],
-  omitted?: Readonly<{ check: string; run: number }>,
-): RunSummary[] {
-  return series.flatMap(({ check, runs }) =>
-    runs.flatMap((run, runIndex) => {
-      if (omitted?.check === check && omitted.run === runIndex) return [];
-      return run.map(({ scale, repetitions }) => ({
+function indexChecks(series: readonly CalibrationCheck[]): readonly IndexedCheck[] {
+  return series.map(({ check, runs }) => {
+    const summaries = runs.flatMap((run, runIndex) =>
+      run.map(({ scale, repetitions }) => ({
         check,
         run: runIndex,
         scale,
         value: medianCost(repetitions),
         spread: Math.max(...repetitions) - Math.min(...repetitions),
-      }));
-    }),
-  );
+      })),
+    );
+    return { check, runCount: runs.length, summaries, points: toCalibrationPoints(summaries) };
+  });
+}
+
+function trainingPoints(
+  indexed: readonly IndexedCheck[],
+  omitted: Readonly<{ check: string; run: number }>,
+): CalibrationPoint[] {
+  return indexed.flatMap((item) => {
+    if (item.check !== omitted.check) return item.points;
+    return toCalibrationPoints(item.summaries.filter((summary) => summary.run !== omitted.run));
+  });
 }
 
 function referencesFor(summaries: readonly RunSummary[]): Map<string, number> {
@@ -178,13 +221,6 @@ function fit(points: readonly CalibrationPoint[], coverage: number): Fit {
   return best!;
 }
 
-function needsFor(
-  series: readonly CalibrationCheck[],
-  omitted?: Readonly<{ check: string; run: number }>,
-): CalibrationPoint[] {
-  return toCalibrationPoints(summarizeRuns(series, omitted));
-}
-
 function allowance(point: CalibrationPoint, fitted: Pick<Fit, 'absolute' | 'relative'>): number {
   return Math.max(fitted.absolute, fitted.relative * point.reference);
 }
@@ -197,24 +233,26 @@ export function calibrateUncertainty(
   const coverage = options.coverage ?? 1;
   validateSeries(series, coverage);
 
-  const calibrationPoints = needsFor(series);
+  const indexed = indexChecks(series);
+  const calibrationPoints = indexed.flatMap((item) => item.points);
   const selected = fit(calibrationPoints, coverage);
   const heldOut: { need: number; allowance: number }[] = [];
 
-  for (const { check, runs } of series) {
-    for (let run = 0; run < runs.length; run += 1) {
-      const trainingPoints = needsFor(series, { check, run });
-      const trained = fit(trainingPoints, coverage);
-      const heldOutSummaries = summarizeRuns(series, { check, run });
-      const references = referencesFor(heldOutSummaries);
-      const heldOutRun = runs[run]!;
-      for (const { scale, repetitions } of heldOutRun) {
-        const reference = references.get(referenceKey(check, scale));
+  for (const item of indexed) {
+    for (let run = 0; run < item.runCount; run += 1) {
+      const trained = fit(trainingPoints(indexed, { check: item.check, run }), coverage);
+      const remaining = item.summaries.filter((summary) => summary.run !== run);
+      const references = referencesFor(remaining);
+      for (const summary of item.summaries) {
+        if (summary.run !== run) continue;
+        const reference = references.get(referenceKey(item.check, summary.scale));
         // Every check has at least two runs, so leave-one-run-out always leaves a reference.
-        if (reference === undefined) throw new TypeError(`No held-out reference for ${check} at scale ${scale}`);
-        const value = medianCost(repetitions);
-        const need = Math.max(Math.abs(value - reference), (Math.max(...repetitions) - Math.min(...repetitions)) / 2);
-        heldOut.push({ need, allowance: Math.max(trained.absolute, trained.relative * reference) });
+        if (reference === undefined)
+          throw new TypeError(`No held-out reference for ${item.check} at scale ${summary.scale}`);
+        heldOut.push({
+          need: Math.max(Math.abs(summary.value - reference), summary.spread / 2),
+          allowance: Math.max(trained.absolute, trained.relative * reference),
+        });
       }
     }
   }

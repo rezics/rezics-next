@@ -634,6 +634,10 @@ The `GROWTH_PROFILE` JSON line includes `statements`, with each scale's complete
 blocks and count across measured repetitions.
 The reader admits at most 64 MiB of total UTF-8 input, 250,000 physical lines, and 50,000 nonblank records per read;
 each physical line is limited to 2 MiB. It rejects excess input and reports the source and line where a limit is crossed.
+Calibration then admits at most 256 checks, 32 runs per check, 4,096 check×run×scale points and 2,048 leave-one-run-out
+folds, covering the documented five-run sample with headroom. It indexes per-run medians and spreads and refits each
+omitted run from those statistics instead of rescanning repetitions. Excess work is refused with the check or series
+size and the supported capacity; it does not return a partial fit.
 Calibration combines a file/check/occurrence only when every run declares the same growth bounds and scales; omitted
 checks with differing bounds report each run and its declaration.
 

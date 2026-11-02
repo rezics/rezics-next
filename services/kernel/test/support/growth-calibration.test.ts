@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
-import { calibrateUncertainty, detectableSlope, type CalibrationCheck } from './growth-calibration.ts';
+import { growthCalibrationReport } from '../../scripts/growth-calibrate.ts';
+import {
+  GROWTH_CALIBRATION_LIMITS,
+  calibrateUncertainty,
+  detectableSlope,
+  type CalibrationCheck,
+} from './growth-calibration.ts';
 
 const scales = [1, 4, 16, 64, 256];
 
@@ -145,4 +151,54 @@ test('the detectable effect is the smallest linear slope a constant or logarithm
   const beyondSearchCap = detectableSlope([1, 4, 16], { absolute: 1e12, relative: 0 }, 'constant', base);
   expect(Number.isFinite(beyondSearchCap)).toBe(true);
   expect(beyondSearchCap).toBeGreaterThan(1e9);
+});
+
+test('calibration refuses work above advertised capacity and names the input', () => {
+  const extraRuns = Array.from({ length: GROWTH_CALIBRATION_LIMITS.runsPerCheck + 1 }, () => [
+    { scale: 1, repetitions: [1] },
+  ]);
+  expect(() => calibrateUncertainty([{ check: 'heavy-run', runs: extraRuns }])).toThrow(
+    `Calibration check heavy-run exceeds the ${GROWTH_CALIBRATION_LIMITS.runsPerCheck} run capacity (${extraRuns.length} runs)`,
+  );
+
+  const extraChecks = Array.from({ length: GROWTH_CALIBRATION_LIMITS.checks + 1 }, (_, index) =>
+    checkRuns(`check-${index}`, [
+      [1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1],
+    ]),
+  );
+  expect(() => calibrateUncertainty(extraChecks)).toThrow(
+    `Calibration exceeds the ${GROWTH_CALIBRATION_LIMITS.checks} check capacity (${extraChecks.length} checks)`,
+  );
+
+  const scaleCount = Math.floor(GROWTH_CALIBRATION_LIMITS.points / 2) + 1;
+  const wideRun = Array.from({ length: scaleCount }, (_, index) => ({ scale: index + 1, repetitions: [1] }));
+  expect(() => calibrateUncertainty([{ check: 'wide', runs: [wideRun, wideRun] }])).toThrow(
+    `Calibration check wide exceeds the ${GROWTH_CALIBRATION_LIMITS.points} point capacity (${scaleCount * 2} check×run×scale points)`,
+  );
+});
+
+test('profile calibration refuses over-capacity work after bounded admission', () => {
+  const profile = JSON.stringify({
+    file: 'test/growth.test.ts',
+    check: 'heavy-run',
+    scales: [1, 4, 16],
+    repetitions: [
+      [{ rows: 1, blocks: 1, statements: 1 }],
+      [{ rows: 1, blocks: 1, statements: 1 }],
+      [{ rows: 1, blocks: 1, statements: 1 }],
+    ],
+    relationSizes: [{}, {}, {}],
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    shadow: Object.fromEntries(['rows', 'blocks', 'statements'].map((metric) => [metric, { outcome: 'compatible' }])),
+  });
+  const calibration = Array.from({ length: GROWTH_CALIBRATION_LIMITS.runsPerCheck + 1 }, (_, index) => ({
+    name: `run-${index + 1}`,
+    text: profile,
+  }));
+  expect(() =>
+    growthCalibrationReport(calibration, { name: 'coverage', text: profile }),
+  ).toThrow(
+    `Calibration check ${JSON.stringify(['test/growth.test.ts', 'heavy-run'])} exceeds the ${GROWTH_CALIBRATION_LIMITS.runsPerCheck} run capacity (${calibration.length} runs)`,
+  );
 });
