@@ -962,17 +962,61 @@ for (const settlement of ['success', 'failure'] as const) {
   });
 }
 
-test('Appeals healthy explicit uncertain retry preserves exact body/key and confirmed receipt across rerenders', async () => {
+test('Appeals refresh hides old content and refreshes terminal empty pages within the original bounds', async () => {
+  await paint('appeals', await load('appeals'));
+  const urls = nativeReads.map((request) => request.url);
+  appeals = [];
+  continuation = null;
+  nativeGate = deferred<void>();
+  await act(async () => {
+    const refresh = button(m.moderation_queue_refresh());
+    refresh.click();
+    refresh.click();
+    await tick();
+  });
+  expect(nativeReads).toHaveLength(urls.length + 1);
+  expect(host.textContent).toContain(m.moderation_appeals_read_loading());
+  hidden('appeals');
+  expect(host.querySelector('blockquote')).toBeNull();
+  await act(async () => {
+    nativeGate!.resolve();
+    await tick();
+  });
+  expect(host.textContent).toContain(m.moderation_appeals_empty());
+  const count = nativeReads.length;
+  appeals = [appeal];
+  await click(m.moderation_queue_refresh());
+  expect(nativeReads.slice(count).map((request) => request.url)).toEqual(urls);
+  expect(host.textContent).toContain(appeal.statement);
+  expect(nativeWrites).toHaveLength(0);
+});
+
+test('Appeals refresh refuses a changed native origin under the original browser observation', async () => {
+  await paint('appeals', await load('appeals'));
+  preparedToken = 'BBBBBBBBBBBBBBBBBBBBBA';
+  await click(m.moderation_queue_refresh());
+  hidden('appeals');
+  expect(host.querySelector('blockquote')).toBeNull();
+  expect(host.querySelector('button')).toBeNull();
+});
+
+test('Appeals refresh waits for resolution recovery, preserving exact body/key and confirmed receipt across rerenders', async () => {
   const page = await load('appeals');
   await paint('appeals', page);
   await type('  Exact independent review statement.  ');
   commandGate = deferred<Response>();
   await click(m.moderation_appeal_reverse_action());
+  const count = nativeReads.length;
+  expect(button(m.moderation_queue_refresh()).disabled).toBe(true);
+  await click(m.moderation_queue_refresh());
   await act(async () => {
     commandGate!.reject(new TypeError('Failed to fetch'));
     await tick();
   });
   expect(host.textContent).toContain(m.moderation_appeal_intent_uncertain());
+  expect(button(m.moderation_queue_refresh()).disabled).toBe(true);
+  await click(m.moderation_queue_refresh());
+  expect(nativeReads).toHaveLength(count);
   const first = nativeWrites[0]!;
   commandGate = undefined;
   await click(m.moderation_appeal_intent_retry());
@@ -983,19 +1027,40 @@ test('Appeals healthy explicit uncertain retry preserves exact body/key and conf
   await paint('appeals', { ...page });
   expect(host.textContent).toContain(m.moderation_appeal_reversed());
   expect(host.textContent).not.toContain(m.moderation_appeal_intent_uncertain());
+  expect(button(m.moderation_queue_refresh()).disabled).toBe(false);
+  appeals = [];
+  await click(m.moderation_queue_refresh());
+  expect(nativeReads).toHaveLength(count + 1);
+  expect(nativeWrites).toHaveLength(2);
+  expect(host.textContent).not.toContain(m.moderation_appeal_reversed());
 });
 
 for (const kind of ['appeals', 'reporter'] as const) {
-  for (const settlement of ['success', 'failure'] as const) {
-    test(`${kind}: explicit unavailable recovery keeps the original observation; late ${settlement} cannot clean up a successor`, async () => {
-      preparationOutage = true;
+  for (const [initial, settlement] of [
+    ['unavailable', 'success'],
+    ['unavailable', 'failure'],
+    ...(kind === 'appeals'
+      ? [
+          ['ready', 'success'],
+          ['ready', 'failure'],
+        ]
+      : []),
+  ]) {
+    test(`${kind}: explicit ${initial} recovery keeps the original observation; late ${settlement} cannot clean up a successor`, async () => {
+      preparationOutage = initial === 'unavailable';
       const page = await load(kind);
       await paint(kind, page);
       expect(credentials).toBe(1);
-      expect(nativeReads).toHaveLength(0);
+      expect(nativeReads).toHaveLength(initial === 'ready' ? 2 : 0);
       preparationOutage = false;
       nativeGate = deferred<void>();
-      await click(kind === 'appeals' ? m.moderation_appeals_read_retry() : m.sources_retry());
+      await click(
+        kind === 'appeals'
+          ? initial === 'ready'
+            ? m.moderation_queue_refresh()
+            : m.moderation_appeals_read_retry()
+          : m.sources_retry(),
+      );
       expect(credentials).toBe(2);
       const gate = nativeGate;
       nativeGate = undefined;
@@ -1028,5 +1093,11 @@ for (const kind of ['appeals', 'reporter'] as const) {
     expect(host.textContent).toContain(evidence(kind));
     expect(credentials).toBe(4);
     expect(nativeWrites).toHaveLength(0);
+    if (kind === 'appeals') {
+      responseStatus = 503;
+      await click(m.moderation_queue_refresh());
+      hidden(kind);
+      expect(host.textContent).toContain(m.moderation_appeals_read_unavailable());
+    }
   });
 }

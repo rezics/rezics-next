@@ -12,6 +12,7 @@
   "moderation_appeals_read_unavailable": "Einsprüche sind derzeit nicht verfügbar. Versuche diese Seite erneut zu laden.",
   "moderation_appeals_read_stale": "Diese Einspruchsseite ist abgelaufen. Beginne erneut auf der ersten Seite.",
   "moderation_appeals_read_closed": "Mit deiner aktuellen Sitzung oder Berechtigung sind Einsprüche nicht verfügbar.",
+  "moderation_appeals_refresh_blocked": "Bestätige die Ergebnisse ausstehender oder ungewisser Entscheidungen, bevor du diese Seite aktualisierst.",
   "moderation_appeals_read_retry": "Diese Seite erneut laden",
   "moderation_appeals_read_restart": "Erste Seite",
   "moderation_appeals_read_sparse": "Auf dieser Seite sind keine Einsprüche sichtbar. Auf der nächsten Seite können weitere folgen.",

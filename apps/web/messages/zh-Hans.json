@@ -12,6 +12,7 @@
   "moderation_appeals_read_unavailable": "目前无法加载申诉。请重试当前页。",
   "moderation_appeals_read_stale": "此申诉页面已过期。请从第一页重新开始。",
   "moderation_appeals_read_closed": "当前会话或权限无法访问申诉。",
+  "moderation_appeals_refresh_blocked": "刷新此页面前，请先确认正在发送或结果不确定的申诉处理结果。",
   "moderation_appeals_read_retry": "重试当前页",
   "moderation_appeals_read_restart": "第一页",
   "moderation_appeals_read_sparse": "当前页没有可见的申诉。下一页可能还有申诉。",

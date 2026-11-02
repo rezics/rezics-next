@@ -12,6 +12,7 @@
   "moderation_appeals_read_unavailable": "現在、異議申し立てを読み込めません。このページを再試行してください。",
   "moderation_appeals_read_stale": "この異議申し立てページは期限切れです。最初のページからやり直してください。",
   "moderation_appeals_read_closed": "現在のセッションまたはアクセス権では異議申し立てを表示できません。",
+  "moderation_appeals_refresh_blocked": "このページを更新する前に、送信中または結果が不明な審査の結果を確認してください。",
   "moderation_appeals_read_retry": "このページを再試行",
   "moderation_appeals_read_restart": "最初のページ",
   "moderation_appeals_read_sparse": "このページに表示できる異議申し立てはありません。次のページに続く場合があります。",

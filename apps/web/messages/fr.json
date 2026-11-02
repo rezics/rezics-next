@@ -12,6 +12,7 @@
   "moderation_appeals_read_unavailable": "Les recours sont indisponibles pour le moment. Réessayez de charger cette page.",
   "moderation_appeals_read_stale": "Cette page de recours a expiré. Reprenez à la première page.",
   "moderation_appeals_read_closed": "Les recours ne sont pas accessibles avec votre session ou vos droits actuels.",
+  "moderation_appeals_refresh_blocked": "Confirmez le résultat des décisions en attente ou incertaines avant d’actualiser cette page.",
   "moderation_appeals_read_retry": "Réessayer cette page",
   "moderation_appeals_read_restart": "Première page",
   "moderation_appeals_read_sparse": "Aucun recours visible sur cette page. Il peut y en avoir sur la suivante.",

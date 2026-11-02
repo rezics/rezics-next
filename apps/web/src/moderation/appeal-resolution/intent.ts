@@ -27,6 +27,10 @@ export function createAppealResolutionIntent(appealId: string) {
     get phase() {
       return phase;
     },
+    /** These phases require this mounted command's exact recovery context. */
+    get unresolved() {
+      return phase === 'pending' || phase === 'uncertain';
+    },
     get command() {
       return command;
     },

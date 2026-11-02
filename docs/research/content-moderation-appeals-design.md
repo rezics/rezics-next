@@ -94,11 +94,16 @@ returns. Late retry success or failure cannot revive it. Fixtures without page i
 presentation stories and never supply production authority.
 
 Loading, terminal empty, sparse empty with a native next cursor, recoverable unavailable, stale-cursor restart and
-closed access are distinct. Only an explicit retry repeats the current read; it clears old private content first and
-never replays a resolution or invalidates Reports. Invalid/expired native cursors offer an explicit first-page restart
+closed access are distinct. A loaded page, including a terminal empty page, offers explicit refresh of its exact
+admitted input; unavailable retry repeats that same read. Both clear old private content first and never replay a
+resolution or invalidate Reports.
+Refresh waits while any resolution is sending or uncertain, retaining its mounted command owner and exact retry until settlement.
+Each click reads one bounded native page and its deduplicated targets; the original private reader admits the response
+and its actual native generation. Invalid/expired native cursors offer an explicit first-page restart
 that removes only the Appeals cursor. Unknown and not-visible scopes share the same closed message. Native problem
 details never enter the UI. List `canResolve` remains the current native hint; commands still authorize independently,
-including the original-reviewer prohibition. Successful resolution confirmation stays visible until navigation.
+including the original-reviewer prohibition. Successful resolution confirmation stays visible until navigation or
+deliberate queue refresh.
 
 ## Amendments to adopt and product slices
 

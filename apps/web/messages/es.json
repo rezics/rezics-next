@@ -12,6 +12,7 @@
   "moderation_appeals_read_unavailable": "Las apelaciones no están disponibles ahora. Vuelve a intentar cargar esta página.",
   "moderation_appeals_read_stale": "Esta página de apelaciones ha caducado. Empieza de nuevo desde la primera página.",
   "moderation_appeals_read_closed": "Las apelaciones no están disponibles con tu sesión o acceso actuales.",
+  "moderation_appeals_refresh_blocked": "Confirma el resultado de las resoluciones pendientes o inciertas antes de actualizar esta página.",
   "moderation_appeals_read_retry": "Reintentar esta página",
   "moderation_appeals_read_restart": "Primera página",
   "moderation_appeals_read_sparse": "No hay apelaciones visibles en esta página. Puede haber más en la siguiente.",

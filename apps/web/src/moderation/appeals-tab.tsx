@@ -49,7 +49,9 @@ function AppealsVisit(props: AppealsPageProps) {
       : null,
   );
   const [data, setData] = useState(original.page);
-  const retrying = useRef(false);
+  const reading = useRef(false);
+  const unresolved = useRef(new Set<string>());
+  const [refreshBlocked, setRefreshBlocked] = useState(false);
   const originalClient = useRef(client).current;
   if (
     props.active === false ||
@@ -62,9 +64,21 @@ function AppealsVisit(props: AppealsPageProps) {
     owner?.retire();
   useSyncExternalStore(owner?.subscribe ?? emptySubscribe, owner?.snapshot ?? zeroSnapshot, zeroSnapshot);
   const current = () => (owner ? owner.isCurrent() : typeof window === 'undefined');
-  async function retry() {
-    if (!current() || retrying.current || data.state !== 'unavailable') return;
-    retrying.current = true;
+  function resolutionPending(appealId: string, pending: boolean) {
+    if (!current()) return;
+    if (pending) unresolved.current.add(appealId);
+    else unresolved.current.delete(appealId);
+    setRefreshBlocked(unresolved.current.size > 0);
+  }
+  async function reload() {
+    if (
+      !current() ||
+      reading.current ||
+      unresolved.current.size > 0 ||
+      (data.state !== 'ready' && data.state !== 'unavailable')
+    )
+      return;
+    reading.current = true;
     const ticket = owner?.ticket();
     setData({ ...data, appeals: [], targets: [], next: null, state: 'loading' });
     try {
@@ -82,7 +96,7 @@ function AppealsVisit(props: AppealsPageProps) {
       if (current() && (!owner || owner.owns(ticket!)))
         setData({ ...data, appeals: [], targets: [], next: null, state: 'unavailable' });
     } finally {
-      if (current() && (!owner || owner.owns(ticket!))) retrying.current = false;
+      if (current() && (!owner || owner.owns(ticket!))) reading.current = false;
     }
   }
   const leave = (action: (() => void) | undefined) => {
@@ -90,7 +104,7 @@ function AppealsVisit(props: AppealsPageProps) {
     owner?.retire();
     action?.();
   };
-  const commandCurrent = owner?.canCommand;
+  const commandCurrent = owner ? () => !reading.current && owner.canCommand() : undefined;
   const state =
     (typeof window !== 'undefined' && !owner) || (owner && !owner.healthy())
       ? 'closed'
@@ -114,7 +128,10 @@ function AppealsVisit(props: AppealsPageProps) {
         {...(original.input.postId ? { postId: original.input.postId } : {})}
         {...(original.reportsSearch !== undefined ? { reportsSearch: original.reportsSearch } : {})}
         {...(commandCurrent ? { isCurrent: commandCurrent } : {})}
-        onRetry={() => void retry()}
+        refreshBlocked={refreshBlocked}
+        onResolutionPending={resolutionPending}
+        onRefresh={() => void reload()}
+        onRetry={() => void reload()}
         onNext={(cursor) => leave(() => original.onNext?.(cursor))}
         onRestart={() => leave(original.onRestart)}
       />
@@ -165,6 +182,9 @@ export function ModerationAppealsView({
   canResolve,
   state = 'ready',
   onRetry,
+  onRefresh,
+  refreshBlocked = false,
+  onResolutionPending,
   onRestart,
   reportsSearch,
   isCurrent,
@@ -172,6 +192,9 @@ export function ModerationAppealsView({
   isCurrent?: () => boolean;
   state?: AppealReadState;
   onRetry?: () => void;
+  onRefresh?: () => void;
+  refreshBlocked?: boolean;
+  onResolutionPending?: (appealId: string, pending: boolean) => void;
   onRestart?: () => void;
   reportsSearch?: string;
   appeals: Appeal[];
@@ -219,6 +242,18 @@ export function ModerationAppealsView({
             ? m.moderation_appeals_read_thread_scope()
             : m.moderation_appeals_read_board_scope()}
       </p>
+      {state === 'ready' && onRefresh ? (
+        <div className="space-y-2">
+          <Button variant="outline" disabled={refreshBlocked} onClick={onRefresh}>
+            {m.moderation_queue_refresh()}
+          </Button>
+          {refreshBlocked ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.moderation_appeals_refresh_blocked()}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {state !== 'ready' ? (
         <ContentItemFrame
           as="div"
@@ -262,6 +297,7 @@ export function ModerationAppealsView({
                 appeal={appeal}
                 target={target}
                 mayResolve={mayResolve}
+                {...(onResolutionPending ? { onResolutionPending } : {})}
                 {...(isCurrent ? { isCurrent } : {})}
               />
             );
@@ -288,11 +324,13 @@ function AppealCard({
   target,
   mayResolve,
   isCurrent,
+  onResolutionPending,
 }: {
   appeal: Appeal;
   target: ModerationTarget | undefined;
   mayResolve: boolean;
   isCurrent?: () => boolean;
+  onResolutionPending?: (appealId: string, pending: boolean) => void;
 }) {
   const id = useId();
   const identity = appealTarget(appeal);
@@ -350,6 +388,9 @@ function AppealCard({
             appealId={appeal.id}
             mayResolve={mayResolve}
             resolution={appeal.decision.appeal ?? null}
+            {...(onResolutionPending
+              ? { onUnresolvedChange: (pending: boolean) => onResolutionPending(appeal.id, pending) }
+              : {})}
             {...(isCurrent ? { isCurrent } : {})}
           />
           <details className="border-t border-border pt-3">

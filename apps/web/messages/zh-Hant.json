@@ -12,6 +12,7 @@
   "moderation_appeals_read_unavailable": "目前無法載入申訴。請重試目前頁面。",
   "moderation_appeals_read_stale": "此申訴頁面已過期。請從第一頁重新開始。",
   "moderation_appeals_read_closed": "目前的工作階段或權限無法存取申訴。",
+  "moderation_appeals_refresh_blocked": "重新整理此頁面前，請先確認傳送中或結果不確定的申訴處理結果。",
   "moderation_appeals_read_retry": "重試目前頁面",
   "moderation_appeals_read_restart": "第一頁",
   "moderation_appeals_read_sparse": "目前頁面沒有可見的申訴。下一頁可能還有申訴。",

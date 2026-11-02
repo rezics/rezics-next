@@ -18,6 +18,7 @@ const resolveAppeal: ResolveAppeal = (data) => actionOnAppeal({ data, headers: c
  * A lost response permits only explicit exact retry; definitive refusals require a fresh authorized page read.
  * Viewer/session, appeal or admission retirement discards private presentation and fences late settlement.
  * Confirmation survives unrelated parent refreshes; this form never refreshes or automatically resumes a command.
+ * The queue waits for pending or uncertain intent to settle before refreshing its native generation.
  * Unknown-session injected fixtures remain usable without granting the default action browser admission.
  */
 export function AppealResolution({
@@ -26,12 +27,14 @@ export function AppealResolution({
   resolution,
   onResolve = resolveAppeal,
   isCurrent,
+  onUnresolvedChange,
 }: {
   appealId: string;
   mayResolve: boolean;
   resolution?: Resolution | null;
   onResolve?: ResolveAppeal;
   isCurrent?: () => boolean;
+  onUnresolvedChange?: (unresolved: boolean) => void;
 }) {
   const [intent] = useState(() => createAppealResolutionIntent(appealId));
   const [, redraw] = useReducer((version: number) => version + 1, 0);
@@ -89,6 +92,8 @@ export function AppealResolution({
     if (!current() || !admitted || result) return;
     const command = outcome === undefined ? intent.retry() : intent.begin(outcome);
     if (!command) return;
+    // Notify synchronously: a second click must not unmount this command before React renders.
+    onUnresolvedChange?.(intent.unresolved);
     redraw();
     try {
       if (!current()) return;
@@ -97,7 +102,10 @@ export function AppealResolution({
     } catch {
       if (current()) intent.uncertain();
     } finally {
-      if (current()) redraw();
+      if (current()) {
+        onUnresolvedChange?.(intent.unresolved);
+        redraw();
+      }
     }
   }
 

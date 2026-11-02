@@ -12,6 +12,7 @@
   "moderation_appeals_read_unavailable": "Appeals are unavailable right now. Retry this page.",
   "moderation_appeals_read_stale": "This appeals page has expired. Start again from the first page.",
   "moderation_appeals_read_closed": "Appeals are not available with your current session or access.",
+  "moderation_appeals_refresh_blocked": "Confirm pending or uncertain resolution outcomes before refreshing this page.",
   "moderation_appeals_read_retry": "Retry this page",
   "moderation_appeals_read_restart": "First page",
   "moderation_appeals_read_sparse": "There are no visible appeals on this page. There may be more on the next page.",
