@@ -480,11 +480,27 @@ test('Default Realm ban management retains original reader and command lifetime 
   await mount();
   await list(lists.at(-1), [], 'sparse-next');
   expect(host.textContent).toContain(m.realm_bans_empty());
+  const recoveryReads = lists.length;
+  const recoveryWrites = writes.length;
   await click(m.realm_bans_next());
   expect(new URL(lists.at(-1)!.request.url).searchParams.get('cursor')).toBe('sparse-next');
+  await settle(lists.at(-1)!, Response.json({ code: 'unavailable' }, { status: 503 }));
+  expect(lists).toHaveLength(recoveryReads + 1);
+  expect(window.document.activeElement).toBe(button(m.realm_bans_read_retry()));
+  await click(m.realm_bans_read_retry());
+  expect(lists).toHaveLength(recoveryReads + 2);
+  expect(new URL(lists.at(-1)!.request.url).searchParams.get('cursor')).toBe('sparse-next');
+  await list(lists.at(-1), [], 'expired-next');
+  expect(window.document.activeElement).toBe(host.querySelector('h2'));
+  await click(m.realm_bans_next());
+  expect(new URL(lists.at(-1)!.request.url).searchParams.get('cursor')).toBe('expired-next');
   await settle(lists.at(-1)!, Response.json({ code: 'invalid_cursor' }, { status: 400 }));
   expect(host.textContent).toContain(m.realm_bans_cursor_invalid());
-  await click(m.realm_bans_refresh());
+  expect(lists).toHaveLength(recoveryReads + 3);
+  expect(window.document.activeElement).toBe(button(m.realm_bans_restart()));
+  expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.realm_bans_read_retry())).toBe(false);
+  await click(m.realm_bans_restart());
+  expect(lists).toHaveLength(recoveryReads + 4);
   expect(new URL(lists.at(-1)!.request.url).searchParams.has('cursor')).toBe(false);
   await list(
     lists.at(-1),
@@ -492,6 +508,7 @@ test('Default Realm ban management retains original reader and command lifetime 
     null,
   );
   expect(host.querySelectorAll('li')).toHaveLength(20);
+  expect(writes).toHaveLength(recoveryWrites);
 
   // Editing a reason while exact lookup is pending does not strand that lookup.
   // Revalidation failure releases the current busy owner; identity changes never send.
@@ -545,6 +562,8 @@ test('Default Realm ban management retains original reader and command lifetime 
     await tick();
   });
   expect(host.textContent).toContain(m.realm_bans_write_unavailable());
+  expect(button(m.realm_bans_refresh()).disabled).toBe(true);
+  await click(m.realm_bans_refresh());
   expect(lists).toHaveLength(readsBeforeFailure);
   await click(m.realm_bans_retry());
   expect(boundaries.at(-1)!.data).toEqual(exact);
@@ -556,7 +575,9 @@ test('Default Realm ban management retains original reader and command lifetime 
   await settle(lists.at(-1)!, Response.json({ code: 'unavailable' }, { status: 503 }));
   expect(host.textContent).toContain(m.realm_bans_removal_pending());
   expect(host.textContent).not.toContain(m.realm_bans_write_unavailable());
-  await click(m.realm_bans_refresh());
+  await click(m.realm_bans_read_retry());
+  expect(writes).toHaveLength(beforeWrite + 2);
+  expect(new URL(lists.at(-1)!.request.url).searchParams.has('cursor')).toBe(false);
   await list();
   await click(m.realm_bans_unban());
   await click(m.realm_bans_confirm());

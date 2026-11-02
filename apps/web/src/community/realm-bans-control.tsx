@@ -246,8 +246,22 @@ function RealmBansVisit({
   const generation = useRef(0);
   const renderGeneration = generation.current;
   const pageReady = useRef(initial?.state === 'ready');
+  // Retain only this visit's last bounded page input, including a failed continuation.
+  const pageRead = useRef<{ cursor?: string; focus: boolean }>({ focus: false });
+  const pageHeading = useRef<HTMLHeadingElement>(null);
+  const restartAction = useRef<HTMLButtonElement>(null);
+  const retryReadAction = useRef<HTMLButtonElement>(null);
   const uncertain = useRef<BanWriteInput | null>(null);
   const visible = useCommunityManagementAdmission('bans', gate.current() && view.state === 'ready');
+
+  useLayoutEffect(() => {
+    if (!pageRead.current.focus || view.state === 'loading') return;
+    pageRead.current.focus = false;
+    if (!visible || !gate.current()) return;
+    const boundary =
+      view.state === 'ready' ? pageHeading.current : (retryReadAction.current ?? restartAction.current);
+    boundary?.focus();
+  }, [view, visible, gate]);
 
   const unresolved = () => gate.current() && (working.current !== null || uncertain.current !== null);
   useAuthoringDeparture(
@@ -272,14 +286,16 @@ function RealmBansVisit({
       working.current = null;
       uncertain.current = null;
       pageReady.current = false;
+      pageRead.current = { focus: false };
     },
     'realm-ban',
   );
 
   const refresh = useCallback(
-    async (cursor?: string) => {
+    async (cursor?: string, moveFocus = false) => {
       if (!gate.current() || working.current || uncertain.current) return;
       pageReady.current = false;
+      pageRead.current = { cursor, focus: moveFocus };
       const ticket = gate.ticket();
       const current = ++generation.current;
       const owns = () => gate.owns(ticket) && generation.current === current;
@@ -489,10 +505,11 @@ function RealmBansVisit({
       aria-busy={busy || view.state === 'loading'}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id={`${id}-title`} className="text-xl font-semibold">
+        <h2 ref={pageHeading} tabIndex={-1} id={`${id}-title`} className="text-xl font-semibold">
           {m.realm_bans_heading()}
         </h2>
         <Button
+          ref={restartAction}
           type="button"
           variant="outline"
           className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
@@ -500,16 +517,35 @@ function RealmBansVisit({
           onClick={() => {
             if (!gate.current() || generation.current !== renderGeneration) return;
             setConfirm(null);
-            void refresh();
+            void refresh(undefined, true);
           }}
         >
-          {m.realm_bans_refresh()}
+          {view.state === 'unavailable' || view.state === 'invalid-cursor'
+            ? m.realm_bans_restart()
+            : m.realm_bans_refresh()}
         </Button>
       </div>
       {view.state !== 'ready' ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {readMessage(view.state)}
-        </p>
+        <div className="space-y-3">
+          <p role="status" className="text-sm text-muted-foreground">
+            {readMessage(view.state)}
+          </p>
+          {view.state === 'unavailable' ? (
+            <Button
+              ref={retryReadAction}
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              disabled={disabled}
+              onClick={() => {
+                if (!gate.current() || generation.current !== renderGeneration) return;
+                void refresh(pageRead.current.cursor, true);
+              }}
+            >
+              {m.realm_bans_read_retry()}
+            </Button>
+          ) : null}
+        </div>
       ) : (
         <>
           <p className="max-w-prose text-sm text-muted-foreground">{m.realm_bans_help()}</p>
@@ -781,7 +817,7 @@ function RealmBansVisit({
               onClick={() => {
                 if (!gate.current() || generation.current !== renderGeneration) return;
                 setConfirm(null);
-                void refresh(view.page.next ?? undefined);
+                void refresh(view.page.next ?? undefined, true);
               }}
             >
               {m.realm_bans_next()}

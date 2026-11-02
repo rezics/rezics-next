@@ -385,13 +385,14 @@ test('withheld and refreshed denied/closed/unavailable/loading projections have 
   }
 });
 
-test('session retirement removes confirmation, uncertain command and pending-removal receipts and fences late callbacks', async () => {
-  for (const phase of ['confirmation', 'uncertain', 'receipt', 'in-flight'] as const) {
+test('session retirement removes confirmation, uncertain command, read recovery and pending-removal receipts and fences late callbacks', async () => {
+  for (const phase of ['confirmation', 'uncertain', 'receipt', 'in-flight', 'recovery'] as const) {
     const lifetime = new RealmBanLifetime(() => true);
     const source = boundary();
     source.props.lifetime = lifetime;
     let finish: ((value: BanWriteResult) => void) | undefined;
     if (phase === 'uncertain') source.setWrite({ ok: false, reason: 'unavailable' });
+    if (phase === 'recovery') source.setRead({ state: 'unavailable' });
     if (phase === 'in-flight')
       source.setWrite(
         new Promise((resolve) => {
@@ -421,6 +422,22 @@ test('session retirement removes confirmation, uncertain command and pending-rem
     expect(source.writes).toHaveLength(before.writes);
     withheld();
   }
+});
+
+test('a failed continuation can restart at the first page independently of exact read retry', async () => {
+  const source = boundary();
+  source.setRead({ state: 'unavailable' });
+  await mount(source.props);
+  await click(m.realm_bans_next());
+  expect(source.reads).toEqual(['opaque-continuation']);
+  await click(m.realm_bans_read_retry());
+  expect(source.reads).toEqual(['opaque-continuation', 'opaque-continuation']);
+  source.setRead({ state: 'ready', page: { items: [], next: null } });
+  await click(m.realm_bans_restart());
+  expect(source.reads).toEqual(['opaque-continuation', 'opaque-continuation', undefined]);
+  expect(window.document.activeElement).toBe(host.querySelector('h2'));
+  expect(source.lookups).toEqual([]);
+  expect(source.writes).toEqual([]);
 });
 
 test('shared departure preserves reviewed bans and recovery, then retires before destination reads', async () => {
