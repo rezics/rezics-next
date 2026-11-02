@@ -1,6 +1,10 @@
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { m } from '../../../paraglide/messages.js';
 import type { Failure } from './model';
+
+const recoveryControlClassName =
+  'h-auto min-h-8 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] py-1 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
 
 export function ZoneFeedback({
   failure,
@@ -26,18 +30,21 @@ export function ZoneFeedback({
     unavailable: m.zones_owner_unavailable,
   }[failure.kind];
   return (
-    <div role="alert" className="space-y-3">
-      <p>{text({}, options)}</p>
+    <div role="alert" className="min-w-0 space-y-3 rounded-xl border bg-muted/30 p-3 text-foreground sm:p-4">
+      <p className="whitespace-normal text-base leading-relaxed [overflow-wrap:anywhere]">{text({}, options)}</p>
       {failure.kind === 'signed-out' ? (
-        <a className="underline" href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}>
+        <a
+          className={cn(buttonVariants({ variant: 'outline' }), recoveryControlClassName)}
+          href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}
+        >
           {m.zones_owner_sign_in({}, options)}
         </a>
       ) : onRetry ? (
-        <Button variant="outline" onClick={onRetry}>
+        <Button className={recoveryControlClassName} variant="outline" onClick={onRetry}>
           {m.zones_owner_retry({}, options)}
         </Button>
       ) : failure.kind === 'unavailable' ? (
-        <a className="underline" href={returnTo}>
+        <a className={cn(buttonVariants({ variant: 'outline' }), recoveryControlClassName)} href={returnTo}>
           {m.zones_owner_retry({}, options)}
         </a>
       ) : null}
