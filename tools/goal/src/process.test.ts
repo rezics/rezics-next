@@ -83,6 +83,23 @@ test('a server that left its group is stopped by its working directory, and proc
     rmSync(root, { recursive: true, force: true });
   }
 });
+test('worktree cleanup skips vanished proc entries but reports unreadable cwd inspection', async () => {
+  const root = tempDirectory(),
+    proc = join(root, 'proc');
+  mkdirSync(join(proc, '42001'), { recursive: true });
+  mkdirSync(join(proc, '42002'));
+  writeFileSync(join(proc, '42002', 'cwd'), 'not a symlink');
+  try {
+    await expect(stopProcessesUnder(join(root, 'worktree'), 0, proc)).rejects.toMatchObject({
+      message: expect.stringContaining('PID 42002'),
+      cause: { code: 'EINVAL' },
+    });
+    rmSync(join(proc, '42002'), { recursive: true });
+    await expect(stopProcessesUnder(join(root, 'worktree'), 0, proc)).resolves.toBe(0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 test('a failing pidfd waiter falls back to the identity and resolves only once the process is gone', async () => {
   const root = tempDirectory(),
     bin = join(root, 'bin');
