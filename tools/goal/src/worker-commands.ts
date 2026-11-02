@@ -89,15 +89,14 @@ export async function runWorkerCommand(
         const incident = task.currentAttempt
           ? toolIncidentForRetry(store, { taskId: task.id, attempt: task.currentAttempt })
           : null;
-        const wait =
-          incident
-            ? {
-                reason: 'environment-incident',
-                incidentId: incident.id,
-                nextProbeAt: incident.nextProbeAt,
-                isProbe: incident.probe.taskId === task.id && incident.probe.attempt === task.currentAttempt,
-              }
-            : intent?.status === 'pending'
+        const wait = incident
+          ? {
+              reason: 'environment-incident',
+              incidentId: incident.id,
+              nextProbeAt: incident.nextProbeAt,
+              isProbe: incident.probe.taskId === task.id && incident.probe.attempt === task.currentAttempt,
+            }
+          : intent?.status === 'pending'
             ? (retryWait(intent, task, (id) => store.dependency(id)?.state, Date.now(), settings.stateDirectory) ?? {
                 reason: 'start',
               })

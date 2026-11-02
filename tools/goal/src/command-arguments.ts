@@ -53,8 +53,7 @@ export function parseWorkerCommandArguments(command: string, argv: string[]): Pa
         const flag = argv[index],
           value = argv[index + 1];
         if (flag === '--brief' && value && brief === undefined) brief = value;
-        else if (flag === '--expected-attempt' && value === '0' && expectedAttempt === undefined)
-          expectedAttempt = 0;
+        else if (flag === '--expected-attempt' && value === '0' && expectedAttempt === undefined) expectedAttempt = 0;
         else throw new Error('usage: amend <task> --expected-attempt 0 --brief <file>');
       }
       if (!arg || expectedAttempt !== 0 || !brief)
@@ -135,9 +134,7 @@ export function parseWorkerCommandArguments(command: string, argv: string[]): Pa
       } else if (proofStart && expectedAttempt === undefined) {
         throw new Error('--proof-start requires --expected-attempt');
       } else if (removeAfter.length && !proofStart && expectedAttempt !== 0) {
-        throw new Error(
-          '--remove-after requires --proof-start with an expected generation (or --expected-attempt 0)',
-        );
+        throw new Error('--remove-after requires --proof-start with an expected generation (or --expected-attempt 0)');
       }
       return {
         command,
@@ -156,8 +153,7 @@ export function parseWorkerCommandArguments(command: string, argv: string[]): Pa
         return { command, action: 'grant', taskId: argv[1] };
       }
       if (argv[0] === 'revoke') {
-        if (!argv[1] || !argv[2] || argv.length !== 3)
-          throw new Error('usage: priority revoke <task> <grant-id>');
+        if (!argv[1] || !argv[2] || argv.length !== 3) throw new Error('usage: priority revoke <task> <grant-id>');
         return { command, action: 'revoke', taskId: argv[1], grantId: argv[2] };
       }
       if (!arg || argv.length !== 2 || !['critical', 'normal'].includes(argv[1]!))
@@ -217,10 +213,7 @@ export function parseWorkerCommandArguments(command: string, argv: string[]): Pa
         if (!values[name]) throw new Error(`import requires --${name}`);
       if ((!values.task && !values.brief) || (values.task && values.brief))
         throw new Error('import requires exactly one of --task or --brief');
-      if (
-        values.outcome &&
-        !['passed', 'gate-failed', 'stopped', 'cancelled', 'pending-gate'].includes(values.outcome)
-      )
+      if (values.outcome && !['passed', 'gate-failed', 'stopped', 'cancelled', 'pending-gate'].includes(values.outcome))
         throw new Error('invalid import outcome');
       if (!['low', 'medium', 'high', 'xhigh', 'max'].includes(values.effort!)) throw new Error('invalid effort');
       return {
