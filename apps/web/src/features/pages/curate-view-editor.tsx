@@ -165,25 +165,26 @@ type FreshAdmissionResult = {
 
 type AdmissionReadRequest = { reader: string; version: number; promise: Promise<CurationRead | undefined> };
 
-function failureView(failure: CurationReadFailure) {
+function failureView(failure: CurationReadFailure, locale: string) {
   if (failure.reason === 'forbidden') return <ErrorPage />;
   return (
     <div className="space-y-4">
-      <CurationFailureNotice failure={failure} />
+      <CurationFailureNotice failure={failure} locale={locale} />
     </div>
   );
 }
 
 function retryableReadFailure(
   failure: CurationReadFailure,
-  options: ReturnType<typeof presentationMessageOptions>,
+  locale: string,
   retry?: { waiting: boolean; onRetry: () => void },
 ) {
   const retryable = failure.reason === 'unavailable' || failure.reason === 'rate-limited';
-  if (!retryable || !retry) return failureView(failure);
+  if (!retryable || !retry) return failureView(failure, locale);
+  const options = presentationMessageOptions(locale);
   return (
     <div className="space-y-4">
-      {failureView(failure)}
+      {failureView(failure, locale)}
       <Button className={editorControlClass} disabled={retry.waiting} onClick={retry.onRetry}>
         {m.curation_reload({}, options)}
       </Button>
@@ -307,15 +308,15 @@ function ActualPresentationViewEditor({
   const currentFreshAdmission = lease?.kind === 'fresh' && freshResult?.lease === lease ? freshResult.result : null;
   const currentAdmission = initialAdmission ?? currentFreshAdmission;
 
-  if (snapshot.session.state === 'signed-out') return failureView({ ok: false, reason: 'signed-out' });
-  if (snapshot.session.state === 'unavailable') return failureView({ ok: false, reason: 'unavailable' });
-  if (snapshot.session.state === 'signed-in' && !reader) return failureView({ ok: false, reason: 'forbidden' });
+  if (snapshot.session.state === 'signed-out') return failureView({ ok: false, reason: 'signed-out' }, locale);
+  if (snapshot.session.state === 'unavailable') return failureView({ ok: false, reason: 'unavailable' }, locale);
+  if (snapshot.session.state === 'signed-in' && !reader) return failureView({ ok: false, reason: 'forbidden' }, locale);
   if (!reader && snapshot.session.state === 'unknown')
     return initial.ok && lease?.kind === 'initial'
-      ? failureView({ ok: false, reason: 'unavailable' })
+      ? failureView({ ok: false, reason: 'unavailable' }, locale)
       : !initial.ok
-        ? failureView(initial)
-        : failureView({ ok: false, reason: 'unavailable' });
+        ? failureView(initial, locale)
+        : failureView({ ok: false, reason: 'unavailable' }, locale);
 
   if (!currentAdmission) {
     const failedRead =
@@ -326,18 +327,19 @@ function ActualPresentationViewEditor({
       !freshResult.result.ok
         ? freshResult.result
         : null;
-    if (failedRead) return retryableReadFailure(failedRead, options, { waiting, onRetry: retryAdmission });
-    if (!needsRead) return !initial.ok ? failureView(initial) : failureView({ ok: false, reason: 'unavailable' });
+    if (failedRead) return retryableReadFailure(failedRead, locale, { waiting, onRetry: retryAdmission });
+    if (!needsRead)
+      return !initial.ok ? failureView(initial, locale) : failureView({ ok: false, reason: 'unavailable' }, locale);
     return <p role="status">{m.curation_loading({}, options)}</p>;
   }
   if (!currentAdmission.ok)
     return retryableReadFailure(
       currentAdmission,
-      options,
+      locale,
       needsRead ? { waiting, onRetry: retryAdmission } : undefined,
     );
-  if (currentAdmission.reader !== reader) return failureView({ ok: false, reason: 'forbidden' });
-  if (!lease) return failureView({ ok: false, reason: 'unavailable' });
+  if (currentAdmission.reader !== reader) return failureView({ ok: false, reason: 'forbidden' }, locale);
+  if (!lease) return failureView({ ok: false, reason: 'unavailable' }, locale);
 
   let retained = retainedPublication.current;
   if (!retained || retained.publication.reader !== reader) {
@@ -461,22 +463,23 @@ function StandalonePresentationViewEditor({
     readAdmission(reader, lifecycle.epoch, transport);
   }
 
-  if (observedSession.state === 'signed-out') return failureView({ ok: false, reason: 'signed-out' });
-  if (observedSession.state === 'unavailable') return failureView({ ok: false, reason: 'unavailable' });
-  if (observedSession.state === 'signed-in' && !reader) return failureView({ ok: false, reason: 'forbidden' });
+  if (observedSession.state === 'signed-out') return failureView({ ok: false, reason: 'signed-out' }, locale);
+  if (observedSession.state === 'unavailable') return failureView({ ok: false, reason: 'unavailable' }, locale);
+  if (observedSession.state === 'signed-in' && !reader) return failureView({ ok: false, reason: 'forbidden' }, locale);
   if (!reader && observedSession.state === 'unknown')
-    return !initial.ok ? failureView(initial) : failureView({ ok: false, reason: 'forbidden' });
+    return !initial.ok ? failureView(initial, locale) : failureView({ ok: false, reason: 'forbidden' }, locale);
   if (!currentAdmission) {
-    if (!needsRead) return !initial.ok ? failureView(initial) : failureView({ ok: false, reason: 'unavailable' });
+    if (!needsRead)
+      return !initial.ok ? failureView(initial, locale) : failureView({ ok: false, reason: 'unavailable' }, locale);
     return <p role="status">{m.curation_loading({}, options)}</p>;
   }
   if (!currentAdmission.ok)
     return retryableReadFailure(
       currentAdmission,
-      options,
+      locale,
       needsRead ? { waiting, onRetry: retryAdmission } : undefined,
     );
-  if (currentAdmission.reader !== reader) return failureView({ ok: false, reason: 'forbidden' });
+  if (currentAdmission.reader !== reader) return failureView({ ok: false, reason: 'forbidden' }, locale);
 
   let retained = publications.current.get(reader);
   if (!retained) {
@@ -630,7 +633,7 @@ function AdmittedPresentationViewEditor({
           fallbackFocus={pageRegion}
           locale={locale}
         />
-        <CurationFailureNotice failure={admissionFailure} />
+        <CurationFailureNotice failure={admissionFailure} locale={locale} />
       </>
     );
 
@@ -870,7 +873,10 @@ function AdmittedPresentationViewEditor({
     return (
       <div className="space-y-4">
         {navigationGuard}
-        <CurationFailureNotice failure={failure ?? (current.ok ? { ok: false, reason: 'unavailable' } : current)} />
+        <CurationFailureNotice
+          failure={failure ?? (current.ok ? { ok: false, reason: 'unavailable' } : current)}
+          locale={locale}
+        />
         <Button className={editorControlClass} disabled={busy || waiting} onClick={() => void reload()}>
           {m.curation_reload({}, options)}
         </Button>
@@ -926,7 +932,7 @@ function AdmittedPresentationViewEditor({
       )}
       {failure && (
         <div className={editorRecoveryClass}>
-          <CurationFailureNotice failure={failure} correction={validationCorrection(failureProfile)} />
+          <CurationFailureNotice failure={failure} correction={validationCorrection(failureProfile)} locale={locale} />
         </div>
       )}
       {preview}
@@ -936,6 +942,7 @@ function AdmittedPresentationViewEditor({
           {...(visit ? { visit } : {})}
           profile={profile}
           head={saved.head}
+          locale={locale}
           onPublished={published}
           correction={validationCorrection(publicationState.intent?.profile ?? profile)}
           onReviewed={(_reviewed, choice) => {
