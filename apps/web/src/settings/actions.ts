@@ -151,7 +151,7 @@ export const readManagedAccountsInventory = createServerFn({ method: 'GET' })
       const subject = sessionSubject(request);
       if (!authorization || !subject) return { ok: false, kind: 'denied', status: null, code: null };
       // The native endpoint verifies that this is the current human, never an operated account.
-      return loadManagedAccounts(kernelClient(), authorization, subject, data);
+      return loadManagedAccounts(kernelClient(), authorization, subject, data, request.signal);
     } catch (error) {
       return managedAccountsException(error);
     }

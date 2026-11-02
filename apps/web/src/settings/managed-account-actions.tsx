@@ -22,7 +22,7 @@ import {
   type ManagedAuthNavigation,
 } from './managed-account-actions-read';
 
-const nativeIO: ManagedAccountActionsIO = (data) => readManagedAccountActions({ data });
+const nativeIO: ManagedAccountActionsIO = (data, signal) => readManagedAccountActions({ data, signal });
 const labels: Record<ManagedActionName, () => string> = {
   profile: () => m.managed_actions_profile(),
   rename: () => m.managed_actions_rename(),

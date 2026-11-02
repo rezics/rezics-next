@@ -1,3 +1,4 @@
+import { withManagedReadDeadline } from './managed-read-deadline';
 import type { ManagedReaderCurrent } from './managed-session-reader';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
@@ -56,7 +57,7 @@ export type DetailFailure = NativePreferenceFailure & { transient: boolean };
 export type DetailResult =
   | { ok: true; viewerId: string; value: ManagementDetail; authNavigation?: ManagedAuthNavigation }
   | { ok: false; failure: DetailFailure };
-export type DetailRead = (input: DetailRequest) => Promise<DetailResult>;
+export type DetailRead = (input: DetailRequest, signal?: AbortSignal) => Promise<DetailResult>;
 
 /** Absent and invalid selections differ, but invalid, missing and invisible targets share one failure view. */
 export function managedAccountTarget(href: string): string | null | undefined {
@@ -112,17 +113,22 @@ export async function loadManagedAccountDetail(
   authorization: string,
   input: DetailRequest,
   env: Parameters<typeof projectManagedAuthNavigation>[3] = {},
+  signal?: AbortSignal,
 ): Promise<DetailResult> {
   try {
-    const result = await client.accounts({ accountId: input.accountId }).management.get({
-      headers: { authorization, 'cache-control': 'no-store' },
-      fetch: { cache: 'no-store' },
-      query: input.cursor
-        ? input.section === 'members'
-          ? { membersCursor: input.cursor }
-          : { operatorsCursor: input.cursor }
-        : {},
-    });
+    const result = await withManagedReadDeadline(
+      (signal) =>
+        client.accounts({ accountId: input.accountId }).management.get({
+          headers: { authorization, 'cache-control': 'no-store' },
+          fetch: { cache: 'no-store', signal },
+          query: input.cursor
+            ? input.section === 'members'
+              ? { membersCursor: input.cursor }
+              : { operatorsCursor: input.cursor }
+            : {},
+        }),
+      signal,
+    );
     if (result.error || !result.data)
       return { ok: false, failure: detailFailure(result.status, result.error?.value, result.headers) };
     const parsed = v.safeParse(managementSchema, result.data);
@@ -173,7 +179,7 @@ export const readManagedAccountDetail = createServerFn({ method: 'GET' })
       if (!authorization || sessionSubject(request) !== data.viewerId)
         return { ok: false, failure: detailFailure(401) };
       // account.read_management has public exposure. Native admission and current Access still run on every GET.
-      return loadManagedAccountDetail(kernelClient(), authorization, data, env as Partial<SessionEnv>);
+      return loadManagedAccountDetail(kernelClient(), authorization, data, env as Partial<SessionEnv>, request.signal);
     } catch (error) {
       return { ok: false, failure: thrownFailure(error) };
     }
@@ -204,6 +210,7 @@ export class ManagedAccountReader {
   private state = empty();
   private generation = 0;
   private disposed = false;
+  private readonly lifetime = new AbortController();
   private actionObservation = 0;
   private listeners = new Set<() => void>();
   constructor(
@@ -230,6 +237,7 @@ export class ManagedAccountReader {
   clear = () => {
     if (this.disposed) return;
     this.disposed = true;
+    this.lifetime.abort();
     this.generation++;
     this.actionObservation++;
     this.publish(empty());
@@ -256,12 +264,19 @@ export class ManagedAccountReader {
     let result: DetailResult;
     try {
       if (!this.live()) return;
-      result = await this.read({
-        viewerId: this.viewerId,
-        accountId: this.accountId,
-        ...(section ? { section } : {}),
-        ...(cursor ? { cursor } : {}),
-      });
+      result = await withManagedReadDeadline(
+        (signal) =>
+          this.read(
+            {
+              viewerId: this.viewerId,
+              accountId: this.accountId,
+              ...(section ? { section } : {}),
+              ...(cursor ? { cursor } : {}),
+            },
+            signal,
+          ),
+        this.lifetime.signal,
+      );
     } catch {
       result = { ok: false, failure: detailFailure(null) };
     }

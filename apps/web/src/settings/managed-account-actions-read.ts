@@ -1,3 +1,4 @@
+import { withManagedReadDeadline } from './managed-read-deadline';
 import type { ManagedReaderCurrent } from './managed-session-reader';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
@@ -145,7 +146,10 @@ export type ManagedAccountActionsResult =
       actions: Record<ManagedActionName, Availability>;
     }
   | { state: 'denied' | 'unavailable'; status: number | null; code: string | null; retryAfter?: string };
-export type ManagedAccountActionsIO = (target: ManagedAccountActionsSelection) => Promise<ManagedAccountActionsResult>;
+export type ManagedAccountActionsIO = (
+  target: ManagedAccountActionsSelection,
+  signal?: AbortSignal,
+) => Promise<ManagedAccountActionsResult>;
 
 const response = v.strictObject({
   resources: v.tuple([
@@ -193,12 +197,17 @@ export async function loadManagedAccountActions(
   authorization: string,
   target: ManagedAccountActionsSelection,
   env: AuthManagementEnv = {},
+  signal?: AbortSignal,
 ): Promise<ManagedAccountActionsResult> {
   try {
     v.parse(selection, target);
-    const result = await client.viewerActions.post(
-      { resources: [{ type: 'access.account', id: target.accountId }] },
-      { headers: { authorization, 'cache-control': 'no-store' }, fetch: { cache: 'no-store' } },
+    const result = await withManagedReadDeadline(
+      (signal) =>
+        client.viewerActions.post(
+          { resources: [{ type: 'access.account', id: target.accountId }] },
+          { headers: { authorization, 'cache-control': 'no-store' }, fetch: { cache: 'no-store', signal } },
+        ),
+      signal,
     );
     if (result.error || result.status !== 200) return failure(result.status, result.error?.value, result.headers);
     // A hidden native resource is a denial, not an empty successful capability response.
@@ -271,7 +280,13 @@ export const readManagedAccountActions = createServerFn({ method: 'GET' })
       if (!authorization) return { state: 'denied', status: 401, code: 'authentication_required' };
       if (!(env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN) return failure(null);
       const { kernelClient } = await import('../kernel/client');
-      return await loadManagedAccountActions(kernelClient(), authorization, data, env as Partial<SessionEnv>);
+      return await loadManagedAccountActions(
+        kernelClient(),
+        authorization,
+        data,
+        env as Partial<SessionEnv>,
+        getRequest().signal,
+      );
     } catch (error) {
       return exception(error);
     }
@@ -285,6 +300,7 @@ export class ManagedAccountActionsRead {
   private value: ActionsSnapshot = { result: null, pending: false };
   private retryAt = 0;
   private disposed = false;
+  private readonly lifetime = new AbortController();
   private listeners = new Set<() => void>();
   constructor(
     private readonly target: ManagedAccountActionsSelection,
@@ -298,6 +314,7 @@ export class ManagedAccountActionsRead {
   dispose = () => {
     if (this.disposed) return;
     this.disposed = true;
+    this.lifetime.abort();
     this.retryAt = 0;
     this.publish({ result: null, pending: false });
   };
@@ -328,7 +345,11 @@ export class ManagedAccountActionsRead {
   }
   private request(): Promise<ManagedAccountActionsResult> {
     this.current = Promise.resolve()
-      .then(() => (this.live() ? this.io(this.target) : failure(null)))
+      .then(() =>
+        this.live()
+          ? withManagedReadDeadline((signal) => this.io(this.target, signal), this.lifetime.signal)
+          : failure(null),
+      )
       .then((result) =>
         result.state === 'ready' &&
         (result.accountId !== this.target.accountId || result.viewerId !== this.target.viewerId)

@@ -1,3 +1,4 @@
+import { withManagedReadDeadline } from './managed-read-deadline';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import type { SessionEnv } from '../session/client';
@@ -74,7 +75,7 @@ export async function loadAccountRenameRegionResult(
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   return authorization && accountId
-    ? readAccountRenameContextResult(client, authorization, accountId)
+    ? readAccountRenameContextResult(client, authorization, accountId, request.signal)
     : { context: null };
 }
 
@@ -91,12 +92,20 @@ export async function readAccountRenameContextResult(
   client: KernelClient,
   authorization: string,
   accountId: string,
+  signal?: AbortSignal,
 ): Promise<AccountRenameReadResult> {
   const [profileRead, actionsRead] = await Promise.allSettled([
-    createEditableProfileSource(client).read(authorization, accountId),
-    client.viewerActions.post(
-      { resources: [{ type: 'access.account', id: accountId }] },
-      { headers: { authorization, 'cache-control': 'no-store' }, fetch: { cache: 'no-store' } },
+    withManagedReadDeadline(
+      (signal) => createEditableProfileSource(client).read(authorization, accountId, signal),
+      signal,
+    ),
+    withManagedReadDeadline(
+      (signal) =>
+        client.viewerActions.post(
+          { resources: [{ type: 'access.account', id: accountId }] },
+          { headers: { authorization, 'cache-control': 'no-store' }, fetch: { cache: 'no-store', signal } },
+        ),
+      signal,
     ),
   ]);
   const failures: AccountRenameFailure[] = [];

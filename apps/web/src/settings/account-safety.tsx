@@ -1,3 +1,4 @@
+import { withManagedReadDeadline } from './managed-read-deadline';
 import { useContext, useEffect, useId, useSyncExternalStore, useMemo, useRef, useState } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -55,9 +56,10 @@ export class AccountRenameRegion {
   private pending: Promise<void> | null = null;
   private active = false;
   private retired = false;
+  private readonly lifetime = new AbortController();
   private listeners = new Set<() => void>();
   constructor(
-    private readonly read: () => Promise<AccountRenameResult>,
+    private readonly read: (signal?: AbortSignal) => Promise<AccountRenameResult>,
     private readonly accountId?: string | null,
     private readonly current: ManagedReaderCurrent = () => true,
     private readonly refreshSession?: () => Promise<unknown>,
@@ -69,6 +71,7 @@ export class AccountRenameRegion {
   dispose = () => {
     if (this.retired) return;
     this.retired = true;
+    this.lifetime.abort();
     this.active = false;
     this.publish({ loading: false, context: null, retryAt: 0 });
   };
@@ -108,14 +111,15 @@ export class AccountRenameRegion {
     if (this.pending) return this.pending;
     // Clear all old identity, links and failure metadata before awaiting a fresh read.
     this.publish({ loading: true, context: null, retryAt: 0 });
-    const ready =
-      refresh && this.refreshSession
-        ? Promise.resolve().then(() => (this.live() && this.active ? this.refreshSession!() : undefined))
-        : Promise.resolve();
-    this.pending = ready
-      .then((): Promise<AccountRenameResult> | AccountRenameResult =>
-        this.live() && this.active ? this.read() : { context: null },
-      )
+    this.pending = withManagedReadDeadline(async (signal) => {
+      const ready =
+        refresh && this.refreshSession
+          ? Promise.resolve().then(() => (this.live() && this.active ? this.refreshSession!() : undefined))
+          : Promise.resolve();
+      await ready;
+      signal.throwIfAborted();
+      return this.live() && this.active ? this.read(signal) : { context: null };
+    }, this.lifetime.signal)
       .catch((): AccountRenameResult => ({ context: null, failures: [{ kind: 'failed', status: null }] }))
       .then((result) => {
         if (!this.live() || !this.active) return;
@@ -139,11 +143,12 @@ export async function readCurrentAccountRename(
   csrfToken: string,
   current: ManagedReaderCurrent,
   load = () => import('./account-rename-actions'),
+  signal?: AbortSignal,
 ): Promise<AccountRenameResult> {
   if (!csrfToken || !current()) return { context: null };
   const { readAccountRename } = await load();
-  if (!current()) return { context: null };
-  const result = await readAccountRename({ headers: { 'X-CSRF-Token': csrfToken } });
+  if (!current() || signal?.aborted) return { context: null };
+  const result = await readAccountRename({ headers: { 'X-CSRF-Token': csrfToken }, signal });
   return current() ? result : { context: null };
 }
 
@@ -159,9 +164,9 @@ function CurrentAccountSafety(props: Extract<AccountSafetyProps, { state: 'signe
   const region = useMemo(
     () =>
       new AccountRenameRegion(
-        () =>
+        (signal) =>
           props.csrfToken
-            ? readCurrentAccountRename(props.csrfToken, owner.isCurrent)
+            ? readCurrentAccountRename(props.csrfToken, owner.isCurrent, undefined, signal)
             : Promise.resolve({ context: null }),
         props.accountId,
         owner.isCurrent,

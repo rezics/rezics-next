@@ -1,3 +1,4 @@
+import { withManagedReadDeadline } from './managed-read-deadline';
 import type { ManagedReaderCurrent } from './managed-session-reader';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
@@ -37,7 +38,10 @@ export type ManagedAccountsFailure = {
   requestId?: string;
 };
 export type ManagedAccountsResult = { ok: true; page: ManagedAccountsPage } | ManagedAccountsFailure;
-export type ManagedAccountsIO = (cursors: ManagedAccountsCursors) => Promise<ManagedAccountsResult>;
+export type ManagedAccountsIO = (
+  cursors: ManagedAccountsCursors,
+  signal?: AbortSignal,
+) => Promise<ManagedAccountsResult>;
 export type ManagedFeed = 'organizations' | 'responsibilities';
 
 export function parseManagedAccountsCursors(value: unknown): ManagedAccountsCursors {
@@ -91,13 +95,18 @@ export async function loadManagedAccounts(
   authorization: string,
   viewerId: string,
   cursors: ManagedAccountsCursors,
+  signal?: AbortSignal,
 ): Promise<ManagedAccountsResult> {
   try {
-    const result = await client.me.managedAccounts.get({
-      query: parseManagedAccountsCursors(cursors),
-      headers: { authorization, 'cache-control': 'no-store' },
-      fetch: { cache: 'no-store' },
-    });
+    const result = await withManagedReadDeadline(
+      (signal) =>
+        client.me.managedAccounts.get({
+          query: parseManagedAccountsCursors(cursors),
+          headers: { authorization, 'cache-control': 'no-store' },
+          fetch: { cache: 'no-store', signal },
+        }),
+      signal,
+    );
     if (result.error) return managedAccountsFailure(result.status, result.error.value, result.headers);
     const parsed = v.safeParse(schema, result.data);
     if (!parsed.success) return managedAccountsFailure(result.status, undefined, result.headers);
@@ -155,6 +164,7 @@ export class ManagedAccountsInventory {
   private value = empty();
   private epoch = 0;
   private disposed = false;
+  private readonly lifetime = new AbortController();
   private loadingEpoch = -1;
   private listeners = new Set<() => void>();
   constructor(
@@ -179,6 +189,7 @@ export class ManagedAccountsInventory {
   dispose = () => {
     if (this.disposed) return;
     this.disposed = true;
+    this.lifetime.abort();
     this.epoch++;
     this.publish(empty());
   };
@@ -189,7 +200,7 @@ export class ManagedAccountsInventory {
   private async request(cursors: ManagedAccountsCursors): Promise<ManagedAccountsResult> {
     try {
       if (!this.live()) return managedAccountsFailure(null);
-      const result = await this.read(cursors);
+      const result = await withManagedReadDeadline((signal) => this.read(cursors, signal), this.lifetime.signal);
       if (result.ok && (result.page.account.id !== this.viewerId || result.page.account.kind !== 'actor'))
         return { ok: false, kind: 'denied', status: null, code: null };
       return result;

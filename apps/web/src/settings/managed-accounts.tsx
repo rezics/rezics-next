@@ -27,7 +27,7 @@ import {
   type ManagedIdentity,
 } from './managed-accounts-read';
 
-const nativeIO: ManagedAccountsIO = (data) => readManagedAccountsInventory({ data });
+const nativeIO: ManagedAccountsIO = (data, signal) => readManagedAccountsInventory({ data, signal });
 // Grow with translated labels while retaining native button and focus behavior.
 const recoveryButtonClassName =
   'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal wrap-anywhere py-2 text-center';

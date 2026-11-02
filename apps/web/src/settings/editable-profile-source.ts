@@ -8,7 +8,7 @@ export type EditableProfile = NonNullable<Awaited<ReturnType<ProfileRead>>['data
 
 /** The private source uses the same server-held credential and account key as the existing PATCH. */
 export type EditableProfileSource = {
-  read: (authorization: string, accountId: string) => Promise<EditableProfile>;
+  read: (authorization: string, accountId: string, signal?: AbortSignal) => Promise<EditableProfile>;
 };
 
 export type EditableProfileFailure = NativePreferenceFailure & { status: number };
@@ -91,10 +91,10 @@ const response = v.strictObject({
 
 export function createEditableProfileSource(client: KernelClient): EditableProfileSource {
   return {
-    async read(authorization, accountId) {
+    async read(authorization, accountId, signal) {
       const result = await client.accounts({ accountId }).profile.get({
         headers: { authorization, 'cache-control': 'no-store' },
-        fetch: { cache: 'no-store' },
+        fetch: { cache: 'no-store', signal },
       });
       if (result.error || !result.data) {
         const failure = nativeProfileFailure(result.status, result.error?.value, result.headers);
