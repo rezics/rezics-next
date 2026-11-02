@@ -70,7 +70,8 @@ test('selection refresh retains drafts, switches retire targets, and created rea
       ),
     );
     await settle(() => button(m.facts_edit_field()).click());
-    const draft = host.querySelector('input[aria-label="' + m.correction_value() + '"]');
+    const valueLabel = [...host.querySelectorAll('label')].find((node) => node.textContent === m.correction_value())!;
+    const draft = window.document.getElementById(valueLabel.htmlFor);
     expect(draft).not.toBeNull();
     failure = true;
     await settle(() => button(m.correction_reload()).click());
@@ -87,7 +88,7 @@ test('selection refresh retains drafts, switches retire targets, and created rea
     await settle(() => button(m.story_arc_choose_existing()).click());
     expect(loads.at(-1)).toEqual({ id: undefined, work: undefined });
     const label = [...host.querySelectorAll('label')].find((node) => node.textContent === m.catalogue_create_label())!;
-    const input = host.querySelector<HTMLInputElement>('#' + label.htmlFor)!;
+    const input = window.document.getElementById(label.htmlFor)!;
     await settle(() => {
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, 'A real arc');
       input.dispatchEvent(new window.Event('input', { bubbles: true }));
