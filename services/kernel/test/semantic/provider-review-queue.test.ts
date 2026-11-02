@@ -123,6 +123,65 @@ test('native scope-bound continuation rejects changed viewer/source/Context/stat
   status(await f.call('GET', endpoint, undefined, 'ordinary'), 403);
 });
 
+test('contributor proposals remain visible to reviewers after native accept and reject decisions', async () => {
+  const reviewSource = `queue_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
+  const reviewEndpoint = `/v1/review-candidates?source=${reviewSource}`;
+  const proposals = [];
+  for (let index = 0; index < 3; index++) {
+    const origin = source(crypto.randomUUID(), reviewSource);
+    const book = await f.create(origin);
+    proposals.push({ id: book.id, candidate: await f.propose(book.id, origin, cited()) });
+  }
+
+  expect(status(await f.call('POST', '/v1/review-candidates:prepare', { source: reviewSource }), 202)).toEqual({
+    preparing: true,
+  });
+  const [work] = await client.listWorkflows({ workflowName: 'semantic.provider-review.prepare', limit: 1 });
+  expect(work).toBeDefined();
+  await client.retrieveWorkflow(work!.workflowID).getResult({ pollingIntervalMs: 10 });
+
+  const contributorPage = status(await f.call('GET', reviewEndpoint), 200);
+  const reviewerPage = status(await f.call('GET', reviewEndpoint, undefined, 'editor'), 200);
+  expect(contributorPage.candidates.map((row: any) => row.candidate.id).sort()).toEqual(
+    proposals.map((proposal) => proposal.candidate).sort(),
+  );
+  expect(reviewerPage.candidates.map((row: any) => row.candidate.id).sort()).toEqual(
+    proposals.map((proposal) => proposal.candidate).sort(),
+  );
+
+  const accepted = status(
+    await f.call(
+      'POST',
+      `/v1/subjects/${proposals[0]!.id}/candidates/${proposals[0]!.candidate}:accept`,
+      { context: GLOBAL_CONTEXT, expected_head: null },
+      'editor',
+    ),
+    200,
+  );
+  const rejected = status(
+    await f.call(
+      'POST',
+      `/v1/subjects/${proposals[1]!.id}/candidates/${proposals[1]!.candidate}:reject`,
+      { context: GLOBAL_CONTEXT, expected_head: null },
+      'editor',
+    ),
+    200,
+  );
+  expect(accepted.acceptance.decision).toBe('accept');
+  expect(rejected.acceptance.decision).toBe('reject');
+
+  const acceptedPage = status(await f.call('GET', `${reviewEndpoint}&status=accepted_unselected`, undefined, 'editor'), 200);
+  expect(acceptedPage.candidates).toHaveLength(1);
+  expect(acceptedPage.candidates[0]).toMatchObject({
+    candidate: { id: proposals[0]!.candidate, decision: 'accepted', rank: null },
+  });
+  const pendingPage = status(await f.call('GET', reviewEndpoint, undefined, 'editor'), 200);
+  expect(pendingPage.candidates).toHaveLength(1);
+  expect(pendingPage.candidates[0]).toMatchObject({
+    candidate: { id: proposals[2]!.candidate, decision: null, head: null, rank: null },
+  });
+});
+
 test('paused projection cannot revive decisions, selection, retraction or current account denial; private progress is 202', async () => {
   await relay.pause();
   const book = books[0]!;
