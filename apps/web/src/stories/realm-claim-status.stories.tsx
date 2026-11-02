@@ -166,7 +166,7 @@ export const SessionWithheld: Story = {
     await expect(view.queryByText('2026-10-31T10:00:00.000Z')).toBeNull();
   },
 };
-export const ReferenceDetails: Story = {
+export const ReferenceDetails = {
   args: { scenario: 'pending' },
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -178,7 +178,7 @@ export const ReferenceDetails: Story = {
     await expect(view.getByRole('button', { name: m.realm_claim_status_check_again() })).toBeEnabled();
     await expect(view.getByRole('link', { name: m.realm_claim_status_back() })).toBeVisible();
   },
-};
+} satisfies Story;
 export const Wrapping390: Story = {
   args: { scenario: 'pending' },
   globals: { locale: 'de', viewport: { value: 'phone390', isRotated: false } },

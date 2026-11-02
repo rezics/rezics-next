@@ -24,14 +24,14 @@ export const Reload: Story = {
 };
 export const ObsoleteEpisode: Story = { args: { scenario: 'obsolete' } };
 export const SessionWithheld: Story = { args: { scenario: 'withheld' } };
-export const ReferenceDetails: Story = {
+export const ReferenceDetails = {
   args: { scenario: 'pending' },
   play: async ({ canvasElement }) => {
     const summary = within(canvasElement).getByText(m.realm_status_details_reference());
     await userEvent.click(summary);
     await expect(canvasElement.querySelector('details')).toHaveAttribute('open');
   },
-};
+} satisfies Story;
 export const Wrapping390: Story = {
   args: { scenario: 'pending' },
   globals: { locale: 'de', viewport: { value: 'phone390', isRotated: false } },
