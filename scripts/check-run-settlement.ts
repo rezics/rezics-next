@@ -730,7 +730,7 @@ function parseUniqueJson(raw: string): unknown {
     throw new Error('check-run-settlement: incomplete JSON string');
   };
   const value = (depth: number): void => {
-    if (depth > 64 || ++nodes > 20_000) throw new Error('check-run-settlement: JSON structure exceeds its bound');
+    if (depth > 64 || ++nodes > 400_000) throw new Error('check-run-settlement: JSON structure exceeds its bound');
     whitespace();
     const char = source[index];
     if (char === '{') {
@@ -764,7 +764,7 @@ function parseUniqueJson(raw: string): unknown {
       }
       let count = 0;
       while (true) {
-        if (++count > 4096) throw new Error('check-run-settlement: JSON array exceeds its bound');
+        if (++count > 65_536) throw new Error('check-run-settlement: JSON array exceeds its bound');
         value(depth + 1);
         whitespace();
         const separator = source[index++];
