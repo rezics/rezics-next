@@ -209,12 +209,7 @@ function editorConfiguration(registry: CompositionRegistry, locale: string): Con
 // Resource editors share the same registry fields, layout renderers and data placeholders.
 export { editorConfiguration };
 
-function violationsHeader(
-  children: ReactNode,
-  errors: CompositionViolation[],
-  pointerPrefix: string,
-  locale: string,
-) {
+function violationsHeader(children: ReactNode, errors: CompositionViolation[], pointerPrefix: string, locale: string) {
   const options = presentationMessageOptions(locale);
   return (
     <>

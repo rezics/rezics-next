@@ -635,12 +635,15 @@ function AdmittedPresentationViewEditor({
       describe(pointer: string) {
         const target = source && resolveCorrection(source, pointer, localeRef.current);
         return target
-          ? m.curation_correction_target({
-              template: templateLabel(target.template),
-              view: viewNames[target.view],
-              component: target.component?.type ?? m.curation_page_settings({}, options),
-              field: target.label,
-            }, options)
+          ? m.curation_correction_target(
+              {
+                template: templateLabel(target.template),
+                view: viewNames[target.view],
+                component: target.component?.type ?? m.curation_page_settings({}, options),
+                field: target.label,
+              },
+              options,
+            )
           : m.curation_correction_unknown({}, options);
       },
       correct(pointer: string) {
@@ -890,7 +893,9 @@ function AdmittedPresentationViewEditor({
               : m.curation_saved({}, options)}
         </p>
         <details className="text-sm">
-          <summary className={editorDisclosureClass}>{m.presentation_editor_saved_version_details({}, options)}</summary>
+          <summary className={editorDisclosureClass}>
+            {m.presentation_editor_saved_version_details({}, options)}
+          </summary>
           <p className="mt-2 break-all font-mono">
             {m.presentation_editor_version_reference({ head: saved.head, digest: saved.digest }, options)}
           </p>
@@ -924,7 +929,10 @@ function AdmittedPresentationViewEditor({
             setOwned(setDraft, (value) => value && reviewPresentationDraft(value, active, choice));
             if (choice === 'discard') setOwned(setGeneration, (value) => value + 1);
             setOwned(setFailure, null);
-            setOwned(setMessage, choice === 'keep' ? m.curation_reconciled({}, options) : m.curation_discarded({}, options));
+            setOwned(
+              setMessage,
+              choice === 'keep' ? m.curation_reconciled({}, options) : m.curation_discarded({}, options),
+            );
           }}
         />
       </div>
@@ -1154,7 +1162,9 @@ function AdmittedPresentationViewEditor({
         {removeConfirm && (
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>{m.curation_remove_title({ template: templateLabel(removeConfirm) }, options)}</AlertDialogTitle>
+              <AlertDialogTitle>
+                {m.curation_remove_title({ template: templateLabel(removeConfirm) }, options)}
+              </AlertDialogTitle>
               <AlertDialogDescription>{m.curation_remove_warning({}, options)}</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
