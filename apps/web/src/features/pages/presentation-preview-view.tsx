@@ -21,6 +21,16 @@ export type PresentationPreviewProps = {
   initial?: PresentationPreview;
 };
 
+type PreviewRequestContext = Pick<PresentationPreviewProps, 'locale' | 'read'>;
+type PreviewInspection =
+  | { status: 'idle' }
+  | { status: 'loading'; context: PreviewRequestContext }
+  | { status: 'complete'; context: PreviewRequestContext; result: PresentationPreview };
+
+function samePreviewRequestContext(left: PreviewRequestContext, right: PreviewRequestContext) {
+  return left.locale === right.locale && left.read === right.read;
+}
+
 /** Connected examples can supply a read adapter without replacing any part of the curation region. */
 export const PresentationPreviewContext = createContext<Partial<Omit<PresentationPreviewProps, 'locale'>>>({});
 
@@ -111,10 +121,14 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
     initial?.ok ? ('subject' in initial.target ? initial.target.subject : initial.target.route) : '',
   );
   const [realm, setRealm] = useState(initial?.ok && 'subject' in initial.target ? (initial.target.realm ?? '') : '');
-  const [result, setResult] = useState<PresentationPreview | null>(initial ?? null);
-  const [busy, setBusy] = useState(false);
+  const [inspection, setInspection] = useState<PreviewInspection>(() =>
+    initial
+      ? { status: 'complete', context: { locale, read }, result: initial }
+      : { status: 'idle' },
+  );
   const request = useRef(0);
   const mounted = useRef(false);
+  const requestContext = useRef<PreviewRequestContext>({ locale, read });
   useLayoutEffect(() => {
     mounted.current = true;
     return () => {
@@ -122,21 +136,33 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
       request.current += 1;
     };
   }, []);
+  useLayoutEffect(() => {
+    const nextContext = { locale, read };
+    if (samePreviewRequestContext(requestContext.current, nextContext)) return;
+    requestContext.current = nextContext;
+    request.current += 1;
+    setInspection({ status: 'idle' });
+  }, [locale, read]);
+  const currentInspection =
+    'context' in inspection && samePreviewRequestContext(inspection.context, { locale, read })
+      ? inspection
+      : { status: 'idle' as const };
+  const busy = currentInspection.status === 'loading';
+  const result = currentInspection.status === 'complete' ? currentInspection.result : null;
   const o = { locale: locale as never };
 
   function clear() {
     if (!mounted.current) return;
     request.current += 1;
-    setBusy(false);
-    setResult(null);
+    setInspection({ status: 'idle' });
   }
 
   async function inspect(event: FormEvent) {
     event.preventDefault();
     if (!mounted.current) return;
+    const context = { locale, read };
     const serial = ++request.current;
-    setBusy(true);
-    setResult(null);
+    setInspection({ status: 'loading', context });
     const input: PresentationPreviewInput = {
       target:
         kind === 'route'
@@ -145,15 +171,19 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
               subject: address.trim(),
               ...(realm.trim() ? { realm: realm.trim() } : {}),
             },
-      locale,
+      locale: context.locale,
     };
+    const isCurrent = () =>
+      mounted.current &&
+      serial === request.current &&
+      samePreviewRequestContext(requestContext.current, context);
     try {
-      const next = await read(input);
-      if (mounted.current && serial === request.current) setResult(next);
+      const next = await context.read(input);
+      if (isCurrent()) setInspection({ status: 'complete', context, result: next });
     } catch {
-      if (mounted.current && serial === request.current) setResult({ ok: false, reason: 'unavailable' });
-    } finally {
-      if (mounted.current && serial === request.current) setBusy(false);
+      if (isCurrent()) {
+        setInspection({ status: 'complete', context, result: { ok: false, reason: 'unavailable' } });
+      }
     }
   }
 
