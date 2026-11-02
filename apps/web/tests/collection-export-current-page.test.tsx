@@ -87,6 +87,16 @@ test('a replacement public Collection export stays usable while retired clipboar
   let context: CollectionPublicContext = { origin: 'https://rezics.com', locale: 'en' };
   let laterPage = false;
   let preparation: ReturnType<typeof deferred> | null = null;
+  let nativeUnavailable = false;
+  const preparedFile = () => {
+    const file = collectionPublicDocument(page, context)!;
+    return { ...file, filename: `prepared-${file.filename}`, text: `${file.text}\n` };
+  };
+  const request = mock(async () => {
+    const file = preparedFile();
+    if (preparation) await preparation.promise;
+    return nativeUnavailable ? { state: 'unavailable' as const } : { state: 'complete' as const, file };
+  });
   const render = async (visible = true) => {
     await act(async () => {
       root.render(
@@ -96,11 +106,7 @@ test('a replacement public Collection export stays usable while retired clipboar
               page={page}
               context={context}
               laterPage={laterPage}
-              request={async () => {
-                const file = collectionPublicDocument(page, context)!;
-                if (preparation) await preparation.promise;
-                return { state: 'complete', file };
-              }}
+              request={request}
             />
           ) : null}
         </StrictMode>,
@@ -124,7 +130,7 @@ test('a replacement public Collection export stays usable while retired clipboar
   };
   const copyCurrent = async () => {
     const count = writes.length;
-    const expected = collectionPublicDocument(page, context)!.text;
+    const expected = preparedFile().text;
     await act(async () => {
       copy().click();
       copy().click();
@@ -150,7 +156,7 @@ test('a replacement public Collection export stays usable while retired clipboar
   const fetch = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Export must stay local'));
   const downloadCurrent = async () => {
     const count = blobs.length;
-    const expected = collectionPublicDocument(page, context)!;
+    const expected = preparedFile();
     await act(async () => download().click());
     expect(blobs).toHaveLength(count + 1);
     expect(await blobs[count]!.text()).toBe(expected.text);
@@ -208,7 +214,7 @@ test('a replacement public Collection export stays usable while retired clipboar
     await act(async () => oldLocale.resolve());
     expectPending();
     await act(async () => localized.reject(new Error('Current clipboard denied')));
-    expectReady(m.library_collection_export_failed());
+    expectReady(m.library_collection_export_delivery_failed());
 
     laterPage = true;
     await render();
@@ -239,6 +245,47 @@ test('a replacement public Collection export stays usable while retired clipboar
     expectPending();
     await act(async () => remounted.resolve());
     expectReady(m.library_collection_export_copied());
+    const cancelDelivery = async () => {
+      await act(async () => button(m.library_collection_cancel()).click());
+      expectReady();
+      expect(button(m.library_collection_cancel())).toBeUndefined();
+    };
+    await cancelDelivery();
+    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: undefined });
+    const requests = request.mock.calls.length;
+    await act(async () => copy().click());
+    expectReady(m.library_collection_export_delivery_failed());
+    expect(request).toHaveBeenCalledTimes(requests + 1);
+    await downloadCurrent();
+    expect(request).toHaveBeenCalledTimes(requests + 1);
+    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const retry = await copyCurrent();
+    expect(request).toHaveBeenCalledTimes(requests + 1);
+    await act(async () => retry.reject(new Error('Clipboard denied again')));
+    expectReady(m.library_collection_export_delivery_failed());
+    const successfulRetry = await copyCurrent();
+    await act(async () => successfulRetry.resolve());
+    expectReady(m.library_collection_export_copied());
+    expect(request).toHaveBeenCalledTimes(requests + 1);
+
+    const cancelledWrite = await copyCurrent();
+    await cancelDelivery();
+    await act(async () => cancelledWrite.resolve());
+    expectReady();
+    await downloadCurrent();
+    expect(request).toHaveBeenCalledTimes(requests + 2);
+    page = { ...page, provenance: { mode: 'session', viewerId: 'new-reader', request: 'new-authority' } };
+    await render();
+    expectReady();
+    await downloadCurrent();
+    expect(request).toHaveBeenCalledTimes(requests + 3);
+    await cancelDelivery();
+    nativeUnavailable = true;
+    await act(async () => copy().click());
+    expectReady(m.library_collection_export_unavailable());
+    await act(async () => download().click());
+    expectReady(m.library_collection_export_unavailable());
+    expect(request).toHaveBeenCalledTimes(requests + 5);
     expect(fetch).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
