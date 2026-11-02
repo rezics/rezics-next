@@ -456,7 +456,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                 : null;
   return (
     <AccessDeparture
-      unresolved={state.page.status !== 'denied' && (!!state.pending || state.reconciling)}
+      unresolved={state.page.status !== 'denied' && state.phase !== 'denied' && (!!state.pending || state.reconciling)}
       retire={controller.retire}
       abandon={controller.abandon}
     >

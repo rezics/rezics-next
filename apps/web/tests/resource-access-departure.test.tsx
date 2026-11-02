@@ -222,8 +222,14 @@ test('owner transfer confirmation survives Stay, then completes and leaves norma
   await act(async () => root.render(<ResourceAccessPage initial={{ status: 'ready', page }} io={io} />));
   await click(button(m.access_add_grant()));
   await type(within(host).getByLabelText(m.access_handle()), 'private');
-  await act(async () => root.render(<ResourceAccessPage initial={{ status: 'ready', page }} io={ioFor(page)} />));
+  const replacement = ioFor(page);
+  await act(async () => root.render(<ResourceAccessPage initial={{ status: 'ready', page }} io={replacement} />));
   expect(blocked()).toBe(false);
   expect(within(document.body).queryByRole('alertdialog')).toBeNull();
   expect(host.textContent).not.toContain('private');
+  await click(button(m.access_add_grant()));
+  await type(within(host).getByLabelText(m.access_handle()), 'revoked');
+  await act(async () => root.render(<ResourceAccessPage initial={{ status: 'denied' }} io={replacement} />));
+  expect(blocked()).toBe(false);
+  expect(host.querySelector('#access-handle')).toBeNull();
 });
