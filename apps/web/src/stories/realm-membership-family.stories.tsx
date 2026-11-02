@@ -12,16 +12,17 @@ const firstCheck = fn();
 const secondCheck = fn();
 const retryLeave = fn();
 const followWrite = fn(async (input: { following: boolean }) => ({ ok: true as const, following: input.following }));
-const longMemberLabel = 'Reading together · translated fiction and community discussions · '.repeat(6);
+const longMemberLabel = 'Reading together · translated fiction and community discussions · '.repeat(6).trim();
 
 function MembershipFamily() {
   return (
     <div className="grid min-w-0 gap-6 sm:grid-cols-2">
       <div data-testid="first-instance" className="min-w-0 space-y-4">
         <RealmParticipationView
-          state="none"
+          state="member"
           visibility="public"
-          admittedAction="join"
+          admittedAction="leave"
+          ready={false}
           onChange={firstChange}
           onRetry={firstCheck}
         />
@@ -50,6 +51,7 @@ function MembershipFamily() {
           state="member"
           visibility="protected"
           admittedAction="leave"
+          ready={false}
           memberLabel={longMemberLabel}
           onChange={secondChange}
           onRetry={secondCheck}
@@ -62,6 +64,24 @@ function MembershipFamily() {
           ready
           onCheck={secondCheck}
           onRetry={retryLeave}
+        />
+      </div>
+      <div data-testid="allowed-join">
+        <RealmParticipationView
+          state="none"
+          visibility="public"
+          admittedAction="join"
+          onChange={firstChange}
+          onRetry={firstCheck}
+        />
+      </div>
+      <div data-testid="allowed-leave">
+        <RealmParticipationView
+          state="member"
+          visibility="public"
+          admittedAction="leave"
+          onChange={secondChange}
+          onRetry={secondCheck}
         />
       </div>
       <div data-testid="denied">
@@ -191,11 +211,13 @@ export const CompleteHierarchy: Story = {
     await expect(owner.getByText(m.realm_leave_owner_required())).toBeVisible();
     await expect(owner.getByRole('button', { name: m.realm_membership_retry() })).toBeDisabled();
 
-    first.getByRole('button', { name: m.realm_join() }).focus();
+    await expect(first.getByRole('button', { name: m.realm_leave() })).toBeDisabled();
+    await expect(second.getByRole('button', { name: m.realm_leave() })).toBeDisabled();
+    within(canvas.getByTestId('allowed-join')).getByRole('button', { name: m.realm_join() }).focus();
     await userEvent.keyboard('{Enter}');
     await expect(firstChange).toHaveBeenCalledWith('join');
     await expect(secondChange).not.toHaveBeenCalled();
-    second.getByRole('button', { name: m.realm_leave() }).focus();
+    within(canvas.getByTestId('allowed-leave')).getByRole('button', { name: m.realm_leave() }).focus();
     await userEvent.keyboard(' ');
     await expect(secondChange).toHaveBeenCalledWith('leave');
     second.getByRole('button', { name: m.realm_membership_retry() }).focus();
@@ -224,7 +246,7 @@ export const CompleteHierarchy: Story = {
 
 export const LongTextAndRtl: Story = {
   render: () => (
-    <div dir="rtl" className="text-xl">
+    <div dir="rtl" className="[&_button]:text-xl [&_p]:text-xl [&_[data-slot=badge]]:text-xl">
       <MembershipFamily />
     </div>
   ),
