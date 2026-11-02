@@ -70,7 +70,9 @@ export function prepareInitialDispatch<T>(options: DispatchPreparationOptions<T>
         options.removeWorktree();
       } catch (error) {
         gitArtifactsRemain = true;
-        retained.push(`worktree ${options.worktree} and branch ${options.branch} (cleanup failed: ${errorText(error)})`);
+        retained.push(
+          `worktree ${options.worktree} and branch ${options.branch} (cleanup failed: ${errorText(error)})`,
+        );
       }
       if (!gitArtifactsRemain) {
         try {

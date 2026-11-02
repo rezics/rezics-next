@@ -117,31 +117,38 @@ test.each(['success', 'freeze', 'existing branch'])('real Git preparation: %s', 
   const worktree = join(root, 'worker');
   const briefPath = join(root, 'brief.md');
   const bytes = 'frozen acceptance\r\n';
-  const git = (...args: string[]) => execFileSync('git', ['-C', source, ...args], { encoding: 'utf8', stdio: 'pipe' }).trim();
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-C', source, ...args], { encoding: 'utf8', stdio: 'pipe' }).trim();
   try {
     mkdirSync(source);
     git('init');
     git('-c', 'user.name=Goal test', '-c', 'user.email=goal@example.test', 'commit', '--allow-empty', '-m', 'source');
     const head = git('rev-parse', 'HEAD');
     if (stage === 'existing branch') git('branch', 'worker');
-    const prepare = () => prepareInitialDispatch({
-      briefPath, briefText: bytes, branch: 'worker', worktree,
-      createWorktree: () => git('worktree', 'add', '-b', 'worker', worktree, head),
-      freezeFiles: () => {
-        writeFileSync(join(worktree, 'acceptance.test.ts'), bytes);
-        if (stage === 'freeze') throw new Error('freeze failed');
-        return 'frozen';
-      },
-      removeWorktree: () => git('worktree', 'remove', '--force', worktree),
-      deleteBranch: () => git('branch', '-D', 'worker'),
-    });
+    const prepare = () =>
+      prepareInitialDispatch({
+        briefPath,
+        briefText: bytes,
+        branch: 'worker',
+        worktree,
+        createWorktree: () => git('worktree', 'add', '-b', 'worker', worktree, head),
+        freezeFiles: () => {
+          writeFileSync(join(worktree, 'acceptance.test.ts'), bytes);
+          if (stage === 'freeze') throw new Error('freeze failed');
+          return 'frozen';
+        },
+        removeWorktree: () => git('worktree', 'remove', '--force', worktree),
+        deleteBranch: () => git('branch', '-D', 'worker'),
+      });
     if (stage === 'success') {
       expect(prepare()).toBe('frozen');
       expect(readFileSync(join(worktree, 'acceptance.test.ts'), 'utf8')).toBe(bytes);
       expect(readFileSync(briefPath, 'utf8')).toBe(bytes);
       git('worktree', 'remove', '--force', worktree);
     } else {
-      expect(prepare).toThrow(stage === 'freeze' ? 'Initial dispatch preparation failed: freeze failed' : /Recovery:.*worker/);
+      expect(prepare).toThrow(
+        stage === 'freeze' ? 'Initial dispatch preparation failed: freeze failed' : /Recovery:.*worker/,
+      );
       expect(existsSync(worktree)).toBe(false);
       expect(existsSync(briefPath)).toBe(stage === 'existing branch');
       expect(git('branch', '--list', 'worker')).toBe(stage === 'existing branch' ? 'worker' : '');

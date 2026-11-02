@@ -955,12 +955,7 @@ export class WorkerTasks {
     // tasks and lose their branches. The pending retry then starts the amended brief.
     // A product retry still waiting to start takes an amended brief; the pending retry then starts that brief.
     const amendPending = devProduct && options.brief !== undefined;
-    if (
-      task.state !== 'held' &&
-      !amendPending &&
-      !incidentHeld &&
-      this.store.retryIntent(ref)?.status === 'pending'
-    )
+    if (task.state !== 'held' && !amendPending && !incidentHeld && this.store.retryIntent(ref)?.status === 'pending')
       throw new Error('a retry is already pending');
     if (task.state === 'held') {
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId, actor);
