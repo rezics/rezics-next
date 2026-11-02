@@ -1,5 +1,19 @@
 import { expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { validateGrowthBaseline } from './growth-baseline.ts';
+
+function withTemporaryTestDirectory(run: (absolute: string, relative: string) => void): void {
+  const root = resolve(import.meta.dir, '.temp');
+  mkdirSync(root, { recursive: true });
+  const absolute = mkdtempSync(resolve(root, 'baseline-'));
+  const relative = `services/kernel/test/support/.temp/${absolute.split('/').at(-1)!}`;
+  try {
+    run(absolute, relative);
+  } finally {
+    rmSync(absolute, { recursive: true, force: true });
+  }
+}
 
 for (const format of ['note', 'message']) {
   const unrelatedResult = { name: `orphan ${format} growth check` };
@@ -65,4 +79,78 @@ test('baseline validation does not treat a generated name outside checkGrowth as
   expect(() => validateGrowthBaseline([{ name, file, reason: 'verification run' }])).toThrow(
     `Growth baseline entry ${name} is not present in ${file}`,
   );
+});
+
+test('baseline validation shares one file snapshot per call and refreshes it on the next call', () => {
+  withTemporaryTestDirectory((absolute, relative) => {
+    const fullPath = join(absolute, 'shared.test.ts');
+    const file = `${relative}/shared.test.ts`;
+    const entries = [
+      { name: 'first shared check', file, reason: 'verification run' },
+      { name: 'second shared check', file, reason: 'verification run' },
+    ];
+    writeFileSync(
+      fullPath,
+      "checkGrowth(database, { name: 'first shared check' });\ncheckGrowth(database, { name: 'second shared check' });\n",
+    );
+    expect(() => validateGrowthBaseline(entries)).not.toThrow();
+
+    writeFileSync(fullPath, "checkGrowth(database, { name: 'first shared check' });\n");
+    expect(() => validateGrowthBaseline(entries)).toThrow(
+      `Growth baseline entry second shared check is not present in ${file}`,
+    );
+  });
+});
+
+test('baseline validation refuses byte, aggregate, lexical-work, and template-depth excesses with entry context', () => {
+  withTemporaryTestDirectory((absolute, relative) => {
+    const oversized = 'services/kernel/test/support/.temp/oversized.test.ts';
+    writeFileSync(join(absolute, 'oversized.test.ts'), `//${'x'.repeat(512 * 1_024)}\n`);
+    expect(() =>
+      validateGrowthBaseline([{ name: 'oversized check', file: oversized, reason: 'verification run' }]),
+    ).toThrow(`Growth baseline entry oversized check cannot inspect ${oversized}: source byte limit exceeded`);
+
+    const aggregateEntries = Array.from({ length: 9 }, (_, index) => {
+      const name = `aggregate check ${index}`;
+      const filename = `aggregate-${index}.test.ts`;
+      writeFileSync(join(absolute, filename), `//${'x'.repeat(480 * 1_024)}\n`);
+      return {
+        name,
+        file: `${relative}/${filename}`,
+        reason: 'verification run',
+      };
+    });
+    expect(() => validateGrowthBaseline(aggregateEntries)).toThrow(/cannot inspect .*aggregate source byte limit exceeded/);
+
+    const nested = `\`${'${`'.repeat(140)}leaf\`${'}\`'.repeat(140)}`;
+    const nestedFile = join(absolute, 'nested.test.ts');
+    const nestedEntryFile = `${relative}/nested.test.ts`;
+    writeFileSync(nestedFile, `const nested = ${nested};\ncheckGrowth(database, { name: 'nested check' });\n`);
+    expect(() =>
+      validateGrowthBaseline([{ name: 'nested check', file: nestedEntryFile, reason: 'verification run' }]),
+    ).toThrow(`Growth baseline entry nested check cannot inspect ${nestedEntryFile}: template nesting limit exceeded`);
+
+    const interpolations = '${part}'.repeat(128);
+    const lexicalCore = `for (const part of ['x']) { checkGrowth(database, { name: \`${interpolations}\` }); }`;
+    const padding = 512 * 1_024 - lexicalCore.length - 3;
+    writeFileSync(join(absolute, 'lexical.test.ts'), `${lexicalCore}\n//${'x'.repeat(padding)}`);
+    const lexicalFile = `${relative}/lexical.test.ts`;
+    expect(() =>
+      validateGrowthBaseline([{ name: 'x'.repeat(128), file: lexicalFile, reason: 'verification run' }]),
+    ).toThrow(`Growth baseline entry ${'x'.repeat(128)} cannot inspect ${lexicalFile}: lexical inspection work limit exceeded`);
+  });
+});
+
+test('finite generated-name choices do not expand into a backtracking regular expression', () => {
+  withTemporaryTestDirectory((absolute, relative) => {
+    const choice = "${mode ? 'a' : 'aa'}";
+    const source = `checkGrowth(database, { name: \`prefix${choice.repeat(40)}z\` });\n`;
+    const fullPath = join(absolute, 'ambiguous.test.ts');
+    const file = `${relative}/ambiguous.test.ts`;
+    writeFileSync(fullPath, source);
+    const name = `prefix${'a'.repeat(60)}y`;
+    expect(() => validateGrowthBaseline([{ name, file, reason: 'verification run' }])).toThrow(
+      `Growth baseline entry ${name} is not present in ${file}`,
+    );
+  });
 });
