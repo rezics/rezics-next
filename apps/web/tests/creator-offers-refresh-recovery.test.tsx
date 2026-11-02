@@ -323,6 +323,17 @@ describe('Creator offer editing recovery retains real drafts without extending p
       expect(p.writes[0]!.csrf).toBe('csrf-renewed');
       await p.settle(p.writes[0]!.work, new Error('Response lost'));
       await p.refresh();
+      await p.settle(p.editorReads.at(-1)!, new Error('Refresh still unavailable'));
+      await act(async () => {
+        p.session(A, 'csrf-after-failure');
+        p.admit();
+      });
+      await p.tick();
+      expect(p.host.textContent).toContain(m.creator_unavailable());
+      expect(p.button(m.creator_offers_refresh()).disabled).toBe(false);
+      expect(p.input('title').value).toBe('My draft');
+      expect(p.input('price').value).toBe('12.99');
+      await p.refresh();
       await p.settle(p.editorReads.at(-1)!, changed);
       expect(p.host.textContent).toContain(m.creator_uncertain());
       await p.submit(true);

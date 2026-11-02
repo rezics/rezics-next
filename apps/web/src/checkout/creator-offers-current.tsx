@@ -4,7 +4,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { useOperation } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
-import { useCreatorCurrentOrigin } from './creator-current-origin';
+import { useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
 import { PendingPage } from '../shell/pending';
 import { CreatorOfferEditor } from './creator-offer-editor';
 import { CreatorOffersPage } from './creator-offers-page';
@@ -163,6 +163,7 @@ function CreatorRead({
     return matches(value, subject, address) ? { kind: 'accepted', value } : undefined;
   });
   const guard: CreatorOfferGuard = origin;
+  const refreshFailure = useCreatorIntent<boolean>(guard, 'offer-refresh-failed');
   const query = useQuery<Outcome | null>({
     ...personalRead,
     queryKey: ['creator-offers-current', subject, locale, address, origin.id],
@@ -192,6 +193,7 @@ function CreatorRead({
   // A loader refresh is not a new admitted origin. Keep its observed rows/edition and
   // command operands mounted, even if that refresh omits a row or temporarily fails.
   if (origin.isCurrent() && query.data && query.data !== display.outcome) {
+    refreshFailure.value = query.data.kind === 'failed';
     setDisplay({
       ...display,
       outcome: query.data,
@@ -236,7 +238,7 @@ function CreatorRead({
       );
   return (
     <>
-      {display.outcome?.kind === 'failed' && (
+      {refreshFailure.value && (
         <div role="alert" className="mb-6 space-y-3 rounded-xl border bg-card p-5 text-card-foreground">
           <p>{m.creator_unavailable()}</p>
           <Button
