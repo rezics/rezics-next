@@ -117,7 +117,7 @@ function deployment() {
   const alias = `${prefix}subjects`;
   const search = new NativeSearch(alias);
   const counts = { checkouts: 0 };
-  const pool = createPool(databaseUrl);
+  const pool = createPool(databaseUrl!);
   const connect = pool.connect.bind(pool);
   pool.connect = (() => {
     counts.checkouts++;
