@@ -113,12 +113,14 @@ export function admitRecentJournal(value: unknown): RecentJournal | undefined {
   let attempted = false;
   for (let index = 0; index < pending.length; index++) {
     const raw = pending[index];
+    const encodedKey = record(raw) && typeof raw.key === 'string' ? JSON.stringify(raw.key) : undefined;
     if (
       !record(raw) ||
       !keysAre(raw, ['key', 'change', 'queuedAt'], ['localId', 'visitedAt', 'expectedRevision']) ||
       typeof raw.key !== 'string' ||
-      raw.key.length < 3 ||
-      raw.key.length > 1024 ||
+      !encodedKey ||
+      encodedKey.length < 3 ||
+      encodedKey.length > 1024 ||
       keys.has(raw.key) ||
       typeof raw.queuedAt !== 'string' ||
       !Number.isFinite(Date.parse(raw.queuedAt))
