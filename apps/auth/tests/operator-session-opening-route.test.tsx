@@ -96,8 +96,9 @@ async function open() {
         await respond(requests.length - 1);
       },
       confirm: () => flush(() => host.querySelector<HTMLInputElement>('#opening-confirm')!.click()),
-      boundary: () =>
+      boundary: (cached: boolean) =>
         flush(() => {
+          if (!cached) return history.replace('/automated/open');
           window.dispatchEvent(new dom.Event('pagehide') as unknown as Event);
           window.dispatchEvent(Object.assign(new dom.Event('pageshow'), { persisted: true }) as unknown as Event);
         }),
@@ -145,7 +146,7 @@ test('failed initial and review reads recover the exact identity and key through
 });
 
 for (const stage of ['review', 'session', 'approval', 'issuance', 'readback'] as const)
-  test(`cached return retires ${stage} without replaying or losing submitted identity`, async () => {
+  test(`page replacement retires ${stage} without replaying or losing submitted identity`, async () => {
     const p = await open();
     try {
       await p.respond(0);
@@ -164,7 +165,7 @@ for (const stage of ['review', 'session', 'approval', 'issuance', 'readback'] as
       }
       const saved = pending.readPendingManagementOperationStepUp();
       const old = p.requests.length - 1;
-      await p.boundary();
+      await p.boundary(stage !== 'approval');
       const count = p.requests.length;
       if (stage === 'review') await flush(() => late.resolve(metadata));
       else
