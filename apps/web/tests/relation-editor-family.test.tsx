@@ -430,7 +430,7 @@ test('Relation Editor proposal/exact-slot family keeps independent native associ
         );
         expect(region().querySelector('[data-relation-statement]')).toBeNull();
         if (scenario === 'unavailable') {
-          await click(region(), m.candidate_reload());
+          await click(region(), m.statement_consent_retry_page());
           expect(within(region()).getByRole('button', { name: m.candidate_review() })).toBeTruthy();
         }
         continue;
@@ -688,3 +688,60 @@ test('Relation Editor proposal/exact-slot family keeps independent native associ
     await ui.close();
   }
 }, 60_000);
+
+
+test('Relation candidate recovery repeats the failed page and explicitly restarts or retires the slot', async () => {
+  const ui = await mounted();
+  const { render, click, region, within, m, RelationEditor, relationFixture } = ui;
+  try {
+    const fixture = relationFixture();
+    const ready = await fixture.transport.read(fixture.slot);
+    if (!ready.ok || !ready.page) throw new Error('Expected candidate page');
+    const calls: unknown[][] = [];
+    let outcome: 'empty' | 'failed' | 'denied' | 'late' = 'empty';
+    let release!: (value: typeof ready) => void;
+    const transport: RelationTransport = {
+      ...fixture.transport,
+      read: async (...args) => {
+        calls.push(structuredClone(args));
+        if (outcome === 'late') return await new Promise((resolve) => { release = resolve; });
+        if (outcome === 'denied') return { ok: false, reason: 'denied' };
+        if (args[1] === 'next-page' && outcome === 'failed') throw new Error('Connection lost');
+        return { ...ready, session: 'read-token', page: { ...ready.page!, candidates: [], next: 'next-page' } };
+      },
+    };
+    const editor = (slot = fixture.slot) => h(RelationEditor, {
+      id: fixture.id, locale: 'en', initial: ready, transport, search: async () => [],
+      composition: { statement: fixture.draft, slot, positionEditable: true, session: 'original-token' },
+    });
+    await render(editor());
+    await click(region(), m.candidate_review());
+    await click(region(), m.relation_review_slot());
+    expect(region().textContent).toContain(m.candidate_empty());
+    expect(within(region()).queryByRole('button', { name: m.candidate_accept() })).toBeNull();
+    outcome = 'failed';
+    await click(region(), m.candidate_more());
+    const failedAddress = structuredClone(calls.at(-1));
+    expect(failedAddress).toEqual([fixture.slot, 'next-page', 'read-token']);
+    expect(within(region()).queryByRole('button', { name: m.candidate_more() })).toBeNull();
+    await click(region(), m.statement_consent_retry_page());
+    expect(calls.at(-1)).toEqual(failedAddress);
+    outcome = 'empty';
+    await click(region(), m.statement_consent_restart());
+    expect(calls.at(-1)).toEqual([fixture.slot, undefined, 'read-token']);
+    outcome = 'denied';
+    await click(region(), m.candidate_more());
+    expect(region().querySelector('[data-relation-statement]')).toBeNull();
+    expect(within(region()).queryByRole('button', { name: m.candidate_review() })).toBeNull();
+    outcome = 'late';
+    await click(region(), m.statement_consent_retry_page());
+    const nextSlot = { ...fixture.slot, key: fixture.id };
+    await render(editor(nextSlot));
+    expect(within(region()).queryByRole('button', { name: m.statement_consent_retry_page() })).toBeNull();
+    await act(async () => release(ready));
+    expect(region().textContent).not.toContain(m.candidate_denied());
+    outcome = 'empty';
+    await click(region(), m.relation_review_slot());
+    expect(calls.at(-1)).toEqual([nextSlot, undefined, 'original-token']);
+  } finally { await ui.close(); }
+});

@@ -566,7 +566,10 @@ to the immutable statement submitted through native candidate proposal, not to a
 
 Review addresses exactly the property plus target, or an existing unresolved `sameAs` IRI, and the declared item
 qualifier key when present. Target and `sameAs` are mutually exclusive. Twenty candidates and their continuation
-belong to that address. The comparison shows the public selection for that slot, proposed qualifiers, evidence,
+belong to that address. A failed candidate read retries its exact slot, cursor and session token; a separate
+restart opens the first page. Starting a read retires the previous comparison as decision authority, and changing
+slots retires the retry destination and late results. Empty intermediate pages retain deliberate continuation.
+The comparison shows the public selection for that slot, proposed qualifiers, evidence,
 source details, decision and selected rank. Unresolved references remain unresolved; unavailable summaries never
 become invented identities. Related labels come from supplied summaries or the existing bounded suggestion response.
 

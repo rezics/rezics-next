@@ -106,6 +106,9 @@ function RelationEditorLive({
   if (!nativeSession.current && composition?.session) nativeSession.current = composition.session;
   const request = useRef<RelationProposal | RelationConfirmation | undefined>(undefined);
   const pageCursor = useRef<string | undefined>(undefined);
+  // Keep the attempted address before I/O, independently of the last successful page.
+  const reading = useRef<{ slot?: RelationSlot; cursor?: string; session?: string } | undefined>(undefined);
+  const readGeneration = useRef(0);
   const running = useRef(false);
   const proposedCandidate = useRef<string | undefined>(undefined);
   const picked = useRef<Record<string, EntityPickerSubject>>({});
@@ -197,10 +200,51 @@ function RelationEditorLive({
     setFailure(undefined);
     request.current = undefined;
     pageCursor.current = undefined;
+    reading.current = undefined;
+    readGeneration.current++;
   }
-  async function load(address = slot, cursor?: string) {
-    if (!lifetime.active()) return;
-    if (running.current || uncertain) return;
+  function failed(next: CandidateFailure) {
+    setFailure(next);
+    if (next.reason === 'denied') {
+      setRead(undefined);
+      setCandidate(undefined);
+      setResult(undefined);
+      setConfirmation(undefined);
+      setConsentEntry(undefined);
+      setProposedId(undefined);
+      picked.current = {};
+      proposedCandidate.current = undefined;
+    }
+  }
+  async function readPage(address?: RelationSlot, cursor?: string, session?: string, proposedId?: string) {
+    const generation = ++readGeneration.current;
+    const destination = { slot: address && { ...address }, cursor, session };
+    reading.current = destination;
+    // A previous page is never fresh authority after another read starts or fails.
+    setRead((previous) => (previous?.ok ? { ...previous, page: null } : undefined));
+    setCandidate(undefined);
+    setResult(undefined);
+    setConsentEntry(undefined);
+    pageCursor.current = undefined;
+    const active = () => mount.active() && readGeneration.current === generation;
+    try {
+      const next = await transport.read(destination.slot, destination.cursor, destination.session);
+      if (!active()) return;
+      if (!next.ok) {
+        failed(next);
+        return;
+      }
+      nativeSession.current = next.session ?? nativeSession.current;
+      setRead(next);
+      pageCursor.current = cursor;
+      setSlot(destination.slot);
+      if (proposedId) setCandidate(next.page?.candidates.find((item) => item.id === proposedId));
+    } catch {
+      if (active()) failed({ ok: false, reason: 'unavailable' });
+    }
+  }
+  async function load(address = slot, cursor?: string, session = nativeSession.current) {
+    if (!lifetime.active() || running.current || uncertain) return;
     running.current = true;
     setBusy(true);
     setSlot(address);
@@ -208,28 +252,17 @@ function RelationEditorLive({
     setConfirmation(undefined);
     request.current = undefined;
     try {
-      const next = await transport.read(address, cursor, nativeSession.current);
-      if (!lifetime.active()) return;
-      if (!next.ok) {
-        setFailure(next);
-        return;
-      }
-      nativeSession.current = next.session ?? nativeSession.current;
-      setRead(next);
-      pageCursor.current = cursor;
-      setSlot(address);
-      setResult(undefined);
-      setCandidate((previous) => next.page?.candidates.find((item) => item.id === previous?.id));
-      if (proposedCandidate.current)
-        setCandidate(next.page?.candidates.find((item) => item.id === proposedCandidate.current));
-    } catch {
-      if (!lifetime.active()) return;
-      setFailure({ ok: false, reason: 'unavailable' });
+      await readPage(address, cursor, session, proposedCandidate.current);
     } finally {
-      if (!lifetime.active()) return;
-      setBusy(false);
-      running.current = false;
+      if (mount.active()) {
+        setBusy(false);
+        running.current = false;
+      }
     }
+  }
+  function reload() {
+    const destination = reading.current;
+    void load(destination?.slot ?? slot, destination?.cursor, destination?.session ?? nativeSession.current);
   }
   async function confirm() {
     if (!lifetime.active()) return;
@@ -259,7 +292,7 @@ function RelationEditorLive({
         const next = await transport.propose(pending);
         if (!lifetime.active()) return;
         if (!next.ok) {
-          setFailure(next);
+          failed(next);
           return;
         }
         setProposed(true);
@@ -278,18 +311,12 @@ function RelationEditorLive({
         setSlot(address);
         setConfirmation(undefined);
         request.current = undefined;
-        const refreshed = await transport.read(address, undefined, nativeSession.current);
-        if (!lifetime.active()) return;
-        if (refreshed.ok) {
-          pageCursor.current = undefined;
-          setRead(refreshed);
-          setCandidate(refreshed.page?.candidates.find((item) => item.id === next.candidate));
-        } else setFailure(refreshed);
+        await readPage(address, undefined, nativeSession.current, next.candidate);
       } else {
         const next = await transport.confirm(pending);
         if (!lifetime.active()) return;
         if (!next.ok) {
-          setFailure(next);
+          failed(next);
           return;
         }
         setResult(next);
@@ -301,9 +328,9 @@ function RelationEditorLive({
       }
     } catch {
       if (!lifetime.active()) return;
-      setFailure({ ok: false, reason: 'unavailable' });
+      failed({ ok: false, reason: 'unavailable' });
     } finally {
-      if (!lifetime.active()) return;
+      if (!mount.active()) return;
       setBusy(false);
       running.current = false;
     }
@@ -349,7 +376,7 @@ function RelationEditorLive({
           <p>{failureText}</p>
         </ContentItemFrame>
       )}
-      {!current && !busy && <Button onClick={() => load()}>{m.relation_open({}, options)}</Button>}
+      {!current && !reading.current && !busy && <Button onClick={() => load()}>{m.relation_open({}, options)}</Button>}
       {current && current.public.subject.context !== candidateContext ? (
         <p>{m.relation_context({}, options)}</p>
       ) : (
@@ -612,7 +639,7 @@ function RelationEditorLive({
                           >
                             {m.relation_add_citation({}, options)}
                           </Button>
-                          <Button variant="outline" disabled={!draftSlot()} onClick={() => load(draftSlot())}>
+                          <Button variant="outline" disabled={!draftSlot()} onClick={() => (slot ? reload() : load(draftSlot()))}>
                             {m.relation_review_slot({}, options)}
                           </Button>
                           <Button
@@ -899,10 +926,19 @@ function RelationEditorLive({
           </div>
         </ContentItemFrame>
       )}
-      {current && !uncertain && (
-        <Button variant="outline" disabled={busy} onClick={() => load(slot, pageCursor.current)}>
-          {m.candidate_reload({}, options)}
-        </Button>
+      {(current || reading.current) && !uncertain && (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" disabled={busy} onClick={reload}>
+            {failure && reading.current
+              ? m.statement_consent_retry_page({}, options)
+              : m.candidate_reload({}, options)}
+          </Button>
+          {reading.current?.slot && (
+            <Button variant="outline" disabled={busy} onClick={() => load(slot)}>
+              {m.statement_consent_restart({}, options)}
+            </Button>
+          )}
+        </div>
       )}
     </section>
   );
