@@ -119,7 +119,9 @@ test('Leave retires an unresolved operation without replaying it after return', 
       return action.promise;
     },
   });
-  const button = ui.host.querySelector<HTMLButtonElement>('#security-sessions-heading')?.parentElement?.querySelector('button');
+  const button = ui.host
+    .querySelector<HTMLButtonElement>('#security-sessions-heading')
+    ?.parentElement?.querySelector('button');
   expect(button).not.toBeNull();
   await flush(() => button!.click());
   expect(calls).toBe(1);

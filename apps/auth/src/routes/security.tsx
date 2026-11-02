@@ -541,320 +541,327 @@ function SecurityPageView({
       <AuthPage
         heading={m.auth_security_heading()}
         identity={
-          <AccountIdentitySummary accountId={accountId} state={identity.state} action="security" retry={identity.retry} />
+          <AccountIdentitySummary
+            accountId={accountId}
+            state={identity.state}
+            action="security"
+            retry={identity.retry}
+          />
         }
       >
-      <div className="auth-security-page" aria-busy={loadState === 'loading' || operationBlocked}>
-        {loadState === 'loading' ? (
-          <p role="status">{m.auth_inventory_loading()}</p>
-        ) : (
-          <>
-            {recovery ? (
-              <div className="auth-login-form" aria-busy={reading}>
-                <div ref={recoveryStatus} tabIndex={-1} role="status">
-                  {recovery.phase === 'accepted'
-                    ? m.auth_security_action_accepted()
-                    : recovery.phase === 'present'
-                      ? m.auth_security_target_present()
-                      : m.auth_security_action_unknown()}
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void recoverTarget()}
-                  disabled={reading}
-                  aria-busy={reading}
-                >
-                  {m.auth_security_check_current()}
-                </Button>
-                {recovery.phase === 'present' ? (
+        <div className="auth-security-page" aria-busy={loadState === 'loading' || operationBlocked}>
+          {loadState === 'loading' ? (
+            <p role="status">{m.auth_inventory_loading()}</p>
+          ) : (
+            <>
+              {recovery ? (
+                <div className="auth-login-form" aria-busy={reading}>
+                  <div ref={recoveryStatus} tabIndex={-1} role="status">
+                    {recovery.phase === 'accepted'
+                      ? m.auth_security_action_accepted()
+                      : recovery.phase === 'present'
+                        ? m.auth_security_target_present()
+                        : m.auth_security_action_unknown()}
+                  </div>
                   <Button
                     type="button"
                     variant="outline"
+                    onClick={() => void recoverTarget()}
                     disabled={reading}
-                    onClick={() =>
-                      void runAction(
-                        recovery.target,
-                        sessions.some((row) => row.id === recovery.target.id && row.current),
-                        true,
-                      )
-                    }
+                    aria-busy={reading}
                   >
-                    {m.auth_security_retry_action()}
+                    {m.auth_security_check_current()}
                   </Button>
-                ) : null}
-              </div>
-            ) : null}
-            {registrationRecovery ? (
-              <div className="auth-login-form" aria-busy={registrationRecovery.reading}>
-                <div ref={recoveryStatus} tabIndex={-1} role="status">
-                  {registrationRecovery.phase === 'reviewed'
-                    ? m.auth_security_passkey_registration_reviewed()
-                    : m.auth_security_passkey_registration_unknown()}
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void reviewRegistration()}
-                  disabled={registrationRecovery.reading}
-                  aria-busy={registrationRecovery.reading}
-                >
-                  {m.auth_security_check_current()}
-                </Button>
-                {registrationRecovery.phase === 'reviewed' ? (
-                  <Button type="button" variant="outline" onClick={finishRegistrationReview}>
-                    {m.auth_security_passkey_registration_continue()}
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-            <section aria-labelledby="security-password-heading">
-              <h2 id="security-password-heading">{m.auth_security_change_password()}</h2>
-              <form
-                className="auth-login-form"
-                method="post"
-                action="/credential-effects/stage"
-                noValidate
-                onSubmit={submitPassword}
-              >
-                <Field data-invalid={Boolean(passwordFieldError)}>
-                  <FieldLabel htmlFor="security-new-password">{m.auth_security_new_password()}</FieldLabel>
-                  <p id="security-password-help" className="auth-security-hint">
-                    {m.auth_security_password_invalid()}
-                  </p>
-                  <PasswordInput
-                    name="password"
-                    autoComplete="new-password"
-                    required
-                    readOnly={operationBlocked}
-                    ref={passwordInput}
-                    id="security-new-password"
-                    value={password}
-                    onChange={(event) => {
-                      setPassword(event.target.value);
-                      setPasswordFieldError('');
-                    }}
-                    aria-invalid={passwordFieldError ? true : undefined}
-                    aria-describedby={
-                      passwordFieldError ? 'security-password-help security-password-error' : 'security-password-help'
-                    }
-                  />
-                  {passwordFieldError ? (
-                    <FieldError id="security-password-error">{passwordFieldError}</FieldError>
-                  ) : null}
-                </Field>
-                {passwordNotice ? (
-                  <div className="auth-login-alert" role="status">
-                    {passwordNotice}
-                  </div>
-                ) : null}
-                {passwordError ? (
-                  <ErrorAlert tabIndex={-1} ref={passwordAlert}>
-                    {passwordError}
-                  </ErrorAlert>
-                ) : null}
-                <Button type="submit" disabled={operationBlocked} aria-busy={passwordPending} className="w-full">
-                  {m.auth_security_password_submit()}
-                </Button>
-              </form>
-            </section>
-
-            {passkeysLoad.kind === 'hidden' ? null : (
-              <section aria-labelledby="security-passkeys-heading">
-                <h2 id="security-passkeys-heading">{m.auth_security_passkeys_heading()}</h2>
-                {passkeysLoad.kind === 'failure' ? (
-                  <>
-                    <ErrorAlert>{passkeysLoad.message}</ErrorAlert>
+                  {recovery.phase === 'present' ? (
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={operationBlocked}
-                      onClick={() => retryLoad.current?.()}
+                      disabled={reading}
+                      onClick={() =>
+                        void runAction(
+                          recovery.target,
+                          sessions.some((row) => row.id === recovery.target.id && row.current),
+                          true,
+                        )
+                      }
                     >
-                      {m.auth_inventory_reload()}
+                      {m.auth_security_retry_action()}
                     </Button>
-                  </>
-                ) : (
-                  <>
-                    <p className="auth-security-hint">{m.auth_security_passkeys_description()}</p>
-                    {passkeyNotice ? (
-                      <div className="auth-login-alert" role="status">
-                        {passkeyNotice}
-                      </div>
-                    ) : null}
-                    {passkeyError ? <ErrorAlert>{passkeyError}</ErrorAlert> : null}
-                    {passkeys.length ? (
-                      <ItemGroup aria-label={m.auth_security_passkeys_heading()}>
-                        {passkeys.map((passkey) => (
-                          <Item key={passkey.id} render={<li />} variant="outline">
-                            <article className="flex w-full flex-col items-start gap-3.5 sm:flex-row sm:items-center">
-                              <ItemContent className="min-w-0 w-full sm:w-auto">
-                                <ItemTitle className="line-clamp-none wrap-anywhere">
-                                  <h3>{passkey.name}</h3>
-                                </ItemTitle>
-                                <ItemDescription className="line-clamp-none wrap-anywhere">
-                                  {m.auth_security_created_at()}{' '}
-                                  <time dateTime={passkey.created_at}>
-                                    {formatSecurityDate(passkey.created_at, locale)}
-                                  </time>
-                                  {' · '}
-                                  {passkey.last_used_at ? (
-                                    <>
-                                      {m.auth_security_passkey_last_used()}{' '}
-                                      <time dateTime={passkey.last_used_at}>
-                                        {formatSecurityDate(passkey.last_used_at, locale)}
-                                      </time>
-                                    </>
-                                  ) : (
-                                    m.auth_security_passkey_never_used()
-                                  )}
-                                </ItemDescription>
-                              </ItemContent>
-                              <ItemActions>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => void removeOnePasskey(passkey)}
-                                  disabled={operationBlocked}
-                                  aria-busy={passkeyRemoving === passkey.id}
-                                  aria-label={m.auth_security_passkey_remove_named({ name: passkey.name })}
-                                >
-                                  {m.auth_security_passkey_remove()}
-                                </Button>
-                              </ItemActions>
-                            </article>
-                          </Item>
-                        ))}
-                      </ItemGroup>
-                    ) : (
-                      <p>{m.auth_security_passkeys_empty()}</p>
-                    )}
-                    <form className="auth-login-form" noValidate onSubmit={submitPasskey}>
-                      <Field>
-                        <FieldLabel htmlFor="security-passkey-name">{m.auth_security_passkey_name()}</FieldLabel>
-                        <Input
-                          id="security-passkey-name"
-                          name="passkey-name"
-                          autoComplete="off"
-                          maxLength={64}
-                          value={passkeyName}
-                          onChange={(event) => setPasskeyName(event.target.value)}
-                          readOnly={operationBlocked}
-                        />
-                      </Field>
-                      <Button type="submit" disabled={operationBlocked} aria-busy={passkeyAdding} className="w-full">
-                        {m.auth_security_passkey_add()}
-                      </Button>
-                    </form>
-                  </>
-                )}
-              </section>
-            )}
-
-            <section aria-labelledby="security-sessions-heading">
-              <h2 id="security-sessions-heading">{m.auth_security_sessions_heading()}</h2>
-              {sessionNotice ? (
-                <div className="auth-login-alert" role="status" tabIndex={-1} ref={sessionStatus}>
-                  {sessionNotice}
+                  ) : null}
                 </div>
               ) : null}
-              {sessionError ? <ErrorAlert>{sessionError}</ErrorAlert> : null}
-              {!orderedSessions.length ? <p>{m.auth_security_sessions_empty()}</p> : null}
-              <ItemGroup aria-label={m.auth_security_sessions_heading()}>
-                {orderedSessions.map((session) => {
-                  const parsedDevice = securityDevice(session.user_agent);
-                  const device = parsedDevice ? m.auth_security_device(parsedDevice) : m.auth_security_unknown_device();
-                  const clientName =
-                    session.client_display_name?.trim() ||
-                    (session.client_id === 'login'
-                      ? m.auth_security_rezics_account()
-                      : session.client_id === 'rezics-website'
-                        ? m.auth_security_rezics()
-                        : session.client_id);
-                  const rawClientId =
-                    !session.client_display_name?.trim() && !['login', 'rezics-website'].includes(session.client_id);
-                  return (
-                    <Item key={session.id} render={<li />} variant="outline">
-                      <article className="flex w-full flex-col items-start gap-3.5 sm:flex-row sm:items-center">
-                        <ItemContent className="min-w-0 w-full sm:w-auto">
-                          <ItemTitle className="line-clamp-none wrap-anywhere">
-                            <h3>
-                              {device}
-                              {session.current ? (
-                                <Badge variant="secondary">{m.auth_security_this_device()}</Badge>
-                              ) : null}
-                            </h3>
-                          </ItemTitle>
-                          <ItemDescription className="line-clamp-none wrap-anywhere">
-                            <span className={rawClientId ? 'font-mono text-xs' : undefined}>{clientName}</span>
-                            {' · '}
-                            <span>
-                              {m.auth_security_created_at()}{' '}
-                              <time dateTime={session.created_at}>
-                                {formatSecurityDate(session.created_at, locale)}
-                              </time>
-                              {' · '}
-                              {m.auth_security_expires_at()}{' '}
-                              <time dateTime={session.expires_at}>
-                                {formatSecurityDate(session.expires_at, locale)}
-                              </time>
-                            </span>
-                          </ItemDescription>
-                        </ItemContent>
-                        <ItemActions>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => void revoke(session)}
-                            disabled={operationBlocked}
-                            aria-busy={sessionPending === session.id}
-                            aria-label={m.auth_security_sign_out_session({ device })}
-                          >
-                            {m.auth_security_sign_out()}
-                          </Button>
-                        </ItemActions>
-                      </article>
-                    </Item>
-                  );
-                })}
-              </ItemGroup>
-            </section>
-
-            <SecurityInventory
-              lifetime={lifetime.current.signal}
-              {...(inventorySource ? { source: inventorySource } : {})}
-              operation={{ blocked: operationBlocked, begin: beginConsentReview }}
-              onSessionEnded={(reduced) => {
-                setConsentReduced(reduced);
-                clearPrivateData('signed-out');
-              }}
-            />
-
-            <section aria-labelledby="security-organizations-heading">
-              <h2 id="security-organizations-heading">{m.auth_organization_security_heading()}</h2>
-              <nav aria-labelledby="security-organizations-heading">
-                <a className={buttonVariants({ variant: 'outline' })} href="/organizations/new">
-                  {m.auth_organization_security_create()}
-                </a>
-              </nav>
-            </section>
-
-            <section aria-labelledby="security-delete-account-heading">
-              <h2 id="security-delete-account-heading">{m.auth_account_delete_submit()}</h2>
-              <p>{m.auth_account_delete_security_description()}</p>
-              <nav aria-labelledby="security-delete-account-heading">
-                <a
-                  className={`${buttonVariants({ variant: 'outline' })} border-destructive/50 hover:border-destructive/70`}
-                  href="/account/delete"
+              {registrationRecovery ? (
+                <div className="auth-login-form" aria-busy={registrationRecovery.reading}>
+                  <div ref={recoveryStatus} tabIndex={-1} role="status">
+                    {registrationRecovery.phase === 'reviewed'
+                      ? m.auth_security_passkey_registration_reviewed()
+                      : m.auth_security_passkey_registration_unknown()}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void reviewRegistration()}
+                    disabled={registrationRecovery.reading}
+                    aria-busy={registrationRecovery.reading}
+                  >
+                    {m.auth_security_check_current()}
+                  </Button>
+                  {registrationRecovery.phase === 'reviewed' ? (
+                    <Button type="button" variant="outline" onClick={finishRegistrationReview}>
+                      {m.auth_security_passkey_registration_continue()}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+              <section aria-labelledby="security-password-heading">
+                <h2 id="security-password-heading">{m.auth_security_change_password()}</h2>
+                <form
+                  className="auth-login-form"
+                  method="post"
+                  action="/credential-effects/stage"
+                  noValidate
+                  onSubmit={submitPassword}
                 >
-                  <Trash2 aria-hidden="true" className="text-destructive" />
-                  {m.auth_account_delete_submit()}
-                </a>
-              </nav>
-            </section>
-          </>
-        )}
-      </div>
+                  <Field data-invalid={Boolean(passwordFieldError)}>
+                    <FieldLabel htmlFor="security-new-password">{m.auth_security_new_password()}</FieldLabel>
+                    <p id="security-password-help" className="auth-security-hint">
+                      {m.auth_security_password_invalid()}
+                    </p>
+                    <PasswordInput
+                      name="password"
+                      autoComplete="new-password"
+                      required
+                      readOnly={operationBlocked}
+                      ref={passwordInput}
+                      id="security-new-password"
+                      value={password}
+                      onChange={(event) => {
+                        setPassword(event.target.value);
+                        setPasswordFieldError('');
+                      }}
+                      aria-invalid={passwordFieldError ? true : undefined}
+                      aria-describedby={
+                        passwordFieldError ? 'security-password-help security-password-error' : 'security-password-help'
+                      }
+                    />
+                    {passwordFieldError ? (
+                      <FieldError id="security-password-error">{passwordFieldError}</FieldError>
+                    ) : null}
+                  </Field>
+                  {passwordNotice ? (
+                    <div className="auth-login-alert" role="status">
+                      {passwordNotice}
+                    </div>
+                  ) : null}
+                  {passwordError ? (
+                    <ErrorAlert tabIndex={-1} ref={passwordAlert}>
+                      {passwordError}
+                    </ErrorAlert>
+                  ) : null}
+                  <Button type="submit" disabled={operationBlocked} aria-busy={passwordPending} className="w-full">
+                    {m.auth_security_password_submit()}
+                  </Button>
+                </form>
+              </section>
+
+              {passkeysLoad.kind === 'hidden' ? null : (
+                <section aria-labelledby="security-passkeys-heading">
+                  <h2 id="security-passkeys-heading">{m.auth_security_passkeys_heading()}</h2>
+                  {passkeysLoad.kind === 'failure' ? (
+                    <>
+                      <ErrorAlert>{passkeysLoad.message}</ErrorAlert>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={operationBlocked}
+                        onClick={() => retryLoad.current?.()}
+                      >
+                        {m.auth_inventory_reload()}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="auth-security-hint">{m.auth_security_passkeys_description()}</p>
+                      {passkeyNotice ? (
+                        <div className="auth-login-alert" role="status">
+                          {passkeyNotice}
+                        </div>
+                      ) : null}
+                      {passkeyError ? <ErrorAlert>{passkeyError}</ErrorAlert> : null}
+                      {passkeys.length ? (
+                        <ItemGroup aria-label={m.auth_security_passkeys_heading()}>
+                          {passkeys.map((passkey) => (
+                            <Item key={passkey.id} render={<li />} variant="outline">
+                              <article className="flex w-full flex-col items-start gap-3.5 sm:flex-row sm:items-center">
+                                <ItemContent className="min-w-0 w-full sm:w-auto">
+                                  <ItemTitle className="line-clamp-none wrap-anywhere">
+                                    <h3>{passkey.name}</h3>
+                                  </ItemTitle>
+                                  <ItemDescription className="line-clamp-none wrap-anywhere">
+                                    {m.auth_security_created_at()}{' '}
+                                    <time dateTime={passkey.created_at}>
+                                      {formatSecurityDate(passkey.created_at, locale)}
+                                    </time>
+                                    {' · '}
+                                    {passkey.last_used_at ? (
+                                      <>
+                                        {m.auth_security_passkey_last_used()}{' '}
+                                        <time dateTime={passkey.last_used_at}>
+                                          {formatSecurityDate(passkey.last_used_at, locale)}
+                                        </time>
+                                      </>
+                                    ) : (
+                                      m.auth_security_passkey_never_used()
+                                    )}
+                                  </ItemDescription>
+                                </ItemContent>
+                                <ItemActions>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => void removeOnePasskey(passkey)}
+                                    disabled={operationBlocked}
+                                    aria-busy={passkeyRemoving === passkey.id}
+                                    aria-label={m.auth_security_passkey_remove_named({ name: passkey.name })}
+                                  >
+                                    {m.auth_security_passkey_remove()}
+                                  </Button>
+                                </ItemActions>
+                              </article>
+                            </Item>
+                          ))}
+                        </ItemGroup>
+                      ) : (
+                        <p>{m.auth_security_passkeys_empty()}</p>
+                      )}
+                      <form className="auth-login-form" noValidate onSubmit={submitPasskey}>
+                        <Field>
+                          <FieldLabel htmlFor="security-passkey-name">{m.auth_security_passkey_name()}</FieldLabel>
+                          <Input
+                            id="security-passkey-name"
+                            name="passkey-name"
+                            autoComplete="off"
+                            maxLength={64}
+                            value={passkeyName}
+                            onChange={(event) => setPasskeyName(event.target.value)}
+                            readOnly={operationBlocked}
+                          />
+                        </Field>
+                        <Button type="submit" disabled={operationBlocked} aria-busy={passkeyAdding} className="w-full">
+                          {m.auth_security_passkey_add()}
+                        </Button>
+                      </form>
+                    </>
+                  )}
+                </section>
+              )}
+
+              <section aria-labelledby="security-sessions-heading">
+                <h2 id="security-sessions-heading">{m.auth_security_sessions_heading()}</h2>
+                {sessionNotice ? (
+                  <div className="auth-login-alert" role="status" tabIndex={-1} ref={sessionStatus}>
+                    {sessionNotice}
+                  </div>
+                ) : null}
+                {sessionError ? <ErrorAlert>{sessionError}</ErrorAlert> : null}
+                {!orderedSessions.length ? <p>{m.auth_security_sessions_empty()}</p> : null}
+                <ItemGroup aria-label={m.auth_security_sessions_heading()}>
+                  {orderedSessions.map((session) => {
+                    const parsedDevice = securityDevice(session.user_agent);
+                    const device = parsedDevice
+                      ? m.auth_security_device(parsedDevice)
+                      : m.auth_security_unknown_device();
+                    const clientName =
+                      session.client_display_name?.trim() ||
+                      (session.client_id === 'login'
+                        ? m.auth_security_rezics_account()
+                        : session.client_id === 'rezics-website'
+                          ? m.auth_security_rezics()
+                          : session.client_id);
+                    const rawClientId =
+                      !session.client_display_name?.trim() && !['login', 'rezics-website'].includes(session.client_id);
+                    return (
+                      <Item key={session.id} render={<li />} variant="outline">
+                        <article className="flex w-full flex-col items-start gap-3.5 sm:flex-row sm:items-center">
+                          <ItemContent className="min-w-0 w-full sm:w-auto">
+                            <ItemTitle className="line-clamp-none wrap-anywhere">
+                              <h3>
+                                {device}
+                                {session.current ? (
+                                  <Badge variant="secondary">{m.auth_security_this_device()}</Badge>
+                                ) : null}
+                              </h3>
+                            </ItemTitle>
+                            <ItemDescription className="line-clamp-none wrap-anywhere">
+                              <span className={rawClientId ? 'font-mono text-xs' : undefined}>{clientName}</span>
+                              {' · '}
+                              <span>
+                                {m.auth_security_created_at()}{' '}
+                                <time dateTime={session.created_at}>
+                                  {formatSecurityDate(session.created_at, locale)}
+                                </time>
+                                {' · '}
+                                {m.auth_security_expires_at()}{' '}
+                                <time dateTime={session.expires_at}>
+                                  {formatSecurityDate(session.expires_at, locale)}
+                                </time>
+                              </span>
+                            </ItemDescription>
+                          </ItemContent>
+                          <ItemActions>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => void revoke(session)}
+                              disabled={operationBlocked}
+                              aria-busy={sessionPending === session.id}
+                              aria-label={m.auth_security_sign_out_session({ device })}
+                            >
+                              {m.auth_security_sign_out()}
+                            </Button>
+                          </ItemActions>
+                        </article>
+                      </Item>
+                    );
+                  })}
+                </ItemGroup>
+              </section>
+
+              <SecurityInventory
+                lifetime={lifetime.current.signal}
+                {...(inventorySource ? { source: inventorySource } : {})}
+                operation={{ blocked: operationBlocked, begin: beginConsentReview }}
+                onSessionEnded={(reduced) => {
+                  setConsentReduced(reduced);
+                  clearPrivateData('signed-out');
+                }}
+              />
+
+              <section aria-labelledby="security-organizations-heading">
+                <h2 id="security-organizations-heading">{m.auth_organization_security_heading()}</h2>
+                <nav aria-labelledby="security-organizations-heading">
+                  <a className={buttonVariants({ variant: 'outline' })} href="/organizations/new">
+                    {m.auth_organization_security_create()}
+                  </a>
+                </nav>
+              </section>
+
+              <section aria-labelledby="security-delete-account-heading">
+                <h2 id="security-delete-account-heading">{m.auth_account_delete_submit()}</h2>
+                <p>{m.auth_account_delete_security_description()}</p>
+                <nav aria-labelledby="security-delete-account-heading">
+                  <a
+                    className={`${buttonVariants({ variant: 'outline' })} border-destructive/50 hover:border-destructive/70`}
+                    href="/account/delete"
+                  >
+                    <Trash2 aria-hidden="true" className="text-destructive" />
+                    {m.auth_account_delete_submit()}
+                  </a>
+                </nav>
+              </section>
+            </>
+          )}
+        </div>
       </AuthPage>
       {blocker?.status === 'blocked' && departureProtected ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
