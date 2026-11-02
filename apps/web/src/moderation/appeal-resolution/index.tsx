@@ -41,10 +41,12 @@ export function AppealResolution({
     session.state === 'unknown' ? null : JSON.stringify([session.state, session.subject, session.csrfToken]);
   const admitted =
     mayResolve &&
-    isCurrent?.() !== false &&
     ((session.state === 'signed-in' && Boolean(session.subject) && Boolean(session.csrfToken)) ||
       (session.state === 'unknown' && onResolve !== resolveAppeal));
   intent.synchronize(appealId, viewer, admitted);
+  // The page owner connects after the first empty render. Private state requires its current admission;
+  // callbacks below also check it before accepting the first input or command.
+  if ((intent.statement !== '' || intent.phase !== 'draft') && isCurrent?.() === false) intent.retire();
   useEffect(() => {
     mounted.current = true;
     return () => {
