@@ -21,6 +21,7 @@ import {
   type GrowthProfileRunSource,
 } from '../test/support/growth-profile-read.ts';
 import { classifySeries } from '../test/support/growth-model.ts';
+import { numericExtent } from '../test/support/growth-numeric.ts';
 
 const COVERAGES = [1, 0.99] as const;
 const SCALE_SETS = [
@@ -190,7 +191,8 @@ function worstPoints(
         });
         const reference = medianGrowthValue(runValues.map(({ median }) => median));
         for (const { entry, values, median } of runValues) {
-          const repetitionHalfSpread = (Math.max(...values) - Math.min(...values)) / 2;
+          const extent = numericExtent(values);
+          const repetitionHalfSpread = (extent.max - extent.min) / 2;
           const runMedianDeviation = Math.abs(median - reference);
           const need = Math.max(runMedianDeviation, repetitionHalfSpread);
           const allowance = Math.max(uncertainty.absolute, uncertainty.relative * reference);
@@ -443,7 +445,7 @@ function methodTable(
     '| Noise need | max(absolute run-median deviation, half the within-run range). |',
     '| Fit | Search relative E from 0% to 100% in 1% steps; choose the least average max(absolute E, relative E × reference) covering the requested share of calibration points. |',
     '| Held-out | Leave out each check run, refit E from indexed per-run medians and spreads, and measure covered points. |',
-    `| Admission | At most ${GROWTH_CALIBRATION_LIMITS.checks} checks, ${GROWTH_CALIBRATION_LIMITS.runsPerCheck} runs per check, ${GROWTH_CALIBRATION_LIMITS.points} points and ${GROWTH_CALIBRATION_LIMITS.heldOutRuns} leave-one-run-out folds; excess input is refused with the supported capacity. |`,
+    `| Admission | At most ${GROWTH_CALIBRATION_LIMITS.checks} checks, ${GROWTH_CALIBRATION_LIMITS.runsPerCheck} runs per check, ${GROWTH_CALIBRATION_LIMITS.repetitions} repetitions per point, ${GROWTH_CALIBRATION_LIMITS.points} points and ${GROWTH_CALIBRATION_LIMITS.heldOutRuns} leave-one-run-out folds; excess input is refused with the supported capacity. |`,
     '| Coverage run | Classify each coverage profile separately under both calibrated E values. |',
     '| Comparable checks | Same file, check, occurrence, scales, bounds, and identified v1 measurement identity (indexProbes and local git source revision). Unidentified legacy lines and mismatched identities are omitted with per-run diagnostics. |',
   ];

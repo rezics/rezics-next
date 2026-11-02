@@ -684,15 +684,10 @@ and labels each scale; each list shows at most five entries and marks omissions.
 statements with the largest first-to-last-scale growth for each failing metric. Each statement line shows its normalized
 first line, its value at every scale, and the plan node that used the most buffers (including its relation or index when
 present). Statements that appeared in only some repetitions are listed as intermittent with their repetition
-numbers. SQL literals and parameters are normalized together while leading SQL comments remain, so comments can
-identify a tagged statement.
-When a bound fails, `GrowthBoundError` keeps its scale and relation summary and adds the statements with the largest
-first-to-last-scale growth for each failing metric. Each statement line shows its normalized first line, its value at
-every scale, and the plan node that used the most buffers (including its relation or index when present). Statements
-that appeared in only some repetitions are listed as intermittent with their repetition numbers. SQL literals,
-dollar-quoted strings, escaped string constants and `$n` parameters are replaced with `?` so literal variants group
-together; quoted identifiers and comments stay intact. Unclosed quotes, unclosed dollar quoting, or a backslash in a
-non-`E` string stay as captured so unsupported syntax is not treated as equivalent.
+numbers. SQL literals, dollar-quoted strings, escaped string constants and `$n` parameters are replaced with `?` so
+literal variants group together; quoted identifiers and leading SQL comments stay intact so comments can identify a
+tagged statement. Unclosed quotes, unclosed dollar quoting, or a backslash in a non-`E` string stay as captured so
+unsupported syntax is not treated as equivalent.
 Set `GROWTH_PROFILE` to a file inside the workspace to collect profiles on local and remote check runs. Remote stack
 runs forward its workspace-relative path and return the file with the result; earlier local lines are retained when the
 returned profile is merged. Write failures are best-effort by default: `checkGrowth` warns once per destination and still
@@ -714,10 +709,13 @@ Incomplete-check missing-run diagnostics admit at most 8,192 check×run pairs (c
 those lists are allocated, counting empty sources as runs; excess expansion is refused with the check identity and that
 capacity. Ordinary complete groups and smaller omitted groups keep their identities, occurrence, ordering and missing
 runs.
-Calibration then admits at most 256 checks, 32 runs per check, 4,096 check×run×scale points and 2,048 leave-one-run-out
-folds, covering the documented five-run sample with headroom. It indexes per-run medians and spreads and refits each
-omitted run from those statistics instead of rescanning repetitions. Excess work is refused with the check or series
-size and the supported capacity; it does not return a partial fit.
+Calibration then admits at most 256 checks, 32 runs per check, 256 repetitions per point, 4,096 check×run×scale points
+and 2,048 leave-one-run-out folds, covering the documented five-run sample and the harness sampling maximum of 15
+repetitions with headroom. Classification uses the same per-point repetition capacity. It indexes per-run medians and
+spreads without spreading values into engine argument lists, and refits each omitted run from those statistics instead
+of rescanning repetitions. Excess work is refused with the check or series size and the supported capacity before
+traversing, copying or sorting oversized numeric evidence; it does not return a partial fit. Profile byte and line
+admission stays with the importer.
 Calibration CLI loading applies that same total-byte budget to observed file sizes before retaining contents, counts a
 file that grows after its size is observed against the budget, and closes every opened profile on failure; file-level
 budget and change errors use line 1 of the run basename because loading does not parse JSONL.

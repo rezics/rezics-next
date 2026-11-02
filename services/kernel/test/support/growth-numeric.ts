@@ -14,6 +14,21 @@ export function requireDenseArray(values: readonly unknown[], label: string): vo
     if (!Object.hasOwn(values, index)) throw new TypeError(`${label} is missing item ${index + 1}`);
 }
 
+/** Per-point repetition arrays admitted by classification and calibration, covering harness sampling (at most 15). */
+export const GROWTH_REPETITION_CAPACITY = 256;
+
+/** Min and max without spreading into an engine argument list. */
+export function numericExtent(values: readonly number[]): Readonly<{ min: number; max: number }> {
+  let min = values[0]!;
+  let max = values[0]!;
+  for (let index = 1; index < values.length; index += 1) {
+    const value = values[index]!;
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+  return { min, max };
+}
+
 function finiteResult(value: number, label: string): number {
   if (!Number.isFinite(value)) throw new TypeError(`${label} is not representable as a finite number`);
   return value;

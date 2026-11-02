@@ -1,4 +1,5 @@
 import { classifySeries, type GrowthModelBound, type SeriesPoint } from './growth-model.ts';
+import { GROWTH_REPETITION_CAPACITY, numericExtent } from './growth-numeric.ts';
 
 export type CalibrationRunPoint = Readonly<{
   scale: number;
@@ -65,10 +66,16 @@ export const GROWTH_CALIBRATION_LIMITS = {
   runsPerCheck: 32,
   points: 4_096,
   heldOutRuns: 2_048,
+  repetitions: GROWTH_REPETITION_CAPACITY,
 } as const;
 
 function medianCost(values: readonly number[]): number {
   return [...values].sort((left, right) => left - right)[(values.length - 1) >> 1]!;
+}
+
+function repetitionSpread(values: readonly number[]): number {
+  const { min, max } = numericExtent(values);
+  return max - min;
 }
 
 function validateSeries(series: readonly CalibrationCheck[], coverage: number): void {
@@ -94,9 +101,25 @@ function validateSeries(series: readonly CalibrationCheck[], coverage: number): 
         `Calibration check ${item.check} exceeds the ${GROWTH_CALIBRATION_LIMITS.runsPerCheck} run capacity (${item.runs.length} runs)`,
       );
 
-    let scales: number[] | undefined;
+    heldOutRuns += item.runs.length;
+    if (heldOutRuns > GROWTH_CALIBRATION_LIMITS.heldOutRuns)
+      throw new TypeError(
+        `Calibration check ${item.check} exceeds the ${GROWTH_CALIBRATION_LIMITS.heldOutRuns} leave-one-run-out capacity (${heldOutRuns} runs)`,
+      );
+
+    let checkPoints = 0;
     for (const run of item.runs) {
       if (run.length === 0) throw new TypeError(`Calibration runs for ${item.check} must contain points`);
+      checkPoints += run.length;
+      if (points + checkPoints > GROWTH_CALIBRATION_LIMITS.points)
+        throw new TypeError(
+          `Calibration check ${item.check} exceeds the ${GROWTH_CALIBRATION_LIMITS.points} point capacity (${points + checkPoints} check×run×scale points)`,
+        );
+    }
+    points += checkPoints;
+
+    let scales: number[] | undefined;
+    for (const run of item.runs) {
       const runScales: number[] = [];
       let previousScale = 0;
       for (const point of run) {
@@ -106,6 +129,10 @@ function validateSeries(series: readonly CalibrationCheck[], coverage: number): 
         runScales.push(point.scale);
         if (point.repetitions.length === 0)
           throw new TypeError('Each calibration point requires at least one repetition');
+        if (point.repetitions.length > GROWTH_CALIBRATION_LIMITS.repetitions)
+          throw new TypeError(
+            `Calibration check ${item.check} exceeds the ${GROWTH_CALIBRATION_LIMITS.repetitions} repetition capacity (${point.repetitions.length} repetitions at scale ${point.scale})`,
+          );
         if (point.repetitions.some((value) => !Number.isFinite(value) || value < 0))
           throw new TypeError('Calibration repetitions must be finite and non-negative');
       }
@@ -113,17 +140,6 @@ function validateSeries(series: readonly CalibrationCheck[], coverage: number): 
         throw new TypeError(`Calibration runs for ${item.check} must use the same scales`);
       scales ??= runScales;
     }
-
-    heldOutRuns += item.runs.length;
-    points += item.runs.length * item.runs[0]!.length;
-    if (heldOutRuns > GROWTH_CALIBRATION_LIMITS.heldOutRuns)
-      throw new TypeError(
-        `Calibration check ${item.check} exceeds the ${GROWTH_CALIBRATION_LIMITS.heldOutRuns} leave-one-run-out capacity (${heldOutRuns} runs)`,
-      );
-    if (points > GROWTH_CALIBRATION_LIMITS.points)
-      throw new TypeError(
-        `Calibration check ${item.check} exceeds the ${GROWTH_CALIBRATION_LIMITS.points} point capacity (${points} check×run×scale points)`,
-      );
   }
 }
 
@@ -135,7 +151,7 @@ function indexChecks(series: readonly CalibrationCheck[]): readonly IndexedCheck
         run: runIndex,
         scale,
         value: medianCost(repetitions),
-        spread: Math.max(...repetitions) - Math.min(...repetitions),
+        spread: repetitionSpread(repetitions),
       })),
     );
     return { check, runCount: runs.length, summaries, points: toCalibrationPoints(summaries) };

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { classifySeries, type GrowthModelBound, type SeriesPoint } from './growth-model.ts';
+import { classifySeries, GROWTH_REPETITION_CAPACITY, type GrowthModelBound, type SeriesPoint } from './growth-model.ts';
 
 function series(scales: readonly number[], medians: readonly number[], uncertainty = 0): SeriesPoint[] {
   return scales.map((scale, index) => ({
@@ -155,6 +155,41 @@ test('series classification requires three to five scales before fitting or stai
   for (const points of [series([1, 4], [10, 20]), series([1, 4, 16, 64, 256, 1024], [10, 20, 30, 40, 50, 60])]) {
     expect(() => classifySeries(points, 'linear', 2)).toThrow(/three to five scales/);
   }
+});
+
+test('series classification refuses oversized repetition evidence before copying or spreading', () => {
+  const unread: number[] = [];
+  unread.length = GROWTH_REPETITION_CAPACITY + 1;
+  unread[0] = 1;
+  expect(() =>
+    classifySeries(
+      [
+        { scale: 1, repetitions: unread, uncertainty: 0 },
+        { scale: 4, repetitions: [1], uncertainty: 0 },
+        { scale: 16, repetitions: [1], uncertainty: 0 },
+      ],
+      'constant',
+    ),
+  ).toThrow(
+    `Repetitions at scale 1 exceeds the ${GROWTH_REPETITION_CAPACITY} repetition capacity (${unread.length} repetitions)`,
+  );
+
+  const admitted = Array.from({ length: GROWTH_REPETITION_CAPACITY }, () => 15);
+  const result = classifySeries(
+    [
+      { scale: 1, repetitions: admitted, uncertainty: 0 },
+      { scale: 4, repetitions: admitted, uncertainty: 0 },
+      { scale: 16, repetitions: admitted, uncertainty: 0 },
+    ],
+    'constant',
+  );
+  expect(result.outcome).toBe('compatible');
+  expect(result.medians).toEqual([15, 15, 15]);
+  expect(result.ranges).toEqual([
+    { lower: 15, upper: 15 },
+    { lower: 15, upper: 15 },
+    { lower: 15, upper: 15 },
+  ]);
 });
 
 test('series classification refuses overflowed intervals, coordinates and regression fits', () => {

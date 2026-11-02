@@ -153,6 +153,13 @@ test('the detectable effect is the smallest linear slope a constant or logarithm
   expect(beyondSearchCap).toBeGreaterThan(1e9);
 });
 
+function unreadRepetitions(length: number): number[] {
+  const values: number[] = [];
+  values.length = length;
+  values[0] = 1;
+  return values;
+}
+
 test('calibration refuses work above advertised capacity and names the input', () => {
   const extraRuns = Array.from({ length: GROWTH_CALIBRATION_LIMITS.runsPerCheck + 1 }, () => [
     { scale: 1, repetitions: [1] },
@@ -171,11 +178,36 @@ test('calibration refuses work above advertised capacity and names the input', (
     `Calibration exceeds the ${GROWTH_CALIBRATION_LIMITS.checks} check capacity (${extraChecks.length} checks)`,
   );
 
+  const unread = unreadRepetitions(GROWTH_CALIBRATION_LIMITS.repetitions + 1);
   const scaleCount = Math.floor(GROWTH_CALIBRATION_LIMITS.points / 2) + 1;
-  const wideRun = Array.from({ length: scaleCount }, (_, index) => ({ scale: index + 1, repetitions: [1] }));
+  const wideRun = Array.from({ length: scaleCount }, (_, index) => ({ scale: index + 1, repetitions: unread }));
   expect(() => calibrateUncertainty([{ check: 'wide', runs: [wideRun, wideRun] }])).toThrow(
     `Calibration check wide exceeds the ${GROWTH_CALIBRATION_LIMITS.points} point capacity (${scaleCount * 2} check×run×scale points)`,
   );
+
+  expect(() =>
+    calibrateUncertainty([
+      {
+        check: 'heavy-reps',
+        runs: [
+          [{ scale: 1, repetitions: unread }],
+          [{ scale: 1, repetitions: [1] }],
+        ],
+      },
+    ]),
+  ).toThrow(
+    `Calibration check heavy-reps exceeds the ${GROWTH_CALIBRATION_LIMITS.repetitions} repetition capacity (${unread.length} repetitions at scale 1)`,
+  );
+
+  const admitted = Array.from({ length: GROWTH_CALIBRATION_LIMITS.repetitions }, () => 10);
+  expect(
+    calibrateUncertainty([
+      {
+        check: 'full-reps',
+        runs: [[{ scale: 1, repetitions: admitted }], [{ scale: 1, repetitions: admitted }]],
+      },
+    ]),
+  ).toMatchObject({ absolute: 0, relative: 0, exact: true, points: 2, heldOutCoverage: 1 });
 });
 
 test('profile calibration refuses over-capacity work after bounded admission', () => {
@@ -198,5 +230,28 @@ test('profile calibration refuses over-capacity work after bounded admission', (
   }));
   expect(() => growthCalibrationReport(calibration, { name: 'coverage', text: profile })).toThrow(
     `Calibration check ${JSON.stringify(['test/growth.test.ts', 'heavy-run'])} exceeds the ${GROWTH_CALIBRATION_LIMITS.runsPerCheck} run capacity (${calibration.length} runs)`,
+  );
+
+  const sample = { rows: 1, blocks: 1, statements: 1 };
+  const heavy = Array.from({ length: GROWTH_CALIBRATION_LIMITS.repetitions + 1 }, () => sample);
+  const heavyProfile = JSON.stringify({
+    file: 'test/growth.test.ts',
+    check: 'heavy-reps',
+    scales: [1, 4, 16],
+    repetitions: [heavy, heavy, heavy],
+    relationSizes: [{}, {}, {}],
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    shadow: Object.fromEntries(['rows', 'blocks', 'statements'].map((metric) => [metric, { outcome: 'compatible' }])),
+  });
+  expect(() =>
+    growthCalibrationReport(
+      [
+        { name: 'run-1', text: heavyProfile },
+        { name: 'run-2', text: heavyProfile },
+      ],
+      { name: 'coverage', text: heavyProfile },
+    ),
+  ).toThrow(
+    `Calibration check ${JSON.stringify(['test/growth.test.ts', 'heavy-reps'])} exceeds the ${GROWTH_CALIBRATION_LIMITS.repetitions} repetition capacity (${heavy.length} repetitions at scale 1)`,
   );
 });

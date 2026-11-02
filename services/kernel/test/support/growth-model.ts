@@ -4,9 +4,13 @@ import {
   checkedMultiply,
   checkedMultiplyDivide,
   checkedSubtract,
+  GROWTH_REPETITION_CAPACITY,
+  numericExtent,
   requireDenseArray,
   requireNonNegativeFiniteNumber,
 } from './growth-numeric.ts';
+
+export { GROWTH_REPETITION_CAPACITY };
 
 export type GrowthModelBound = 'constant' | 'logarithmic' | 'linear';
 export type GrowthFamily = GrowthModelBound;
@@ -68,6 +72,10 @@ function validatePoints(points: readonly SeriesPoint[], bound: GrowthModelBound)
     previousScale = point.scale;
     if (!Array.isArray(point.repetitions) || point.repetitions.length === 0)
       throw new TypeError('Each scale requires at least one repetition');
+    if (point.repetitions.length > GROWTH_REPETITION_CAPACITY)
+      throw new TypeError(
+        `Repetitions at scale ${point.scale} exceeds the ${GROWTH_REPETITION_CAPACITY} repetition capacity (${point.repetitions.length} repetitions)`,
+      );
     requireDenseArray(point.repetitions, `Repetitions at scale ${point.scale}`);
     for (let repetition = 0; repetition < point.repetitions.length; repetition += 1)
       requireNonNegativeFiniteNumber(
@@ -520,10 +528,10 @@ export function classifySeries(
     throw new TypeError('Index probes must be a non-negative safe integer');
   const medians = points.map(({ repetitions }) => medianCost(repetitions));
   const uncertainties = points.map(({ uncertainty }) => uncertainty);
-  const ranges = points.map(({ repetitions }) => ({
-    lower: Math.min(...repetitions),
-    upper: Math.max(...repetitions),
-  }));
+  const ranges = points.map(({ repetitions }) => {
+    const { min, max } = numericExtent(repetitions);
+    return { lower: min, upper: max };
+  });
   const intervals = runningMaximumEnvelope(expandedIntervals(medians, uncertainties, 1));
   const adjacentDifferences = medians
     .slice(1)
