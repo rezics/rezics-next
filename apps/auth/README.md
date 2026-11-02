@@ -216,6 +216,14 @@ fresh confirmation. Signed-out or changed accounts cannot act on it. Relation re
 after a submit failure, Retry reads the current relationship and leaves approval/execution in the original explicit
 reconciliation flow, retaining the request, operation key and references.
 
+## Rename account
+
+Rename review belongs to the mounted page and its native source; replacing the source resets the draft and confirmation,
+and departure prevents unfinished browser stages from changing storage or starting reauthentication.
+Unsent attempts stop after an outstanding read or approval; submitted attempts retain their original key and command
+and finish reconciliation without changing a replacement review. An uncertain mutation requires explicit recovery,
+with current-account readback establishing success. The profile and step-up composition ports remain in `account-rename.ts`.
+
 ## Step-up
 
 A signed-in browser whose session is not fresh enough for `prompt=login` or `max_age` arrives at

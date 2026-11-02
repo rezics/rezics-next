@@ -149,6 +149,7 @@ export type RenameResult =
 export async function runRenameAttempt(
   attempt: RenameAttempt,
   readCurrent: () => Promise<RenameRead>,
+  isCurrent: () => boolean = () => true,
 ): Promise<RenameResult> {
   const closed = parseRenameContinuation({
     accountId: attempt.accountId,
@@ -157,7 +158,9 @@ export async function runRenameAttempt(
     submitted: attempt.submitted,
   });
   if (!closed) return { kind: 'denied' };
+  if (!isCurrent() && !attempt.submitted) return { kind: 'unavailable' };
   const current = await readCurrent();
+  if (!isCurrent() && !attempt.submitted) return { kind: 'unavailable' };
   if (current.kind !== 'ready') return { kind: attempt.submitted ? 'unknown' : 'unavailable' };
   if (current.target.accountId !== closed.accountId) return { kind: 'denied' };
   if (!renameSessionMatches(current.target)) return { kind: 'step-up' };
@@ -185,8 +188,11 @@ export async function runRenameAttempt(
       return { kind: 'unavailable' };
     attempt.reference = approval.body.reference;
   }
+  // An unsent review may end while approval is in flight. Already submitted
+  // attempts still reconcile with their original key, descriptor and reference.
+  if (!isCurrent() && !attempt.submitted) return { kind: 'unavailable' };
   attempt.submitted = true;
-  saveRenameContinuation(attempt);
+  if (isCurrent()) saveRenameContinuation(attempt);
   const executed = await authPost<unknown>('/account-operations/execute', { ...body, reference: attempt.reference });
   if (!executed.ok) {
     if (executed.status === 409) return { kind: 'conflict', current: await readCurrent() };
@@ -216,16 +222,17 @@ export async function runRenameAttempt(
 
 export interface RenameSource {
   readCurrent(): Promise<RenameRead>;
-  run(attempt: RenameAttempt): Promise<RenameResult>;
+  run(attempt: RenameAttempt, isCurrent?: () => boolean): Promise<RenameResult>;
   /** Owner composition saves/validates the same continuation, signs in for the
-   * management profile, then returns here WITHOUT executing. */
-  stepUp(attempt: RenameContinuation): Promise<boolean>;
+   * management profile, then returns here WITHOUT executing. Check isCurrent
+   * after any await before storing a continuation or navigating the browser. */
+  stepUp(attempt: RenameContinuation, isCurrent?: () => boolean): Promise<boolean>;
 }
 export const nativeRenameSource: RenameSource = {
   readCurrent: () => loadRenameTarget(),
-  run: (attempt) => runRenameAttempt(attempt, nativeRenameSource.readCurrent),
-  stepUp: async (attempt) => {
-    saveRenameContinuation(attempt);
+  run: (attempt, isCurrent) => runRenameAttempt(attempt, nativeRenameSource.readCurrent, isCurrent),
+  stepUp: async (attempt, isCurrent = () => true) => {
+    if (isCurrent()) saveRenameContinuation(attempt);
     return false;
   },
 };

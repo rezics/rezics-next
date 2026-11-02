@@ -25,6 +25,22 @@ export const Route = createFileRoute('/account/rename')({
 });
 
 export function RenameAccountPage({ source = nativeRenameSource }: { source?: RenameSource } = {}) {
+  const [review, setReview] = useState({ source, generation: 0 });
+  // A different native source starts a fresh review, including its busy gate and draft.
+  if (review.source !== source) setReview({ source, generation: review.generation + 1 });
+  useEffect(() => {
+    const resume = (event: PageTransitionEvent) => {
+      // The old document's pending work lost ownership at pagehide, even if the
+      // browser later restores this page from its back/forward cache.
+      if (event.persisted) setReview((previous) => ({ ...previous, generation: previous.generation + 1 }));
+    };
+    window.addEventListener('pageshow', resume);
+    return () => window.removeEventListener('pageshow', resume);
+  }, []);
+  return <RenameReview key={review.generation} source={source} />;
+}
+
+function RenameReview({ source }: { source: RenameSource }) {
   const [current, setCurrent] = useState<RenameRead | null>(null);
   const [handle, setHandle] = useState('');
   const [confirmed, setConfirmed] = useState(false);
@@ -38,6 +54,22 @@ export function RenameAccountPage({ source = nativeRenameSource }: { source?: Re
   const busy = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const owner = useRef<(() => boolean) | null>(null);
+
+  useLayoutEffect(() => {
+    let active = true;
+    const isCurrent = () => active;
+    owner.current = isCurrent;
+    busy.current = false;
+    const leave = () => {
+      active = false;
+    };
+    window.addEventListener('pagehide', leave);
+    return () => {
+      leave();
+      window.removeEventListener('pagehide', leave);
+    };
+  }, []);
 
   const receiveCurrent = useCallback((result: RenameRead) => {
     const saved = readRenameContinuation();
@@ -65,39 +97,36 @@ export function RenameAccountPage({ source = nativeRenameSource }: { source?: Re
     setCurrent(result);
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    void source
-      .readCurrent()
-      .catch((): RenameRead => ({ kind: 'unavailable' }))
-      .then((result) => {
-        if (active) receiveCurrent(result);
-      });
-    return () => {
-      active = false;
-    };
+  // Initial loading and explicit recovery share the same ownership boundary.
+  const reload = useCallback(async () => {
+    const isCurrent = owner.current!;
+    if (!isCurrent() || busy.current) return;
+    busy.current = true;
+    setPending(true);
+    try {
+      const result = await source.readCurrent();
+      if (isCurrent()) receiveCurrent(result);
+    } catch {
+      if (isCurrent()) setCurrent({ kind: 'unavailable' });
+    } finally {
+      if (isCurrent()) {
+        busy.current = false;
+        setPending(false);
+      }
+    }
   }, [source, receiveCurrent]);
+  useEffect(() => {
+    void reload();
+  }, [reload]);
   useLayoutEffect(() => {
     if (inputError) input.current?.focus();
     else if (message || current?.kind === 'unavailable' || current?.kind === 'denied') alert.current?.focus();
   }, [inputError, message, current?.kind]);
 
-  async function reload() {
-    if (busy.current) return;
-    busy.current = true;
-    setPending(true);
-    try {
-      receiveCurrent(await source.readCurrent());
-    } catch {
-      setCurrent({ kind: 'unavailable' });
-    } finally {
-      busy.current = false;
-      setPending(false);
-    }
-  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy.current || current?.kind !== 'ready' || !confirmed) return;
+    const isCurrent = owner.current!;
+    if (!isCurrent() || busy.current || current?.kind !== 'ready' || !confirmed) return;
     const normalized = normalizeSignupHandle(handle);
     if (!normalized || (normalized === current.target.handle && !attempt.current?.submitted)) {
       setInputError(m.auth_rename_invalid());
@@ -111,7 +140,8 @@ export function RenameAccountPage({ source = nativeRenameSource }: { source?: Re
     setMessage('');
     setInputError('');
     try {
-      const result = await source.run(selected);
+      const result = await source.run(selected, isCurrent);
+      if (!isCurrent()) return;
       setLocked(selected.submitted);
       if (result.kind === 'renamed') {
         clearRenameContinuation();
@@ -119,7 +149,8 @@ export function RenameAccountPage({ source = nativeRenameSource }: { source?: Re
       } else if (result.kind === 'step-up') {
         saveRenameContinuation(selected);
         setConfirmed(false);
-        if (!(await source.stepUp(selected))) setMessage(m.auth_rename_unavailable());
+        const handedOff = await source.stepUp(selected, isCurrent);
+        if (isCurrent() && !handedOff) setMessage(m.auth_rename_unavailable());
       } else if (result.kind === 'conflict') {
         clearRenameContinuation();
         attempt.current = null;
@@ -137,11 +168,15 @@ export function RenameAccountPage({ source = nativeRenameSource }: { source?: Re
         );
       }
     } catch {
-      setLocked(selected.submitted);
-      setMessage(selected.submitted ? m.auth_rename_unknown() : m.auth_rename_unavailable());
+      if (isCurrent()) {
+        setLocked(selected.submitted);
+        setMessage(selected.submitted ? m.auth_rename_unknown() : m.auth_rename_unavailable());
+      }
     } finally {
-      busy.current = false;
-      setPending(false);
+      if (isCurrent()) {
+        busy.current = false;
+        setPending(false);
+      }
     }
   }
 
