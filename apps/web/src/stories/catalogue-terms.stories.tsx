@@ -233,9 +233,9 @@ function IndependentTermsStory() {
               locale={locale}
               session="signed-in"
               transport={fixture.transport}
-              typeLabels={
-                index === 0 ? { 'schema:Movie': `Movie / ${'supplied-type-reference:'.repeat(12)}` } : undefined
-              }
+              {...(index === 0
+                ? { typeLabels: { 'schema:Movie': `Movie / ${'supplied-type-reference:'.repeat(12)}` } }
+                : {})}
             />
           ))}
         </div>
