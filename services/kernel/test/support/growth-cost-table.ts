@@ -380,10 +380,7 @@ function scanGrowthCheckTitles(source: string): GrowthCheckTitle[] {
   return titles;
 }
 
-function parseGrowthCheckTitle(
-  source: string,
-  start: number,
-): { title: GrowthCheckTitle; end: number } | undefined {
+function parseGrowthCheckTitle(source: string, start: number): { title: GrowthCheckTitle; end: number } | undefined {
   let cursor = skipTrivia(source, start);
   const modifiers: string[] = [];
   while (source[cursor] === '.') {
