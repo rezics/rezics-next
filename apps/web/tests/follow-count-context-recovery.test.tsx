@@ -4,7 +4,9 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PrivateFollowCountsPageView } from '../src/library/private-follow-counts-page';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const targetId = '0192f3a0-6c1e-7b2a-9d4e-000000000021';
 
 test('malformed target context can be corrected with validated GET fields or cleared to own counts', () => {
