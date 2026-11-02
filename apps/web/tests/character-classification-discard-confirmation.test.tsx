@@ -59,7 +59,7 @@ test('Character classification confirms only its edited draft and preserves it a
   ];
   read.public.subject.statements[property] = [source];
   read.release.properties[property]!.targets = ['skos:Concept'];
-  read.public.related[source.value.type === 'value' ? source.value.content as string : ''] = {
+  read.public.related[source.value.type === 'value' ? (source.value.content as string) : ''] = {
     type: 'skos:Concept',
     labels: { en: 'Original concept' },
   };
@@ -147,10 +147,14 @@ test('Character classification confirms only its edited draft and preserves it a
     const cancel = button(first!, m.candidate_cancel());
     expect(window.document.activeElement).toBe(cancel);
     expect([...first!.querySelectorAll('input')]).toEqual(fields);
-    expect(fields.map(({ id, value }) => [id, value])).toEqual(fields.map((field, index) => [addresses[index], values[index]]));
+    expect(fields.map(({ id, value }) => [id, value])).toEqual(
+      fields.map((field, index) => [addresses[index], values[index]]),
+    );
     expect(picker.value).toBe('Selected search summary');
     await act(async () =>
-      first!.querySelector('[role="group"]')!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+      first!
+        .querySelector('[role="group"]')!
+        .dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
     );
     expect(window.document.activeElement).toBe(button(first!, m.curation_view_discard()));
     expect(first!.querySelector('fieldset')).not.toBeNull();

@@ -185,8 +185,7 @@ export function CharacterClassification({
     restoreDiscardFocus.current = true;
     setConfirmation(undefined);
   };
-  const confirmDiscard = (pending: { draft: FactDraft; active: () => boolean }) =>
-    closeDraft(pending.draft, pending);
+  const confirmDiscard = (pending: { draft: FactDraft; active: () => boolean }) => closeDraft(pending.draft, pending);
   const change = (statement: StatementInput) => {
     if (!active()) return;
     if (!draft || running.current || factLocked(draft)) return;
