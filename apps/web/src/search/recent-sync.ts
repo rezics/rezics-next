@@ -11,6 +11,11 @@ import {
 } from './recent-history';
 import { createRecentPageProgress, RECENT_HISTORY_READ_PAGE_LIMIT } from './recent-page-progress';
 import { admitRecentPage, recentItemAction } from './recent-response';
+import {
+  recentRetryDeadlineBlocks,
+  type RecentRetryAdmission,
+  type RecentRetryDeadline,
+} from './recent-retry-admission';
 import type { RecentEntry as NativeEntry, RecentItem, RecentPage, Pending } from './recent';
 import { admitRecentJournal, freshRecentJournal, type RecentJournal } from './recent-journal';
 
@@ -24,12 +29,13 @@ export type RecentSearchTransport = {
   read(
     cursor: string | undefined,
     signal: AbortSignal,
-  ): Promise<{ accountId: string | null; page: RecentPage | null; code?: string }>;
+  ): Promise<{ accountId: string | null; page: RecentPage | null; code?: string } & RecentRetryAdmission>;
   write(
     input: { accountId: string; expectedRevision: number; pending: Pending },
     signal: AbortSignal,
   ): Promise<
-    { ok: false; code: string } | { ok: true; value: { id: string | null; revision: number; lastUsed: string } }
+    | ({ ok: false; code: string } & RecentRetryAdmission)
+    | { ok: true; value: { id: string | null; revision: number; lastUsed: string } }
   >;
 };
 export type RecentSearchSyncAdapter = RecentSyncAdapter & {
@@ -137,10 +143,18 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
   const api = options.transport ?? transport;
   const lifetimeAbort = new AbortController();
   let needsRead = true;
+  let retryDeadline: RecentRetryDeadline | undefined;
   const live = (signal: AbortSignal) => {
     signal.throwIfAborted();
     if (bucket !== `account:${accountId}` || currentBucket() !== bucket)
       throw new DOMException('Recent account changed', 'AbortError');
+  };
+  const refuseNative = () => {
+    if (recentRetryDeadlineBlocks(retryDeadline)) throw new RecentSyncError('unavailable');
+  };
+  const admitRetry = (deadline: RecentRetryDeadline | undefined) => {
+    if (deadline === undefined || !Number.isFinite(deadline)) return;
+    retryDeadline = retryDeadline === undefined ? deadline : Math.max(retryDeadline, deadline);
   };
   const load = () => readRecentDocument(storage, bucket);
   const nativeKey = (entry: NativeEntry | undefined) => {
@@ -209,10 +223,13 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
     let cursor: string | undefined, revision: number | undefined;
     for (let request = 0; request < RECENT_HISTORY_READ_PAGE_LIMIT; request++) {
       live(signal);
+      refuseNative();
       const response = await api.read(cursor, signal);
       live(signal);
-      if (response.accountId !== accountId || !response.page)
+      if (response.accountId !== accountId || !response.page) {
+        admitRetry(response.retryAt);
         throw new RecentSyncError(response.code === 'stale_cursor' ? 'conflict' : 'unavailable');
+      }
       const page = admitRecentPage(response.page);
       if (!page) throw new RecentSyncError('unavailable');
       if (revision !== undefined && revision !== page.revision) throw new RecentSyncError('conflict');
@@ -258,8 +275,10 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
   async function run(input: readonly RecentEntry[], external: AbortSignal, retry = false) {
     const signal = AbortSignal.any([external, lifetimeAbort.signal]);
     live(signal);
+    refuseNative();
     return serial(bucket, async () => {
       live(signal);
+      refuseNative();
       // The caller's entries may already be stale. Always use the sole persisted local document.
       let { document, journal } = reconcile(input);
       if (journal.conflict) {
@@ -288,13 +307,16 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
           if (!pending) break;
           if (pending.expectedRevision === undefined) pending.expectedRevision = journal.revision!;
           save(document, journal);
+          refuseNative();
           const response = await api.write({ accountId, expectedRevision: pending.expectedRevision, pending }, signal);
           live(signal);
           ({ document, journal } = reconcile());
-          if (!response.ok)
+          if (!response.ok) {
+            admitRetry(response.retryAt);
             throw new RecentSyncError(
               response.code === 'conflict' || response.code === 'idempotency_conflict' ? 'conflict' : 'unavailable',
             );
+          }
           const receipt = response.value;
           if (
             receipt.revision !== pending.expectedRevision + 1 ||
@@ -350,6 +372,9 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
       return run(entries, signal);
     },
     retry: (entries, signal) => run(entries, signal, true),
-    dispose: () => lifetimeAbort.abort(),
+    dispose: () => {
+      retryDeadline = undefined;
+      lifetimeAbort.abort();
+    },
   };
 }

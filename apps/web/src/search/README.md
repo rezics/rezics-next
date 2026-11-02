@@ -91,6 +91,9 @@ limit, then the previous action, and falls back to the labeled history region; e
 announces completion.
 Recent server functions admit only native command discriminants and fields before dispatch; unknown kinds and unresolved
 `pending:` remove ids fail validation with no native call. Extra adapter journal fields on a pending envelope are stripped.
+Native Recent Retry-After is an in-memory, adapter-scoped minimum delay: sync, refresh and retry refuse native I/O
+until that instant without polling or persisting a deadline; local remember, remove and clear continue, and an explicit
+retry after the delay resends the same attempted command.
 
 The [canonical stories](../stories/header-search/README.md) cover resting, focused discovery, suggestions,
 filter entry and phone interaction. `tests/header-search-composition.test.tsx` exercises the existing routed

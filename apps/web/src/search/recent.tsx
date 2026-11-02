@@ -15,6 +15,7 @@ import {
 } from './recent-history';
 import { useRecentHistory } from './recent-history-hook';
 import { useHistoryRemovalFocus } from './history-removal-focus';
+import { admitRecentRetryHeaders, type RecentRetryAdmission } from './recent-retry-admission';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -155,6 +156,20 @@ async function authenticatedRecent() {
   const { kernelClient } = await import('../kernel/client');
   return { accountId, authorization, api: kernelClient() };
 }
+function nativeRecentFailure(result: {
+  error?: { value?: unknown } | undefined;
+  headers?: HeadersInit | undefined;
+}): { code: string } & RecentRetryAdmission {
+  const failure = result.error?.value;
+  const retryAt = admitRecentRetryHeaders(result.headers);
+  return {
+    code:
+      failure && typeof failure === 'object' && 'code' in failure && typeof failure.code === 'string'
+        ? failure.code
+        : 'unavailable',
+    ...(retryAt === undefined ? {} : { retryAt }),
+  };
+}
 export const readRecent = createServerFn({ method: 'GET' })
   .validator(admitRecentCursor)
   .handler(async ({ data: cursor }) => {
@@ -166,15 +181,7 @@ export const readRecent = createServerFn({ method: 'GET' })
       fetch: { cache: 'no-store', signal: getRequest().signal },
     });
     if (result.error || !result.data) {
-      const failure = result.error?.value;
-      return {
-        accountId: auth.accountId,
-        page: null,
-        code:
-          failure && typeof failure === 'object' && 'code' in failure && typeof failure.code === 'string'
-            ? failure.code
-            : 'unavailable',
-      };
+      return { accountId: auth.accountId, page: null, ...nativeRecentFailure(result) };
     }
     return { accountId: auth.accountId, page: result.data };
   });
@@ -198,14 +205,7 @@ export const writeRecent = createServerFn({ method: 'POST' })
               .recentSearches({ id: change.id })
               .delete(undefined, { query: { expectedRevision: data.expectedRevision }, headers, fetch });
     if (result.error || !result.data) {
-      const failure = result.error?.value;
-      return {
-        ok: false as const,
-        code:
-          failure && typeof failure === 'object' && 'code' in failure && typeof failure.code === 'string'
-            ? failure.code
-            : 'unavailable',
-      };
+      return { ok: false as const, ...nativeRecentFailure(result) };
     }
     return { ok: true as const, value: result.data };
   });
