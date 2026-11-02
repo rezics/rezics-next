@@ -144,6 +144,20 @@ type Selection = {
   unavailable: boolean;
 };
 
+type FocusRequest = {
+  kind: 'selection' | 'clear' | 'return';
+  owner: object;
+  callerId: number;
+  callerTicket: number;
+  source: RealmAppearanceRead;
+  head: string;
+  generation: number;
+  slot: RealmImageSlot | 'rules';
+  expected: Element | null;
+  returnTo?: 'selector' | 'opener';
+  opener?: HTMLButtonElement | null;
+};
+
 function rulesHref(postId: string, revisionId: string) {
   return localizeUrl(new URL(`/posts/${postId}/revisions/${revisionId}`, 'https://rezics.local')).pathname;
 }
@@ -174,9 +188,17 @@ export function RealmAppearanceSettings({
     slot: RealmImageSlot | 'rules';
     owner: object;
     callerId: number;
+    callerTicket: number;
     source: RealmAppearanceRead;
     head: string;
+    generation: number;
+    opener: HTMLButtonElement | null;
   } | null>(null);
+  const focusRequest = useRef<FocusRequest | null>(null);
+  const selectionTriggers = useRef<Partial<Record<RealmImageSlot | 'rules', HTMLButtonElement | null>>>({});
+  const clearTriggers = useRef<Partial<Record<RealmImageSlot | 'rules', HTMLButtonElement | null>>>({});
+  const referenceInput = useRef<HTMLInputElement | null>(null);
+  const clearBoundary = useRef<HTMLDivElement | null>(null);
   const ids = useId();
   const callerId = lifetime?.id ?? 0;
   const incoming = useRef(initial);
@@ -203,6 +225,7 @@ export function RealmAppearanceSettings({
     clearState?.owner === control &&
     clearState.callerId === callerId &&
     clearState.source === initial &&
+    (!lifetime || lifetime.owns(clearState.callerTicket)) &&
     read.kind === 'ready' &&
     clearState.head === read.snapshot.head
       ? clearState.slot
@@ -245,20 +268,44 @@ export function RealmAppearanceSettings({
   );
   const selectionGeneration = useRef(0);
   function setSelection(value: Selection | null) {
-    if (value === null) selectionGeneration.current++;
+    if (value === null) {
+      selectionGeneration.current++;
+      focusRequest.current = null;
+    }
     selectionRef.current = value;
     setSelectionState(value);
   }
   function setClear(value: RealmImageSlot | 'rules' | null) {
     if (value === null) {
+      selectionGeneration.current++;
+      focusRequest.current = null;
       setClearState(null);
       return;
     }
     const current = control.getSnapshot().read;
     if (!control.selectable() || current.kind !== 'ready') return;
+    const callerTicket = lifetime?.ticket() ?? 0;
+    if (lifetime && (!lifetime.current() || !lifetime.owns(callerTicket))) return;
     control.cancelUpload();
     setSelection(null);
-    setClearState({ slot: value, owner: control, callerId, source: initial, head: current.snapshot.head });
+    const generation = ++selectionGeneration.current;
+    const opener = clearTriggers.current[value] ?? (document.activeElement as HTMLButtonElement | null);
+    const next = {
+      slot: value,
+      owner: control,
+      callerId,
+      callerTicket,
+      source: initial,
+      head: current.snapshot.head,
+      generation,
+      opener,
+    };
+    setClearState(next);
+    focusRequest.current = {
+      kind: 'clear',
+      ...next,
+      expected: document.activeElement,
+    };
   }
   function currentSelection(selected: Selection) {
     const current = selectionRef.current;
@@ -276,6 +323,56 @@ export function RealmAppearanceSettings({
       (!lifetime || (lifetime.current() && lifetime.owns(selected.callerTicket))) &&
       snapshot.read.kind === 'ready' &&
       snapshot.read.snapshot.head === selected.head
+    );
+  }
+  function closeSelection(selected: Selection) {
+    const expected = document.activeElement;
+    setSelection(null);
+    focusRequest.current = {
+      kind: 'return',
+      owner: control,
+      callerId,
+      callerTicket: selected.callerTicket,
+      source: selected.source,
+      head: selected.head ?? '',
+      generation: selectionGeneration.current,
+      slot: selected.slot,
+      expected,
+      returnTo: 'selector',
+    };
+  }
+  function closeClear(current: NonNullable<typeof clearState>, returnTo: 'selector' | 'opener') {
+    const expected = document.activeElement;
+    setClear(null);
+    focusRequest.current = {
+      kind: 'return',
+      owner: control,
+      callerId,
+      callerTicket: current.callerTicket,
+      source: current.source,
+      head: current.head,
+      generation: selectionGeneration.current,
+      slot: current.slot,
+      expected,
+      returnTo,
+      opener: current.opener,
+    };
+  }
+  function focusRequestIsCurrent(request: FocusRequest) {
+    const current = control.getSnapshot().read;
+    return (
+      request.owner === control &&
+      request.callerId === callerId &&
+      request.generation === selectionGeneration.current &&
+      request.source === incoming.current &&
+      (!lifetime || (lifetime.current() && lifetime.owns(request.callerTicket))) &&
+      visible &&
+      request.head !== '' &&
+      current.kind === 'ready' &&
+      current.snapshot.realmId === realmId &&
+      current.snapshot.state === 'active' &&
+      current.snapshot.canManage &&
+      current.snapshot.head === request.head
     );
   }
   function openSelection(slot: RealmImageSlot | 'rules') {
@@ -299,6 +396,17 @@ export function RealmAppearanceSettings({
       unavailable: false,
     };
     setSelection(next);
+    focusRequest.current = {
+      kind: 'selection',
+      owner: control,
+      callerId,
+      callerTicket: next.callerTicket,
+      source: initial,
+      head: next.head ?? '',
+      generation: next.generation,
+      slot,
+      expected: document.activeElement,
+    };
   }
   useLayoutEffect(() => {
     const previousRead = incoming.current;
@@ -315,6 +423,36 @@ export function RealmAppearanceSettings({
       setClear(null);
     }
   }, [control, initial, callerId]);
+  useLayoutEffect(() => {
+    const request = focusRequest.current;
+    if (!request) return;
+    focusRequest.current = null;
+    if (!focusRequestIsCurrent(request)) return;
+    if (
+      request.kind !== 'return' &&
+      document.activeElement !== request.expected
+    )
+      return;
+    if (
+      request.kind === 'return' &&
+      document.activeElement !== request.expected &&
+      document.activeElement !== document.body
+    )
+      return;
+    if (request.kind === 'selection') {
+      const selected = selectionRef.current;
+      if (selected?.generation === request.generation && currentSelection(selected)) referenceInput.current?.focus();
+    } else if (request.kind === 'clear') {
+      if (clearState?.generation === request.generation && clearState.slot === request.slot)
+        clearBoundary.current?.focus();
+    } else if (selectionState === null && clearState === null) {
+      const target =
+        request.returnTo === 'opener' && request.opener?.isConnected && !request.opener.disabled
+          ? request.opener
+          : selectionTriggers.current[request.slot];
+      if (target?.isConnected && !target.disabled) target.focus();
+    }
+  }, [control, initial, callerId, read, selectionState, clearState, visible]);
   useLayoutEffect(() => control.connect(), [control]);
   useEffect(() => () => control.cancelUpload(), [control]);
   useEffect(() => () => control.disconnect(), [control]);
@@ -451,7 +589,14 @@ export function RealmAppearanceSettings({
             ) : null}
             {snapshot.canManage ? (
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" disabled={!selectable} onClick={() => openSelection(slot)}>
+                <Button
+                  ref={(element) => {
+                    selectionTriggers.current[slot] = element;
+                  }}
+                  variant="outline"
+                  disabled={!selectable}
+                  onClick={() => openSelection(slot)}
+                >
                   {m.realm_appearance_choose()}
                 </Button>
                 <Field className="w-full min-w-0 max-w-64">
@@ -473,6 +618,9 @@ export function RealmAppearanceSettings({
                   />
                 </Field>
                 <Button
+                  ref={(element) => {
+                    clearTriggers.current[slot] = element;
+                  }}
                   variant="ghost"
                   disabled={
                     !selectable ||
@@ -510,10 +658,20 @@ export function RealmAppearanceSettings({
           <>
             <p className="text-sm text-muted-foreground">{m.realm_appearance_rules_help()}</p>
             <div className="flex gap-2">
-              <Button variant="outline" disabled={!selectable} onClick={() => openSelection('rules')}>
+              <Button
+                ref={(element) => {
+                  selectionTriggers.current.rules = element;
+                }}
+                variant="outline"
+                disabled={!selectable}
+                onClick={() => openSelection('rules')}
+              >
                 {m.realm_appearance_select_rules()}
               </Button>
               <Button
+                ref={(element) => {
+                  clearTriggers.current.rules = element;
+                }}
                 variant="ghost"
                 disabled={!selectable || draft.presentation.rules === null}
                 onClick={() => setClear('rules')}
@@ -535,6 +693,7 @@ export function RealmAppearanceSettings({
               {selection.slot === 'rules' ? m.realm_appearance_rules_link() : m.realm_appearance_image_link()}
             </FieldLabel>
             <Input
+              ref={referenceInput}
               id={`${ids}-reference`}
               value={selection.link}
               maxLength={2048}
@@ -614,12 +773,12 @@ export function RealmAppearanceSettings({
                     ...previous,
                     [selection.slot]: { owner: control, callerId, reference: selection.reference! },
                   }));
-                setSelection(null);
+                closeSelection(selection);
               }}
             >
               {m.realm_appearance_use_selection()}
             </Button>
-            <Button variant="ghost" onClick={() => setSelection(null)}>
+            <Button variant="ghost" onClick={() => closeSelection(selection)}>
               {m.editor_cancel()}
             </Button>
           </div>
@@ -627,8 +786,10 @@ export function RealmAppearanceSettings({
       ) : null}
       {clear ? (
         <div
+          ref={clearBoundary}
           role="group"
           aria-label={m.realm_appearance_clear_confirm()}
+          tabIndex={-1}
           className="space-y-3 rounded-xl border border-destructive p-4"
         >
           <p>
@@ -648,12 +809,12 @@ export function RealmAppearanceSettings({
                 )
                   return;
                 control.clear(clear);
-                setClear(null);
+                if (clearState) closeClear(clearState, 'selector');
               }}
             >
               {m.realm_appearance_clear()}
             </Button>
-            <Button variant="outline" onClick={() => setClear(null)}>
+            <Button variant="outline" onClick={() => clearState && closeClear(clearState, 'opener')}>
               {m.editor_cancel()}
             </Button>
           </div>
