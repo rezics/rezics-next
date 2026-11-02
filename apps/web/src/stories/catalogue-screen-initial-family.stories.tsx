@@ -19,7 +19,7 @@ const person = '00000000-0000-4000-8000-000000000302';
 const parent = '00000000-0000-4000-8000-000000000301';
 const citation = `https://example.org/credits/${'complete-original-source-'.repeat(12)}?page=24#director`;
 const scalar = '0.5000000000000000000000000000000000000000000000000000000000000000000001';
-const longName = (property: string) => `${property} — ${'Full released name 完整名稱 اسم الحقل '.repeat(5)}`;
+const longName = (property: string) => `${property} — ${'Full released name 完整名稱 اسم الحقل '.repeat(5)}`.trimEnd();
 const search = async () => [
   { id: parent, title: 'Observatory season', types: ['schema:TVSeason'], typeLabel: 'Season', cover: null },
   { id: person, title: 'A. Observer', types: ['schema:Person'], typeLabel: 'Person', cover: null },

@@ -11,7 +11,7 @@ import type { CreateResult } from '../src/features/catalogue/create-subject';
 import recorded from '../src/kernel/recorded/definitions-release.json';
 import * as start from '../.storybook/react-start';
 
-// Authored UNRUN. This is one connected actual-component campaign. DOM construction and
+// One connected actual-component campaign. DOM construction and
 // keyboard simulation do not prove browser geometry, native authorization, private SSR or backend growth.
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
@@ -49,6 +49,7 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     Range: window.Range,
     DOMRect: window.DOMRect,
     getComputedStyle: window.getComputedStyle.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
@@ -299,7 +300,7 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     // Full supplied localized names/strings/citations stay in the actual DOM in both directions.
     // Browser plays own geometry; setting a DOM viewport is not geometry evidence.
     const release = structuredClone(recorded.release) as Release;
-    const longName = `Director — ${'完整名稱 اسم طويل Full released property name '.repeat(8)}`;
+    const longName = `Director — ${'完整名稱 اسم طويل Full released property name '.repeat(8)}`.trimEnd();
     for (const locale of ['en', 'ar']) release.properties['schema:director']!.labels[locale] = longName;
     const initial = [
       row('schema:director', person),
