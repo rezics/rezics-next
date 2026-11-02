@@ -14,6 +14,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { localizeUrl } from '../paraglide/runtime.js';
 import { useCommunityManagementAdmission } from './community-management';
+import { ImageCredit } from './community-presentation-parts';
 import {
   createRealmAppearance,
   realmAppearanceHasUnsavedChanges,
@@ -116,13 +117,15 @@ function ImagePreview({
           {m.realm_appearance_retry_image_preview()}
         </Button>
       ) : null}
-      {value?.credit && loaded ? (
-        <p className="text-xs text-muted-foreground">
-          {value.credit.rightsHolder} · {value.credit.license}
-        </p>
-      ) : null}
+      {value ? <ImageCredit image={value} loaded={loaded} /> : null}
     </div>
   );
+}
+
+function imagePreviewKey(image: RealmPresentationOptional<RealmPresentationImage>) {
+  return image.state === 'available'
+    ? JSON.stringify([image.state, image.value.id, image.value.digest, realmImageSource(image), image.value.credit])
+    : image.state;
 }
 
 type Selection = {
@@ -423,7 +426,7 @@ export function RealmAppearanceSettings({
           <div key={slot} className="min-w-0 space-y-3">
             <h3 className="font-medium">{label(slot)}</h3>
             <ImagePreview
-              key={realmImageSource(draft[slot]) ?? 'none'}
+              key={imagePreviewKey(draft[slot])}
               image={draft[slot]}
               title={snapshot.title}
               banner={slot === 'banner'}
@@ -556,7 +559,7 @@ export function RealmAppearanceSettings({
           </Field>
           {selection.candidate?.kind === 'image' ? (
             <ImagePreview
-              key={realmImageSource({ state: 'available', value: selection.candidate.image }) ?? 'none'}
+              key={imagePreviewKey({ state: 'available', value: selection.candidate.image })}
               image={{ state: 'available', value: selection.candidate.image }}
               title={snapshot.title}
               banner={selection.slot === 'banner'}
@@ -699,12 +702,12 @@ export function RealmAppearanceSettings({
                 <summary>{m.realm_appearance_current()}</summary>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <ImagePreview
-                    key={realmImageSource(snapshot.avatar) ?? 'none'}
+                    key={imagePreviewKey(snapshot.avatar)}
                     image={snapshot.avatar}
                     title={snapshot.title}
                   />
                   <ImagePreview
-                    key={realmImageSource(snapshot.banner) ?? 'none'}
+                    key={imagePreviewKey(snapshot.banner)}
                     image={snapshot.banner}
                     title={snapshot.title}
                     banner

@@ -36,9 +36,21 @@ const [{ createRoot }, { within, userEvent }, { RealmAppearanceSettings }, { m }
   import('../src/community/realm-presentation-settings'),
   import('../src/paraglide/messages.js'),
 ]);
-const credited = { ...image, credit: { rightsHolder: 'A. Maker', license: 'CC BY 4.0' } };
+const credited = {
+  ...image,
+  credit: {
+    rightsHolder: 'A. Maker',
+    via: { name: 'Openverse', url: 'https://images.example/photo' },
+    license: 'CC BY 4.0',
+  },
+};
 const replacement = {
   ...credited,
+  id: '0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0002',
+  credit: {
+    ...credited.credit,
+    via: { name: 'Archive source', url: 'https://images.example/replacement' },
+  },
   variants: [...credited.variants, { format: 'webp' as const, width: 640, height: 960 }],
 };
 const url = realmImageSource({ state: 'available', value: replacement })!;
@@ -106,6 +118,8 @@ test('retry keeps the draft and fences replaced, cleared, revoked, and retired i
   await emit(old, 'load');
   expect(retry()).toBeNull();
   await emit(current, 'error');
+  expect(host.querySelector('a[href="https://images.example/photo"]')).toBeNull();
+  expect(host.querySelector('a[href="https://images.example/replacement"]')).toBeNull();
   const button = within(host).getByRole('button', { name: m.realm_appearance_retry_image_preview() });
   const before = apiCalls;
   button.focus();
@@ -124,7 +138,14 @@ test('retry keeps the draft and fences replaced, cleared, revoked, and retired i
   expect(host.textContent).not.toContain('A. Maker');
   await emit(retried, 'load');
   expect(host.textContent).toContain('A. Maker · CC BY 4.0');
+  expect(host.querySelector<HTMLAnchorElement>('a[href="https://images.example/replacement"]')?.textContent).toBe(
+    'Archive source',
+  );
+  await paint(read());
+  expect(host.querySelector('a[href="https://images.example/replacement"]')).toBeNull();
+  expect(host.querySelector('a[href="https://images.example/photo"]')).toBeNull();
   await paint(read({ state: 'unavailable', value: null }));
+  expect(host.querySelector('a[href="https://images.example/photo"]')).toBeNull();
   await emit(retried, 'error');
   expect(retry()).toBeNull();
   await paint(read({ state: 'available', value: replacement }));

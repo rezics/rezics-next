@@ -219,9 +219,9 @@ function imagePosition(image: RealmPresentationImage): string | undefined {
   return image.focalPoint ? `${image.focalPoint.x * 100}% ${image.focalPoint.y * 100}%` : undefined;
 }
 
-export function ImageCredit({ image }: { image: RealmPresentationImage }) {
+export function ImageCredit({ image, loaded = true }: { image: RealmPresentationImage; loaded?: boolean }) {
   const credit = image.credit;
-  if (!credit) return null;
+  if (!loaded || !credit) return null;
   return (
     <p className="text-xs text-muted-foreground">
       © {credit.rightsHolder} ·{' '}
