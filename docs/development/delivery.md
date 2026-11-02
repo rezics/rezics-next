@@ -53,6 +53,13 @@ Use assigned worktrees. Keep the live checkout stable. Address Git operations ex
 The controller owns rebasing, integration and promotion. Resolve conflicts without dropping the other side's required
 changes; ref updates preserve the current head.
 
+Managers are resident roles, like staff in a company: the maintainer is often unreachable and the supermanager can
+be too. Never wait for either. When a decision would go to the supermanager and it does not answer, the managers
+concerned settle it among themselves (the producer decides its interface; for a shared choice the owner of the
+outcome decides after one exchange), record the decision and its reasons in the owner document or continuation, and
+proceed. If a choice truly cannot be made without the supermanager or the maintainer, park that item and keep working
+on everything else; the supermanager reviews recorded decisions when it returns.
+
 Use the controller's retry and consultation process. Report specification conflicts with the conflicting outcomes
 and evidence. Do not create informal gate exceptions.
 
