@@ -10,6 +10,7 @@ import { resolveSubject } from '../library/subject-anchor.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { readVotePopulations } from './voter-realms.ts';
+import { produceIdentityRatingVoteChange } from '../semantic/identity-rating-producer.ts';
 import questionRead from './question-read.sql';
 import voteInsert from './vote-insert.sql';
 import voteLock from './vote-lock.sql';
@@ -20,7 +21,6 @@ import voteUpdate from './vote-update.sql';
 
 export const STANDARD_QUESTION_ID = '00000000-0000-7000-8000-000000000001';
 export const VOTE_SCOPE = 'rating:vote';
-const VOTE_EVENT = 'com.rezics.rating.vote.changed.v1';
 
 export type RatingQuestion = {
   id: string;
@@ -112,20 +112,16 @@ function changedVoteEvent(input: {
   revision: number;
   populations: string[];
 }) {
-  return {
-    type: VOTE_EVENT,
-    subject: input.voterId,
-    data: {
-      voterId: input.voterId,
-      questionId: input.questionId,
-      targetId: input.sourceTargetId,
-      ...(input.sourceTargetId === input.aggregateTargetId ? {} : { aggregateTargetId: input.aggregateTargetId }),
-      previous: input.previous,
-      units: input.units,
-      revision: input.revision,
-      populations: input.populations,
-    },
-  };
+  return produceIdentityRatingVoteChange({
+    authenticatedVoterId: input.voterId,
+    questionId: input.questionId,
+    sourceTargetId: input.sourceTargetId,
+    aggregateTargetId: input.aggregateTargetId,
+    previous: input.previous,
+    units: input.units,
+    revision: input.revision,
+    populations: input.populations,
+  });
 }
 
 function queryClient(client: Queryable): Queryable {
