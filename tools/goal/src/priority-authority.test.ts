@@ -169,6 +169,57 @@ test('provider identity is ambiguous when a caller supplies both Codex and Claud
   }
 });
 
+test('Consume the applicable task priority grant after a manager-parent change.', async () => {
+  const h = harness();
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const owner = task.brief.manager;
+    addManager(h.store.db, owner, 'owner-session', 'old-super');
+    addManager(h.store.db, 'old-super', 'old-super-session', 'root');
+    addManager(h.store.db, 'new-super', 'new-super-session', 'root');
+    const runtime = runtimeFor(h);
+    const printed: string[] = [];
+    const grantEnv = (id: string, session: string) => ({
+      runtime,
+      env: { CODEX_THREAD_ID: session, GOAL_MANAGER: id },
+      print: (value: string) => printed.push(value),
+    });
+
+    await runWorkerCommand('priority', ['grant', task.id], grantEnv('old-super', 'old-super-session'));
+    const staleGrant = JSON.parse(printed[0]!);
+    addManager(h.store.db, owner, 'owner-session', 'new-super');
+    await expect(
+      runWorkerCommand('priority', [task.id, 'critical'], {
+        runtime,
+        env: { CODEX_THREAD_ID: 'owner-session', GOAL_MANAGER: owner },
+      }),
+    ).rejects.toThrow(
+      "critical priority requires an active task-bound grant from the task manager's configured supermanager",
+    );
+
+    await runWorkerCommand('priority', ['grant', task.id], grantEnv('new-super', 'new-super-session'));
+    const currentGrant = JSON.parse(printed[1]!);
+    await runWorkerCommand('priority', [task.id, 'critical'], {
+      runtime,
+      env: { CODEX_THREAD_ID: 'owner-session', GOAL_MANAGER: owner },
+    });
+
+    const updated = h.store.task(task.id);
+    const stale = updated.priorityGrants?.find((grant) => grant.id === staleGrant.id);
+    const current = updated.priorityGrants?.find((grant) => grant.id === currentGrant.id);
+    expect(updated.brief.criticalPath).toBe(true);
+    expect(updated.priorityGrants).toHaveLength(2);
+    expect(stale).toMatchObject({ grantor: 'old-super' });
+    expect(stale?.consumedAt).toBeUndefined();
+    expect(current).toMatchObject({ grantor: 'new-super', consumedBy: owner });
+    expect(updated.priorityHistory).toEqual([
+      expect.objectContaining({ value: 'critical', setter: owner, grantor: 'new-super', grantId: currentGrant.id }),
+    ]);
+  } finally {
+    h.dispose();
+  }
+});
+
 test('legacy critical task records keep unknown setter provenance', () => {
   const h = harness();
   try {
