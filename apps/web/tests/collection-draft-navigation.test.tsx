@@ -55,7 +55,7 @@ test('curated draft departure preserves loaded edits and selection; revert, save
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, value });
   const { createRoot } = await import('react-dom/client');
-  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { QueryClient, QueryClientProvider, useQuery } = await import('@tanstack/react-query');
   const { createRouter, createRootRoute, createRoute, createMemoryHistory, RouterProvider, Outlet } =
     await import('@tanstack/react-router');
   const sessions = await import('../src/session/query');
@@ -123,15 +123,18 @@ test('curated draft departure preserves loaded edits and selection; revert, save
     throw new Error('refresh unavailable');
   });
   let current = true;
-  const Screen = () => (
-    <CollectionPage
-      page={page}
-      queryKey={queryKey}
-      cursor={undefined}
-      refreshPage={refresh}
-      isCurrent={() => current}
-    />
-  );
+  function Screen() {
+    const { data } = useQuery({ queryKey, queryFn: refresh, enabled: false });
+    return (
+      <CollectionPage
+        page={data!}
+        queryKey={queryKey}
+        cursor={undefined}
+        refreshPage={refresh}
+        isCurrent={() => current}
+      />
+    );
+  }
   const rootRoute = createRootRoute({ component: Outlet });
   const router = createRouter({
     routeTree: rootRoute.addChildren([
@@ -215,7 +218,11 @@ test('curated draft departure preserves loaded edits and selection; revert, save
     await save();
     await navigate();
     expect(dialog()!.textContent).toContain(m.library_collection_draft_navigation_pending());
-    expect(dialog()!.textContent).not.toContain(m.library_collection_draft_navigation_leave());
+    expect(
+      [...dialog()!.querySelectorAll('button')].some(
+        (button) => button.textContent === m.library_collection_draft_navigation_leave(),
+      ),
+    ).toBe(false);
     await settle(() => finish({ ok: false, reason: 'unavailable' }));
     await click(m.library_collection_draft_navigation_stay());
     await navigate();
@@ -244,9 +251,8 @@ test('curated draft departure preserves loaded edits and selection; revert, save
     expect(dialog()).not.toBeNull();
     current = false;
     await settle(() => client.setQueryData(queryKey, { ...page }));
-    // A live guard checks retirement even before the next editor render.
     expect(unload()).toBe(false);
-    await click(m.library_collection_draft_navigation_leave());
+    expect(dialog()).toBeNull();
     expect(router.state.location.pathname).toBe('/away');
   } finally {
     await act(async () => root.unmount());
