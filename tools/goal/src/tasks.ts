@@ -1413,6 +1413,11 @@ export class WorkerTasks {
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
         throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
+      if (
+        task.currentAttempt > 0 &&
+        this.store.retryIntent({ taskId, attempt: task.currentAttempt })?.status === 'abandoned'
+      )
+        throw new StaleAttemptError({ taskId, attempt: task.currentAttempt }, task.currentAttempt);
       if (!task.branch || !task.base) throw new Error('Imported attempts need a dispatchable contract before retry');
       if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
         throw new Error(`cannot retry ${task.state} task`);
@@ -1905,7 +1910,7 @@ export class WorkerTasks {
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     let settlementLease: ReturnType<typeof acquireDirectoryLease> | undefined;
     try {
-      const task = this.store.task(taskId);
+      let task = this.store.task(taskId);
       const ref = { taskId, attempt: task.currentAttempt };
       if (task.state === 'integrated' || task.state === 'merged' || task.state === 'cancelled')
         throw new Error(`cannot stop ${task.state} task`);
@@ -1915,41 +1920,49 @@ export class WorkerTasks {
         });
         return;
       }
-      const attempt = this.store.attempt(ref);
+      const settleLogPath = this.store.attempt(ref).logPath;
       // A worker's exit may wake its follower while cancellation is still reaping descendants.
-      settlementLease = acquireDirectoryLeaseWaiting(`${attempt.logPath}.settle`);
-      await terminateProcessGroup(attempt.process, this.settings.terminationGraceMs);
-      for (const process of attempt.auxiliaryProcesses)
-        await terminateProcessGroup(process, this.settings.terminationGraceMs);
-      if (attempt.state === 'stopped') {
-        if (cancelled) this.store.cancelStopped(ref);
-        return;
-      }
-      this.store.write(ref, () => {
-        if (['integrated', 'merged'].includes(this.store.task(taskId).state))
-          throw new Error('cannot stop integrated task');
-        if (attempt.state !== 'stopped' && attempt.state !== 'cancelled') {
-          const pool = this.settings.pools.find((p) => p.name === attempt.pool);
-          const ended = this.store.updateAttempt(ref, (a) => {
-            a.endedAt = new Date().toISOString();
-            a.after = pool ? this.reader(pool) : null;
-          });
-          this.store.putRecord(
-            makeRecord(
-              task,
-              ended,
-              readMeasurement(ended, { configDirectory: pool?.configDirectory }),
-              cancelled ? 'cancelled' : 'stopped',
-            ),
+      settlementLease = acquireDirectoryLeaseWaiting(`${settleLogPath}.settle`);
+      task = this.store.task(taskId);
+      if (task.currentAttempt !== ref.attempt || ['integrated', 'merged'].includes(task.state))
+        throw new StaleAttemptError(ref, task.currentAttempt);
+      const attempt = this.store.attempt(ref);
+      const intent = this.store.beginTermination(ref, cancelled ? 'cancel' : 'stop');
+      if (intent.state !== 'complete') {
+        if (intent.processIdentity === 'unknown')
+          throw new Error(
+            `${intent.operation} request retained with unknown process identity for task ${taskId} attempt ${ref.attempt}`,
           );
-          this.store.event(ref, cancelled ? 'cancelled' : 'stopped', {});
-          this.store.close(ref, cancelled ? 'cancelled' : 'stopped');
+        try {
+          const owned = new Map(
+            [intent.process, ...intent.auxiliaryProcesses]
+              .filter((identity): identity is NonNullable<typeof identity> => identity !== null)
+              .map((identity) => [`${identity.pid}:${identity.start}:${identity.boot}:${identity.group}`, identity]),
+          );
+          for (const process of owned.values()) await terminateProcessGroup(process, this.settings.terminationGraceMs);
+          this.store.finishTermination(ref);
+        } catch (error) {
+          this.store.finishTermination(ref, String(error));
+          throw error;
         }
-      });
+      }
+      const pool = this.settings.pools.find((p) => p.name === attempt.pool);
+      this.store.closeTerminated(ref, pool ? this.reader(pool) : null, pool?.configDirectory);
     } finally {
       settlementLease?.release();
       lease.release();
     }
+  }
+  /** Resume the saved stop through the same command path after a controller restart. */
+  async resumeTermination(taskId: string): Promise<void> {
+    const task = this.store.task(taskId);
+    if (!task.currentAttempt) return;
+    const ref = { taskId, attempt: task.currentAttempt };
+    const intent = this.store.attempt(ref).terminationIntent;
+    if (!intent || intent.processIdentity === 'unknown') return;
+    if (intent.state === 'complete' && task.state === (intent.operation === 'cancel' ? 'cancelled' : 'stopped')) return;
+    if (intent.operation === 'cancel') await this.cancel(taskId);
+    else await this.stop(taskId);
   }
   async cancel(taskId: string): Promise<void> {
     await this.stop(taskId, true);

@@ -1463,6 +1463,8 @@ and integration-commit policy used to release held work.
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
 
+For an attempt that has started, `stop` and `cancel` persist the requested disposition before signaling its recorded process groups. `status <task>` shows `terminationRequest` as requested, unknown or complete; missing process identity stays unknown and is never reported as physical termination. Host recovery resumes that same request and records its terminal result once. A stop abandons any retry already queued for that attempt; a later explicit retry queues a new one.
+
 A retry resumes the previous attempt's provider session while the pool, CLI and model stay the same. `--fresh-session`
 starts the next attempt in a new session instead, keeping the branch, worktree, commits and uncommitted work; the
 choice is kept on the task through capacity waits, dependency holds and restarts, and the attempt it creates consumes
@@ -1479,6 +1481,7 @@ dependency that predates this notification is reported once to its manager. The 
 dependency.
 A held amendment keeps its old live attempt's ownership until settlement, even if its dependencies integrate first.
 The next host sweep can then release it under the task lease and start the amended contract from the updated base.
+An unstarted held task can use `retry --brief` on the same task id to replace the brief and dependency edges while keeping attempt 0, its branch, worktree and uncommitted files. The host creates its first attempt once the new dependencies are merged.
 An amended held contract starts a fresh provider session after its old worker settles. A check waiter with saved checks
 and no terminal attempt record can continue its original session with the current contract; retained check IDs on a
 terminal attempt do not make it a check continuation. An unchanged held retry retains its supported session resume.

@@ -130,6 +130,9 @@ export async function runWorkerCommand(
     } else if (parsedArguments.command === 'status') {
       const arg = parsedArguments.taskId;
       const show = (task: Task) => {
+        const terminationRequest = task.currentAttempt
+          ? store.attempt({ taskId: task.id, attempt: task.currentAttempt }).terminationIntent
+          : undefined;
         const intent = task.currentAttempt
           ? store.retryIntent({ taskId: task.id, attempt: task.currentAttempt })
           : undefined;
@@ -158,6 +161,7 @@ export async function runWorkerCommand(
             : undefined;
         return {
           ...task,
+          ...(terminationRequest ? { terminationRequest } : {}),
           ...(task.state === 'held'
             ? {
                 dependencies,

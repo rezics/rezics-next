@@ -221,6 +221,17 @@ export const MANAGER_INCIDENT_REGRESSIONS: readonly RegressionCase[] = [
 
 export const LIFECYCLE_SUITE_TESTS: readonly LifecycleTestCase[] = [
   {
+    id: 'suite-native-stop-custody',
+    file: 'tools/goal/src/stop-custody-and-held-contract.test.ts',
+    testName:
+      'normal stop ends exactly its owned detached check process tree with honest terminal custody, no peer kill or duplicate new check',
+  },
+  {
+    id: 'suite-held-contract',
+    file: 'tools/goal/src/stop-custody-and-held-contract.test.ts',
+    testName: 'unstarted held retry --brief preserves task identity, attempt 0, work, dependencies, and releases once',
+  },
+  {
     id: 'suite-dependency-base',
     file: 'tools/goal/src/dependency-base.test.ts',
     testName: 'a dependent starts from dev when its dependency landed after dev-verified, and has the dependency code',

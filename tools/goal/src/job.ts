@@ -1155,6 +1155,24 @@ export class WorkerJob implements GateOutcomeSink {
   async recoverOrphans(options: { adoptRunning?: boolean } = {}): Promise<void> {
     const adoptRunning = options.adoptRunning ?? true;
     const store = this.tasks.store;
+    for (const task of store.activeTasks()) {
+      if (!task.currentAttempt) continue;
+      const ref = { taskId: task.id, attempt: task.currentAttempt };
+      const intent = store.attempt(ref).terminationIntent;
+      if (!intent || intent.processIdentity === 'unknown') continue;
+      if (intent.state === 'complete' && ['stopped', 'cancelled'].includes(task.state)) continue;
+      try {
+        await this.tasks.resumeTermination(task.id);
+      } catch (error) {
+        if (
+          error instanceof LeaseHeldError ||
+          error instanceof StaleAttemptError ||
+          store.attempt(ref).terminationIntent?.state === 'unknown'
+        )
+          continue;
+        throw error;
+      }
+    }
     this.reportCancelledDependencies();
     // The same recovery sweep also observes detached custody after a model exit or cancellation.
     if (adoptRunning) {

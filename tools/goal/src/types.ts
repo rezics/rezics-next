@@ -290,7 +290,8 @@ export type RetryIntent = AttemptRef & {
     awaitCheckHosts?: boolean;
     profile?: Profile;
   };
-  status: 'pending' | 'started';
+  status: 'pending' | 'started' | 'abandoned';
+  abandonedBy?: 'stop' | 'cancel';
   nextAttempt?: number;
 };
 export type WorktreeCleanupDisposition = {
@@ -359,10 +360,21 @@ export type PromotionRun = {
   }[];
 };
 export type AttemptFailure = 'spec-conflict' | 'scope-growth' | 'pool-exhausted' | 'tool';
+export type TerminationIntent = {
+  operation: 'stop' | 'cancel';
+  requestedAt: string;
+  state: 'requested' | 'unknown' | 'complete';
+  processIdentity: 'known' | 'not-started' | 'unknown';
+  process: ProcessIdentity | null;
+  auxiliaryProcesses: ProcessIdentity[];
+  error?: string;
+};
 export type Attempt = AttemptRef & {
   state: 'pending' | 'running' | 'waiting' | 'exited' | 'superseded' | 'stopped' | 'cancelled';
   /** Detached check runs whose completion will resume this attempt's session. */
   checks?: string[];
+  /** Durable operator disposition, distinct from confirmed process-group termination. */
+  terminationIntent?: TerminationIntent;
   previousBriefHash?: string;
   newBriefHash?: string;
   supersededFinalized?: boolean;

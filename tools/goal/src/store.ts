@@ -18,6 +18,7 @@ import type {
   PromotionRun,
   RetryIntent,
   Task,
+  TerminationIntent,
   WorktreeCleanupDisposition,
 } from './types.ts';
 import { recordFlow, ensureFlow, closePendingFlow } from './flow.ts';
@@ -1172,6 +1173,7 @@ export class WorkerStore implements AttemptFence {
       .transaction(() => {
         const intent = this.retryIntent(ref);
         if (!intent) throw new Error('unknown retry intent');
+        if (intent.status === 'abandoned') return intent;
         const wasPending = intent.status === 'pending';
         const task = this.task(ref.taskId);
         update(intent);
@@ -1452,9 +1454,22 @@ export class WorkerStore implements AttemptFence {
       return attempt;
     });
   }
+  /** Do not publish a replacement while an accepted operator stop still owns this generation. */
+  assertRetryAllowed(ref: AttemptRef): void {
+    const task = this.task(ref.taskId);
+    if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+    if (!ref.attempt) return;
+    const intent = this.attempt(ref).terminationIntent;
+    if (
+      this.retryIntent(ref)?.status === 'abandoned' ||
+      (intent && (intent.operation === 'cancel' || intent.state !== 'complete' || task.state !== 'stopped'))
+    )
+      throw new StaleAttemptError(ref, task.currentAttempt);
+  }
   /** Superseding and publishing the next sequence are atomic, before stopping any external process. */
   nextAttempt(ref: AttemptRef, make: (n: number) => Attempt, configDirectory?: string, admitProof = false): Attempt {
     return this.write(ref, () => {
+      this.assertRetryAllowed(ref);
       const task = this.task(ref.taskId);
       if (
         task.state === 'integrated' ||
@@ -1589,6 +1604,103 @@ export class WorkerStore implements AttemptFence {
       });
       enqueue(request);
     });
+  }
+  private abandonRetry(ref: AttemptRef, operation: 'stop' | 'cancel'): void {
+    const retry = this.retryIntent(ref);
+    if (!retry || retry.status !== 'pending') return;
+    retry.status = 'abandoned';
+    retry.abandonedBy = operation;
+    delete retry.nextAttempt;
+    this.db
+      .query('UPDATE worker_retry_intents SET body=? WHERE task_id=? AND attempt=?')
+      .run(JSON.stringify(retry), ref.taskId, ref.attempt);
+  }
+  /** Persist the operator's disposition before terminating any process. */
+  beginTermination(ref: AttemptRef, operation: 'stop' | 'cancel'): TerminationIntent {
+    return this.db
+      .transaction(() => {
+        const task = this.task(ref.taskId);
+        if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+        if (['integrated', 'merged', 'cancelled'].includes(task.state))
+          throw new Error(`cannot terminate ${task.state} task`);
+        const attempt = this.attempt(ref);
+        const at = new Date().toISOString();
+        let intent = attempt.terminationIntent;
+        if (!intent) {
+          const auxiliaryProcesses = [...(attempt.auxiliaryProcesses ?? [])];
+          const started = this.events(ref.taskId, ref.attempt).some((event) => event.kind === 'worker-run-started');
+          const processIdentity = attempt.process
+            ? 'known'
+            : attempt.state === 'pending' && !started && !auxiliaryProcesses.length
+              ? 'not-started'
+              : 'unknown';
+          intent = {
+            operation,
+            requestedAt: at,
+            state: processIdentity === 'unknown' ? 'unknown' : 'requested',
+            processIdentity,
+            process: attempt.process,
+            auxiliaryProcesses,
+            ...(processIdentity === 'unknown' ? { error: 'process identity unavailable' } : {}),
+          };
+          attempt.terminationIntent = intent;
+          this.db
+            .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+            .run(ref.taskId, ref.attempt, 'termination-requested', at, JSON.stringify({ operation, processIdentity }));
+        } else if (operation === 'cancel' && intent.operation !== 'cancel') {
+          intent.operation = 'cancel';
+        }
+        this.abandonRetry(ref, intent.operation);
+        this.saveAttempt(attempt);
+        return intent;
+      })
+      .immediate();
+  }
+  /** Record physical confirmation separately from the durable operator request. */
+  finishTermination(ref: AttemptRef, error?: string): void {
+    this.db
+      .transaction(() => {
+        const task = this.task(ref.taskId);
+        if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+        const attempt = this.attempt(ref);
+        const intent = attempt.terminationIntent;
+        if (!intent) throw new Error('termination request is missing');
+        if (error) {
+          intent.state = 'unknown';
+          intent.error = error;
+        } else {
+          if (intent.processIdentity === 'unknown') throw new Error('process identity is unknown');
+          intent.state = 'complete';
+          delete intent.error;
+        }
+        this.saveAttempt(attempt);
+      })
+      .immediate();
+  }
+  /** Commit the requested terminal state once, only after known process groups are confirmed absent. */
+  closeTerminated(ref: AttemptRef, after: PoolReading | null, configDirectory?: string): void {
+    this.db
+      .transaction(() => {
+        const task = this.task(ref.taskId);
+        if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+        const attempt = this.attempt(ref);
+        const intent = attempt.terminationIntent;
+        if (intent?.state !== 'complete') throw new Error('physical termination is unconfirmed');
+        const state = intent.operation === 'cancel' ? 'cancelled' : 'stopped';
+        attempt.endedAt ??= new Date().toISOString();
+        attempt.after ??= after;
+        if (!this.record(ref))
+          this.saveRecord(makeRecord(task, attempt, readMeasurement(attempt, { configDirectory }), state));
+        if (!this.events(ref.taskId, ref.attempt).some((event) => event.kind === state))
+          this.db
+            .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+            .run(ref.taskId, ref.attempt, state, new Date().toISOString(), '{}');
+        task.state = state;
+        attempt.state = state;
+        this.saveTask(task);
+        this.saveAttempt(attempt);
+      })
+      .immediate();
   }
   /** Stopping invalidates the current writer without inventing an attempt that never ran. */
   close(ref: AttemptRef, state: 'stopped' | 'cancelled'): void {
