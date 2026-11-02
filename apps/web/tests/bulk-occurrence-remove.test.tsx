@@ -11,9 +11,16 @@ import {
   createBulkOccurrenceRemoveManifest,
   type BulkOccurrenceRemoveSender,
 } from '../src/library/bulk-occurrence-remove';
-import { BulkOccurrenceRemoveJourneyControls, BulkOccurrenceRemoveReview } from '../src/library/bulk-occurrence-remove-review';
+import {
+  BulkOccurrenceRemoveJourneyControls,
+  BulkOccurrenceRemoveReview,
+} from '../src/library/bulk-occurrence-remove-review';
 import type { BulkStatusOperation } from '../src/library/bulk-status';
-import { receiveUndoEvidence, type BulkUndoOutcome, type BulkUndoRead } from '../src/library/bulk-operation-undo-evidence';
+import {
+  receiveUndoEvidence,
+  type BulkUndoOutcome,
+  type BulkUndoRead,
+} from '../src/library/bulk-operation-undo-evidence';
 import type { BulkRead, OperationAddress } from '../src/library/bulk-operation-recovery-native';
 
 const operation = (phase: BulkStatusOperation['phase'] = 'preview'): BulkStatusOperation => ({
@@ -72,11 +79,7 @@ function readyRead(outcomes: BulkUndoOutcome[] = []): BulkUndoRead {
 function captureSelection() {
   const first = members.members[0]!;
   const second = { ...members.members[1]!, subject: first.subject, subjectId: first.subject.id };
-  const captured = captureBulkOccurrenceRemove(
-    collection.collection,
-    [first, second],
-    new Set([second.id, first.id]),
-  );
+  const captured = captureBulkOccurrenceRemove(collection.collection, [first, second], new Set([second.id, first.id]));
   if (!captured.ok) throw new Error('Expected selected occurrences to capture');
   return captured;
 }
@@ -289,7 +292,11 @@ test('stored outcomes show removed, changed, missing and failed targets inline',
   const failed = outcome({ ordinal: '3', state: 'failed', reason: 'dependency_unavailable' });
   const view = renderToStaticMarkup(
     <BulkOccurrenceRemoveJourneyControls
-      state={{ phase: 'confirmed', operation: operation('completed'), read: readyRead([outcome(), changed, missing, failed]) }}
+      state={{
+        phase: 'confirmed',
+        operation: operation('completed'),
+        read: readyRead([outcome(), changed, missing, failed]),
+      }}
       canWrite
       onPreview={() => {}}
       onRetryPreview={() => {}}
@@ -317,15 +324,22 @@ test('Undo requires an applied selected occurrence and its original unexpired na
       purgeAfter: '2099-11-03T00:00:00.000Z',
     },
   });
-  expect(bulkOccurrenceRemoveUndoReceipt(capture, operation(), native, Date.parse('2099-11-02T00:00:00.000Z'))).toEqual({
-    collectionId: collection.collection.id,
-    memberId: first.memberId,
-    deletionId: '0192f3a0-6c1e-7b2a-9d4e-000000000099',
-    revision: 7,
-    purgeAfter: '2099-11-03T00:00:00.000Z',
-  });
+  expect(bulkOccurrenceRemoveUndoReceipt(capture, operation(), native, Date.parse('2099-11-02T00:00:00.000Z'))).toEqual(
+    {
+      collectionId: collection.collection.id,
+      memberId: first.memberId,
+      deletionId: '0192f3a0-6c1e-7b2a-9d4e-000000000099',
+      revision: 7,
+      purgeAfter: '2099-11-03T00:00:00.000Z',
+    },
+  );
   expect(
-    bulkOccurrenceRemoveUndoReceipt(capture, operation(), { ...native, state: 'failed' }, Date.parse('2099-11-02T00:00:00.000Z')),
+    bulkOccurrenceRemoveUndoReceipt(
+      capture,
+      operation(),
+      { ...native, state: 'failed' },
+      Date.parse('2099-11-02T00:00:00.000Z'),
+    ),
   ).toBeUndefined();
   expect(bulkOccurrenceRemoveUndoReceipt(capture, operation(), { ...native, memberDeletion: null })).toBeUndefined();
   expect(bulkOccurrenceRemoveUndoReceipt(capture, operation(), { ...native, memberId: 'unselected' })).toBeUndefined();
@@ -337,20 +351,42 @@ test('Undo requires an applied selected occurrence and its original unexpired na
       Date.parse('2026-11-03T00:00:00.000Z'),
     ),
   ).toBeUndefined();
-  expect(bulkOccurrenceRemoveRestoreAvailable(native.memberDeletion!.purgeAfter, true, Date.parse('2099-11-02T00:00:00.000Z'))).toBe(
-    true,
-  );
-  expect(bulkOccurrenceRemoveRestoreAvailable(native.memberDeletion!.purgeAfter, false, Date.parse('2099-11-02T00:00:00.000Z'))).toBe(
-    false,
-  );
-  expect(bulkOccurrenceRemoveRestoreAvailable(native.memberDeletion!.purgeAfter, true, Date.parse('2099-11-04T00:00:00.000Z'))).toBe(
-    false,
-  );
   expect(
-    bulkOccurrenceRemoveRestoreAvailable(native.memberDeletion!.purgeAfter, true, Date.parse('2099-11-04T00:00:00.000Z'), true),
+    bulkOccurrenceRemoveRestoreAvailable(
+      native.memberDeletion!.purgeAfter,
+      true,
+      Date.parse('2099-11-02T00:00:00.000Z'),
+    ),
   ).toBe(true);
   expect(
-    bulkOccurrenceRemoveRestoreAvailable(native.memberDeletion!.purgeAfter, false, Date.parse('2099-11-04T00:00:00.000Z'), true),
+    bulkOccurrenceRemoveRestoreAvailable(
+      native.memberDeletion!.purgeAfter,
+      false,
+      Date.parse('2099-11-02T00:00:00.000Z'),
+    ),
+  ).toBe(false);
+  expect(
+    bulkOccurrenceRemoveRestoreAvailable(
+      native.memberDeletion!.purgeAfter,
+      true,
+      Date.parse('2099-11-04T00:00:00.000Z'),
+    ),
+  ).toBe(false);
+  expect(
+    bulkOccurrenceRemoveRestoreAvailable(
+      native.memberDeletion!.purgeAfter,
+      true,
+      Date.parse('2099-11-04T00:00:00.000Z'),
+      true,
+    ),
+  ).toBe(true);
+  expect(
+    bulkOccurrenceRemoveRestoreAvailable(
+      native.memberDeletion!.purgeAfter,
+      false,
+      Date.parse('2099-11-04T00:00:00.000Z'),
+      true,
+    ),
   ).toBe(false);
   expect(bulkOccurrenceRemoveResultKind({ ...native, reason: 'missing_target' })).toBe('removed');
 });

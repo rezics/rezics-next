@@ -1023,11 +1023,7 @@ function CollectionPageLifetime({
     const viewer = session.state === 'signed-in' ? session.subject : null;
     if (!viewer) return;
     const source = editorPage.current ?? page;
-    const captured = captureBulkOccurrenceRemove(
-      { id: source.id, title: source.title },
-      source.members,
-      selectedIds,
-    );
+    const captured = captureBulkOccurrenceRemove({ id: source.id, title: source.title }, source.members, selectedIds);
     if (!captured.ok) {
       setFailure(m.library_collection_batch_unavailable());
       return;
@@ -1337,9 +1333,7 @@ function CollectionPageLifetime({
                 disabled={pending || editing}
                 onClick={() => void undoRemoval(episode)}
               >
-                {episode.uncertain
-                  ? m.library_bulk_occurrence_remove_retry_restore()
-                  : m.editor_undo()}{' '}
+                {episode.uncertain ? m.library_bulk_occurrence_remove_retry_restore() : m.editor_undo()}{' '}
                 {visibleUndo.length > 1 ? index + 1 : ''}
               </Button>
             ))}
