@@ -4307,5 +4307,10 @@
   "curation_review_last_column": "Dernière colonne",
   "creator_offer_controls_manage": "Gérer le prix ou retirer l’offre",
   "creator_offer_controls_manage_offer": "Gérer le prix ou retirer l’offre : {title}",
-  "creator_offer_controls_retained": "Ces commandes restent ouvertes pour garder votre brouillon, votre demande ou son résultat visible."
+  "creator_offer_controls_retained": "Ces commandes restent ouvertes pour garder votre brouillon, votre demande ou son résultat visible.",
+  "fictional_work_technical_details": "Détails techniques",
+  "fictional_work_work_reference": "Référence de l’œuvre",
+  "fictional_work_subject_reference": "Référence de la fiche",
+  "fictional_work_type_reference": "Référence du type",
+  "fictional_work_choose_another": "Choisir une autre œuvre"
 }

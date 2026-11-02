@@ -4308,5 +4308,10 @@
   "curation_review_last_column": "最后一栏",
   "creator_offer_controls_manage": "管理价格或下架",
   "creator_offer_controls_manage_offer": "管理价格或下架：{title}",
-  "creator_offer_controls_retained": "此操作区会保持展开，以便查看草稿、请求或结果。"
+  "creator_offer_controls_retained": "此操作区会保持展开，以便查看草稿、请求或结果。",
+  "fictional_work_technical_details": "技术详情",
+  "fictional_work_work_reference": "作品引用标识",
+  "fictional_work_subject_reference": "条目引用标识",
+  "fictional_work_type_reference": "类型引用标识",
+  "fictional_work_choose_another": "选择其他作品"
 }

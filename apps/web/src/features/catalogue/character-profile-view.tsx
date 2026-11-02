@@ -1,7 +1,6 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { pickText } from '@rezics/composition';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
@@ -17,6 +16,7 @@ import { EditorFailure, PartValue } from './statement-editor-view';
 import { SubjectTermsEntry } from './subject-terms-entry';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { RelationEditor } from './relation-editor';
+import { FictionalReferenceDetails, FictionalWorkReference } from './fictional-work-reference';
 import type { CreateResult } from './create-subject';
 import { CharacterProfileCreate } from './character-profile-create';
 import { CharacterClassification } from './character-profile-classification';
@@ -119,8 +119,7 @@ function CharacterProfileLive({
           <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
             <h2 className="text-xl font-semibold">{m.character_identity({}, o)}</h2>
             <p lang={pageText(current.release.types[characterType]!.labels, locale).lang}>
-              {pageText(current.release.types[characterType]!.labels, locale).text}{' '}
-              <code className="text-sm">{characterType}</code>
+              {pageText(current.release.types[characterType]!.labels, locale).text}
             </p>
             <p className="text-sm text-muted-foreground">
               <DefinitionMeaning values={current.release.types[characterType]!.descriptions} locale={locale} />
@@ -213,6 +212,7 @@ function CharacterProfileLive({
                 />
               </div>
             )}
+            <FictionalReferenceDetails type={characterType} locale={locale} />
           </section>
           {character && groups && (
             <>
@@ -318,19 +318,13 @@ function CharacterProfileLive({
             )}
             {current.work ? (
               <>
-                <a
-                  className="underline"
-                  href={
-                    subjectHref(
-                      { id: current.work.subject.id, label: pickText(current.work.subject.labels, locale).text },
-                      locale,
-                    ).href
-                  }
-                  lang={pageText(current.work.subject.labels, locale).lang}
-                >
-                  {pickText(current.work.subject.labels, locale).text}
-                </a>
-                <code className="block break-all text-sm">{current.work.subject.id}</code>
+                {query.data?.ok && (
+                  <FictionalWorkReference
+                    subject={current.work.subject}
+                    locale={locale}
+                    onChooseAnother={session === 'signed-in' ? () => setWork(undefined) : undefined}
+                  />
+                )}
                 <div hidden={session !== 'signed-in'}>
                   <RelationEditor
                     key={current.work.subject.id}

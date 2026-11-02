@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { pickText } from '@rezics/composition';
-import { useMemo } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { useMemo, useState } from 'react';
+import { CandidateReaderBoundary } from '../subject/candidate-lifetime';
+import { Button } from '@rezics/ui/shadcn/button';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { CharacterProfile } from '../features/catalogue/character-profile-view';
 import {
   characterProfileFixture,
@@ -24,37 +26,73 @@ function Example({
   scenario = 'ready',
   existing = false,
   work = false,
+  workLabel = 'supplied',
+  retirement = false,
   onCreate,
 }: {
   scenario?: CharacterScenario;
   existing?: boolean;
   work?: boolean;
+  workLabel?: 'supplied' | 'long' | 'absent';
+  retirement?: boolean;
   onCreate?: ObserveCreate;
 }) {
   const locale = getLocale();
-  const fixture = useMemo(() => characterProfileFixture(scenario, locale), [scenario, locale]);
+  const [retired, setRetired] = useState(false);
+  const fixture = useMemo(() => {
+    const current = characterProfileFixture(scenario, locale);
+    if (workLabel === 'long')
+      current.work.publicRead.subject.labels = {
+        ja: '星を渡る旅人たちの物語 — Die Reise durch die Sternenstadt — '.repeat(8),
+      };
+    if (workLabel === 'absent') current.work.publicRead.subject.labels = {};
+    return current;
+  }, [scenario, locale, workLabel]);
   const transport = useMemo(
     () => ({
       ...fixture.transport,
+      load: retired ? async () => ({ ok: false as const, reason: 'denied' as const }) : fixture.transport.load,
       create: async (command: Parameters<typeof fixture.transport.create>[0]) => {
         const result = await fixture.transport.create(command);
         onCreate?.(structuredClone(fixture.calls));
         return result;
       },
     }),
-    [fixture, onCreate],
+    [fixture, onCreate, retired],
+  );
+  const profile = (
+    <CharacterProfile
+      key={`${scenario}:${existing}:${work}:${locale}`}
+      locale={locale}
+      {...fixture.props}
+      transport={transport}
+      {...(retired ? { session: 'signed-out' as const } : {})}
+      {...(existing ? { id: characterProfileId } : {})}
+      {...(work ? { work: fixture.work.id } : {})}
+    />
   );
   return (
     <PatternStory visitor={scenario === 'signed-out' ? 'Signed Out' : 'Signed In'}>
       <AppShell>
-        <CharacterProfile
-          key={`${scenario}:${existing}:${work}:${locale}`}
-          locale={locale}
-          {...fixture.props}
-          transport={transport}
-          {...(existing ? { id: characterProfileId } : {})}
-          {...(work ? { work: fixture.work.id } : {})}
-        />
+        {retirement ? (
+          <>
+            <Button data-fixture-retire onClick={() => setRetired(true)} disabled={retired}>
+              Retire the illustrative current reader
+            </Button>
+            <CandidateReaderBoundary
+              address="fictional-work-story"
+              observed={{
+                state: retired ? 'signed-out' : 'signed-in',
+                subject: retired ? null : 'story-reader',
+                csrfToken: retired ? null : 'story-csrf',
+              }}
+            >
+              {profile}
+            </CandidateReaderBoundary>
+          </>
+        ) : (
+          profile
+        )}
       </AppShell>
     </PatternStory>
   );
@@ -313,3 +351,59 @@ export const ConcealedReader: Story = {
   },
 };
 export const PendingSelection: Story = { args: { scenario: 'pending', existing: true, work: true } };
+
+// Illustrative production compositions only. All added play assertions are authored UNRUN.
+export const LongWorkReference: Story = {
+  args: { existing: true, work: true, workLabel: 'long' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('button', { name: m.fictional_work_choose_another() });
+    const reference = canvasElement.querySelector<HTMLElement>('[data-slot="fictional-work-reference"]')!;
+    const title = within(reference).getByRole('link');
+    await expect(title.getAttribute('lang')).toBe(getLocale() === 'ja' ? null : 'ja');
+    title.focus();
+    await userEvent.tab();
+    const summary = reference.querySelector('summary')!;
+    await expect(summary).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(reference.querySelector('details')).toHaveAttribute('open');
+    for (const text of reference.querySelectorAll<HTMLElement>('a, code')) {
+      await expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth + 1);
+    }
+    await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
+  },
+};
+export const UnlabelledWork: Story = { args: { existing: true, work: true, workLabel: 'absent' } };
+export const AnonymousWork: Story = { args: { scenario: 'signed-out', existing: true, work: true } };
+export const UnavailableWork: Story = { args: { scenario: 'unavailable', existing: true, work: true } };
+export const WorkSelection: Story = {
+  args: { existing: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const input = await canvas.findByRole('textbox', { name: m.character_choose_work() });
+    await userEvent.type(input, characterProfileFixture().work.publicRead.subject.labels.en!);
+    await screen.findByRole('option');
+    await userEvent.keyboard('{ArrowDown}{Enter}');
+    await expect(canvas.findByRole('button', { name: m.fictional_work_choose_another() })).resolves.toBeVisible();
+  },
+};
+export const ClearedWork: Story = {
+  args: { existing: true, work: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.fictional_work_choose_another() }));
+    await expect(canvas.findByRole('textbox', { name: m.character_choose_work() })).resolves.toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.fictional_work_choose_another() })).toBeNull();
+  },
+};
+export const RetiredWork: Story = {
+  args: { existing: true, work: true, retirement: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('button', { name: m.fictional_work_choose_another() });
+    await userEvent.click(canvasElement.querySelector<HTMLButtonElement>('[data-fixture-retire]')!);
+    await waitFor(() => expect(canvasElement.querySelector('[data-slot="fictional-work-reference"]')).toBeNull());
+    await expect(canvasElement.textContent).not.toContain(characterProfileFixture().work.id);
+  },
+};

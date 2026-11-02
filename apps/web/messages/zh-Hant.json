@@ -4307,5 +4307,10 @@
   "curation_review_last_column": "最後一欄",
   "creator_offer_controls_manage": "管理價格或下架",
   "creator_offer_controls_manage_offer": "管理價格或下架：{title}",
-  "creator_offer_controls_retained": "此操作區會保持展開，以便查看草稿、請求或結果。"
+  "creator_offer_controls_retained": "此操作區會保持展開，以便查看草稿、請求或結果。",
+  "fictional_work_technical_details": "技術詳細資訊",
+  "fictional_work_work_reference": "作品參照識別碼",
+  "fictional_work_subject_reference": "條目參照識別碼",
+  "fictional_work_type_reference": "類型參照識別碼",
+  "fictional_work_choose_another": "選擇其他作品"
 }

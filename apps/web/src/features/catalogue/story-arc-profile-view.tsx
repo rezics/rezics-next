@@ -16,6 +16,7 @@ import { SubjectFacts } from './subject-facts-view';
 import { CharacterClassification } from './character-profile-classification';
 import type { FactsTransport } from './subject-facts';
 import { RelationEditor } from './relation-editor';
+import { FictionalReferenceDetails, FictionalWorkReference } from './fictional-work-reference';
 import { storyArcEntry } from './story-arc-profile-entry';
 import {
   storyArcFacts,
@@ -129,13 +130,12 @@ function StoryArcProfileLive({
             {arc ? (
               <>
                 <h2 className="text-xl font-semibold">{m.story_arc_identity({}, o)}</h2>
-                <p lang={pageText(current.release.types[storyArcType]!.labels, locale).lang}>
-                  {pageText(current.release.types[storyArcType]!.labels, locale).text} <code>{storyArcType}</code>
-                </p>
                 <p lang={label.lang} className="text-lg font-medium">
-                  {label.text}
+                  {label.text || m.subject_value_unlabelled({}, o)}
                 </p>
-                <code className="block break-all text-sm">{arc.subject.id}</code>
+                <p lang={pageText(current.release.types[storyArcType]!.labels, locale).lang}>
+                  {pageText(current.release.types[storyArcType]!.labels, locale).text}
+                </p>
                 {href && (
                   <nav className="flex flex-wrap gap-3" aria-label={m.facts_other_editors({}, o)}>
                     <a href={`${href}/terms`} className={`${callerTextActionClass} underline`}>
@@ -148,6 +148,9 @@ function StoryArcProfileLive({
                       {m.context_title({}, o)}
                     </a>
                   </nav>
+                )}
+                {query.data?.ok && (
+                  <FictionalReferenceDetails id={arc.subject.id} type={storyArcType} locale={locale} />
                 )}
               </>
             ) : (
@@ -234,19 +237,13 @@ function StoryArcProfileLive({
             <p>{m.story_arc_work_help({}, o)}</p>
             {current.work ? (
               <>
-                <a
-                  className={`${callerTextActionClass} underline`}
-                  lang={pageText(current.work.subject.labels, locale).lang}
-                  href={
-                    subjectHref(
-                      { id: current.work.subject.id, label: pageText(current.work.subject.labels, locale).text },
-                      locale,
-                    ).href
-                  }
-                >
-                  {pageText(current.work.subject.labels, locale).text}
-                </a>
-                <code className="block break-all text-sm">{current.work.subject.id}</code>
+                {query.data?.ok && (
+                  <FictionalWorkReference
+                    subject={current.work.subject}
+                    locale={locale}
+                    onChooseAnother={editable ? () => setWork(undefined) : undefined}
+                  />
+                )}
                 <div hidden={!editable}>
                   <RelationEditor
                     key={`work:${current.work.subject.id}`}

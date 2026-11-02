@@ -4307,5 +4307,10 @@
   "curation_review_last_column": "마지막 열",
   "creator_offer_controls_manage": "가격 관리 또는 판매 중단",
   "creator_offer_controls_manage_offer": "가격 관리 또는 판매 중단: {title}",
-  "creator_offer_controls_retained": "초안, 요청 또는 결과를 확인할 수 있도록 이 관리 영역은 열린 상태로 유지됩니다."
+  "creator_offer_controls_retained": "초안, 요청 또는 결과를 확인할 수 있도록 이 관리 영역은 열린 상태로 유지됩니다.",
+  "fictional_work_technical_details": "기술 세부 정보",
+  "fictional_work_work_reference": "작품 참조 ID",
+  "fictional_work_subject_reference": "항목 참조 ID",
+  "fictional_work_type_reference": "유형 참조 ID",
+  "fictional_work_choose_another": "다른 작품 선택"
 }

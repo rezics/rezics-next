@@ -4307,5 +4307,10 @@
   "curation_review_last_column": "最後の列",
   "creator_offer_controls_manage": "価格の管理・出品の取り下げ",
   "creator_offer_controls_manage_offer": "価格の管理・出品の取り下げ：{title}",
-  "creator_offer_controls_retained": "下書き、リクエスト、結果を確認できるように、これらの操作欄は開いたままになります。"
+  "creator_offer_controls_retained": "下書き、リクエスト、結果を確認できるように、これらの操作欄は開いたままになります。",
+  "fictional_work_technical_details": "技術情報",
+  "fictional_work_work_reference": "作品の参照ID",
+  "fictional_work_subject_reference": "項目の参照ID",
+  "fictional_work_type_reference": "種類の参照ID",
+  "fictional_work_choose_another": "別の作品を選ぶ"
 }

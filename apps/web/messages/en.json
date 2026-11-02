@@ -4308,5 +4308,10 @@
   "curation_review_last_column": "Last column",
   "creator_offer_controls_manage": "Manage price or delist",
   "creator_offer_controls_manage_offer": "Manage price or delist: {title}",
-  "creator_offer_controls_retained": "These controls stay open to keep your draft, request or result visible."
+  "creator_offer_controls_retained": "These controls stay open to keep your draft, request or result visible.",
+  "fictional_work_technical_details": "Technical details",
+  "fictional_work_work_reference": "Work reference",
+  "fictional_work_subject_reference": "Subject reference",
+  "fictional_work_type_reference": "Type reference",
+  "fictional_work_choose_another": "Choose another work"
 }

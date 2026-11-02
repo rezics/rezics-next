@@ -4307,5 +4307,10 @@
   "curation_review_last_column": "Última columna",
   "creator_offer_controls_manage": "Gestionar el precio o retirar la oferta",
   "creator_offer_controls_manage_offer": "Gestionar el precio o retirar la oferta: {title}",
-  "creator_offer_controls_retained": "Estos controles permanecen abiertos para mantener visibles el borrador, la solicitud o el resultado."
+  "creator_offer_controls_retained": "Estos controles permanecen abiertos para mantener visibles el borrador, la solicitud o el resultado.",
+  "fictional_work_technical_details": "Detalles técnicos",
+  "fictional_work_work_reference": "Referencia de la obra",
+  "fictional_work_subject_reference": "Referencia de la entrada",
+  "fictional_work_type_reference": "Referencia del tipo",
+  "fictional_work_choose_another": "Elegir otra obra"
 }
