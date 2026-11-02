@@ -258,11 +258,10 @@ test('the default private reporter-status journey refreshes outcomes, retries fa
   const originalRead = reader.readReporterStatus;
   const requestRead = reader.loadReporterStatusRequest;
   const id = '01a17a3b-0884-721b-91ef-d7ffd7bb58f3';
-  const report = { ...submission, id };
+  let report = { ...submission, id };
   const original = { state: 'signed-in' as const, subject: submission.reporterId, csrfToken: 'first-browser-session' };
   let browser = original;
   let status = 200;
-  let outcome: ReporterStatus['outcome'] = null;
   let closed = false;
   let release: (() => void) | undefined;
   let gate: Promise<void> | undefined;
@@ -273,12 +272,7 @@ test('the default private reporter-status journey refreshes outcomes, retries fa
       calls.push(`${request.method} ${new URL(request.url).pathname}`);
       expect(request.headers.get('authorization')).toBe(`Bearer ${browser.subject}`);
       const responseStatus = status;
-      const responseReport = {
-        ...report,
-        reporterId: browser.subject,
-        outcome,
-        resolvedAt: outcome ? '2026-10-31T10:00:00.000Z' : null,
-      };
+      const responseReport = { ...report, reporterId: browser.subject };
       if (gate) await gate;
       return Response.json(
         responseStatus === 200
@@ -355,7 +349,6 @@ test('the default private reporter-status journey refreshes outcomes, retries fa
     const buttons = [...host.querySelectorAll('button')].filter((item) => item.textContent?.includes(label));
     expect(buttons).toHaveLength(1);
     const button = buttons[0];
-    expect(button).toBeDefined();
     await act(async () => {
       button!.click();
       button!.click();
@@ -375,13 +368,13 @@ test('the default private reporter-status journey refreshes outcomes, retries fa
     expect(host.textContent).toContain(report.evidence!);
     expect(host.textContent).toContain(m.moderation_target_unavailable());
     for (const next of ['actioned', 'dismissed'] as const) {
-      outcome = null;
+      report = { ...report, outcome: null, resolvedAt: null };
       await mount();
       expect(host.textContent).toContain(m.reporter_status_pending());
       const before = calls.length;
       await flush();
       expect(calls).toHaveLength(before);
-      outcome = next;
+      report = { ...report, outcome: next, resolvedAt: '2026-10-31T10:00:00.000Z' };
       gate = new Promise((resolve) => {
         release = resolve;
       });
