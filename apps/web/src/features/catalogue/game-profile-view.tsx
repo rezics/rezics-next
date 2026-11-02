@@ -105,11 +105,7 @@ function GameProfileLive({
   // Existing-subject recovery retains private holders, never display authority.
   if (id)
     return (
-      <CatalogueCurrentReading
-        visible={!!admitted}
-        ready={!!admitted}
-        revision={`${id}:${readingRevision}`}
-      >
+      <CatalogueCurrentReading visible={!!admitted} ready={!!admitted} revision={`${id}:${readingRevision}`}>
         {!admitted && (
           <article className="mx-auto min-w-0 max-w-4xl space-y-5">
             <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
