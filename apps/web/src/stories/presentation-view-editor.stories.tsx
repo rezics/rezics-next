@@ -64,7 +64,7 @@ const profile: PresentationProfile = {
   routes: [{ route: '/', document: pageDocument('home', 1) }],
 };
 const reader = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10';
-const initial = { ok: true as const, reader, profile, digest: `sha256:${'a'.repeat(64)}`, head: 7 };
+const initial = { ok: true as const, reader, profile, digest: profileDigest(profile), head: 7 };
 const transport: CurationEditorTransport = {
   read: async () => initial,
   publish: async () => ({ ok: false, reason: 'unavailable' }),
@@ -198,7 +198,7 @@ export const NativeValidation: Story = {
     },
   },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await editDetails(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.curation_publish() }));
     await expect(await canvas.findByText(m.curation_invalid_retained())).toBeVisible();
     await expect(canvas.queryByRole('button', { name: m.curation_retry_original() })).not.toBeInTheDocument();
@@ -303,7 +303,7 @@ export const UnsavedNavigation: Story = {
 };
 
 // UNRUN constructed control examples; these do not establish native publication or visual acceptance.
-const longType = `schema:${'LongTemplate'.repeat(16)}`;
+const longType = `schema:${'LongTemplate'.repeat(10)}`;
 const longRoute = `/${'long-route-key-'.repeat(14)}end`;
 const longProfile: PresentationProfile = {
   ...profile,

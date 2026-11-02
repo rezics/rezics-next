@@ -1062,6 +1062,7 @@ function AdmittedPresentationViewEditor({
             profile={profile}
             selection={selection}
             viewNames={viewNames}
+            locale={locale}
             disabled={busy}
             onAdd={addCompanion}
             onReset={resetCompanion}

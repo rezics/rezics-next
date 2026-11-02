@@ -12,7 +12,6 @@ import { PresentationViewEditor } from '../features/pages/curate-view-editor';
 import type { PresentationPreview, PresentationPreviewInput } from '../features/pages/presentation-preview';
 import { PresentationPreviewPanel } from '../features/pages/presentation-preview-view';
 import type { PublicationTransport } from '../features/pages/curation-publish';
-import { withTemplate } from '../features/pages/curate';
 import recorded from '../kernel/recorded/subject.json';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -67,7 +66,7 @@ function ConnectedCuration({
   independent = false,
   recover = false,
 }: {
-  state?: 'current' | 'route' | 'denied' | 'unavailable' | 'draft' | 'invalid' | 'missing' | 'changed' | 'redirect';
+  state?: 'current' | 'route' | 'denied' | 'unavailable' | 'invalid' | 'missing' | 'changed' | 'redirect';
   independent?: boolean;
   recover?: boolean;
 }) {
@@ -137,21 +136,10 @@ function ConnectedCuration({
           ? { ...realmResult, target: input.target }
           : { ...current(locale), target: input.target }
       : result;
-  const draft =
-    state === 'draft'
-      ? withTemplate(
-          published,
-          { scope: 'generic', key: null },
-          {
-            root: { props: {} },
-            content: [{ type: 'Heading', props: { id: 'draft', level: 1, text: { en: 'Unpublished draft heading' } } }],
-          },
-        )
-      : published;
   const initial = {
     ok: true as const,
     reader: subject,
-    profile: independent ? comparisonProfile : draft,
+    profile: independent ? comparisonProfile : published,
     digest: independent ? comparisonDigest : digest,
     head,
   };
@@ -211,16 +199,20 @@ export const RouteResolution: Story = { render: () => <ConnectedCuration state="
 export const Denied: Story = { render: () => <ConnectedCuration state="denied" /> };
 export const Unavailable: Story = { render: () => <ConnectedCuration state="unavailable" /> };
 export const DraftDistinction: Story = {
-  render: () => <ConnectedCuration state="draft" />,
+  render: () => <ConnectedCuration />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: `generic: ${m.curation_generic()}` }));
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.curation_scope() }), 'route');
+    await userEvent.type(canvas.getByRole('textbox', { name: m.curation_key() }), '/unpublished-draft');
+    await userEvent.click(canvas.getByRole('button', { name: m.curation_add() }));
+    await expect(canvas.getByText(m.curation_unsaved())).toBeVisible();
     const editor = await canvas.findByRole('region', { name: m.curation_editor() });
     const preview = canvas.getByRole('region', { name: m.presentation_preview_title() });
     await userEvent.click(within(preview).getByRole('button', { name: m.presentation_preview_inspect() }));
     await within(preview).findByRole('heading', { name: m.presentation_editor_preview_current() });
     await expect(canvas.getByRole('region', { name: m.curation_editor() })).toBe(editor);
-    await expect(within(preview).queryByText('Unpublished draft heading')).toBeNull();
+    await expect(within(preview).queryByText('/unpublished-draft')).toBeNull();
+    await expect(canvas.getByText(m.curation_unsaved())).toBeVisible();
     await userEvent.click(within(preview).getByRole('button', { name: m.presentation_preview_close() }));
     await expect(canvas.getByRole('region', { name: m.curation_editor() })).toBe(editor);
   },

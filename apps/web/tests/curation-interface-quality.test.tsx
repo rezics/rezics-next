@@ -32,7 +32,7 @@ test('companion editing follows the explicit editor locale alongside its templat
       m.curation_companion_views,
       m.curation_companion_view,
       m.curation_companion_source,
-      m.curation_companion_source_choose,
+      m.curation_companion_choose_source,
       m.curation_companion_source_empty,
       m.curation_companion_source_overview,
       m.curation_companion_add,

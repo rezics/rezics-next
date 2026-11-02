@@ -16,6 +16,7 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { m } from '../../paraglide/messages.js';
 import { overviewOf, type CompanionViewSource } from './curate';
 import type { ViewSelection } from './curate-view-editor-state';
+import { presentationMessageOptions } from './curate-view-editor-messages';
 import {
   admitCompanionAdd,
   admitCompanionReset,
@@ -34,6 +35,7 @@ type CompanionViewControlsProps = {
   selection: ViewSelection;
   viewNames: Record<View, string>;
   disabled?: boolean;
+  locale?: string | undefined;
   onAdd: (view: View, source: CompanionViewSource) => void;
   onReset: (view: View) => void;
 };
@@ -43,9 +45,11 @@ export function CurationCompanionViews({
   selection,
   viewNames,
   disabled = false,
+  locale,
   onAdd,
   onReset,
 }: CompanionViewControlsProps) {
+  const options = presentationMessageOptions(locale);
   const id = useId();
   const [choice, setChoice] = useState<CompanionAddChoice>(emptyCompanionAdd);
   const [resetting, setResetting] = useState<CompanionResetIntent | null>(null);
@@ -60,15 +64,18 @@ export function CurationCompanionViews({
   if (template.scope === 'route' || (availableViews.length === 0 && !canReset && admittedReset === null)) return null;
 
   return (
-    <section className="space-y-3 rounded-lg border border-border p-3" aria-label={m.curation_companion_views()}>
+    <section
+      className="space-y-3 rounded-lg border border-border p-3"
+      aria-label={m.curation_companion_views({}, options)}
+    >
       <div className="space-y-1">
-        <h3 className="font-medium">{m.curation_companion_views()}</h3>
-        <p className="text-sm text-muted-foreground">{m.curation_companion_views_help()}</p>
+        <h3 className="font-medium">{m.curation_companion_views({}, options)}</h3>
+        <p className="text-sm text-muted-foreground">{m.curation_companion_views_help({}, options)}</p>
       </div>
       {availableViews.length > 0 && (
         <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
           <Field className="min-w-0">
-            <FieldLabel htmlFor={`${id}-view`}>{m.curation_companion_view()}</FieldLabel>
+            <FieldLabel htmlFor={`${id}-view`}>{m.curation_companion_view({}, options)}</FieldLabel>
             <NativeSelect
               id={`${id}-view`}
               className="w-full min-w-0 max-w-full"
@@ -80,7 +87,7 @@ export function CurationCompanionViews({
               }}
             >
               <NativeSelectOption value="" disabled>
-                {m.curation_companion_choose_view()}
+                {m.curation_companion_choose_view({}, options)}
               </NativeSelectOption>
               {availableViews.map((candidate) => (
                 <NativeSelectOption key={candidate} value={candidate}>
@@ -90,7 +97,7 @@ export function CurationCompanionViews({
             </NativeSelect>
           </Field>
           <Field className="min-w-0">
-            <FieldLabel htmlFor={`${id}-source`}>{m.curation_companion_source()}</FieldLabel>
+            <FieldLabel htmlFor={`${id}-source`}>{m.curation_companion_source({}, options)}</FieldLabel>
             <NativeSelect
               id={`${id}-source`}
               className="w-full min-w-0 max-w-full"
@@ -102,12 +109,14 @@ export function CurationCompanionViews({
               }}
             >
               <NativeSelectOption value="" disabled>
-                {m.curation_companion_choose_source()}
+                {m.curation_companion_choose_source({}, options)}
               </NativeSelectOption>
               {hasOverview && (
-                <NativeSelectOption value="overview">{m.curation_companion_source_overview()}</NativeSelectOption>
+                <NativeSelectOption value="overview">
+                  {m.curation_companion_source_overview({}, options)}
+                </NativeSelectOption>
               )}
-              <NativeSelectOption value="empty">{m.curation_companion_source_empty()}</NativeSelectOption>
+              <NativeSelectOption value="empty">{m.curation_companion_source_empty({}, options)}</NativeSelectOption>
             </NativeSelect>
           </Field>
           <Button
@@ -121,7 +130,7 @@ export function CurationCompanionViews({
               setChoice(emptyCompanionAdd);
             }}
           >
-            {m.curation_companion_add()}
+            {m.curation_companion_add({}, options)}
           </Button>
         </div>
       )}
@@ -133,17 +142,19 @@ export function CurationCompanionViews({
           disabled={disabled}
           onClick={() => setResetting(companionResetIntent(profile, template, selection.view))}
         >
-          {m.curation_companion_reset()}
+          {m.curation_companion_reset({}, options)}
         </Button>
       )}
       <AlertDialog open={admittedReset !== null} onOpenChange={(open) => !open && setResetting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{m.curation_companion_reset_title()}</AlertDialogTitle>
-            <AlertDialogDescription>{m.curation_companion_reset_description()}</AlertDialogDescription>
+            <AlertDialogTitle>{m.curation_companion_reset_title({}, options)}</AlertDialogTitle>
+            <AlertDialogDescription>{m.curation_companion_reset_description({}, options)}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className={controlClass}>{m.curation_companion_reset_cancel()}</AlertDialogCancel>
+            <AlertDialogCancel className={controlClass}>
+              {m.curation_companion_reset_cancel({}, options)}
+            </AlertDialogCancel>
             <AlertDialogAction
               className={controlClass}
               variant="destructive"
@@ -155,7 +166,7 @@ export function CurationCompanionViews({
                 setChoice(emptyCompanionAdd);
               }}
             >
-              {m.curation_companion_reset_confirm()}
+              {m.curation_companion_reset_confirm({}, options)}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

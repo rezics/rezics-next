@@ -4,7 +4,7 @@ import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics
 import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { PresentationViewEditor } from '../features/pages/curate-view-editor';
-import { publishProfile } from '../features/pages/curate';
+import { overviewOf, publishProfile, withTemplate } from '../features/pages/curate';
 import type { PublicationTransport } from '../features/pages/curation-publish';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime';
@@ -18,6 +18,11 @@ const initialProfile: PresentationProfile = {
   types: [],
   routes: [],
 };
+const editedProfile = withTemplate(
+  initialProfile,
+  { scope: 'route', key: '/books' },
+  overviewOf(initialProfile, { scope: 'generic', key: null })!,
+);
 const reader = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10';
 
 function PublicationStory({ scenario }: { scenario: Scenario }) {
@@ -64,7 +69,7 @@ function PublicationStory({ scenario }: { scenario: Scenario }) {
       <PresentationViewEditor
         initial={{ ok: true, reader, profile: initialProfile, head: 7, digest: profileDigest(initialProfile) }}
         observedSession={{ state: 'signed-in', subject: reader }}
-        locale="en"
+        locale={getLocale()}
         transport={transport}
       />
     </div>
@@ -94,6 +99,15 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function editDraft(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await expect(canvas.getByRole('button', { name: m.curation_publish() })).toBeDisabled();
+  await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.curation_scope() }), 'route');
+  await userEvent.type(canvas.getByRole('textbox', { name: m.curation_key() }), '/books');
+  await userEvent.click(canvas.getByRole('button', { name: m.curation_add() }));
+  await userEvent.click(await canvas.findByRole('button', { name: m.curation_close() }));
+  await expect(canvas.getByRole('button', { name: m.curation_publish() })).toBeEnabled();
+}
 async function submit(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await userEvent.click(await canvas.findByRole('button', { name: m.curation_publish() }));
@@ -109,13 +123,14 @@ async function expectPublished(canvasElement: HTMLElement, head: number) {
   await expect(await canvas.findByText(m.presentation_editor_published())).toBeVisible();
   await userEvent.click(await canvas.findByText(m.presentation_editor_publication_details()));
   await expect(
-    await canvas.findByText(m.presentation_editor_version_reference({ head, digest: profileDigest(initialProfile) })),
+    await canvas.findByText(m.presentation_editor_version_reference({ head, digest: profileDigest(editedProfile) })),
   ).toBeVisible();
 }
 
 export const UnknownPublish: Story = {
   args: { scenario: 'unknown-publish' },
   play: async ({ canvasElement }) => {
+    await editDraft(canvasElement);
     const canvas = await submit(canvasElement);
     await canvas.findByText(m.curation_unknown());
     await retry(canvasElement);
@@ -125,6 +140,7 @@ export const UnknownPublish: Story = {
 export const PartialActivation: Story = {
   args: { scenario: 'partial-activation' },
   play: async ({ canvasElement }) => {
+    await editDraft(canvasElement);
     const canvas = await submit(canvasElement);
     await canvas.findByText(m.curation_partial());
     await retry(canvasElement);
@@ -134,12 +150,8 @@ export const PartialActivation: Story = {
 export const CurrentHeadConflict: Story = {
   args: { scenario: 'current-head-conflict' },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.curation_scope() }), 'route');
-    await userEvent.type(canvas.getByRole('textbox', { name: m.curation_key() }), '/books');
-    await userEvent.click(canvas.getByRole('button', { name: m.curation_add() }));
-    await userEvent.click(canvas.getByRole('button', { name: m.curation_close() }));
-    await submit(canvasElement);
+    await editDraft(canvasElement);
+    const canvas = await submit(canvasElement);
     await userEvent.click(await canvas.findByText(m.presentation_editor_active_version_details()));
     await canvas.findByText(m.curation_actual_head({ head: 9, digest: profileDigest(initialProfile) }));
     await expect(canvas.getByRole('button', { name: 'route: /books' })).toBeVisible();
@@ -152,6 +164,7 @@ export const CurrentHeadConflict: Story = {
 export const RevokedReplay: Story = {
   args: { scenario: 'revoked-replay' },
   play: async ({ canvasElement }) => {
+    await editDraft(canvasElement);
     const canvas = await submit(canvasElement);
     await canvas.findByText(m.curation_partial());
     await retry(canvasElement);
@@ -296,6 +309,7 @@ export const ReadableComparison: Story = {
   args: { scenario: 'current-head-conflict' },
   render: () => <ReviewScenarioStory scenario="stale" />,
   play: async ({ canvasElement }) => {
+    await editDraft(canvasElement);
     const canvas = await submit(canvasElement);
     await expect(await canvas.findByRole('region', { name: m.curation_compare() })).toBeVisible();
     await expect(canvas.getByText('Reading together')).toBeVisible();
@@ -309,6 +323,7 @@ export const InspectionReadFailure: Story = {
   args: { scenario: 'unknown-publish' },
   render: () => <ReviewScenarioStory scenario="read-failure" />,
   play: async ({ canvasElement }) => {
+    await editDraft(canvasElement);
     const canvas = await submit(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.curation_reload_head() }));
     await expect(await canvas.findByText(m.curation_review_read_failed())).toBeVisible();
@@ -322,6 +337,7 @@ export const InvalidReplacement: Story = {
   args: { scenario: 'unknown-publish' },
   render: () => <ReviewScenarioStory scenario="invalid" />,
   play: async ({ canvasElement }) => {
+    await editDraft(canvasElement);
     const canvas = await submit(canvasElement);
     await expect(await canvas.findByText(m.curation_invalid())).toBeVisible();
     await expect(canvas.getByText(m.curation_review_replace_help())).toBeVisible();
