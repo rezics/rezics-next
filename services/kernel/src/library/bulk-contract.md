@@ -67,7 +67,7 @@ the extra target exists. Manifest persistence uses one header insert, one multir
 read; replay uses one header insert attempt and one read. Header insertion and target insertion are atomic.
 
 Manifest pages seek by `(route,operation_id,ordinal)` and emit at most 100 targets, using the installed pending
-partial index for pending work. A same-home attempt performs at most six full-key/indexed statements plus its
+partial index for pending work. A same-home attempt performs at most five full-key/indexed statements plus its
 native executor's static bound: header lock/read, target lock, target transition, indexed pending existence and
 header completion update (the last two share a statement). No runtime quotes, funding or no-refill ledger applies.
 Execution expires 24 hours after preview and results are retained for 48 hours. Retention never substitutes for

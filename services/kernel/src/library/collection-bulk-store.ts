@@ -49,7 +49,8 @@ export class CollectionBulkSelectionTooLarge extends Error {
 }
 
 function key(input: CollectionBulkKey): void {
-  if (routeOf(input.accountId) !== input.route || routeOf(input.operationId) !== input.route)
+  if (!Number.isInteger(input.route) || input.route < 0 || input.route > 65535 ||
+    routeOf(input.accountId) !== input.route || routeOf(input.operationId) !== input.route)
     throw new RangeError('Owner and operation must carry the source route');
 }
 function json(value: unknown, maxBytes = JSON_BYTES): string {
@@ -133,7 +134,7 @@ export async function previewCollectionBulk(
     const frozen = JSON.parse(json(target, TARGET_BYTES)) as CollectionBulkTarget;
     return { ...frozen, operationId: input.operationId, ordinal: String(ordinal) };
   });
-  const sourceDigest = digest(json({ request: intent, targets, initiator: input.initiator, creationReceipt: receipt }, 4_300_000));
+  const sourceDigest = digest(json({ request: intent, targets, initiator: input.initiator, creationReceipt: receipt }, 4_600_000));
   const created = await tx.query(`INSERT INTO library.bulk_operation
     (route,operation_id,account_id,request,initiator,creation_receipt,source_digest,target_count,phase,
       admitted_at,expires_at,results_expire_at)
