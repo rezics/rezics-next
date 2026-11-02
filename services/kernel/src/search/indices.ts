@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch, type SearchRequestWork } from './opensearch.ts';
 import { mixedDiscoveryIndexDefinition as nativeDiscoveryDefinition } from './discovery-documents.ts';
 
@@ -23,6 +24,34 @@ function validatePrefix(prefix: string): void {
 
 function validateGeneration(generation: number): void {
   if (!Number.isSafeInteger(generation) || generation <= 0) throw new RangeError('Invalid subject index generation');
+}
+
+/** A write is never retried: only a fresh bounded native observation can resolve its effect. */
+export async function observedWrite(
+  write: () => Promise<unknown>,
+  observe: () => Promise<boolean>,
+  message: string,
+): Promise<void> {
+  let failure: unknown;
+  try {
+    const response = await write();
+    if (
+      !record(response) ||
+      response.status !== 200 ||
+      !record(response.body) ||
+      response.body.acknowledged !== true ||
+      Object.hasOwn(response.body, 'error')
+    )
+      failure = new SearchUnavailableError(message);
+  } catch (error) {
+    failure = error;
+  }
+  try {
+    if (await observe()) return;
+  } catch (error) {
+    failure = error;
+  }
+  throw new SearchUnavailableError(message, { cause: failure });
 }
 
 export function subjectIndexName(prefix: string, generation: number): string {
@@ -109,14 +138,33 @@ async function createIndex(
   body: SubjectIndexDefinition,
 ): Promise<void> {
   const index = subjectIndexName(prefix, generation);
-  try {
-    // Allocated atomically with the physical index; never recreate this alias on another incarnation.
-    const writeAlias = `${index}-writer-${crypto.randomUUID().replaceAll('-', '')}`;
-    await search.request('PUT', `/${index}`, { ...body, aliases: { [writeAlias]: { is_write_index: true } } });
-  } catch (error) {
-    if (error instanceof OpenSearchError && error.type === 'resource_already_exists_exception') return;
-    throw error;
-  }
+  const before = await readSubjectGenerationInventory(search, prefix);
+  if (before.generations.includes(generation)) return;
+
+  // Allocated atomically with the physical index; never recreate this alias on another incarnation.
+  const writeAlias = `${index}-writer-${crypto.randomUUID().replaceAll('-', '')}`;
+  let alreadyAllocated = false;
+  await observedWrite(
+    async () => {
+      try {
+        return await search.request('PUT', `/${index}`, { ...body, aliases: { [writeAlias]: { is_write_index: true } } });
+      } catch (error) {
+        if (error instanceof OpenSearchError && error.type === 'resource_already_exists_exception') {
+          alreadyAllocated = true;
+          return { status: 200, body: { acknowledged: true } };
+        }
+        throw error;
+      }
+    },
+    async () => {
+      const observed = await readSubjectGenerationInventory(search, prefix);
+      return (
+        observed.generations.includes(generation) &&
+        (alreadyAllocated || observed.writerAliases.get(generation) === writeAlias)
+      );
+    },
+    'Subject generation allocation could not be established',
+  );
 }
 
 /** Read the bounded name-sort writer format from one physical generation's native mapping metadata. */
@@ -125,6 +173,21 @@ export async function readSubjectSortFormat(
   prefix: string,
   generation: number,
 ): Promise<number | null> {
+  return (await readSubjectMapping(search, prefix, generation)).sortFormat;
+}
+
+type SubjectMappingObservation = {
+  metadata: Record<string, unknown>;
+  sortFormat: number | null;
+  activatedAt: string | null;
+  ratingCompatible: boolean;
+};
+
+async function readSubjectMapping(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<SubjectMappingObservation> {
   const index = subjectIndexName(prefix, generation);
   let response: { status: number; body: unknown };
   try {
@@ -137,20 +200,73 @@ export async function readSubjectSortFormat(
 
   const unavailable = () => new SearchUnavailableError('Subject generation mapping is missing or malformed');
   if (!record(response) || response.status !== 200 || !record(response.body)) throw unavailable();
-  // A concrete mapping request must describe exactly that physical generation.
   const names = Object.keys(response.body);
   if (names.length !== 1 || names[0] !== index) throw unavailable();
   const indexMapping = response.body[index];
   if (!record(indexMapping) || !record(indexMapping.mappings) || !record(indexMapping.mappings.properties))
     throw unavailable();
   const mappings = indexMapping.mappings;
-  if (!Object.hasOwn(mappings, '_meta')) return null;
-  const meta = mappings._meta;
-  if (!record(meta)) throw unavailable();
-  if (!Object.hasOwn(meta, 'name_sort_format')) return null;
-  const format = meta.name_sort_format;
-  if (typeof format !== 'number' || !Number.isSafeInteger(format) || format < 0) throw unavailable();
-  return format === SUBJECT_SORT_FORMAT ? SUBJECT_SORT_FORMAT : null;
+  let metadata: Record<string, unknown> = {};
+  if (Object.hasOwn(mappings, '_meta')) {
+    if (!record(mappings._meta)) throw unavailable();
+    metadata = mappings._meta;
+  }
+
+  let sortFormat: number | null = null;
+  if (Object.hasOwn(metadata, 'name_sort_format')) {
+    const format = metadata.name_sort_format;
+    if (typeof format !== 'number' || !Number.isSafeInteger(format) || format < 0) throw unavailable();
+    if (format === SUBJECT_SORT_FORMAT) sortFormat = SUBJECT_SORT_FORMAT;
+  }
+
+  let activatedAt: string | null = null;
+  if (Object.hasOwn(metadata, 'activated_at')) {
+    const value = metadata.activated_at;
+    if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) throw unavailable();
+    activatedAt = value;
+  }
+
+  const properties = mappings.properties;
+  const compatible = (value: unknown, type: string) =>
+    record(value) && value.type === type && value.coerce === false && value.doc_values !== false;
+  return {
+    metadata,
+    sortFormat,
+    activatedAt,
+    ratingCompatible:
+      compatible(properties.rating_score, 'double') && compatible(properties.rating_prior_epoch, 'long'),
+  };
+}
+
+export async function readSubjectActivationTime(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<number | null> {
+  const activatedAt = (await readSubjectMapping(search, prefix, generation)).activatedAt;
+  return activatedAt === null ? null : Date.parse(activatedAt);
+}
+
+/** Set activation metadata once and admit it only after the exact complete mapping is observed. */
+export async function ensureSubjectActivationMetadata(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<number> {
+  const before = await readSubjectMapping(search, prefix, generation);
+  if (before.activatedAt !== null) return Date.parse(before.activatedAt);
+
+  const activatedAt = new Date().toISOString();
+  const metadata = { ...before.metadata, activated_at: activatedAt };
+  await observedWrite(
+    () => search.request('PUT', `/${subjectIndexName(prefix, generation)}/_mapping`, { _meta: metadata }),
+    async () => {
+      const observed = await readSubjectMapping(search, prefix, generation);
+      return observed.ratingCompatible && isDeepStrictEqual(observed.metadata, metadata);
+    },
+    'Subject generation activation mapping could not be established',
+  );
+  return Date.parse(activatedAt);
 }
 
 /** Add rating sort fields to an existing generation without changing its analyzers or sort-key bounds. */
@@ -160,19 +276,26 @@ export async function ensureSubjectRatingMapping(
   generation: number,
 ): Promise<void> {
   const index = subjectIndexName(prefix, generation);
-  await search.request('PUT', `/${index}/_mapping`, {
-    properties: {
-      rating_score: { type: 'double', doc_values: true, coerce: false },
-      rating_prior_epoch: { type: 'long', doc_values: true, coerce: false },
-    },
-  });
+  await observedWrite(
+    () =>
+      search.request('PUT', `/${index}/_mapping`, {
+        properties: {
+          rating_score: { type: 'double', doc_values: true, coerce: false },
+          rating_prior_epoch: { type: 'long', doc_values: true, coerce: false },
+        },
+      }),
+    async () => (await readSubjectMapping(search, prefix, generation)).ratingCompatible,
+    'Subject rating mapping could not be established',
+  );
 }
 
-export async function subjectGenerations(
+type SubjectGenerationInventory = { generations: number[]; active: number | null; writerAliases: Map<number, string> };
+
+async function readSubjectGenerationInventory(
   search: OpenSearch,
   prefix: string,
   work?: SearchRequestWork,
-): Promise<{ generations: number[]; active: number | null }> {
+): Promise<SubjectGenerationInventory> {
   validatePrefix(prefix);
   const alias = subjectAlias(prefix);
   const unavailable = () => new SearchUnavailableError('Subject generation metadata is missing or malformed');
@@ -293,5 +416,19 @@ export async function subjectGenerations(
     if (writerReceipts.get(name) !== writer) throw unavailable();
   }
 
-  return { generations: [...generations.values()].sort((a, b) => a - b), active };
+  const writerAliases = new Map<number, string>();
+  for (const [name, writer] of writerMembers) {
+    const generation = generations.get(name);
+    if (generation !== undefined) writerAliases.set(generation, writer);
+  }
+  return { generations: [...generations.values()].sort((a, b) => a - b), active, writerAliases };
+}
+
+export async function subjectGenerations(
+  search: OpenSearch,
+  prefix: string,
+  work?: SearchRequestWork,
+): Promise<{ generations: number[]; active: number | null }> {
+  const { generations, active } = await readSubjectGenerationInventory(search, prefix, work);
+  return { generations, active };
 }

@@ -176,7 +176,7 @@ afterAll(async () => {
   await search.request('DELETE', `/${index}`).catch(() => undefined);
 });
 
-test('an old strict generation gains only the two rating mappings through one repeatable native request', async () => {
+test('an old strict generation gains only the two rating mappings with observed native writes', async () => {
   const old = structuredClone(indices.subjectIndexDefinition()) as Definition;
   delete old.mappings.properties.rating_score;
   delete old.mappings.properties.rating_prior_epoch;
@@ -201,8 +201,9 @@ test('an old strict generation gains only the two rating mappings through one re
   };
   for (let n = 0; n < 2; n++) {
     await indices.ensureSubjectRatingMapping(observed, prefix, 1);
-    expect(requests).toHaveLength(n + 1);
-    expect(requests[n]).toEqual({ method: 'PUT', path: `/${index}/_mapping`, body: { properties } });
+    expect(requests).toHaveLength((n + 1) * 2);
+    expect(requests[n * 2]).toEqual({ method: 'PUT', path: `/${index}/_mapping`, body: { properties } });
+    expect(requests[n * 2 + 1]).toEqual({ method: 'GET', path: `/${index}/_mapping`, body: undefined });
   }
   const mapping = (await search.request<Mapping>('GET', `/${index}/_mapping`)).body[index]!.mappings;
   expect(mapping.dynamic).toBe('strict');
@@ -292,8 +293,10 @@ test('mapping upgrades validate names and propagate native failures including in
       throw failure;
     },
   };
-  await expect(indices.ensureSubjectRatingMapping(failing, prefix, 1)).rejects.toBe(failure);
-  expect(calls).toBe(1);
+  await expect(indices.ensureSubjectRatingMapping(failing, prefix, 1)).rejects.toThrow(
+    'Subject rating mapping could not be established',
+  );
+  expect(calls).toBe(2);
   for (const [invalidPrefix, generation] of [
     ['../bad', 1],
     [prefix, 0],
@@ -303,5 +306,5 @@ test('mapping upgrades validate names and propagate native failures including in
       RangeError,
     );
   }
-  expect(calls).toBe(1);
+  expect(calls).toBe(2);
 });

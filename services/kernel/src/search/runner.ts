@@ -12,15 +12,17 @@ import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
 import type { PublicPreparation } from './public-preparation.ts';
 import type { Pool } from 'pg';
 import { startRelays } from '../events/relays.ts';
-import { OpenSearchError, type OpenSearch } from './opensearch.ts';
+import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import retire from './retire.sql';
 import {
   createSubjectIndex,
+  ensureSubjectActivationMetadata,
   ensureSubjectRatingMapping,
+  observedWrite,
+  readSubjectActivationTime,
   subjectGenerations,
   subjectIndexName,
   subjectAlias,
-  readSubjectSortFormat,
 } from './indices.ts';
 import { createSubjectIndexer } from './indexer.ts';
 import { createSearchWriterGuard } from './writer-guard.ts';
@@ -72,21 +74,35 @@ export async function startSearchIndexing(options: {
       if (state.generations.length === 0) {
         await createSubjectIndex(options.search, options.prefix, 1);
         if (stopped) return;
-        if (!options.publicPreparation) {
-          const format = await readSubjectSortFormat(options.search, options.prefix, 1);
-          if (stopped) return;
-          await options.search.request('PUT', `/${subjectIndexName(options.prefix, 1)}/_mapping`, {
-            _meta: { ...(format === null ? {} : { name_sort_format: format }), activated_at: new Date().toISOString() },
-          });
-          if (stopped) return;
-          await options.search.request('POST', '/_aliases', {
-            actions: [{ add: { index: subjectIndexName(options.prefix, 1), alias: subjectAlias(options.prefix) } }],
-          });
-          if (stopped) return;
-          state = { generations: [1], active: 1 };
-        } else {
-          state = { generations: [1], active: null };
-        }
+        state = await subjectGenerations(options.search, options.prefix);
+        if (!state.generations.includes(1))
+          throw new SearchUnavailableError('Subject generation allocation could not be observed');
+      }
+
+      const confirmedRatingMappings = new Set<number>();
+      if (!options.publicPreparation && state.active === null) {
+        if (state.generations.length !== 1 || state.generations[0] !== 1)
+          throw new SearchUnavailableError('Subject bootstrap activation is unavailable');
+        await ensureSubjectRatingMapping(options.search, options.prefix, 1);
+        confirmedRatingMappings.add(1);
+        if (stopped) return;
+        await ensureSubjectActivationMetadata(options.search, options.prefix, 1);
+        if (stopped) return;
+        await observedWrite(
+          () =>
+            options.search.request('POST', '/_aliases', {
+              actions: [{ add: { index: subjectIndexName(options.prefix, 1), alias: subjectAlias(options.prefix) } }],
+            }),
+          async () => {
+            const observed = await subjectGenerations(options.search, options.prefix);
+            return observed.generations.includes(1) && observed.active === 1;
+          },
+          'Subject bootstrap activation could not be established',
+        );
+        if (stopped) return;
+        state = await subjectGenerations(options.search, options.prefix);
+        if (state.active !== 1 || !state.generations.includes(1))
+          throw new SearchUnavailableError('Subject bootstrap activation is unavailable');
       }
 
       if (options.publicPreparation) {
@@ -97,17 +113,26 @@ export async function startSearchIndexing(options: {
       }
       let activatedAt: number | undefined;
       if (state.active !== null) {
-        const index = subjectIndexName(options.prefix, state.active);
-        const { body } = await options.search.request<
-          Record<string, { mappings?: { _meta?: { activated_at?: unknown } } }>
-        >('GET', `/${index}/_mapping`);
-        if (stopped) return;
-        const value = body[index]?.mappings?._meta?.activated_at;
-        if (typeof value === 'string') {
-          const parsed = Date.parse(value);
-          if (Number.isFinite(parsed)) activatedAt = parsed;
+        if (options.publicPreparation) {
+          const index = subjectIndexName(options.prefix, state.active);
+          const { body } = await options.search.request<
+            Record<string, { mappings?: { _meta?: { activated_at?: unknown } } }>
+          >('GET', `/${index}/_mapping`);
+          if (stopped) return;
+          const value = body[index]?.mappings?._meta?.activated_at;
+          if (typeof value === 'string') {
+            const parsed = Date.parse(value);
+            if (Number.isFinite(parsed)) activatedAt = parsed;
+          }
+        } else {
+          const observed = await readSubjectActivationTime(options.search, options.prefix, state.active);
+          if (observed === null) throw new SearchUnavailableError('Active Subject generation metadata is unavailable');
+          activatedAt = observed;
         }
       }
+
+      if (!options.publicPreparation && state.active === null)
+        throw new SearchUnavailableError('Subject bootstrap activation is unavailable');
 
       const liveGenerations = state.generations.filter((generation) => {
         if (state.active === null) return true;
@@ -125,7 +150,8 @@ export async function startSearchIndexing(options: {
         // compatible additions before any relay can bulk a rating-bearing document.
         for (const generation of liveGenerations) {
           if (stopped) return;
-          await ensureSubjectRatingMapping(options.search, options.prefix, generation);
+          if (!confirmedRatingMappings.has(generation))
+            await ensureSubjectRatingMapping(options.search, options.prefix, generation);
         }
         if (stopped) return;
         const previous = current;

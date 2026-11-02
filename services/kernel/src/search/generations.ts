@@ -28,6 +28,7 @@ import { discardConnection } from '../database/pool.ts';
 import {
   createSubjectIndex,
   MAX_SUBJECT_GENERATIONS,
+  observedWrite,
   readSubjectSortFormat,
   SUBJECT_SORT_FORMAT,
   subjectAlias,
@@ -40,6 +41,8 @@ import { readFreshness } from './freshness.ts';
 import reconcile from './reconcile.sql';
 import lockRebuild from './rebuild-lock.sql';
 import unlockRebuild from './rebuild-unlock.sql';
+
+export { observedWrite };
 import type { SubjectSource } from './source.ts';
 import { subjectConsumer, startDiscoveryIndexing } from './runner.ts';
 
@@ -160,34 +163,6 @@ async function indexCounts(search: OpenSearch, index: string): Promise<Map<numbe
     counts.set(key, count);
   }
   return counts;
-}
-
-/** A write is never retried: only a fresh bounded native observation can resolve its effect. */
-export async function observedWrite(
-  write: () => Promise<unknown>,
-  observe: () => Promise<boolean>,
-  message: string,
-): Promise<void> {
-  let failure: unknown;
-  try {
-    const response = await write();
-    if (
-      !record(response) ||
-      response.status !== 200 ||
-      !record(response.body) ||
-      response.body.acknowledged !== true ||
-      Object.hasOwn(response.body, 'error')
-    )
-      failure = new SearchUnavailableError(message);
-  } catch (error) {
-    failure = error;
-  }
-  try {
-    if (await observe()) return;
-  } catch (error) {
-    failure = error;
-  }
-  throw new SearchUnavailableError(message, { cause: failure });
 }
 
 export async function rebuildSubjects(options: {
