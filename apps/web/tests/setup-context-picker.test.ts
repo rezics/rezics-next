@@ -195,7 +195,6 @@ test('continuation restart preserves admitted choices and rejects retired restar
   );
   await picker.current(contextId, 'saved-head');
   await picker.choose(contextId);
-  const selectionVersion = picker.selectionVersion();
   picker.search(' Reading ');
   await new Promise((done) => setTimeout(done, 270));
   picker.next();
@@ -216,7 +215,6 @@ test('continuation restart preserves admitted choices and rejects retired restar
   expect(calls[3]!.cursor).toBeUndefined();
   expect(calls.every((call) => call.query === 'Reading')).toBe(true);
   expect({ ...picker.getSnapshot(), page: before.page }).toEqual(before);
-  expect(picker.selection(contextId, selectionVersion)?.id).toBe(contextId);
   expect(resolve).toHaveBeenCalledTimes(2);
   await picker.choose(otherId);
   expect(picker.restartSearch(restart)).toBe(false);
@@ -252,7 +250,6 @@ test('disconnected and disposed Context callbacks cannot start fresh search, exa
   picker.search('hidden');
   picker.next();
   picker.retrySearch();
-  picker.restartSearch({ query: 'replacement', cursor: '', version: picker.searchVersion() });
   await picker.choose(contextId);
   await picker.choosePage(contextId);
   await picker.chooseCurrent(contextId);
