@@ -5,7 +5,7 @@ import type { CreateFailure } from '../src/features/catalogue/create-subject';
 import type { PublicationCommand, PublicationTransport } from '../src/features/catalogue/publication-editor';
 import type { PublicationScenario } from '../src/kernel/fake/publication-editor';
 
-// UNRUN authored actual-component regression. A DOM renderer supplies no browser geometry, native or SSR proof.
+// A DOM renderer supplies no browser geometry, native or SSR proof.
 test('independent publication creation, local corrections, immutable recovery and actual reader results compose the complete family', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -30,7 +30,7 @@ test('independent publication creation, local corrections, immutable recovery an
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
-  const { within } = await import(Bun.resolveSync('@testing-library/dom', storybook));
+  const { within, fireEvent } = await import(Bun.resolveSync('@testing-library/dom', storybook));
   const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
   const { PublicationEditor } = await import('../src/features/catalogue/publication-editor-form');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
@@ -132,8 +132,7 @@ test('independent publication creation, local corrections, immutable recovery an
   const input = (name: string, index = 0) => scope(index).getByRole('textbox', { name }) as HTMLInputElement;
   const replace = (element: HTMLElement, value: string) =>
     act(async () => {
-      await user.clear(element);
-      if (value) await user.type(element, value);
+      fireEvent.input(element, { target: { value } });
     });
   const click = (name: string, index = 0) => act(async () => user.click(scope(index).getByRole('button', { name })));
   const add = (property: string, index = 0) =>
