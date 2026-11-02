@@ -439,7 +439,8 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
   function dispatch(
     file: string,
     after: string[] = [],
-    acceptance = ['true'],
+    // null leaves the command to the worker.
+    acceptance: string[] | null = ['true'],
     goal = 'fixture',
     target?: 'main' | 'stabilize',
   ) {
@@ -449,7 +450,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
       markdown
         .replace('goal: fixture', `goal: ${goal}${target ? `\ntarget: ${target}` : ''}`)
         .replace('paths: [result.txt]', `paths: [${file}]`)
-        .replace('command: [bun, test]', `command: ${JSON.stringify(acceptance)}`)
+        .replace('  command: [bun, test]\n', acceptance ? `  command: ${JSON.stringify(acceptance)}\n` : '')
         .replace('waiting: []', `waiting: []\nafter: ${JSON.stringify(after)}`),
     );
     const task = h.tasks.dispatch(briefFile);

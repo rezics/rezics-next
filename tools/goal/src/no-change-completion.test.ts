@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { git } from './tasks.ts';
 import { integrationHarness } from './test-support.ts';
 
-async function unchangedClaim(h: ReturnType<typeof integrationHarness>, command: string[]) {
+async function unchangedClaim(h: ReturnType<typeof integrationHarness>, command: string[] | null) {
   h.ensureDev();
   const source = h.advanceDev('retained.txt');
   const task = h.dispatch('retained.txt', [], command);
@@ -31,6 +31,25 @@ test('an unchanged claim runs its original acceptance on the retained source wit
     const saved = h.store.events(task.id, 1).find((event) => event.kind === 'gate-outcome')!;
     expect(JSON.parse(saved.body).retainedSourceAcceptance).toEqual(outcome.retainedSourceAcceptance);
     expect(readFileSync(outcome.logPath, 'utf8')).toContain(`source=${source}: ${command.join(' ')}`);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('an unchanged claim without an acceptance command integrates on its represented source', async () => {
+  const h = integrationHarness();
+  try {
+    const { source, task } = await unchangedClaim(h, null);
+    const dev = h.head();
+
+    await h.train();
+
+    const outcome = h.outcomes[0]!;
+    expect(outcome.passed).toBe(true);
+    expect(outcome.mergedCommit).toBe(source);
+    expect(outcome.retainedSourceAcceptance).toEqual({ sourceCommit: source, command: [], status: 'unavailable' });
+    expect(h.store.task(task.id).state).toBe('integrated');
+    expect(h.head()).toBe(dev);
   } finally {
     h.dispose();
   }
