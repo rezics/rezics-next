@@ -279,7 +279,10 @@ test('Recipe creation and current correction share complete frames with independ
     )!;
 
     correction.setScenario('conflict');
-    await act(async () => user.keyboard('{Enter}'));
+    await act(async () => {
+      within(draft).getByRole('button', { name: m.correction_submit() }).focus();
+      await user.keyboard('{Enter}');
+    });
     await until(() => draft.textContent!.includes(m.correction_stale()));
     const stale = posts(correction, '/candidates').find(
       (call) => (call.body as { statement: { property: { id: string } } }).statement.property.id === ingredient,
