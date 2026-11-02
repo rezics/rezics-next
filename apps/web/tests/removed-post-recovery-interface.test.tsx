@@ -106,29 +106,122 @@ test('Complete usable removed post recovery and write prompts: native admission 
     decisionId,
   };
   const { decisionId: _decision, ...withoutDecision } = withheld;
-  const cases: { label: string; value: Props; restore: boolean; decision: boolean; identity: boolean; time?: string }[] = [
-    { label: 'author with supplied deadline', value: props(erased(0, deadline), { onRestore: () => {} }), restore: true, decision: false, identity: false, time: deadline },
-    { label: 'another reader without native eligibility', value: props(erased(0), { viewerId: 'another-reader' }), restore: false, decision: false, identity: false },
-    { label: 'signed out', value: props(erased(0, deadline), { viewerId: undefined, onRestore: () => {} }), restore: false, decision: false, identity: false },
-    { label: 'no supplied callback', value: props(erased(0, deadline)), restore: false, decision: false, identity: false },
-    { label: 'expired deadline', value: props(erased(0, '2000-01-01T00:00:00.000Z'), { onRestore: () => {} }), restore: false, decision: false, identity: false },
-    { label: 'invalid deadline', value: props(erased(0, 'unknown'), { onRestore: () => {} }), restore: false, decision: false, identity: false },
-    { label: 'unknown server clock', value: props(erased(0), { deadlineUnknown: true, onRestore: () => {} }), restore: true, decision: false, identity: false },
-    { label: 'unknown clock without command authority', value: props(erased(0), { deadlineUnknown: true }), restore: false, decision: false, identity: false },
-    { label: 'withheld author', value: props(withheld, { onRestore: () => {} }), restore: false, decision: true, identity: true, time: source.createdAt },
-    { label: 'withheld other reader', value: props(withheld, { viewerId: 'another-reader', onRestore: () => {} }), restore: false, decision: false, identity: true, time: source.createdAt },
-    { label: 'withheld without admitted decision', value: props(withoutDecision), restore: false, decision: false, identity: true, time: source.createdAt },
-    { label: 'restored command awaiting readable content', value: props(erased(0, deadline), { restored: true, onRestore: () => {} }), restore: false, decision: false, identity: false },
+  const cases: {
+    label: string;
+    value: Props;
+    restore: boolean;
+    decision: boolean;
+    identity: boolean;
+    time?: string;
+  }[] = [
+    {
+      label: 'author with supplied deadline',
+      value: props(erased(0, deadline), { onRestore: () => {} }),
+      restore: true,
+      decision: false,
+      identity: false,
+      time: deadline,
+    },
+    {
+      label: 'another reader without native eligibility',
+      value: props(erased(0), { viewerId: 'another-reader' }),
+      restore: false,
+      decision: false,
+      identity: false,
+    },
+    {
+      label: 'signed out',
+      value: props(erased(0, deadline), { viewerId: undefined, onRestore: () => {} }),
+      restore: false,
+      decision: false,
+      identity: false,
+    },
+    {
+      label: 'no supplied callback',
+      value: props(erased(0, deadline)),
+      restore: false,
+      decision: false,
+      identity: false,
+    },
+    {
+      label: 'expired deadline',
+      value: props(erased(0, '2000-01-01T00:00:00.000Z'), { onRestore: () => {} }),
+      restore: false,
+      decision: false,
+      identity: false,
+    },
+    {
+      label: 'invalid deadline',
+      value: props(erased(0, 'unknown'), { onRestore: () => {} }),
+      restore: false,
+      decision: false,
+      identity: false,
+    },
+    {
+      label: 'unknown server clock',
+      value: props(erased(0), { deadlineUnknown: true, onRestore: () => {} }),
+      restore: true,
+      decision: false,
+      identity: false,
+    },
+    {
+      label: 'unknown clock without command authority',
+      value: props(erased(0), { deadlineUnknown: true }),
+      restore: false,
+      decision: false,
+      identity: false,
+    },
+    {
+      label: 'withheld author',
+      value: props(withheld, { onRestore: () => {} }),
+      restore: false,
+      decision: true,
+      identity: true,
+      time: source.createdAt,
+    },
+    {
+      label: 'withheld other reader',
+      value: props(withheld, { viewerId: 'another-reader', onRestore: () => {} }),
+      restore: false,
+      decision: false,
+      identity: true,
+      time: source.createdAt,
+    },
+    {
+      label: 'withheld without admitted decision',
+      value: props(withoutDecision),
+      restore: false,
+      decision: false,
+      identity: true,
+      time: source.createdAt,
+    },
+    {
+      label: 'restored command awaiting readable content',
+      value: props(erased(0, deadline), { restored: true, onRestore: () => {} }),
+      restore: false,
+      decision: false,
+      identity: false,
+    },
   ];
   try {
     for (const example of cases) {
       // Adversarial stale bytes must not become a title, hidden node, link, tooltip or data attribute.
-      const poisoned = { ...example.value.post, body: { text: privateBody }, title: privateTitle } as unknown as ThreadPost;
+      const poisoned = {
+        ...example.value.post,
+        body: { text: privateBody },
+        title: privateTitle,
+      } as unknown as ThreadPost;
       root.innerHTML = renderToStaticMarkup(
-        <LocaleProvider locale="en"><ol><RemovedPost {...example.value} post={poisoned} /></ol></LocaleProvider>,
+        <LocaleProvider locale="en">
+          <ol>
+            <RemovedPost {...example.value} post={poisoned} />
+          </ol>
+        </LocaleProvider>,
       );
       const row = root.querySelector('li')!;
-      const restore = [...row.querySelectorAll('button')].filter((button) => button.textContent === m.thread_post_restore());
+      const restore = [...row.querySelectorAll('button')].filter(
+        (button) => button.textContent === m.thread_post_restore(),
+      );
       expect(restore.length, example.label).toBe(Number(example.restore));
       expect(Boolean(row.querySelector('a[href^="/moderation/decisions/"]')), example.label).toBe(example.decision);
       expect(row.textContent?.includes('Mira Okabe'), example.label).toBe(example.identity);
@@ -146,7 +239,9 @@ test('Complete usable removed post recovery and write prompts: native admission 
         expect(row.querySelector('button')).toBeNull();
       expect(row.querySelector('time')?.getAttribute('datetime') ?? undefined, example.label).toBe(example.time);
       if (example.decision)
-        expect(row.querySelector('a[href^="/moderation/"]')?.getAttribute('href')).toBe(`/moderation/decisions/${encodeURIComponent(decisionId)}`);
+        expect(row.querySelector('a[href^="/moderation/"]')?.getAttribute('href')).toBe(
+          `/moderation/decisions/${encodeURIComponent(decisionId)}`,
+        );
       if (example.value.deadlineUnknown) expect(row.textContent).toContain(m.thread_post_restore_deadline_unknown());
       if (example.value.restored) expect(row.textContent).toContain(m.thread_post_unavailable());
       expect(row.id).toBe(example.value.anchorId);
@@ -195,21 +290,54 @@ test('Complete usable removed post recovery and write prompts: independent callb
   const returnTo = `/de/threads/${source.threadId}/lange-referenz?value=${longReference}&mode=review#post-${source.id}`;
   const longLabel = 'Melden Sie sich an, um zu Ihrem gespeicherten Diskussionsbeitrag zurückzukehren. '.repeat(4);
   // This is the caller's pending guard, not a new pending state or retry inside RemovedPost.
-  const restoreFirst = () => { if (!pending) { pending = true; restores[0]++; } };
-  const restoreSecond = () => { restores[1]++; };
+  const restoreFirst = () => {
+    if (!pending) {
+      pending = true;
+      restores[0]++;
+    }
+  };
+  const restoreSecond = () => {
+    restores[1]++;
+  };
   const render = () => (
     <LocaleProvider locale="de">
       <ol>
-        <RemovedPost {...props(erased(0, deadline), {
-          anchorId: 'independent-recovery-first', itemRef: rows[0], menuButton: menus[0], minHeight: 320,
-          onRestore: restoreFirst, onCopyLink: () => { copies[0]++; }, onRefresh: () => { refreshes[0]++; },
-          restoreError: failure, existingReviewId: failure ? reviewId : undefined, restored,
-        })} />
-        <RemovedPost {...props(erased(1), {
-          anchorId: 'independent-recovery-second', itemRef: rows[1], menuButton: menus[1], minHeight: 280,
-          deadlineUnknown: true, restoreError: error, existingReviewId: reviewId,
-          onRestore: restoreSecond, onCopyLink: () => { copies[1]++; }, onRefresh: () => { refreshes[1]++; },
-        })} />
+        <RemovedPost
+          {...props(erased(0, deadline), {
+            anchorId: 'independent-recovery-first',
+            itemRef: rows[0],
+            menuButton: menus[0],
+            minHeight: 320,
+            onRestore: restoreFirst,
+            onCopyLink: () => {
+              copies[0]++;
+            },
+            onRefresh: () => {
+              refreshes[0]++;
+            },
+            restoreError: failure,
+            existingReviewId: failure ? reviewId : undefined,
+            restored,
+          })}
+        />
+        <RemovedPost
+          {...props(erased(1), {
+            anchorId: 'independent-recovery-second',
+            itemRef: rows[1],
+            menuButton: menus[1],
+            minHeight: 280,
+            deadlineUnknown: true,
+            restoreError: error,
+            existingReviewId: reviewId,
+            onRestore: restoreSecond,
+            onCopyLink: () => {
+              copies[1]++;
+            },
+            onRefresh: () => {
+              refreshes[1]++;
+            },
+          })}
+        />
       </ol>
       <div id="long-write-prompts">
         <SignInPrompt returnTo={returnTo} label={longLabel} />
@@ -218,8 +346,8 @@ test('Complete usable removed post recovery and write prompts: independent callb
       </div>
     </LocaleProvider>
   );
-  const button = (index: number, label: string) => [...rows[index]!.current!.querySelectorAll('button')]
-    .find((element) => element.textContent === label)!;
+  const button = (index: number, label: string) =>
+    [...rows[index]!.current!.querySelectorAll('button')].find((element) => element.textContent === label)!;
   const click = async (element: HTMLElement) => {
     await act(async () => {
       element.click();
@@ -235,7 +363,9 @@ test('Complete usable removed post recovery and write prompts: independent callb
   };
 
   try {
-    await act(async () => { root.render(render()); });
+    await act(async () => {
+      root.render(render());
+    });
     expect(restores).toEqual([0, 0]);
     expect(refreshes).toEqual([0, 0]);
     const first = rows[0]!.current!;
@@ -269,7 +399,9 @@ test('Complete usable removed post recovery and write prompts: independent callb
 
     pending = false;
     failure = error;
-    await act(async () => { root.render(render()); });
+    await act(async () => {
+      root.render(render());
+    });
     expect(rows[0]!.current).toBe(first);
     expect(menus[0]!.current).toBe(firstMenu);
     expect(first.querySelector('[role="alert"]')?.textContent).toContain(error);
@@ -281,8 +413,9 @@ test('Complete usable removed post recovery and write prompts: independent callb
     firstMenu.focus();
     expect(window.document.activeElement).toBe(menus[0]!.current);
     await keyboard(firstMenu, '{Enter}');
-    const copy = [...window.document.querySelectorAll('[role="menuitem"]')]
-      .find((element) => element.textContent === m.thread_content_copy_link())!;
+    const copy = [...window.document.querySelectorAll('[role="menuitem"]')].find(
+      (element) => element.textContent === m.thread_content_copy_link(),
+    )!;
     expect(copy).toBeDefined();
     await keyboard(copy as unknown as HTMLElement, '{Enter}');
     expect(copies).toEqual([1, 0]);
@@ -290,14 +423,17 @@ test('Complete usable removed post recovery and write prompts: independent callb
     secondMenu.focus();
     expect(window.document.activeElement).toBe(secondMenu);
     await keyboard(secondMenu, '{Enter}');
-    const secondCopy = [...window.document.querySelectorAll('[role="menuitem"]')]
-      .find((element) => element.textContent === m.thread_content_copy_link())!;
+    const secondCopy = [...window.document.querySelectorAll('[role="menuitem"]')].find(
+      (element) => element.textContent === m.thread_content_copy_link(),
+    )!;
     expect(secondCopy).toBeDefined();
     await keyboard(secondCopy as unknown as HTMLElement, '{Enter}');
     expect(copies).toEqual([1, 1]);
     expect(window.document.activeElement).toBe(menus[1]!.current);
     restored = true;
-    await act(async () => { root.render(render()); });
+    await act(async () => {
+      root.render(render());
+    });
     expect(rows[0]!.current).toBe(first);
     expect(first.textContent).toContain(m.thread_post_unavailable());
     expect(button(0, m.thread_post_restore())).toBeUndefined();
@@ -307,7 +443,9 @@ test('Complete usable removed post recovery and write prompts: independent callb
     first.focus();
     expect(window.document.activeElement).toBe(first);
     expect(first.tabIndex).toBe(-1);
-    expect(host.querySelectorAll('[id]').length).toBe(new Set([...host.querySelectorAll('[id]')].map((element) => element.id)).size);
+    expect(host.querySelectorAll('[id]').length).toBe(
+      new Set([...host.querySelectorAll('[id]')].map((element) => element.id)).size,
+    );
     const prompts = host.querySelector('#long-write-prompts')!;
     const links = [...prompts.querySelectorAll('a')];
     expect(links).toHaveLength(3);
@@ -321,7 +459,9 @@ test('Complete usable removed post recovery and write prompts: independent callb
     expect(host.querySelector('details')).toBeNull();
     // Layout, focus indication and 44px measurements are browser observations in the canonical story.
   } finally {
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
     setLocale(previousLocale, { reload: false });
     restoreGlobals();
     await window.happyDOM.close();

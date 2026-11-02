@@ -64,7 +64,9 @@ function RecoveryInterface() {
       <main className="mx-auto min-w-0 max-w-2xl space-y-8 px-4 py-8">
         <h1 className="text-2xl font-semibold">Removed post recovery and write prompts</h1>
         <section aria-labelledby="recovery-author-heading" className="min-w-0 space-y-3">
-          <h2 id="recovery-author-heading" className="text-lg font-medium">Author: independent recovery controls</h2>
+          <h2 id="recovery-author-heading" className="text-lg font-medium">
+            Author: independent recovery controls
+          </h2>
           <ol className="min-w-0 space-y-4">
             <RemovedPost
               {...common}
@@ -114,20 +116,48 @@ function RecoveryInterface() {
           </Button>
         </section>
         <section aria-labelledby="recovery-other-heading">
-          <h2 id="recovery-other-heading" className="text-lg font-medium">Another reader: deleted post</h2>
+          <h2 id="recovery-other-heading" className="text-lg font-medium">
+            Another reader: deleted post
+          </h2>
           <ol>
-            <RemovedPost {...common} post={erased(2)} viewerId="another-reader" anchorId="recovery-nonowner" onCopyLink={() => {}} />
+            <RemovedPost
+              {...common}
+              post={erased(2)}
+              viewerId="another-reader"
+              anchorId="recovery-nonowner"
+              onCopyLink={() => {}}
+            />
           </ol>
         </section>
         <section aria-labelledby="recovery-withheld-heading">
-          <h2 id="recovery-withheld-heading" className="text-lg font-medium">Withheld: author and another reader</h2>
+          <h2 id="recovery-withheld-heading" className="text-lg font-medium">
+            Withheld: author and another reader
+          </h2>
           <ol className="space-y-4">
-            <RemovedPost {...common} post={withheld} viewerId={authorId} anchorId="recovery-withheld-owner" onCopyLink={() => {}} />
-            <RemovedPost {...common} post={withheld} viewerId="another-reader" anchorId="recovery-withheld-reader" onCopyLink={() => {}} />
+            <RemovedPost
+              {...common}
+              post={withheld}
+              viewerId={authorId}
+              anchorId="recovery-withheld-owner"
+              onCopyLink={() => {}}
+            />
+            <RemovedPost
+              {...common}
+              post={withheld}
+              viewerId="another-reader"
+              anchorId="recovery-withheld-reader"
+              onCopyLink={() => {}}
+            />
           </ol>
         </section>
-        <section aria-labelledby="recovery-prompts-heading" className="min-w-0 space-y-4" data-testid="recovery-prompts">
-          <h2 id="recovery-prompts-heading" className="text-lg font-medium">Long localized write prompts</h2>
+        <section
+          aria-labelledby="recovery-prompts-heading"
+          className="min-w-0 space-y-4"
+          data-testid="recovery-prompts"
+        >
+          <h2 id="recovery-prompts-heading" className="text-lg font-medium">
+            Long localized write prompts
+          </h2>
           <SignInPrompt returnTo={returnTo} label={longLabel} />
           <SignInPrompt compact returnTo={returnTo} label={'登入後返回這篇討論並繼續閱讀與回覆。'.repeat(12)} />
           <ExistingReviewNotice reviewId={reviewId} />
@@ -177,14 +207,25 @@ export const Canonical: Story = {
     await expect(other.querySelector('button')).toBeNull();
     await expect(withheldOwner).toHaveTextContent('Mira Okabe');
     await expect(withheldOwner.querySelector('time')).toHaveAttribute('datetime', source.createdAt);
-    await expect(within(withheldOwner).getByRole('link', { name: m.thread_post_decision_link() }))
-      .toHaveAttribute('href', `/moderation/decisions/${encodeURIComponent(decisionId)}`);
+    await expect(within(withheldOwner).getByRole('link', { name: m.thread_post_decision_link() })).toHaveAttribute(
+      'href',
+      `/moderation/decisions/${encodeURIComponent(decisionId)}`,
+    );
     await expect(withheldReader.querySelector('a[href^="/moderation/"]')).toBeNull();
-    await expect(canvas.getByTestId('recovery-prompts').querySelector('a'))
-      .toHaveAttribute('href', `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`);
+    await expect(canvas.getByTestId('recovery-prompts').querySelector('a')).toHaveAttribute(
+      'href',
+      `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`,
+    );
 
     await userEvent.keyboard('{Tab}');
-    for (const control of [restore, secondRestore, refresh, more, ...canvas.getByTestId('recovery-prompts').querySelectorAll<HTMLAnchorElement>('a'), ...withheldOwner.querySelectorAll<HTMLAnchorElement>('a[href^="/moderation/"]')]) {
+    for (const control of [
+      restore,
+      secondRestore,
+      refresh,
+      more,
+      ...canvas.getByTestId('recovery-prompts').querySelectorAll<HTMLAnchorElement>('a'),
+      ...withheldOwner.querySelectorAll<HTMLAnchorElement>('a[href^="/moderation/"]'),
+    ]) {
       const rect = control.getBoundingClientRect();
       await expect(rect.width).toBeGreaterThanOrEqual(44);
       await expect(rect.height).toBeGreaterThanOrEqual(44);
@@ -207,15 +248,19 @@ export const Canonical: Story = {
     await userEvent.click(finish);
     await expect(finish).toBeDisabled();
     await expect(within(owner).getByRole('alert')).toHaveTextContent(failure);
-    await expect(within(owner).getByRole('link', { name: m.thread_review_existing() }))
-      .toHaveAttribute('href', `/${getLocale()}/threads/${reviewId}`);
+    await expect(within(owner).getByRole('link', { name: m.thread_review_existing() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/threads/${reviewId}`,
+    );
     await userEvent.click(within(owner).getByRole('button', { name: m.thread_post_refresh() }));
     await expect(result).toHaveTextContent('refresh calls 1, 1');
     await expect(owner.querySelector('[data-slot="tombstone"]')).not.toBeNull();
     await userEvent.click(more);
     await userEvent.click(await screen.findByText(m.thread_content_copy_link(), { exact: true }));
     await expect(result).toHaveTextContent('copy calls 1, 0');
-    await waitFor(() => expect(within(owner).getByRole('button', { name: m.thread_content_more_actions() })).toHaveFocus());
+    await waitFor(() =>
+      expect(within(owner).getByRole('button', { name: m.thread_content_more_actions() })).toHaveFocus(),
+    );
     owner.focus();
     await expect(owner).toHaveFocus();
     await expect(owner).toHaveAttribute('tabindex', '-1');
