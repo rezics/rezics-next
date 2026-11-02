@@ -16,6 +16,11 @@ const props = {
   identitySource: async () => ({ kind: 'unavailable' as const }),
 };
 const confirm = (host: HTMLElement) => fill(host.querySelector('input')!, 'delete my account');
+const submit = (host: HTMLElement) =>
+  flush(() => {
+    confirm(host);
+    send(host);
+  });
 const restore = () => {
   const event = new dom.Event('pageshow');
   Object.defineProperty(event, 'persisted', { value: true });
@@ -53,10 +58,7 @@ test('read recovery is single-flight, preserves the human and needs a new confir
 });
 test('uncertain deletion survives cached return with its exact command; accepted cleanup stays pending', async () => {
   const page = await open(<DeleteAccountContent {...props} initial={initial} />, body);
-  await flush(() => {
-    confirm(page.host);
-    send(page.host);
-  });
+  await submit(page.host);
   await flush(() => page.calls[0]!.resolve(approval()));
   await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
   await flush(() => page.calls[2]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
@@ -67,10 +69,7 @@ test('uncertain deletion survives cached return with its exact command; accepted
   await flush(restore);
   expect(page.calls).toHaveLength(3);
   expect(page.host.querySelector<HTMLInputElement>('input')?.value, page.host.textContent ?? '').toBe('');
-  await flush(() => {
-    confirm(page.host);
-    send(page.host);
-  });
+  await submit(page.host);
   expect(page.calls[3]!.body).toEqual({ operationKey: saved.operationKey, operation: saved.operation });
   await flush(() => page.calls[3]!.resolve(approval()));
   await flush(() => page.calls[4]!.resolve(Response.json({ accountId: initial.accountId })));
@@ -93,10 +92,7 @@ for (const phase of ['read', 'approval', 'success', 'step-up'] as const)
       globalThis.fetch = (() => read.promise) as typeof fetch;
       await flush(restore);
     } else {
-      await flush(() => {
-        confirm(page.host);
-        send(page.host);
-      });
+      await submit(page.host);
       if (phase !== 'approval') await flush(() => page.calls[0]!.resolve(approval()));
     }
     await flush(leave);
