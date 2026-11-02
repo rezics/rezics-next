@@ -43,6 +43,7 @@ test('Multilingual terms show actionable field-specific corrections without chan
   const root = createRoot(host as unknown as HTMLElement);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   let retiredCorrection: (() => unknown) | undefined;
+  let retiredLanguage: (() => unknown) | undefined;
 
   try {
     // Data language and interface language are independent in the actual default page.
@@ -171,24 +172,61 @@ test('Multilingual terms show actionable field-specific corrections without chan
       const queued = (element: object) => {
         const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;
         const props = Reflect.get(element, key) as { onClick: (event: unknown) => unknown };
-        return () => props.onClick({ currentTarget: element, preventDefault() {} });
+        return () => props.onClick({ currentTarget: element, detail: 0, preventDefault() {} });
       };
+      const keyboardClick = (element: HTMLElement) =>
+        act(async () => {
+          element.focus();
+          await user.keyboard('{Enter}');
+        });
       if (retiredCorrection) {
         const focused = window.document.activeElement;
         await act(async () => {
           retiredCorrection!();
+          retiredLanguage!();
         });
         expect(control('terms-language').value).toBe(locale);
         expect(window.document.activeElement).toBe(focused);
       }
 
       await replace('terms-new-language', 'english!');
-      await click(m.catalogue_create_add_language({}, options));
+      await keyboardClick(button(m.catalogue_create_add_language({}, options)));
       correction('terms-new-language', m.catalogue_terms_validation_language({}, options));
+      expect(window.document.activeElement).toBe(control('terms-new-language'));
+      expect(control('terms-language').value).toBe(locale);
       const languageErrorId = control('terms-new-language').getAttribute('aria-describedby')!;
       await replace('terms-new-language', 'en-US');
-      await click(m.catalogue_create_add_language({}, options));
+      await keyboardClick(button(m.catalogue_create_add_language({}, options)));
       expect(window.document.getElementById(languageErrorId)).toBeNull();
+      expect(window.document.activeElement).toBe(control('terms-labels-mode'));
+      expect(control('terms-new-language').value).toBe('');
+      await mode('aliases', 'set');
+      await replace('terms-aliases', 'Retained alias');
+      await language('en');
+      expect(window.document.activeElement).toBe(control('terms-language'));
+      await replace('terms-new-language', 'en-US');
+      await keyboardClick(button(m.catalogue_create_add_language({}, options)));
+      expect(window.document.activeElement).toBe(control('terms-aliases'));
+      expect(control('terms-aliases').value).toBe('Retained alias');
+      expect(control('terms-language').querySelectorAll('option[value="en-US"]')).toHaveLength(1);
+      const resume = `en-US: ${m.catalogue_create_aliases({}, options)}`;
+      await language('en');
+      await keyboardClick(button(resume));
+      expect(window.document.activeElement).toBe(control('terms-aliases'));
+      await language('en');
+      await click(resume);
+      expect(window.document.activeElement).toBe(button(resume));
+      expect(control('terms-aliases').value).toBe('Retained alias');
+      await language('en');
+      await act(async () => {
+        const opener = button(resume);
+        opener.focus();
+        queued(opener)();
+        control('terms-new-language').focus();
+        opener.focus();
+      });
+      expect(control('terms-language').value).toBe('en-US');
+      expect(window.document.activeElement).toBe(button(resume));
 
       // A populated added language stays local through Cancel and Escape, then only its tab and draft are removed.
       await language('ja');
@@ -402,9 +440,20 @@ test('Multilingual terms show actionable field-specific corrections without chan
         await replace('terms-labels', 'Corrected title');
       }
       serverFailure = undefined;
+      await replace('terms-new-language', 'fr');
+      const refusedAdd = queued(button(m.catalogue_create_add_language({}, options)));
+      retiredLanguage = queued(button(`ja: ${m.catalogue_create_description({}, options)}`));
       await save();
       expect(host.textContent).toContain(m.catalogue_terms_uncertain({}, options));
       expect(control('terms-labels').closest('fieldset')?.disabled).toBe(true);
+      const beforeRefusal = window.document.activeElement;
+      await act(async () => {
+        refusedAdd();
+        retiredLanguage!();
+      });
+      expect(control('terms-language').value).toBe('en');
+      expect(window.document.activeElement).toBe(beforeRefusal);
+      expect(control('terms-language').querySelector('option[value="fr"]')).toBeNull();
       const uncertain = commands.at(-1)!;
       expect(uncertain).toMatchObject({
         etag: snapshot.etag,

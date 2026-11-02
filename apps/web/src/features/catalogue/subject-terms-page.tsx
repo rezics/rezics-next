@@ -338,6 +338,106 @@ function SubjectTermsPageLive({
     setLanguage(next);
   }
 
+  // Rendered actions belong to this reading and draft, even when their DOM nodes survive.
+  const languageAdmission = useMemo(
+    () => ({}),
+    [visit, base, drafts, addedLanguages, language, newLanguage, busy, locked],
+  );
+  const currentLanguageAdmission = useRef(languageAdmission);
+  currentLanguageAdmission.current = languageAdmission;
+  const languageFocus = useRef<{
+    visit: TermsReadVisit;
+    snapshot: TermsSnapshot;
+    drafts: TermsDraft;
+    tag: string;
+    invalid: boolean;
+    add: boolean;
+    opener: HTMLButtonElement;
+    cancel: () => void;
+  } | null>(null);
+  const [, scheduleLanguageFocus] = useState(0);
+  useLayoutEffect(() => () => languageFocus.current?.cancel(), []);
+  useLayoutEffect(() => {
+    const intent = languageFocus.current;
+    if (!intent) return;
+    intent.cancel();
+    if (
+      !lifetime.active() ||
+      currentVisit.current !== intent.visit ||
+      base !== intent.snapshot ||
+      drafts !== intent.drafts ||
+      language !== intent.tag ||
+      busy ||
+      (intent.add && locked) ||
+      !intent.opener.isConnected ||
+      intent.opener.ownerDocument.activeElement !== intent.opener
+    )
+      return;
+    const draft = drafts[language];
+    const field = termFields.find((field) => draft && draft[field].mode !== 'keep') ?? 'labels';
+    const target = intent.invalid
+      ? languageError
+        ? 'new-language'
+        : undefined
+      : locked
+        ? 'draft'
+        : drafts[language]?.[field].mode === 'set'
+          ? field
+          : `${field}-mode`;
+    if (target) intent.opener.ownerDocument.getElementById(domId(target))?.focus();
+  });
+
+  function reachLanguage(event: MouseEvent<HTMLButtonElement>, tag: string, add = false) {
+    if (
+      !lifetime.active() ||
+      currentVisit.current !== visit ||
+      currentLanguageAdmission.current !== languageAdmission ||
+      !base ||
+      busy ||
+      running.current ||
+      (add && locked)
+    )
+      return;
+    languageFocus.current?.cancel();
+    const invalid = add && !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(tag);
+    const opener = event.currentTarget;
+    const document = opener.ownerDocument;
+    if (event.detail === 0 && document.activeElement === opener && opener.isConnected) {
+      const cancel = () => {
+        opener.removeEventListener('focusout', cancel);
+        document.removeEventListener('pointerdown', cancel, true);
+        document.removeEventListener('keydown', tabbed, true);
+        document.defaultView?.removeEventListener('blur', cancel);
+        if (languageFocus.current?.cancel === cancel) languageFocus.current = null;
+      };
+      const tabbed = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') cancel();
+      };
+      languageFocus.current = {
+        visit,
+        snapshot: base,
+        drafts,
+        tag: invalid ? language : tag,
+        invalid,
+        add,
+        opener,
+        cancel,
+      };
+      opener.addEventListener('focusout', cancel);
+      document.addEventListener('pointerdown', cancel, true);
+      document.addEventListener('keydown', tabbed, true);
+      document.defaultView?.addEventListener('blur', cancel);
+      scheduleLanguageFocus((sequence) => sequence + 1);
+    }
+    if (add) {
+      setLanguageError(invalid);
+      if (invalid) return;
+      if (!languages.includes(tag)) setAddedLanguages((previous) => [...previous, tag]);
+      setNewLanguage('');
+    }
+    chooseLanguage(tag);
+  }
+
   function clearLocalDraft(
     target: string,
     remove: boolean,
@@ -877,24 +977,20 @@ function SubjectTermsPageLive({
                     type="button"
                     variant="outline"
                     disabled={locked}
-                    onClick={() => {
-                      if (!/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(newLanguage)) {
-                        setLanguageError(true);
-                        return;
-                      }
-                      if (!languages.includes(newLanguage)) {
-                        setAddedLanguages((previous) => [...previous, newLanguage]);
-                      }
-                      chooseLanguage(newLanguage);
-                      setNewLanguage('');
-                    }}
+                    onClick={(event) => reachLanguage(event, newLanguage, true)}
                   >
                     {m.catalogue_create_add_language({}, options)}
                   </Button>
                 </div>
               </FieldGroup>
               {!storedLanguage && <p role="status">{m.catalogue_terms_empty({}, options)}</p>}
-              <ContentItemHeading className="font-semibold">{m.creator_editions_draft({}, options)}</ContentItemHeading>
+              <ContentItemHeading
+                id={domId('draft')}
+                tabIndex={-1}
+                className="font-semibold focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+              >
+                {m.creator_editions_draft({}, options)} · {language}
+              </ContentItemHeading>
               <div className="flex min-w-0 flex-col gap-3">
                 <div className="flex flex-wrap gap-3">
                   <Button
@@ -1032,7 +1128,7 @@ function SubjectTermsPageLive({
                           variant="outline"
                           disabled={busy}
                           aria-pressed={language === tag}
-                          onClick={() => setLanguage(tag)}
+                          onClick={(event) => reachLanguage(event, tag)}
                         >
                           {tag}: {fields.map(fieldLabel).join(', ')}
                         </Button>
