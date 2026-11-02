@@ -92,6 +92,8 @@ test('initial qualifiers reconcile current choices and preserve private holders,
   let replace!: (row: MangaRow) => void;
   const changed = mock();
   const removed = mock();
+  let accept = true;
+  let fieldType: 'schema:ComicSeries' | 'schema:PublicationVolume' = 'schema:ComicSeries';
   function Harness({ disabled }: { disabled: boolean }) {
     const [row, setRow] = useState(initial);
     replace = (next) => {
@@ -109,11 +111,12 @@ test('initial qualifiers reconcile current choices and preserve private holders,
         <MangaInitialField
           row={row}
           read={read}
-          type="schema:ComicSeries"
+          type={fieldType}
           locale="en"
           search={async () => []}
           disabled={disabled}
           onChange={(next) => {
+            if (!accept) return;
             changed();
             current = next;
             setRow(next);
@@ -268,6 +271,60 @@ test('initial qualifiers reconcile current choices and preserve private holders,
     const committed = request();
     await act(async () => queued());
     expect(request()).toEqual(committed);
+    const frames = new Map<number, FrameRequestCallback>();
+    let frame = 0;
+    window.requestAnimationFrame = (callback) => {
+      frames.set(++frame, callback);
+      return frame;
+    };
+    window.cancelAnimationFrame = (id) => {
+      frames.delete(id);
+    };
+    const addedIds = new Set<string>();
+    for (const outcome of ['admitted', 'repeated', 'refused', 'moved', 'removed', 'locked', 'type']) {
+      await act(async () => replace(probe));
+      await act(async () => user.selectOptions(choice(), 'schema:position'));
+      expect(window.document.activeElement).toBe(choice());
+      accept = outcome !== 'refused';
+      await act(async () => {
+        action().focus();
+        await user.keyboard('{Enter}');
+      });
+      if (accept) {
+        const id = current.qualifierIds!.at(-1)!;
+        expect(addedIds.has(id)).toBe(false);
+        addedIds.add(id);
+        expect(current.statement.qualifiers!.at(-1)).toEqual(snak('schema:position', ''));
+      } else {
+        expect(current).toBe(probe);
+        expect(frames.size).toBe(0);
+      }
+      if (outcome === 'moved') {
+        choice().focus();
+        action().focus();
+      }
+      if (outcome === 'removed') await act(async () => replace(probe));
+      if (outcome === 'locked') {
+        await show(true);
+        await show();
+      }
+      if (outcome === 'type') {
+        fieldType = 'schema:PublicationVolume';
+        await show();
+        fieldType = 'schema:ComicSeries';
+        await show();
+      }
+      const focus = window.document.activeElement;
+      await act(async () => {
+        const callbacks = [...frames.values()];
+        frames.clear();
+        callbacks.forEach((callback) => callback(0));
+      });
+      if (outcome === 'admitted' || outcome === 'repeated')
+        expect(window.document.activeElement).toBe(qualifier(current.qualifierIds!.at(-1)!).querySelector('select'));
+      else expect(window.document.activeElement).toBe(focus);
+    }
+    accept = true;
     await act(async () => replace(probe));
     await act(async () => user.selectOptions(choice(), 'schema:position'));
     const retired = oldAction();

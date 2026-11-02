@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { hasDocumentContent } from '@rezics/document';
 import { pickText } from '@rezics/composition';
@@ -78,13 +78,73 @@ export function MangaInitialField({
     if (qualifier && !qualifierAllowed) setQualifier('');
   }, [qualifier, qualifierAllowed]);
   // Late editor emissions obey the current lock and exact row incarnation.
-  const current = useRef({ disabled, row, qualifier, qualifierOptions });
-  current.current = { disabled, row, qualifier, qualifierOptions };
+  const current = useRef({ disabled, row, type, qualifier, qualifierOptions });
+  current.current = { disabled, row, type, qualifier, qualifierOptions };
   const editable = () => !current.current.disabled && current.current.row === row;
   const change = (next: MangaRow) => {
     if (editable()) onChange(next);
   };
   const qualifierIds = qualifiers.map((_, index) => row.qualifierIds?.[index] ?? String(index));
+  const additionFocus = useRef<{ current: () => boolean; cancel: () => void } | null>(null);
+  useLayoutEffect(() => () => additionFocus.current?.cancel(), []);
+  useLayoutEffect(() => {
+    if (additionFocus.current && !additionFocus.current.current()) additionFocus.current.cancel();
+  });
+  function addQualifier(next: MangaRow, id: string, event?: MouseEvent<HTMLButtonElement>) {
+    additionFocus.current?.cancel();
+    const trigger = event?.currentTarget;
+    const scope = section.current;
+    const document = trigger?.ownerDocument;
+    const window = document?.defaultView;
+    let pending = !!(event?.detail === 0 && document?.activeElement === trigger && scope && window);
+    let frame: number | undefined;
+    const cancel = () => {
+      pending = false;
+      document?.removeEventListener('focusin', cancel);
+      document?.removeEventListener('pointerdown', cancel, true);
+      if (frame !== undefined) window?.cancelAnimationFrame(frame);
+      additionFocus.current = null;
+    };
+    if (pending) {
+      document!.addEventListener('focusin', cancel);
+      document!.addEventListener('pointerdown', cancel, true);
+    }
+    // The change adapter may refuse an otherwise current callback. Commit it before
+    // requesting orientation, and require this exact admitted row and stable part.
+    flushSync(() => {
+      change(next);
+      setQualifier('');
+    });
+    const admitted = () =>
+      pending &&
+      !current.current.disabled &&
+      current.current.type === type &&
+      current.current.row === next &&
+      current.current.row.qualifierIds?.includes(id) === true &&
+      (removalAllowed?.() ?? true) &&
+      section.current === scope &&
+      !!scope?.isConnected &&
+      !!trigger?.isConnected &&
+      !scope.closest('[hidden], [inert]') &&
+      (document!.activeElement === trigger ||
+        (trigger.matches(':disabled') && document!.activeElement === document!.body));
+    if (!admitted()) {
+      cancel();
+      return;
+    }
+    additionFocus.current = { current: admitted, cancel };
+    frame = window!.requestAnimationFrame(() => {
+      const allowed = admitted();
+      cancel();
+      if (!allowed) return;
+      const group = document!.getElementById(`${feedback.id}-qualifier-${id}`);
+      if (!group || !scope!.contains(group) || group.closest('[hidden], [inert]')) return;
+      const control = [
+        ...group.querySelectorAll<HTMLElement>('input:not([type="hidden"]), textarea, select, [role="combobox"]'),
+      ].find((item) => !item.matches(':disabled, [aria-disabled="true"]') && !item.closest('[hidden], [inert]'));
+      (control ?? group).focus();
+    });
+  }
   const citationPart = row.statement.references?.[0]?.parts.find((part) => part.property.id === 'schema:url');
   const citation =
     citationPart?.value.type === 'value' && typeof citationPart.value.content === 'string'
@@ -247,6 +307,8 @@ export function MangaInitialField({
               <div
                 key={qualifierIds[index]}
                 id={`${feedback.id}-qualifier-${qualifierIds[index]}`}
+                role="group"
+                aria-label={name(part.property.id)}
                 data-manga-picker={
                   read.release.properties[part.property.id]?.datatype === 'wikibase-item' ? '' : undefined
                 }
@@ -336,7 +398,7 @@ export function MangaInitialField({
                 type="button"
                 variant="outline"
                 disabled={disabled || !qualifierAllowed}
-                onClick={() => {
+                onClick={(event) => {
                   if (
                     !editable() ||
                     !section.current?.isConnected ||
@@ -344,18 +406,22 @@ export function MangaInitialField({
                     !current.current.qualifierOptions.includes(qualifier)
                   )
                     return;
-                  change({
-                    ...row,
-                    qualifierIds: [...qualifierIds, crypto.randomUUID()],
-                    statement: {
-                      ...row.statement,
-                      qualifiers: [
-                        ...qualifiers,
-                        { property: { id: qualifier }, value: { type: 'value', content: '' } },
-                      ],
+                  const id = crypto.randomUUID();
+                  addQualifier(
+                    {
+                      ...row,
+                      qualifierIds: [...qualifierIds, id],
+                      statement: {
+                        ...row.statement,
+                        qualifiers: [
+                          ...qualifiers,
+                          { property: { id: qualifier }, value: { type: 'value', content: '' } },
+                        ],
+                      },
                     },
-                  });
-                  setQualifier('');
+                    id,
+                    event,
+                  );
                 }}
               >
                 {m.relation_add_qualifier({}, o)}
