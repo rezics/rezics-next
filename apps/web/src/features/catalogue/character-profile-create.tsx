@@ -44,9 +44,14 @@ function DraftRemoval({
   const [confirming, setConfirming] = useState(false);
   const cancel = useRef<HTMLButtonElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
   const o = { locale: locale as never };
   useLayoutEffect(() => {
     if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current) {
+      trigger.current?.focus();
+      restoreFocus.current = false;
+    }
   }, [confirming]);
   return confirming ? (
     <div className="space-y-2" role="group" aria-label={m.candidate_confirm_title({ action: description }, o)}>
@@ -59,8 +64,8 @@ function DraftRemoval({
           className={actionClassName}
           disabled={disabled}
           onClick={() => {
+            restoreFocus.current = true;
             setConfirming(false);
-            requestAnimationFrame(() => trigger.current?.focus());
           }}
         >
           {m.candidate_cancel({}, o)}

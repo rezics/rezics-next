@@ -264,6 +264,7 @@ export const ManyCurrentFields: Story = {
     await expect(new Set(ids).size).toBe(ids.length);
     await expect(args.onAttempt).not.toHaveBeenCalled();
     await userEvent.click(canvas.getAllByRole('button', { name: m.catalogue_create_remove_language() })[7]!);
+    await userEvent.click(canvas.getAllByRole('button', { name: m.catalogue_create_remove_language() })[7]!);
     await expect(canvas.getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(15);
     await expect(args.onAttempt).not.toHaveBeenCalled();
   },

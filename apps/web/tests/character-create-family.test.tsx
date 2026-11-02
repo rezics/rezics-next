@@ -162,6 +162,9 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     await act(async () =>
       user.click(within(facts[0] as HTMLElement).getByRole('button', { name: m.recipe_remove_field() })),
     );
+    await act(async () =>
+      user.click(within(facts[0] as HTMLElement).getByRole('button', { name: m.recipe_remove_field() })),
+    );
     expect(control(m.correction_amount()).id).toBe(heightId);
     expect(window.document.activeElement).toBe(host.querySelector('[data-slot="character-initial-fact"] > div'));
     await submit();

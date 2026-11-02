@@ -194,6 +194,7 @@ test('CharacterCreate associates exact corrections, retains drafts and attempts,
     expect(fixture.calls).toHaveLength(0);
     const oldAmountId = amount.id;
     await click(m.recipe_remove_field());
+    await click(m.recipe_remove_field());
     await addFact('schema:height');
     const replacement = input(m.correction_amount());
     expect(replacement.id).not.toBe(oldAmountId);
@@ -301,6 +302,7 @@ test('CharacterCreate associates exact corrections, retains drafts and attempts,
       pointer: '/statements/schema:sameAs/1/value/content',
       code: 'invalid_format',
     });
+    await act(async () => user.click(canvas.getAllByRole('button', { name: m.recipe_remove_field() })[0]!));
     await act(async () => user.click(canvas.getAllByRole('button', { name: m.recipe_remove_field() })[0]!));
     const remainingUrl = input(m.correction_url());
     expect(remainingUrl.id).toBe(secondUrlId);

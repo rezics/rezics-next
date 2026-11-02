@@ -257,6 +257,7 @@ export const UncertainRetry: Story = {
     await userEvent.type(canvas.getByRole('textbox', { name: m.correction_value() }), 'https://example.org/removed');
     await phoneControls();
     await userEvent.click(canvas.getByRole('button', { name: m.recipe_remove_field() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.recipe_remove_field() }));
     await expect(canvas.queryByRole('textbox', { name: m.correction_value() })).toBeNull();
     await userEvent.selectOptions(initial, 'schema:url');
     await userEvent.click(addFact);
