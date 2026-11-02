@@ -47,6 +47,7 @@ document.head.appendChild = <T extends Node>(node: T): T => {
 const { createRoot } = await import('react-dom/client');
 const { TurnstileWidget, loadTurnstile } = await import('../src/turnstile.tsx');
 const { Route } = await import('../src/routes/signup');
+const { Route: LoginRoute } = await import('../src/routes/login');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider, Outlet } =
   await import('@tanstack/react-router');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
@@ -439,7 +440,10 @@ async function signup() {
   const query =
     '?client_id=web&state=opaque&resource=one&resource=two&empty=&sig=private&exp=1&prompt=login&max_age=600';
   const router = createRouter({
-    routeTree: rootRoute.addChildren([route]),
+    routeTree: rootRoute.addChildren([
+      route,
+      LoginRoute.update({ id: '/login', path: '/login', getParentRoute: () => rootRoute } as never),
+    ]),
     history: createMemoryHistory({ initialEntries: [`/signup${query}`] }),
   });
   await router.load();
@@ -888,7 +892,7 @@ test('repeated script failures and retries retain no failed scripts, listeners o
   );
 });
 
-test('a successful signup followed by refused signin preserves the original two-request flow and page feedback', async () => {
+test('created accounts keep sign-in failure feedback and finish through login without repeating creation', async () => {
   for (const status of [401, 429, 503]) {
     const page = await signup();
     const api = provider();
@@ -914,10 +918,93 @@ test('a successful signup followed by refused signin preserves the original two-
       if (status === 429) expect(alert.textContent).toContain('37');
       if (status === 503) expect(alert.textContent).toMatch(/try again|later/i);
       expect(api.resets).toHaveLength(0);
-      expect(page.ui.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
-      expect(page.input('password').value).toBe('private-password');
+      expect(page.ui.host.querySelector('[role="status"]')!.textContent).toContain('Your account was created');
+      expect(page.ui.host.querySelector('form')).toBeNull();
+      expect(page.ui.host.querySelector('input')).toBeNull();
+      const login = page.ui.host.querySelector<HTMLAnchorElement>('a[href^="/login"]')!;
+      expect(login.getAttribute('href')).toBe(`/login${page.query}`);
+      expect(page.ui.host.querySelector('a[href^="/recovery"]')!.getAttribute('href')).toBe(`/recovery${page.query}`);
+      await flush(() => page.router.history.push(login.getAttribute('href')!));
+      await page.router.load();
+      const assign = window.location.assign;
+      const targets: string[] = [];
+      window.location.assign = (target) => {
+        targets.push(String(target));
+      };
+      try {
+        globalThis.fetch = (async (path: string) => {
+          paths.push(path);
+          return Response.json({ success: true });
+        }) as typeof fetch;
+        await page.fill('email', 'reader@example.test');
+        await page.fill('password', 'private-password');
+        await page.submit();
+        expect(paths).toEqual(['/signup', '/signin', '/signin']);
+        expect(targets).toEqual([
+          'https://auth.test/authorize?client_id=web&state=opaque&resource=one&resource=two&empty=&max_age=600',
+        ]);
+      } finally {
+        window.location.assign = assign;
+      }
     } finally {
       await page.ui.close();
     }
   }
 });
+
+for (const stage of ['creation', 'sign-in'])
+  for (const boundary of ['unmount', 'replace', 'cached return'])
+    for (const status of [200, 503])
+      test(`${stage} ${status} cannot continue after ${boundary}`, async () => {
+        const page = await signup();
+        const api = provider();
+        const paths: string[] = [];
+        const targets: string[] = [];
+        const assign = window.location.assign;
+        window.location.assign = (target) => {
+          targets.push(String(target));
+        };
+        let release!: (response: Response) => void;
+        globalThis.fetch = (async (path: string) => {
+          paths.push(path);
+          if (stage === 'sign-in' && path === '/signup')
+            return Response.json({ accountId: 'account-id' }, { status: 201 });
+          return new Promise<Response>((resolve) => {
+            release = resolve;
+          });
+        }) as typeof fetch;
+        try {
+          await page.fillAll();
+          await scriptEvent(scripts().at(-1)!, 'load', api.api);
+          await flush(() => api.widgets[0]!.options.callback('signup-token'));
+          await page.submit();
+          if (stage === 'sign-in') {
+            expect(page.ui.host.querySelector('[role="status"]')!.textContent).toContain('Your account was created');
+            expect(page.ui.host.querySelector('form')).toBeNull();
+          }
+          if (boundary === 'unmount') await page.ui.close();
+          else if (boundary === 'replace') await flush(() => page.router.history.replace('/signup?state=new'));
+          else
+            await flush(() => {
+              window.dispatchEvent(new dom.Event('pagehide') as unknown as Event);
+              window.dispatchEvent(Object.assign(new dom.Event('pageshow'), { persisted: true }) as unknown as Event);
+            });
+          await flush(() =>
+            release(
+              Response.json(status === 200 ? { accountId: 'account-id' } : { error: 'unavailable' }, {
+                status: stage === 'creation' && status === 200 ? 201 : status,
+              }),
+            ),
+          );
+          expect(paths).toEqual(stage === 'creation' ? ['/signup'] : ['/signup', '/signin']);
+          expect(targets).toEqual([]);
+          expect(page.ui.host.querySelector('[role="alert"]')).toBeNull();
+          if (boundary !== 'unmount') {
+            for (const name of ['handle', 'email', 'password']) expect(page.input(name).value).toBe('');
+            expect(page.ui.host.querySelector('[role="status"]')?.textContent ?? '').not.toContain('created');
+          }
+        } finally {
+          window.location.assign = assign;
+          await page.ui.close();
+        }
+      });

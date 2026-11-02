@@ -263,6 +263,7 @@
   "auth_security_this_device": "Dieses Gerät",
   "auth_security_unknown_device": "Unbekanntes Gerät",
   "auth_signup_conflict": "Dieses Konto konnte nicht erstellt werden. Melde dich an oder stelle den Zugang wieder her.",
+  "auth_signup_created": "Dein Konto wurde erstellt. Melde dich an, um fortzufahren.",
   "auth_signup_denied": "Prüfe Nutzername, E-Mail-Adresse, Passwort und die Überprüfung, und versuche es erneut.",
   "auth_signup_email": "E-Mail-Adresse",
   "auth_signup_handle": "Nutzername",

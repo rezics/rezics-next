@@ -82,7 +82,15 @@ after every request that does not end in 201.
 
 `POST /signup` sends `{ key, handle, email, password, turnstile_token }` as JSON with same-origin credentials. In
 development that POST is forwarded to AUTH_ORIGIN; GET /signup remains this page. A 201 response is `{ accountId }`
-and sets no session. The page then signs in with `POST /signin` and resumes with `signInTarget`. Passwords shorter
+and sets no session. Creation and automatic sign-in are distinct stages: after creation the creation form is removed,
+private inputs are cleared, and the page signs in once with `POST /signin`, resuming with `signInTarget` on success.
+If sign-in fails, the creation confirmation and sign-in/recovery links retain the original query; retrying sign-in
+uses the existing login page and never repeats creation. `src/sign-in.ts` supplies the shared sign-in result and
+validated destination helpers (there is no separate login-attempt helper in this base).
+Departure or history replacement retires pending browser continuations before the next stage or navigation;
+it cannot undo a server write. A cached-document return starts an empty fresh form without automatically retrying
+creation or sign-in. An uncertain creation is retried only by explicit submission with the existing key and a fresh
+Turnstile token while the same journey remains open. Passwords shorter
 than 8 or longer than 128 characters are refused before a request. 400
 `registration_denied` reports bad input or a refused token. 409 `handle_unavailable` is shown on the handle field.
 Any other 409, including an email already in use, shows the same generic message with links to sign in and recovery,

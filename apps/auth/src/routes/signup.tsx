@@ -8,7 +8,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AuthPage } from '../frame';
 import { createSignupKey, explainSignIn, normalizeSignupHandle, submitSignup } from '../signup';
-import { signInTarget } from '../sign-in';
+import { signIn, signInTarget } from '../sign-in';
 import { readTurnstileConfig } from '../turnstile.ts';
 import { TurnstileWidget, type TurnstileHandle, type TurnstileStatus } from '../turnstile.tsx';
 import { ErrorAlert } from '../alert';
@@ -27,9 +27,46 @@ export const Route = createFileRoute('/signup')({
   component: SignupPage,
 });
 
+type SignupJourney = { active: boolean; sequence: number; query: string };
+
 function SignupPage() {
+  const { history } = useRouter();
+  const sequence = useRef(0);
+  const [journey, setJourney] = useState<SignupJourney | null>(null);
+  useLayoutEffect(() => {
+    let current: SignupJourney | null = null;
+    const leave = () => {
+      // This fences browser continuations; a dispatched server write may still complete.
+      if (current) current.active = false;
+      current = null;
+      setJourney(null);
+    };
+    const replace = () => {
+      leave();
+      if (history.location.pathname !== '/signup') return;
+      current = { active: true, sequence: ++sequence.current, query: history.location.search };
+      setJourney(current);
+    };
+    const unsubscribe = history.subscribe(replace);
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted) replace();
+    };
+    window.addEventListener('pagehide', leave);
+    window.addEventListener('pageshow', restore);
+    replace();
+    return () => {
+      if (current) current.active = false;
+      unsubscribe();
+      window.removeEventListener('pagehide', leave);
+      window.removeEventListener('pageshow', restore);
+    };
+  }, [history]);
+  return journey ? <SignupForm key={journey.sequence} journey={journey} /> : null;
+}
+
+function SignupForm({ journey }: { journey: SignupJourney }) {
   const { siteKey, scriptUrl } = Route.useLoaderData();
-  const query = useRouter().history.location.search;
+  const { query } = journey;
   const key = useRef(createSignupKey());
   const turnstile = useRef<TurnstileHandle>(null);
   const alert = useRef<HTMLDivElement>(null);
@@ -38,14 +75,7 @@ function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [challengeStatus, setChallengeStatus] = useState<TurnstileStatus>('loading');
-  const mounted = useRef(false);
-
-  useLayoutEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+  const [created, setCreated] = useState(false);
   const [pending, setPending] = useState(false);
   const [handleError, setHandleError] = useState('');
   const [emailError, setEmailError] = useState('');
@@ -74,7 +104,7 @@ function SignupPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || pending) return;
+    if (!journey.active || created || submitting.current || pending) return;
     clearErrors();
     const invalidHandle = normalizeSignupHandle(handle) === null;
     const invalidEmail = !email.trim() || Boolean(emailInput.current?.validity.typeMismatch);
@@ -99,15 +129,20 @@ function SignupPage() {
       password,
       turnstile_token: token,
     });
-    if (!mounted.current) return;
+    if (!journey.active) return;
     if (submission.ok) {
-      if (submission.signIn.ok) {
+      setCreated(true);
+      setPassword('');
+      // Creation is final for this journey. A login failure only offers existing login/recovery routes.
+      const result = await signIn(email, password);
+      if (!journey.active) return;
+      if (result.ok) {
         window.location.assign(signInTarget(query, window.location.origin));
         return;
       }
       submitting.current = false;
       setPending(false);
-      setMessage(explainSignIn(submission.signIn));
+      setMessage(explainSignIn(result));
       return;
     }
     submitting.current = false;
@@ -129,111 +164,128 @@ function SignupPage() {
 
   return (
     <AuthPage heading={m.auth_signup_heading()}>
-      <form className="auth-login-form" method="post" action="/signup" noValidate onSubmit={submit}>
-        <Field data-invalid={Boolean(handleError)}>
-          <FieldLabel htmlFor={handleId}>{m.auth_signup_handle()}</FieldLabel>
-          <Input
-            id={handleId}
-            name="handle"
-            value={handle}
-            onChange={(event) => {
-              setHandle(event.target.value);
-              setHandleError('');
-            }}
-            aria-invalid={handleError ? true : undefined}
-            aria-describedby={handleError ? handleErrorId : undefined}
-            readOnly={pending}
-            required
-          />
-          {handleError ? <FieldError id={handleErrorId}>{handleError}</FieldError> : null}
-        </Field>
-        <Field data-invalid={Boolean(emailError)}>
-          <FieldLabel htmlFor={emailId}>{m.auth_signup_email()}</FieldLabel>
-          <Input
-            ref={emailInput}
-            id={emailId}
-            name="email"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => {
-              setEmail(event.target.value);
-              setEmailError('');
-            }}
-            aria-invalid={emailError ? true : undefined}
-            aria-describedby={emailError ? emailErrorId : undefined}
-            readOnly={pending}
-            required
-          />
-          {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
-        </Field>
-        <Field data-invalid={Boolean(passwordError)}>
-          <FieldLabel htmlFor={passwordId}>{m.auth_signup_password()}</FieldLabel>
-          <PasswordInput
-            name="password"
-            autoComplete="new-password"
-            required
-            readOnly={pending}
-            id={passwordId}
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-              setPasswordError('');
-            }}
-            aria-invalid={passwordError ? true : undefined}
-            aria-describedby={passwordError ? passwordErrorId : undefined}
-          />
-          {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
-        </Field>
-        <Field data-invalid={Boolean(turnstileError) || challengeStatus === 'failed'}>
-          <div id="signup-turnstile" tabIndex={-1} aria-describedby={turnstileError ? turnstileErrorId : undefined}>
-            <TurnstileWidget
-              ref={turnstile}
-              siteKey={siteKey}
-              scriptUrl={scriptUrl}
-              language={getLocale()}
-              onStatus={setChallengeStatus}
-              onToken={(value) => {
-                if (value) setTurnstileError('');
-              }}
-            />
-          </div>
-          {challengeStatus === 'loading' ? <p role="status">{m.auth_signup_turnstile_loading()}</p> : null}
-          {challengeStatus === 'failed' ? (
-            <div>
-              <FieldError role="alert">{m.auth_signup_turnstile_failed()}</FieldError>
-              <Button
-                type="button"
-                disabled={pending}
-                onClick={() => {
-                  setTurnstileError('');
-                  turnstile.current?.retry();
-                }}
-              >
-                {m.auth_signup_turnstile_retry()}
-              </Button>
-            </div>
+      {created ? (
+        <div className="auth-login-form" aria-busy={pending}>
+          <p role="status">{m.auth_signup_created()}</p>
+          {message ? (
+            <ErrorAlert tabIndex={-1} ref={alert}>
+              <p>{message}</p>
+            </ErrorAlert>
           ) : null}
-          {turnstileError ? <FieldError id={turnstileErrorId}>{turnstileError}</FieldError> : null}
-        </Field>
-        {message ? (
-          <ErrorAlert tabIndex={-1} ref={alert}>
-            <p>{message}</p>
-            {conflict ? (
-              <nav className="auth-signup-links" aria-label={m.auth_signup_conflict()}>
-                <a href={`/login${query}`}>{m.auth_signup_sign_in()}</a>
-                <a href={`/recovery${query}`}>{m.auth_signup_recovery()}</a>
-              </nav>
+          <nav className="auth-signup-links" aria-label={m.auth_signup_sign_in()}>
+            <a href={`/login${query}`}>{m.auth_signup_sign_in()}</a>
+            <a href={`/recovery${query}`}>{m.auth_signup_recovery()}</a>
+          </nav>
+        </div>
+      ) : (
+        <form className="auth-login-form" method="post" action="/signup" noValidate onSubmit={submit}>
+          <Field data-invalid={Boolean(handleError)}>
+            <FieldLabel htmlFor={handleId}>{m.auth_signup_handle()}</FieldLabel>
+            <Input
+              id={handleId}
+              name="handle"
+              value={handle}
+              onChange={(event) => {
+                setHandle(event.target.value);
+                setHandleError('');
+              }}
+              aria-invalid={handleError ? true : undefined}
+              aria-describedby={handleError ? handleErrorId : undefined}
+              readOnly={pending}
+              required
+            />
+            {handleError ? <FieldError id={handleErrorId}>{handleError}</FieldError> : null}
+          </Field>
+          <Field data-invalid={Boolean(emailError)}>
+            <FieldLabel htmlFor={emailId}>{m.auth_signup_email()}</FieldLabel>
+            <Input
+              ref={emailInput}
+              id={emailId}
+              name="email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setEmailError('');
+              }}
+              aria-invalid={emailError ? true : undefined}
+              aria-describedby={emailError ? emailErrorId : undefined}
+              readOnly={pending}
+              required
+            />
+            {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
+          </Field>
+          <Field data-invalid={Boolean(passwordError)}>
+            <FieldLabel htmlFor={passwordId}>{m.auth_signup_password()}</FieldLabel>
+            <PasswordInput
+              name="password"
+              autoComplete="new-password"
+              required
+              readOnly={pending}
+              id={passwordId}
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setPasswordError('');
+              }}
+              aria-invalid={passwordError ? true : undefined}
+              aria-describedby={passwordError ? passwordErrorId : undefined}
+            />
+            {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
+          </Field>
+          <Field data-invalid={Boolean(turnstileError) || challengeStatus === 'failed'}>
+            <div id="signup-turnstile" tabIndex={-1} aria-describedby={turnstileError ? turnstileErrorId : undefined}>
+              <TurnstileWidget
+                ref={turnstile}
+                siteKey={siteKey}
+                scriptUrl={scriptUrl}
+                language={getLocale()}
+                onStatus={setChallengeStatus}
+                onToken={(value) => {
+                  if (value) setTurnstileError('');
+                }}
+              />
+            </div>
+            {challengeStatus === 'loading' ? <p role="status">{m.auth_signup_turnstile_loading()}</p> : null}
+            {challengeStatus === 'failed' ? (
+              <div>
+                <FieldError role="alert">{m.auth_signup_turnstile_failed()}</FieldError>
+                <Button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => {
+                    setTurnstileError('');
+                    turnstile.current?.retry();
+                  }}
+                >
+                  {m.auth_signup_turnstile_retry()}
+                </Button>
+              </div>
             ) : null}
-          </ErrorAlert>
-        ) : null}
-        <Button type="submit" disabled={pending} aria-busy={pending}>
-          {m.auth_signup_heading()}
-        </Button>
-      </form>
-      <nav className="auth-login-links" aria-label={m.auth_signup_sign_in()}>
-        <a href={`/login${query}`}>{m.auth_signup_sign_in()}</a>
-      </nav>
+            {turnstileError ? <FieldError id={turnstileErrorId}>{turnstileError}</FieldError> : null}
+          </Field>
+          {message ? (
+            <ErrorAlert tabIndex={-1} ref={alert}>
+              <p>{message}</p>
+              {conflict ? (
+                <nav className="auth-signup-links" aria-label={m.auth_signup_conflict()}>
+                  <a href={`/login${query}`}>{m.auth_signup_sign_in()}</a>
+                  <a href={`/recovery${query}`}>{m.auth_signup_recovery()}</a>
+                </nav>
+              ) : null}
+            </ErrorAlert>
+          ) : null}
+          <Button type="submit" disabled={pending} aria-busy={pending}>
+            {m.auth_signup_heading()}
+          </Button>
+        </form>
+      )}
+      {!created ? (
+        <nav className="auth-login-links" aria-label={m.auth_signup_sign_in()}>
+          <a href={`/login${query}`}>{m.auth_signup_sign_in()}</a>
+        </nav>
+      ) : null}
     </AuthPage>
   );
 }

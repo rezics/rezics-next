@@ -1,5 +1,5 @@
 import { authPost, failureMessage } from './api';
-import { signIn, type SignInResult } from './sign-in';
+import type { SignInResult } from './sign-in';
 import { m } from './paraglide/messages.js';
 
 export type SignupBody = {
@@ -15,7 +15,7 @@ export type SignupFailure =
   | { field: 'handle'; message: string }
   | { field: 'form'; message: string; conflict: boolean };
 
-export type SignupSubmission = { ok: true; signIn: SignInResult } | { ok: false; failure: SignupFailure };
+export type SignupSubmission = { ok: true } | { ok: false; failure: SignupFailure };
 
 export function createSignupKey(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -40,8 +40,7 @@ export async function submitSignup(input: SignupBody): Promise<SignupSubmission>
   }
   const result = await authPost<{ accountId: string }>('/signup', input);
   // The shared client treats only HTTP 200 as success. Registration answers 201 and issues no session.
-  if (result.ok || (!result.ok && result.status === 201))
-    return { ok: true, signIn: await signIn(input.email, input.password) };
+  if (result.ok || (!result.ok && result.status === 201)) return { ok: true };
   return { ok: false, failure: explainSignup(result.status, result.code, result.retryAfter) };
 }
 

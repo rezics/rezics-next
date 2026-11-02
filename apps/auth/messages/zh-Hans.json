@@ -263,6 +263,7 @@
   "auth_security_this_device": "此设备",
   "auth_security_unknown_device": "未知设备",
   "auth_signup_conflict": "无法创建此账户。请登录或恢复访问。",
+  "auth_signup_created": "账户已创建。请登录以继续。",
   "auth_signup_denied": "请检查用户名、邮箱、密码和验证后再试。",
   "auth_signup_email": "电子邮箱",
   "auth_signup_handle": "用户名",
