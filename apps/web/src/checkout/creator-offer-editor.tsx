@@ -5,6 +5,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
+import { CreatorOfferDraftNavigation, CreatorOfferDraftState } from './creator-offer-draft-navigation';
 import { creatorPreviewGuard, useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
 import { parseCreatorPrice } from './creator-price';
 import { formatMinorAmount } from './money';
@@ -161,8 +162,12 @@ export function CreatorOfferEditor({
   locale: string;
   guard?: CreatorOfferGuard;
 }) {
-  if (guard) return <CreatorOfferForm data={data} locale={locale} createKey={data.createKey} guard={guard} />;
-  return <StandaloneCreatorOfferEditor data={data} locale={locale} />;
+  return (
+    <CreatorOfferDraftNavigation>
+      {guard ? <CreatorOfferForm data={data} locale={locale} createKey={data.createKey} guard={guard} />
+        : <StandaloneCreatorOfferEditor data={data} locale={locale} />}
+    </CreatorOfferDraftNavigation>
+  );
 }
 
 function StandaloneCreatorOfferEditor({ data, locale }: { data: CreatorEditorPageData; locale: string }) {
@@ -372,6 +377,16 @@ function CreatorOfferForm({
             <p className="text-sm leading-relaxed">{m.creator_current_rights()}</p>
           </section>
           <form onSubmit={submit} className="space-y-6 rounded-xl border bg-card p-5 text-card-foreground sm:p-6">
+            <CreatorOfferDraftState
+              guard={guard}
+              dirty={result?.kind !== 'saved' && !!(title || taxCode || currency || text)}
+              mayCommit={busy || uncertain}
+              discard={() => {
+                delete memory.value;
+                setTitle(''); setTaxCode(''); setIntent({ currency: '', text: '' });
+                setDraftEditor(undefined); setResult(null);
+              }}
+            />
             <Field>
               <FieldLabel htmlFor={`${fieldId}-title`}>{m.creator_title()}</FieldLabel>
               <Input

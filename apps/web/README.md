@@ -2233,6 +2233,16 @@ session/address retirement and captured uncertain command operands are unchanged
 
 Decision: edition correction starts blank so resolving an ambiguous address always requires an explicit choice.
 
+### Creator offer drafts
+
+Create and reprice forms compare exact raw fields to their empty baseline and announce unsaved changes live.
+Internal router and same-origin anchor departures ask Stay or Leave once for all edited offers; supported document
+unload uses the browser warning. Stay preserves fields, edition and field focus. Leaving discards only unsent
+local edits and sends no command. Pending or uncertain commands may already have committed; leaving preserves
+the existing request and intent store without retrying. Pristine, exactly reverted and confirmed saved forms do
+not warn. Current-origin retirement continues to hide private fields immediately.
+Decision: an unresolved departure retains the existing in-memory intent only; this feature adds no persistence.
+
 ### Confirming creator offer availability
 
 After a successful reprice or delist response, the creator offer controls request one fresh, bounded owned-offer

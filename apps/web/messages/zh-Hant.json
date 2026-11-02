@@ -4657,5 +4657,11 @@
   "creator_offer_address_invalid_edition": "版本位址格式不正確、重複或存在衝突。請輸入你打算出售的確切版本。",
   "creator_offer_address_first_page": "你的報價首頁",
   "creator_offer_address_edition": "版本 ID",
-  "creator_offer_address_open_edition": "開啟此版本"
+  "creator_offer_address_open_edition": "開啟此版本",
+  "creator_offer_draft_navigation_unsaved": "有未儲存的變更",
+  "creator_offer_draft_navigation_title": "離開此報價草稿？",
+  "creator_offer_draft_navigation_discard": "離開會捨棄尚未送出的變更。留下可繼續編輯。",
+  "creator_offer_draft_navigation_uncertain": "此操作可能已經提交。離開後仍保留原始請求以供復原，不會取消或重試該請求。",
+  "creator_offer_draft_navigation_stay": "留下",
+  "creator_offer_draft_navigation_leave": "離開"
 }

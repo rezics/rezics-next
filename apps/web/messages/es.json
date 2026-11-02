@@ -4657,5 +4657,11 @@
   "creator_offer_address_invalid_edition": "La dirección de la edición no es válida, está repetida o es contradictoria. Introduce la edición exacta que quieres vender.",
   "creator_offer_address_first_page": "Primera página de tus ofertas",
   "creator_offer_address_edition": "ID de la edición",
-  "creator_offer_address_open_edition": "Abrir esta edición"
+  "creator_offer_address_open_edition": "Abrir esta edición",
+  "creator_offer_draft_navigation_unsaved": "Cambios sin guardar",
+  "creator_offer_draft_navigation_title": "¿Salir de este borrador de oferta?",
+  "creator_offer_draft_navigation_discard": "Al salir se descartan los cambios no enviados. Quédate para seguir editando.",
+  "creator_offer_draft_navigation_uncertain": "Es posible que esta operación ya se haya confirmado. Al salir se conserva la solicitud original para recuperarla; no se cancela ni se vuelve a enviar.",
+  "creator_offer_draft_navigation_stay": "Quedarme",
+  "creator_offer_draft_navigation_leave": "Salir"
 }

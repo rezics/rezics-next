@@ -4706,5 +4706,11 @@
   "creator_offer_address_invalid_edition": "The edition address is malformed, repeated or conflicting. Enter the exact edition you intend to sell.",
   "creator_offer_address_first_page": "First page of your offers",
   "creator_offer_address_edition": "Edition ID",
-  "creator_offer_address_open_edition": "Open this edition"
+  "creator_offer_address_open_edition": "Open this edition",
+  "creator_offer_draft_navigation_unsaved": "Unsaved changes",
+  "creator_offer_draft_navigation_title": "Leave this offer draft?",
+  "creator_offer_draft_navigation_discard": "Leaving discards unsent changes. Stay to keep editing.",
+  "creator_offer_draft_navigation_uncertain": "This operation may already have committed. Leaving keeps its original request for recovery; it does not cancel or retry it.",
+  "creator_offer_draft_navigation_stay": "Stay",
+  "creator_offer_draft_navigation_leave": "Leave"
 }

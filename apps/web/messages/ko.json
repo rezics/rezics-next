@@ -4657,5 +4657,11 @@
   "creator_offer_address_invalid_edition": "에디션 주소가 잘못되었거나 중복 또는 충돌합니다. 판매하려는 정확한 에디션을 입력하세요.",
   "creator_offer_address_first_page": "내 제안의 첫 페이지",
   "creator_offer_address_edition": "에디션 ID",
-  "creator_offer_address_open_edition": "이 에디션 열기"
+  "creator_offer_address_open_edition": "이 에디션 열기",
+  "creator_offer_draft_navigation_unsaved": "저장하지 않은 변경 사항",
+  "creator_offer_draft_navigation_title": "이 판매 제안 초안에서 나가시겠어요?",
+  "creator_offer_draft_navigation_discard": "나가면 전송하지 않은 변경 사항이 삭제됩니다. 계속 편집하려면 머무르세요.",
+  "creator_offer_draft_navigation_uncertain": "이 작업은 이미 완료되었을 수 있습니다. 나가도 복구를 위해 원래 요청을 유지하며, 취소하거나 다시 전송하지 않습니다.",
+  "creator_offer_draft_navigation_stay": "머무르기",
+  "creator_offer_draft_navigation_leave": "나가기"
 }

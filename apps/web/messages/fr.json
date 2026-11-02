@@ -4657,5 +4657,11 @@
   "creator_offer_address_invalid_edition": "L’adresse de l’édition est incorrecte, répétée ou contradictoire. Saisissez l’édition exacte que vous souhaitez vendre.",
   "creator_offer_address_first_page": "Première page de vos offres",
   "creator_offer_address_edition": "Identifiant de l’édition",
-  "creator_offer_address_open_edition": "Ouvrir cette édition"
+  "creator_offer_address_open_edition": "Ouvrir cette édition",
+  "creator_offer_draft_navigation_unsaved": "Modifications non enregistrées",
+  "creator_offer_draft_navigation_title": "Quitter ce brouillon d’offre ?",
+  "creator_offer_draft_navigation_discard": "Quitter abandonne les modifications non envoyées. Restez pour continuer à modifier.",
+  "creator_offer_draft_navigation_uncertain": "Cette opération a peut-être déjà été effectuée. Quitter conserve la requête initiale pour la récupération, sans l’annuler ni la renvoyer.",
+  "creator_offer_draft_navigation_stay": "Rester",
+  "creator_offer_draft_navigation_leave": "Quitter"
 }

@@ -4657,5 +4657,11 @@
   "creator_offer_address_invalid_edition": "エディションの指定が不正、重複、または矛盾しています。販売するエディションの正確なIDを入力してください。",
   "creator_offer_address_first_page": "オファーの最初のページ",
   "creator_offer_address_edition": "エディションID",
-  "creator_offer_address_open_edition": "このエディションを開く"
+  "creator_offer_address_open_edition": "このエディションを開く",
+  "creator_offer_draft_navigation_unsaved": "未保存の変更があります",
+  "creator_offer_draft_navigation_title": "このオファーの下書きを離れますか？",
+  "creator_offer_draft_navigation_discard": "離れると未送信の変更は破棄されます。編集を続けるには、このページに留まってください。",
+  "creator_offer_draft_navigation_uncertain": "この操作はすでに確定している可能性があります。離れても復旧用に元のリクエストは保持されます。キャンセルや再送信は行われません。",
+  "creator_offer_draft_navigation_stay": "留まる",
+  "creator_offer_draft_navigation_leave": "離れる"
 }

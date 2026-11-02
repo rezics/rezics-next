@@ -1,5 +1,6 @@
 import { createContext, useContext, useId, useLayoutEffect, useRef, useState } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
+import { CreatorOfferDraftNavigation, CreatorOfferDraftState } from './creator-offer-draft-navigation';
 import { creatorPreviewGuard, useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -227,6 +228,16 @@ function OfferCommands({
       >
         {m.creator_offer_controls_manage()}
       </Button>
+      <CreatorOfferDraftState
+        guard={guard}
+        dirty={result?.kind !== 'saved' && text !== ''}
+        mayCommit={busy || uncertain}
+        discard={() => {
+          delete memory.value;
+          setDraft(undefined); setText(''); setResult(null);
+          release(observed.id);
+        }}
+      />
       <div id={controlsId} hidden={!expanded} className="min-w-0 space-y-4">
         {keepOpen && (
           <p id={`${controlsId}-retained`} className="text-sm leading-relaxed text-muted-foreground">
@@ -383,6 +394,7 @@ export function CreatorOffersPage({
               : m.creator_offers_unavailable();
   const restart = page.kind === 'stale' || page.kind === 'error';
   return (
+    <CreatorOfferDraftNavigation>
     <section className="max-w-4xl min-w-0 space-y-6 text-foreground" aria-labelledby="creator-offers-heading">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <PageHeading id="creator-offers-heading">{m.creator_offers_heading()}</PageHeading>
@@ -504,5 +516,6 @@ export function CreatorOffersPage({
         </>
       )}
     </section>
+    </CreatorOfferDraftNavigation>
   );
 }

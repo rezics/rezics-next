@@ -4657,5 +4657,11 @@
   "creator_offer_address_invalid_edition": "Die Editionsadresse ist ungültig, wiederholt oder widersprüchlich. Gib die genaue Edition ein, die du verkaufen möchtest.",
   "creator_offer_address_first_page": "Erste Seite deiner Angebote",
   "creator_offer_address_edition": "Editions-ID",
-  "creator_offer_address_open_edition": "Diese Edition öffnen"
+  "creator_offer_address_open_edition": "Diese Edition öffnen",
+  "creator_offer_draft_navigation_unsaved": "Ungespeicherte Änderungen",
+  "creator_offer_draft_navigation_title": "Diesen Angebotsentwurf verlassen?",
+  "creator_offer_draft_navigation_discard": "Beim Verlassen werden nicht gesendete Änderungen verworfen. Bleibe hier, um weiterzubearbeiten.",
+  "creator_offer_draft_navigation_uncertain": "Dieser Vorgang wurde möglicherweise bereits ausgeführt. Beim Verlassen bleibt die ursprüngliche Anfrage zur Wiederherstellung erhalten; sie wird weder abgebrochen noch erneut gesendet.",
+  "creator_offer_draft_navigation_stay": "Bleiben",
+  "creator_offer_draft_navigation_leave": "Verlassen"
 }
