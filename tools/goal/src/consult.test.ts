@@ -43,6 +43,11 @@ function released(h: ReturnType<typeof harness>, ref: { taskId: string; attempt:
   for (const process of h.store.attempt(ref).auxiliaryProcesses) expect(sameProcess(process)).toBe(false);
 }
 
+async function refusedSecond(h: ReturnType<typeof harness>, ref: { taskId: string; attempt: number }, directory: string) {
+  released(h, ref);
+  await expect(consult(h.tasks, ref, directory)).rejects.toThrow('this task already used its one consultation');
+}
+
 test('A consultation yields usable advice or an actionable truthful terminal failure and releases its owned resources without a second invocation.', async () => {
   const success = await prepared(`
 console.log(JSON.stringify({type:'thread.started',thread_id:'consultation'}));
@@ -52,13 +57,10 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
   try {
     expect(await consult(success.h.tasks, success.ref, success.directory)).toBe(advice);
     expect(await Bun.file(join(success.directory, 'consultation.md')).text()).toBe(advice);
-    expect(success.h.store.events(success.ref.taskId, success.ref.attempt).some((e) => e.kind === 'consultation-completed')).toBe(
-      true,
-    );
-    released(success.h, success.ref);
-    await expect(consult(success.h.tasks, success.ref, success.directory)).rejects.toThrow(
-      'this task already used its one consultation',
-    );
+    expect(
+      success.h.store.events(success.ref.taskId, success.ref.attempt).some((e) => e.kind === 'consultation-completed'),
+    ).toBe(true);
+    await refusedSecond(success.h, success.ref, success.directory);
   } finally {
     success.h.dispose();
   }
@@ -72,20 +74,15 @@ process.exit(2);
       /consultation failed \(exit 2\): provider refused the session/,
     );
     expect(existsSync(join(failure.directory, 'consultation.md'))).toBe(false);
-    expect(failure.h.store.events(failure.ref.taskId, failure.ref.attempt).some((e) => e.kind === 'consultation-completed')).toBe(
-      false,
-    );
+    expect(
+      failure.h.store.events(failure.ref.taskId, failure.ref.attempt).some((e) => e.kind === 'consultation-completed'),
+    ).toBe(false);
     expect(failure.h.store.attempt(failure.ref).consulted).toBe(true);
-    released(failure.h, failure.ref);
-    await expect(consult(failure.h.tasks, failure.ref, failure.directory)).rejects.toThrow(
-      'this task already used its one consultation',
-    );
+    await refusedSecond(failure.h, failure.ref, failure.directory);
   } finally {
     failure.h.dispose();
   }
-});
 
-test('a zero-exit consultation without advice is a truthful failure and still consumes the one consultation', async () => {
   const empty = await prepared(`
 console.log(JSON.stringify({type:'thread.started',thread_id:'consultation'}));
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}));
@@ -95,19 +92,11 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_t
       'consultation produced no usable advice',
     );
     expect(existsSync(join(empty.directory, 'consultation.md'))).toBe(false);
-    expect(empty.h.store.events(empty.ref.taskId, empty.ref.attempt).some((e) => e.kind === 'consultation-completed')).toBe(
-      false,
-    );
-    released(empty.h, empty.ref);
-    await expect(consult(empty.h.tasks, empty.ref, empty.directory)).rejects.toThrow(
-      'this task already used its one consultation',
-    );
+    await refusedSecond(empty.h, empty.ref, empty.directory);
   } finally {
     empty.h.dispose();
   }
-});
 
-test('a consultation timeout keeps a bounded cause and reaps the owned process', async () => {
   const original = globalThis.setTimeout;
   globalThis.setTimeout = ((fn, delay, ...rest) =>
     original(fn, delay === CONSULTATION_LIMIT_MS ? 0 : delay, ...rest)) as typeof setTimeout;
@@ -120,10 +109,7 @@ setInterval(() => {}, 1000);
       /consultation timed out: still waiting on provider/,
     );
     expect(existsSync(join(hanging.directory, 'consultation.md'))).toBe(false);
-    released(hanging.h, hanging.ref);
-    await expect(consult(hanging.h.tasks, hanging.ref, hanging.directory)).rejects.toThrow(
-      'this task already used its one consultation',
-    );
+    await refusedSecond(hanging.h, hanging.ref, hanging.directory);
   } finally {
     globalThis.setTimeout = original;
     hanging.h.dispose();
