@@ -436,6 +436,7 @@ of authored value languages. Every selected public assertion, qualifier and cita
 Opening an editor creates a clearly labelled private draft, never a selected public value. Multiple selected values
 require an explicit choice of assertion; a multivalued field may instead propose an additional value. Cardinality
 still governs the later whole-slot selection, not a client-side collapse of existing assertions.
+Scalar Edit/Add keyboard activation focuses the newly admitted private draft heading in the same opening transaction; refusal, moved focus or retired reading/workspace cancels that handoff, and pointer, initial and background renders never request it.
 
 Refresh retains a still-selected source; a withdrawn choice requires an explicit current replacement before editing, even if only one remains or no values remain, while an explicit additional-value action stays separate and other drafts stay intact.
 

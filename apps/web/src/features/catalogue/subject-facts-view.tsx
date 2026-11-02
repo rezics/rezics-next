@@ -324,6 +324,56 @@ function FactField({
   const sourceIndex = draft?.source ? selected.findIndex((item) => item.id === draft.source) : -1;
   const locked = !!draft && factLocked(draft);
   const row = useRef<HTMLElement>(null);
+  const privateHeading = useRef<HTMLHeadingElement>(null);
+  const latestOpening = useRef({ read, property, locale, href, editorHref, draft, visible });
+  latestOpening.current = { read, property, locale, href, editorHref, draft, visible };
+  function stage(event: MouseEvent<HTMLButtonElement>, source: string | null) {
+    const opener = event.currentTarget;
+    const document = opener.ownerDocument;
+    const originalRow = row.current;
+    if (!active() || !visible || draft || busy || !canStage || !originalRow?.isConnected || opener.disabled) return;
+    if (event.detail !== 0 || document.activeElement !== opener) {
+      onStage(source);
+      return;
+    }
+    // Admission is synchronous in all consumers. Keep focus intent inside that same
+    // transaction: a refusal must not attach itself to a later draft or reading.
+    let moved = false;
+    const cancel = () => {
+      moved = true;
+    };
+    document.addEventListener('focusin', cancel, true);
+    document.addEventListener('pointerdown', cancel, true);
+    try {
+      flushSync(() => onStage(source));
+    } finally {
+      document.removeEventListener('focusin', cancel, true);
+      document.removeEventListener('pointerdown', cancel, true);
+    }
+    const now = latestOpening.current;
+    const focused = document.activeElement;
+    if (
+      moved ||
+      !active() ||
+      !now.visible ||
+      now.read !== read ||
+      now.property !== property ||
+      now.locale !== locale ||
+      now.href !== href ||
+      now.editorHref !== editorHref ||
+      row.current !== originalRow ||
+      !originalRow.isConnected ||
+      !now.draft ||
+      now.draft.property !== property ||
+      now.draft.source !== source ||
+      now.draft.command ||
+      now.draft.result ||
+      opener.isConnected ||
+      (focused && focused !== document.body && focused !== document.documentElement)
+    )
+      return;
+    privateHeading.current?.focus();
+  }
   if (!visible) return null;
   return (
     <section ref={row} aria-label={label} className="min-w-0 [overflow-wrap:anywhere]">
@@ -382,8 +432,8 @@ function FactField({
                 variant="outline"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
                 disabled={!canEdit}
-                onClick={() => {
-                  if (canEdit) onStage(sourceSelected ? source : null);
+                onClick={(event) => {
+                  if (canEdit) stage(event, sourceSelected ? source : null);
                 }}
               >
                 {m.facts_edit_field({}, o)}
@@ -394,7 +444,7 @@ function FactField({
                   variant="outline"
                   className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
                   disabled={busy || !canStage}
-                  onClick={() => onStage(null)}
+                  onClick={(event) => stage(event, null)}
                 >
                   {m.facts_add_value({}, o)}
                 </Button>
@@ -403,7 +453,7 @@ function FactField({
           </div>
         ) : (
           <div className="min-w-0 space-y-4 border-t border-border pt-4">
-            <ContentItemHeading level={4} className="text-base font-semibold">
+            <ContentItemHeading ref={privateHeading} tabIndex={-1} level={4} className="text-base font-semibold">
               {m.facts_private({}, o)}
               {draft.source && (
                 <>
