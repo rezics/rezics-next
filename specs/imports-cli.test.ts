@@ -102,6 +102,7 @@ class Remote {
   requests: Request[] = [];
   effects = new Map<string, BatchWriteResult['results'][number]>();
   subjects = new Map<string, string>();
+  sourceRecords = new Map<string, { record: Record<string, unknown>; revision: number }>();
   before: (request: Request) => Promise<Response | undefined> = async () => undefined;
   async fetch(request: Request): Promise<Response> {
     this.requests.push(request.clone());
@@ -112,6 +113,31 @@ class Remote {
     if (override) return override;
     const path = new URL(request.url).pathname;
     if (path === '/v1/sourceFences:check') return Response.json({ fenced: false, securityRevision: null });
+    if (path === '/v1/source-records:setMetadata') {
+      const body = (await request.json()) as {
+        source: string;
+        external_id: string;
+        metadata: Record<string, unknown>;
+        expected_metadata_revision: number | null;
+      };
+      const owner = JSON.stringify([body.source, body.external_id]);
+      const prior = this.sourceRecords.get(owner);
+      const record =
+        body.expected_metadata_revision === null && prior
+          ? { ...prior.record, ...body.metadata }
+          : body.metadata;
+      const changed = !prior || JSON.stringify(prior.record) !== JSON.stringify(record);
+      const revision = prior ? prior.revision + Number(changed) : 1;
+      this.sourceRecords.set(owner, { record, revision });
+      return Response.json(
+        {
+          record,
+          metadata_revision: revision,
+          effect: !prior ? 'filled' : changed ? (body.expected_metadata_revision === null ? 'filled' : 'corrected') : 'noEffect',
+        },
+        { status: prior ? 200 : 201 },
+      );
+    }
     expect(path).toBe('/v1/subjects:batchWrite');
     const body: BatchWriteRequest = await request.json();
     expect(checkBatchWrite(body)).toEqual([]);

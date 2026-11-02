@@ -282,7 +282,12 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
           if (signins > 1) return new Response('', { status: 401 });
           const sourceIndex = argv.indexOf('--source');
           const source = sourceIndex < 0 ? undefined : argv[sourceIndex + 1];
-          const expectedScopes = source === 'vndb' ? VNDB_IMPORTER_SCOPES : IMPORTER_SCOPES;
+          const expectedScopes =
+            source === 'vndb'
+              ? VNDB_IMPORTER_SCOPES
+              : source === 'bangumi'
+                ? [...IMPORTER_SCOPES, 'subject:read']
+                : IMPORTER_SCOPES;
           let body: unknown;
           try {
             body = JSON.parse(await request.clone().text());
