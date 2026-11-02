@@ -77,6 +77,26 @@ for Web preview, explicit confirmation and per-target results; navigation and re
 Compose retention and erasure with Accounts 27af and the existing Library cleanup, including the new header's
 owner/expiry indexes. Do not expose the internal store before this composition lands.
 
+## Personal Library removal executor
+
+`executeLibraryRemovalTarget` now delegates to `collection-bulk-library-removal.ts`; other action ports retain
+their existing implementation status. It removes only the captured personal entry through the ordinary native
+deletion transition and event. Copies, sessions, Collection occurrences and financial facts remain independent.
+The same owner transaction stores terminal target evidence and its original command receipt. `TargetEvidence`
+adds optional `deletion: { deletionId, revision, restoreUntil }` for successful removals, preserving the original
+720-hour deadline. Undo remains a separate admitted command.
+
+Decision: present `admissionSequence` is native `entry.owner_write_seq`; absent `slotGeneration` is the captured
+`owner_write_counter.seq`, conservatively conflicting on any intervening owner state write, including create/clear ABA.
+Missing native sequence evidence conflicts rather than being replaced with a synthetic value.
+
+The internal source-bound recovery path verifies the exact persisted manifest, initiating record and original
+native receipt against terminal evidence. It may return private accounting after revocation; callers must still
+authorize every public result read. It neither acknowledges another home's outcome nor authorizes another effect.
+Personal removals are same-home; the executor installs no remote dispatcher, scheduler, public route or erasure path.
+It uses the operation owner's installed durable reader/restorer and chunk limiter; admission, confirmation and
+worker composition remain owned by the integration delivery.
+
 ## Static bounds
 
 The separately owned command envelope admits at most 64 KiB. The stored-value ceilings below bound internal

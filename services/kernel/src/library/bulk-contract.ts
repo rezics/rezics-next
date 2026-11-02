@@ -1,4 +1,4 @@
-/** Bulk integration ports; Collection occurrence removal delegates to its native executor. */
+/** Bulk integration ports; installed actions delegate to their native executors. */
 import { executeCollectionRemoveTarget as removeCapturedOccurrence } from './collection-bulk-remove.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
@@ -13,7 +13,7 @@ import type { WriteRateContext, WriteRateDecision, WriteRateFamily } from '../ac
 import type { Access, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkContext } from '../work/registry.ts';
-import type { EntryState } from './entry-model.ts';
+import type { EntryDeletion, EntryState } from './entry-model.ts';
 
 export const BULK_PAGE_LIMIT = 100;
 export const BULK_SEGMENT_PAGES = 100;
@@ -112,7 +112,8 @@ export type OutcomeView = Readonly<{
 export type OutcomeQuery = { limit?: number; cursor?: string; state?: TargetState };
 export type OutcomePage = { outcomes: readonly OutcomeView[]; next: string | null };
 
-/** Frozen on source; an absent slot generation also changes on create/delete ABA. */
+/** Frozen native owner observations. Present admissionSequence is owner_write_seq;
+ * absent slotGeneration is the owner_write_counter sequence at capture. */
 export type EntryExpectation =
   | { kind: 'present'; incarnation: string; admissionSequence: DecimalSequence; revision: number }
   | { kind: 'absent'; slotGeneration: DecimalSequence };
@@ -213,6 +214,8 @@ export type TargetEvidence = Readonly<{
   resultingMemberId: string | null;
   /** Original native removal episode, never renewed by processing or replay. */
   memberDeletion?: Readonly<{ deletionId: string; revision: number; purgeAfter: string }>;
+  /** Present only for a successful personal entry removal. */
+  deletion?: EntryDeletion;
 }>;
 export type AttemptResult =
   | { kind: 'terminal'; evidence: TargetEvidence }
@@ -360,12 +363,7 @@ export async function executeStatusTarget(
 ): Promise<AttemptResult> {
   throw new Error('Library bulk status is not implemented');
 }
-export async function executeLibraryRemovalTarget(
-  _dependencies: BulkDependencies,
-  _command: TargetCommand,
-): Promise<AttemptResult> {
-  throw new Error('Library bulk entry removal is not implemented');
-}
+export { executeLibraryRemovalTarget } from './collection-bulk-library-removal.ts';
 export async function executeCollectionAddTarget(
   _dependencies: BulkDependencies,
   _command: TargetCommand,

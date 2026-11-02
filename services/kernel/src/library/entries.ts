@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import canonicalize from 'canonicalize';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { authoritativeTimeValue, CommandUnavailableError, type CommandEvent } from '../command/command.ts';
+import { authoritativeTimeValue, CommandUnavailableError, type CommandEvent, type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -26,7 +26,7 @@ import type { PreparedType } from './type-preparation-contract.ts';
 import { observePreparationSource, observePreparationIdentity } from './preparation-source.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 import placement from './shelf-counter-placement.sql';
-import type { Entry, EntryState } from './entry-model.ts';
+import type { Entry, EntryState, EntryDeletion } from './entry-model.ts';
 import * as store from './entry-store.ts';
 import entryPage from './entry-store-entry-page.sql';
 import { createFollowCommands } from './follows.ts';
@@ -165,6 +165,64 @@ function binding(owner: AccountActor, selectedState: EntryState | null): CursorB
   return {
     operation: 'library_entry.list',
     parameters: { accountId: owner.accountId, state: selectedState },
+  };
+}
+
+/** Ordinary deletion transition, on the caller's authorized native owner transaction. */
+export async function deleteLibraryEntryInTransaction(
+  tx: CommandTransaction,
+  command: { transactionId: string; time: AuthoritativeTime },
+  owner: AccountActor,
+  subjectId: string,
+  expected: number,
+  guard?: string,
+): Promise<{ value: EntryDeletion; events: readonly CommandEvent[] }> {
+  const route = requireRoute(owner.accountId);
+  const write = { client: tx, route, accountId: owner.accountId };
+  const gate = await enterShelfWrite(write);
+  await createShelfHeads().ensure(write, subjectId);
+  const current = await mutationState.run(tx, {
+    route,
+    account_id: owner.accountId,
+    subject_id: subjectId,
+  });
+  if (!current) throw new LibraryNotFoundError();
+  if (
+    current.revision !== expected ||
+    expected > 2_147_483_644 ||
+    (current.incarnationId != null && guard === undefined) ||
+    (guard !== undefined && current.incarnationId !== guard)
+  )
+    throw new LibraryEntryLifecycleConflictError('stale');
+  let incarnation = current.incarnationId;
+  if (incarnation == null) {
+    incarnation = newId(route);
+    const stamped = await stampLegacyIncarnation.run(tx, {
+      route,
+      account_id: owner.accountId,
+      subject_id: subjectId,
+      revision: expected,
+      transaction_id: current.transactionId,
+      incarnation_id: incarnation,
+    });
+    if (stamped?.incarnationId !== incarnation) throw new LibraryEntryLifecycleConflictError('stale');
+  }
+  await allocateOwnerWriteSeq(tx, owner.accountId);
+  const removed = await retainEntryDeletion(
+    tx,
+    { route, accountId: owner.accountId, subjectId, revision: expected, incarnationId: incarnation },
+    { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
+  );
+  if (!removed) throw new LibraryEntryLifecycleConflictError('stale');
+  if (gate.ready && !removed.typeId) throw new Error('Complete shelf deletion is missing its type');
+  await createShelfCounters().transition(
+    write,
+    removed.typeId ? { state: removed.state, typeId: removed.typeId } : null,
+    null,
+  );
+  return {
+    value: { deletionId: removed.deletionId, revision: removed.deletedRevision, restoreUntil: removed.restoreUntil },
+    events: [entryEvent(DELETED_EVENT, owner.accountId, subjectId)],
   };
 }
 
@@ -420,52 +478,10 @@ export function createEntryCommands(config: Dependencies) {
         prepare: (attempt) => admitEntryAttempt(config, actor, 'library_entry:delete', attempt, deadline),
       },
       async (tx, command) => {
-        const route = requireRoute(owner.accountId);
-        const write = { client: tx, route, accountId: owner.accountId };
-        const gate = await enterShelfWrite(write);
-        await heads.ensure(write, subjectId);
-        const current = await mutationState.run(tx, {
-          route,
-          account_id: owner.accountId,
-          subject_id: subjectId,
-        });
-        if (!current) throw new LibraryNotFoundError();
-        if (
-          current.revision !== expected ||
-          expected > 2_147_483_644 ||
-          (current.incarnationId != null && guard === undefined) ||
-          (guard !== undefined && current.incarnationId !== guard)
-        )
-          throw new LibraryEntryLifecycleConflictError('stale');
-        let incarnation = current.incarnationId;
-        if (incarnation == null) {
-          incarnation = newId(route);
-          const stamped = await stampLegacyIncarnation.run(tx, {
-            route,
-            account_id: owner.accountId,
-            subject_id: subjectId,
-            revision: expected,
-            transaction_id: current.transactionId,
-            incarnation_id: incarnation,
-          });
-          if (stamped?.incarnationId !== incarnation) throw new LibraryEntryLifecycleConflictError('stale');
-        }
-        await allocateOwnerWriteSeq(tx, owner.accountId);
-        const removed = await retainEntryDeletion(
-          tx,
-          { route, accountId: owner.accountId, subjectId, revision: expected, incarnationId: incarnation },
-          { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
-        );
-        if (!removed) throw new LibraryEntryLifecycleConflictError('stale');
-        if (gate.ready && !removed.typeId) throw new Error('Complete shelf deletion is missing its type');
-        await counters.transition(
-          write,
-          removed.typeId ? { state: removed.state, typeId: removed.typeId } : null,
-          null,
-        );
+        const removed = await deleteLibraryEntryInTransaction(tx, command, owner, subjectId, expected, guard);
         return {
-          value: { deletionId: removed.deletionId, revision: removed.deletedRevision },
-          events: [entryEvent(DELETED_EVENT, owner.accountId, subjectId)],
+          value: { deletionId: removed.value.deletionId, revision: removed.value.revision },
+          events: removed.events,
         };
       },
     );
