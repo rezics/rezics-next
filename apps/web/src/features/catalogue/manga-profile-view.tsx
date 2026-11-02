@@ -19,6 +19,7 @@ import { definitionText } from './definition-guide';
 import { DefinitionGuideLink } from './definition-guide-view';
 import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
 import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
+import { useSpecialistLanguageAddFocus } from './specialist-language-add-focus';
 import { EditorFailure } from './statement-editor-view';
 import { MangaInitialField, MangaRowRemove, type MangaRow } from './manga-profile-field';
 import { mangaCreateFeedback } from './manga-create-feedback';
@@ -209,6 +210,7 @@ function MangaCreate({
   const o = { locale: locale as never };
   const termsId = useId();
   const nextTermId = useRef(1);
+  const focusAddedLanguage = useSpecialistLanguageAddFocus();
   const [type, setType] = useState<MangaType>('schema:ComicSeries');
   const [terms, setTerms] = useState<MangaTermDraft[]>([
     { id: 0, language: locale, label: '', description: '', aliases: '' },
@@ -582,14 +584,18 @@ function MangaCreate({
             type="button"
             variant="outline"
             disabled={locked}
-            onClick={() => {
+            onClick={(event) => {
               if (!currentTermEdit(terms, type, activeTypeActivation)) return;
+              const id = nextTermId.current++;
               const next = [
                 ...termsHolder.current,
-                { id: nextTermId.current++, language: '', label: '', description: '', aliases: '' },
+                { id, language: '', label: '', description: '', aliases: '' },
               ];
               termsHolder.current = next;
               setTerms(next);
+              focusAddedLanguage(event, `${termsId}-language-${id}`, () =>
+                currentTermEdit(next, type, activeTypeActivation),
+              );
             }}
           >
             {m.catalogue_create_add_language({}, o)}

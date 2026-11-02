@@ -121,6 +121,8 @@ Existing Screen correction reloads retire the public reading before transport st
 
 Album, Manga and Recipe creation confirm removal of each populated unsent language row, including language-only input; Cancel or Escape retains its inputs and correction targets and restores trigger focus, while confirmation removes that stable row only, focuses the next row or Add language, and obeys current command and metadata locks.
 
+Album and Manga creation hand keyboard Add language focus to the exact newly admitted stable row's language control; pointer additions stay in place. Focus movement, including moving away and back before mounting, or retirement of the row, metadata, Type activation or workspace cancels the handoff; rejected additions and background changes never move focus.
+
 ## Create and correct a recipe
 
 `/{locale}/catalogue/recipe`, linked from catalogue creation, creates a released `schema:Recipe` with initial

@@ -111,6 +111,44 @@ test('specialist language choices preserve stable drafts, focus, corrections and
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
       });
+      if (family !== 'Recipe') {
+        const add = canvas.getByRole('button', { name: m.catalogue_create_add_language() });
+        const keyboardAdd = () => act(async () => {
+          add.focus();
+          await user.keyboard('{Enter}');
+        });
+        expect(document.activeElement).not.toBe(input(m.catalogue_create_language()));
+        await keyboardAdd();
+        const first = input(m.catalogue_create_language(), 1);
+        expect(document.activeElement).toBe(first);
+        await keyboardAdd();
+        const second = input(m.catalogue_create_language(), 2);
+        expect(document.activeElement).toBe(second);
+        await click(m.catalogue_create_remove_language(), row(first));
+        expect(input(m.catalogue_create_language(), 1)).toBe(second);
+        await keyboardAdd();
+        expect(document.activeElement).toBe(input(m.catalogue_create_language(), 2));
+        expect(input(m.catalogue_create_language(), 2).id).not.toBe(first.id);
+        await act(async () => {
+          add.focus();
+          add.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 0 }));
+          second.focus();
+          add.focus();
+        });
+        expect(document.activeElement).toBe(add);
+        if (family === 'Album') {
+          metadata = false;
+          await keyboardAdd();
+          expect(canvas.getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(4);
+          expect(document.activeElement).toBe(add);
+          metadata = true;
+        }
+        while (canvas.getAllByRole('textbox', { name: m.catalogue_create_language() }).length > 1)
+          await click(m.catalogue_create_remove_language(), row(input(m.catalogue_create_language(), 1)));
+        await click(m.catalogue_create_add_language());
+        expect(document.activeElement).toBe(add);
+        await click(m.catalogue_create_remove_language());
+      }
       await fill(input(m.catalogue_create_label()), 'Original');
       await click(m.catalogue_create_add_language());
       await click(m.catalogue_create_remove_language());

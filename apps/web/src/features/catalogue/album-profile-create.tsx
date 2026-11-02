@@ -14,6 +14,7 @@ import { albumCreateCorrections, type AlbumCorrection, type AlbumRow } from './a
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
+import { useSpecialistLanguageAddFocus } from './specialist-language-add-focus';
 import {
   albumDraft,
   albumFields,
@@ -80,6 +81,9 @@ function AlbumProfileCreateLive({
   const metadataReady = metadataCurrent(release);
   const termsId = useId();
   const nextTermId = useRef(1);
+  const focusAddedLanguage = useSpecialistLanguageAddFocus();
+  const currentRelease = useRef(release);
+  currentRelease.current = release;
   const [terms, setTerms] = useState<(TermDraft & { id: number })[]>([
     { id: 0, language: locale, label: '', description: '', aliases: '' },
   ]);
@@ -336,10 +340,15 @@ function AlbumProfileCreateLive({
               type="button"
               variant="outline"
               disabled={locked}
-              onClick={() => {
-                if (locked || running.current || pending.current) return;
+              onClick={(event) => {
+                if (!termEditingAdmitted.current() || currentRelease.current !== release) return;
                 const id = nextTermId.current++;
                 setTerms((previous) => [...previous, { id, language: '', label: '', description: '', aliases: '' }]);
+                focusAddedLanguage(
+                  event,
+                  `${termsId}-language-${id}`,
+                  () => termEditingAdmitted.current() && currentRelease.current === release && termIds.current.has(id),
+                );
               }}
             >
               {m.catalogue_create_add_language({}, o)}
