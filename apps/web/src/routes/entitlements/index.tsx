@@ -1,3 +1,4 @@
+import { purchaseHistorySearch } from '../../checkout/purchase-return';
 import { createFileRoute } from '@tanstack/react-router';
 import { EntitlementsCurrent } from '../../checkout/entitlements-current';
 import { entitlementSearch, readBuyerEntitlementsCurrent } from '../../checkout/entitlements';
@@ -9,7 +10,10 @@ import { pageHeadContext } from '../../shell/head-context';
 
 export const Route = createFileRoute('/entitlements/')({
   beforeLoad: requireSignedIn,
-  validateSearch: entitlementSearch,
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...purchaseHistorySearch(search),
+    ...entitlementSearch(search),
+  }),
   loaderDeps: ({ search }) => entitlementSearch(search),
   loader: ({ deps }) => readBuyerEntitlementsCurrent({ data: { ...deps, locale: getLocale() } }),
   staleTime: 0,
@@ -17,7 +21,12 @@ export const Route = createFileRoute('/entitlements/')({
     pageHead({ title: m.entitlements_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: function EntitlementsRoute() {
     return (
-      <EntitlementsCurrent initial={Route.useLoaderData()} locale={getLocale()} cursor={Route.useSearch().cursor} />
+      <EntitlementsCurrent
+        initial={Route.useLoaderData()}
+        locale={getLocale()}
+        cursor={Route.useSearch().cursor}
+        history={Route.useSearch()}
+      />
     );
   },
 });

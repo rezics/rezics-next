@@ -1,3 +1,4 @@
+import type { PurchaseHistoryPosition } from './purchase-return';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { isNotFound } from '@tanstack/react-router';
@@ -27,7 +28,7 @@ export function OrdersCurrent({
   locale,
 }: {
   initial: BuyerOrdersCurrentRead;
-  search: { cursor?: string };
+  search: { cursor?: string } & PurchaseHistoryPosition;
   locale: string;
 }) {
   const address = { cursor: search.cursor || null, locale };
@@ -50,6 +51,7 @@ export function OrdersCurrent({
       seed={session.seed}
       hydrated={hydrated}
       origin={origin}
+      history={{ ...search, ordersCursor: address.cursor ?? undefined }}
     />
   );
 }
@@ -61,6 +63,7 @@ function CurrentOrdersRead({
   seed,
   hydrated,
   origin,
+  history,
 }: {
   subject: string;
   address: BuyerOrdersAddress;
@@ -68,6 +71,7 @@ function CurrentOrdersRead({
   seed: boolean;
   hydrated: boolean;
   origin: BuyerCurrentOrigin;
+  history: PurchaseHistoryPosition;
 }) {
   const [lifetime] = useState(() => crypto.randomUUID());
   const [initialData] = useState(() => (seed && matches(initial, subject, address) ? initial : undefined));
@@ -104,5 +108,12 @@ function CurrentOrdersRead({
       />
     );
   if (!matches(query.data, subject, address)) return <PendingPage />;
-  return <OrdersPage page={query.data.page} locale={address.locale} continuation={address.cursor !== null} />;
+  return (
+    <OrdersPage
+      page={query.data.page}
+      locale={address.locale}
+      continuation={address.cursor !== null}
+      history={history}
+    />
+  );
 }

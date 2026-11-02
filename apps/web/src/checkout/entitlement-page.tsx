@@ -1,3 +1,4 @@
+import { purchaseHistoryHref, type PurchaseHistoryPosition } from './purchase-return';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
@@ -11,10 +12,12 @@ export function EntitlementPage({
   page,
   locale,
   retry,
+  history = {},
 }: {
   page: BuyerEntitlementPage;
   locale: string;
   retry?: () => void;
+  history?: PurchaseHistoryPosition | undefined;
 }) {
   const record = page.kind === 'ready' ? page.data : null;
   const subject = record
@@ -22,12 +25,15 @@ export function EntitlementPage({
     : null;
   return (
     <article className="max-w-4xl min-w-0 space-y-6" aria-labelledby="entitlement-heading">
-      <a href={`/${locale}/entitlements`} className={buttonVariants({ variant: 'link', className: 'min-h-11 px-0' })}>
+      <a
+        href={purchaseHistoryHref(locale, 'entitlements', history)}
+        className={buttonVariants({ variant: 'link', className: 'min-h-11 px-0' })}
+      >
         {m.entitlements_heading()}
       </a>
       <PageHeading id="entitlement-heading">{m.entitlements_detail_heading()}</PageHeading>
       {page.kind !== 'ready' ? (
-        <EntitlementsState kind={page.kind} locale={locale} {...(retry ? { retry } : {})} />
+        <EntitlementsState kind={page.kind} locale={locale} history={history} {...(retry ? { retry } : {})} />
       ) : record && subject ? (
         <>
           <div className="flex min-w-0 items-start gap-4 sm:gap-6">
@@ -84,7 +90,7 @@ export function EntitlementPage({
           </dl>
           <p>
             <a
-              href={`/${locale}/orders/${record.orderId}`}
+              href={purchaseHistoryHref(locale, `orders/${record.orderId}`, history)}
               className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
             >
               {m.order_receipt()}
@@ -100,7 +106,7 @@ export function EntitlementPage({
                 <dt className="text-muted-foreground">{m.order_reference()}</dt>
                 <dd>
                   <a
-                    href={`/${locale}/orders/${record.orderId}`}
+                    href={purchaseHistoryHref(locale, `orders/${record.orderId}`, history)}
                     className="inline-flex min-h-11 items-center break-all font-mono text-primary underline underline-offset-4"
                   >
                     {record.orderId}

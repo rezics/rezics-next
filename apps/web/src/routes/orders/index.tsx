@@ -1,3 +1,4 @@
+import { purchaseHistorySearch } from '../../checkout/purchase-return';
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
@@ -15,13 +16,16 @@ function validCursor(value: unknown): string | undefined {
 
 function validateOrdersSearch(search: Record<string, unknown>) {
   const cursor = validCursor(search.cursor);
-  return cursor ? { cursor } : {};
+  return { ...purchaseHistorySearch(search), ...(cursor ? { cursor } : {}) };
 }
 
 export const Route = createFileRoute('/orders/')({
   beforeLoad: requireSignedIn,
   validateSearch: validateOrdersSearch,
-  loaderDeps: ({ search }) => validateOrdersSearch(search),
+  loaderDeps: ({ search }) => {
+    const cursor = validCursor(search.cursor);
+    return cursor ? { cursor } : {};
+  },
   loader: ({ deps }) => readBuyerOrdersCurrent({ data: { ...deps, locale: getLocale() } }),
   head: ({ match }) =>
     pageHead({ title: m.orders_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),

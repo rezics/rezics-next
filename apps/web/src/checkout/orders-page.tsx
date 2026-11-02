@@ -1,3 +1,4 @@
+import { purchaseHistoryHref, type PurchaseHistoryPosition } from './purchase-return';
 import { ContentItem } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
@@ -31,10 +32,12 @@ export function OrdersPage({
   page,
   locale,
   continuation = false,
+  history = {},
 }: {
   page: BuyerOrderPage;
   locale: string;
   continuation?: boolean;
+  history?: PurchaseHistoryPosition;
 }) {
   return (
     <section className="max-w-4xl min-w-0 space-y-6 text-foreground" aria-labelledby="orders-heading">
@@ -43,7 +46,7 @@ export function OrdersPage({
       </PageHeading>
       <p>
         <a
-          href={`/${locale}/entitlements`}
+          href={purchaseHistoryHref(locale, 'entitlements', history)}
           className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
         >
           {m.entitlements_heading()}
@@ -63,7 +66,7 @@ export function OrdersPage({
               key={order.id}
               title={order.title}
               headingLevel={2}
-              href={`/${locale}/orders/${order.id}`}
+              href={purchaseHistoryHref(locale, `orders/${order.id}`, history)}
               data-order-row
               data-order-id={order.id}
               data-settlement={order.settlement}
@@ -99,13 +102,16 @@ export function OrdersPage({
       {continuation || page.next ? (
         <nav aria-label={m.orders_pagination()} className="flex flex-wrap gap-3">
           {continuation ? (
-            <a href={`/${locale}/orders`} className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}>
+            <a
+              href={purchaseHistoryHref(locale, 'orders', { ...history, ordersCursor: undefined })}
+              className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+            >
               {m.entitlements_restart()}
             </a>
           ) : null}
           {page.next ? (
             <a
-              href={`/${locale}/orders?cursor=${encodeURIComponent(page.next)}`}
+              href={purchaseHistoryHref(locale, 'orders', { ...history, ordersCursor: page.next })}
               className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
             >
               {m.orders_next()}

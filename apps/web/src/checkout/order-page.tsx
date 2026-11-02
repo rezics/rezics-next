@@ -1,3 +1,4 @@
+import { purchaseHistoryHref, type PurchaseHistoryPosition } from './purchase-return';
 import { Exposure } from '../kernel/exposure';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -38,6 +39,7 @@ function entitlementLabel(entitlement: CurrentEntitlement): string {
 
 type OrderPageProps = {
   order: OrderPageData;
+  history?: PurchaseHistoryPosition | undefined;
   checkout?: 'canceled' | 'success';
   /** Component stories substitute only this operation's contract-shaped response. */
   reconcile?: ReconciliationSender;
@@ -128,6 +130,7 @@ function OrderLifetime({
   gaveUp,
   setGaveUp,
   checkout,
+  history = {},
   reconcile,
   canReadOrder,
   hydrated,
@@ -377,7 +380,7 @@ function OrderLifetime({
       {order.entitlementId ? (
         <p>
           <a
-            href={`/${locale}/entitlements/${encodeURIComponent(order.entitlementId)}`}
+            href={purchaseHistoryHref(locale, `entitlements/${encodeURIComponent(order.entitlementId)}`, history)}
             className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
           >
             {m.entitlements_detail_heading()}
@@ -482,7 +485,7 @@ function OrderLifetime({
       <Exposure operation="order.list">
         <p>
           <a
-            href={`/${locale}/orders`}
+            href={purchaseHistoryHref(locale, 'orders', history)}
             className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
           >
             {m.nav_orders()}

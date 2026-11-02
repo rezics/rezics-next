@@ -347,6 +347,10 @@ session. Access and refresh tokens stay in the Worker; the browser holds an opaq
 Only routes that use the credential resolve tokens, currently `/media` and `/media/…`, `POST /checkout`, order reads,
 and the signed-in buyer's private `/orders` history. The history page requests one bounded `GET /v1/orders` cursor page
 per visit and links each captured order to its existing known-ID page.
+Purchase-history, receipt and owned-benefit links carry separate bounded `ordersCursor` and `entitlementsCursor`
+URL positions; each list consumes only its own opaque cursor, retries that exact page, and clears only its own
+position on restart. Optional malformed return positions are ignored. These positions never authorize use or
+alter the original credentials of an enrolled mutation.
 After hydration, the shell reads session presence, lifetime and CSRF token once through the private browser session query,
 without refreshing tokens or contacting Auth. The root and public home, Space and board renders do not read session or preference cookies. Missing, invalid, expired or unreadable sessions render as signed
 out without changing the cookie. Media requests, checkout start and order reads resolve before calling the kernel, so

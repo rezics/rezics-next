@@ -1,3 +1,4 @@
+import { purchaseHistoryHref, type PurchaseHistoryPosition } from './purchase-return';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Cover } from '@rezics/ui/cover';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
@@ -31,8 +32,10 @@ export function EntitlementsState({
   kind,
   locale,
   retry,
+  history = {},
 }: {
   kind: Exclude<EntitlementsRead<never>['kind'], 'ready'>;
+  history?: PurchaseHistoryPosition;
   locale: string;
   retry?: () => void;
 }) {
@@ -49,7 +52,10 @@ export function EntitlementsState({
       <AlertDescription className="space-y-4">
         <p>{message}</p>
         {kind === 'cursor-error' ? (
-          <a href={`/${locale}/entitlements`} className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}>
+          <a
+            href={purchaseHistoryHref(locale, 'entitlements', { ...history, entitlementsCursor: undefined })}
+            className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+          >
             {m.entitlements_restart()}
           </a>
         ) : kind !== 'denied' ? (
@@ -67,23 +73,28 @@ export function EntitlementsPage({
   locale,
   retry,
   continuation = false,
+  history = {},
 }: {
   page: BuyerEntitlementsPage;
   locale: string;
   retry?: () => void;
   continuation?: boolean;
+  history?: PurchaseHistoryPosition;
 }) {
   return (
     <section className="max-w-4xl min-w-0 space-y-6" aria-labelledby="entitlements-heading">
       <header className="space-y-3">
         <PageHeading id="entitlements-heading">{m.entitlements_heading()}</PageHeading>
         <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.entitlements_intro()}</p>
-        <a href={`/${locale}/orders`} className={buttonVariants({ variant: 'link', className: 'min-h-11 px-0' })}>
+        <a
+          href={purchaseHistoryHref(locale, 'orders', history)}
+          className={buttonVariants({ variant: 'link', className: 'min-h-11 px-0' })}
+        >
           {m.entitlements_orders()}
         </a>
       </header>
       {page.kind !== 'ready' ? (
-        <EntitlementsState kind={page.kind} locale={locale} {...(retry ? { retry } : {})} />
+        <EntitlementsState kind={page.kind} locale={locale} history={history} {...(retry ? { retry } : {})} />
       ) : page.data.entitlements.length === 0 ? (
         <Empty className="border border-border">
           <EmptyHeader>
@@ -109,7 +120,7 @@ export function EntitlementsPage({
                 title={subject.title}
                 {...(record.summary?.label ? { titleLang: record.summary.label.language } : {})}
                 headingLevel={2}
-                href={`/${locale}/entitlements/${record.id}`}
+                href={purchaseHistoryHref(locale, `entitlements/${record.id}`, history)}
                 visual={<Cover subject={subject} cover={cover} size="xs" src={coverSrc} decorative />}
                 state={<EntitlementStatus record={record} />}
                 metadata={
@@ -131,7 +142,7 @@ export function EntitlementsPage({
         <nav aria-label={m.entitlements_pagination()} className="flex flex-wrap gap-3">
           {continuation ? (
             <a
-              href={`/${locale}/entitlements`}
+              href={purchaseHistoryHref(locale, 'entitlements', { ...history, entitlementsCursor: undefined })}
               className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
             >
               {m.entitlements_restart()}
@@ -139,7 +150,7 @@ export function EntitlementsPage({
           ) : null}
           {page.data.next ? (
             <a
-              href={`/${locale}/entitlements?cursor=${encodeURIComponent(page.data.next)}`}
+              href={purchaseHistoryHref(locale, 'entitlements', { ...history, entitlementsCursor: page.data.next })}
               className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
             >
               {m.entitlements_next()}

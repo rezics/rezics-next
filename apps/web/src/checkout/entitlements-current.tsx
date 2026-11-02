@@ -1,3 +1,4 @@
+import type { PurchaseHistoryPosition } from './purchase-return';
 import { useCallback, useState, type ComponentType } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
@@ -16,9 +17,16 @@ import { EntitlementsPage } from './entitlements-page';
 import { useBuyerCurrentOrigin, type BuyerCurrentOrigin } from './buyer-current-origin';
 
 type Page = BuyerEntitlementsPage | BuyerEntitlementPage;
-type PageProps<T> = { page: T; locale: string; retry?: () => void; continuation?: boolean };
+type PageProps<T> = {
+  page: T;
+  locale: string;
+  retry?: () => void;
+  continuation?: boolean;
+  history?: PurchaseHistoryPosition | undefined;
+};
 type CurrentProps<T extends Page> = {
   initial: BuyerEntitlementsCurrentRead<T>;
+  history?: PurchaseHistoryPosition | undefined;
   address: EntitlementsAddress;
   read: (address: EntitlementsAddress) => Promise<BuyerEntitlementsCurrentRead<T>>;
   Presentation: ComponentType<PageProps<T>>;
@@ -45,15 +53,18 @@ export function EntitlementsCurrent({
   initial,
   locale,
   cursor,
+  history,
 }: {
   initial: BuyerEntitlementsCurrentRead;
   locale: string;
   cursor?: string | undefined;
+  history?: PurchaseHistoryPosition | undefined;
 }) {
   return (
     <EntitlementsBoundary
       initial={initial}
       address={{ kind: 'list', locale, cursor: cursor || null }}
+      history={{ ...history, entitlementsCursor: cursor || undefined }}
       read={readList}
       Presentation={EntitlementsPage}
     />
@@ -64,15 +75,18 @@ export function EntitlementCurrent({
   initial,
   locale,
   id,
+  history,
 }: {
   initial: BuyerEntitlementCurrentRead;
   locale: string;
   id: string;
+  history?: PurchaseHistoryPosition | undefined;
 }) {
   return (
     <EntitlementsBoundary
       initial={initial}
       address={{ kind: 'detail', locale, id }}
+      history={history}
       read={readDetail}
       Presentation={EntitlementPage}
     />
@@ -96,7 +110,7 @@ function EntitlementsBoundary<T extends Page>(props: CurrentProps<T>) {
         : hydrated && (session.state === 'unknown' || (session.state === 'signed-in' && !subject))
           ? 'preparing'
           : 'denied';
-    return <Presentation page={{ kind } as T} locale={address.locale} retry={retrySession} />;
+    return <Presentation page={{ kind } as T} locale={address.locale} retry={retrySession} history={props.history} />;
   }
   return (
     <EntitlementsRead
@@ -119,6 +133,7 @@ function EntitlementsRead<T extends Page>({
   hydrated,
   seed,
   origin,
+  history,
 }: CurrentProps<T> & { subject: string; hydrated: boolean; seed: boolean; origin: BuyerCurrentOrigin }) {
   const [lifetime] = useState(() => crypto.randomUUID());
   const [initialData] = useState<Outcome<T> | undefined>(() =>
@@ -166,6 +181,7 @@ function EntitlementsRead<T extends Page>({
       locale={address.locale}
       continuation={address.kind === 'list' && address.cursor !== null}
       retry={retry}
+      history={history}
     />
   );
 }

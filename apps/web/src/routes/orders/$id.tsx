@@ -1,3 +1,4 @@
+import { purchaseHistorySearch } from '../../checkout/purchase-return';
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
@@ -17,7 +18,7 @@ export const Route = createFileRoute('/orders/$id')({
   beforeLoad: requireSignedIn,
   validateSearch: (search: Record<string, unknown>) => {
     const checkout = checkoutQuery(search.checkout);
-    return checkout ? { checkout } : {};
+    return { ...purchaseHistorySearch(search), ...(checkout ? { checkout } : {}) };
   },
   loader: ({ params }) => readOrder({ data: { id: params.id, locale: getLocale() } }),
   staleTime: 60_000,
@@ -33,9 +34,14 @@ export const Route = createFileRoute('/orders/$id')({
   component: function OrderRoute() {
     const checkout = Route.useSearch().checkout;
     return checkout ? (
-      <OrderPage key={Route.useLoaderData().id} order={Route.useLoaderData()} checkout={checkout} />
+      <OrderPage
+        history={Route.useSearch()}
+        key={Route.useLoaderData().id}
+        order={Route.useLoaderData()}
+        checkout={checkout}
+      />
     ) : (
-      <OrderPage key={Route.useLoaderData().id} order={Route.useLoaderData()} />
+      <OrderPage history={Route.useSearch()} key={Route.useLoaderData().id} order={Route.useLoaderData()} />
     );
   },
 });
