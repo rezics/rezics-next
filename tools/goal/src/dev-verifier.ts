@@ -261,15 +261,16 @@ function packageManagerPinAt(checkout: string, commit?: string): string | undefi
     return undefined;
   }
 }
-function repositoryBun(tree: string, fallbackRoot = tree): string {
+function repositoryBun(tree: string, fallbackRoot = tree, bootstrap = false): string {
   const pinnedVersion = packageManagerPinAt(tree);
   for (const root of [...new Set([tree, fallbackRoot])]) {
     if (pinnedVersion && packageManagerPinAt(root) !== pinnedVersion) continue;
     const executable = join(root, 'node_modules/.bin/bun');
     if (existsSync(executable)) return executable;
   }
-  if (pinnedVersion) throw new Error(`Pinned Bun ${pinnedVersion} is not installed for verifier checks.`);
-  return 'bun';
+  if (pinnedVersion && !bootstrap)
+    throw new Error(`Pinned Bun ${pinnedVersion} is not installed for verifier checks.`);
+  return bootstrap ? process.execPath : 'bun';
 }
 function toolchainIdentity(settings: Settings, commit?: string): unknown {
   let remoteHosts: string | null = null;
@@ -392,10 +393,11 @@ function installDependencies(tree: string, stateDirectory: string, fallbackRoot:
   if (!existsSync(join(tree, 'package.json')) || !existsSync(join(tree, 'bun.lock'))) return true;
   const installLog = join(stateDirectory, `dev-verify-install-${randomUUID()}.log`);
   for (let attempt = 0; attempt < 3; attempt++) {
-    appendFileSync(installLog, `$ bun install --frozen-lockfile (attempt ${attempt + 1})\n`);
     try {
+      const executable = repositoryBun(tree, fallbackRoot, true);
+      appendFileSync(installLog, `$ ${executable} install --frozen-lockfile (attempt ${attempt + 1})\n`);
       const result = runBoundedInstallProcess({
-        command: repositoryBun(tree, fallbackRoot),
+        command: executable,
         args: ['install', '--frozen-lockfile'],
         cwd: tree,
         step: 'bun install --frozen-lockfile',
@@ -490,8 +492,7 @@ function installDependenciesCached(
     environment: environmentIdentity(options.settings),
     toolchain: toolchainIdentity(options.settings, commit),
   });
-  const cached = cachedRun(options.store, key);
-  if (cached) return { passed: cached.passed, output: cached.output, logPath: cached.logPath };
+  // A previous tree's successful install cannot populate this fresh tree's node_modules.
   const { stateDirectory } = options.settings;
   const logPrefix = 'dev-verify-install-';
   const logSuffix = '.log';

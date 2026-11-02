@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -132,6 +132,62 @@ test('selects the repository Bun executable for verifier checks', () => {
   expect(command[0]).toBe('env');
   expect(command[2]).toBe(join(root, 'node_modules/.bin/bun'));
   expect(command[1]).toContain(`PATH=${join(root, 'node_modules/.bin')}:`);
+});
+
+test.each([false, true])('bootstraps a fresh pinned tree (install fails: %s)', async (fails) => {
+  const root = repo(),
+    base = git(root, 'rev-parse', 'dev-verified');
+  mkdirSync(join(root, 'toolchain'));
+  writeFileSync(join(root, 'toolchain/package.json'), JSON.stringify({ name: 'bun', version: Bun.version, bin: './bun' }));
+  writeFileSync(join(root, 'toolchain/bun'), `#!/bin/sh\nexec '${process.execPath}' "$@"\n`, { mode: 0o755 });
+  writeFileSync(
+    join(root, 'package.json'),
+    JSON.stringify({ packageManager: `bun@${Bun.version}`, dependencies: { bun: 'file:./toolchain' } }),
+  );
+  const lock = spawnSync(process.execPath, ['install', '--lockfile-only', '--ignore-scripts'], {
+    cwd: root, encoding: 'utf8',
+  });
+  expect(lock.status, lock.stderr).toBe(0);
+  if (fails) writeFileSync(join(root, 'bun.lock'), 'invalid lockfile');
+  git(root, 'add', 'package.json', 'bun.lock', 'toolchain');
+  git(root, 'commit', '-m', 'pin Bun on dev');
+  const landing = git(root, 'rev-parse', 'HEAD');
+  git(root, 'branch', '-f', 'dev', landing);
+  git(root, 'checkout', '--detach', base);
+  expect(existsSync(join(root, 'node_modules/.bin/bun'))).toBe(false);
+  const ctx = setup(root);
+  let checks = 0;
+  const runGate = async (command: readonly string[], cwd: string) => {
+    expect(command[2]).toBe(join(cwd, 'node_modules/.bin/bun'));
+    const result = spawnSync(command[0]!, command.slice(1), { cwd, encoding: 'utf8' });
+    checks++;
+    return { passed: result.status === 0, output: result.stdout + result.stderr, timedOut: false };
+  };
+  // Keep successful setup evidence across a restart, but request the check again in a new tree.
+  const store = {
+    ...ctx.store,
+    devVerifierRun: (key: string) => {
+      const run = ctx.store.devVerifierRun(key);
+      return run?.evidence.command.includes('install') ? run : undefined;
+    },
+  };
+  for (let restart = 0; restart < 2; restart++) {
+    git(root, 'branch', '-f', 'dev-verified', base);
+    await verifyDev({ ...ctx, store, runGate });
+  }
+  expect(checks).toBe(fails ? 0 : 2);
+  const findings = ctx.store.devVerifierFindings();
+  if (fails) {
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings.every((finding) => finding.result === 'infrastructure')).toBe(true);
+  } else expect(findings).toEqual([]);
+  const logs = readdirSync(ctx.settings.stateDirectory).filter((name) => name.startsWith('dev-verify-install-'));
+  expect(logs).toHaveLength(2);
+  for (const log of logs) {
+    expect(readFileSync(join(ctx.settings.stateDirectory, log), 'utf8')).toContain(
+      `$ ${process.execPath} install --frozen-lockfile`,
+    );
+  }
 });
 
 test('reuses a failed verifier check while its workspace inputs stay unchanged', async () => {
