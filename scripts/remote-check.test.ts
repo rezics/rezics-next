@@ -771,7 +771,7 @@ if (script.includes('/proc/loadavg')) {
 `;
 
 const fakeRsync = `#!/usr/bin/env bun
-import { appendFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 const args = process.argv.slice(2);
 if (args.includes('--version')) {
