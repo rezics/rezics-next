@@ -89,20 +89,24 @@ test.serial('reaping keeps protected containers and counts only removals Docker 
   }
 });
 
-test.serial('a Docker removal that hangs is terminated within the operation bound', () => {
-  const box = dockerSandbox();
-  const state = join(box.directory, 'state');
-  mkdirSync(state);
-  writeFileSync(join(state, 'containers.json'), '{"maxAgeHours":4}');
-  executable(
-    join(box.bin, 'docker'),
-    `#!/bin/sh\ncase "$1" in\n  ps) printf 'old-id\\tfocused_yalow\\t2026-11-02 00:00:00 +0800 CST\\n' ;;\n  rm) exec sleep 60 ;;\nesac\n`,
-  );
-  try {
-    const started = Date.now();
-    expect(reapContainers(emptyDb, state, Date.parse('2026-11-03T12:00:00+08:00'))).toBe(0);
-    expect(Date.now() - started).toBeLessThan(25_000);
-  } finally {
-    box.close();
-  }
-}, 25_000);
+test.serial(
+  'a Docker removal that hangs is terminated within the operation bound',
+  () => {
+    const box = dockerSandbox();
+    const state = join(box.directory, 'state');
+    mkdirSync(state);
+    writeFileSync(join(state, 'containers.json'), '{"maxAgeHours":4}');
+    executable(
+      join(box.bin, 'docker'),
+      `#!/bin/sh\ncase "$1" in\n  ps) printf 'old-id\\tfocused_yalow\\t2026-11-02 00:00:00 +0800 CST\\n' ;;\n  rm) exec sleep 60 ;;\nesac\n`,
+    );
+    try {
+      const started = Date.now();
+      expect(reapContainers(emptyDb, state, Date.parse('2026-11-03T12:00:00+08:00'))).toBe(0);
+      expect(Date.now() - started).toBeLessThan(25_000);
+    } finally {
+      box.close();
+    }
+  },
+  25_000,
+);

@@ -49,7 +49,12 @@ export function staleContainers(
 }
 
 function confirmedRemovals(stdout: string, selected: readonly ContainerRow[]): number {
-  const confirmations = new Set(stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
+  const confirmations = new Set(
+    stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
   return selected.filter((row) => confirmations.has(row.id) || confirmations.has(row.name)).length;
 }
 
