@@ -28,6 +28,7 @@ import {
   changePassword,
   formatSecurityDate,
   loadSecurity,
+  reviewPasskeyRegistration,
   revokeSession,
   securityDevice,
   type PasskeysLoad,
@@ -44,6 +45,7 @@ export const Route = createFileRoute('/security')({
 type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
 type SecurityOperation =
   | { kind: 'password' | 'passkey-add' | 'consent' }
+  | { kind: 'registration-review'; accountId: string; phase: 'unknown' | 'reviewed'; reading: boolean }
   | { kind: 'target'; target: SecurityTarget }
   | { kind: 'recovery'; target: SecurityTarget; phase: 'unknown' | 'accepted' | 'present'; reading: boolean };
 
@@ -57,7 +59,7 @@ export function SecurityPage({
 }: {
   initial?: SecurityLoadResult;
   inventorySource?: InventorySource;
-  securitySource?: SecuritySource;
+  securitySource?: SecuritySource & { reviewRegistration?: typeof reviewPasskeyRegistration };
   identitySource?: AccountIdentitySource;
 } = {}) {
   const [loadState, setLoadState] = useState<LoadState>('loading');
@@ -85,6 +87,7 @@ export function SecurityPage({
   const passkeyRemoving =
     operation?.kind === 'target' && operation.target.kind === 'passkey' ? operation.target.id : '';
   const recovery = operation?.kind === 'recovery' ? operation : null;
+  const registrationRecovery = operation?.kind === 'registration-review' ? operation : null;
   const reading = recovery?.reading ?? false;
   const operationBlocked = operation !== null;
   const [signedOutNotice, setSignedOutNotice] = useState('');
@@ -182,9 +185,9 @@ export function SecurityPage({
   }, [passwordFieldError, passwordError]);
 
   useLayoutEffect(() => {
-    if (recovery) recoveryStatus.current?.focus();
+    if (recovery || registrationRecovery) recoveryStatus.current?.focus();
     else if (sessionNotice) sessionStatus.current?.focus();
-  }, [recovery, sessionNotice]);
+  }, [recovery, registrationRecovery, sessionNotice]);
 
   function updateOperation(next: SecurityOperation | null) {
     activeOperation.current = next;
@@ -383,7 +386,43 @@ export function SecurityPage({
       window.location.assign(STEP_UP_URL);
     } else if (result.reason === 'failure') {
       setPasskeyError(result.message);
+    } else if (result.reason === 'unknown') {
+      updateOperation({ kind: 'registration-review', accountId: owner, phase: 'unknown', reading: false });
     }
+  }
+
+  async function reviewRegistration() {
+    const held = activeOperation.current;
+    if (held?.kind !== 'registration-review' || held.reading) return;
+    updateOperation({ ...held, reading: true });
+    const generation = authorityGeneration.current;
+    const result = await (securitySource?.reviewRegistration ?? reviewPasskeyRegistration)(
+      held.accountId,
+      lifetime.current.signal,
+    );
+    if (authorityGeneration.current !== generation || activeAccount.current !== held.accountId) return;
+    if (result.kind === 'signed-out' || result.kind === 'denied') {
+      clearPrivateData(result.kind === 'signed-out' ? 'signed-out' : 'failure', m.auth_security_action_unverified());
+      return;
+    }
+    if (result.kind === 'unavailable') {
+      updateOperation({ ...held, phase: 'unknown', reading: false });
+      setPasskeyError(m.auth_security_readback_unavailable());
+      return;
+    }
+    setPasskeys(result.passkeys);
+    setPasskeysLoad(result);
+    setPasskeyError('');
+    // Native row IDs are authoritative. Neither a name nor a WebAuthn credential ID identifies a saved row.
+    updateOperation({ ...held, phase: 'reviewed', reading: false });
+  }
+
+  function finishRegistrationReview() {
+    const held = activeOperation.current;
+    if (held?.kind !== 'registration-review' || held.reading || held.phase !== 'reviewed') return;
+    updateOperation(null);
+    setPasskeyName('');
+    setPasskeyNotice(m.auth_security_passkey_registration_reviewed());
   }
 
   async function removeOnePasskey(passkey: SecurityPasskey) {
@@ -466,6 +505,29 @@ export function SecurityPage({
                     }
                   >
                     {m.auth_security_retry_action()}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+            {registrationRecovery ? (
+              <div className="auth-login-form" aria-busy={registrationRecovery.reading}>
+                <div ref={recoveryStatus} tabIndex={-1} role="status">
+                  {registrationRecovery.phase === 'reviewed'
+                    ? m.auth_security_passkey_registration_reviewed()
+                    : m.auth_security_passkey_registration_unknown()}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void reviewRegistration()}
+                  disabled={registrationRecovery.reading}
+                  aria-busy={registrationRecovery.reading}
+                >
+                  {m.auth_security_check_current()}
+                </Button>
+                {registrationRecovery.phase === 'reviewed' ? (
+                  <Button type="button" variant="outline" onClick={finishRegistrationReview}>
+                    {m.auth_security_passkey_registration_continue()}
                   </Button>
                 ) : null}
               </div>

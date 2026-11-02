@@ -1,8 +1,8 @@
 import { privateAuthRead } from './private-auth-read';
 import { authPost, failureMessage, type AuthPostResult } from './api';
 import { m } from './paraglide/messages.js';
-import { loadPasskeyInventory } from './security-inventory';
-import { performSecurityAction } from './security-reconciliation';
+import { issuerSecurityRequest, loadPasskeyInventory } from './security-inventory';
+import { parseSecurityPasskeys, performSecurityAction } from './security-reconciliation';
 
 export type SecuritySession = {
   id: string;
@@ -31,6 +31,54 @@ export type SecurityLoadResult =
   | { kind: 'ready'; accountId: string; sessions: SecuritySession[]; passkeys: PasskeysLoad }
   | { kind: 'signed-out' }
   | { kind: 'failure'; message: string };
+
+export type PasskeyRegistrationReview =
+  | { kind: 'ready'; passkeys: SecurityPasskey[] }
+  | { kind: 'signed-out' | 'denied' | 'unavailable' };
+
+const registrationReview = createServerFn({ method: 'POST' })
+  .validator((accountId: string) => {
+    if (typeof accountId !== 'string' || !accountId) throw new Error('Invalid account');
+    return accountId;
+  })
+  .handler(async ({ data }): Promise<PasskeyRegistrationReview> => {
+    // All reads carry one fixed BFF request cookie; never adopt another account's list.
+    async function authority(): Promise<'current' | 'signed-out' | 'denied' | 'unavailable'> {
+      const response = await issuerSecurityRequest('/session');
+      if (response.status === 401) return 'signed-out';
+      if (response.status === 403) return 'denied';
+      if (response.status !== 200) return 'unavailable';
+      const body: unknown = await response.json();
+      if (!body || typeof body !== 'object' || !('account_id' in body) || typeof body.account_id !== 'string')
+        return 'unavailable';
+      return body.account_id === data ? 'current' : 'denied';
+    }
+    try {
+      const before = await authority();
+      if (before !== 'current') return { kind: before };
+      const response = await issuerSecurityRequest('/passkeys');
+      if (response.status === 401) return { kind: 'signed-out' };
+      if (response.status === 403) return { kind: 'denied' };
+      if (response.status !== 200) return { kind: 'unavailable' };
+      const passkeys = parseSecurityPasskeys(await response.json());
+      if (!passkeys) return { kind: 'unavailable' };
+      const after = await authority();
+      return after === 'current' ? { kind: 'ready', passkeys } : { kind: after };
+    } catch {
+      return { kind: 'unavailable' };
+    }
+  });
+
+export async function reviewPasskeyRegistration(
+  accountId: string,
+  signal?: AbortSignal,
+): Promise<PasskeyRegistrationReview> {
+  try {
+    return await privateAuthRead((readSignal) => registrationReview({ data: accountId, signal: readSignal }), signal);
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
 
 type SessionResponse = { account_id?: unknown };
 type SessionsResponse = { sessions?: unknown };
@@ -254,3 +302,4 @@ export function formatSecurityDate(value: string, locale: string): string {
   if (!Number.isFinite(date.getTime())) return value;
   return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
+import { createServerFn } from '@tanstack/react-start';

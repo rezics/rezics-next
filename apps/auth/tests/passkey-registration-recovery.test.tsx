@@ -1,0 +1,225 @@
+import { afterAll, afterEach, expect, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act } from 'react';
+import type { Root } from 'react-dom/client';
+import type { PasskeyRegistrationReview } from '../src/security';
+import type { SecurityTarget } from '../src/security-reconciliation';
+
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
+);
+const dom = new Window({ url: 'https://auth.test/security' });
+const globals = {
+  ...Object.fromEntries(
+    ['window', 'document', 'navigator', 'HTMLElement', 'HTMLInputElement', 'Element', 'Node', 'Event'].map((key) => [
+      key,
+      dom[key as keyof typeof dom],
+    ]),
+  ),
+  getComputedStyle: dom.getComputedStyle.bind(dom),
+  IS_REACT_ACT_ENVIRONMENT: true,
+  PublicKeyCredential: class {},
+};
+const originals = new Map(
+  [...Object.keys(globals), 'fetch'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+const { createRoot } = await import('react-dom/client');
+const { SecurityPage } = await import('../src/routes/security');
+const { initial } = await import('../src/stories/accounts-security/security/security.stories');
+const { emptyInventory, button } = await import('../src/stories/accounts-operations/story');
+const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
+const { m } = await import('../src/paraglide/messages.js');
+const { AUTH_POST_TIMEOUT_MS } = await import('../src/api');
+overwriteGetLocale(() => 'en');
+const flush = (action: () => void) => act(async () => action());
+let host: HTMLDivElement, root: Root, ceremonies: number, requests: { path: string; init: RequestInit }[];
+let response: ReturnType<typeof Promise.withResolvers<Response>>;
+let review: ReturnType<typeof Promise.withResolvers<PasskeyRegistrationReview>>;
+let reviews: string[];
+let actions: SecurityTarget[];
+const source = {
+  act: async (target: SecurityTarget) => {
+    actions.push(target);
+    return { kind: 'failure' as const };
+  },
+  read: async () => ({ kind: 'unavailable' as const }),
+  reviewRegistration: async (accountId: string) => {
+    reviews.push(accountId);
+    return review.promise;
+  },
+};
+const render = (value = initial) =>
+  flush(() =>
+    root.render(
+      <SecurityPage
+        initial={value}
+        securitySource={source}
+        inventorySource={emptyInventory}
+        identitySource={async () => ({ kind: 'unavailable' })}
+      />,
+    ),
+  );
+const submit = () =>
+  host
+    .querySelectorAll('form')[1]!
+    .dispatchEvent(new dom.Event('submit', { bubbles: true, cancelable: true }) as unknown as Event);
+const click = (label: string) => button(host, label)!.click();
+const locked = () =>
+  [...host.querySelectorAll<HTMLButtonElement>('form button[type="submit"], li button')].every(
+    (control) => control.disabled,
+  );
+afterEach(async () => {
+  await flush(() => root.unmount());
+  host.remove();
+});
+afterAll(async () => {
+  for (const [key, descriptor] of originals) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+  await dom.happyDOM.close();
+});
+async function mount() {
+  host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  ceremonies = 0;
+  requests = [];
+  reviews = [];
+  actions = [];
+  response = Promise.withResolvers();
+  review = Promise.withResolvers();
+  window.confirm = () => true;
+  Object.defineProperty(navigator, 'credentials', {
+    configurable: true,
+    value: {
+      create: async () => {
+        ceremonies++;
+        const bytes = Uint8Array.of(1).buffer;
+        return {
+          id: 'browser-credential',
+          rawId: bytes,
+          type: 'public-key',
+          response: { attestationObject: bytes, clientDataJSON: bytes },
+          getClientExtensionResults: () => ({}),
+        };
+      },
+    },
+  });
+  globalThis.fetch = (async (path, init = {}) => {
+    requests.push({ path: String(path), init });
+    if (path === '/passkeys/register/options')
+      return Response.json({
+        challenge: 'Y2hhbGxlbmdl',
+        rp: { id: 'auth.test', name: 'REZICS' },
+        user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      });
+    return response.promise;
+  }) as typeof fetch;
+  await render();
+}
+
+test.each(['headers', 'created body', 'error body'])(
+  '%s stall releases waiting into recovery without replay',
+  async (stage) => {
+    await mount();
+    if (stage !== 'headers')
+      response.resolve(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('{'));
+            },
+          }),
+          { status: stage === 'created body' ? 201 : 503 },
+        ),
+      );
+    await flush(submit);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, AUTH_POST_TIMEOUT_MS + 30));
+    });
+    expect(host.textContent).toContain(m.auth_security_passkey_registration_unknown());
+    expect(locked()).toBe(true);
+    expect(requests.map(({ path }) => path)).toEqual(['/passkeys/register/options', '/passkeys/register']);
+    expect(requests[1]!.init.signal!.aborted).toBe(true);
+    await flush(() =>
+      response.resolve(
+        Response.json({ id: 'late-native-row', name: 'Late key', created_at: '2026-11-01' }, { status: 201 }),
+      ),
+    );
+    expect(host.textContent).not.toContain('Late key');
+    expect(ceremonies).toBe(1);
+  },
+  AUTH_POST_TIMEOUT_MS + 3000,
+);
+
+test('lost acknowledgement requires a successful current inventory and review before a fresh explicit ceremony', async () => {
+  await mount();
+  await flush(submit);
+  await flush(() => response.reject(new TypeError('connection lost')));
+  await flush(submit);
+  expect(locked()).toBe(true);
+  await flush(() => {
+    click(m.auth_security_check_current());
+    click(m.auth_security_check_current());
+  });
+  expect(reviews).toEqual([initial.kind === 'ready' ? initial.accountId : '']);
+  await flush(() => review.resolve({ kind: 'unavailable' }));
+  expect(button(host, m.auth_security_passkey_registration_continue())).toBeUndefined();
+  expect(host.textContent).toContain(m.auth_security_readback_unavailable());
+  review = Promise.withResolvers();
+  await flush(() => click(m.auth_security_check_current()));
+  await flush(() =>
+    review.resolve({
+      kind: 'ready',
+      passkeys: [
+        { id: 'unrelated-native-id', name: 'Security key', created_at: '2026-11-01T00:00:00Z', last_used_at: null },
+      ],
+    }),
+  );
+  expect(host.textContent).toContain(m.auth_security_passkey_registration_reviewed());
+  expect(host.textContent).not.toContain(m.auth_security_passkey_added());
+  expect(locked()).toBe(true);
+  expect(ceremonies).toBe(1);
+  await flush(() => click(m.auth_security_passkey_registration_continue()));
+  expect(locked()).toBe(false);
+  await flush(() => click(m.auth_security_passkey_remove()));
+  expect(actions[0]?.id).toBe('unrelated-native-id');
+  response = Promise.withResolvers();
+  response.resolve(
+    Response.json({ id: 'saved-native-id', name: 'New key', created_at: '2026-11-02T00:00:00Z' }, { status: 201 }),
+  );
+  await flush(submit);
+  expect(ceremonies).toBe(2);
+  expect(host.textContent).toContain(m.auth_security_passkey_added());
+  expect(host.textContent).toContain('New key');
+});
+
+test.each(['signed-out', 'denied', 'replaced'])(
+  '%s authority discards registration recovery and late private rows',
+  async (kind) => {
+    await mount();
+    response.resolve(Response.json(null, { status: 201 }));
+    await flush(submit);
+    await flush(() => click(m.auth_security_check_current()));
+    if (kind === 'replaced') await render({ kind: 'signed-out' });
+    await flush(() =>
+      review.resolve(
+        kind === 'replaced'
+          ? {
+              kind: 'ready',
+              passkeys: [
+                { id: 'old-native-id', name: 'Private old key', created_at: '2026-11-01', last_used_at: null },
+              ],
+            }
+          : { kind },
+      ),
+    );
+    expect(host.querySelector('form')).toBeNull();
+    expect(host.textContent).not.toContain('Private old key');
+    expect(button(host, m.auth_security_passkey_registration_continue())).toBeUndefined();
+  },
+);

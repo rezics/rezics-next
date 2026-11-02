@@ -187,6 +187,8 @@ credential, so nothing changed and a localized message says so. Registration and
 browser has no WebAuthn the section is absent and `GET /passkeys` is not requested; a failed list shows an alert in that
 section only.
 
+Decision: registration uses the existing five-second issuer deadline through response-body completion; an uncertain acknowledgement holds the page operation boundary until an account-bound native passkey refresh and explicit review, never infers success from names or WebAuthn IDs, and never replays the ceremony or registration POST.
+
 A lost or 503 mutation response retains only the account, operation kind and exact target id in page memory and
 shows an unknown result. It never sends an automatic duplicate. An explicit check reads current native authority
 and the own session/passkey inventory with no-store, using the fixed request cookie, then rechecks authority.

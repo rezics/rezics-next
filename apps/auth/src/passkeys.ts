@@ -7,7 +7,7 @@ import {
   type PublicKeyCredentialCreationOptionsJSON,
   type PublicKeyCredentialRequestOptionsJSON,
 } from '@simplewebauthn/browser';
-import { authPost, failureMessage, type AuthPostResult } from './api';
+import { AUTH_POST_TIMEOUT_MS, authPost, failureMessage, type AuthPostResult } from './api';
 import { m } from './paraglide/messages.js';
 import { securityDevice, type SecurityPasskey } from './security';
 import { performSecurityAction, type SecurityActionResult } from './security-reconciliation';
@@ -86,22 +86,64 @@ export function passkeySignInFailure(result: Exclude<PasskeySignInResult, { ok: 
   return failureMessage(503, 'unavailable', null);
 }
 
-// authPost accepts only 200 and registration answers 201, so this posts the same way and accepts 201.
-async function postCreated<Body>(path: string, body: unknown): Promise<AuthPostResult<Body>> {
+type UnknownRegistration = { ok: false; reason: 'unknown' };
+
+// Registration accepts 201 and cannot treat a lost acknowledgement as a refusal.
+async function postCreated<Body>(
+  path: string,
+  body: unknown,
+  caller?: AbortSignal,
+): Promise<AuthPostResult<Body> | UnknownRegistration> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancel = () => {};
+  const stopped = new Promise<UnknownRegistration>((resolve) => {
+    cancel = () => {
+      resolve({ ok: false, reason: 'unknown' });
+      controller.abort();
+    };
+    timer = setTimeout(cancel, AUTH_POST_TIMEOUT_MS);
+    caller?.addEventListener('abort', cancel, { once: true });
+    if (caller?.aborted) cancel();
+  });
   try {
+    // The race also ends a transport that ignores abort, through body completion.
+    return await Promise.race([sendCreated<Body>(path, body, controller.signal), stopped]);
+  } finally {
+    clearTimeout(timer);
+    caller?.removeEventListener('abort', cancel);
+  }
+}
+
+async function sendCreated<Body>(
+  path: string,
+  body: unknown,
+  signal: AbortSignal,
+): Promise<AuthPostResult<Body> | UnknownRegistration> {
+  try {
+    signal.throwIfAborted();
     const response = await fetch(path, {
       method: 'POST',
       credentials: 'same-origin',
       redirect: 'error',
+      cache: 'no-store',
+      signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     if (response.status === 201) return { ok: true, body: (await response.json()) as Body };
-    const errorBody: unknown = await response.json().catch(() => null);
+    const errorBody: unknown = await response.json();
     const code =
       errorBody && typeof errorBody === 'object' && 'error' in errorBody && typeof errorBody.error === 'string'
         ? errorBody.error
         : '';
+    const notApplied =
+      errorBody &&
+      typeof errorBody === 'object' &&
+      'effect_status' in errorBody &&
+      errorBody.effect_status === 'not_applied';
+    if (!code || (!notApplied && ![400, 401, 403, 404, 409, 413, 415, 429].includes(response.status)))
+      return { ok: false, reason: 'unknown' };
     const header = response.headers.get('Retry-After');
     return {
       ok: false,
@@ -110,12 +152,13 @@ async function postCreated<Body>(path: string, body: unknown): Promise<AuthPostR
       retryAfter: header && /^\d+$/.test(header) ? header : null,
     };
   } catch {
-    return { ok: false, status: 503, code: 'unavailable', retryAfter: null };
+    return { ok: false, reason: 'unknown' };
   }
 }
 
 export type PasskeyAddResult =
   | { ok: true; passkey: SecurityPasskey }
+  | UnknownRegistration
   | { ok: false; reason: 'cancelled' | 'step-up' }
   | { ok: false; reason: 'failure'; message: string };
 
@@ -159,11 +202,14 @@ export async function addPasskey(name: string, signal?: AbortSignal): Promise<Pa
   const created = await postCreated<{ id?: unknown; name?: unknown; created_at?: unknown }>(
     '/passkeys/register',
     chosen ? { response, name: chosen } : { response },
+    signal,
   );
+  if ('reason' in created) return created;
   if (!created.ok) return addFailure(created);
+  if (!created.body || typeof created.body !== 'object') return { ok: false, reason: 'unknown' };
   const { id, name: savedName, created_at: createdAt } = created.body;
   if (typeof id !== 'string' || typeof savedName !== 'string' || typeof createdAt !== 'string')
-    return { ok: false, reason: 'failure', message: failureMessage(503, 'unavailable', null) };
+    return { ok: false, reason: 'unknown' };
   return { ok: true, passkey: { id, name: savedName, created_at: createdAt, last_used_at: null } };
 }
 
