@@ -53,10 +53,11 @@ test('confirmation and recovery use the persisted preview, skip a changed entry 
     ]);
     expect((await readCollectionBulk(tx, input))?.phase).toBe('completed');
     for (let ordinal = 0; ordinal < 3; ordinal++) {
+      const row = recovered[ordinal]!;
+      if (row.state === 'pending') throw new Error('Expected a terminal result');
       expect(await applyCollectionBulkTarget(tx, { ...input, ordinal }, async () => {
         throw new Error('A completed effect was repeated');
-      })).toEqual({ state: recovered[ordinal]!.state, reason: recovered[ordinal]!.reason,
-        resultingMemberId: recovered[ordinal]!.resultingMemberId });
+      })).toEqual({ state: row.state, reason: row.reason, resultingMemberId: row.resultingMemberId });
     }
     expect((await tx.query('SELECT sum(effects)::integer AS n FROM bulk_test_effect')).rows[0].n).toBe(2);
     expect(await readCollectionBulk(tx, { ...input, accountId: newId(route) })).toBeNull();

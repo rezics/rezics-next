@@ -241,5 +241,5 @@ export async function applyCollectionBulkTarget(
     AND account_id=$3 AND NOT EXISTS (SELECT 1 FROM library.bulk_target WHERE route=$1 AND operation_id=$2
       AND state IN ('pending','reconciling') ORDER BY ordinal LIMIT 1)`,
     [input.route,input.operationId,input.accountId]);
-  return outcome;
+  return { ...outcome, resultingMemberId: outcome.resultingMemberId ?? null };
 }
