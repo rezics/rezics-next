@@ -94,12 +94,17 @@ function pngHeader(width: number, height: number, animated = false): File {
   header[9] = 6;
   const animation = animated ? pngChunk('acTL', concatBytes(writeUint32(2), writeUint32(0))) : new Uint8Array();
   const imageData = pngChunk('IDAT', new Uint8Array([0x78, 0x01, 0x00]));
-  const content = concatBytes(signature, pngChunk('IHDR', header), animation, imageData, pngChunk('IEND', new Uint8Array()));
-  return new File(
-    [fileBytes(content)],
-    animated ? 'animated.png' : 'header.png',
-    { type: 'image/png', lastModified: 1 },
+  const content = concatBytes(
+    signature,
+    pngChunk('IHDR', header),
+    animation,
+    imageData,
+    pngChunk('IEND', new Uint8Array()),
   );
+  return new File([fileBytes(content)], animated ? 'animated.png' : 'header.png', {
+    type: 'image/png',
+    lastModified: 1,
+  });
 }
 
 function jpegHeader(width: number, height: number): File {
@@ -122,11 +127,7 @@ function jpegHeader(width: number, height: number): File {
 
 function malformedFiles(): File[] {
   return [
-    new File(
-      [fileBytes(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))],
-      'truncated-signature.png',
-      { type: 'image/png' },
-    ),
+    new File([fileBytes(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))], 'truncated-signature.png', { type: 'image/png' }),
     new File(
       [
         fileBytes(
@@ -140,16 +141,12 @@ function malformedFiles(): File[] {
       'invalid-length.png',
       { type: 'image/png' },
     ),
-    new File(
-      [fileBytes(new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x01]))],
-      'short-length.jpg',
-      { type: 'image/jpeg' },
-    ),
-    new File(
-      [fileBytes(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x01]))],
-      'truncated-segment.jpg',
-      { type: 'image/jpeg' },
-    ),
+    new File([fileBytes(new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x01]))], 'short-length.jpg', {
+      type: 'image/jpeg',
+    }),
+    new File([fileBytes(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x01]))], 'truncated-segment.jpg', {
+      type: 'image/jpeg',
+    }),
     jpegHeader(8_192, 8_192),
     pngHeader(8_192, 8_192),
     pngHeader(32, 32, true),
@@ -159,7 +156,12 @@ function malformedFiles(): File[] {
   ];
 }
 
-async function canvasImage(width: number, height: number, type: 'image/jpeg' | 'image/png', name: string): Promise<File> {
+async function canvasImage(
+  width: number,
+  height: number,
+  type: 'image/jpeg' | 'image/png',
+  name: string,
+): Promise<File> {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -169,10 +171,18 @@ async function canvasImage(width: number, height: number, type: 'image/jpeg' | '
   context.fillRect(0, 0, width, height);
   if (height > 1) {
     context.fillStyle = '#f4cf49';
-    context.fillRect(Math.floor(width * 0.65), Math.floor(height * 0.65), Math.ceil(width * 0.25), Math.ceil(height * 0.25));
+    context.fillRect(
+      Math.floor(width * 0.65),
+      Math.floor(height * 0.65),
+      Math.ceil(width * 0.25),
+      Math.ceil(height * 0.25),
+    );
   }
   const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((result) => (result ? resolve(result) : reject(new Error('Could not encode the local image fixture'))), type);
+    canvas.toBlob(
+      (result) => (result ? resolve(result) : reject(new Error('Could not encode the local image fixture'))),
+      type,
+    );
   });
   return new File([blob], name, { type, lastModified: 1 });
 }
@@ -277,7 +287,13 @@ export const Default: Story = {
         const body = (await request.clone().json()) as Record<string, unknown>;
         const id = nextMediaId();
         traffic.reservationIds.push(id);
-        traffic.media.push({ method: request.method, path: url.pathname, csrf: request.headers.get('X-CSRF-Token'), id, body });
+        traffic.media.push({
+          method: request.method,
+          path: url.pathname,
+          csrf: request.headers.get('X-CSRF-Token'),
+          id,
+          body,
+        });
         return Response.json({
           media: { id, state: 'reserved', mediaType: body.mediaType, byteCount: body.byteCount },
         });
@@ -299,7 +315,12 @@ export const Default: Story = {
           return new Response(null, { status: 204 });
         }
         if (request.method === 'GET') {
-          traffic.media.push({ method: request.method, path: url.pathname, csrf: request.headers.get('X-CSRF-Token'), id });
+          traffic.media.push({
+            method: request.method,
+            path: url.pathname,
+            csrf: request.headers.get('X-CSRF-Token'),
+            id,
+          });
           const upload = traffic.media.find((record) => record.method === 'PUT' && record.id === id);
           return Response.json({
             media: {
@@ -333,8 +354,7 @@ export const Default: Story = {
       URL.createObjectURL = nativeCreateObjectURL;
       URL.revokeObjectURL = nativeRevokeObjectURL;
       globalThis.fetch = nativeFetch;
-      if (blobArrayBufferDescriptor)
-        Object.defineProperty(Blob.prototype, 'arrayBuffer', blobArrayBufferDescriptor);
+      if (blobArrayBufferDescriptor) Object.defineProperty(Blob.prototype, 'arrayBuffer', blobArrayBufferDescriptor);
     };
   },
   play: async (context) => {
@@ -349,7 +369,9 @@ export const Default: Story = {
     const previewElement = await profile.findByRole('region', { name: m.settings_profile_preview_heading() });
     const preview = within(previewElement);
     const previewHasLocalImage = () =>
-      Array.from(previewElement.querySelectorAll('img')).some((image) => image.getAttribute('src')?.startsWith('blob:'));
+      Array.from(previewElement.querySelectorAll('img')).some((image) =>
+        image.getAttribute('src')?.startsWith('blob:'),
+      );
 
     const uploadOriginalAndSave = async (file: File) => {
       const expected = await nativeArrayBuffer.call(file);

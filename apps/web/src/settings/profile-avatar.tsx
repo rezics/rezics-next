@@ -107,7 +107,9 @@ export function ProfileAvatar({
       <div className="flex items-center gap-4">
         {localPreview || !avatar || !('variants' in avatar) ? (
           <Avatar className="size-20 shrink-0">
-            {localPreview && state.url ? <AvatarImage src={state.url} alt={m.settings_profile_avatar_preview()} /> : null}
+            {localPreview && state.url ? (
+              <AvatarImage src={state.url} alt={m.settings_profile_avatar_preview()} />
+            ) : null}
             <AvatarFallback>
               <UserRound className="size-8" aria-hidden="true" />
             </AvatarFallback>

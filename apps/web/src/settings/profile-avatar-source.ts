@@ -183,13 +183,7 @@ function isJpegFrameMarker(marker: number): boolean {
 }
 
 function isSupportedJpegSegment(marker: number): boolean {
-  return (
-    marker === 0xc4 ||
-    marker === 0xdb ||
-    marker === 0xdd ||
-    (marker >= 0xe0 && marker <= 0xef) ||
-    marker === 0xfe
-  );
+  return marker === 0xc4 || marker === 0xdb || marker === 0xdd || (marker >= 0xe0 && marker <= 0xef) || marker === 0xfe;
 }
 
 function readUint32(bytes: Uint8Array, offset: number): number {
