@@ -335,6 +335,8 @@ revoked action; that exception cannot revoke group grants or another account's g
 
 The resource grant form lets managers change the handle or recipient kind during lookup; each change clears the previous recipient and lookup error while preserving the role/actions and validity draft, and results belong only to the current form, resource and acting authority.
 
+Resource-access controllers retire browser continuations on disposal and remount for a changed resource or acting authority; reattachment retains any uncertain command's original payload and key for explicit retry, with current disclosure read separately from its result.
+
 Every command attempt authorizes before reading an idempotency receipt, including retries and replays. A revoked
 caller receives neither a stored result nor another effect. Catalogue actions that remove their own authority
 declare `replay: 'self-account-read'`. Receipt identity is `(principal_kind, principal_id, command_kind,

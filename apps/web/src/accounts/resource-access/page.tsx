@@ -392,7 +392,17 @@ function GrantForm({
 }
 
 export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: AccessIO }) {
+  // A loader's resource and complete acting authority own all controller and form state.
+  const scope =
+    initial.status === 'ready'
+      ? JSON.stringify([initial.page.resource, initial.page.authority])
+      : initial.status;
+  return <ResourceAccessEditor key={scope} initial={initial} io={io} />;
+}
+
+function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: AccessIO }) {
   const [controller] = useState(() => new AccessRecovery(initial, io));
+  useLayoutEffect(controller.activate, [controller]);
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [form, setForm] = useState<Grant | 'new' | null>(null);
   const [revoke, setRevoke] = useState<Grant | null>(null);

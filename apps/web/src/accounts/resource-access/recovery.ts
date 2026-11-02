@@ -12,6 +12,8 @@ export type EditorState = {
 export class AccessRecovery {
   private listeners = new Set<() => void>();
   private state: EditorState;
+  private generation = 0;
+  private active = true;
   constructor(
     page: AccessState,
     private io: AccessIO,
@@ -19,6 +21,28 @@ export class AccessRecovery {
     this.state = { page, phase: 'idle', busy: false, pending: null };
   }
   snapshot = () => this.state;
+  /** Effect replay may reattach this controller, but never its old continuations. */
+  activate = () => {
+    if (!this.active) {
+      this.active = true;
+      void this.reload();
+    }
+    return this.dispose;
+  };
+  dispose = () => {
+    this.active = false;
+    this.generation++;
+    // A retired write may still commit. Only explicit retry may resolve its exact command.
+    this.state = {
+      ...this.state,
+      page: { status: 'unavailable' },
+      busy: false,
+      phase: this.state.busy && this.state.pending ? 'uncertain' : this.state.phase,
+    };
+  };
+  private owns(generation: number) {
+    return this.active && generation === this.generation;
+  }
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -37,27 +61,30 @@ export class AccessRecovery {
     }
   }
   async reload(cursor?: string) {
-    if (this.state.busy) return;
+    if (!this.active || this.state.busy) return;
+    const generation = ++this.generation;
     this.update({ busy: true, page: { status: 'loading' } });
-    this.update({ page: await this.current(cursor), busy: false });
+    const page = await this.current(cursor);
+    if (this.owns(generation)) this.update({ page, busy: false });
   }
   async submit(change: Omit<Change, 'key'>) {
-    if (this.state.busy || this.state.pending) return;
+    if (!this.active || this.state.busy || this.state.pending) return;
     const pending = structuredClone({ ...change, key: crypto.randomUUID() });
     this.update({ pending });
     await this.attempt(pending);
   }
   async submitTransfer(input: Omit<OwnerTransfer, 'key' | 'kind'>) {
-    if (this.state.busy || this.state.pending || !this.io.transfer) return;
+    if (!this.active || this.state.busy || this.state.pending || !this.io.transfer) return;
     const pending = parseOwnerTransfer({ ...input, kind: 'realm-owner-transfer', key: crypto.randomUUID() });
     this.update({ pending });
     await this.attempt(pending);
   }
   async retry() {
-    if (this.state.busy || !this.state.pending) return;
+    if (!this.active || this.state.busy || !this.state.pending) return;
     await this.attempt(this.state.pending);
   }
   private async attempt(pending: Change | OwnerTransfer) {
+    const generation = ++this.generation;
     this.update({ busy: true });
     let result: WriteResult;
     let current: AccessState | undefined;
@@ -70,12 +97,14 @@ export class AccessRecovery {
     } catch {
       result = { status: 'uncertain' };
     }
+    if (!this.owns(generation)) return;
     // Clear all old ACL data before a current authorization/disclosure read.
     this.update({
       page: { status: 'loading' },
       phase: result.status,
       pending: result.status === 'uncertain' || result.status === 'preparing' ? pending : null,
     });
-    this.update({ page: current ?? (await this.current()), busy: false });
+    const page = current ?? (await this.current());
+    if (this.owns(generation)) this.update({ page, busy: false });
   }
 }
