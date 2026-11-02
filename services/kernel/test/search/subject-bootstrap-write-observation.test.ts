@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
+import { createPool } from '../../src/database/pool.ts';
 import { startSearchIndexing } from '../../src/search/runner.ts';
 import { subjectIndexName } from '../../src/search/indices.ts';
 import type { OpenSearch } from '../../src/search/opensearch.ts';
@@ -8,6 +9,8 @@ import type { SubjectListingSource, SubjectSource } from '../../src/search/sourc
 type Stage = 'allocation' | 'rating' | 'metadata' | 'alias';
 type Fault = { stage: Stage; commit: boolean; loseResponse: boolean; malformedObservation?: boolean };
 type NativeIndex = { mappings: Record<string, unknown>; aliases: Set<string> };
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error('DATABASE_URL must name the check database');
 
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -113,20 +116,13 @@ function deployment() {
   const prefix = `bootstrap-${crypto.randomUUID().slice(0, 8)}-`;
   const alias = `${prefix}subjects`;
   const search = new NativeSearch(alias);
-  const counts = { checkouts: 0, queries: 0 };
-  const pool = {
-    options: { max: 10 },
-    async connect() {
-      counts.checkouts++;
-      return {
-        async query() {
-          counts.queries++;
-          return { rows: [] };
-        },
-        release() {},
-      } as unknown as PoolClient;
-    },
-  } as unknown as Pool;
+  const counts = { checkouts: 0 };
+  const pool = createPool(databaseUrl);
+  const connect = pool.connect.bind(pool);
+  pool.connect = (() => {
+    counts.checkouts++;
+    return connect();
+  }) as Pool['connect'];
   const start = () =>
     startSearchIndexing({
       pool,
@@ -137,7 +133,7 @@ function deployment() {
       intervalMs: 60_000,
       discoverMs: 60_000,
     });
-  return { prefix, search, counts, start };
+  return { prefix, search, pool, counts, start };
 }
 
 test('uncommitted allocation, rating mapping, and activation writes keep relay checkpoints stopped', async () => {
@@ -146,14 +142,15 @@ test('uncommitted allocation, rating mapping, and activation writes keep relay c
     current.search.failNext(stage, { commit: false, loseResponse: false });
     const runner = await current.start();
     try {
-      expect(current.counts.queries).toBe(0);
+      expect(current.counts.checkouts).toBe(0);
       expect(current.search.active).toBeUndefined();
       await runner.refresh();
       await Bun.sleep(0);
-      expect(current.counts.queries).toBeGreaterThan(0);
+      expect(current.counts.checkouts).toBeGreaterThan(0);
       expect(current.search.active).toBe(subjectIndexName(current.prefix, 1));
     } finally {
       await runner.stop();
+      await current.pool.end();
     }
   }
 });
@@ -167,9 +164,10 @@ test('committed lost responses are observed once at each bootstrap write boundar
       await Bun.sleep(0);
       expect(current.search.writes.get(stage)).toBe(1);
       expect(current.search.active).toBe(subjectIndexName(current.prefix, 1));
-      expect(current.counts.queries).toBeGreaterThan(0);
+      expect(current.counts.checkouts).toBeGreaterThan(0);
     } finally {
       await runner.stop();
+      await current.pool.end();
     }
   }
 });
@@ -183,16 +181,17 @@ test('a later explicit refresh recovers from committed allocation after malforme
   });
   const runner = await current.start();
   try {
-    expect(current.counts.queries).toBe(0);
+    expect(current.counts.checkouts).toBe(0);
     expect(current.search.active).toBeUndefined();
     expect(current.search.writes.get('allocation')).toBe(1);
     await runner.refresh();
     await Bun.sleep(0);
     expect(current.search.writes.get('allocation')).toBe(1);
     expect(current.search.active).toBe(subjectIndexName(current.prefix, 1));
-    expect(current.counts.queries).toBeGreaterThan(0);
+    expect(current.counts.checkouts).toBeGreaterThan(0);
   } finally {
     await runner.stop();
+    await current.pool.end();
   }
 });
 
@@ -208,8 +207,9 @@ test('a normal bootstrap starts relays only after native allocation, mapping and
       ['alias', 1],
     ]);
     expect(current.search.active).toBe(subjectIndexName(current.prefix, 1));
-    expect(current.counts.queries).toBeGreaterThan(0);
+    expect(current.counts.checkouts).toBeGreaterThan(0);
   } finally {
     await runner.stop();
+    await current.pool.end();
   }
 });
