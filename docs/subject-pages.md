@@ -179,6 +179,7 @@ work is concealed, and a merged identity is not silently substituted. Discovery 
 before creation. A separate confirmation identifies an independent publication: a file, language/format combination,
 personal Library Copy or distribution event alone does not establish this grain.
 Publication independence uses a native checkbox button so validation links focus the visible control.
+Explicit keyboard Retry or definitions Refresh preserves a surviving meaningful opener or focuses the current form/review heading, unsupported-profile state or failed-read recovery; pointer, automatic, moved-focus and retired recovery intent stays quiet.
 
 Only emitted profiles and effective fields are offered: Book editions use `bf:Instance`, video works use
 `rezics:AnimeRelease`, and software/game works use `wd:Q20631656` where the released work target permits it.

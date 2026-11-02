@@ -19,7 +19,7 @@ import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet 
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { cn } from '@rezics/ui/utils';
-import { useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -41,6 +41,7 @@ import { usePublicationEditorNavigation } from './publication-editor-navigation'
 // Caller sizing preserves dense fine-pointer desktops and lets translated actions wrap.
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+const recoveryFocusClassName = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
 // NativeSelect applies className to its wrapper, so size the native target inside it.
 const selectClassName = 'w-full min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
@@ -222,6 +223,19 @@ function PublicationEditorLive({
     queryFn: () => transport.load(),
     retry: false,
   });
+  const recoveryScope = JSON.stringify([work, locale, session, lifetime.generation]);
+  const recoveryFocus = useRef<
+    | {
+        scope: string;
+        generation: number;
+        opener: HTMLButtonElement;
+        result?: Awaited<ReturnType<typeof query.refetch>>;
+        cancel: () => void;
+      }
+    | undefined
+  >(undefined);
+  const [completedRecovery, setCompletedRecovery] = useState(0);
+  useLayoutEffect(() => () => recoveryFocus.current?.cancel(), []);
   const [draftProfile, setDraftProfile] = useState<PublicationProfile>();
   const [draftNames, setDraftNames] = useState<Record<string, string>>({});
   const privateDefinitions = useRef<Pick<Extract<PublicationRead, { ok: true }>, 'release' | 'profiles'> | undefined>(
@@ -345,6 +359,39 @@ function PublicationEditorLive({
     Object.keys(facts).some(unsupportedFact) ||
     reviewErrors.length > 0;
 
+  // Orient only to the committed result of the same explicit keyboard recovery.
+  useLayoutEffect(() => {
+    const intent = recoveryFocus.current;
+    if (!intent) return;
+    if (intent.scope !== recoveryScope || intent.generation !== readingGeneration.current || !lifetime.active())
+      return intent.cancel();
+    const result = intent.result;
+    if (
+      completedRecovery !== intent.generation ||
+      query.isFetching ||
+      !result ||
+      result.data !== query.data ||
+      result.error !== query.error ||
+      result.dataUpdatedAt !== query.dataUpdatedAt ||
+      result.errorUpdatedAt !== query.errorUpdatedAt
+    )
+      return;
+    const document = intent.opener.ownerDocument;
+    const active = document.activeElement;
+    intent.cancel();
+    if (active === intent.opener && intent.opener.isConnected && !intent.opener.disabled) return;
+    if (active && active !== document.body) return;
+    const recovered = !query.isError && !!read;
+    const target = recovered
+      ? !currentProfile
+        ? `${id}-unsupported-profile`
+        : reviewDefinitions
+          ? `${id}-review-heading`
+          : `${id}-profile-heading`
+      : `${id}-load-error`;
+    document.getElementById(target)?.focus();
+  });
+
   function keepPrivateDraft() {
     if (!read) return;
     privateDefinitions.current = { release: read.release, profiles: read.profiles };
@@ -361,14 +408,41 @@ function PublicationEditorLive({
     }));
   }
 
-  async function refreshDefinitions() {
+  async function refreshDefinitions(event?: MouseEvent<HTMLButtonElement>) {
     if (!lifetime.active()) return;
+    if (event && (renderedReadingGeneration !== readingGeneration.current || query.isFetching)) return;
+    recoveryFocus.current?.cancel();
     keepPrivateDraft();
     const generation = ++readingGeneration.current;
+    const opener = event?.currentTarget;
+    if (event?.detail === 0 && opener && opener.ownerDocument.activeElement === opener) {
+      const document = opener.ownerDocument;
+      const cancel = () => {
+        document.removeEventListener('focusin', moved, true);
+        document.removeEventListener('pointerdown', cancel, true);
+        document.removeEventListener('keydown', tabbed, true);
+        if (recoveryFocus.current?.cancel === cancel) recoveryFocus.current = undefined;
+      };
+      const moved = (event: FocusEvent) => {
+        if (event.target !== opener) cancel();
+      };
+      const tabbed = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') cancel();
+      };
+      recoveryFocus.current = { scope: recoveryScope, generation, opener, cancel };
+      document.addEventListener('focusin', moved, true);
+      document.addEventListener('pointerdown', cancel, true);
+      document.addEventListener('keydown', tabbed, true);
+    }
+    const intent = recoveryFocus.current;
     refreshRequiredRef.current = true;
     setRefreshRequired(true);
     const refreshed = await query.refetch();
     if (!lifetime.active() || generation !== readingGeneration.current) return;
+    if (intent && recoveryFocus.current === intent) {
+      intent.result = refreshed;
+      setCompletedRecovery(generation);
+    }
     if (!refreshed.isError && refreshed.data?.ok && refreshed.data.public.subject.id === work) {
       refreshRequiredRef.current = false;
       setRefreshRequired(false);
@@ -758,7 +832,11 @@ function PublicationEditorLive({
               aria-labelledby={`${id}-load-error`}
               className="min-w-0 space-y-3 p-4"
             >
-              <ContentItemHeading id={`${id}-load-error`} className="text-lg font-semibold">
+              <ContentItemHeading
+                tabIndex={-1}
+                id={`${id}-load-error`}
+                className={cn('text-lg font-semibold', recoveryFocusClassName)}
+              >
                 {query.data?.ok === false && query.data.reason === 'concealed'
                   ? m.catalogue_create_concealed({}, o)
                   : query.data?.ok === false && query.data.reason === 'invalid'
@@ -774,7 +852,7 @@ function PublicationEditorLive({
                   className={actionClassName}
                   variant="outline"
                   disabled={busy || query.isFetching}
-                  onClick={() => void refreshDefinitions()}
+                  onClick={(event) => void refreshDefinitions(event)}
                 >
                   {m.catalogue_create_retry({}, o)}
                 </Button>
@@ -808,7 +886,13 @@ function PublicationEditorLive({
                 />
               </ul>
               {!profile && (
-                <ContentItemFrame as="div" role="status" className="p-4">
+                <ContentItemFrame
+                  id={`${id}-unsupported-profile`}
+                  tabIndex={-1}
+                  as="div"
+                  role="status"
+                  className={cn('p-4', recoveryFocusClassName)}
+                >
                   {m.publication_empty({}, o)}
                 </ContentItemFrame>
               )}
@@ -818,8 +902,14 @@ function PublicationEditorLive({
             <form onSubmit={(event) => void submit(event)} noValidate className="space-y-6" aria-busy={busy}>
               {reviewDefinitions && (
                 <ContentItemFrame as="div" role="status" className="min-w-0 space-y-3 p-4">
-                  <p>{m.publication_definitions_review({}, o)}</p>
-                  {!currentProfile && <p>{m.publication_empty({}, o)}</p>}
+                  <ContentItemHeading id={`${id}-review-heading`} tabIndex={-1} className={recoveryFocusClassName}>
+                    {m.publication_definitions_review({}, o)}
+                  </ContentItemHeading>
+                  {!currentProfile && (
+                    <div id={`${id}-unsupported-profile`} tabIndex={-1} className={recoveryFocusClassName}>
+                      {m.publication_empty({}, o)}
+                    </div>
+                  )}
                   {reviewErrors.length > 0 && (
                     <ul className="list-inside list-disc">
                       {[...new Set(reviewErrors.map((error) => reviewErrorLabel(error.pointer)))].map((label) => (
@@ -834,7 +924,7 @@ function PublicationEditorLive({
                     type="button"
                     variant="outline"
                     disabled={busy || query.isFetching}
-                    onClick={() => void refreshDefinitions()}
+                    onClick={(event) => void refreshDefinitions(event)}
                   >
                     {m.publication_refresh({}, o)}
                   </Button>
@@ -876,7 +966,11 @@ function PublicationEditorLive({
                   className="min-w-0 gap-4"
                 >
                   <FieldLegend lang={profile.labelLang ?? undefined} className="max-w-full">
-                    <ContentItemHeading className="text-xl font-semibold [overflow-wrap:anywhere]">
+                    <ContentItemHeading
+                      id={`${id}-profile-heading`}
+                      tabIndex={-1}
+                      className={cn('text-xl font-semibold [overflow-wrap:anywhere]', recoveryFocusClassName)}
+                    >
                       {profile.label}
                     </ContentItemHeading>
                   </FieldLegend>

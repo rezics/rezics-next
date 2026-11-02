@@ -41,19 +41,22 @@ test('publication refresh retires the old work reading, keeps private values and
   const fixture = publicationFixture('ready', 'en');
   const title = fixture.work.subject.labels.en!;
   const commands: PublicationCommand[] = [];
-  let mode: 'ready' | 'pending' | 'refusal' = 'ready';
+  let mode: 'ready' | 'pending' | 'refusal' | 'unsupported' = 'refusal';
   let submitMode: 'definitions' | 'uncertain' = 'definitions';
+  let resolveRead: ((read: PublicationRead) => void) | undefined;
   let rejectRead: ((error: Error) => void) | undefined;
   let loads = 0;
   const transport: PublicationTransport = {
     load: async () => {
       loads++;
       if (mode === 'pending')
-        return await new Promise<PublicationRead>((_resolve, reject) => {
+        return await new Promise<PublicationRead>((resolve, reject) => {
+          resolveRead = resolve;
           rejectRead = reject;
         });
       if (mode === 'refusal') return { ok: false, reason: 'unavailable' };
-      return fixture.transport.load();
+      const read = await fixture.transport.load();
+      return mode === 'unsupported' && read.ok ? { ...read, profiles: [] } : read;
     },
     submit: async (command) => {
       commands.push(structuredClone(command));
@@ -106,6 +109,14 @@ test('publication refresh retires the old work reading, keeps private values and
     );
   const scope = () => canvas.getAllByRole('article')[0]!;
   const input = (name: string) => within(scope()).getByRole('textbox', { name }) as HTMLInputElement;
+  const outside = window.document.createElement('button');
+  outside.textContent = 'Elsewhere';
+  window.document.body.append(outside);
+  const keyboard = (name: string) =>
+    act(async () => {
+      within(scope()).getByRole('button', { name }).focus();
+      await user.keyboard('{Enter}');
+    });
   const click = (name: string) => act(async () => user.click(within(scope()).getByRole('button', { name })));
   const replace = (element: HTMLElement, value: string) =>
     act(async () => {
@@ -115,6 +126,16 @@ test('publication refresh retires the old work reading, keeps private values and
 
   try {
     await draw();
+    await canvas.findByRole('button', { name: m.catalogue_create_retry() });
+    expect(window.document.activeElement).toBe(window.document.body);
+    mode = 'ready';
+    await keyboard(m.catalogue_create_retry());
+    await waitFor(() =>
+      expect(window.document.activeElement).toBe(
+        canvas.getByRole('heading', { name: fixture.release.types['bf:Instance']!.labels.en! }),
+      ),
+    );
+    expect(canvas.queryByRole('button', { name: m.catalogue_create_retry() })).toBeNull();
     await within(scope()).findByRole('textbox', { name: m.catalogue_create_label() });
     expect(within(scope()).getByRole('link', { name: title })).toBeDefined();
     await replace(input(m.catalogue_create_label()), 'A local edition');
@@ -158,14 +179,38 @@ test('publication refresh retires the old work reading, keeps private values and
     expect(canvas.queryByRole('link', { name: title })).toBeNull();
     expect(input(m.catalogue_create_label()).value).toBe('A local edition');
     mode = 'refusal';
-    await click(m.catalogue_create_retry());
-    await waitFor(() => expect(loads).toBe(3));
+    await keyboard(m.catalogue_create_retry());
+    await waitFor(() => expect(loads).toBe(4));
+    expect(window.document.activeElement).toBe(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
     expect(canvas.queryByRole('link', { name: title })).toBeNull();
     expect(input(m.catalogue_create_label()).value).toBe('A local edition');
 
+    mode = 'unsupported';
+    await keyboard(m.catalogue_create_retry());
+    await waitFor(() => expect(window.document.activeElement).toBe(canvas.getByText(m.publication_empty())));
+    expect((canvas.getByRole('button', { name: m.catalogue_create_review_new() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     mode = 'ready';
-    await click(m.catalogue_create_retry());
+    await keyboard(m.publication_refresh());
     await canvas.findByRole('link', { name: title });
+    const refresh = canvas.getByRole('button', { name: m.publication_refresh() });
+    await waitFor(() => expect((refresh as HTMLButtonElement).disabled).toBe(false));
+    expect(
+      window.document.activeElement === refresh ||
+        window.document.activeElement === canvas.getByRole('heading', { name: m.publication_definitions_review() }),
+    ).toBe(true);
+    for (const intent of ['moved', 'pointer']) {
+      mode = 'pending';
+      if (intent === 'moved') {
+        await keyboard(m.publication_refresh());
+        outside.focus();
+      } else await click(m.publication_refresh());
+      outside.focus();
+      await act(async () => resolveRead?.(await fixture.transport.load()));
+      await canvas.findByRole('link', { name: title });
+      expect(window.document.activeElement).toBe(outside);
+    }
     expect(input(m.catalogue_create_label()).value).toBe('A local edition');
     expect(input(m.catalogue_create_language()).value).toBe('en-GB');
     expect(input(m.relation_citation()).value).toBe('https://publisher.example/edition');
@@ -185,6 +230,19 @@ test('publication refresh retires the old work reading, keeps private values and
     const sealed = structuredClone(commands[1]!);
     await click(m.catalogue_create_retry());
     expect(commands[2]).toEqual(sealed);
+
+    await act(async () => root.render(null));
+    client.clear();
+    mode = 'refusal';
+    await draw();
+    await canvas.findByRole('button', { name: m.catalogue_create_retry() });
+    mode = 'pending';
+    await keyboard(m.catalogue_create_retry());
+    await act(async () => root.render(null));
+    outside.focus();
+    await act(async () => resolveRead?.(await fixture.transport.load()));
+    expect(window.document.activeElement).toBe(outside);
+    expect(host.textContent).toBe('');
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous) {
