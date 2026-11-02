@@ -1038,6 +1038,7 @@ closure. The public factory never promotes a body on that basis.
 
 `kind-type-evidence-write.sql` is one INSERT/conflict point; its subsequent
 `kind-type-evidence-read.sql` is one exact primary-key read with a retained row lock.
+Each retained read charges both the native point and its lock, including on a failed comparison.
 The additive migration stores a maximum 16 KiB binding, 16 KiB dependency body and
 4096-byte frontier using database `jsonb::text` size guards. An UPDATE trigger
 preserves immutable records; deletion still belongs to native retirement/erasure,
@@ -1050,7 +1051,7 @@ rows/points, empty seeks and a conservative sixfold JSON encoding bound on outpu
 `kindTypeEvidenceLocalFootprint` publishes the complete local worst case for one
 raw reference: four anchor observations (capture and final verification for both
 keys), their four enrollment locks, one insert, immutable readback and final retained
-read. This is **11 candidate keys, 56 native rows, 56 native points, 11 statements,
+read. This is **11 candidate keys, 58 native rows, 58 native points, 11 statements,
 11 empty seeks, zero identity metadata rows and zero witness keys**, plus the actual
 encoded SQL/parameter bytes and declared bounded output. Same-key originals and
 terminals may still pay the full repeated plan. Each repeat has a fresh debit in

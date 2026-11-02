@@ -208,12 +208,12 @@ test('native Type dependency selection retains negative, one-hop and duplicate o
 
 test('local Type body quote includes every repeated anchor lock and retained record point', () => {
   const quote = kindTypeEvidenceLocalFootprint({ anchorInputBytes: 1000, lockInputBytes: 200, writeValues: [], readValues: [] });
-  expect(quote).toMatchObject({ candidateKeys: 11, nativeRows: 56, nativePoints: 56,
+  expect(quote).toMatchObject({ candidateKeys: 11, nativeRows: 58, nativePoints: 58,
     identityMetadataRows: 0, witnessKeys: 0, statements: 11, emptySeeks: 11 });
   expect(quote.bytes).toBeGreaterThan(2 * 6 * (16384 + 16384 + 4096));
 });
 
-test('native dependency bodies cannot bypass original admission with a structural home or a second ledger', async () => {
+test('native dependency bodies cannot bypass original admission with a structural home', async () => {
   let io = 0;
   const pool = { connect() { io++; throw new Error('Unadmitted checkout'); } } as unknown as Pool;
   const tx = { query() { io++; throw new Error('Unadmitted native body'); } } as unknown as OperationalTransaction;

@@ -219,9 +219,10 @@ const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'];
 function recordFootprint(sql: string, values: readonly unknown[], write: boolean): WorkDimensions {
   return {
     candidateKeys: 1,
-    nativeRows: write ? 2 : 1,
+    // INSERT/conflict or the exact retained point plus its final row lock.
+    nativeRows: 2,
     identityMetadataRows: 0,
-    nativePoints: write ? 2 : 1,
+    nativePoints: 2,
     witnessKeys: 0,
     statements: 1,
     bytes: Buffer.byteLength(sql) + bytes(values) +
