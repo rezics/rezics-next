@@ -2,7 +2,13 @@ import { managementOperationProfile } from '@rezics/auth-contract';
 import { authPost } from './api';
 import { loadAccountSession } from './account-operations';
 import { createSignupKey, normalizeSignupHandle } from './signup';
-import { managementOperationStepUpUrl, storePendingManagementOperationStepUp } from './management-operation-step-up';
+import {
+  clearPendingManagementOperationStepUp,
+  managementOperationStepUpUrl,
+  pendingManagementOperationMatches,
+  pendingManagementOperationStepUpState,
+  storePendingManagementOperationStepUp,
+} from './management-operation-step-up';
 
 export const RENAME_ROUTE = '/account/rename';
 export const RENAME_PROFILE = managementOperationProfile('rename');
@@ -136,6 +142,10 @@ export function readRenameContinuation(): RenameContinuation | null {
   }
 }
 export function clearRenameContinuation(): void {
+  const continuation = readRenameContinuation();
+  const pending = pendingManagementOperationStepUpState();
+  if (continuation && pending.kind === 'pending' && pendingManagementOperationMatches(pending.value, continuation))
+    clearPendingManagementOperationStepUp();
   try {
     window.sessionStorage.removeItem(storageKey);
   } catch {
@@ -237,8 +247,7 @@ export const nativeRenameSource: RenameSource = {
   run: (attempt, isCurrent) => runRenameAttempt(attempt, nativeRenameSource.readCurrent, isCurrent),
   stepUp: async (attempt, isCurrent = () => true) => {
     const input = { accountId: attempt.accountId, operationKey: attempt.operationKey, operation: attempt.operation };
-    if (!isCurrent() || !saveRenameContinuation(attempt) || !storePendingManagementOperationStepUp(input))
-      return false;
+    if (!isCurrent() || !saveRenameContinuation(attempt) || !storePendingManagementOperationStepUp(input)) return false;
     window.location.assign(managementOperationStepUpUrl('rename'));
     return true;
   },

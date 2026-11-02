@@ -5,7 +5,14 @@ import {
   accountProfileReadTransport,
   type AccountProfileAccess,
 } from '../../../services/auth/src/account-profile-read-transport.ts';
-import { createRenameAttempt, nativeRenameSource, RENAME_PROFILE, type RenameOperation } from '../src/account-rename';
+import {
+  clearRenameContinuation,
+  createRenameAttempt,
+  nativeRenameSource,
+  RENAME_PROFILE,
+  type RenameOperation,
+} from '../src/account-rename';
+import { pendingManagementOperationStepUpState } from '../src/management-operation-step-up';
 
 const issuer = 'https://rename.auth.test';
 const accountId = '00000000-0000-4000-8000-000000000001';
@@ -123,6 +130,8 @@ test('the default source reads a handleless human and reconciles a lost rename r
   expect(await nativeRenameSource.stepUp(next)).toBe(true);
   expect(f.navigations).toEqual(['/step-up?management_operation=rename&return_to=%2Faccount%2Frename']);
   expect([...f.stored.values()].join('')).not.toContain('original-reference');
+  clearRenameContinuation();
+  expect(pendingManagementOperationStepUpState()).toEqual({ kind: 'absent' });
 });
 test('native read failure, substituted profiles and session changes stay unavailable and recover without issuing commands', async () => {
   const f = fixture();
