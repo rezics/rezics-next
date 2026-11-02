@@ -753,7 +753,7 @@ function PeopleProfileEditorLive({
                 peopleProfiles(current.release, locale).find((profile) => profile.id === current.public.subject.type)
                   ?.fields ?? [],
             }}
-          profileHeadingRef={retryHeading}
+            profileHeadingRef={retryHeading}
             profileIntro={<ProfileIntro read={privateRead} locale={locale} />}
             transport={{
               propose,

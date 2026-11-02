@@ -47,9 +47,8 @@ test('whole Person and Organization creation families retain exact facts, indepe
   const { PeopleProfileEditor } = await import('../src/features/catalogue/people-profile-view');
   const { peopleProfiles } = await import('../src/features/catalogue/people-profile');
   const { definitionText } = await import('../src/features/catalogue/definition-guide');
-  const { peopleProfileFixture, peopleCreatedId, peoplePersonId } = await import(
-    '../src/kernel/fake/catalogue-people-profile'
-  );
+  const { peopleProfileFixture, peopleCreatedId, peoplePersonId } =
+    await import('../src/kernel/fake/catalogue-people-profile');
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const testing = createRequire(require.resolve('storybook/test'));
@@ -776,11 +775,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
       ...retryFixture.transport,
       load: async () => {
         const attempt = ++retryLoads;
-        return attempt === 1
-          ? firstRead.promise
-          : attempt === 2
-            ? retriedRead.promise
-            : freshMetadata;
+        return attempt === 1 ? firstRead.promise : attempt === 2 ? retriedRead.promise : freshMetadata;
       },
     };
     await render(editor(retryFixture, retryTransport));
