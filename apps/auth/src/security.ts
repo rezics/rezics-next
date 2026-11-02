@@ -1,3 +1,4 @@
+import { createServerFn } from '@tanstack/react-start';
 import { privateAuthRead } from './private-auth-read';
 import { authPost, failureMessage, type AuthPostResult } from './api';
 import { m } from './paraglide/messages.js';
@@ -302,4 +303,3 @@ export function formatSecurityDate(value: string, locale: string): string {
   if (!Number.isFinite(date.getTime())) return value;
   return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
-import { createServerFn } from '@tanstack/react-start';

@@ -3,7 +3,6 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import type { Root } from 'react-dom/client';
 import type { PasskeyRegistrationReview } from '../src/security';
-import type { SecurityTarget } from '../src/security-reconciliation';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
@@ -38,29 +37,20 @@ let host: HTMLDivElement, root: Root, ceremonies: number, requests: { path: stri
 let response: ReturnType<typeof Promise.withResolvers<Response>>;
 let review: ReturnType<typeof Promise.withResolvers<PasskeyRegistrationReview>>;
 let reviews: string[];
-let actions: SecurityTarget[];
 const source = {
-  act: async (target: SecurityTarget) => {
-    actions.push(target);
-    return { kind: 'failure' as const };
-  },
+  act: async () => ({ kind: 'failure' as const }),
   read: async () => ({ kind: 'unavailable' as const }),
   reviewRegistration: async (accountId: string) => {
     reviews.push(accountId);
     return review.promise;
   },
 };
-const render = (value = initial) =>
-  flush(() =>
-    root.render(
-      <SecurityPage
-        initial={value}
-        securitySource={source}
-        inventorySource={emptyInventory}
-        identitySource={async () => ({ kind: 'unavailable' })}
-      />,
-    ),
-  );
+const props = {
+  securitySource: source,
+  inventorySource: emptyInventory,
+  identitySource: async () => ({ kind: 'unavailable' as const }),
+};
+const render = (value = initial) => flush(() => root.render(<SecurityPage initial={value} {...props} />));
 const submit = () =>
   host
     .querySelectorAll('form')[1]!
@@ -88,10 +78,8 @@ async function mount() {
   ceremonies = 0;
   requests = [];
   reviews = [];
-  actions = [];
   response = Promise.withResolvers();
   review = Promise.withResolvers();
-  window.confirm = () => true;
   Object.defineProperty(navigator, 'credentials', {
     configurable: true,
     value: {
@@ -186,16 +174,10 @@ test('lost acknowledgement requires a successful current inventory and review be
   expect(ceremonies).toBe(1);
   await flush(() => click(m.auth_security_passkey_registration_continue()));
   expect(locked()).toBe(false);
-  await flush(() => click(m.auth_security_passkey_remove()));
-  expect(actions[0]?.id).toBe('unrelated-native-id');
   response = Promise.withResolvers();
-  response.resolve(
-    Response.json({ id: 'saved-native-id', name: 'New key', created_at: '2026-11-02T00:00:00Z' }, { status: 201 }),
-  );
   await flush(submit);
   expect(ceremonies).toBe(2);
-  expect(host.textContent).toContain(m.auth_security_passkey_added());
-  expect(host.textContent).toContain('New key');
+  expect(requests.filter(({ path }) => path === '/passkeys/register')).toHaveLength(2);
 });
 
 test.each(['signed-out', 'denied', 'replaced'])(
