@@ -1,4 +1,4 @@
-import type { MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { ContentItem } from '@rezics/ui/content-item';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -31,6 +31,40 @@ const actionClassName =
 /** Shared directory region for the route and its Patterns/Pages stories. Listing never grants creation. */
 export function BoardDirectory({ request, contribution, result, previous, onNavigate, onRetry }: Props) {
   const locale = getLocale();
+  const requestIdentity = JSON.stringify([
+    request.purpose,
+    request.cursor ?? null,
+    request.limit,
+    contribution?.subject ?? null,
+    contribution?.subjectTitle ?? null,
+  ]);
+  const [keyboardRetry, setKeyboardRetry] = useState<string | null>(null);
+  const resultRegion = useRef<HTMLElement>(null);
+  const retryButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!keyboardRetry) return;
+    if (keyboardRetry !== requestIdentity) {
+      setKeyboardRetry(null);
+      return;
+    }
+    if (result.state !== 'loading') {
+      setKeyboardRetry(null);
+      (result.state === 'unavailable' ? retryButton.current : resultRegion.current)?.focus();
+      return;
+    }
+    const cancel = () => setKeyboardRetry(null);
+    const moved = (event: FocusEvent) => {
+      if (event.target !== document.body) cancel();
+    };
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('focusin', moved, true);
+    window.addEventListener('blur', cancel);
+    return () => {
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('focusin', moved, true);
+      window.removeEventListener('blur', cancel);
+    };
+  }, [keyboardRetry, requestIdentity, result.state]);
   const navigate = (destination: BoardDirectoryRequest) => (event: MouseEvent<HTMLAnchorElement>) => {
     if (!onNavigate || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
@@ -70,12 +104,27 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
           );
         })}
       </nav>
-      <section aria-label={purposeLabel(request.purpose)} aria-busy={result.state === 'loading'} className="space-y-4">
+      <section
+        ref={resultRegion}
+        tabIndex={-1}
+        aria-label={purposeLabel(request.purpose)}
+        aria-busy={result.state === 'loading'}
+        className="space-y-4"
+      >
         {result.state === 'loading' ? <p role="status">{m.board_directory_loading()}</p> : null}
         {result.state === 'unavailable' ? (
           <div role="status" className="space-y-3">
             <p>{m.board_directory_unavailable()}</p>
-            <Button variant="outline" size="lg" className={actionClassName} onClick={onRetry}>
+            <Button
+              ref={retryButton}
+              variant="outline"
+              size="lg"
+              className={actionClassName}
+              onClick={(event) => {
+                if (event.detail === 0) setKeyboardRetry(requestIdentity);
+                onRetry();
+              }}
+            >
               {m.board_directory_retry()}
             </Button>
             {request.cursor ? (
