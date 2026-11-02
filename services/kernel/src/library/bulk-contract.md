@@ -88,9 +88,8 @@ its existing 100-row budget; it remains the erasure authority.
 
 ## Further action composition
 
-The explicit status path installs native commands, routes, worker delivery and lifecycle cleanup. The delivered
-Collection add executor is reachable through the add preview receiving path below. Remaining native action owners
-supply their executor seams; Web owns its consumer journey.
+The explicit status, curated Collection add and occurrence removal paths install native commands, routes, worker
+delivery and lifecycle cleanup. Web owns its consumer journey.
 
 ## Collection add preview receiving
 
@@ -101,6 +100,16 @@ The immutable manifest stores the chosen Collection on every target, with each t
 partition. Preview does not read or change membership. Confirmation dispatches the installed executor, which checks
 current authority and membership at the stored destination and records skip-present, capacity and conflict outcomes
 per target. Ordinary Collection member addition remains duplicate-permitting.
+
+## Collection occurrence removal preview receiving
+
+Decision: occurrence removal previews accept unique explicit member IDs from an active curated Collection; duplicate
+Subjects remain separate targets when their member IDs differ.
+
+Admission captures the selected native member revision, transaction ID and addedAt together with each exact Subject,
+member and Collection identity. Preview does not remove members. The persisted manifest binds that exact population
+to the durable initiator and native source. Confirmation uses only those stored targets and the installed per-target
+executor, which skips a changed occurrence individually. Query expansion remains owned by its complete capture path.
 
 Further actions extend the installed preview, confirmation and result API only when their native executors are
 available. Use the source's documented direct or ready-result interface for filtered capture and the existing

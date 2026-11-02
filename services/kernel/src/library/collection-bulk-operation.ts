@@ -34,6 +34,10 @@ import {
   explicitLibraryRemoval,
   resolveLibraryRemovalSubjects,
 } from './collection-bulk-entry-admission.ts';
+import {
+  captureCollectionBulkOccurrences,
+  explicitCollectionOccurrenceRemoval,
+} from './collection-bulk-occurrence-admission.ts';
 import type { BulkAdmission, BulkCounters, OperationResult, OutcomeQuery } from './bulk-contract.ts';
 import {
   captureCollectionBulkAddTargets,
@@ -187,10 +191,22 @@ export async function collectionBulkView(tx: CommandTransaction, key: Collection
     [key.route, key.operationId, key.accountId],
   );
   const counts: BulkCounters = {
-    scannedCandidates: operation.targetCount,
-    selectedSubjects: operation.targetCount,
-    scannedOccurrences: 0,
-    capturedOccurrences: 0,
+    scannedCandidates:
+      operation.request.action === 'remove_from_collection' && operation.request.selection.kind === 'occurrences'
+        ? 0
+        : operation.targetCount,
+    selectedSubjects:
+      operation.request.action === 'remove_from_collection' && operation.request.selection.kind === 'occurrences'
+        ? 0
+        : operation.targetCount,
+    scannedOccurrences:
+      operation.request.action === 'remove_from_collection' && operation.request.selection.kind === 'occurrences'
+        ? operation.targetCount
+        : 0,
+    capturedOccurrences:
+      operation.request.action === 'remove_from_collection' && operation.request.selection.kind === 'occurrences'
+        ? operation.targetCount
+        : 0,
     targets: operation.targetCount,
     pending: 0,
     reconciling: 0,
@@ -316,9 +332,15 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
           ? explicitLibraryRemoval(input)
           : input.action === 'add_to_collection'
             ? explicitCollectionBulkAdd(input)
-            : explicitBulkStatus(input);
+            : input.action === 'remove_from_collection'
+              ? explicitCollectionOccurrenceRemoval(input)
+              : explicitBulkStatus(input);
       const action = parsed.action === 'remove_from_library' ? 'library_entry:delete' : 'library_entry:update';
       const owner = bulkOwner(actor, action);
+      const request = {
+        ...parsed,
+        selection: { kind: parsed.action === 'remove_from_collection' ? 'occurrences' : 'explicit' },
+      };
       const route = requireRoute(owner.accountId),
         operationId = newId(route);
       const requestDigest = bulkHash([principalCommandIdentity(owner), BULK_PREVIEW_COMMAND, input]);
@@ -333,6 +355,14 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
             const context = commandAccessContext({ pool, deadline: deadlineFor(5000) }, attempt);
             await admitEntryAttempt(deps, owner, action, attempt, context.deadline);
             const capture = await captureDurableInitiator(context, owner);
+            if (parsed.action === 'remove_from_collection') {
+              try {
+                const targets = await captureCollectionBulkOccurrences(deps, owner, parsed, attempt, context.deadline);
+                return { capture, targets, action: parsed.action };
+              } catch (error) {
+                return { capture, targets: [] as CollectionBulkTarget[], action: parsed.action, error };
+              }
+            }
             if (parsed.action === 'remove_from_library') {
               try {
                 const resolved = await resolveLibraryRemovalSubjects(deps, owner, parsed, attempt.time, context);
@@ -378,8 +408,9 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
         },
         async (tx, command, prepared) => {
           if ('error' in prepared) throw prepared.error;
-          const targets: CollectionBulkTarget[] =
-            prepared.action === 'remove_from_library'
+          const targets: CollectionBulkTarget[] = prepared.action === 'remove_from_collection'
+            ? prepared.targets
+            : prepared.action === 'remove_from_library'
               ? await captureLibraryRemovalTargets(tx, owner, prepared.resolved)
               : parsed.action === 'add_to_collection'
                 ? await captureCollectionBulkAddTargets(
@@ -413,7 +444,6 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
                       };
                     });
                   })();
-          const request = { ...parsed, selection: { kind: 'explicit' as const } };
           const operation = { route, id: operationId, kind: BULK_PREVIEW_COMMAND, sourceId: operationId };
           const record: DurableInitiatorRecord = {
             operation,
