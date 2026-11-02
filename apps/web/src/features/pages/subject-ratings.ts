@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import { decodeOwnRatingValue } from './subject-own-rating-value';
+import { admitRatingAggregate } from './rating-population-value';
 
 export const GLOBAL = '00000000-0000-8000-8000-000000000000';
 export const QUESTION = '00000000-0000-7000-8000-000000000001';
@@ -139,15 +140,6 @@ function isDate(value: unknown): value is string {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
-function isDateTime(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
-    isDate(value.slice(0, 10)) &&
-    Number.isFinite(Date.parse(value))
-  );
-}
-
 function isRatingQuestion(value: unknown): value is RatingQuestion {
   if (!isRecord(value) || !isRecord(value.scale)) return false;
   return (
@@ -184,28 +176,6 @@ function isPublicFigure(value: unknown): value is PublicFigure {
     validDisplayNumber(value.mean) &&
     validDisplayNumber(value.score)
   );
-}
-
-function isFreshness(value: unknown): boolean {
-  return isRecord(value) && (value.asOf === null || isDateTime(value.asOf)) && typeof value.updating === 'boolean';
-}
-
-function isAggregateFigure(value: unknown): value is Figure {
-  if (
-    !isRecord(value) ||
-    typeof value.population !== 'string' ||
-    !isInteger(value.count) ||
-    value.count < 0 ||
-    (value.freshness !== undefined && !isFreshness(value.freshness)) ||
-    (value.mean !== undefined && (typeof value.mean !== 'number' || !Number.isFinite(value.mean))) ||
-    (value.histogram !== undefined &&
-      (!Array.isArray(value.histogram) ||
-        value.histogram.length < 1 ||
-        !value.histogram.every((count) => isInteger(count) && count >= 0))) ||
-    (value.remaining !== undefined && (!isInteger(value.remaining) || value.remaining < 1))
-  )
-    return false;
-  return true;
 }
 
 function isStatistic(value: unknown): value is Statistic {
@@ -278,18 +248,9 @@ export async function readRatings(client: KernelClient, id: string, only?: Ratin
     }),
     settle('global', async () => {
       const result = await subject.ratings.get({ query: { question: QUESTION, population: [GLOBAL] } });
-      if (result.status !== 200 || !result.data) return ratingFailure(result.status);
-      if (
-        !isRecord(result.data) ||
-        result.data.subject !== id ||
-        result.data.question !== QUESTION ||
-        !Array.isArray(result.data.figures) ||
-        result.data.figures.length < 1 ||
-        result.data.figures.length > 20 ||
-        !result.data.figures.every(isAggregateFigure)
-      )
-        return { kind: 'failed' };
-      const value = result.data.figures.find((item) => item.population === GLOBAL);
+      if (result.status !== 200) return ratingFailure(result.status);
+      const aggregate = admitRatingAggregate(result.data, { subject: id, question: QUESTION, populations: [GLOBAL] });
+      const value = aggregate?.figures[0];
       return value ? { kind: 'ready', value } : { kind: 'failed' };
     }),
     settle('statistics', async () => {
