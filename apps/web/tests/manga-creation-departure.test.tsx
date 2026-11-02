@@ -145,6 +145,23 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
       commands.push(command);
       return fixture.transport.create(command);
     });
+    await select(m.manga_grain(), 'schema:PublicationVolume');
+    const isbnTitle = fixture.release.properties['schema:isbn']!.labels.en!;
+    const isbn = await add(m.manga_publication(), 'schema:isbn', isbnTitle);
+    await replace(m.correction_value(), '9781234567897', isbn);
+    await select(m.manga_grain(), 'schema:ComicSeries');
+    expect(blocked()).toBe(true);
+    await leaveAttempt();
+    await click(m.thread_authoring_stay(), dialog()!);
+    await select(m.manga_grain(), 'schema:PublicationVolume');
+    expect(
+      (
+        within(within(host).getByRole('region', { name: isbnTitle })).getByRole('textbox', {
+          name: m.correction_value(),
+        }) as HTMLInputElement
+      ).value,
+    ).toBe('9781234567897');
+    await select(m.manga_grain(), 'schema:ComicSeries');
     const authored = await add(
       m.authored_title(),
       'schema:abstract',
@@ -159,9 +176,6 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
       await user.tab();
       await user.click(within(authored).getByRole('checkbox', { name: m.authored_original() }));
     });
-    await select(m.correction_add_qualifier(), 'schema:position', authored);
-    await click(m.relation_add_qualifier(), authored);
-    await replace(m.correction_value(), '2', authored);
     await select(m.manga_grain(), 'schema:PublicationVolume');
     // The only authored work is now in the hidden holder; returning to the initial Type below must retain it.
     expect(blocked()).toBe(true);
@@ -238,7 +252,7 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
       { ...owner, csrfToken: 'replacement-token' },
       { ...owner, subject: 'another-viewer' },
     ]) {
-      await mount(mangaFixture(), pending);
+      router = await mount(mangaFixture(), pending);
       await replace(m.catalogue_create_label(), 'Retiring');
       await click(m.manga_title());
       await leaveAttempt();
