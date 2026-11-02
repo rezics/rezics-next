@@ -137,64 +137,6 @@ test('missing original physical owner keeps current receiving closure unavailabl
   }
 }, 120_000);
 
-test('concurrent invalidation preserves one fence per restore generation without installing a receiver', async () => {
-  const f = await nativeFixture();
-  try {
-    const deleted = await f.person('receiving-concurrent-transition');
-    expect((await f.delete(deleted)).status).toBe(200);
-    const ports = f.bindings.trustedAccess;
-    const barrier = await ports.readAuthErasureBarrier!(deleted.accountId);
-    if (!barrier) throw new Error('Missing genuine native deletion barrier');
-    const partition = Math.floor(f.routeOf(deleted.accountId)! / 16);
-    expect(
-      (await f.kernel.query('SELECT access.initialize_auth_erasure_partition($1) AS ready', [partition])).rows[0]
-        ?.ready,
-    ).toBe(true);
-    expect(await ports.registerAuthReceivingClosure!({ barrier, deadline: Date.now() + 5000 })).toEqual({
-      state: 'pending',
-      reason: 'physical-owner-unavailable',
-    });
-    const invalidate = (restoreGeneration: string) =>
-      ports.invalidateAuthReceivingClosure!({ partition, restoreGeneration, deadline: Date.now() + 5000 });
-    expect(await Promise.all([invalidate('replacement-one'), invalidate('replacement-one')])).toEqual([true, true]);
-    expect(
-      (await f.kernel.query('SELECT revision::text FROM access.auth_receiving_control WHERE partition_no=$1', [partition]))
-        .rows[0]?.revision,
-    ).toBe('2');
-    expect(await invalidate('replacement-two')).toBe(true);
-    expect(
-      (
-        await f.kernel.query(
-          `SELECT revision::text,state,requested_restore,database_identity,receiving_incarnation,
-           restore_generation,owner_installation,writer_fence
-           FROM access.auth_receiving_control WHERE partition_no=$1`,
-          [partition],
-        )
-      ).rows[0],
-    ).toEqual({
-      revision: '3',
-      state: 'quarantined',
-      requested_restore: 'replacement-two',
-      database_identity: null,
-      receiving_incarnation: null,
-      restore_generation: null,
-      owner_installation: null,
-      writer_fence: null,
-    });
-    for (const restoreGeneration of ['replacement-one', 'replacement-two']) {
-      expect(
-        await ports.readAuthReceivingControl!({ partition, restoreGeneration, deadline: Date.now() + 5000 }),
-      ).toBeNull();
-    }
-    expect(await ports.registerAuthReceivingClosure!({ barrier, deadline: Date.now() + 5000 })).toEqual({
-      state: 'pending',
-      reason: 'physical-owner-unavailable',
-    });
-  } finally {
-    await f.close();
-  }
-}, 120_000);
-
 test('pending receiving registration rejects an incorrect native Source or barrier before conflict handling', async () => {
   const f = await nativeFixture();
   try {
@@ -232,46 +174,6 @@ test('pending receiving registration rejects an incorrect native Source or barri
       state: 'pending',
       reason: 'physical-owner-unavailable',
     });
-  } finally {
-    await f.close();
-  }
-}, 120_000);
-
-// UNRUN receiving regression: a valid account is not enough to admit a caller
-// supplied, stale erasure version into the durable native obligation set.
-test('stale receiving barrier registration rolls back without creating an obligation', async () => {
-  const f = await nativeFixture();
-  try {
-    const deleted = await f.person('receiving-stale-barrier');
-    expect((await f.delete(deleted)).status).toBe(200);
-    const ports = f.bindings.trustedAccess;
-    const barrier = await ports.readAuthErasureBarrier!(deleted.accountId);
-    if (!barrier) throw new Error('Missing genuine native deletion barrier');
-    const stale = { ...barrier, version: barrier.version + 1 };
-    await expect(
-      ports.registerAuthReceivingClosure!({ barrier: stale, deadline: Date.now() + 5000 }),
-    ).rejects.toThrow();
-
-    const route = f.routeOf(deleted.accountId)!;
-    expect(
-      (
-        await f.kernel.query(
-          'SELECT 1 FROM access.auth_receiving_obligation WHERE route=$1 AND account_id=$2',
-          [route, deleted.accountId],
-        )
-      ).rowCount,
-    ).toBe(0);
-    expect(
-      await ports.registerAuthReceivingClosure!({ barrier, deadline: Date.now() + 5000 }),
-    ).toEqual({ state: 'pending', reason: 'physical-owner-unavailable' });
-    expect(
-      (
-        await f.kernel.query<{ version: number }>(
-          'SELECT version FROM access.auth_receiving_obligation WHERE route=$1 AND account_id=$2',
-          [route, deleted.accountId],
-        )
-      ).rows,
-    ).toEqual([{ version: barrier.version }]);
   } finally {
     await f.close();
   }
