@@ -257,10 +257,14 @@ export function ReporterStatusView({
   );
 }
 
-function ReportReference({ report, isCurrent = () => true }: { report: ReporterStatus; isCurrent?: () => boolean }) {
+const alwaysCurrent = () => true;
+
+function ReportReference({ report, isCurrent = alwaysCurrent }: { report: ReporterStatus; isCurrent?: () => boolean }) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const lifetime = useRef(0);
   const copyGeneration = useRef(0);
+  const manualReferenceRef = useRef<HTMLTextAreaElement>(null);
+  const copyButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     lifetime.current++;
     return () => {
@@ -272,13 +276,20 @@ function ReportReference({ report, isCurrent = () => true }: { report: ReporterS
     { label: m.reporter_status_target(), value: `${report.target.kind} ${report.target.id}` },
     ...(report.revisionId ? [{ label: m.reporter_status_revision(), value: report.revisionId }] : []),
   ];
+  const referenceText = reference.map(({ label, value }) => `${label}: ${value}`).join('\n');
+  useEffect(() => {
+    if (copyState !== 'failed' || !isCurrent()) return;
+    manualReferenceRef.current?.focus();
+    manualReferenceRef.current?.select();
+  }, [copyState, isCurrent]);
   async function copy() {
     if (!isCurrent()) return;
     const mounted = lifetime.current;
     const attempt = ++copyGeneration.current;
     const current = () => mounted === lifetime.current && attempt === copyGeneration.current && isCurrent();
+    setCopyState('idle');
     try {
-      await navigator.clipboard.writeText(reference.map(({ label, value }) => `${label}: ${value}`).join('\n'));
+      await navigator.clipboard.writeText(referenceText);
       if (current()) setCopyState('copied');
     } catch {
       if (current()) setCopyState('failed');
@@ -296,10 +307,34 @@ function ReportReference({ report, isCurrent = () => true }: { report: ReporterS
             </div>
           ))}
         </dl>
-        <Button variant="outline" className="min-h-11" onClick={() => void copy()}>
+        <Button ref={copyButtonRef} variant="outline" className="min-h-11" onClick={() => void copy()}>
           <Copy className="size-4" aria-hidden="true" />
           {m.reporter_status_copy()}
         </Button>
+        {copyState === 'failed' && isCurrent() ? (
+          <div className="space-y-3">
+            <label className="block space-y-2 text-sm font-medium">
+              <span>{m.reporter_status_reference()}</span>
+              <textarea
+                ref={manualReferenceRef}
+                className="min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-sm leading-6 select-text"
+                readOnly
+                rows={reference.length}
+                value={referenceText}
+              />
+            </label>
+            <Button
+              variant="outline"
+              className="min-h-11"
+              onClick={() => {
+                setCopyState('idle');
+                copyButtonRef.current?.focus();
+              }}
+            >
+              {m.board_feed_copy_close()}
+            </Button>
+          </div>
+        ) : null}
         <p role="status" className="text-sm text-muted-foreground">
           {copyState === 'copied'
             ? m.reporter_status_copied()
