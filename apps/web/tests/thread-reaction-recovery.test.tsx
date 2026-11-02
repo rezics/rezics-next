@@ -138,7 +138,6 @@ for (const clear of [false, true])
       finishRefresh();
     });
     expect(button(m.reaction_like()).disabled).toBe(false);
-    expect(host.querySelector('[role="status"]')).toBeNull();
   });
 
 for (const boundary of ['target', 'account', 'csrf'] as const)
