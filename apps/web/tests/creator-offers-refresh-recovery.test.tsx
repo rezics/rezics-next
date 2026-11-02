@@ -431,7 +431,9 @@ describe('Creator offer editing recovery retains real drafts without extending p
           // Use the saved command's read-only recovery rather than the page refresh.
           await act(async () => {
             [...p.host.querySelectorAll('button')]
-              .filter((button) => button.textContent === m.creator_offers_refresh()).at(-1)!.click();
+              .filter((button) => button.textContent === m.creator_offers_refresh())
+              .at(-1)!
+              .click();
           });
           expect(p.writes).toHaveLength(2);
         }
@@ -453,7 +455,10 @@ describe('Creator offer editing recovery retains real drafts without extending p
         } else {
           expect(p.input('price').disabled).toBe(false);
           await p.fill('price', '14.00');
-          await act(async () => { p.session(A, 'renewed-after-confirmation'); p.admit(); });
+          await act(async () => {
+            p.session(A, 'renewed-after-confirmation');
+            p.admit();
+          });
           await p.tick();
           expect(p.input('price').value).toBe('14.00');
           await p.submit(true);

@@ -242,7 +242,11 @@ function OfferCommands({
               onChange={(next) => {
                 if (isCurrent() && !frozen) {
                   keepDraft({
-                    observed, text: next, pending: pending.current, keys: keys.current, rule,
+                    observed,
+                    text: next,
+                    pending: pending.current,
+                    keys: keys.current,
+                    rule,
                     result: confirmed ? null : result,
                   });
                   if (confirmed) setResult(null);
