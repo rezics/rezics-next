@@ -796,10 +796,7 @@ function SubjectLibrarySlotView({
     try {
       const response = await readSubjectLibraryCollections({ data: { subjectId: subject.id } });
       if (!collectionLifetime.current()) return;
-      if (
-        !response.provenance ||
-        response.provenance.viewer !== data.provenance?.viewer
-      ) {
+      if (!response.provenance || response.provenance.viewer !== data.provenance?.viewer) {
         setCollections(null);
         setCollectionsLoaded(false);
         setCollectionsProblem('unavailable');
@@ -1364,7 +1361,11 @@ function SubjectLibrarySlotView({
                     </label>
                     <div className="flex flex-wrap gap-2">
                       <Exposure operation="library_label.create">
-                        <button type="submit" disabled={!data.csrfToken || (hydrated && labelPending)} className={labelButtonClass}>
+                        <button
+                          type="submit"
+                          disabled={!data.csrfToken || (hydrated && labelPending)}
+                          className={labelButtonClass}
+                        >
                           {m.library_subject_label_add()}
                         </button>
                       </Exposure>

@@ -617,7 +617,6 @@ test('The mounted leaf partitions admission and return-address ABA reads and req
   expect(host.textContent).toContain('A private label');
 });
 
-
 test('A tokenless reader sees current native slot facts and can retry reads; token arrival never submits commands', async () => {
   const reads: ReturnType<typeof deferred<SubjectLibrarySlotData>>[] = [];
   const source = queries.subjectLibraryQuery;
@@ -646,14 +645,18 @@ test('A tokenless reader sees current native slot facts and can retry reads; tok
   expect(entries).toHaveLength(0);
   expect(labels).toHaveLength(0);
   await act(async () => client.setQueryData(['session'], viewer('A', 'arrived')));
-  await act(async () => reads.at(-1)!.resolve({ ...data, provenance: { ...data.provenance!, readId: crypto.randomUUID() } }));
+  await act(async () =>
+    reads.at(-1)!.resolve({ ...data, provenance: { ...data.provenance!, readId: crypto.randomUUID() } }),
+  );
   expect(entries).toHaveLength(0);
   expect(labels).toHaveLength(0);
   await click(m.library_subject_remove());
   expect(entries[0]!.csrf).toBe('arrived');
   await act(async () => entries[0]!.reject(new Error('write unknown')));
   await act(async () => client.setQueryData(['session'], { ...viewer(), csrfToken: null }));
-  await act(async () => reads.at(-1)!.resolve({ ...data, provenance: { ...data.provenance!, readId: crypto.randomUUID() } }));
+  await act(async () =>
+    reads.at(-1)!.resolve({ ...data, provenance: { ...data.provenance!, readId: crypto.randomUUID() } }),
+  );
   const stale = button(m.library_selection_retry());
   await click(m.library_selection_retry());
   expect(entries[1]!.csrf).toBe('arrived');

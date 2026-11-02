@@ -38,8 +38,7 @@ export function subjectLibraryLeafQuery(
   },
 ) {
   const query = subjectLibraryQuery(frame.id, locale, false, undefined, undefined, frame.type);
-  const ready =
-    session.state === 'signed-in' && !!session.subject && (!mounted || mounted.admitted);
+  const ready = session.state === 'signed-in' && !!session.subject && (!mounted || mounted.admitted);
   const currentData = (data: SubjectLibrarySlotData): SubjectLibrarySlotData =>
     ready &&
     data.session === 'signed-in' &&
