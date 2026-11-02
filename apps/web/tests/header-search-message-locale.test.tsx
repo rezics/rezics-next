@@ -3,25 +3,34 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import { HeaderSearchView } from '../src/search/header-search/header-search';
-import { initialHeaderSearchState, reduceHeaderSearchState } from '../src/search/header-search/state';
+import { initialHeaderSearchState } from '../src/search/header-search/state';
 import type { SearchScope } from '../src/search/header-search/types';
 
 const present = (locale: 'en' | 'zh-Hans', suggestions: 'error' | 'unavailable') => {
   const scope: SearchScope = {
-    kind: 'Collection', id: 'reading', name: 'Reading list', searchAction: `/${locale}/collections/reading/search`,
+    kind: 'Collection',
+    id: 'reading',
+    name: 'Reading list',
+    searchAction: `/${locale}/collections/reading/search`,
   };
-  const state = reduceHeaderSearchState(
-    reduceHeaderSearchState(initialHeaderSearchState(scope, 'draft'), { type: 'open-phone' }),
-    { type: 'suggestions', state: suggestions },
-  );
-  return createElement(HeaderSearchView, { id: locale, state, locale, keyboardShortcut: true, region: null, onRetry() {} });
+  const state = { ...initialHeaderSearchState(scope, 'draft'), expanded: true, phoneSheet: true, suggestions };
+  return createElement(HeaderSearchView, {
+    id: locale,
+    state,
+    locale,
+    keyboardShortcut: true,
+    region: null,
+    onRetry() {},
+  });
 };
 
-test('header messages follow each presenter's locale when locales coexist', async () => {
+test('header messages follow each locale when locales coexist', async () => {
   const previousLocale = getLocale();
   try {
     await setLocale('ja', { reload: false });
-    const markup = renderToStaticMarkup(createElement('div', null, present('en', 'error'), present('zh-Hans', 'unavailable')));
+    const markup = renderToStaticMarkup(
+      createElement('div', null, present('en', 'error'), present('zh-Hans', 'unavailable')),
+    );
     for (const pair of [
       ['aria-label="Search subjects"', 'aria-label="搜索条目"'],
       ['aria-label="Close search"', 'aria-label="关闭搜索"'],
