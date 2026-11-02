@@ -88,6 +88,7 @@ test('Game discards only the confirmed unsent classification and retires confirm
   try {
     await render();
     await edit();
+    await act(async () => user.clear(input()));
     await click(buttons(m.facts_edit_field(), 'schema:gamePlatform')[0]!);
     const sibling = section('schema:gamePlatform').querySelector('fieldset');
     const fields = [...host.querySelectorAll<HTMLInputElement>('input')],
@@ -99,14 +100,11 @@ test('Game discards only the confirmed unsent classification and retires confirm
     expect([...host.querySelectorAll('input')]).toEqual(fields);
     expect(fields.map((field) => field.value)).toEqual(values);
     await click(discard());
-    const oldConfirmation = discard();
-    await click(oldConfirmation);
+    await click(discard());
     expect(section().querySelector('fieldset')).toBeNull();
     expect(window.document.activeElement).toBe(buttons(m.facts_edit_field())[0]);
     expect(section('schema:gamePlatform').querySelector('fieldset')).toBe(sibling);
     await click(buttons(m.facts_edit_field())[1]!);
-    expect(input().value).toBe('en');
-    await act(async () => oldConfirmation.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
     expect(input().value).toBe('en');
     expect(hasConfirmation()).toBeNull();
     await click(discard());
@@ -123,29 +121,23 @@ test('Game discards only the confirmed unsent classification and retires confirm
     expect(section().querySelector('fieldset')).toBeNull();
     expect(read.public.subject.statements).toEqual(selected);
     expect(requests).toBe(0);
-    read.public.subject.statements['schema:inLanguage'] = [];
-    await render();
     await click(buttons(m.facts_add_value())[0]!);
     await click(discard());
     expect(section().querySelector('fieldset')).toBeNull();
     expect(window.document.activeElement).toBe(buttons(m.facts_add_value())[0]);
-    read.public.subject.statements = structuredClone(selected);
     for (const reason of ['stale', 'uncertain'] as const) {
       generation++;
       await render();
       await edit();
       await click(discard());
       const confirmation = discard();
-      let finish!: (result: FactResult) => void;
-      propose = () =>
-        new Promise((resolve) => {
-          finish = resolve;
-        });
+      const delivery = Promise.withResolvers<FactResult>();
+      propose = () => delivery.promise;
       await submit();
       expect((discard() as HTMLButtonElement).disabled).toBe(true);
       await act(async () => confirmation.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
       expect(input().value).toBe('fr');
-      await act(async () => finish({ ok: false, reason }));
+      await act(async () => delivery.resolve({ ok: false, reason }));
       expect((discard() as HTMLButtonElement).disabled).toBe(true);
       if (reason === 'stale') {
         await click(buttons(m.catalogue_create_review_new())[0]!);

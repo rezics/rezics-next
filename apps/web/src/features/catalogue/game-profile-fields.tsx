@@ -370,7 +370,6 @@ export function GameInitialFacts({
     </fieldset>
   );
 }
-/** Common per-field sealing/retry and review, with item controls for native classification slots. */
 /** Local confirmation belongs to one exact unsent row and its admitted current reading. */
 function GameClassificationDiscard({
   draft,
@@ -480,6 +479,7 @@ function GameClassificationDiscard({
   );
 }
 
+/** Common per-field sealing/retry and review, with item controls for native classification slots. */
 export const GameClassifications = catalogueEditor(GameClassificationsLive);
 
 function GameClassificationsLive({
