@@ -484,7 +484,9 @@ test('controller inbox recovery wakes the same active Goal once without changing
     expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
     expect(s.requests().filter((r) => r.method === 'turn/steer')).toHaveLength(0);
     expect(s.requests().filter((r) => r.method === 'thread/goal/set')).toHaveLength(1);
-    expect(s.requests().some((r) => ['thread/fork', 'thread/goal/clear', 'turn/interrupt'].includes(r.method))).toBe(false);
+    expect(s.requests().some((r) => ['thread/fork', 'thread/goal/clear', 'turn/interrupt'].includes(r.method))).toBe(
+      false,
+    );
   } finally {
     await recovered?.close();
     closeTransport();
