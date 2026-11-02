@@ -436,7 +436,7 @@ test('Current-page creation preserves native subject/version, modes, totals, ret
         await act(async () => {
           await h.user.selectOptions(h.body.getByRole('combobox', { name: m.library_progress_unit() }), 'chapters');
         });
-      if (mode !== 'completed_units')
+      if (mode === 'scalar_amount')
         await act(async () => {
           await h.user.type(h.total(), '0');
         });
@@ -450,7 +450,7 @@ test('Current-page creation preserves native subject/version, modes, totals, ret
         mode,
         unit: mode === 'scalar_amount' ? 'chapters' : mode === 'cursor_position' ? 'position' : 'track',
         idempotencyKey: initial.idempotencyKey,
-        ...(mode === 'completed_units' ? {} : { total: '0' }),
+        ...(mode === 'scalar_amount' ? { total: '0' } : {}),
       };
       expect(old.data).toEqual(intent);
       expect(old.headers).toEqual({ 'x-csrf-token': 'csrf' });

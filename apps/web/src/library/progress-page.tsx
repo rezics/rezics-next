@@ -335,6 +335,7 @@ function ProgressIndexPageContent({
   const pair = units.find((unit) => unit.id === selectedUnit) ?? units[0];
   const progressDefaultUnit = units[0]?.id ?? '';
   const unit = pair?.id ?? progressDefaultUnit;
+  const acceptsTotal = mode === 'scalar_amount' && pair?.total !== 'forbidden';
   const choiceRequest = useRef(0);
   const [choosing, setChoosing] = useState(false);
   const [total, setTotal] = useState('');
@@ -447,12 +448,12 @@ function ProgressIndexPageContent({
     if (!current() || !draftCurrent() || origin.pending || (!intent.current && (!mode || !pair))) return;
     if (!intent.current) {
       setValidateTotal(true);
-      if (pair?.total !== 'forbidden' && progressDecimalIssue(total, pair, pair?.total === 'required')) return;
+      if (acceptsTotal && progressDecimalIssue(total, pair, pair?.total === 'required')) return;
     }
     origin.pending = true;
     setAlert(null);
     setPending(true);
-    const totalValue = pair?.total !== 'forbidden' ? total.trim() : '';
+    const totalValue = acceptsTotal ? total.trim() : '';
     try {
       const headers = authority ? authority.headers() : csrfHeaders();
       if (!headers || !current()) return;
@@ -688,7 +689,7 @@ function ProgressIndexPageContent({
                       ))}
                     </NativeSelect>
                   </Field>
-                  {pair?.total !== 'forbidden' ? (
+                  {acceptsTotal ? (
                     <Field>
                       <FieldLabel htmlFor="progress-total">{m.library_progress_total()}</FieldLabel>
                       <ProgressDecimalInput

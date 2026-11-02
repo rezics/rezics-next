@@ -691,7 +691,7 @@ test('decimal corrections explain invalid operands before review and retain exac
     const label = mode === 'scalar_amount' ? m.library_progress_amount() : m.library_progress_position();
     try {
       await h.click(m.library_progress_update());
-      for (const invalid of ['1e3', '', '0.249999', '999999999999.123457', '1.1234567']) {
+      for (const invalid of ['1e3', '', '01', '0.249999', '999999999999.123457', '1.1234567']) {
         await h.fill(label, invalid);
         await h.click(m.library_progress_record());
         expect(commands).toHaveLength(0);
@@ -701,6 +701,10 @@ test('decimal corrections explain invalid operands before review and retain exac
         expect(h.field(label).getAttribute('aria-describedby')?.split(' ').some((id) =>
           window.document.getElementById(id)?.getAttribute('role') === 'alert')).toBe(true);
       }
+      await h.escape();
+      expect(h.body.getAllByRole('alertdialog')).toHaveLength(1);
+      await h.click(m.library_progress_draft_navigation_stay());
+      expect(h.field(label).value).toBe('1.1234567');
       await h.fill(label, '999999999999.123456');
       if (mode === 'cursor_position') {
         for (const invalid of ['', 'x'.repeat(257)]) {
