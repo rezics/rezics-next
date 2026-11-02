@@ -5,6 +5,7 @@ import { createRatingIdentityRepairCommands } from '../../src/rating/identity-re
 import type { IdentityRepairPage, IdentityWorkRef } from '../../src/rating/identity-work-frame.ts';
 import type { RatingIdentityProducer } from '../../src/rating/segment-identity-guard.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
+import pageVotes from '../../src/rating/segment-identity-page.sql';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId } from '../../src/route/route.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
@@ -122,11 +123,16 @@ async function effects(actor: AccountActor) {
 
 test('durable pages remain bounded and pending without Semantic authority, then resume through an empty terminal receipt', async () => {
   const actor = await voter();
-  for (let n = 0; n < 66; n++) await seed(actor, newId(route));
+  const targets = Array.from({ length: 67 }, () => newId(route)).sort();
+  for (const target of targets.slice(0, 66)) await seed(actor, target);
   const unavailable = createRatingIdentityRepairCommands({ pool: database.pool });
   const ref = await admit(unavailable, actor);
+  // A vote beyond the admitted upper bound belongs to later work, even before the first selection.
+  await seed(actor, targets[66]!);
   const first = await select(unavailable, actor, ref);
   expect(first.votes).toHaveLength(64);
+  expect(first.after).toBeNull();
+  expect(first.through).toEqual({ questionId: STANDARD_QUESTION_ID, targetId: targets[65]! });
   expect((await select(unavailable, actor, ref)).pageId).toBe(first.pageId);
   expect((await unavailable.commit(actor, binding(first), key())).value).toMatchObject({
     status: 'pending',
@@ -144,6 +150,7 @@ test('durable pages remain bounded and pending without Semantic authority, then 
   const second = await select(commands, actor, ref);
   expect(second.votes).toHaveLength(2);
   expect(second.after).toEqual(first.next);
+  expect([...first.votes, ...second.votes].map((vote) => vote.targetId)).toEqual(targets.slice(0, 66));
   await commands.commit(actor, binding(second), key());
   const last = await select(commands, actor, ref);
   expect(last.terminal).toBe(true);
@@ -153,6 +160,31 @@ test('durable pages remain bounded and pending without Semantic authority, then 
     receipt: { terminal: true, checkpoint: second.next },
   });
   expect((await commands.select(actor, ref, key())).value).toMatchObject({ reason: 'stale-work' });
+});
+
+test('identity page locks the selected native vote until its transaction releases it', async () => {
+  const actor = await voter();
+  const target = newId(route);
+  await seed(actor, target);
+  const reader = await database.admin.connect();
+  try {
+    await reader.query('BEGIN');
+    const page = await reader.query(pageVotes.sql, [
+      route, actor.accountId, null, null, STANDARD_QUESTION_ID, target,
+    ]);
+    expect(page.rows.map((row) => row.targetId)).toEqual([target]);
+    await expect(database.admin.query(
+      'SELECT 1 FROM rating.vote WHERE route = $1 AND voter_id = $2 FOR UPDATE NOWAIT',
+      [route, actor.accountId],
+    )).rejects.toMatchObject({ code: '55P03' });
+  } finally {
+    await reader.query('ROLLBACK');
+    reader.release();
+  }
+  expect((await database.admin.query(
+    'SELECT 1 FROM rating.vote WHERE route = $1 AND voter_id = $2 FOR UPDATE NOWAIT',
+    [route, actor.accountId],
+  )).rowCount).toBe(1);
 });
 
 test('effects, receipt and checkpoint roll back together; lost responses replay while original votes and clears survive', async () => {
