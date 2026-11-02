@@ -243,7 +243,7 @@ async function independentWorkspaceJourney(canvasElement: HTMLElement) {
   const longName = '読者の選択 — Gemeinschaft für gemeinsame Lektüre et les récits partagés '.repeat(3);
   await userEvent.type(inputs[0]!, longName);
   await expect(inputs[1]!).toHaveValue('');
-  await userEvent.selectOptions(first!.querySelector('select')!, 'ja');
+  await userEvent.selectOptions(within(first!).getByRole('combobox', { name: m.catalogue_create_language() }), 'ja');
   await expect(second!.querySelector('select')).toHaveValue(getLocale());
   await userEvent.click(within(first!).getByRole('button', { name: m.editorial_create() }));
   await within(first!).findByText(m.editorial_created());
@@ -283,7 +283,7 @@ export const IndependentWorkspacesDesktopRtl: Story = {
     await expect(workspaces).toHaveLength(2);
     for (const workspace of workspaces) {
       await expect(workspace.scrollWidth).toBeLessThanOrEqual(workspace.clientWidth + 1);
-      const select = workspace.querySelector('select')!;
+      const select = within(workspace).getByRole('combobox', { name: m.catalogue_create_language() });
       await userEvent.click(select);
       await userEvent.tab();
       await expect(workspace.querySelector('input')).toHaveFocus();
