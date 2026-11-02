@@ -32,7 +32,7 @@ test('mixed presentation is independent of member changes and hidden Types', asy
   expect(current).not.toHaveProperty('typeCounts');
 }, 120_000);
 
-test('default preparation readiness never delays or replaces an owner override', async () => {
+test('an explicit kind supplies presentation for every readable viewer', async () => {
   const collection = await f.collection({ visibility: 'public', presentationKind: 'schema:Movie' });
   await f.add(collection.id, await f.subject('schema:Book'));
   for (const bearer of [null, f.owner.bearer, f.other.bearer]) {

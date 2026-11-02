@@ -54,12 +54,7 @@ export const collectionSchema = t.Object(
     description: nullableString,
     visibility,
     presentationKind: nullableString,
-    presentationKindSource: t.Union([
-      t.Literal('owner'),
-      t.Literal('members'),
-      t.Literal('empty'),
-      t.Literal('pending'),
-    ]),
+    presentationKindSource: t.Union([t.Literal('owner'), t.Literal('mixed')]),
     cover: t.Optional(CoverSummarySchema),
     coverSource: t.Union([t.Literal('owner'), t.Literal('member'), t.Literal('none'), t.Literal('pending')]),
     coverMediaId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),

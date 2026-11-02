@@ -4,6 +4,7 @@ import {
   dominantCollectionKind,
   reduceConfiguredCollectionKinds,
 } from '../../src/library/collection-kind.ts';
+import { collectionPresentation } from '../../src/library/collection-presentation.ts';
 
 test('dominant kind counts canonical subjects and resolves ties by exact TypeId', () => {
   const canonicalTypes = new Map<string, string>();
@@ -35,6 +36,16 @@ test('mixed default and retained owner choice need no member evidence', () => {
     presentationKind: 'example:Retired',
     presentationKindSource: 'owner',
   });
+});
+
+test('mixed kind does not inherit independent cover readiness', () => {
+  for (const row of [{ memberCount: 0 }, { memberCount: 1 }, { memberCount: 0, membershipKind: 'dynamic' }]) {
+    expect(collectionPresentation({ ...row, presentationKind: null })).toMatchObject({
+      presentationKind: null,
+      presentationKindSource: 'mixed',
+      coverSource: row.memberCount === 0 && row.membershipKind !== 'dynamic' ? 'none' : 'pending',
+    });
+  }
 });
 
 test('configured reduction takes one highest-ranked vote per canonical item and uses exact stable ID ties', () => {

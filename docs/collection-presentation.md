@@ -221,8 +221,9 @@ serialization or duplicate writers replace those whole producers. A source/type 
 neither full native/API/UI delivery nor integrated root/main behavior.
 
 Required outcomes include owner, other account, anonymous and suspended credentials; hidden original/member and
-terminal; mixed defaults across member Type changes; override/clear and retired Type fallback; denied cover and current ordered fallback;
-CAS, receipt replay, batch rollback, destination cap and cross-curator rejection; active/removal/Undo/public-source
+terminal; mixed defaults across member Type changes; override/clear and retired Type fallback; denied cover and
+current ordered fallback; CAS, receipt replay, batch rollback, destination cap and cross-curator rejection;
+active/removal/Undo/public-source
 changes and terminal no-resurrection. Suspension uses actual invalidated bearer behavior under Library authority.
 Native growth evidence uses 1/8/64 homes, extending to 4,096 where the existing source/dependency contract requires,
 with unrelated population/history, duplicates and identity churn. These are future implementation acceptance
