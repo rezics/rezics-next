@@ -24,7 +24,7 @@ function readPngSource(bytes: Uint8Array): AvatarCropSource | null {
   }
 
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let offset = pngSignature.length;
+  let offset: number = pngSignature.length;
   let width = 0;
   let height = 0;
   let colorType = -1;

@@ -57,6 +57,12 @@ function concatBytes(...parts: Uint8Array[]): Uint8Array {
   return output;
 }
 
+function fileBytes(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
 function writeUint32(value: number): Uint8Array {
   const bytes = new Uint8Array(4);
   new DataView(bytes.buffer).setUint32(0, value, false);
@@ -88,8 +94,9 @@ function pngHeader(width: number, height: number, animated = false): File {
   header[9] = 6;
   const animation = animated ? pngChunk('acTL', concatBytes(writeUint32(2), writeUint32(0))) : new Uint8Array();
   const imageData = pngChunk('IDAT', new Uint8Array([0x78, 0x01, 0x00]));
+  const content = concatBytes(signature, pngChunk('IHDR', header), animation, imageData, pngChunk('IEND', new Uint8Array()));
   return new File(
-    [concatBytes(signature, pngChunk('IHDR', header), animation, imageData, pngChunk('IEND', new Uint8Array()))],
+    [fileBytes(content)],
     animated ? 'animated.png' : 'header.png',
     { type: 'image/png', lastModified: 1 },
   );
@@ -103,36 +110,52 @@ function jpegHeader(width: number, height: number): File {
   new DataView(frame.buffer).setUint16(7, width, false);
   frame.set([0x01, 0x01, 0x11, 0x00], 9);
   const scan = new Uint8Array([0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00]);
-  return new File([concatBytes(new Uint8Array([0xff, 0xd8]), app0, frame, scan, new Uint8Array([0xff, 0xd9]))], 'header.jpg', {
-    type: 'image/jpeg',
-    lastModified: 1,
-  });
+  return new File(
+    [fileBytes(concatBytes(new Uint8Array([0xff, 0xd8]), app0, frame, scan, new Uint8Array([0xff, 0xd9])))],
+    'header.jpg',
+    {
+      type: 'image/jpeg',
+      lastModified: 1,
+    },
+  );
 }
 
 function malformedFiles(): File[] {
   return [
-    new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'truncated-signature.png', { type: 'image/png' }),
+    new File(
+      [fileBytes(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))],
+      'truncated-signature.png',
+      { type: 'image/png' },
+    ),
     new File(
       [
-        concatBytes(
-          new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-          writeUint32(0xffff_ffff),
-          new Uint8Array([0x49, 0x48, 0x44, 0x52]),
+        fileBytes(
+          concatBytes(
+            new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+            writeUint32(0xffff_ffff),
+            new Uint8Array([0x49, 0x48, 0x44, 0x52]),
+          ),
         ),
       ],
       'invalid-length.png',
       { type: 'image/png' },
     ),
-    new File([new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x01])], 'short-length.jpg', { type: 'image/jpeg' }),
-    new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x01])], 'truncated-segment.jpg', {
-      type: 'image/jpeg',
-    }),
+    new File(
+      [fileBytes(new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x01]))],
+      'short-length.jpg',
+      { type: 'image/jpeg' },
+    ),
+    new File(
+      [fileBytes(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x01]))],
+      'truncated-segment.jpg',
+      { type: 'image/jpeg' },
+    ),
     jpegHeader(8_192, 8_192),
     pngHeader(8_192, 8_192),
     pngHeader(32, 32, true),
-    new File([new Uint8Array([0x47, 0x49, 0x46, 0x38])], 'animated.gif', { type: 'image/gif' }),
-    new File([new Uint8Array([0x52, 0x49, 0x46, 0x46])], 'still.webp', { type: 'image/webp' }),
-    new File([new Uint8Array([0x00, 0x00, 0x00, 0x20])], 'still.avif', { type: 'image/avif' }),
+    new File([fileBytes(new Uint8Array([0x47, 0x49, 0x46, 0x38]))], 'animated.gif', { type: 'image/gif' }),
+    new File([fileBytes(new Uint8Array([0x52, 0x49, 0x46, 0x46]))], 'still.webp', { type: 'image/webp' }),
+    new File([fileBytes(new Uint8Array([0x00, 0x00, 0x00, 0x20]))], 'still.avif', { type: 'image/avif' }),
   ];
 }
 
@@ -271,7 +294,7 @@ export const Default: Story = {
             csrf: request.headers.get('X-CSRF-Token'),
             id,
             bytes,
-            source,
+            ...(source ? { source } : {}),
           });
           return new Response(null, { status: 204 });
         }
