@@ -1067,7 +1067,12 @@ function SummaryPassage({
 }) {
   const excerpt = summaryExcerpt(document);
   const body = (
-    <DocumentValue document={document} lang={language === value.locale ? undefined : language} labels={value.labels} />
+    <DocumentValue
+      document={document}
+      lang={language === value.locale ? undefined : language}
+      locale={value.locale}
+      labels={value.labels}
+    />
   );
   return (
     <SubjectPassage excerpt={excerpt} language={language} locale={value.locale}>

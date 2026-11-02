@@ -56,7 +56,7 @@ export function PublishedPresentationPage({ result }: { result: Extract<Presenta
               context={page.context}
               document={page.document}
               reads={page.reads}
-              messages={subjectPageMessages()}
+              messages={subjectPageMessages(locale)}
             >
               <CompositionRender
                 document={page.document}

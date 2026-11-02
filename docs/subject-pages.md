@@ -280,7 +280,9 @@ For each document-valued property a page binds, show at most one released public
 normal rank, then the reader's language and the subject's original-language fallback. If eligible statements tie at
 that rank and language, the smallest statement UUID in code-unit order wins. `pages.read` obtains that exact body
 through the existing `document.get` aggregate; a locator alone is never prose. The page renders an available body
-with its language through the shared document renderer. A missing eligible reference contributes no body. A body
+with its language through the shared document renderer. Embedded document controls follow a supplied
+reader-interface locale; callers without one keep the ambient locale, independently of that authored language.
+A missing eligible reference contributes no body. A body
 withheld by Content renders the ordinary unavailable value and contributes no `recipeInstructions`; a failed body
 read remains a page read failure and is never converted to an empty or successful value. Public `recipeInstructions`
 keeps the existing Schema.org `HowToStep` projection and uses the same selected body as the rendered statement, so

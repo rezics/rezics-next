@@ -36,25 +36,26 @@ export function SubjectLink({ href, lang, className, children }: LinkProps) {
   );
 }
 
-/** The words a subject page needs from the site's messages. */
-export function subjectPageMessages(): PageMessages {
+/** The words a subject page needs from the site's messages. Ordinary routes keep the ambient locale. */
+export function subjectPageMessages(locale?: string): PageMessages {
+  const options = locale === undefined ? undefined : { locale: locale as never };
   return {
-    unknown: m.subject_value_unknown(),
-    none: m.subject_value_none(),
-    unlabelled: m.subject_value_unlabelled(),
-    sources: m.subject_sources(),
-    aliases: m.subject_aliases(),
-    search: m.search_submit(),
-    cover: m.subject_cover(),
-    coverCredit: m.subject_cover_credit(),
-    coverReveal: m.subject_cover_reveal(),
-    coverWithheld: m.subject_cover_withheld(),
-    coverVia: m.subject_cover_via(),
-    details: m.subject_details(),
-    documentSpoiler: m.thread_reveal_spoiler(),
-    source: m.subject_source(),
-    licence: m.subject_source_licence(),
-    spoilerShow: m.subject_spoiler_show(),
+    unknown: m.subject_value_unknown({}, options),
+    none: m.subject_value_none({}, options),
+    unlabelled: m.subject_value_unlabelled({}, options),
+    sources: m.subject_sources({}, options),
+    aliases: m.subject_aliases({}, options),
+    search: m.search_submit({}, options),
+    cover: m.subject_cover({}, options),
+    coverCredit: m.subject_cover_credit({}, options),
+    coverReveal: m.subject_cover_reveal({}, options),
+    coverWithheld: m.subject_cover_withheld({}, options),
+    coverVia: m.subject_cover_via({}, options),
+    details: m.subject_details({}, options),
+    documentSpoiler: m.thread_reveal_spoiler({}, options),
+    source: m.subject_source({}, options),
+    licence: m.subject_source_licence({}, options),
+    spoilerShow: m.subject_spoiler_show({}, options),
   };
 }
 

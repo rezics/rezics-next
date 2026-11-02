@@ -96,15 +96,18 @@ export function readableDocument(value: unknown): DocumentSnapshot | undefined {
 export function DocumentValue({
   document,
   lang,
+  locale,
   labels,
 }: {
   document: DocumentSnapshot;
   lang: string | undefined;
+  /** Reader-interface locale for embedded controls; authored `lang` stays the document language. */
+  locale?: string;
   labels: ValueLabels;
 }) {
   return (
     <div lang={lang} className="max-w-prose">
-      <DocumentBody document={document} labels={{ revealSpoiler: labels.documentSpoiler }} />
+      <DocumentBody document={document} locale={locale} labels={{ revealSpoiler: labels.documentSpoiler }} />
     </div>
   );
 }

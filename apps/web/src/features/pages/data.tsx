@@ -278,6 +278,7 @@ export function CandidateValue({
         <DocumentValue
           document={document}
           lang={typeof content.language === 'string' ? content.language : undefined}
+          locale={locale}
           labels={{
             documentSpoiler: m.thread_reveal_spoiler({}, { locale: locale as never }),
             spoilerShow: '',
@@ -487,7 +488,7 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
       const lang = content.language === options.locale ? undefined : content.language;
       return (
         <div className="space-y-1">
-          <DocumentValue document={document} lang={lang} labels={options.labels} />
+          <DocumentValue document={document} lang={lang} locale={options.locale} labels={options.labels} />
           <LanguageTag lang={content.language} locale={options.locale} />
         </div>
       );
