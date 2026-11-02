@@ -64,6 +64,7 @@ async function local(instrumentDatabase?: ImporterOptions['instrumentDatabase'])
       return { fenced: false, securityRevision: null };
     },
     async writeSourceStatistic() {},
+    async clearSourceStatistic() {},
   };
   const open = () =>
     new Importer({
