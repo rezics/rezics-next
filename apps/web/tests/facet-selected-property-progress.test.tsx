@@ -1,10 +1,7 @@
 import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, useState, type ComponentProps } from 'react';
-import {
-  MAX_CACHED_FACET_PROPERTIES,
-  MAX_FACET_CONTINUATIONS,
-} from '../src/search/refinement/facet-continuation';
+import { MAX_CACHED_FACET_PROPERTIES, MAX_FACET_CONTINUATIONS } from '../src/search/refinement/facet-continuation';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -170,8 +167,7 @@ test('A newly selected retained facet property keeps cursor-cycle history and it
   expect(host.textContent).toContain('window-1');
   await selectProperty('schema:p0');
 
-  for (let index = 1; index < MAX_FACET_CONTINUATIONS; index++)
-    await act(async () => moreFor('Property 8').click());
+  for (let index = 1; index < MAX_FACET_CONTINUATIONS; index++) await act(async () => moreFor('Property 8').click());
   expect(cursors).toEqual(Array.from({ length: MAX_FACET_CONTINUATIONS }, (_, index) => `cursor-${index}`));
   expect(host.textContent).toContain(`window-${MAX_FACET_CONTINUATIONS}`);
   expect(host.textContent).toContain(m.refinement_restart());
