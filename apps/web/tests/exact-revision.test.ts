@@ -7,6 +7,7 @@ import { loadExactRevision, type ExactRevisionResponse, type ExactRevisionState 
 import { exactRevisionHref } from '../src/threads/exact-revision-href';
 import { ExactRevisionView } from '../src/threads/exact-revision-view';
 import { loadRevisionDocumentMedia, revisionDocumentImageIds } from '../src/threads/exact-revision-media';
+import { threadLocation } from '../src/threads/thread-href';
 import { current, id, identity, later, selected } from '../src/stories/exact-revision/fixture';
 import type { DocumentImagePresentation } from '../src/threads/document-media';
 import * as start from '../.storybook/react-start';
@@ -44,6 +45,7 @@ test('two exact revisions retain their original document/block identity, licence
     if (page.state !== 'ready') throw new Error('Expected the exact revision');
     expect(page.revision).toEqual(revision);
     const html = markup(page, revision.revisionId);
+    expect(html).toContain(`href="${threadLocation('en', page.thread, undefined, revision.id)}"`);
     expect(html).toContain(revision.licence);
     expect(html).toContain(revision.subjectIds[0]!);
     expect(html).toContain(

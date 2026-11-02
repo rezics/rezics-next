@@ -31,6 +31,10 @@ export function ExactRevisionView({
   ) {
     page = { state: 'unavailable', status: 404 };
   }
+  const returnHref =
+    page.state === 'ready'
+      ? threadLocation(locale, page.thread, undefined, page.revision.id)
+      : undefined;
   return (
     <ContentItemFrame
       as="article"
@@ -41,7 +45,7 @@ export function ExactRevisionView({
       <header className="space-y-3">
         {page.state === 'ready' ? (
           <a
-            href={`${threadLocation(locale, page.thread)}#post-${encodeURIComponent(page.revision.id)}`}
+            href={returnHref}
             className="inline-flex min-h-11 max-w-full items-center rounded-sm text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {m.exact_revision_back()}
