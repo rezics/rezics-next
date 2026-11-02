@@ -51,7 +51,32 @@ const relationSurface = [
 
 type Snak = RelationDraft['qualifiers'][number];
 type CompositionCloseDecision = { active: () => boolean; close: () => void };
+type DraftTrigger = Pick<HTMLElement, 'ownerDocument' | 'isConnected' | 'focus'>;
 export { QualifierInput };
+type DraftDecisionBase = {
+  draftRevision: number;
+  readGeneration: number;
+  read: RelationRead | undefined;
+  field: object | undefined;
+  draft: RelationDraft;
+  editorActive: () => boolean;
+  trigger: DraftTrigger;
+};
+type DraftDecisionSpec =
+  | { kind: 'remove-qualifier'; qualifierId: number; qualifier: Snak }
+  | { kind: 'replace-property'; propertyName: string; replacement: RelationDraft }
+  | { kind: 'edit-existing'; statement: Candidate['statement']; replacement: RelationDraft };
+type DraftDecision = DraftDecisionBase & DraftDecisionSpec;
+type DraftFocusTarget =
+  | { kind: 'trigger' }
+  | { kind: 'property' }
+  | { kind: 'qualifier'; identity: number }
+  | { kind: 'add-qualifier' };
+type DraftFocusIntent = {
+  trigger: DraftTrigger;
+  active: Element | null;
+  target: DraftFocusTarget;
+};
 const blankDraft = (property: string): RelationDraft => ({
   property: { id: property, data_type: 'wikibase-item' },
   value: { type: 'somevalue' },
@@ -138,8 +163,15 @@ function RelationEditorLive({
   const [confirmation, setConfirmation] = useState<'propose' | 'accept' | 'reject' | 'adopt'>();
   const [closeConfirmation, setCloseConfirmation] = useState<CompositionCloseDecision>();
   const closeDecision = useRef<CompositionCloseDecision | undefined>(undefined);
+  const [draftDecision, setDraftDecision] = useState<DraftDecision>();
   const closeButton = useRef<HTMLButtonElement>(null);
   const restoreCloseFocus = useRef(false);
+  const draftDecisionRef = useRef<DraftDecision | undefined>(undefined);
+  const draftDecisionPanel = useRef<HTMLDivElement>(null);
+  const draftFocusIntent = useRef<DraftFocusIntent | undefined>(undefined);
+  const qualifierIdentities = useRef(new WeakMap<object, number>());
+  const nextQualifierIdentity = useRef(0);
+  const qualifierRemoveButtons = useRef(new Map<number, HTMLButtonElement>());
   const candidatePageBoundary = useRef<HTMLElement>(null);
   const candidatePageEmpty = useRef<HTMLParagraphElement>(null);
   const candidateReadFailure = useRef<HTMLDivElement>(null);
@@ -185,6 +217,9 @@ function RelationEditorLive({
   if (wasVisible.current !== visible) {
     wasVisible.current = visible;
     if (!visible) {
+      draftDecisionRef.current = undefined;
+      setDraftDecision(undefined);
+      draftFocusIntent.current = undefined;
       resumeRead.current = !!(read?.ok || reading.current);
       if (request.current && 'statement' in request.current) proposalReplay.current = true;
       readGeneration.current++;
@@ -264,10 +299,21 @@ function RelationEditorLive({
     (control ?? intent.target).focus();
   });
   useLayoutEffect(() => cancelQualifierFocus, []);
+  const admittedRead = useRef(read);
+  admittedRead.current = read;
+  const admittedField = useRef(field);
+  admittedField.current = field;
+  const admittedDraft = useRef(draft);
+  admittedDraft.current = draft;
+  const visibleNow = useRef(visible);
+  visibleNow.current = visible;
   const publicRead = result?.public ?? current?.public;
   const concealed = failure?.reason === 'denied';
   const uncertain = failure?.reason === 'unavailable' && !!request.current;
-  const frozen = busy || !!confirmation || uncertain || failure?.reason === 'stale';
+  const nativeFrozen = busy || !!confirmation || uncertain || failure?.reason === 'stale';
+  const nativeFrozenNow = useRef(nativeFrozen);
+  nativeFrozenNow.current = nativeFrozen;
+  const frozen = nativeFrozen || !!draftDecision;
   const name = (property: string) =>
     pickText(current?.names[property] ?? {}, locale).text || m.subject_value_unlabelled({}, options);
   const pinnedNames = (release: string | undefined) =>
@@ -306,7 +352,15 @@ function RelationEditorLive({
   // The existing draft/reading lifetime also retires questions when their holder is replaced.
   if (closeConfirmation && !closeConfirmation.active()) retireCompositionClose();
   function compositionCloseLocked() {
-    return !lifetime.active() || !visible || !!request.current || proposed || !!result || failure?.reason === 'stale';
+    return (
+      !lifetime.active() ||
+      !visible ||
+      !!request.current ||
+      !!draftDecisionRef.current ||
+      proposed ||
+      !!result ||
+      failure?.reason === 'stale'
+    );
   }
   function requestCompositionClose() {
     if (!composition || !onClose || compositionCloseLocked()) return;
@@ -422,7 +476,15 @@ function RelationEditorLive({
   }
 
   function editable() {
-    return lifetime.active() && !running.current && !request.current && !frozen;
+    return (
+      lifetime.active() &&
+      mount.active() &&
+      visible &&
+      !running.current &&
+      !request.current &&
+      !nativeFrozen &&
+      !draftDecisionRef.current
+    );
   }
   function addQualifier(event: MouseEvent<HTMLButtonElement>) {
     cancelQualifierFocus();
@@ -453,6 +515,80 @@ function RelationEditorLive({
       dispose: () => origin.removeEventListener('focusout', cancelQualifierFocus),
     };
   }
+  function qualifierIdentity(snak: Snak) {
+    let identity = qualifierIdentities.current.get(snak);
+    if (identity === undefined) {
+      identity = nextQualifierIdentity.current++;
+      qualifierIdentities.current.set(snak, identity);
+    }
+    return identity;
+  }
+
+  function populatedValue(value: Snak['value']) {
+    return value.type === 'value' ? String(value.content) !== '' : value.type !== 'somevalue';
+  }
+
+  function hasLocalDraftWork() {
+    return (
+      populatedValue(draft.value) ||
+      draft.qualifiers.some((snak) => populatedValue(snak.value)) ||
+      draft.references.some((reference) => reference.parts.some((snak) => populatedValue(snak.value))) ||
+      citation !== '' ||
+      ownConsent ||
+      !!candidate ||
+      rank !== 'normal'
+    );
+  }
+
+  function decisionIsCurrent(decision: DraftDecision) {
+    return (
+      draftDecisionRef.current === decision &&
+      decision.editorActive() &&
+      mount.active() &&
+      visibleNow.current &&
+      !nativeFrozenNow.current &&
+      !running.current &&
+      !request.current &&
+      decision.draftRevision === draftRevision.current &&
+      decision.readGeneration === readGeneration.current &&
+      decision.read === admittedRead.current &&
+      decision.field === admittedField.current &&
+      decision.draft === admittedDraft.current
+    );
+  }
+
+  function requestDraftDecision(spec: DraftDecisionSpec, trigger: DraftTrigger) {
+    if (!editable()) return;
+    const decision: DraftDecision = {
+      ...spec,
+      draftRevision: draftRevision.current,
+      readGeneration: readGeneration.current,
+      read,
+      field,
+      draft,
+      editorActive: () => lifetime.active(),
+      trigger,
+    };
+    draftDecisionRef.current = decision;
+    setDraftDecision(decision);
+  }
+
+  function finishDraftDecision(decision: DraftDecision, target: DraftFocusTarget, restore = true) {
+    if (draftDecisionRef.current !== decision) return;
+    const document = decision.trigger.ownerDocument;
+    const active = document.activeElement;
+    const insideDecision = !!draftDecisionPanel.current?.contains(active);
+    if (restore && (active === (decision.trigger as unknown as Element) || insideDecision))
+      draftFocusIntent.current = { trigger: decision.trigger, active, target };
+    else draftFocusIntent.current = undefined;
+    draftDecisionRef.current = undefined;
+    setDraftDecision(undefined);
+  }
+
+  function cancelDraftDecision(decision: DraftDecision) {
+    if (draftDecisionRef.current === decision) finishDraftDecision(decision, { kind: 'trigger' });
+  }
+
   function draftSlot(next = draft): RelationSlot | undefined {
     if (!field || !next.property.id) return;
     if (next.value.type === 'value' && typeof next.value.content === 'string') {
@@ -474,6 +610,14 @@ function RelationEditorLive({
   }
   function edit(next: RelationDraft) {
     if (!editable()) return;
+    applyEdit(next);
+  }
+  function applyEdit(next: RelationDraft) {
+    if (draftDecisionRef.current) {
+      draftDecisionRef.current = undefined;
+      setDraftDecision(undefined);
+      draftFocusIntent.current = undefined;
+    }
     retireCompositionClose();
     lifetime.retire();
     draftRevision.current++;
@@ -496,8 +640,59 @@ function RelationEditorLive({
     pageCursor.current = undefined;
     reading.current = undefined;
     candidateReadFocus.current = undefined;
+    failedCandidateRead.current = false;
     readGeneration.current++;
   }
+
+  function commitQualifierRemoval(identity: number) {
+    const index = draft.qualifiers.findIndex((snak) => qualifierIdentity(snak) === identity);
+    if (index < 0) return;
+    const remaining = draft.qualifiers.filter((_, at) => at !== index);
+    const adjacent = draft.qualifiers[index + 1] ?? draft.qualifiers[index - 1];
+    const focusTarget: DraftFocusTarget = adjacent
+      ? { kind: 'qualifier', identity: qualifierIdentity(adjacent) }
+      : { kind: 'add-qualifier' };
+    const decision = draftDecisionRef.current;
+    if (decision?.kind === 'remove-qualifier' && decision.qualifierId === identity)
+      finishDraftDecision(decision, focusTarget);
+    applyEdit({ ...draft, qualifiers: remaining });
+  }
+
+  function confirmDraftDecision(decision: DraftDecision) {
+    if (draftDecisionRef.current !== decision) return;
+    if (!decisionIsCurrent(decision)) {
+      finishDraftDecision(decision, { kind: 'property' });
+      return;
+    }
+    if (decision.kind === 'remove-qualifier') {
+      commitQualifierRemoval(decision.qualifierId);
+      return;
+    }
+    finishDraftDecision(decision, { kind: 'property' });
+    applyEdit(decision.replacement);
+    setCitation('');
+  }
+
+  useLayoutEffect(() => {
+    if (draftDecision && !decisionIsCurrent(draftDecision))
+      finishDraftDecision(draftDecision, { kind: 'property' });
+    if (draftDecision || !draftFocusIntent.current) return;
+    const intent = draftFocusIntent.current;
+    draftFocusIntent.current = undefined;
+    if (!visible || !mount.active()) return;
+    const document = intent.trigger.ownerDocument;
+    const active = document.activeElement;
+    if (active !== intent.active && active !== document.body) return;
+    let target: DraftTrigger | null = null;
+    if (intent.target.kind === 'trigger') target = intent.trigger.isConnected ? intent.trigger : null;
+    else if (intent.target.kind === 'qualifier')
+      target = qualifierRemoveButtons.current.get(intent.target.identity) ?? null;
+    else if (intent.target.kind === 'add-qualifier')
+      target = document.getElementById(`${formId}-add-qualifier`);
+    else target = document.getElementById(`${formId}-property`);
+    (target ?? document.getElementById(`${formId}-property`))?.focus();
+  }, [draftDecision, draft, read, field, visible, nativeFrozen, mount, formId]);
+
   function failed(next: CandidateFailure) {
     setFailure(next);
     if (next.reason === 'denied') {
@@ -681,6 +876,12 @@ function RelationEditorLive({
         : confirmation === 'reject'
           ? m.relation_reject({}, options)
           : m.candidate_adopt({}, options);
+  const draftDecisionAction =
+    draftDecision?.kind === 'remove-qualifier'
+      ? m.relation_remove({}, options)
+      : draftDecision?.kind === 'edit-existing'
+        ? m.relation_edit_existing({}, options)
+        : m.work_parts_draft_discard({}, options);
   const navigationState = { dirty, pending: !!request.current, isCurrent: () => lifetime.active() };
   const departure = navigation?.(navigationState);
   const content = visible ? (
@@ -726,6 +927,69 @@ function RelationEditorLive({
             </Button>
           </div>
         </ContentItemFrame>
+      )}
+      {draftDecision && !concealed && (
+        <div ref={draftDecisionPanel}>
+          <ContentItemFrame
+            as="div"
+            role="group"
+            aria-labelledby={`${formId}-draft-decision-title`}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelDraftDecision(draftDecision);
+              }
+            }}
+            className="min-w-0 space-y-3 rounded-xl bg-card p-4 sm:p-5"
+          >
+            <ContentItemHeading id={`${formId}-draft-decision-title`} level={2} className="font-semibold">
+              {m.candidate_confirm_title({ action: draftDecisionAction }, options)}
+            </ContentItemHeading>
+            {draftDecision.kind === 'remove-qualifier' ? (
+              <>
+                <p>{name(draftDecision.qualifier.property.id)}</p>
+                {current && (
+                  <CandidateValue
+                    snak={draftDecision.qualifier}
+                    related={current.public.related}
+                    locale={locale}
+                  />
+                )}
+              </>
+            ) : (
+              <>
+                <p>{m.work_parts_draft_discard_confirmation({}, options)}</p>
+                {draftDecision.kind === 'replace-property' ? (
+                  <p>{draftDecision.propertyName}</p>
+                ) : (
+                  current && (
+                    <Statement
+                      statement={draftDecision.statement}
+                      publicRead={current.public}
+                      names={current.names}
+                      locale={locale}
+                    />
+                  )
+                )}
+              </>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={nativeFrozen || !decisionIsCurrent(draftDecision)}
+                onClick={() => confirmDraftDecision(draftDecision)}
+              >
+                {draftDecisionAction}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={nativeFrozen}
+                onClick={() => cancelDraftDecision(draftDecision)}
+              >
+                {m.candidate_cancel({}, options)}
+              </Button>
+            </div>
+          </ContentItemFrame>
+        </div>
       )}
       {consentEntry && (
         <StatementConsentLink
@@ -795,8 +1059,21 @@ function RelationEditorLive({
                         value={draft.property.id}
                         onChange={(event) => {
                           if (!editable()) return;
-                          edit(blankDraft(event.target.value));
-                          setCitation('');
+                          const property = event.target.value;
+                          const replacement = blankDraft(property);
+                          if (hasLocalDraftWork())
+                            requestDraftDecision(
+                              {
+                                kind: 'replace-property',
+                                propertyName: current.fields.find((item) => item.id === property)?.label ?? property,
+                                replacement,
+                              },
+                              event.currentTarget,
+                            );
+                          else {
+                            edit(replacement);
+                            setCitation('');
+                          }
                         }}
                       >
                         <NativeSelectOption value="">{m.candidate_choose_field({}, options)}</NativeSelectOption>
@@ -831,10 +1108,18 @@ function RelationEditorLive({
                                     />
                                     <Button
                                       variant="outline"
-                                      onClick={() => {
+                                      onClick={(event) => {
                                         if (!editable()) return;
-                                        edit(relationDraft(statement));
-                                        setCitation('');
+                                        const replacement = relationDraft(statement);
+                                        if (hasLocalDraftWork())
+                                          requestDraftDecision(
+                                            { kind: 'edit-existing', statement, replacement },
+                                            event.currentTarget,
+                                          );
+                                        else {
+                                          edit(replacement);
+                                          setCitation('');
+                                        }
                                       }}
                                     >
                                       {m.relation_edit_existing({}, options)}
@@ -868,59 +1153,74 @@ function RelationEditorLive({
                           <p className="text-sm">{m.relation_unresolved({}, options)}</p>
                         )}
                         <div className="space-y-3">
-                          {draft.qualifiers.map((snak, index) => (
-                            <div
-                              key={`${snak.property.id}:${index}`}
-                              ref={(node) => {
-                                if (node && qualifierFocus.current?.snak === snak) qualifierFocus.current.target = node;
-                              }}
-                              role="group"
-                              aria-label={name(snak.property.id)}
-                              tabIndex={-1}
-                              className="flex min-w-0 items-end gap-2 focus-visible:outline-2 focus-visible:outline-ring"
-                            >
-                              <div className="min-w-0 flex-1">
-                                <fieldset
-                                  disabled={
-                                    !!composition &&
-                                    (!composition.positionEditable ||
-                                      snak.property.id !== 'schema:position' ||
-                                      !field.qualifiers.some((item) => item.id === 'schema:position'))
-                                  }
-                                >
-                                  <QualifierInput
-                                    definition={field.qualifiers.find((item) => item.id === snak.property.id)}
-                                    snak={snak}
-                                    index={index}
-                                    label={name(snak.property.id)}
-                                    scope={formId}
-                                    search={search}
-                                    target={target}
-                                    remember={remember}
-                                    disabled={frozen}
-                                    onChange={(value) =>
-                                      edit({
-                                        ...draft,
-                                        qualifiers: draft.qualifiers.map((item, at) =>
-                                          at === index ? { ...item, value } : item,
-                                        ),
-                                      })
-                                    }
-                                  />
-                                </fieldset>
-                              </div>
-                              <Button
-                                variant="outline"
-                                disabled={!!composition}
-                                aria-label={`${m.relation_remove({}, options)}: ${name(snak.property.id)}`}
-                                onClick={() =>
-                                  edit({ ...draft, qualifiers: draft.qualifiers.filter((_, at) => at !== index) })
-                                }
+                          {draft.qualifiers.map((snak, index) => {
+                            const identity = qualifierIdentity(snak);
+                            return (
+                              <div
+                                key={identity}
+                                ref={(node) => {
+                                  if (node && qualifierFocus.current?.snak === snak)
+                                    qualifierFocus.current.target = node;
+                                }}
+                                role="group"
+                                aria-label={name(snak.property.id)}
+                                tabIndex={-1}
+                                className="flex min-w-0 items-end gap-2 focus-visible:outline-2 focus-visible:outline-ring"
                               >
-                                {m.relation_remove({}, options)}
-                              </Button>
-                            </div>
-                          ))}
+                                <div className="min-w-0 flex-1">
+                                  <fieldset
+                                    disabled={
+                                      !!composition &&
+                                      (!composition.positionEditable ||
+                                        snak.property.id !== 'schema:position' ||
+                                        !field.qualifiers.some((item) => item.id === 'schema:position'))
+                                    }
+                                  >
+                                    <QualifierInput
+                                      definition={field.qualifiers.find((item) => item.id === snak.property.id)}
+                                      snak={snak}
+                                      index={identity}
+                                      label={name(snak.property.id)}
+                                      scope={formId}
+                                      search={search}
+                                      target={target}
+                                      remember={remember}
+                                      disabled={frozen}
+                                      onChange={(value) => {
+                                        const qualifiers = draft.qualifiers.map((item, at) => {
+                                          if (at !== index) return item;
+                                          const changed = { ...item, value };
+                                          qualifierIdentities.current.set(changed, identity);
+                                          return changed;
+                                        });
+                                        edit({ ...draft, qualifiers });
+                                      }}
+                                    />
+                                  </fieldset>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  disabled={!!composition}
+                                  ref={(node) => {
+                                    if (node) qualifierRemoveButtons.current.set(identity, node);
+                                    else qualifierRemoveButtons.current.delete(identity);
+                                  }}
+                                  aria-label={`${m.relation_remove({}, options)}: ${name(snak.property.id)}`}
+                                  onClick={(event) => {
+                                    if (!editable() || composition) return;
+                                    if (populatedValue(snak.value))
+                                      requestDraftDecision(
+                                        { kind: 'remove-qualifier', qualifierId: identity, qualifier: snak },
+                                        event.currentTarget,
+                                      );
+                                    else commitQualifierRemoval(identity);
+                                  }}
+                                >
+                                  {m.relation_remove({}, options)}
+                                </Button>
+                              </div>
+                            );
+                          })}
                           <Field>
                             <FieldLabel htmlFor={`${formId}-add-qualifier`}>
                               {m.relation_qualifier({}, options)}

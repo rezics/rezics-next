@@ -205,8 +205,14 @@ test('Relation Editor proposal/exact-slot family keeps independent native associ
       )!;
       const input = window.document.getElementById(label.htmlFor) as unknown as HTMLInputElement;
       expect(input.value).toBe(long);
-      if (scope === regions[2]) expect(input.matches(':disabled')).toBe(true);
-      else {
+      if (scope === regions[2]) {
+        expect(input.matches(':disabled')).toBe(true);
+        const removals = within(scope)
+          .getAllByRole('button')
+          .filter((button) => button.getAttribute('aria-label')?.startsWith(`${m.relation_remove()}:`));
+        expect(removals.length).toBeGreaterThan(0);
+        expect(removals.every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
+      } else {
         await act(async () => user.click(label));
         expect(window.document.activeElement).toBe(input);
         for (const other of regions.filter((node) => node !== scope))
@@ -757,6 +763,162 @@ test('initial Relation Open orients only admitted keyboard results after its ope
     }
   } finally {
     outside.remove();
+    await ui.close();
+  }
+});
+
+test('Relation Editor confirms populated local changes and retires stale decisions', async () => {
+  const ui = await mounted();
+  const {
+    window,
+    user,
+    within,
+    render,
+    click,
+    select,
+    region,
+    RelationEditor,
+    relationFixture,
+    relationProperty,
+    m,
+  } = ui;
+  try {
+    const fixture = relationFixture();
+    const initial = await fixture.transport.read();
+    let holdRead = false;
+    let releaseRead!: () => void;
+    let markReadHeld!: () => void;
+    const readHeld = new Promise<void>((resolve) => (markReadHeld = resolve));
+    const transport: RelationTransport = {
+      ...fixture.transport,
+      read: async (...args) => {
+        const next = await fixture.transport.read(...args);
+        if (!holdRead) return next;
+        holdRead = false;
+        await new Promise<void>((resolve) => {
+          releaseRead = resolve;
+          markReadHeld();
+        });
+        return next;
+      },
+    };
+    await render(
+      h(RelationEditor, {
+        id: fixture.id,
+        locale: 'en',
+        initial,
+        transport,
+        search: async () => [],
+      }),
+    );
+    let scope = region();
+    await select(scope, m.relation_property(), relationProperty);
+    await act(async () => user.click(within(scope).getAllByRole('button', { name: m.relation_edit_existing() })[0]!));
+    let credit = scope.querySelector('input[id$="qualifier-1"]') as HTMLInputElement;
+    const creditId = credit.id;
+    const citation = within(scope).getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement;
+    await act(async () => user.type(citation, 'https://example.org/local-source'));
+    expect(scope.textContent).toContain('https://example.org/credits');
+
+    const removals = () =>
+      within(scope)
+        .getAllByRole('button')
+        .filter((button) => button.getAttribute('aria-label')?.startsWith(`${m.relation_remove()}:`));
+    const removeRole = removals()[0]!;
+    await act(async () => user.click(removeRole));
+    const removeAction = m.relation_remove();
+    let group = within(scope).getByRole('group', {
+      name: m.candidate_confirm_title({ action: removeAction }),
+    });
+    expect(within(group).getByRole('button', { name: removeAction })).toBeTruthy();
+    await click(group, m.candidate_cancel());
+    expect(window.document.activeElement).toBe(removeRole);
+    expect(scope.textContent).toContain('The traveler');
+    expect((scope.querySelector('input[id$="qualifier-1"]') as HTMLInputElement).value).toBe('Original credit');
+    expect((scope.querySelector('input[id$="qualifier-1"]') as HTMLInputElement).id).toBe(creditId);
+    expect(citation.value).toBe('https://example.org/local-source');
+
+    await act(async () => user.click(removals()[0]!));
+    group = within(scope).getByRole('group', { name: m.candidate_confirm_title({ action: removeAction }) });
+    await click(group, removeAction);
+    credit = scope.querySelector('input[id$="qualifier-1"]') as HTMLInputElement;
+    expect(credit.value).toBe('Original credit');
+    expect(credit.id).toBe(creditId);
+    expect(window.document.activeElement).toBe(removals()[0]);
+    expect(scope.textContent).toContain('https://example.org/credits');
+    expect(citation.value).toBe('https://example.org/local-source');
+
+    const property = within(scope).getByRole('combobox', { name: m.relation_property() }) as HTMLSelectElement;
+    const nextProperty = [...property.options]
+      .map((option) => option.value)
+      .find((value) => value && value !== relationProperty);
+    if (!nextProperty) throw new Error('Expected another admitted relation property');
+    await select(scope, m.relation_property(), nextProperty);
+    const discardAction = m.work_parts_draft_discard();
+    group = within(scope).getByRole('group', { name: m.candidate_confirm_title({ action: discardAction }) });
+    await click(group, m.candidate_cancel());
+    expect(property.value).toBe(relationProperty);
+    expect(credit.value).toBe('Original credit');
+    expect(citation.value).toBe('https://example.org/local-source');
+
+    const editExisting = within(scope).getAllByRole('button', { name: m.relation_edit_existing() });
+    await act(async () => user.click(editExisting[1]!));
+    const editAction = m.relation_edit_existing();
+    group = within(scope).getByRole('group', { name: m.candidate_confirm_title({ action: editAction }) });
+    await click(group, m.candidate_cancel());
+    expect(credit.value).toBe('Original credit');
+    expect(credit.id).toBe(creditId);
+    expect(citation.value).toBe('https://example.org/local-source');
+
+    const staleEdit = within(scope).getAllByRole('button', { name: m.relation_edit_existing() })[2]!;
+    await act(async () => user.click(staleEdit));
+    group = within(scope).getByRole('group', { name: m.candidate_confirm_title({ action: editAction }) });
+    holdRead = true;
+    await click(scope, m.candidate_reload());
+    await readHeld;
+    expect(within(scope).queryByRole('group', { name: m.candidate_confirm_title({ action: editAction }) })).toBeNull();
+    await act(async () => {
+      releaseRead();
+      await Promise.resolve();
+    });
+    expect(scope.textContent).toContain('The traveler');
+    expect((scope.querySelector('input[id$="qualifier-1"]') as HTMLInputElement).value).toBe('Original credit');
+    expect(citation.value).toBe('https://example.org/local-source');
+    expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(0);
+
+    await render(null);
+    const consentFixture = relationFixture();
+    consentFixture.publicRead.subject.type = 'schema:Person';
+    const consentInitial = await consentFixture.transport.read();
+    await render(
+      h(RelationEditor, {
+        id: consentFixture.id,
+        locale: 'en',
+        initial: consentInitial,
+        transport: consentFixture.transport,
+        search: async () => [],
+      }),
+    );
+    scope = region();
+    await select(scope, m.relation_property(), 'rezics:penNameOf');
+    const consent = within(scope).getByRole('checkbox', { name: m.statement_consent_own() });
+    await act(async () => user.click(consent));
+    const consentCitation = within(scope).getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement;
+    await act(async () => user.type(consentCitation, 'https://example.org/consent-source'));
+    const consentProperty = within(scope).getByRole('combobox', { name: m.relation_property() }) as HTMLSelectElement;
+    const replacement = [...consentProperty.options]
+      .map((option) => option.value)
+      .find((value) => value && value !== 'rezics:penNameOf');
+    if (!replacement) throw new Error('Expected another admitted Person relation property');
+    await select(scope, m.relation_property(), replacement);
+    group = within(scope).getByRole('group', { name: m.candidate_confirm_title({ action: discardAction }) });
+    await click(group, m.candidate_cancel());
+    expect(consentProperty.value).toBe('rezics:penNameOf');
+    expect(within(scope).getByRole('checkbox', { name: m.statement_consent_own() }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    expect(consentCitation.value).toBe('https://example.org/consent-source');
+  } finally {
     await ui.close();
   }
 });

@@ -744,6 +744,10 @@ keys. Existing qualifiers, original names and reference parts survive replacemen
 to the immutable statement submitted through native candidate proposal, not to a presentation document.
 Relation draft edits synchronously retire their callback lifetime before advancing its revision; retained target, qualifier, staging, citation and consent callbacks cannot restore a replaced property/source or removed qualifier, while current callbacks keep editing mounted controls.
 
+Removing a populated qualifier or replacing a populated relation draft uses an in-form cancellable decision; blank
+scaffolding stays immediate, Cancel preserves values, sources and consent, and confirmation is valid only for the
+current editor, reading and field. Restore focus after resolution only if it has not moved outside the decision.
+
 Review addresses exactly the property plus target, or an existing unresolved `sameAs` IRI, and the declared item
 qualifier key when present. Target and `sameAs` are mutually exclusive. Twenty candidates and their continuation
 belong to that address. A failed candidate read retries its exact slot, cursor and session token; a separate
