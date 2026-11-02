@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from 'react';
+import { catalogueEditor, useEditorLifetime, useCurrentReadingVisible } from './editor-lifetime';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -252,7 +253,9 @@ export function GameInitialFacts({
   );
 }
 /** Common per-field sealing/retry and review, with item controls for native classification slots. */
-export function GameClassifications({
+export const GameClassifications = catalogueEditor(GameClassificationsLive);
+
+function GameClassificationsLive({
   read,
   locale,
   search,
@@ -265,6 +268,8 @@ export function GameClassifications({
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
 }) {
+  const lifetime = useEditorLifetime();
+  const visible = useCurrentReadingVisible();
   const [drafts, setDrafts] = useState<FactDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
@@ -273,21 +278,36 @@ export function GameClassifications({
   const o = { locale: locale as never };
   const context = { ...read, source: null };
   const fields = gameGroups(read.release, read.public.subject.type).classification;
+  const wasVisible = useRef(visible);
+  if (wasVisible.current !== visible) {
+    wasVisible.current = visible;
+    running.current = false;
+    setBusy(false);
+    if (!visible) {
+      setAddress(undefined);
+      setComparison(undefined);
+      setDrafts((rows) => rows.map((row) =>
+        row.command && !row.result ? { ...row, result: { ok: false, reason: 'uncertain' } } : row,
+      ));
+    }
+  }
   async function submit() {
-    if (running.current) return;
+    if (!lifetime.active() || running.current) return;
     running.current = true;
     setBusy(true);
     const sealed = sealFacts(read.public.subject.id, read.release, drafts);
     setDrafts(sealed);
     try {
       await sendFacts(sealed, transport.propose, (property, result) =>
-        setDrafts((rows) => rows.map((row) => (row.property === property ? { ...row, result } : row))),
+        lifetime.active() && setDrafts((rows) => rows.map((row) => (row.property === property ? { ...row, result } : row))),
       );
     } finally {
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
   }
+  if (!visible) return null;
   return (
     <section className="min-w-0 max-w-full space-y-5" aria-busy={busy}>
       <h2 className="font-sans text-xl font-semibold">{m.game_profile_classification({}, o)}</h2>
@@ -297,6 +317,7 @@ export function GameClassifications({
         const selected = read.public.subject.statements[property] ?? [];
         const draft = drafts.find((row) => row.property === property);
         const stage = (source: (typeof selected)[number] | null) => {
+          if (!lifetime.active()) return;
           const baseline = source ? statementInput(source) : null;
           setDrafts((rows) => [
             ...rows,
@@ -380,7 +401,7 @@ export function GameClassifications({
                       locale={locale}
                       search={search}
                       change={(statement) =>
-                        setDrafts((rows) =>
+                        lifetime.active() && setDrafts((rows) =>
                           rows.map((row) =>
                             row.property === property
                               ? { ...row, statement, result: undefined, command: undefined }
@@ -398,7 +419,7 @@ export function GameClassifications({
                         className={gameActionClass}
                         type="button"
                         onClick={() => {
-                          if (draft.result?.ok) {
+                          if (lifetime.active() && draft.result?.ok) {
                             setAddress({ property, candidate: draft.result.candidate, session: draft.result.session });
                             setComparison(review(property, draft.result.session));
                           }
@@ -414,7 +435,7 @@ export function GameClassifications({
                       type="button"
                       variant="outline"
                       onClick={() =>
-                        setDrafts((rows) =>
+                        lifetime.active() && setDrafts((rows) =>
                           rows.map((row) =>
                             row.property === property ? { ...row, command: undefined, result: undefined } : row,
                           ),

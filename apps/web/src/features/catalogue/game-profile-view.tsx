@@ -1,5 +1,5 @@
-import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useMemo, useState } from 'react';
+import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
@@ -85,6 +85,57 @@ function GameProfileLive({
   }
   const refreshFailed = query.isError || (!!query.data && !query.data.ok && query.data.reason === 'unavailable');
   const o = { locale: locale as never };
+  const admitted =
+    !query.isError && query.data?.ok && query.data.public?.subject.id === id
+      ? { ...query.data, public: query.data.public }
+      : undefined;
+  const privateReading = useRef<ReadyGame>(undefined);
+  if (admitted) privateReading.current = admitted;
+  // Existing-subject recovery retains private holders, never display authority.
+  if (id)
+    return (
+      <CatalogueCurrentReading
+        visible={!!admitted}
+        ready={!!admitted}
+        revision={id}
+      >
+        {!admitted && (
+          <article className="mx-auto min-w-0 max-w-4xl space-y-5">
+            <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
+            {query.isPending ? (
+              <p role="status">{m.catalogue_create_loading({}, o)}</p>
+            ) : (
+              <>
+                {refreshFailed && <p role="status">{m.game_profile_refresh_failed({}, o)}</p>}
+                <EditorFailure
+                  reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'}
+                  locale={locale}
+                />
+                <Button
+                  className={gameActionClass}
+                  disabled={query.isFetching}
+                  onClick={() => lifetime.active() && void query.refetch({ cancelRefetch: false })}
+                >
+                  {m.game_profile_refresh({}, o)}
+                </Button>
+              </>
+            )}
+          </article>
+        )}
+        {privateReading.current && (
+          <GameCorrection
+            read={privateReading.current}
+            visible={!!admitted}
+            locale={locale}
+            session={session}
+            transport={transport}
+            search={search}
+            refresh={() => query.refetch({ cancelRefetch: false }).then(() => undefined)}
+            refreshing={query.isFetching}
+          />
+        )}
+      </CatalogueCurrentReading>
+    );
   const read = refreshFailed ? lastReading : query.data;
   if (!read || !read.ok)
     return (
@@ -153,27 +204,7 @@ function GameProfileLive({
         />
       </div>
     );
-  if (!read.public)
-    return (
-      <article className="mx-auto max-w-4xl space-y-4">
-        <EditorFailure reason="denied" locale={locale} />
-        <Button className={gameActionClass} disabled={query.isFetching} onClick={() => void query.refetch()}>
-          {m.game_profile_refresh({}, o)}
-        </Button>
-      </article>
-    );
-  return (
-    <GameCorrection
-      read={{ ...read, public: read.public }}
-      locale={locale}
-      session={session}
-      transport={transport}
-      search={search}
-      refresh={() => query.refetch().then(() => undefined)}
-      refreshing={query.isFetching}
-      refreshFailed={refreshFailed}
-    />
-  );
+  return null;
 }
 function GameCorrection({
   read,
@@ -183,17 +214,18 @@ function GameCorrection({
   search,
   refresh,
   refreshing,
-  refreshFailed,
+  visible,
 }: {
   refresh: () => Promise<void>;
   refreshing: boolean;
-  refreshFailed: boolean;
+  visible: boolean;
   read: ReadyGame;
   locale: string;
   session: string;
   transport: GameProfileTransport;
   search: EntityPickerSearch;
 }) {
+  const lifetime = useEditorLifetime();
   const client = useQueryClient();
   const o = { locale: locale as never };
   const subject = read.public.subject;
@@ -217,7 +249,7 @@ function GameCorrection({
   );
   return (
     <article className="mx-auto min-w-0 w-full max-w-4xl space-y-8">
-      <header className="space-y-4">
+      {visible && <header className="space-y-4">
         <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
         <h2 className="min-w-0 font-sans text-2xl font-semibold [overflow-wrap:anywhere]">
           <a
@@ -251,21 +283,19 @@ function GameCorrection({
             type="button"
             variant="outline"
             disabled={refreshing}
-            onClick={() => void refresh()}
+            onClick={() => lifetime.active() && void refresh()}
           >
-            {refreshFailed ? m.catalogue_create_retry({}, o) : m.game_profile_refresh({}, o)}
+            {m.game_profile_refresh({}, o)}
           </Button>
         </nav>
-        <p role={refreshing || refreshFailed ? 'status' : undefined} className="text-sm">
+        <p role={refreshing ? 'status' : undefined} className="text-sm">
           {refreshing
             ? m.game_profile_refreshing({}, o)
-            : refreshFailed
-              ? m.game_profile_refresh_failed({}, o)
-              : m.game_profile_current({}, o)}
+            : m.game_profile_current({}, o)}
         </p>
         <p className="text-sm text-muted-foreground">{m.game_profile_support({}, o)}</p>
-      </header>
-      {Object.entries(groups)
+      </header>}
+      {visible && Object.entries(groups)
         .filter(([, ids]) => ids.length)
         .map(([group, ids]) => (
           <section key={group} className="space-y-4">
@@ -295,6 +325,7 @@ function GameCorrection({
           </section>
         ))}
       {session !== 'signed-in' ? (
+        visible && (
         session === 'unavailable' ? (
           <div role="alert" className="space-y-3">
             <p>{m.catalogue_create_unavailable({}, o)}</p>
@@ -310,12 +341,13 @@ function GameCorrection({
             {session === 'signed-out' ? m.relation_sign_in({}, o) : m.catalogue_create_loading({}, o)}
           </p>
         )
+        )
       ) : (
         <>
-          <details className="min-w-0 max-w-full rounded-xl border border-border p-4">
-            <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
+          <details hidden={!visible} className="min-w-0 max-w-full rounded-xl border border-border p-4">
+            {visible && <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
               {m.game_profile_facts({}, o)}
-            </summary>
+            </summary>}
             <SubjectFacts
               initial={{ ...read, source: null }}
               locale={locale}
@@ -324,10 +356,10 @@ function GameCorrection({
             />
           </details>
           {!!groups.classification.length && (
-            <details className="min-w-0 max-w-full space-y-4 rounded-xl border border-border p-4">
-              <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
+            <details hidden={!visible} className="min-w-0 max-w-full space-y-4 rounded-xl border border-border p-4">
+              {visible && <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
                 {m.game_profile_classification({}, o)}
-              </summary>
+              </summary>}
               <GameClassifications
                 read={read}
                 locale={locale}
@@ -338,10 +370,10 @@ function GameCorrection({
             </details>
           )}
           {!!fields.length && (
-            <details className="min-w-0 max-w-full rounded-xl border border-border p-4">
-              <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
+            <details hidden={!visible} className="min-w-0 max-w-full rounded-xl border border-border p-4">
+              {visible && <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
                 {m.game_profile_relations({}, o)}
-              </summary>
+              </summary>}
               <RelationEditor
                 id={subject.id}
                 locale={locale}
@@ -353,7 +385,7 @@ function GameCorrection({
           )}
         </>
       )}
-      <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
+      {visible && <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
         <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
           {m.specialist_identity_names({}, o)}
         </summary>
@@ -389,8 +421,8 @@ function GameCorrection({
             </div>
           ))}
         </dl>
-      </details>
-      <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
+      </details>}
+      {visible && <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
         <summary className={gameDisclosureSummaryClass}>{m.specialist_identity_reference({}, o)}</summary>
         <dl className="mt-3 min-w-0 space-y-3">
           <div className="min-w-0">
@@ -411,7 +443,7 @@ function GameCorrection({
           </div>
         </dl>
         <p className="text-sm text-muted-foreground">{m.game_profile_terms_help({}, o)}</p>
-      </details>
+      </details>}
     </article>
   );
 }

@@ -3521,7 +3521,7 @@
   "creator_sales_next": "Older sales",
   "game_profile_refresh": "Refresh Game reading",
   "game_profile_refreshing": "Refreshing the Game reading… The last confirmed reading remains below.",
-  "game_profile_refresh_failed": "Refresh failed. The last confirmed reading is shown below; your correction work is kept. Retry to load the current reading.",
+  "game_profile_refresh_failed": "Refresh failed. Your private correction work is kept. Retry to load the current reading before continuing.",
   "game_profile_current": "Current Game reading loaded.",
   "game_profile_title": "Game and visual-novel work editor",
   "game_profile_credits": "Creators and credits",
