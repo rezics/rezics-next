@@ -131,6 +131,54 @@ test('a failed command also reaps its process group while preserving install dia
   }
 });
 
+test('output above the capture budget keeps early and terminal install diagnostics within bounded files', () => {
+  const h = temporaryDirectory();
+  try {
+    const outputBytes = 32 * 1024 * 1024;
+    const captureSizesPath = join(h.path, 'capture-sizes.txt');
+    const noise = `head -c ${outputBytes} /dev/zero | tr '\\000' x`;
+    const script = [
+      `printf 'early stdout diagnostic\\n'`,
+      `printf 'Installing package @fixture/noisy-dependency@4.2.0\\n' >&2`,
+      noise,
+      `printf '\\nfinal stdout diagnostic\\n'`,
+      `${noise} >&2`,
+      `printf '\\nERR_PNPM_TARBALL_INTEGRITY: terminal install failure\\n' >&2`,
+      'sleep 0.1',
+      `for capture in "$PWD"/.temp/goal-install-*/stdout.log "$PWD"/.temp/goal-install-*/stderr.log; do if [ -f "$capture" ]; then wc -c < "$capture" >> '${captureSizesPath}'; fi; done`,
+      'exit 37',
+    ].join('; ');
+    const error = captureFailure(() =>
+      runBoundedInstallProcess({
+        command: 'sh',
+        args: ['-c', script],
+        cwd: h.path,
+        step: 'bun install --frozen-lockfile',
+        purpose: 'preparation',
+        limits: { startupMs: 2_000, runMs: 15_000, terminationMs: 500 },
+      }),
+    );
+
+    expect(error.phase).toBe('exit');
+    expect(error.timedOut).toBe(false);
+    expect(error.exitCode).toBe(37);
+    expect(error.step).toBe('bun install --frozen-lockfile');
+    expect(error.packageName).toBe('@fixture/noisy-dependency');
+    expect(error.stdout).toContain('early stdout diagnostic');
+    expect(error.stdout).toContain('final stdout diagnostic');
+    expect(error.stderr).toContain('Installing package @fixture/noisy-dependency@4.2.0');
+    expect(error.stderr).toContain('ERR_PNPM_TARBALL_INTEGRITY: terminal install failure');
+    expect(error.stdout).toContain('[process output truncated after 32 MiB]');
+    expect(error.stderr).toContain('[process output truncated after 32 MiB]');
+    expect(readFileSync(captureSizesPath, 'utf8').trim().split(/\s+/).map(Number).sort()).toEqual([
+      outputBytes,
+      outputBytes,
+    ]);
+  } finally {
+    h.close();
+  }
+}, 30_000);
+
 test('generic dependency progress and completed package lines do not name the active package', async () => {
   const h = temporaryDirectory();
   try {

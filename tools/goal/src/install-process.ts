@@ -9,7 +9,6 @@ import {
   readSync,
   rmSync,
   rmdirSync,
-  statSync,
   writeFileSync,
   writeSync,
 } from 'node:fs';
@@ -46,7 +45,10 @@ type ProcessResult = {
   timedOut: boolean;
   error?: string;
   cleanupError?: string;
-  outputTruncated?: boolean;
+  outputCapture?: {
+    stdout?: { tailPosition: number };
+    stderr?: { tailPosition: number };
+  };
 };
 
 type ProcessRequest = {
@@ -133,22 +135,51 @@ export class BoundedProcessError extends Error {
 }
 
 const captureLimit = 32 * 1024 * 1024;
-function readCapture(path: string): string {
+const captureHeadLimit = Math.floor(captureLimit / 2);
+const captureTailLimit = captureLimit - captureHeadLimit;
+const captureMarker = '\n[process output truncated after 32 MiB]\n';
+
+type CaptureState = {
+  bytes: number;
+  tailPosition: number;
+  truncated: boolean;
+};
+
+function readCapture(path: string, tailPosition?: number): string {
   if (!existsSync(path)) return '';
-  const size = statSync(path).size;
-  if (size <= captureLimit) return readFileSync(path, 'utf8');
-  const headLength = Math.floor(captureLimit / 2);
-  const tailLength = captureLimit - headLength;
+  if (tailPosition === undefined) return readFileSync(path, 'utf8');
   const fd = openSync(path, 'r');
   try {
-    const head = Buffer.alloc(headLength);
-    const tail = Buffer.alloc(tailLength);
-    readSync(fd, head, 0, headLength, 0);
-    readSync(fd, tail, 0, tailLength, size - tailLength);
-    return `${head.toString('utf8')}\n[process output truncated]\n${tail.toString('utf8')}`;
+    const head = Buffer.alloc(captureHeadLimit);
+    const tail = Buffer.alloc(captureTailLimit);
+    readSync(fd, head, 0, captureHeadLimit, 0);
+    const firstTailLength = captureTailLimit - tailPosition;
+    readSync(fd, tail, 0, firstTailLength, captureHeadLimit + tailPosition);
+    if (tailPosition > 0) readSync(fd, tail, firstTailLength, tailPosition, captureHeadLimit);
+    return `${head.toString('utf8')}${captureMarker}${tail.toString('utf8')}`;
   } finally {
     closeSync(fd);
   }
+}
+
+function recordCapture(fd: number, state: CaptureState, chunk: Buffer): void {
+  const headBytes = Math.max(0, Math.min(chunk.length, captureHeadLimit - state.bytes));
+  if (headBytes > 0) writeSync(fd, chunk, 0, headBytes, state.bytes);
+
+  const tail = chunk.subarray(headBytes);
+  if (tail.length >= captureTailLimit) {
+    writeSync(fd, tail, tail.length - captureTailLimit, captureTailLimit, captureHeadLimit);
+    state.tailPosition = 0;
+  } else if (tail.length > 0) {
+    const firstTailBytes = Math.min(tail.length, captureTailLimit - state.tailPosition);
+    writeSync(fd, tail, 0, firstTailBytes, captureHeadLimit + state.tailPosition);
+    const wrappedBytes = tail.length - firstTailBytes;
+    if (wrappedBytes > 0) writeSync(fd, tail, firstTailBytes, wrappedBytes, captureHeadLimit);
+    state.tailPosition = (state.tailPosition + tail.length) % captureTailLimit;
+  }
+
+  state.truncated ||= state.bytes + chunk.length > captureLimit;
+  state.bytes = Math.min(captureLimit + 1, state.bytes + chunk.length);
 }
 
 function packageFromOutput(output: string): string | undefined {
@@ -254,11 +285,8 @@ export function runBoundedInstallProcess(options: BoundedProcessOptions): Bounde
         maxBuffer: 1024 * 1024,
       },
     );
-    stdout = readCapture(stdoutPath);
-    stderr = readCapture(stderrPath);
     try {
       result = JSON.parse(readFileSync(resultPath, 'utf8')) as ProcessResult;
-      if (result.outputTruncated) stderr += '\n[process output truncated after 32 MiB]\n';
     } catch {
       fallbackError =
         supervisor.error?.message ?? supervisor.stderr?.trim() ?? `supervisor exited ${supervisor.status}`;
@@ -270,6 +298,8 @@ export function runBoundedInstallProcess(options: BoundedProcessOptions): Bounde
         ...(fallbackError ? { error: fallbackError } : {}),
       };
     }
+    stdout = readCapture(stdoutPath, result.outputCapture?.stdout?.tailPosition);
+    stderr = readCapture(stderrPath, result.outputCapture?.stderr?.tailPosition);
   } finally {
     try {
       rmSync(scratch, { recursive: true, force: true });
@@ -380,27 +410,17 @@ async function supervise(request: ProcessRequest): Promise<ProcessResult> {
     });
     if (child.pid) identity = groupLeaderIdentity(child.pid);
     const outputError: string[] = [];
-    let stdoutBytes = 0;
-    let stderrBytes = 0;
-    let outputTruncated = false;
-    const record = (fd: number, chunk: Buffer) => {
-      const remaining = captureLimit - (fd === stdoutFd ? stdoutBytes : stderrBytes);
-      if (remaining <= 0) {
-        outputTruncated = true;
-        return;
-      }
-      const written = chunk.length > remaining ? chunk.subarray(0, remaining) : chunk;
-      if (fd === stdoutFd) stdoutBytes += written.length;
-      else stderrBytes += written.length;
-      if (written.length < chunk.length) outputTruncated = true;
+    const stdoutCapture: CaptureState = { bytes: 0, tailPosition: 0, truncated: false };
+    const stderrCapture: CaptureState = { bytes: 0, tailPosition: 0, truncated: false };
+    const record = (fd: number, state: CaptureState, chunk: Buffer) => {
       try {
-        writeSync(fd, written);
+        recordCapture(fd, state, chunk);
       } catch (error) {
         outputError.push(error instanceof Error ? error.message : String(error));
       }
     };
-    child.stdout?.on('data', (chunk: Buffer) => record(stdoutFd!, chunk));
-    child.stderr?.on('data', (chunk: Buffer) => record(stderrFd!, chunk));
+    child.stdout?.on('data', (chunk: Buffer) => record(stdoutFd!, stdoutCapture, chunk));
+    child.stderr?.on('data', (chunk: Buffer) => record(stderrFd!, stderrCapture, chunk));
     child.once('close', closeResolve);
     const result = await new Promise<ProcessResult>((resolve) => {
       let finished = false;
@@ -427,7 +447,14 @@ async function supervise(request: ProcessRequest): Promise<ProcessResult> {
           resolve({
             ...value,
             ...(cleanupErrors.length ? { cleanupError: cleanupErrors.join('; ') } : {}),
-            ...(outputTruncated ? { outputTruncated: true } : {}),
+            ...(stdoutCapture.truncated || stderrCapture.truncated
+              ? {
+                  outputCapture: {
+                    ...(stdoutCapture.truncated ? { stdout: { tailPosition: stdoutCapture.tailPosition } } : {}),
+                    ...(stderrCapture.truncated ? { stderr: { tailPosition: stderrCapture.tailPosition } } : {}),
+                  },
+                }
+              : {}),
           });
         })().catch((error) =>
           resolve({ ...value, cleanupError: error instanceof Error ? error.message : String(error) }),
