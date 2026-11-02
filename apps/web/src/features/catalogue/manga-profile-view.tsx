@@ -2,6 +2,7 @@ import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouter } from '@tanstack/react-router';
 import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { hasDocumentContent } from '@rezics/document';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -611,10 +612,17 @@ function MangaCreate({
                       {row.label?.text || m.correction_invalid_part({}, o)}
                     </ContentItemHeading>
                     <p role="alert">{m.correction_stale({}, o)}</p>
+                    <details>
+                      <summary className="cursor-pointer">{m.catalogue_creation_technical_details({}, o)}</summary>
+                      <pre className="mt-2 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-3 font-mono text-xs">
+                        {JSON.stringify(row.statement, null, 2)}
+                      </pre>
+                    </details>
                     <MangaRowRemove
                       row={row}
                       locale={locale}
                       disabled={locked}
+                      populated={retiredMangaRowPopulated(row)}
                       removalAllowed={removalAllowed}
                       onRemove={() => changeRows(rows.filter((item) => item !== row))}
                     />
@@ -683,6 +691,25 @@ function MangaCreate({
         </Button>
       </form>
     </>
+  );
+}
+
+function retiredMangaRowPopulated(row: MangaRow): boolean {
+  const hasValue = (value: unknown): boolean => {
+    if (typeof value === 'string') return !!value.trim();
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'object') return Object.values(value).some(hasValue);
+    return true;
+  };
+  return (
+    row.statement.value.type !== 'value' ||
+    (row.authored
+      ? hasDocumentContent(row.authored.document) || !!row.authored.language.trim() || !!row.authored.licence.trim()
+      : hasValue(row.statement.value.content)) ||
+    !!row.original ||
+    !!row.statement.qualifiers?.length ||
+    !!row.statement.references?.some((reference) => reference.parts.length) ||
+    !!Object.values(row.targets ?? {}).some((targets) => targets.length)
   );
 }
 
