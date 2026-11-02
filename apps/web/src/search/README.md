@@ -25,9 +25,11 @@ invalid-input recovery copy follow the supplied page locale, with English as the
 Global search accepts drafts up to 512 UTF-8 bytes; scoped inputs keep their existing 256 UTF-16-unit cap, and
 typeahead keeps its independent 64-code-point prefix bound.
 
-Header suggestion ownership follows query, locale, the full value of the supplied SearchScope, the active loader and
-session observation; equivalent scope objects retain ownership. Locale, scope or loader changes hide old results
-during render and retire their requests before selection. An unsettled session or a change to its state, subject or
+Native suggestion pages are admitted whole before BFF truncation or type-label enrichment; invalid native data is
+dependency-unavailable, with no partial ready page. Header suggestion ownership follows query, locale, the full value of
+the supplied SearchScope, the active loader and session observation; equivalent scope objects retain ownership. Locale,
+scope or loader changes hide old results during render and retire their requests before selection. An unsettled session
+or a change to its state, subject or
 CSRF observation also retires results; a settled session reloads the retained draft, while isolated presenters without
 a session observation use anonymous identity. Trending and header-suggestion retries stay manual: native Retry-After
 disables retry until its minimum delay, without polling; session observations (including CSRF changes) and locale

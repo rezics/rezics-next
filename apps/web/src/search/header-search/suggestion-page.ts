@@ -44,18 +44,19 @@ const subject: v.GenericSchema<SuggestionResult['subjects'][number]> = v.strictO
   summary: v.nullable(summary),
   facts: v.exactOptional(v.record(v.string(), v.pipe(v.array(fact), v.maxLength(3)))),
 });
-const suggestionPage: v.GenericSchema<SuggestionResult> = v.strictObject({
+const nativeEnvelope = {
   subjects: v.pipe(v.array(subject), v.maxLength(10)),
   as_of: v.pipe(v.string(), v.isoTimestamp()),
+};
+const nativeSuggestionPage: v.GenericSchema<NativeSuggestionPage> = v.strictObject(nativeEnvelope);
+const suggestionPage: v.GenericSchema<SuggestionResult> = v.strictObject({
+  ...nativeEnvelope,
   types: v.record(v.string(), textMap),
 });
 
-/** Validate the complete native page before the header can render a row from it. */
-export function parseSuggestionPage(value: unknown): SuggestionResult {
-  const parsed = v.safeParse(suggestionPage, value);
-  if (!parsed.success) throw new TypeError('Malformed suggestion page');
+function admitSuggestionIdentities(subjects: SuggestionResult['subjects']): void {
   const identities = new Set<string>();
-  for (const subject of parsed.output.subjects) {
+  for (const subject of subjects) {
     const identity = subject.id.toLowerCase();
     if (
       identities.has(identity) ||
@@ -66,5 +67,21 @@ export function parseSuggestionPage(value: unknown): SuggestionResult {
     }
     identities.add(identity);
   }
+}
+
+function parsePage<T extends { subjects: SuggestionResult['subjects'] }>(schema: v.GenericSchema<T>, value: unknown): T {
+  const parsed = v.safeParse(schema, value);
+  if (!parsed.success) throw new TypeError('Malformed suggestion page');
+  admitSuggestionIdentities(parsed.output.subjects);
   return parsed.output;
+}
+
+/** Admit the complete native suggestion page before BFF truncation or type-label enrichment. */
+export function parseNativeSuggestionPage(value: unknown): NativeSuggestionPage {
+  return parsePage(nativeSuggestionPage, value);
+}
+
+/** Validate the complete BFF page, including type labels, before the header can render a row from it. */
+export function parseSuggestionPage(value: unknown): SuggestionResult {
+  return parsePage(suggestionPage, value);
 }

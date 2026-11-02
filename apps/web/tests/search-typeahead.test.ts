@@ -25,13 +25,13 @@ import type { SessionEnv } from '../src/session/client';
 import { problem } from '../src/media/kernel';
 import { searchFormFields } from '../src/search/search-params';
 
-const result: SuggestionResult = {
+const native = {
   as_of: '2026-10-31T00:00:00.000Z',
   subjects: [
     { id: '01a17dfd-5dbf-738a-9405-9dfa9a8ec069', type: 'schema:Book', labels: { 'zh-Hans': '小王子' }, summary: null },
   ],
-  types: { 'schema:Book': { 'zh-Hans': '图书' } },
 };
+const result: SuggestionResult = { ...native, types: { 'schema:Book': { 'zh-Hans': '图书' } } };
 
 function present(state: Parameters<typeof HeaderSearchView>[0]['state']) {
   return renderToStaticMarkup(
@@ -47,7 +47,7 @@ function present(state: Parameters<typeof HeaderSearchView>[0]['state']) {
 
 test('the visible shell Search consumes its typed native suggestion operation and current labels without counts, permission or per-hit reads', async () => {
   const calls: { url: URL; signal: AbortSignal | null | undefined }[] = [];
-  let current = result;
+  let current = native;
   const client = createKernelClient('http://kernel.local', {
     fetch: async (url, init) => {
       calls.push({ url: new URL(String(url)), signal: init?.signal });
@@ -83,7 +83,7 @@ test('the visible shell Search consumes its typed native suggestion operation an
   expect(html).toContain('bg-popover');
   state = reduceHeaderSearchState(state, { type: 'invalidate' });
   expect(present(state)).not.toContain('role="option"');
-  current = { ...result, subjects: [], as_of: '2026-10-31T00:00:01.000Z' };
+  current = { ...native, subjects: [], as_of: '2026-10-31T00:00:01.000Z' };
   const second = await readSubjectSuggestions(client, query, null, controller.signal);
   expect(second.subjects).toEqual([]);
   expect(second.as_of).toBe(current.as_of);
@@ -100,7 +100,7 @@ test('prefix admission uses the actual Unicode, language and limit bounds withou
   const client = createKernelClient('http://kernel.local', {
     fetch: async () => {
       calls++;
-      return Response.json(result);
+      return Response.json(native);
     },
   });
   for (const query of [
@@ -143,7 +143,7 @@ test('the normal BFF forwards the server session and invalid credentials fail wi
       credentials.push(credential);
       return credential === 'Bearer invalid'
         ? Response.json({ code: 'invalid_credentials' }, { status: 401 })
-        : Response.json(result);
+        : Response.json(native);
     },
   });
   const read = async (q: string, request: Request) => ({

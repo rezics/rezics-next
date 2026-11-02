@@ -119,7 +119,16 @@ mock.module('../src/kernel/client', () => ({
                 return {
                   status: 200,
                   data: {
-                    subjects: [{ id: fixtureId, type: 'test:work', labels: { en: 'Private target' }, facts: {} }],
+                    subjects: [
+                      {
+                        id: fixtureId,
+                        type: 'test:work',
+                        labels: { en: 'Private target' },
+                        facts: {},
+                        summary: null,
+                      },
+                    ],
+                    as_of: '2026-01-01T00:00:00.000Z',
                   },
                   error: null,
                 };

@@ -115,13 +115,16 @@ test('Add copy by finding and selecting a recognisable edition', async () => {
             ...subject,
             facts: {},
             summary: {
-              ...subject,
-              label: Object.values(subject.labels)[0],
+              id: subject.id,
+              type: subject.type,
+              types: [subject.type],
+              label: { value: Object.values(subject.labels)[0]!, language: 'en' },
+              creativeWork: true,
               cover: copyRecording.copies[1]!.subject.cover,
             },
           },
         ],
-        as_of: '2026-11-01T00:00:00Z',
+        as_of: '2026-11-01T00:00:00.000Z',
       });
     }
     if (url.pathname === `/v1/subjects/${first.id}`) return oldProfile.promise;

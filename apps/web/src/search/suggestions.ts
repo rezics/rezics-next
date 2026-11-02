@@ -1,8 +1,9 @@
 import type { KernelClient } from '@rezics/client';
 import { requestLanguages } from '../kernel/languages.ts';
-import { problem, problemResponse } from '../media/kernel.ts';
+import { dependencyUnavailable, problem, problemResponse } from '../media/kernel.ts';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
+import { parseNativeSuggestionPage } from './header-search/suggestion-page';
 import { validSuggestionText } from './typeahead';
 import type { SubjectHit } from './results.tsx';
 
@@ -50,7 +51,13 @@ export async function readSubjectSuggestions(
     if (retryAfter !== null) throw Object.assign(failure, { headers: { 'retry-after': retryAfter } });
     throw failure;
   }
-  return { ...result.data, subjects: result.data.subjects.slice(0, query.limit) };
+  try {
+    const page = parseNativeSuggestionPage(result.data);
+    return { ...page, subjects: page.subjects.slice(0, query.limit) };
+  } catch (error) {
+    if (error instanceof TypeError) throw dependencyUnavailable();
+    throw error;
+  }
 }
 
 /**

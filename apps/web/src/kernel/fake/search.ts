@@ -154,8 +154,13 @@ function fixtureSuggestions(fixtures: Fixtures, request: Request): SuggestionRes
     .filter((subject) => matchesText(subject, query))
     .slice(0, limit)
     .map((subject) => {
-      const { kind: _kind, base: _base, ...hit } = subjectHit(fixtures, subject, languages);
-      return hit;
+      const hit = subjectHit(fixtures, subject, languages);
+      return {
+        id: hit.id,
+        type: hit.type,
+        labels: hit.labels,
+        summary: { ...hit.summary, cover: null },
+      };
     });
   return { subjects, as_of: '2026-10-27T00:00:00Z' } as SuggestionResponse;
 }
@@ -202,6 +207,8 @@ async function suggestionStory(
   const subjects = source.subjects.filter(
     (subject) =>
       isRecord(subject) &&
+      typeof subject.id === 'string' &&
+      typeof subject.type === 'string' &&
       isRecord(subject.labels) &&
       Object.values(subject.labels).some(
         (label) => typeof label === 'string' && label.toLocaleLowerCase().includes(query),
@@ -209,7 +216,16 @@ async function suggestionStory(
   );
   const limit = Math.max(1, Math.min(Number(url.searchParams.get('limit') ?? 8) || 8, 8));
   return bodyFromRecording(
-    { status: 200, subjects: subjects.slice(0, limit), as_of: source.as_of ?? '2026-10-27T00:00:00Z' },
+    {
+      status: 200,
+      subjects: subjects.slice(0, limit).map((subject) => ({
+        id: subject.id,
+        type: subject.type,
+        labels: subject.labels,
+        summary: subject.summary ?? null,
+      })),
+      as_of: source.as_of ?? '2026-10-27T00:00:00Z',
+    },
     languages,
   );
 }
