@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react';
 import { flushSync } from 'react-dom';
@@ -220,6 +221,15 @@ function ReactionCaller({
   const retrying = useRef(false);
   const epoch = useRef(0);
   const generation = epoch.current;
+  type KeyboardFocus = {
+    commandId: string | null;
+    element: HTMLElement;
+    generation: number;
+    stage: 'selection' | 'retry' | 'retrying' | 'handoff';
+  };
+  const keyboardFocus = useRef<KeyboardFocus | null>(null);
+  const retryButton = useRef<HTMLButtonElement>(null);
+  const focusBoundary = useRef<HTMLDivElement>(null);
   const controlled = useRef({ counts, value });
   controlled.current = { counts, value };
   const [resolved, setResolved] = useState<{
@@ -244,14 +254,56 @@ function ReactionCaller({
     observation.snapshot() === revision &&
     (reactionOrigin?.isCurrent() ?? true);
 
+  useEffect(() => {
+    const onPointerDown = () => {
+      keyboardFocus.current = null;
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      const intent = keyboardFocus.current;
+      if (intent && intent.stage !== 'handoff' && event.target !== intent.element) keyboardFocus.current = null;
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('focusin', onFocusIn, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('focusin', onFocusIn, true);
+    };
+  }, []);
+
   function retain(intent: Intent, message: string = m.candidate_unavailable()) {
     if (!current()) return;
+    const focus = keyboardFocus.current;
+    const moveToRetry =
+      focus?.stage === 'selection' &&
+      focus.generation === generation &&
+      focus.commandId === intent.commandId &&
+      focus.element === document.activeElement;
+    const keepRetryBoundary =
+      focus?.stage === 'retrying' &&
+      focus.commandId === intent.commandId &&
+      focus.element === focusBoundary.current &&
+      focus.element === document.activeElement;
+    if (moveToRetry || keepRetryBoundary) focus!.stage = 'handoff';
+    else if (focus?.commandId === intent.commandId) keyboardFocus.current = null;
     unresolved.current = intent;
     epoch.current++;
     flushSync(() => {
       setFailed(message);
       setRecovery(intent);
     });
+    if (moveToRetry && focus) {
+      const retry = retryButton.current;
+      if (retry && current()) {
+        focus.element = retry;
+        focus.generation = epoch.current;
+        focus.stage = 'retry';
+        retry.focus();
+      } else keyboardFocus.current = null;
+    } else if (keepRetryBoundary && focus) {
+      focus.generation = epoch.current;
+      focus.element = focusBoundary.current!;
+      focus.stage = 'retrying';
+    }
   }
 
   async function submit(intent: Intent, replay: boolean) {
@@ -332,11 +384,29 @@ function ReactionCaller({
 
   async function onChange(kind: ReactionKind | null) {
     if (!current() || generation !== epoch.current || unresolved.current) return;
-    await submit({ kind, commandId: crypto.randomUUID(), phase: 'write' }, false);
+    const commandId = crypto.randomUUID();
+    const focus = keyboardFocus.current;
+    if (focus?.stage === 'selection') {
+      if (focus.generation === generation && focus.element === document.activeElement) focus.commandId = commandId;
+      else keyboardFocus.current = null;
+    }
+    await submit({ kind, commandId, phase: 'write' }, false);
   }
 
   async function retry(intent: Intent) {
     if (!current() || unresolved.current !== intent || retrying.current) return;
+    const focus = keyboardFocus.current;
+    const keyboardRetry =
+      focus?.stage === 'retry' &&
+      focus.generation === generation &&
+      focus.commandId === intent.commandId &&
+      focus.element === retryButton.current &&
+      focus.element === document.activeElement;
+    if (keyboardRetry && focus && focusBoundary.current) {
+      focus.element = focusBoundary.current;
+      focus.stage = 'retrying';
+      focus.element.focus();
+    }
     retrying.current = true;
     setRecovering(true);
     try {
@@ -345,12 +415,45 @@ function ReactionCaller({
       // The retained command and failure remain available for explicit recovery.
     } finally {
       retrying.current = false;
-      if (current()) setRecovering(false);
+      if (current()) {
+        flushSync(() => setRecovering(false));
+        if (
+          keyboardRetry &&
+          focus &&
+          keyboardFocus.current === focus &&
+          focus.stage === 'retrying' &&
+          focus.element === focusBoundary.current &&
+          focus.element === document.activeElement
+        ) {
+          if (unresolved.current === intent && current() && retryButton.current) {
+            focus.element = retryButton.current;
+            focus.generation = epoch.current;
+            focus.stage = 'retry';
+            focus.element.focus();
+          } else keyboardFocus.current = null;
+        }
+      }
     }
   }
 
+  function noteKeyboardActivation(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const button = (event.target as HTMLElement).closest('button');
+    if (!button || button === retryButton.current) return;
+    keyboardFocus.current = { commandId: null, element: button, generation, stage: 'selection' };
+  }
+
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2" aria-busy={recovering}>
+    // This labelled group is the stable keyboard target while recovery controls are disabled for reconciliation.
+    <div
+      ref={focusBoundary}
+      role="group"
+      aria-label={m.reaction_reactions()}
+      tabIndex={-1}
+      className="flex min-w-0 flex-wrap items-center gap-2"
+      aria-busy={recovering}
+      onKeyDownCapture={noteKeyboardActivation}
+    >
       <Reactions
         key={generation}
         counts={resolved?.snapshot.counts ?? counts}
@@ -366,6 +469,7 @@ function ReactionCaller({
         <>
           <span role="status">{failed}</span>
           <Button
+            ref={retryButton}
             type="button"
             variant="outline"
             size="sm"
