@@ -4110,6 +4110,8 @@
   "realm_review_realm": "Referencia del Realm",
   "realm_review_refresh": "Actualizar el estado actual",
   "realm_review_refresh_after_approval": "Se confirmó la aprobación, pero no se pudo actualizar la cola actual. Actualízala antes de continuar.",
+  "realm_review_restart": "Volver a empezar desde la primera página",
+  "realm_review_retry_page": "Reintentar esta página",
   "realm_review_request_reference": "Referencia de la solicitud",
   "realm_review_retry": "Comprobar y reintentar la misma aprobación",
   "realm_review_review": "Revisar solicitud",

@@ -4110,6 +4110,8 @@
   "realm_review_realm": "Realm-Referenz",
   "realm_review_refresh": "Aktuellen Stand aktualisieren",
   "realm_review_refresh_after_approval": "Die Genehmigung wurde bestätigt, aber die aktuelle Warteschlange konnte nicht aktualisiert werden. Aktualisiere sie, bevor du fortfährst.",
+  "realm_review_restart": "Auf der ersten Seite neu beginnen",
+  "realm_review_retry_page": "Diese Seite erneut laden",
   "realm_review_request_reference": "Anfragereferenz",
   "realm_review_retry": "Dieselbe Genehmigung prüfen und erneut versuchen",
   "realm_review_review": "Anfrage prüfen",

@@ -185,7 +185,7 @@ export function createRealmClaimReview(
       return owns(ticket) ? { kind: 'unavailable' } : null;
     }
   }
-  async function refresh(cursor = state.cursor) {
+  async function readPage(cursor: string | undefined) {
     if (state.busy) return;
     const ticket = begin();
     if (!ticket) return;
@@ -198,6 +198,9 @@ export function createRealmClaimReview(
       busy: false,
       ...(state.outcome === 'confirming' ? { intent: null, outcome: 'idle' as const } : {}),
     });
+  }
+  async function refresh() {
+    await readPage(state.cursor);
   }
   async function send(ticket: Ticket, intent = state.intent) {
     if (!owns(ticket) || !intent || state.busy || state.read.kind !== 'ready') return;
@@ -261,7 +264,15 @@ export function createRealmClaimReview(
         !state.read.page.next
       )
         return;
-      await refresh(state.read.page.next);
+      await readPage(state.read.page.next);
+    },
+    async retryPage() {
+      if (state.read.kind !== 'unavailable' || state.outcome === 'uncertain') return;
+      await readPage(state.cursor);
+    },
+    async restart() {
+      if (state.read.kind !== 'unavailable' || state.outcome === 'uncertain') return;
+      await readPage(undefined);
     },
     async prepare(requestId: string) {
       if (state.busy || state.intent || state.outcome !== 'idle' || state.read.kind !== 'ready') return;

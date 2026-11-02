@@ -4110,6 +4110,8 @@
   "realm_review_realm": "Realm 참조 번호",
   "realm_review_refresh": "현재 상태 새로고침",
   "realm_review_refresh_after_approval": "승인이 확인되었지만 현재 대기열을 새로고침하지 못했습니다. 계속하기 전에 새로고침하세요.",
+  "realm_review_restart": "첫 페이지부터 다시 시작",
+  "realm_review_retry_page": "이 페이지 다시 시도",
   "realm_review_request_reference": "신청 참조 번호",
   "realm_review_retry": "같은 승인을 확인하고 재시도",
   "realm_review_review": "신청 검토",

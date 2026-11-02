@@ -235,6 +235,39 @@ test('Realm claim review prioritizes the human request and preserves visible app
     identity(rows[0]!, second.claimantAccountId);
     identity(rows[1]!);
     expect(host.textContent).not.toContain(m.realm_review_next());
+
+    const failedCursor = 'expired.signed.cursor';
+    const recoveryReads: unknown[] = [];
+    const recoveryApprovals: RealmClaimApprovalInput[] = [];
+    await mount({
+      initial: { kind: 'ready', page: { claimRequests: [], next: failedCursor } },
+      adapter: {
+        read: async (input) => {
+          recoveryReads.push(input);
+          return recoveryReads.length < 3 ? { kind: 'unavailable' } : empty;
+        },
+        approve: async (input) => {
+          recoveryApprovals.push(input);
+          return { kind: 'unavailable' };
+        },
+      },
+    });
+    await click(m.realm_review_next());
+    await click(m.realm_review_retry_page());
+    expect(recoveryReads).toEqual([
+      { realmId: reviewRequest.realmId, cursor: failedCursor },
+      { realmId: reviewRequest.realmId, cursor: failedCursor },
+    ]);
+    expect(window.document.activeElement).toBe(button(m.realm_review_retry_page()));
+    await click(m.realm_review_restart());
+    expect(recoveryReads).toEqual([
+      { realmId: reviewRequest.realmId, cursor: failedCursor },
+      { realmId: reviewRequest.realmId, cursor: failedCursor },
+      { realmId: reviewRequest.realmId },
+    ]);
+    expect(window.document.activeElement).toBe(host.querySelector('section[aria-labelledby$="-queue"] h2'));
+    expect(recoveryApprovals).toHaveLength(0);
+
     await mount(reviewExample('empty'));
     expect(host.textContent).toContain(m.realm_review_empty());
     expect(host.textContent).not.toContain(m.realm_review_sparse());

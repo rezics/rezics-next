@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useSyncExternalStore } from 'react';
+import { useEffect, useId, useMemo, useRef, useSyncExternalStore } from 'react';
 import { ArrowRight, Check, CircleHelp, RefreshCw, ShieldCheck } from 'lucide-react';
 import { ContentItem, ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -135,6 +135,10 @@ function RealmClaimReviewContent({
   );
   const snapshot = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
   useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.snapshot);
+  const queueBoundary = useRef<HTMLHeadingElement>(null);
+  const retryPageButton = useRef<HTMLButtonElement>(null);
+  const refreshButton = useRef<HTMLButtonElement>(null);
+  const pendingQueueFocus = useRef<number | null>(null);
   useRealmClaimDeparture(lifetime, control, ready);
   useEffect(() => {
     control.reconnect();
@@ -157,6 +161,17 @@ function RealmClaimReviewContent({
     busy: false,
   };
   const state = active ? snapshot : hidden;
+  useEffect(() => {
+    const caller = pendingQueueFocus.current;
+    if (caller === null || state.busy) return;
+    pendingQueueFocus.current = null;
+    if (!active || !lifetime.owns(caller)) return;
+    if (state.read.kind === 'ready') queueBoundary.current?.focus();
+    else (retryPageButton.current ?? refreshButton.current)?.focus();
+  }, [active, lifetime, state.busy, state.read]);
+  function rememberQueueActivation(detail: number) {
+    pendingQueueFocus.current = detail === 0 ? lifetime.ticket() : null;
+  }
   const page = state.read.kind === 'ready' ? state.read.page : null;
   const confirming = page && state.outcome === 'confirming' ? state.intent : null;
   const denied = state.read.kind === 'denied' || state.read.kind === 'signed-out' || state.read.kind === 'closed';
@@ -173,20 +188,57 @@ function RealmClaimReviewContent({
           <PageHeading>{m.realm_review_heading()}</PageHeading>
           <p className="text-pretty leading-7 text-muted-foreground">{m.realm_review_intro()}</p>
         </div>
-        <Button
-          variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
-          disabled={!active || state.busy}
-          onClick={() => void control.refresh()}
-        >
-          <RefreshCw className={state.busy ? 'animate-spin' : ''} aria-hidden="true" />
-          {state.busy ? m.realm_review_working() : m.realm_review_refresh()}
-        </Button>
+        {state.read.kind === 'unavailable' && !state.busy && state.outcome !== 'uncertain' ? (
+          <div className="flex flex-wrap gap-3">
+            <Button
+              ref={retryPageButton}
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+              disabled={!active}
+              onClick={(event) => {
+                rememberQueueActivation(event.detail);
+                void control.retryPage();
+              }}
+            >
+              {m.realm_review_retry_page()}
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+              disabled={!active}
+              onClick={(event) => {
+                rememberQueueActivation(event.detail);
+                void control.restart();
+              }}
+            >
+              {m.realm_review_restart()}
+            </Button>
+          </div>
+        ) : (
+          <Button
+            ref={refreshButton}
+            variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+            disabled={!active || state.busy}
+            onClick={(event) => {
+              rememberQueueActivation(event.detail);
+              void control.refresh();
+            }}
+          >
+            <RefreshCw className={state.busy ? 'animate-spin' : ''} aria-hidden="true" />
+            {state.busy ? m.realm_review_working() : m.realm_review_refresh()}
+          </Button>
+        )}
       </header>
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_16rem] lg:gap-10">
         <section aria-labelledby={`${id}-queue`} className="min-w-0 space-y-5">
           <div className="space-y-1">
-            <h2 id={`${id}-queue`} className="text-lg font-semibold">
+            <h2
+              ref={queueBoundary}
+              id={`${id}-queue`}
+              tabIndex={-1}
+              className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
               {m.realm_review_queue()}
             </h2>
             {page ? <ReferenceDetails realmId={realmId} /> : null}
@@ -337,7 +389,10 @@ function RealmClaimReviewContent({
                   variant="outline"
                   className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
                   disabled={!editable}
-                  onClick={() => void control.next()}
+                  onClick={(event) => {
+                    rememberQueueActivation(event.detail);
+                    void control.next();
+                  }}
                 >
                   {m.realm_review_next()}
                   <ArrowRight aria-hidden="true" />

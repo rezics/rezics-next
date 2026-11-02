@@ -4110,6 +4110,8 @@
   "realm_review_realm": "Référence du Realm",
   "realm_review_refresh": "Actualiser la situation actuelle",
   "realm_review_refresh_after_approval": "L’approbation a été confirmée, mais la file actuelle n’a pas pu être actualisée. Actualisez-la avant de continuer.",
+  "realm_review_restart": "Recommencer depuis la première page",
+  "realm_review_retry_page": "Réessayer cette page",
   "realm_review_request_reference": "Référence de la demande",
   "realm_review_retry": "Vérifier et réessayer la même approbation",
   "realm_review_review": "Examiner la demande",

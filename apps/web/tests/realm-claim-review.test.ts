@@ -97,12 +97,16 @@ describe('Platform Realm claim review and genuine native approval journey', () =
 
   test('an uncertain applied approval recovers with the same key even after its row leaves the queue', async () => {
     const intents: unknown[] = [];
+    const reads: unknown[] = [];
     let current: RealmClaimReviewRead = pending;
     const control = createRealmClaimReview(
       realmId,
       pending,
       {
-        read: async () => current,
+        read: async (input) => {
+          reads.push(input);
+          return current;
+        },
         approve: async (data) => {
           intents.push(data);
           current = empty;
@@ -114,6 +118,10 @@ describe('Platform Realm claim review and genuine native approval journey', () =
     await control.prepare(requestId);
     await control.confirm();
     expect(control.getSnapshot()).toMatchObject({ outcome: 'uncertain', receipt: null, read: { kind: 'unavailable' } });
+    const uncertainReads = reads.length;
+    await control.restart();
+    await control.retryPage();
+    expect(reads).toHaveLength(uncertainReads);
     await control.retry();
     expect(intents).toEqual([input, input]);
     expect(control.getSnapshot()).toMatchObject({ outcome: 'approved', receipt: claim });
@@ -193,6 +201,29 @@ describe('Platform Realm claim review and genuine native approval journey', () =
     await control.next();
     expect(reads).toEqual([{ realmId, cursor: 'opaque-next' }]);
     expect(control.getSnapshot().read).toEqual(pending);
+  });
+
+  test('a failed continuation retries its cursor and explicitly restarts at the first page', async () => {
+    const cursor = 'expired.signed.cursor';
+    const reads: unknown[] = [];
+    let approvals = 0;
+    const control = createRealmClaimReview(realmId, { kind: 'ready', page: { claimRequests: [], next: cursor } }, {
+      read: async (input) => {
+        reads.push(input);
+        return reads.length < 3 ? { kind: 'unavailable' } : pending;
+      },
+      approve: async () => {
+        approvals++;
+        return { kind: 'unavailable' };
+      },
+    });
+    await control.next();
+    await control.retryPage();
+    expect(reads).toEqual([{ realmId, cursor }, { realmId, cursor }]);
+    await control.restart();
+    expect(reads).toEqual([{ realmId, cursor }, { realmId, cursor }, { realmId }]);
+    expect(control.getSnapshot()).toMatchObject({ read: pending, cursor: undefined });
+    expect(approvals).toBe(0);
   });
 
   test('retirement fences late prepare, uncertain retry and approval receipt refresh', async () => {
@@ -278,6 +309,32 @@ describe('Platform Realm claim review and genuine native approval journey', () =
     await retryResult;
     expect(retries).toBe(1);
     expect(retrying.getSnapshot()).toMatchObject({ read: { kind: 'unavailable' }, receipt: null });
+
+    current = true;
+    const restartRead = deferred<RealmClaimReviewRead>();
+    const restartLifetime = createRealmClaimCallerLifetime(() => current);
+    let restartReads = 0;
+    const restarting = createRealmClaimReview(
+      realmId,
+      { kind: 'unavailable' },
+      {
+        read: () => {
+          restartReads++;
+          return restartRead.promise;
+        },
+        approve: async () => ({ kind: 'unavailable' }),
+      },
+      () => idempotencyKey,
+      restartLifetime,
+    );
+    const restartResult = restarting.restart();
+    current = false;
+    restartLifetime.current();
+    restartRead.resolve(pending);
+    await restartResult;
+    await restarting.restart();
+    expect(restartReads).toBe(1);
+    expect(restarting.getSnapshot().read).toEqual({ kind: 'unavailable' });
   });
 
   test('closed bounded payloads reject private fields, malformed identifiers and false success', async () => {

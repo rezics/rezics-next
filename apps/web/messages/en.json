@@ -3233,6 +3233,8 @@
   "realm_review_approved_at": "Approved at",
   "realm_review_success_help": "Approval is confirmed for the account above. The queue has been refreshed. Review the current queue before taking another action.",
   "realm_review_refresh_after_approval": "An approval receipt was received, but the current queue could not be refreshed. Refresh before continuing.",
+  "realm_review_restart": "Restart from first page",
+  "realm_review_retry_page": "Retry this page",
   "realm_review_review_current": "Review refreshed queue",
   "realm_review_guidance_heading": "A careful handover",
   "realm_review_guidance_dates": "Each request relates to when the Realm became orphaned. The waiting period is 30 days (720 hours); the displayed dates do not establish current eligibility.",

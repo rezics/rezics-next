@@ -4110,6 +4110,8 @@
   "realm_review_realm": "Realm 編號",
   "realm_review_refresh": "重新整理目前狀態",
   "realm_review_refresh_after_approval": "已確認核准，但無法重新整理目前佇列。請先重新整理，再繼續操作。",
+  "realm_review_restart": "從第一頁重新開始",
+  "realm_review_retry_page": "重試此頁",
   "realm_review_request_reference": "申請編號",
   "realm_review_retry": "檢查並重試相同核准",
   "realm_review_review": "審查申請",

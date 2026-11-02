@@ -4110,6 +4110,8 @@
   "realm_review_realm": "Realmの参照番号",
   "realm_review_refresh": "現在の状態を再読み込み",
   "realm_review_refresh_after_approval": "承認は確認されましたが、現在のキューを再読み込みできませんでした。続ける前に再読み込みしてください。",
+  "realm_review_restart": "最初のページから再開",
+  "realm_review_retry_page": "このページを再試行",
   "realm_review_request_reference": "申請の参照番号",
   "realm_review_retry": "同じ承認を確認して再試行",
   "realm_review_review": "申請を審査",

@@ -4110,6 +4110,8 @@
   "realm_review_realm": "Realm 编号",
   "realm_review_refresh": "刷新当前状态",
   "realm_review_refresh_after_approval": "已确认批准，但无法刷新当前队列。请先刷新，再继续操作。",
+  "realm_review_restart": "从第一页重新开始",
+  "realm_review_retry_page": "重试此页",
   "realm_review_request_reference": "申请编号",
   "realm_review_retry": "检查并重试同一批准",
   "realm_review_review": "审核申请",
