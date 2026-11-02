@@ -1,6 +1,12 @@
 import type { SearchScope } from './header-search/types';
+import { isWithinGlobalSearchQueryLimit } from './query-text-limit';
 
 export const RECENT_HISTORY_LIMIT = 32;
+/** Native Recent query text is still TypeBox maxLength 256 (UTF-16 units). */
+export const NATIVE_RECENT_QUERY_TEXT_LIMIT = 256;
+function isAdmittedRecentQuery(query: string): boolean {
+  return isWithinGlobalSearchQueryLimit(query) || query.length <= NATIVE_RECENT_QUERY_TEXT_LIMIT;
+}
 export type RecentEntry = { id: string; query: string; languages?: string[]; scope?: SearchScope; visitedAt: number };
 export type RecentStorage = Pick<Storage, 'getItem' | 'setItem'>;
 /** Own-account transport; local history remains the sole producer and store. */
@@ -98,7 +104,8 @@ export function readRecentHistory(storage: RecentStorage, bucket: string): Recen
         scope = { kind: scope.kind, id: scope.id, name: '' };
       // Corrupt scoped history must never silently become global history.
       if (item.scope && !scope) return [];
-      const query = item.query.slice(0, 256);
+      if (!isAdmittedRecentQuery(item.query)) return [];
+      const query = item.query;
       if (!query.trim() && !scope) return [];
       return [
         {
@@ -125,7 +132,7 @@ export function rememberRecent(
   now = Date.now(),
   languages?: readonly string[],
 ): RecentEntry[] {
-  query = query.slice(0, 256);
+  if (!isAdmittedRecentQuery(query)) return [...entries];
   if (!query.trim() && !scope) return [...entries];
   const safeScope = cleanScope(scope);
   if (scope && !safeScope) return [...entries];

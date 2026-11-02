@@ -64,6 +64,8 @@ reader moved away.
 Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only
 explicit sort value.
 
+Local Recent keeps exact query text within global Search's 512 UTF-8 bytes or native Recent's 256 UTF-16-unit bound,
+never truncates, and leaves longer valid global queries local-only so they cannot block native synchronization.
 Recent history reads at most two 20-row pages for its 32-row view; each nonterminal page must contain 20 rows, and
 malformed continuations keep accepted local history and pending changes until a fresh traversal succeeds. Failed
 local writes remain in the memory fallback until a write succeeds; observed durable removals and

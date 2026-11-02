@@ -1,4 +1,5 @@
 import {
+  NATIVE_RECENT_QUERY_TEXT_LIMIT,
   RECENT_HISTORY_LIMIT,
   readRecentDocument,
   writeRecentDocument,
@@ -63,13 +64,15 @@ export function nativeRecentEntry(entry: RecentEntry): NativeEntry | undefined {
         ? { kind: ref.kind === 'Collection' ? ('collection' as const) : ('realm' as const), id: ref.id }
         : undefined;
   if (ref && !scope) return;
-  if (entry.query.trim())
+  if (entry.query.trim()) {
+    if (entry.query.length > NATIVE_RECENT_QUERY_TEXT_LIMIT) return;
     return {
       kind: 'query',
       text: entry.query,
       ...(entry.languages !== undefined ? { languages: [...entry.languages] } : {}),
       ...(scope ? { scope } : {}),
     };
+  }
   if (scope) return { kind: 'scope', scope };
 }
 export function localRecentEntry(item: RecentItem): RecentEntry {
