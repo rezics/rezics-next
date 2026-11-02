@@ -601,8 +601,8 @@ test('a turn in which the manager writes or returns a backlog brief is not an em
     });
     expect(s.managers.get(state.id).turnsWithoutDecision).toBe(1);
     // File times are wall-clock times: bring the host clock to the wall clock before each turn starts.
-    const sync = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
+    const sync = async (waitMs = 20) => {
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
       s.advance(Date.now() - s.services.now());
     };
     // A new brief written during the turn.
@@ -612,7 +612,8 @@ test('a turn in which the manager writes or returns a backlog brief is not an em
     const returned = join(backlog, 'failed', 'returned.md');
     writeFileSync(returned, 'Returned brief\n');
     utimesSync(returned, 1, 1);
-    await sync();
+    // Past the file-clock slack, so only the rename during the turn can count.
+    await sync(1_100);
     await turn('return', () => renameSync(returned, join(backlog, 'returned.md')));
     // A brief written during the turn that a backlog run already dispatched.
     await sync();

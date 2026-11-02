@@ -146,6 +146,7 @@ export function recordManagerDecision(db: Database, id: string, at = Date.now())
 /** More `clock.sleep` calls than this in one UTC hour raise one alarm for that manager. */
 export const MANAGER_SLEEP_ALARM_PER_HOUR = 10;
 const HOUR_MS = 3_600_000;
+const FILE_CLOCK_SLACK_MS = 1_000;
 const managerSleepMigration = {
   module: 'manager-sleep',
   version: 1,
@@ -430,7 +431,9 @@ export class ManagerSessions {
     return join(this.services.backlogDirectory ?? join(spec.cwd, '.temp', 'goal', 'backlog'), spec.goal);
   }
   /** Whether a ready brief in the Goal's backlog was written or moved there since `since`, or dispatched from it. */
-  private backlogWrittenSince(spec: ManagerSpec, since: number): boolean {
+  private backlogWrittenSince(spec: ManagerSpec, turnStart: number): boolean {
+    // File times come from the kernel's coarse clock, which can trail the process clock by a few milliseconds.
+    const since = turnStart - FILE_CLOCK_SLACK_MS;
     const directory = this.backlogPath(spec);
     for (const path of [directory, join(directory, '.dispatching')]) {
       let names: string[];
