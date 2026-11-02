@@ -128,6 +128,7 @@ function RelationEditorLive({
       setCandidate(undefined);
       setResult(undefined);
       setConsentEntry(undefined);
+      picked.current = {};
       setFailure(request.current ? { ok: false, reason: 'unavailable' } : undefined);
     }
   }

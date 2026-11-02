@@ -57,6 +57,7 @@ export function CharacterClassification({
     wasVisible.current = visible;
     running.current = false;
     setBusy(false);
+    if (!visible) setPicked([]);
     if (!visible)
       setDraft((previous) =>
         previous?.command && !previous.result ? { ...previous, result: { ok: false, reason: 'uncertain' } } : previous,
