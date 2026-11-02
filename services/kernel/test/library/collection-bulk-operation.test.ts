@@ -157,6 +157,10 @@ test('current authority loss prevents another effect and result disclosure', asy
     sourceDigest: stored.operation.sourceDigest,
     target: { ...stored.row.target, operationId: id, ordinal: stored.row.ordinal },
     receipt: stored.row.receipt,
+    identity: {
+      clientId: stored.operation.initiator.actor.clientId,
+      requestedBy: stored.operation.initiator.actor.requestedBy,
+    },
     chunkIndex: 0,
     deadline: workStepDeadline(),
   };

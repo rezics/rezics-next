@@ -35,6 +35,11 @@ import {
   resolveLibraryRemovalSubjects,
 } from './collection-bulk-entry-admission.ts';
 import type { BulkAdmission, BulkCounters, OperationResult, OutcomeQuery } from './bulk-contract.ts';
+import {
+  captureCollectionBulkAddTargets,
+  explicitCollectionBulkAdd,
+  prepareCollectionBulkAddAdmission,
+} from './collection-bulk-add-admission.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
 import {
   confirmCollectionBulk,
@@ -306,7 +311,12 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
   }
   return {
     async preview(actor: Actor, input: BulkAdmission, requestKey: string) {
-      const parsed = input.action === 'remove_from_library' ? explicitLibraryRemoval(input) : explicitBulkStatus(input);
+      const parsed =
+        input.action === 'remove_from_library'
+          ? explicitLibraryRemoval(input)
+          : input.action === 'add_to_collection'
+            ? explicitCollectionBulkAdd(input)
+            : explicitBulkStatus(input);
       const action = parsed.action === 'remove_from_library' ? 'library_entry:delete' : 'library_entry:update';
       const owner = bulkOwner(actor, action);
       const route = requireRoute(owner.accountId),
@@ -326,6 +336,19 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
             if (parsed.action === 'remove_from_library') {
               try {
                 const resolved = await resolveLibraryRemovalSubjects(deps, owner, parsed, attempt.time, context);
+                return { capture, resolved, action: parsed.action };
+              } catch (error) {
+                return {
+                  capture,
+                  resolved: [] as { subjectId: string; requestedSubjectId: string | null }[],
+                  action: parsed.action,
+                  error,
+                };
+              }
+            }
+            if (parsed.action === 'add_to_collection') {
+              try {
+                const resolved = await prepareCollectionBulkAddAdmission(deps, owner, parsed, attempt.time, context);
                 return { capture, resolved, action: parsed.action };
               } catch (error) {
                 return {
@@ -358,7 +381,15 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
           const targets: CollectionBulkTarget[] =
             prepared.action === 'remove_from_library'
               ? await captureLibraryRemovalTargets(tx, owner, prepared.resolved)
-              : await (async () => {
+              : parsed.action === 'add_to_collection'
+                ? await captureCollectionBulkAddTargets(
+                    tx,
+                    route,
+                    owner.accountId,
+                    parsed.collectionId,
+                    prepared.resolved,
+                  )
+                : await (async () => {
                   const rows = await tx.query<{ subjectId: string; incarnation: string | null; revision: number }>(
                     `SELECT subject_id AS "subjectId",incarnation_id AS incarnation,revision FROM library.entry
                       WHERE route=$1 AND account_id=$2 AND subject_id=ANY($3::uuid[]) ORDER BY subject_id`,

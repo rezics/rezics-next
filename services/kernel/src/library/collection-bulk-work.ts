@@ -151,6 +151,10 @@ export async function runCollectionBulkPage(deps: Dependencies, input: Collectio
       sourceDigest: operation.sourceDigest,
       target,
       receipt: row.receipt,
+      identity: {
+        clientId: operation.initiator.actor.clientId,
+        requestedBy: operation.initiator.actor.requestedBy,
+      },
       chunkIndex: Math.floor(Number(row.ordinal) / 100),
       deadline: workStepDeadline(),
     };
