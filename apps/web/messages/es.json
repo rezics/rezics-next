@@ -2055,6 +2055,8 @@
   "realm_shelf_loading": "Cargando…",
   "realm_boards_more": "Cargar más foros",
   "realm_publications_more": "Cargar más publicaciones",
+  "av_leave_unsaved": "Los motivos de tus decisiones y las acciones revisadas se guardan solo en esta página. Al salir se descarta este trabajo sin guardar.",
+  "av_leave_pending": "Una decisión sigue sin resolverse. Quédate para conservar la solicitud original y tus motivos. La solicitud aún puede completarse; salir no la cancela ni la revierte.",
   "av_accounts": "Cuentas",
   "av_review_title": "Revisar verificaciones de cuenta",
   "av_status_title": "Estado de verificación",

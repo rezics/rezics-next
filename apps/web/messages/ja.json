@@ -2055,6 +2055,8 @@
   "realm_shelf_loading": "読み込み中…",
   "realm_boards_more": "ボードをさらに読み込む",
   "realm_publications_more": "掲載をさらに読み込む",
+  "av_leave_unsaved": "判断理由と確認した操作は、このページ内だけに保持されます。離れると未保存の入力は失われます。",
+  "av_leave_pending": "結果が未確定の判断があります。元のコマンドと理由を保持するには、このページに留まってください。リクエストは完了する可能性があり、離れてもキャンセルや取り消しはできません。",
   "av_accounts": "アカウント",
   "av_review_title": "アカウント認証の審査",
   "av_status_title": "認証状況",

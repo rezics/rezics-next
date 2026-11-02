@@ -73,11 +73,12 @@ function ReviewerJourney({
 }
 
 export function AccountVerificationJourney({ accountId }: { accountId: string }) {
-  const { state, csrfToken } = useSession();
+  const { state, csrfToken, subject } = useSession();
+  const viewerId = state === 'signed-in' ? (subject ?? null) : null;
   const query = useQuery({
     ...personalRead,
     retry: false,
-    queryKey: ['account-verification', 'account', accountId],
+    queryKey: ['account-verification', 'account', viewerId, accountId],
     enabled: personalRead.enabled && state === 'signed-in',
     queryFn: ({ signal: caller }) =>
       withVerificationDeadline(
@@ -88,9 +89,16 @@ export function AccountVerificationJourney({ accountId }: { accountId: string })
   });
   return (
     <AccountVerificationPageView
+      key={viewerId}
       accountId={accountId}
-      page={query.isError ? { state: 'unavailable' } : (query.data?.page ?? { state: 'loading' })}
-      viewerId={query.data?.viewerId ?? null}
+      page={
+        !viewerId || (query.data && query.data.viewerId !== viewerId)
+          ? { state: 'denied' }
+          : query.isError
+            ? { state: 'unavailable' }
+            : (query.data?.page ?? { state: 'loading' })
+      }
+      viewerId={viewerId}
       canWrite={!!csrfToken && !query.isFetching}
       submit={submit}
       refresh={() => {

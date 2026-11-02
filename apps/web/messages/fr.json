@@ -2055,6 +2055,8 @@
   "realm_shelf_loading": "Chargement…",
   "realm_boards_more": "Charger plus de forums",
   "realm_publications_more": "Charger plus de publications",
+  "av_leave_unsaved": "Les motifs de vos décisions et les actions examinées sont conservés uniquement sur cette page. Partir supprime ce travail non enregistré.",
+  "av_leave_pending": "Une décision reste non résolue. Restez pour conserver la commande initiale et vos motifs. La demande peut encore aboutir ; partir ne l’annule pas et ne revient pas sur ses effets.",
   "av_accounts": "Comptes",
   "av_review_title": "Examiner les vérifications de compte",
   "av_status_title": "État de la vérification",

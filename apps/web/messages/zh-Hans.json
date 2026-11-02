@@ -2055,6 +2055,8 @@
   "realm_shelf_loading": "正在加载…",
   "realm_boards_more": "加载更多版块",
   "realm_publications_more": "加载更多发布",
+  "av_leave_unsaved": "决定理由和已确认的操作仅保留在此页面。离开将丢弃这些未保存的内容。",
+  "av_leave_pending": "一项决定的结果仍未确认。留在此页可保留原始命令和理由。请求仍可能完成；离开不会取消或撤销请求。",
   "av_accounts": "账号",
   "av_review_title": "审核账号认证",
   "av_status_title": "认证状态",

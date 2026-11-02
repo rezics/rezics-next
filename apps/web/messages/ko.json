@@ -2055,6 +2055,8 @@
   "realm_shelf_loading": "불러오는 중…",
   "realm_boards_more": "게시판 더 불러오기",
   "realm_publications_more": "게시 더 불러오기",
+  "av_leave_unsaved": "결정 사유와 검토한 작업은 이 페이지에만 보관됩니다. 나가면 저장하지 않은 내용이 사라집니다.",
+  "av_leave_pending": "아직 결과가 확인되지 않은 결정이 있습니다. 원래 명령과 사유를 유지하려면 머무르세요. 요청은 계속 완료될 수 있으며, 나가도 취소되거나 되돌려지지 않습니다.",
   "av_accounts": "계정",
   "av_review_title": "계정 인증 심사",
   "av_status_title": "인증 상태",

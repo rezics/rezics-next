@@ -2085,6 +2085,8 @@
   "realm_shelf_loading": "Loading…",
   "realm_boards_more": "Load more boards",
   "realm_publications_more": "Load more publications",
+  "av_leave_unsaved": "Your decision reasons and reviewed actions are kept only on this page. Leaving discards this unsaved work.",
+  "av_leave_pending": "A decision is still unresolved. Stay to keep the original command and your reasons. The request may still finish; leaving does not cancel or undo it.",
   "av_accounts": "Accounts",
   "av_review_title": "Review account verifications",
   "av_status_title": "Verification status",

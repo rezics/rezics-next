@@ -1,4 +1,16 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import { Link, useRouter } from '@tanstack/react-router';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -7,6 +19,116 @@ import { m } from '../paraglide/messages.js';
 import { readAttempt, saveAttempt, clearAttempt } from './attempt';
 import type { Operation, OperationResult } from './transport';
 import { verificationCommandTimeout, withVerificationDeadline } from './deadline';
+
+type DecisionDraft = { dirty: () => boolean; leave: () => void };
+const DecisionsContext = createContext<{
+  register: (draft: DecisionDraft) => () => void;
+  refresh: () => void;
+  navigate: (action: () => void) => void;
+} | null>(null);
+const departureMessages = () => ({
+  title: m.settings_verification_leave_title(),
+  unsaved: m.av_leave_unsaved(),
+  pending: m.av_leave_pending(),
+  discardTitle: m.settings_verification_leave_title(),
+  discardUnsaved: m.av_leave_unsaved(),
+  discardPending: m.av_leave_pending(),
+  discardAction: m.thread_authoring_leave(),
+});
+
+export function VerificationDeparture({ children }: { children: ReactNode }) {
+  return <AuthoringDepartureBoundary navigationMessages={departureMessages()}>{children}</AuthoringDepartureBoundary>;
+}
+
+/** Queue moves share one decision for every form; saved commands remain available for explicit recovery after leaving. */
+export function VerificationDecisions({
+  operation,
+  authorized,
+  children,
+}: {
+  operation: ReturnType<typeof useOperationAttempt>;
+  authorized: boolean;
+  children: ReactNode;
+}) {
+  const drafts = useRef(new Set<DecisionDraft>());
+  const [, update] = useState(0);
+  const refresh = useCallback(() => update((value) => value + 1), []);
+  const register = useCallback(
+    (draft: DecisionDraft) => {
+      drafts.current.add(draft);
+      refresh();
+      return () => {
+        drafts.current.delete(draft);
+        refresh();
+      };
+    },
+    [refresh],
+  );
+  const transition = useRef<(() => void) | null>(null);
+  const leave = () => {
+    for (const draft of drafts.current) draft.leave();
+    operation.retire();
+  };
+  const dirty = authorized && (!!operation.attempt || [...drafts.current].some((draft) => draft.dirty()));
+  const { requestDiscard } = useAuthoringDeparture(
+    dirty,
+    authorized && !!operation.attempt,
+    `${dirty}:${operation.attempt?.key ?? ''}`,
+    () => {
+      leave();
+      const action = transition.current;
+      transition.current = null;
+      action?.();
+    },
+    leave,
+    undefined,
+    departureMessages(),
+  );
+  return (
+    <DecisionsContext.Provider
+      value={{
+        register,
+        refresh,
+        navigate: (action) => {
+          if (!dirty) {
+            action();
+            return;
+          }
+          transition.current = action;
+          requestDiscard();
+        },
+      }}
+    >
+      {children}
+    </DecisionsContext.Provider>
+  );
+}
+
+export function useVerificationNavigation() {
+  return useContext(DecisionsContext)?.navigate ?? ((action: () => void) => action());
+}
+
+/** Native proof links open separately; in-app destinations participate in the page's router decision. */
+export function VerificationLink({
+  href,
+  children,
+  className,
+}: {
+  href: string;
+  children: ReactNode;
+  className: string;
+}) {
+  const router = useRouter({ warn: false });
+  return router ? (
+    <Link to={href} className={className}>
+      {children}
+    </Link>
+  ) : (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  );
+}
 
 export type SubmitOperation = (operation: Operation, signal?: AbortSignal) => Promise<OperationResult>;
 export function actionLabel(action: Operation['action']) {
@@ -41,7 +163,11 @@ export function useOperationAttempt(
   submit: SubmitOperation,
   refresh: () => void,
   canWrite = true,
+  authority = '',
 ) {
+  const [generation, setGeneration] = useState(0);
+  const binding = useRef({ scope, submit, authority });
+  binding.current = { scope, submit, authority };
   const [attempt, setAttempt] = useState<Operation | null>(null);
   const [command, setCommand] = useState<Operation | null>(null);
   const [busy, setBusy] = useState(false);
@@ -52,15 +178,19 @@ export function useOperationAttempt(
   }, [refresh]);
   const current = useRef<{
     scope: string | null;
+    submit: SubmitOperation;
+    authority: string;
     active: boolean;
     ready: boolean;
     locked: boolean;
     pending: Operation | null;
     controller: AbortController;
   } | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const lifetime = {
       scope,
+      submit,
+      authority,
       active: true,
       ready: false,
       locked: false,
@@ -86,7 +216,15 @@ export function useOperationAttempt(
       lifetime.active = false;
       lifetime.controller.abort();
     };
-  }, [scope]);
+  }, [scope, submit, authority, generation]);
+
+  const retire = useCallback(() => {
+    if (current.current) {
+      current.current.active = false;
+      current.current.controller.abort();
+    }
+    setGeneration((value) => value + 1);
+  }, []);
 
   async function run(operation: Operation) {
     const lifetime = current.current;
@@ -127,7 +265,14 @@ export function useOperationAttempt(
       outcome = { state: 'uncertain' };
     }
     // Navigation may have replaced this viewer/scope while the native command was running.
-    if (!lifetime.active || current.current !== lifetime) return;
+    if (
+      !lifetime.active ||
+      current.current !== lifetime ||
+      binding.current.scope !== lifetime.scope ||
+      binding.current.submit !== lifetime.submit ||
+      binding.current.authority !== lifetime.authority
+    )
+      return;
     if (['accepted', 'conflict', 'invalid'].includes(outcome.state)) {
       try {
         clearAttempt(sessionStorage, scope);
@@ -142,7 +287,7 @@ export function useOperationAttempt(
     setBusy(false);
     refreshCurrentList.current();
   }
-  return { attempt, command, busy, result, run };
+  return { attempt, command, busy, result, run, retire };
 }
 
 export function OperationFeedback({
@@ -183,12 +328,14 @@ export function OperationForm({
   disabled,
   onSubmit,
   draft,
+  reconciled = false,
 }: {
   actions: Operation['action'][];
   targetId: string;
   disabled: boolean;
   onSubmit: (operation: Operation) => void;
   draft?: Operation | null;
+  reconciled?: boolean;
 }) {
   const id = useId();
   const initial = draft?.targetId === targetId ? draft : null;
@@ -196,6 +343,28 @@ export function OperationForm({
   const [reason, setReason] = useState(initial?.reason ?? '');
   const [confirm, setConfirm] = useState(false);
   const hasReason = action === 'approve' || action === 'reject' || action === 'revoke';
+  const decisions = useContext(DecisionsContext);
+  const dirty = !reconciled && (confirm || reason.trim() !== '' || action !== actions[0]);
+  const latest = useRef({ dirty, leave: () => {} });
+  latest.current = {
+    dirty,
+    leave: () => {
+      setReason('');
+      setAction(actions[0]!);
+      setConfirm(false);
+    },
+  };
+  useLayoutEffect(
+    () => decisions?.register({ dirty: () => latest.current.dirty, leave: () => latest.current.leave() }),
+    [decisions?.register],
+  );
+  useLayoutEffect(() => decisions?.refresh(), [decisions?.refresh, dirty]);
+  useEffect(() => {
+    if (draft?.targetId === targetId && !latest.current.dirty) {
+      setAction(draft.action);
+      setReason(draft.reason);
+    }
+  }, [draft?.key, targetId]);
   return (
     <form
       className="space-y-4"

@@ -2055,6 +2055,8 @@
   "realm_shelf_loading": "正在載入…",
   "realm_boards_more": "載入更多看板",
   "realm_publications_more": "載入更多發布",
+  "av_leave_unsaved": "決定理由與已確認的操作僅保留在此頁面。離開將捨棄這些尚未儲存的內容。",
+  "av_leave_pending": "一項決定的結果仍未確認。留在此頁可保留原始命令與理由。請求仍可能完成；離開不會取消或撤銷請求。",
   "av_accounts": "帳號",
   "av_review_title": "審核帳號認證",
   "av_status_title": "認證狀態",

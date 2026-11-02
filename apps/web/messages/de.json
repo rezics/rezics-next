@@ -2055,6 +2055,8 @@
   "realm_shelf_loading": "Wird geladen…",
   "realm_boards_more": "Weitere Boards laden",
   "realm_publications_more": "Weitere Veröffentlichungen laden",
+  "av_leave_unsaved": "Deine Entscheidungsgründe und geprüften Aktionen werden nur auf dieser Seite aufbewahrt. Beim Verlassen gehen diese ungespeicherten Eingaben verloren.",
+  "av_leave_pending": "Eine Entscheidung ist noch ungeklärt. Bleibe, um den ursprünglichen Auftrag und deine Gründe zu behalten. Die Anfrage kann noch abgeschlossen werden; das Verlassen bricht sie nicht ab und macht sie nicht rückgängig.",
   "av_accounts": "Konten",
   "av_review_title": "Kontoverifizierungen prüfen",
   "av_status_title": "Verifizierungsstatus",
