@@ -200,7 +200,7 @@ type CreateIntent = {
   taxCode: string;
   pending: CreatorOfferMutation | null;
   key: string;
-  result: CreatorOfferResult;
+  result: CreatorOfferResult | null;
 };
 
 function CreatorOfferForm({
@@ -224,7 +224,7 @@ function CreatorOfferForm({
   const [busy, setBusy] = useState(false);
   const pending = useRef<CreatorOfferMutation | null>(resume?.pending ?? null);
   const submittedRules = useRef<readonly ConfiguredSaleCurrencyRule[] | null>(resume?.rules ?? null);
-  const locked = useRef(resume?.result.kind === 'saved');
+  const locked = useRef(resume?.result?.kind === 'saved');
   const key = useRef(resume?.key ?? createKey);
   const lifetime = useRef({ active: false });
   useLayoutEffect(() => {
@@ -237,13 +237,30 @@ function CreatorOfferForm({
   }, []);
   const fieldId = useId();
   // The selected edition and its price facts are the observed create operand, including on retry.
-  const [editor] = useState(resume?.editor ?? data.editor);
+  const [draftEditor, setDraftEditor] = useState(resume?.editor);
+  const editor = draftEditor ?? data.editor;
+  if (!draftEditor) key.current = createKey;
   const rules = submittedRules.current ?? (editor.kind === 'ready' ? editor.schema.configuredSaleCurrencies : []);
   const rule = rules.find((row) => row.currency === currency);
   const amount = parsedPrice(text, rule);
   const uncertain = result?.kind === 'retry';
   const frozen = busy || uncertain || result?.kind === 'saved';
   const canSubmit = data.selling && guard.isCurrent() && !!guard.csrfToken();
+
+  function keepDraft(changes: Partial<Pick<CreateIntent, 'intent' | 'title' | 'taxCode'>> = {}) {
+    setDraftEditor(editor);
+    memory.value = {
+      editor,
+      rules,
+      intent,
+      title,
+      taxCode,
+      pending: pending.current,
+      key: key.current,
+      result,
+      ...changes,
+    };
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -272,6 +289,7 @@ function CreatorOfferForm({
       };
       submittedRules.current = rules;
     }
+    setDraftEditor(editor);
     memory.value = {
       editor,
       rules,
@@ -370,7 +388,10 @@ function CreatorOfferForm({
                 value={title}
                 disabled={frozen}
                 onChange={(event) => {
-                  if (guard.isCurrent()) setTitle(event.target.value);
+                  if (guard.isCurrent() && !frozen) {
+                    keepDraft({ title: event.target.value });
+                    setTitle(event.target.value);
+                  }
                 }}
                 className="min-h-11"
               />
@@ -379,7 +400,10 @@ function CreatorOfferForm({
               rules={rules}
               intent={intent}
               onChange={(next) => {
-                if (guard.isCurrent()) setIntent(next);
+                if (guard.isCurrent() && !frozen) {
+                  keepDraft({ intent: next });
+                  setIntent(next);
+                }
               }}
               locale={locale}
               disabled={frozen}
@@ -394,7 +418,10 @@ function CreatorOfferForm({
                 value={taxCode}
                 disabled={frozen}
                 onChange={(event) => {
-                  if (guard.isCurrent()) setTaxCode(event.target.value);
+                  if (guard.isCurrent() && !frozen) {
+                    keepDraft({ taxCode: event.target.value });
+                    setTaxCode(event.target.value);
+                  }
                 }}
                 className="min-h-11"
               />

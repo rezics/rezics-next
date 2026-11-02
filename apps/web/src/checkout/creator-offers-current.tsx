@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Button } from '@rezics/ui/shadcn/button';
 import { useOperation } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
+import { m } from '../paraglide/messages.js';
 import { useCreatorCurrentOrigin } from './creator-current-origin';
 import { PendingPage } from '../shell/pending';
 import { CreatorOfferEditor } from './creator-offer-editor';
@@ -128,6 +130,18 @@ async function read(address: CreatorOfferAddress): Promise<Read> {
 }
 
 type Outcome = { kind: 'accepted'; value: Read } | { kind: 'failed' };
+
+/** An explicit nonprivate response withdraws display even when session preparation lost its subject. */
+function withdraws(value: Read, address: CreatorOfferAddress): boolean {
+  const sameAddress =
+    value.requested.kind === address.kind &&
+    (address.kind === 'list'
+      ? value.requested.kind === 'list' && value.requested.cursor === address.cursor
+      : value.requested.kind === 'editor' && value.requested.contentEditionId === address.contentEditionId);
+  const kind = 'page' in value.data ? value.data.page.kind : value.data.editor.kind;
+  return sameAddress && (kind === 'denied' || kind === 'closed' || kind === 'unavailable');
+}
+
 function CreatorRead({
   initial,
   address,
@@ -157,7 +171,9 @@ function CreatorRead({
       if (!origin.isCurrent()) return null;
       try {
         const value = await read(address);
-        return origin.isCurrent() && matches(value, subject, address) ? { kind: 'accepted', value } : null;
+        return origin.isCurrent() && (matches(value, subject, address) || withdraws(value, address))
+          ? { kind: 'accepted', value }
+          : null;
       } catch {
         return origin.isCurrent() ? { kind: 'failed' } : null;
       }
@@ -179,34 +195,61 @@ function CreatorRead({
     setDisplay({
       ...display,
       outcome: query.data,
-      value: query.data.kind === 'accepted' ? query.data.value : undefined,
+      value: query.data.kind === 'accepted' ? query.data.value : display.value,
     });
   }
   if (hydrated && !origin.isCurrent()) return <Notice kind="preparing" address={address} locale={locale} />;
   if (display.value && origin.isCurrent()) origin.workspace.read = display.value;
   const data = display.value?.data;
+  let content;
   if (!data)
-    return (
+    content = (
       <Notice
         kind={display.outcome?.kind === 'failed' ? 'unavailable' : 'preparing'}
         address={address}
         locale={locale}
       />
     );
-  if (
+  else if (
     !data.selling &&
     (('page' in data && data.page.kind === 'ready') || ('editor' in data && data.editor.kind === 'ready'))
   )
-    return <Notice kind="closed" address={address} locale={locale} />;
-  if ('page' in data)
-    return (
+    content = <Notice kind="closed" address={address} locale={locale} />;
+  else if ('page' in data)
+    content = (
       <CreatorOffersPage
         data={data}
         guard={guard}
+        onRefresh={() => void query.refetch()}
+        refreshing={query.isFetching}
         locale={locale}
         offerPageAvailable={offerPageAvailable ?? false}
         {...(address.kind === 'list' && address.cursor ? { cursor: address.cursor } : {})}
       />
     );
-  return <CreatorOfferEditor data={data} guard={guard} locale={locale} />;
+  else
+    content =
+      data.editor.kind === 'ready' ? (
+        <CreatorOfferEditor data={data} guard={guard} locale={locale} />
+      ) : (
+        <CreatorOfferEditor data={data} locale={locale} />
+      );
+  return (
+    <>
+      {display.outcome?.kind === 'failed' && (
+        <div role="alert" className="mb-6 space-y-3 rounded-xl border bg-card p-5 text-card-foreground">
+          <p>{m.creator_unavailable()}</p>
+          <Button
+            variant="outline"
+            className="min-h-11"
+            disabled={query.isFetching}
+            onClick={() => void query.refetch()}
+          >
+            {m.creator_offers_refresh()}
+          </Button>
+        </div>
+      )}
+      {content}
+    </>
+  );
 }
