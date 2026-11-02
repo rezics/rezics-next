@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -54,7 +54,21 @@ function statusText(status: Page['status'] | Outcome['status']) {
 }
 
 export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO }) {
+  const resource = useRef(initial.status === 'ready' ? initial.account.id : 'unavailable');
+  if (initial.status === 'ready') resource.current = initial.account.id;
+  // A replacement resource starts a fresh review and retires the previous resource's callbacks.
+  // A failed selection refresh does not discard a command whose result is still uncertain.
+  return <LifecycleReview key={resource.current} initial={initial} io={io} />;
+}
+
+function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
+  const id = useId();
+  const actionId = `${id}-action`;
+  const reasonId = `${id}-reason`;
+  const reasonHelpId = `${id}-reason-help`;
+  const titleId = `${id}-confirm-title`;
   const [page, setPage] = useState(initial);
+  const currentPage = useRef(initial);
   const [action, setAction] = useState<Action>('suspend');
   const [reason, setReason] = useState('');
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
@@ -66,27 +80,58 @@ export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO })
   const unresolved = useRef<Intent | null>(null);
   const lastRead = useRef(false);
   const ambiguous = useRef(false);
+  const retryable = useRef(false);
+  const active = useRef(true);
+  const currentConfirmation = useRef<Confirmation | null>(null);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+      currentConfirmation.current = null;
+    };
+  }, []);
+
+  function replaceConfirmation(value: Confirmation | null) {
+    currentConfirmation.current = value;
+    setConfirmation(value);
+  }
+  function updatePage(value: Page) {
+    currentPage.current = value;
+    setPage(value);
+  }
   const offered = page.status === 'ready' ? page.offered : [];
   const selected = offered.includes(action) ? action : offered[0];
   const canChoose = !busy && !locked && selected !== undefined;
 
   async function read() {
-    if (inFlight.current) return;
+    if (!active.current || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     try {
-      setPage(await io.read());
+      const next = await io.read();
+      if (active.current) updatePage(next);
     } catch {
-      setPage({ status: 'unavailable' });
+      if (active.current) updatePage({ status: 'unavailable' });
     } finally {
       // Replaying an uncertain command requires a bounded read attempt first, even if unavailable.
       lastRead.current = true;
       inFlight.current = false;
-      setBusy(false);
+      if (active.current) setBusy(false);
     }
   }
-  async function send(intent: Intent) {
-    if (inFlight.current || (unresolved.current !== null && unresolved.current !== intent)) return;
+  async function send(review: Confirmation) {
+    const intent = review.intent;
+    const current = currentPage.current;
+    if (
+      !active.current ||
+      currentConfirmation.current !== review ||
+      inFlight.current ||
+      current.status !== 'ready' ||
+      current.account.id !== intent.accountId ||
+      !current.offered.includes(intent.action) ||
+      (unresolved.current !== null && (unresolved.current !== intent || !retryable.current || !lastRead.current))
+    )
+      return;
     inFlight.current = true;
     unresolved.current = intent;
     lastRead.current = false;
@@ -99,17 +144,19 @@ export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO })
       // A BFF response can be lost after the native commit. Preserve exactly this intent.
       result = { status: 'uncertain', current: { status: 'unavailable' } };
     }
+    if (!active.current) return;
     if (['recorded', 'uncertain', 'pending'].includes(result.status)) ambiguous.current = true;
     // A later denial before receipt access cannot settle an earlier lost response.
     if (ambiguous.current && !['recorded', 'uncertain', 'pending'].includes(result.status))
       result = { status: 'uncertain', current: result.current ?? { status: 'unavailable' } };
     setOutcome(result);
-    if (result.current) setPage(result.current);
+    retryable.current = result.status === 'uncertain';
+    if (result.current) updatePage(result.current);
     if (!ambiguous.current) {
       // An explicit native not_applied result or a pre-command refusal permits editing again.
       unresolved.current = null;
       setLocked(false);
-      setConfirmation(null);
+      replaceConfirmation(null);
     }
     inFlight.current = false;
     setBusy(false);
@@ -154,8 +201,18 @@ export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO })
           className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!canChoose || !selected || reason.length > 2000) return;
-            setConfirmation({
+            if (
+              !active.current ||
+              page !== currentPage.current ||
+              inFlight.current ||
+              unresolved.current ||
+              currentConfirmation.current ||
+              !canChoose ||
+              !selected ||
+              reason.length > 2000
+            )
+              return;
+            replaceConfirmation({
               intent: parseIntent({
                 accountId: page.account.id,
                 action: selected,
@@ -171,9 +228,9 @@ export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO })
             <legend className="mb-3 font-semibold">{m.lifecycle_action()}</legend>
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="lifecycle-action">{m.lifecycle_action()}</FieldLabel>
+                <FieldLabel htmlFor={actionId}>{m.lifecycle_action()}</FieldLabel>
                 <NativeSelect
-                  id="lifecycle-action"
+                  id={actionId}
                   className="w-full"
                   value={selected ?? ''}
                   onChange={(event) => setAction(event.target.value as Action)}
@@ -189,16 +246,16 @@ export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO })
                 </NativeSelect>
               </Field>
               <Field>
-                <FieldLabel htmlFor="lifecycle-reason">{m.lifecycle_reason()}</FieldLabel>
+                <FieldLabel htmlFor={reasonId}>{m.lifecycle_reason()}</FieldLabel>
                 <Textarea
-                  id="lifecycle-reason"
+                  id={reasonId}
                   className="min-h-28"
                   maxLength={2000}
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
-                  aria-describedby="lifecycle-reason-help"
+                  aria-describedby={reasonHelpId}
                 />
-                <FieldDescription id="lifecycle-reason-help">{m.lifecycle_reason_help()}</FieldDescription>
+                <FieldDescription id={reasonHelpId}>{m.lifecycle_reason_help()}</FieldDescription>
               </Field>
             </FieldGroup>
             <Button type="submit">{m.lifecycle_review()}</Button>
@@ -206,8 +263,8 @@ export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO })
         </form>
       )}
       {confirmation && (
-        <section aria-labelledby="lifecycle-confirm-title" className="flex flex-col gap-4 rounded-lg border p-5">
-          <h2 id="lifecycle-confirm-title" className="text-lg font-semibold">
+        <section aria-labelledby={titleId} className="flex flex-col gap-4 rounded-lg border p-5">
+          <h2 id={titleId} className="text-lg font-semibold">
             {m.lifecycle_confirmation()}
           </h2>
           <dl className="flex flex-col gap-2">
@@ -235,11 +292,17 @@ export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO })
             <div className="flex flex-wrap gap-3">
               <Button
                 disabled={busy || !offered.includes(confirmation.intent.action)}
-                onClick={() => void send(confirmation.intent)}
+                onClick={() => void send(confirmation)}
               >
                 {m.lifecycle_confirm()}
               </Button>
-              <Button variant="outline" disabled={busy} onClick={() => setConfirmation(null)}>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  if (!inFlight.current && currentConfirmation.current === confirmation) replaceConfirmation(null);
+                }}
+              >
                 {m.lifecycle_cancel()}
               </Button>
             </div>
@@ -267,7 +330,7 @@ export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO })
             <Button
               variant="outline"
               disabled={busy || !lastRead.current || !offered.includes(confirmation.intent.action)}
-              onClick={() => void send(confirmation.intent)}
+              onClick={() => void send(confirmation)}
             >
               {m.lifecycle_retry_same()}
             </Button>
