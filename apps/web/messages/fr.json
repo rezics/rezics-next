@@ -4352,5 +4352,6 @@
   "library_dynamic_page_reader_empty": "Aucun élément sur cette page.",
   "library_dynamic_page_reader_first_page": "Première page des éléments",
   "space_setup_details_heading": "En savoir plus sur la configuration",
-  "space_setup_details_name_unavailable": "Nom indisponible"
+  "space_setup_details_name_unavailable": "Nom indisponible",
+  "moderation_controls_details_summary": "Filtres sélectionnés : {status} ; {kind} ; {order}."
 }

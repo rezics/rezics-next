@@ -270,8 +270,23 @@ export function ModerationReportsView({
   const selectedQuery = new URLSearchParams(selection).toString();
   const reportsHref = `?${filters ? `${filters}&` : ''}${selectedQuery}`;
   const appealsHref = `?tab=appeals${filters ? `&${filters}` : ''}`;
+  const selectedStatus = {
+    all: m.moderation_filter_all_status(),
+    pending: m.moderation_filter_pending(),
+    resolved: m.moderation_filter_resolved(),
+  }[selection.status];
+  const selectedKind = {
+    all: m.moderation_filter_all_kinds(),
+    board: m.moderation_queue_board(),
+    thread: m.moderation_queue_thread(),
+    post: m.moderation_queue_post(),
+  }[selection.targetKind];
+  const selectedOrder = {
+    newest: m.moderation_filter_newest(),
+    oldest: m.moderation_filter_oldest(),
+  }[selection.order];
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-6 text-foreground">
+    <article className="mx-auto w-full min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]">
       <header className="space-y-3">
         {boardId ? (
           <a
@@ -290,28 +305,54 @@ export function ModerationReportsView({
               : m.moderation_queue_board_scope()}
         </p>
       </header>
-      <nav aria-label={m.moderation_tabs_label()} className="flex gap-4 border-b pb-2">
+      <nav aria-label={m.moderation_tabs_label()} className="flex min-w-0 flex-wrap gap-2 border-b pb-2">
         {tab === 'reports' ? (
-          <span aria-current="page" className="font-semibold">
+          <a
+            href={reportsHref}
+            aria-current="page"
+            className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-primary px-3 py-2 font-semibold underline underline-offset-4 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             {m.moderation_reports_tab()}
-          </span>
+          </a>
         ) : (
-          <a href={reportsHref}>{m.moderation_reports_tab()}</a>
+          <a
+            href={reportsHref}
+            className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-transparent px-3 py-2 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {m.moderation_reports_tab()}
+          </a>
         )}
         {tab === 'appeals' ? (
-          <span aria-current="page" className="font-semibold">
+          <a
+            href={appealsHref}
+            aria-current="page"
+            className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-primary px-3 py-2 font-semibold underline underline-offset-4 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             {m.moderation_appeals_tab()}
-          </span>
+          </a>
         ) : (
-          <a href={appealsHref}>{m.moderation_appeals_tab()}</a>
+          <a
+            href={appealsHref}
+            className="inline-flex min-h-11 min-w-11 max-w-full items-center border-b-2 border-transparent px-3 py-2 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {m.moderation_appeals_tab()}
+          </a>
         )}
       </nav>
-      <fieldset className="flex flex-wrap items-end gap-3" disabled={!onSelection || retired}>
+      <p id={`${controlsId}-summary`} className="min-w-0 text-sm leading-relaxed text-muted-foreground">
+        {m.moderation_controls_details_summary({ status: selectedStatus, kind: selectedKind, order: selectedOrder })}
+      </p>
+      <fieldset
+        className="flex min-w-0 flex-wrap items-end gap-3"
+        aria-describedby={`${controlsId}-summary`}
+        disabled={!onSelection || retired}
+      >
         <legend className="sr-only">{m.moderation_filter_label()}</legend>
-        <label htmlFor={`${controlsId}-status`} className="space-y-1 text-sm">
+        <label htmlFor={`${controlsId}-status`} className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
           <span className="block">{m.moderation_filter_status()}</span>
           <NativeSelect
             id={`${controlsId}-status`}
+            className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11"
             value={selection.status}
             onChange={(event) => select({ ...selection, status: event.target.value as ReportSelection['status'] })}
           >
@@ -320,10 +361,11 @@ export function ModerationReportsView({
             <NativeSelectOption value="resolved">{m.moderation_filter_resolved()}</NativeSelectOption>
           </NativeSelect>
         </label>
-        <label htmlFor={`${controlsId}-kind`} className="space-y-1 text-sm">
+        <label htmlFor={`${controlsId}-kind`} className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
           <span className="block">{m.moderation_filter_kind()}</span>
           <NativeSelect
             id={`${controlsId}-kind`}
+            className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11"
             value={selection.targetKind}
             onChange={(event) =>
               select({ ...selection, targetKind: event.target.value as ReportSelection['targetKind'] })
@@ -335,10 +377,11 @@ export function ModerationReportsView({
             <NativeSelectOption value="post">{m.moderation_queue_post()}</NativeSelectOption>
           </NativeSelect>
         </label>
-        <label htmlFor={`${controlsId}-order`} className="space-y-1 text-sm">
+        <label htmlFor={`${controlsId}-order`} className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
           <span className="block">{m.moderation_filter_order()}</span>
           <NativeSelect
             id={`${controlsId}-order`}
+            className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11"
             value={selection.order}
             onChange={(event) => select({ ...selection, order: event.target.value as ReportSelection['order'] })}
           >
@@ -346,7 +389,12 @@ export function ModerationReportsView({
             <NativeSelectOption value="oldest">{m.moderation_filter_oldest()}</NativeSelectOption>
           </NativeSelect>
         </label>
-        <Button type="button" variant="outline" onClick={() => select(DEFAULT_REPORT_SELECTION)}>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+          onClick={() => select(DEFAULT_REPORT_SELECTION)}
+        >
           {m.moderation_filter_reset()}
         </Button>
       </fieldset>

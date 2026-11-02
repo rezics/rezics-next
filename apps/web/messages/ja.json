@@ -4352,5 +4352,6 @@
   "library_dynamic_page_reader_empty": "このページには項目がありません。",
   "library_dynamic_page_reader_first_page": "項目の最初のページ",
   "space_setup_details_heading": "セットアップについて",
-  "space_setup_details_name_unavailable": "名前を取得できません"
+  "space_setup_details_name_unavailable": "名前を取得できません",
+  "moderation_controls_details_summary": "選択中の絞り込み：{status}、{kind}、{order}。"
 }
