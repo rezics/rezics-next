@@ -619,7 +619,8 @@ test('independent publication creation, local corrections, immutable recovery an
     const freshPicker = scope().getByRole('combobox', { name: publisherName }) as HTMLInputElement;
     expect(freshPicker.value).toBe('');
     await act(async () => user.type(freshPicker, 'Press'));
-    await act(async () => user.click(await optionsInDocument.findByRole('option', { name: /Supplied publisher/ })));
+    const freshChoice = await optionsInDocument.findByRole('option', { name: /Supplied publisher/ });
+    await act(async () => user.click(freshChoice));
     await click(m.publication_submit());
     await scope().findByRole('link', { name: m.catalogue_create_open() });
     expect(publisher.commands[0]!.item.statements['schema:publisher']![0]!.value).toEqual({
