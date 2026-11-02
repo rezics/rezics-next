@@ -24,10 +24,7 @@ export function nativeSubjectResolveEnvelope(
   const alias = subjectAlias(prefix);
   const indices = generations.map((entry) => {
     const name = subjectIndexName(prefix, entry.generation);
-    const aliases = [
-      ...(entry.writer ? [entry.writer] : []),
-      ...(active === entry.generation ? [alias] : []),
-    ];
+    const aliases = [...(entry.writer ? [entry.writer] : []), ...(active === entry.generation ? [alias] : [])];
     return {
       name,
       attributes: entry.hidden ? ['open', 'hidden'] : ['open'],
