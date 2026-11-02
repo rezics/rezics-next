@@ -267,6 +267,89 @@ test('empty, one and multiple current choices keep exact names, source baselines
   });
 });
 
+test('classification choices follow exact reread IDs while staged private and uncertain intent stays fixed', async () => {
+  await mounted(async ({ host, render, choose, enter }) => {
+    const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
+    const { statementInput } = await import('../src/features/catalogue/statement-editor');
+    const { m } = await import('../src/paraglide/messages.js');
+    const setup = await supplied(2, 'uncertain');
+    const sources = setup.read.public.subject.statements[property]!;
+    const sourceA = sources[0]!;
+    const sourceB = sources[1]!;
+    sourceA.references[0]!.parts[0]!.value = { type: 'value', content: 'https://archive.example/source-a' };
+    sourceB.references[0]!.parts[0]!.value = { type: 'value', content: 'https://archive.example/source-b' };
+    let updateRead!: (ids: string[]) => void;
+    function CurrentRead() {
+      const [read, setRead] = useState(setup.read);
+      updateRead = (ids) => {
+        const next = structuredClone(setup.read);
+        const current = next.public.subject.statements[property]!;
+        next.public.subject.statements[property] = ids.map((id) => current.find((statement) => statement.id === id)!);
+        setRead(next);
+      };
+      return (
+        <>
+          <CharacterClassification {...setup} read={read} property={property} locale="en" search={async () => []} />
+          <CharacterClassification {...setup} read={read} property={property} locale="en" search={async () => []} />
+        </>
+      );
+    }
+    await render(<CurrentRead />);
+    const fields = () => [...host.querySelectorAll('h3')].map((heading) => heading.closest<HTMLElement>('section')!);
+    const select = (index: number) => fields()[index]!.querySelector<HTMLSelectElement>('select')!;
+    const value = (index: number) =>
+      fields()[index]!.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!;
+
+    await choose(select(0), sourceA.id);
+    await choose(select(1), sourceA.id);
+    await act(async () => updateRead([sourceB.id, sourceA.id]));
+    expect([select(0).value, select(1).value]).toEqual([sourceA.id, sourceA.id]);
+    await act(async () => button(fields()[0]!, m.facts_edit_field()).click());
+    expect(value(0).value).toBe(concept);
+    expect(fields()[0]!.querySelector<HTMLInputElement>('input[type="url"]')!.value).toBe(
+      'https://archive.example/source-a',
+    );
+
+    await act(async () => updateRead([sourceB.id]));
+    expect(select(1).value).toBe('');
+    expect(button(fields()[1]!, m.facts_edit_field()).disabled).toBe(true);
+    expect(button(fields()[1]!, m.facts_add_value()).disabled).toBe(false);
+    expect(fields()[0]!.textContent).toContain(m.facts_private());
+    expect(value(0).value).toBe(concept);
+    expect(fields()[0]!.querySelector<HTMLInputElement>('input[type="url"]')!.value).toBe(
+      'https://archive.example/source-a',
+    );
+    await choose(select(1), sourceB.id);
+    await act(async () => button(fields()[1]!, m.facts_edit_field()).click());
+    expect(value(1).value).toBe(replacement);
+    await act(async () => button(fields()[1]!, m.curation_view_discard()).click());
+
+    const edited = 'https://archive.example/source-a-edited';
+    await enter(fields()[0]!.querySelector<HTMLInputElement>('input[type="url"]')!, edited);
+    await act(async () => button(fields()[0]!, m.correction_submit()).click());
+    expect(fields()[0]!.textContent).toContain(m.facts_uncertain());
+    const command = setup.commands[0]!;
+    const expected = statementInput(sourceA);
+    expected.references[0]!.parts[0]!.value = { type: 'value', content: edited };
+    expect(command.statement).toEqual(expected);
+    const body = structuredClone(command.statement);
+
+    await act(async () => updateRead([]));
+    expect(setup.commands[0]).toBe(command);
+    expect(command.key).toBe(setup.commands[0]!.key);
+    expect(command.statement).toEqual(body);
+    expect(value(0).value).toBe(concept);
+    expect(fields()[0]!.querySelector<HTMLInputElement>('input[type="url"]')!.value).toBe(edited);
+    expect(fields()[1]!.querySelector('select')).toBeNull();
+    expect(button(fields()[1]!, m.facts_edit_field()).disabled).toBe(false);
+    await act(async () => button(fields()[1]!, m.facts_edit_field()).click());
+    expect(value(1).value).toBe('');
+    await act(async () => button(fields()[0]!, m.correction_retry()).click());
+    expect(setup.commands[1]).toBe(command);
+    expect(setup.commands[1]!.statement).toEqual(body);
+  });
+});
+
 test('multivalued Add stages a blank private value; current Edit preserves full supplied fallback title and evidence', async () => {
   await mounted(async ({ host, render }) => {
     const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');

@@ -99,7 +99,13 @@ export function CharacterClassification({
   const rememberedLabel = useRef<ReturnType<typeof pageText> | undefined>(undefined);
   if (admitted) rememberedLabel.current = pageText(definition.labels, locale);
   const selected = read.public.subject.statements[property] ?? [];
+  const latestRead = useRef(read);
+  latestRead.current = read;
   const [source, setSource] = useState(selected.length === 1 ? selected[0]!.id : '');
+  const sourceChoice = selected.some((statement) => statement.id === source) ? source : '';
+  useLayoutEffect(() => {
+    if (source && !selected.some((statement) => statement.id === source)) setSource('');
+  }, [selected, source]);
   const [draft, setDraft] = useState<FactDraft>();
   const [picked, setPicked] = useState<EntityPickerSubject[]>([]);
   const [busy, setBusy] = useState(false);
@@ -189,9 +195,18 @@ export function CharacterClassification({
   const stage = (id: string | null) => {
     if (!usable() || !admitted) return;
     if (running.current || (draft && factLocked(draft))) return;
-    const source = selected.find((statement) => statement.id === id);
-    if (id && !source) return;
-    const baseline = source ? statementInput(source) : null;
+    const currentRead = latestRead.current;
+    const currentDefinition = currentRead.release.properties[property];
+    if (
+      !currentRead.release.types[currentRead.public.subject.type]?.properties.includes(property) ||
+      currentDefinition?.datatype !== 'wikibase-item' ||
+      currentDefinition.relation?.group !== 'classification'
+    )
+      return;
+    const currentSelected = currentRead.public.subject.statements[property] ?? [];
+    const selectedSource = currentSelected.find((statement) => statement.id === id);
+    if (id && !selectedSource) return;
+    const baseline = selectedSource ? statementInput(selectedSource) : null;
     setConfirmation(undefined);
     setPicked([]);
     setReviewing(false);
@@ -300,7 +315,7 @@ export function CharacterClassification({
                   id={selectedValueId}
                   className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring md:pointer-fine:[&_select]:min-h-8"
                   aria-label={m.facts_choose_value({}, o)}
-                  value={source}
+                  value={sourceChoice}
                   onChange={(event) => {
                     if (usable()) setSource(event.target.value);
                   }}
@@ -317,8 +332,8 @@ export function CharacterClassification({
             <Button
               className={actionClassName}
               variant="outline"
-              disabled={!!selected.length && !source}
-              onClick={() => stage(source || null)}
+              disabled={!!selected.length && !sourceChoice}
+              onClick={() => stage(sourceChoice || null)}
             >
               {m.facts_edit_field({}, o)}
             </Button>
