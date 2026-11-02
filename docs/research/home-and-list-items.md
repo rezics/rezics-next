@@ -519,16 +519,16 @@ native writer. No slice changes product scope, APIs or frozen files.
    producer coverage or installed question membership.
 4. **Unify Search, discovery and catalogue membership/credits.** Consume the existing result/member/cover adapters
    across every delegating route/mount, including default results, discovery, Realm discovery, `CoverList` and
-   qualified credits. Preserve multilingual identity, work/role/
-   language qualifiers, facts, citations, rating context and independent source links; suggestion controls remain
+   qualified credits. Preserve multilingual identity, work/role/language qualifiers, facts, citations, rating
+   context and independent source links; suggestion controls remain
    separate. Search owns native result/constraint semantics. The sequential Web selected-label consumer touches
    only `search/search.tsx`, preserving delivered `results.tsx`: human unavailable kind/property/value labels,
    exact selection/URL/constraint in labeled details, clear-one/all and the existing header authority. Closed rows,
    one bounded native request and SSR fences remain intact; no chip fetch, substitute filter or broader query.
 5. **Unify Library across list/grid and Collection workflows.** Cover shelf, Continue, Collection browser/page/
    editor/publication, My Collections/Following, copies, labels, logs and progress. Receive existing shelf/cover/
-   table, selection, sort, log and progress consumers rather than repeating the obsolete no-op sorting repair. Preserve reorder,
-   loaded-page selection, immutable logs, privacy and unknown progress. Public/unlisted/private Collections and
+   table, selection, sort, log and progress consumers rather than repeating the obsolete no-op sorting repair.
+   Preserve reorder, loaded-page selection, immutable logs, privacy and unknown progress. Public/unlisted/private Collections and
    mounted Zones still need actual default-consumer evidence. Commerce retains whole-selection bulk/preparation
    and native lifetimes. Its next complete Progress index contract receives the `SessionRow` missing-unit and
    standalone Next-anchor obligations: preserve the current human unavailable label and accessible exact mode/unit
@@ -545,8 +545,8 @@ native writer. No slice changes product scope, APIs or frozen files.
    added name lookup or I/O, preserving the explicit transfer lookup and all mutation/uncertainty behavior.
    Accounts retains authorization; public-account, native moderation, Realm/Home and erasure owners stay separate.
 7. **Unify commerce and review summaries.** Cover orders, offer/access/sales, statements, editions and provider
-   candidates. Receive creator offer/sales and provider/review family consumers,
-   recognizable offer titles and edition terminal recovery. Preserve ledger/case bodies, captured price,
+   candidates. Receive creator offer/sales and provider/review family consumers, recognizable offer titles and
+   edition terminal recovery. Preserve ledger/case bodies, captured price,
    attribution, fixed-edition/licence terms, current permissions and uncertain-result recovery. Buyer list/detail
    remain Commerce deliveries; a family wrapper owns no business protocol. Sales' default 503/native Client
    generation is a separate producer obligation, not solved by row presentation. Provider Context choices,
@@ -561,8 +561,8 @@ native writer. No slice changes product scope, APIs or frozen files.
    next complete creation journey for explicit 44px phone/coarse-pointer size, full wrapping and visible focus,
    without editing frozen generated button variants. It is not a standalone writer or completed-delivery retry;
    source geometry is not measured visual proof. Completion accounts for each active string as removed,
-   contextualized or retained, rather than replacing technical terminology wholesale. Keep essential consequences, permission/status, unknown outcomes
-   and decision identity visible; optional technical details must not swallow safety copy. Unknown means
+   contextualized or retained, rather than replacing technical terminology wholesale. Keep essential consequences,
+   permission/status, unknown outcomes and decision identity visible; optional technical details must not swallow safety copy. Unknown means
    unavailable, explicit deletion alone permits a deleted tombstone, and withheld identity never enters DOM or
    attributes, even closed details. Exact dangerous operands remain inspectable before confirmation.
 9. **Add richer Home summaries only with adopted producer capabilities.** Existing title/description/cover,
@@ -577,8 +577,8 @@ native writer. No slice changes product scope, APIs or frozen files.
     the family with real identity, independent actions, native order/budgets, states and recovery before old bodies
     or compatibility paths retire, including `MobileFeedCard`. Connected patterns alone do not prove retirement.
     Publish the integrated Storybook revision. Keep source/integration/check/native/visual/publication evidence
-    distinct, record the actual deployed pin and
-    establish renderer/shared-UI/story closure before treating older images as current. Original keyboard, touch,
+    distinct, record the actual deployed pin and establish renderer/shared-UI/story closure before treating older
+    images as current. Original keyboard, touch,
     responsive, locale, permission and native acceptance remains owed; this adoption supplies none of it.
 
 ### Acceptance scenarios to carry into those briefs
@@ -637,8 +637,8 @@ Richer summaries are bounded owner capabilities, not presumed installed backend 
 recommendations, custom feeds, autoplay and another Home rail remain outside scope. Existing source repairs,
 including Home scaffolding and Realm identity, supersede historical inventory defects; current Progress source
 already has a human missing-unit label, accessible enum details and honest unavailable historical meaning, so
-its next index contract preserves that work while receiving the anchor obligation. No completed consumer is reopened
-merely because publication is stale.
+its next index contract preserves that work while receiving the anchor obligation. No completed consumer is
+reopened merely because publication is stale.
 
 Research is linked evidence, the Web Goal owns requirements, and the slices above retain complete original
 journeys and owner boundaries. Neither these documents nor folder observations establish all-state, keyboard,
