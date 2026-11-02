@@ -37,6 +37,7 @@ export type CollectionReadAddress = {
   cursor?: string | undefined;
   editor?: boolean | undefined;
   search?: Record<string, string | string[]> | undefined;
+  filter?: FilterDocument | undefined;
 };
 
 /** Nonsecret evidence of the prepared server viewer and the exact addressed read. */
@@ -53,6 +54,7 @@ export function collectionRequestVariant(input: CollectionReadAddress, kind: 'pa
     input.cursor || null,
     input.editor === true,
     Object.entries(input.search ?? {}).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
+    input.filter ?? null,
   ]);
 }
 

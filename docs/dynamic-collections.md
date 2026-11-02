@@ -40,6 +40,8 @@ actual viewer, Collection, validated filter and sort, and accepted release/meani
 record and its work intent may be written. This cannot materialize a Collection, grant access, or perform a receipt,
 domain event, rename, follow, or other resource mutation. Authorization, current source eligibility, and privacy are
 checked before disclosure and revalidated by the owning admitted plan; preparation is never cached authority.
+Collection list previews remain read-only and never reserve Members preparation; the common Members GET is the sole
+preparation entry point because it carries the current bound Source and filter read.
 Accounts owns the additive fenced event-free operational transaction plus atomic durable intent/native SPEC.
 Use only its actual [Core contract/export](../services/kernel/src/command/README.md#operational-transactions):
 the adopted mechanism uses same-client DBOS `enqueueInTransaction`, native Access/current-T finalization and

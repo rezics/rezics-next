@@ -2356,11 +2356,9 @@ dominant Type, whole-Source readiness or complete absence of cover images.
 
 Anonymous previews use the existing current public read eligibility and the actual anonymous Actor. The
 direct preview executes no writes, operational transaction or retained preparation, and never substitutes a
-curator. Metadata-only list/detail requests do not invoke the preview producer. For authenticated same-owner curated sources, `collection-preview-work.ts` binds the common
-`MembersPreparation.reserve` boundary with internal ordinal order. One unresolved parent receives at most
-one reservation per list, rotating through the current page in each reader instance. Other-account and
-logical/dynamic sources receive no retained authority. The unfiltered definition uses the shared FilterDocument
-Type tautology at the current immutable release; unknown evidence remains unknown under NOT.
+curator. Metadata-only list/detail requests do not invoke a preparation producer. Collection list previews remain
+read-only for every viewer; only the common Members GET may reserve preparation because it carries the exact
+current Source and filter binding.
 
 The exact producer declarations include `id | ordinal`. Native reservation, touch and step admission persist
 private episodes and locator-only intents. `readRetainedDefinition` recovers their exact canonical meaning and

@@ -2,7 +2,11 @@ import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { loadDynamicMembers, loadEditableCollectionPage } from '../src/library/collection-load';
+import {
+  collectionRequestVariant,
+  loadDynamicMembers,
+  loadEditableCollectionPage,
+} from '../src/library/collection-load';
 import { admitsCollectionOperation, readCollectionViewerActions } from '../src/library/collection-records';
 import { collectionMemberRatio, collectionPageAddress } from '../src/library/collection-presentation';
 
@@ -11,6 +15,16 @@ const { CollectionReadMembers } = await import('../src/library/collection-page')
 
 const id = '0192f3a0-6c1e-7b2a-9d4e-000000000004';
 const stamp = '2026-10-30T12:00:00.000Z';
+
+test('Members retry provenance binds the exact filter along with Collection and cursor', () => {
+  const input = { id, cursor: 'opaque+cursor', filter: { type: { in: ['schema:Book'] } } };
+  const request = collectionRequestVariant(input, 'members');
+  expect(collectionRequestVariant(structuredClone(input), 'members')).toBe(request);
+  expect(
+    collectionRequestVariant({ ...input, filter: { type: { in: ['schema:Movie'] } } }, 'members'),
+  ).not.toBe(request);
+  expect(collectionRequestVariant({ ...input, cursor: 'another-cursor' }, 'members')).not.toBe(request);
+});
 
 test('Collection read page has real owner actions, readable member rows and complete page states', async () => {
   const calls: Request[] = [];
