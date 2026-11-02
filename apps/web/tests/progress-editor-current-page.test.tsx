@@ -171,7 +171,12 @@ async function mount(initial: LoadedPage, phone = false) {
   const originalMatchMedia = window.matchMedia;
   if (phone)
     window.matchMedia = ((query: string) =>
-      ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} }) as unknown as MediaQueryList) as typeof window.matchMedia;
+      ({
+        matches: true,
+        media: query,
+        addEventListener() {},
+        removeEventListener() {},
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
   await router.load();
   const tree = (p: Page | null) => (
     <StrictMode>
@@ -427,9 +432,9 @@ test('same-page retries keep uncertain intent, successful saves refresh authorit
     };
     await settle(() => histories[0]!.work.resolve(authoritative));
     expect(h.body.queryByRole('dialog')).toBeNull();
-        const savedUnload = new window.Event('beforeunload', { cancelable: true });
-        window.dispatchEvent(savedUnload);
-        expect(savedUnload.defaultPrevented).toBe(false);
+    const savedUnload = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(savedUnload);
+    expect(savedUnload.defaultPrevented).toBe(false);
     expect(h.host.textContent).toContain('authoritative-unit');
     await h.show(initial); // An ordinary rerender with the same loader object must not reset state.
     await h.click(m.library_progress_update());

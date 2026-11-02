@@ -676,7 +676,8 @@ function SessionEditor({
     );
   }
 
-  const pendingCommand = lifetime.current?.custody.retry !== undefined || lifetime.current?.custody.flight !== undefined;
+  const pendingCommand =
+    lifetime.current?.custody.retry !== undefined || lifetime.current?.custody.flight !== undefined;
   const baseline = draftBaseline.current;
   const draftDirty =
     draftOpened &&
@@ -1322,10 +1323,7 @@ function SessionEditor({
             {editorContent}
           </BottomSheet>
         ) : (
-          <Dialog
-            open={editing}
-            onOpenChange={(value) => (value ? edit(() => setEditing(true)) : closeUpdate())}
-          >
+          <Dialog open={editing} onOpenChange={(value) => (value ? edit(() => setEditing(true)) : closeUpdate())}>
             <DialogContent className="max-h-[85dvh] overflow-y-auto">
               <DialogTitle>{m.library_progress_update()}</DialogTitle>
               <input type="hidden" name="idempotencyKey" value={key} />

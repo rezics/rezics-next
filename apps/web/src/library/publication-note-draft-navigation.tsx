@@ -220,9 +220,8 @@ export function usePublicationNoteDraftNavigation(options: DraftOptions) {
   return {
     requestNavigation: () =>
       Promise.resolve(
-        navigation?.requestNavigation(
-          document.activeElement instanceof HTMLElement ? document.activeElement : null,
-        ) ?? false,
+        navigation?.requestNavigation(document.activeElement instanceof HTMLElement ? document.activeElement : null) ??
+          false,
       ),
   };
 }
