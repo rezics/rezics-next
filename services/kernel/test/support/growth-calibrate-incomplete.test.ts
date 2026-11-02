@@ -9,9 +9,7 @@ const profile = (check: string, scales: number[]): string =>
     repetitions: scales.map(() => [{ rows: 1, blocks: 1, statements: 1 }]),
     relationSizes: scales.map(() => ({})),
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
-    shadow: Object.fromEntries(
-      ['rows', 'blocks', 'statements'].map((metric) => [metric, { outcome: 'compatible' }]),
-    ),
+    shadow: Object.fromEntries(['rows', 'blocks', 'statements'].map((metric) => [metric, { outcome: 'compatible' }])),
   });
 
 test('explains omitted calibration checks without inventing a calibration', () => {

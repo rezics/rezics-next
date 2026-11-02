@@ -370,10 +370,7 @@ function omittedTable(read: GrowthProfileRead): string[] {
 }
 
 function incompleteCalibrationError(read: GrowthProfileRead, metrics: readonly GrowthProfileMetric[]): Error {
-  const rows = [
-    '| File | Check | Problem | Missing runs | Scales by run |',
-    '| --- | --- | --- | --- | --- |',
-  ];
+  const rows = ['| File | Check | Problem | Missing runs | Scales by run |', '| --- | --- | --- | --- | --- |'];
   for (const item of read.omitted) {
     const scaleSets = new Set(item.scalesByRun.map(({ scales }) => JSON.stringify(scales)));
     const problems = [
