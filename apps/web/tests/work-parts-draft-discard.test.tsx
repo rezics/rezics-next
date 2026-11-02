@@ -151,12 +151,30 @@ test('Work Parts orients only current keyboard openings, closes independent draf
     expect(editors()[0]).toBe(firstEditor);
 
     const close = await click(m.work_parts_draft_close(), firstEditor);
-    await click(m.candidate_cancel(), firstEditor);
+    const retain = (name: string, editor: HTMLElement) => {
+      const button = [...editor.querySelectorAll('button')].find((item) => item.textContent?.trim() === name)!;
+      return Reflect.get(button, Object.keys(button).find((key) => key.startsWith('__reactProps$'))!).onClick;
+    };
+    const cancelledConfirm = retain(m.work_parts_draft_discard(), firstEditor);
+    const cancelledCancel = retain(m.candidate_cancel(), firstEditor);
+    await act(async () => {
+      cancelledCancel();
+      cancelledConfirm();
+    });
+    expect(editors()).toHaveLength(2);
     expect(firstEditor.textContent).not.toContain(m.work_parts_draft_discard());
     expect(firstEditor.querySelector('input[id$="qualifier-0"]')).toBe(firstPosition);
     expect(firstPosition!.value).toBe('41');
     expect(host.ownerDocument.activeElement).toBe(close);
+    await input(firstPosition!, '42');
     await click(m.work_parts_draft_close(), firstEditor);
+    await act(async () => {
+      cancelledConfirm();
+      cancelledCancel();
+    });
+    expect(host.contains(firstEditor)).toBe(true);
+    expect(firstEditor.textContent).toContain(m.work_parts_draft_discard_confirmation());
+    expect(firstPosition!.value).toBe('42');
     await click(m.work_parts_draft_discard(), firstEditor);
     await until(() => editors().length === 1);
     expect(editors()[0]).toBe(sibling);
@@ -172,8 +190,17 @@ test('Work Parts orients only current keyboard openings, closes independent draf
     const freshPosition = reopened.querySelector<HTMLInputElement>('input[id$="qualifier-0"]')!;
     expect(freshPosition.value).toBe(admittedPosition);
     expect(siblingPosition!.value).toBe('55');
+    await act(async () => cancelledConfirm());
+    expect(host.contains(reopened)).toBe(true);
 
     await input(freshPosition, '72');
+    await click(m.work_parts_draft_close(), reopened);
+    const beforeRead = retain(m.work_parts_draft_discard(), reopened);
+    await click(m.relation_review_slot(), reopened);
+    await until(() => reopened.getAttribute('aria-busy') === 'false');
+    await act(async () => beforeRead());
+    expect(host.contains(reopened)).toBe(true);
+    expect(freshPosition.value).toBe('72');
     await click(m.work_parts_draft_close(), reopened);
     await click(m.relation_propose(), reopened);
     await click(m.relation_propose(), reopened);

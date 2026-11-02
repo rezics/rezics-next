@@ -50,6 +50,7 @@ const relationSurface = [
 ].join(' ');
 
 type Snak = RelationDraft['qualifiers'][number];
+type CompositionCloseDecision = { active: () => boolean; close: () => void };
 export { QualifierInput };
 const blankDraft = (property: string): RelationDraft => ({
   property: { id: property, data_type: 'wikibase-item' },
@@ -135,7 +136,8 @@ function RelationEditorLive({
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<CandidateFailure | undefined>(initial && !initial.ok ? initial : undefined);
   const [confirmation, setConfirmation] = useState<'propose' | 'accept' | 'reject' | 'adopt'>();
-  const [closeConfirmation, setCloseConfirmation] = useState(false);
+  const [closeConfirmation, setCloseConfirmation] = useState<CompositionCloseDecision>();
+  const closeDecision = useRef<CompositionCloseDecision | undefined>(undefined);
   const closeButton = useRef<HTMLButtonElement>(null);
   const restoreCloseFocus = useRef(false);
   const candidatePageBoundary = useRef<HTMLElement>(null);
@@ -296,23 +298,41 @@ function RelationEditorLive({
     );
   const dirty = !proposed && JSON.stringify([draft, citation]) !== initialProposal.current;
 
+  function retireCompositionClose() {
+    closeDecision.current = undefined;
+    restoreCloseFocus.current = false;
+    setCloseConfirmation(undefined);
+  }
+  // The existing draft/reading lifetime also retires questions when their holder is replaced.
+  if (closeConfirmation && !closeConfirmation.active()) retireCompositionClose();
   function compositionCloseLocked() {
     return !lifetime.active() || !visible || !!request.current || proposed || !!result || failure?.reason === 'stale';
   }
   function requestCompositionClose() {
     if (!composition || !onClose || compositionCloseLocked()) return;
-    if (dirty || requireCloseConfirmation) setCloseConfirmation(true);
-    else onClose();
+    if (dirty || requireCloseConfirmation) {
+      if (closeDecision.current) return;
+      const generation = readGeneration.current;
+      const decision = {
+        active: () => lifetime.active() && readGeneration.current === generation,
+        close: onClose,
+      };
+      closeDecision.current = decision;
+      setCloseConfirmation(decision);
+    } else onClose();
   }
-  function confirmCompositionClose() {
-    if (!composition || !onClose || compositionCloseLocked()) return;
-    setCloseConfirmation(false);
-    onClose();
+  function currentCompositionClose(decision: CompositionCloseDecision) {
+    return closeDecision.current === decision && decision.active();
   }
-  function cancelCompositionClose() {
-    if (!lifetime.active()) return;
+  function confirmCompositionClose(decision: CompositionCloseDecision) {
+    if (!currentCompositionClose(decision) || !composition || !onClose || compositionCloseLocked()) return;
+    retireCompositionClose();
+    decision.close();
+  }
+  function cancelCompositionClose(decision: CompositionCloseDecision) {
+    if (!currentCompositionClose(decision)) return;
+    retireCompositionClose();
     restoreCloseFocus.current = true;
-    setCloseConfirmation(false);
   }
   useLayoutEffect(() => {
     if (restoreCloseFocus.current) {
@@ -454,6 +474,7 @@ function RelationEditorLive({
   }
   function edit(next: RelationDraft) {
     if (!editable()) return;
+    retireCompositionClose();
     lifetime.retire();
     draftRevision.current++;
     running.current = false;
@@ -497,6 +518,7 @@ function RelationEditorLive({
     proposedId?: string,
     event?: MouseEvent<HTMLButtonElement>,
   ) {
+    retireCompositionClose();
     const generation = ++readGeneration.current;
     const intent =
       event?.detail === 0 && event.currentTarget === document.activeElement
@@ -696,10 +718,10 @@ function RelationEditorLive({
           <p>{m.work_parts_draft_discard_confirmation({}, options)}</p>
           {closeLocked && <p role="status">{m.work_parts_draft_discard_locked({}, options)}</p>}
           <div className="flex flex-wrap gap-2">
-            <Button disabled={closeLocked} onClick={confirmCompositionClose}>
+            <Button disabled={closeLocked} onClick={() => confirmCompositionClose(closeConfirmation)}>
               {m.work_parts_draft_discard({}, options)}
             </Button>
-            <Button variant="outline" onClick={cancelCompositionClose}>
+            <Button variant="outline" onClick={() => cancelCompositionClose(closeConfirmation)}>
               {m.candidate_cancel({}, options)}
             </Button>
           </div>
