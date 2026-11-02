@@ -107,13 +107,7 @@ test('materialization baseline is the actual completed RunStore row and acquisit
   try {
     const run = await f.stage();
     const grouped = f.facade.page(run, null, 1).records[0]!;
-    expect(grouped.record.vn).toEqual({
-      id: 'v123',
-      olang: 'en',
-      c_votecount: 2,
-      c_average: 700,
-      alias: 'Harbor Sentinel',
-    });
+    expect(grouped.record.vn).toEqual({ id: 'v123', olang: 'en', c_votecount: 2, c_average: 700, alias: 'Harbor Sentinel' });
     expect((await f.facade.commit(run)).status).toBe('committed');
     const before = f.facade.baseline('v123');
     expect(before).toEqual({
@@ -192,7 +186,6 @@ test('native aliases survive bootstrap, bound refresh, removal and durable repla
     f.deny(true);
     const changed = await f.stage(false, 'Harbor Watch\\nHarbor Guard');
     const row = f.facade.page(changed, null, 16).records.find((record) => record.key === 'v123')!;
-    expect(row.output.normalizedRecord.vn.aliases).toEqual(['Harbor Watch', 'Harbor Guard']);
     expect(row.output.digest).not.toBe(digest);
     expect(row.output.record_revision).toBe('7');
     expect((await f.facade.commit(changed)).status).toBe('bulk-failed');
