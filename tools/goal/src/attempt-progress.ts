@@ -84,23 +84,27 @@ export function noProgressTwice(store: WorkerStore, task: Task, ref: AttemptRef)
 }
 
 /** A tool blocker's identity: its first line with its worktree and volatile numbers, hashes and identifiers removed. */
-export function blockerFingerprint(
-  attempt: Pick<Attempt, 'blocker' | 'result'>,
-  worktree?: string | null,
-): string {
+export function blockerFingerprint(attempt: Pick<Attempt, 'blocker' | 'result'>, worktree?: string | null): string {
   const line = (attempt.blocker || attempt.result || '').split(/\r?\n/, 1)[0] ?? '';
   const withoutWorktree = worktree
-    ? line.replace(new RegExp(escapeRegExp(worktree.replaceAll('\\', '/')).replaceAll('/', '[\\\\/]'), 'gi'), '<worktree>')
+    ? line.replace(
+        new RegExp(escapeRegExp(worktree.replaceAll('\\', '/')).replaceAll('/', '[\\\\/]'), 'gi'),
+        '<worktree>',
+      )
     : line;
-  return withoutWorktree
-    .replace(/\x1b\[[0-9;]*m/g, '')
-    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '#')
-    .replace(/\b[0-9a-f]{7,}\b/gi, '#')
-    .replace(/\d+/g, '#')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase()
-    .slice(0, 300);
+  return (
+    withoutWorktree
+      .replace(/\x1b\[[0-9;]*m/g, '')
+      // Temporary directory names are random per run; the same failure must keep one fingerprint.
+      .replace(/(\/(?:tmp|var\/tmp|run\/user\/\d+)\/[A-Za-z0-9._-]*?)[-.]?[A-Za-z0-9]{6,}(?=[\/'"\s]|$)/g, '$1<tmp>')
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '#')
+      .replace(/\b[0-9a-f]{7,}\b/gi, '#')
+      .replace(/\d+/g, '#')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase()
+      .slice(0, 300)
+  );
 }
 
 function escapeRegExp(value: string): string {
