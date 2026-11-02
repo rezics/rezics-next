@@ -84,7 +84,7 @@ export function createRealmPageProgress(input: {
   };
 
   const request = async (restart = false) => {
-    if (disposed || active || window.pending || window.state.kind === 'closed') return;
+    if (disposed || active || window.state.kind === 'closed') return;
     if (!restart && window.state.kind === 'ready' && window.state.next === null) return;
     if (restart) progress = initialRealmPageProgress();
     const cursor = progress.cursor;

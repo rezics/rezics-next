@@ -9,10 +9,12 @@ import {
 import { createSearchRealmDiscoveryPage } from '../src/search/realm-discovery-section';
 import {
   advanceRealmPageProgress,
+  createRealmPageProgress,
   initialRealmPageProgress,
   REALM_DISCOVERY_CURSOR_MAX_LENGTH,
 } from '../src/search/realm-page-progress';
 import type { SearchRealmDiscoveryRequest } from '../src/search/realm-discovery-section';
+import type { RealmDiscoveryWindow } from '../src/search/realm-discovery-loader';
 import { m } from '../src/paraglide/messages.js';
 
 type Page = Exclude<RealmDiscoveryState, { kind: 'loading' }>;
@@ -122,4 +124,94 @@ test('a repeated cycle offers a visible restart and issues one fresh first-page 
   expect(snapshots.at(-1)?.state).toEqual(ready('restarted', 'c'));
   expect(snapshots.at(-1)?.restart).toBe(false);
   page.dispose();
+});
+
+test('unseeded Search and header controllers issue one first-page request, ignore a second start, and retry the same first cursor', async () => {
+  const searchReads: Array<string | undefined> = [];
+  const searchWindows: RealmDiscoveryWindow[] = [];
+  const searchPage = deferred<Page>();
+  const search = createRealmPageProgress({
+    read: async ({ cursor }) => {
+      searchReads.push(cursor);
+      return searchPage.promise;
+    },
+    publish: (window) => searchWindows.push(window),
+  });
+  expect(search.snapshot()).toMatchObject({ state: { kind: 'loading' }, pending: true });
+  const searchStarted = search.start();
+  search.start();
+  expect(searchReads).toEqual([undefined]);
+  expect(searchWindows.at(-1)).toMatchObject({ state: { kind: 'loading' }, pending: true });
+  searchPage.resolve(ready('search-first', cursor));
+  await searchStarted;
+  expect(searchWindows.at(-1)?.state).toEqual(ready('search-first', cursor));
+  search.dispose();
+
+  const headerReads: SearchRealmDiscoveryRequest[] = [];
+  const headerWindows: { state: RealmDiscoveryState; pending: boolean; retry: boolean }[] = [];
+  const headerFailure = deferred<Page>();
+  const header = createSearchRealmDiscoveryPage(
+    async (request) => {
+      headerReads.push(request);
+      return headerReads.length === 1 ? headerFailure.promise : ready('header-retry', null);
+    },
+    'en',
+    (state, progress) => headerWindows.push({ state, ...progress }),
+  );
+  const headerStarted = header.start();
+  header.start();
+  expect(headerReads).toEqual([{ locale: 'en', sort: 'trending', limit: 20 }]);
+  headerFailure.resolve({ kind: 'unavailable' });
+  await headerStarted;
+  expect(headerWindows.at(-1)).toMatchObject({ state: { kind: 'unavailable' }, pending: false, retry: true });
+  await header.retry();
+  expect(headerReads[1]).toEqual({ locale: 'en', sort: 'trending', limit: 20 });
+  expect(headerWindows.at(-1)?.state).toEqual(ready('header-retry', null));
+  header.dispose();
+});
+
+test('dispose suppresses an unseeded first read or a late first-page publication, and a seeded window does not reread', async () => {
+  let abandoned = 0;
+  const beforeStart = createRealmPageProgress({
+    read: async () => {
+      abandoned += 1;
+      return ready('abandoned', null);
+    },
+    publish: () => {
+      abandoned += 1;
+    },
+  });
+  beforeStart.dispose();
+  await beforeStart.start();
+  expect(abandoned).toBe(0);
+
+  const late = deferred<Page>();
+  const lateWindows: RealmDiscoveryWindow[] = [];
+  const inFlight = createRealmPageProgress({
+    read: async () => late.promise,
+    publish: (window) => lateWindows.push(window),
+  });
+  const pending = inFlight.start();
+  inFlight.dispose();
+  late.resolve(ready('late', cursor));
+  await pending;
+  expect(lateWindows).toEqual([
+    { state: { kind: 'loading' }, pending: true, retry: false, restart: false },
+  ]);
+
+  const seededReads: Array<string | undefined> = [];
+  const seeded = createRealmPageProgress({
+    initial: ready('seeded', cursor),
+    read: async ({ cursor: next }) => {
+      seededReads.push(next);
+      return ready('more', null);
+    },
+    publish: () => {},
+  });
+  await seeded.start();
+  expect(seededReads).toEqual([]);
+  expect(seeded.snapshot().state).toEqual(ready('seeded', cursor));
+  await seeded.next();
+  expect(seededReads).toEqual([cursor]);
+  seeded.dispose();
 });
