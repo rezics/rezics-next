@@ -101,10 +101,7 @@ export function mayRetryLifecycle(state: LifecycleState) {
 export function lifecycleControlsPresentation(state: LifecycleState) {
   const snapshot = state.read.kind === 'ready' ? state.read.snapshot : null;
   const canRetry = mayRetryLifecycle(state);
-  const visible =
-    snapshot !== null &&
-    snapshot.state !== 'orphaned' &&
-    (snapshot.actions.length > 0 || canRetry);
+  const visible = snapshot !== null && snapshot.state !== 'orphaned' && (snapshot.actions.length > 0 || canRetry);
   return {
     visible,
     readOnly: visible && snapshot !== null && snapshot.actions.length === 0 && !canRetry,
