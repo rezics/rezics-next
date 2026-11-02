@@ -366,12 +366,13 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     await act(async () => user.click(within(fields('long')).getAllByRole('button', { name: m.relation_remove() })[0]!));
     expect(observed.long).toBe(disabledRows);
 
-    // Supplied-data growth only: released multivalued credits admit 1/8/64 statements.
+    // Supplied-data growth only: distinct native UUIDv7 targets have independent
+    // relation slots, admitting 1/8/64 credits below the total initial-fact bound.
     // No enumeration of the definitions population and no IO occurs while rendering supplied rows.
     await render(null);
     for (const count of [1, 8, 64]) {
       const rows = Array.from({ length: count }, (_, index) =>
-        row('schema:director', `00000000-0000-4000-8000-${String(index + 1000).padStart(12, '0')}`),
+        row('schema:director', `00000000-0000-7000-8000-${String(index + 1000).padStart(12, '0')}`),
       );
       expect(
         screenInitialFacts(
