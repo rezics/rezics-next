@@ -3456,6 +3456,7 @@
   "character_create_help": "Enter a name in its data language. Add only facts you know; initial facts are selected by native creation. Later corrections are proposals awaiting review.",
   "character_create": "Create fictional character",
   "character_initial_fact": "Optional initial fact",
+  "character_initial_fact_withdrawn": "The selected field is no longer offered for this character. Your entries are kept. Choose a current field, then add it.",
   "character_add_fact": "Add fact",
   "character_choose_existing": "Use an existing fictional character",
   "character_choose_work": "Choose an existing work",

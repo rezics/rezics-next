@@ -137,6 +137,7 @@ function CharacterProfileCreateLive({
   ]);
   const [facts, setFacts] = useState<StatementInput[]>([]);
   const [field, setField] = useState('');
+  const [fieldWithdrawn, setFieldWithdrawn] = useState(false);
   const [failure, setFailure] = useState<CreateFailure>();
   const [corrections, setCorrections] = useState<CharacterCorrection[]>([]);
   const factIds = useRef(new WeakMap<StatementInput, number>());
@@ -153,6 +154,12 @@ function CharacterProfileCreateLive({
   const available = Object.values(characterGroups(release))
     .flat()
     .filter((id) => editableScalar(release.properties[id]) && id !== 'schema:alternateName');
+  const selectedField = available.includes(field) ? field : '';
+  if (field && !selectedField) {
+    // Require a deliberate new choice even if a later release offers this field again.
+    setField('');
+    setFieldWithdrawn(true);
+  }
   const targets = characterCorrectionTargets(
     termsId,
     terms,
@@ -407,8 +414,12 @@ function CharacterProfileCreateLive({
           <NativeSelect
             id={`${termsId}-initial-field`}
             className="w-full [&>select]:min-h-11"
-            value={field}
-            onChange={(event) => setField(event.target.value)}
+            value={selectedField}
+            aria-describedby={fieldWithdrawn ? `${termsId}-field-withdrawn` : undefined}
+            onChange={(event) => {
+              setField(event.target.value);
+              setFieldWithdrawn(false);
+            }}
           >
             <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
             {available.map((id) => (
@@ -421,12 +432,17 @@ function CharacterProfileCreateLive({
               </NativeSelectOption>
             ))}
           </NativeSelect>
+          {fieldWithdrawn && (
+            <p id={`${termsId}-field-withdrawn`} role="status" className="text-sm text-muted-foreground">
+              {m.character_initial_fact_withdrawn({}, o)}
+            </p>
+          )}
         </Field>
         <Button
           className={actionClassName}
           type="button"
           variant="outline"
-          disabled={!field}
+          disabled={locked || !selectedField}
           onClick={() => {
             if (locked || running.current || !available.includes(field)) return;
             const fact: StatementInput = {

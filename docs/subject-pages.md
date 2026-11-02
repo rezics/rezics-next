@@ -50,6 +50,7 @@ An explicit successful required refresh revalidates retained input before new co
 until corrected or removed, while unresolved commands keep exact replay. Populated language rows and staged facts
 require row-local removal confirmation with Cancel; surviving inputs retain their stable correction targets. Uncertain
 submissions keep removal and editing locked to the original request.
+When refreshed Character definitions withdraw an additional field choice, return the chooser to its prompt with an explanation and disable Add until deliberate valid re-selection; preserve authored input and never restore the choice automatically.
 
 Album creation resolves rejected submitted indices to stable assertion rows and authored language controls; following an invalid correction explicitly reviews a new command, while conflicts still require Review and uncertain commands remain sealed. Unknown addresses remain inspectable without a correction link.
 Album creation freezes retained private controls and shows complete assertion snapshots while metadata is retired; explicit refresh restores only admitted definitions, keeps retired facts for deliberate removal, and leaves exact uncertain retries and created-reader recovery independent.
