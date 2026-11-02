@@ -265,7 +265,7 @@ process.exitCode = interrupted ? 125 : result.status ?? 1;
       expect(firstAttempt[1]!.interrupted).toBe(true);
       expect(firstAttempt[1]!.status).toBe(125);
       expect(firstAttempt[1]!.argv.slice(3)).toEqual(firstReturned);
-      expect(firstAttempt[1]!.forwardedArgv.slice(3)).toEqual([firstReturned[0]]);
+      expect(firstAttempt[1]!.forwardedArgv.slice(3)).toEqual([firstReturned[0]!]);
       expect(errorMessages.join('\n')).toContain(`${labelName}=${interruptedTask}/1`);
       const remaining = interruptedIds.filter((id) => {
         const inspect = spawnSync('docker', ['inspect', '--format', '{{.Id}}', id], { encoding: 'utf8' });
