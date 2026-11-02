@@ -60,8 +60,9 @@ Recent history reads at most two 20-row pages for its 32-row view; each nontermi
 malformed continuations keep accepted local history and pending changes until a fresh traversal succeeds. Failed
 local writes remain in the memory fallback until a write succeeds; observed durable removals and
 `localStorage.clear()` invalidate cached durable buckets, including inactive ones, while account labels remain
-native-hydrated. Keyboard removal focuses the next available row action, then the previous action, and falls back to
-the labeled history region; explicit clear focuses that region and announces completion.
+native-hydrated. Keyboard removal focuses the next available row action, including one newly shown at the 5/32-row
+limit, then the previous action, and falls back to the labeled history region; explicit clear focuses that region and
+announces completion.
 
 The [canonical stories](../stories/header-search/README.md) cover resting, focused discovery, suggestions,
 filter entry and phone interaction. `tests/header-search-composition.test.tsx` exercises the existing routed

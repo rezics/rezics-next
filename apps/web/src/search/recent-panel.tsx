@@ -1,9 +1,10 @@
 import { CurrentTrendingSearches } from './trending-section';
 import { ChevronRight, Clock, UserRound, X } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import type { RecentEntry, RecentHistory } from './recent-history';
 import { SearchRealmDiscoverySection, type SearchRealmDiscoveryLoader } from './realm-discovery-section';
+import { useHistoryRemovalFocus } from './history-removal-focus';
 
 export type SearchRealmDiscovery = { id: string; name: string; description: string; href: string; avatar?: string };
 /** Legacy caller shape retained for compatibility. Realm arrays cannot establish native discovery authority. */
@@ -36,6 +37,11 @@ export function RecentPanel({
 }) {
   const [all, setAll] = useState(false);
   const entries = history?.entries ?? [];
+  const visibleEntries = entries.slice(0, all ? 32 : 5);
+  const [announcement, setAnnouncement] = useState('');
+  const announce = useCallback((message: string) => setAnnouncement(message), []);
+  const focusCandidates = entries.slice(0, (all ? 32 : 5) + 1);
+  const focus = useHistoryRemovalFocus(entries, focusCandidates, announce, history?.owner);
   const status =
     history?.failure === 'conflict'
       ? m.search_history_conflict()
@@ -49,7 +55,12 @@ export function RecentPanel({
   return (
     <div data-search-discovery className="px-2 py-4">
       {recent ?? (
-        <section className="space-y-2">
+        <section
+          ref={focus.regionRef}
+          tabIndex={-1}
+          aria-label={all ? m.header_search_history() : m.header_search_recent()}
+          className="space-y-2"
+        >
           <div className="flex items-center justify-between gap-2 px-2">
             <h2 className="font-semibold">{all ? m.header_search_history() : m.header_search_recent()}</h2>
             <button type="button" className={control} aria-expanded={all} onClick={() => setAll(!all)}>
@@ -64,51 +75,67 @@ export function RecentPanel({
             </button>
           )}
           {entries.length ? (
-            <ul>
-              {entries.slice(0, all ? 32 : 5).map((entry) => (
-                <li key={entry.id} className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    className={`${control} min-w-0 flex-1 text-start`}
-                    onClick={() => onSelect?.(entry)}
-                  >
-                    {entry.scope?.image ? (
-                      <img alt="" src={entry.scope.image} className="size-9 rounded-full object-cover" />
-                    ) : entry.scope ? (
-                      <span
-                        aria-hidden="true"
-                        className="grid size-9 shrink-0 place-items-center rounded-full bg-muted"
-                      >
-                        <UserRound className="size-4" />
-                      </span>
-                    ) : (
-                      <Clock aria-hidden="true" className="mx-2 size-5 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="min-w-0">
-                      <span className="block truncate">
-                        {entry.query || entry.scope?.name || m.search_history_unavailable()}
-                      </span>
-                      {entry.query && entry.scope ? (
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {entry.scope.name || m.search_history_unavailable()}
+            <ul ref={focus.listRef}>
+              {visibleEntries.map((entry, index) => {
+                const name = entry.query || entry.scope?.name || '';
+                return (
+                  <li key={entry.id} className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      className={`${control} min-w-0 flex-1 text-start`}
+                      onClick={() => onSelect?.(entry)}
+                    >
+                      {entry.scope?.image ? (
+                        <img alt="" src={entry.scope.image} className="size-9 rounded-full object-cover" />
+                      ) : entry.scope ? (
+                        <span
+                          aria-hidden="true"
+                          className="grid size-9 shrink-0 place-items-center rounded-full bg-muted"
+                        >
+                          <UserRound className="size-4" />
                         </span>
-                      ) : null}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`${control} shrink-0`}
-                    aria-label={m.header_search_remove_recent({ name: entry.query || entry.scope?.name || '' })}
-                    onClick={() => history?.remove(entry.id)}
-                  >
-                    <X aria-hidden="true" className="size-4" />
-                  </button>
-                </li>
-              ))}
+                      ) : (
+                        <Clock aria-hidden="true" className="mx-2 size-5 shrink-0 text-muted-foreground" />
+                      )}
+                      <span className="min-w-0">
+                        <span className="block truncate">
+                          {entry.query || entry.scope?.name || m.search_history_unavailable()}
+                        </span>
+                        {entry.query && entry.scope ? (
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {entry.scope.name || m.search_history_unavailable()}
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`${control} shrink-0`}
+                      aria-label={m.header_search_remove_recent({ name })}
+                      data-history-action=""
+                      data-history-id={entry.id}
+                      onClick={(event) => {
+                        focus.requestRemove(
+                          entry.id,
+                          index,
+                          event.currentTarget,
+                          m.search_history_management_removed({ name }),
+                        );
+                        history?.remove(entry.id);
+                      }}
+                    >
+                      <X aria-hidden="true" className="size-4" />
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="px-2 py-4 text-sm text-muted-foreground">{m.header_search_recent_empty()}</p>
           )}
+          <p className="sr-only" role="status" aria-live="polite">
+            {announcement}
+          </p>
         </section>
       )}
       {global ? <CurrentTrendingSearches language={language} onSelect={onQuery} /> : null}
