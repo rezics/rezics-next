@@ -311,7 +311,7 @@ export function workerPrompt(
       : '',
     frozen.length ? `Frozen acceptance files are already committed and must not be edited: ${frozen.join(', ')}.` : '',
     continuesItself(task)
-      ? `If the outcome does not fit this attempt, commit a coherent, type-checking part and write the rest as a continuation brief at \`${CONTINUATION_DIRECTORY}/<short-name>.md\` with your contract's front matter (goal ${task.brief.goal}, manager ${manager}, own paths, acceptance, estimate) and the remaining outcome in user terms. Unfinished work is not a blocker: return success and name the continuation.`
+      ? `If the outcome does not fit this attempt, commit a coherent, type-checking part and write the rest as a continuation brief at \`${CONTINUATION_DIRECTORY}/<short-name>.md\` by copying your contract's front matter and changing only paths, acceptance and estimate (goal ${task.brief.goal}, manager ${manager}), followed by the remaining outcome in user terms. Unfinished work is not a blocker: return success and name the continuation.`
       : UNFINISHED,
     'Finish with one JSON object: status, summary, blocker (null or kind and detail), checks, approaches. Summary at most 120 words: what changed, decisions, files outside declared paths, what was not run. Blocker detail at most 80 words. Commit no evidence or audit files.',
     task.brief.kind === 'bulk-text'
