@@ -6,6 +6,8 @@ import threads from '../../../kernel/recorded/board-threads.json';
 import realmBoard from '../../../kernel/recorded/board-realm.json';
 import realm from '../../../kernel/recorded/board-realm-realm.json';
 import { ContinueHot as continuation } from '../../board-continuation.stories';
+import { MultipleBoards as aboutFamily } from '../../board-about-family.stories';
+import { getLocale } from '../../../paraglide/runtime.js';
 import { PageStory, pagePaths } from '../../page';
 import { CommunityFixture } from './board-community-fixtures';
 
@@ -102,6 +104,7 @@ export const StartThread: Story = {
 };
 
 export const ContinueHot: Story = { ...continuation };
+export const AboutFamily: Story = { ...aboutFamily };
 export const Empty: Story = { render: () => <CommunityFixture state="empty" /> };
 export const Protected: Story = { render: () => <CommunityFixture state="protected" /> };
 export const SourceUnavailable: Story = { render: () => <CommunityFixture state="source-unavailable" /> };
@@ -120,6 +123,24 @@ export const Presentation: Story = {
       expect.stringContaining('/revisions/'),
     );
     await expect(view.queryByText(m.board_community_members_unknown())).toBeNull();
+    const about = within(view.getByRole('complementary', { name: m.board_community_about() }));
+    const heading = about.getByRole('heading', { level: 2, name: m.board_community_about() });
+    await expect(heading.closest('aside')).toHaveAttribute('aria-labelledby', heading.id);
+    const rules = about.getByRole('region', { name: m.board_community_rules() });
+    await expect(rules).toHaveAttribute(
+      'aria-labelledby',
+      within(rules).getByRole('heading', { level: 3, name: m.board_community_rules() }).id,
+    );
+    await expect(about.getByRole('link', { name: realm.realm.title })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/realms/${realm.realm.realmId}`,
+    );
+    await expect(about.getByRole('link', { name: m.board_community_rules_revision() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/posts/01a17ce8-2850-71fd-a965-456700000001/revisions/01a17ce8-2850-71fe-874d-456700000002`,
+    );
+    await expect(about.getByText('MIT')).toBeVisible();
+    await expect(about.getByText(realm.realm.summary)).toBeVisible();
   },
 };
 
@@ -132,5 +153,16 @@ export const NoOptionals: Story = {
     await expect(view.queryByRole('link', { name: m.board_community_rules_revision() })).toBeNull();
     await expect(view.queryByText(m.board_community_global())).toBeNull();
     await expect(view.queryByText(realm.realm.summary)).toBeNull();
+    const aside = view.getByRole('complementary', { name: m.board_community_about() });
+    const about = within(aside);
+    await expect(aside).toHaveAttribute(
+      'aria-labelledby',
+      about.getByRole('heading', { level: 2, name: m.board_community_about() }).id,
+    );
+    await expect(about.getByRole('link', { name: realm.realm.title })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/realms/${realm.realm.realmId}`,
+    );
+    await expect(aside.querySelector('[data-slot="document-body"]')).toBeNull();
   },
 };

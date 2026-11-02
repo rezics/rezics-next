@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import {
   CommunityBanner,
   CommunityAvatar,
@@ -32,6 +33,8 @@ export function BoardCommunity({
   start?: ReactNode;
   overflow?: ReactNode;
 }) {
+  const aboutHeadingId = useId();
+  const rulesHeadingId = useId();
   const { board, realm, threads, authors, now } = page;
   const title = board.title ?? m.threads_untitled();
   const community = page.community?.state === 'available' ? page.community.value : null;
@@ -67,40 +70,47 @@ export function BoardCommunity({
       </header>
       <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <BoardFeed boardId={board.id} sort={sort} page={threads} authors={authors} now={now} actions={start} />
-        <aside className="space-y-4 rounded-2xl bg-card p-5" aria-labelledby="board-about-heading">
-          <h2 id="board-about-heading" className="font-semibold">
-            {m.board_community_about()}
-          </h2>
-          {summary ? <p className="text-sm leading-relaxed text-muted-foreground">{summary}</p> : null}
-          {board.realmId === null ? (
-            <p className="text-sm leading-relaxed text-muted-foreground">{m.board_community_global()}</p>
-          ) : null}
-          {board.realmId !== null && !community && !realm ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {m.board_community_source_unavailable()}
-            </p>
-          ) : null}
-          {contextRealm ? (
-            <a
-              href={`/${getLocale()}/realms/${contextRealm.id}`}
-              className="inline-flex min-h-11 items-center text-sm font-medium text-primary hover:underline"
-            >
-              {contextRealm.title}
-            </a>
-          ) : null}
-          {board.visibility === 'protected' ? (
-            <p className="text-sm text-muted-foreground">{m.board_community_protected_help()}</p>
-          ) : null}
-          {board.realmId !== null ? (
-            <section className="space-y-3 border-t border-border pt-4" aria-labelledby="board-rules-heading">
-              <h3 id="board-rules-heading" className="font-semibold">
-                {m.board_community_rules()}
-              </h3>
-              <CommunityRules rules={rules} />
-            </section>
-          ) : null}
-          {avatar?.credit ? <ImageCredit image={avatar} /> : null}
-          {banner?.credit ? <ImageCredit image={banner} /> : null}
+        <aside className="min-w-0" aria-labelledby={aboutHeadingId}>
+          <ContentItemFrame
+            as="div"
+            className="min-w-0 space-y-5 rounded-2xl bg-card p-5 [overflow-wrap:anywhere] [&_a]:max-w-full [&_a]:whitespace-normal [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_pre]:whitespace-pre-wrap"
+          >
+            <ContentItemHeading id={aboutHeadingId} className="text-lg leading-snug font-semibold">
+              {m.board_community_about()}
+            </ContentItemHeading>
+            {summary ? (
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{summary}</p>
+            ) : null}
+            {board.realmId === null ? (
+              <p className="text-sm leading-relaxed text-muted-foreground">{m.board_community_global()}</p>
+            ) : null}
+            {board.realmId !== null && !community && !realm ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                {m.board_community_source_unavailable()}
+              </p>
+            ) : null}
+            {contextRealm ? (
+              <a
+                href={`/${getLocale()}/realms/${contextRealm.id}`}
+                className="inline-flex min-h-11 items-center text-sm font-medium text-primary hover:underline"
+              >
+                {contextRealm.title}
+              </a>
+            ) : null}
+            {board.visibility === 'protected' ? (
+              <p className="text-sm text-muted-foreground">{m.board_community_protected_help()}</p>
+            ) : null}
+            {board.realmId !== null ? (
+              <section className="min-w-0 space-y-3 border-t border-border pt-5" aria-labelledby={rulesHeadingId}>
+                <ContentItemHeading level={3} id={rulesHeadingId} className="text-base leading-snug font-semibold">
+                  {m.board_community_rules()}
+                </ContentItemHeading>
+                <CommunityRules rules={rules} />
+              </section>
+            ) : null}
+            {avatar?.credit ? <ImageCredit image={avatar} /> : null}
+            {banner?.credit ? <ImageCredit image={banner} /> : null}
+          </ContentItemFrame>
         </aside>
       </div>
     </article>
@@ -112,7 +122,7 @@ export function BoardCommunityMenu({ boardId, signedIn = false }: { boardId: str
     <Menu
       title={m.board_more_actions()}
       trigger={
-        <Button variant="ghost" size="icon" aria-label={m.board_more_actions()}>
+        <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={m.board_more_actions()}>
           <EllipsisIcon />
         </Button>
       }
@@ -157,7 +167,7 @@ export function BoardCommunityStatus({
             : m.error_message()}
       </p>
       {state === 'error' && onRetry ? (
-        <Button variant="outline" className="mt-4" onClick={onRetry}>
+        <Button variant="outline" className="mt-4 min-h-11 min-w-11" onClick={onRetry}>
           {m.board_community_retry()}
         </Button>
       ) : null}
