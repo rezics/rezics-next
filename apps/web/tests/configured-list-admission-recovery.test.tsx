@@ -60,20 +60,28 @@ mock.module('../src/session/query', () => ({
 mock.module('../src/features/pages/type-list-query', () => ({
   typeListQuery: (locale: string, node: string, page: string, cursor: string | undefined, admission: Admission) =>
     queryOptions({
-      queryKey: ['configured-list-test', locale, node, page, cursor ?? null, admission.expectedReader, admission.incarnation],
+      queryKey: [
+        'configured-list-test',
+        locale,
+        node,
+        page,
+        cursor ?? null,
+        admission.expectedReader,
+        admission.incarnation,
+      ],
       queryFn: () => {
         const input = { locale, node, page, ...(cursor !== undefined ? { cursor } : {}), admission };
         reads.push(input);
-        return reads.length === 1
-          ? firstRead.promise
-          : Promise.resolve(staleReady(input));
+        return reads.length === 1 ? firstRead.promise : Promise.resolve(staleReady(input));
       },
       retry: false,
       refetchOnMount: false,
     }),
 }));
 mock.module('../src/features/pages/data', () => ({ PageData: ({ children }: { children: ReactNode }) => children }));
-mock.module('../src/features/pages/type-list', () => ({ TypeList: () => createElement('p', null, 'PRIVATE STALE ROWS') }));
+mock.module('../src/features/pages/type-list', () => ({
+  TypeList: () => createElement('p', null, 'PRIVATE STALE ROWS'),
+}));
 
 test('configured list shows pending and recoverable admission states, then retries once with the current reader', async () => {
   const { Window } = await import(
@@ -111,7 +119,10 @@ test('configured list shows pending and recoverable admission states, then retri
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const page = JSON.stringify({ subject: '0192f3a0-6c1e-7b2a-9d4e-000000000101', realm: '0192f3a0-6c1e-7b2a-9d4e-000000000201' });
+  const page = JSON.stringify({
+    subject: '0192f3a0-6c1e-7b2a-9d4e-000000000101',
+    realm: '0192f3a0-6c1e-7b2a-9d4e-000000000201',
+  });
 
   async function until(predicate: () => boolean) {
     for (let turn = 0; turn < 100 && !predicate(); turn++)
@@ -120,7 +131,11 @@ test('configured list shows pending and recoverable admission states, then retri
   }
 
   try {
-    client.setQueryData(sessionModule.sessionQuery.queryKey, { state: 'signed-in', subject: 'reader-a', csrfToken: 'csrf' });
+    client.setQueryData(sessionModule.sessionQuery.queryKey, {
+      state: 'signed-in',
+      subject: 'reader-a',
+      csrfToken: 'csrf',
+    });
     await act(async () =>
       root.render(
         createElement(
