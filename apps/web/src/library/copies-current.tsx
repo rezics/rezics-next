@@ -5,6 +5,8 @@ import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
 import { CopiesPage, type CopiesOrigin } from './copies-page';
+import { CopiesAddressRecovery } from './copies-address-recovery';
+import type { CopiesQuery } from './copies-query';
 import { useManagementCurrentOrigin } from './management-current-origin';
 import {
   copiesAddress,
@@ -42,7 +44,7 @@ export function CopiesCurrent({
   failure,
 }: {
   initial: CopiesCurrentRead;
-  search: { subjectId?: string; cursor?: string };
+  search: CopiesQuery;
   locale: string;
   failure?: string | undefined;
 }) {
@@ -73,6 +75,8 @@ export function CopiesCurrent({
             : m.library_sort_preparing()}
       </p>
     );
+  if (address.issue)
+    return <CopiesAddressRecovery key={origin.id} address={address} current={() => origin.isCurrent()} />;
   return (
     <>
       {!allowed ? <p role="status">{m.library_sort_preparing()}</p> : null}

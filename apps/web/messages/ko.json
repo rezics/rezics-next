@@ -4497,5 +4497,14 @@
   "search_input_recovery_input_label": "{parameter} 입력",
   "search_input_recovery_apply": "수정 적용",
   "search_input_recovery_remove": "이 입력 삭제",
-  "search_query_limit_error": "검색어는 UTF-8 기준 최대 512바이트입니다. 입력한 내용은 유지되므로 줄인 뒤 검색하세요."
+  "search_query_limit_error": "검색어는 UTF-8 기준 최대 512바이트입니다. 입력한 내용은 유지되므로 줄인 뒤 검색하세요.",
+  "library_copies_address_subject_invalid": "대상 선택자가 올바르지 않습니다. 사본을 불러오지 않았습니다. 선택자를 수정하거나 모든 사본을 여세요.",
+  "library_copies_address_cursor_invalid": "페이지 위치가 올바르지 않거나 너무 깁니다. 사본을 불러오지 않았습니다. 위치를 수정하거나 이 보기를 처음부터 여세요. 대상 필터는 유지됩니다.",
+  "library_copies_address_subject_label": "대상 ID",
+  "library_copies_address_cursor_label": "페이지 위치",
+  "library_copies_address_correct": "수정한 보기 열기",
+  "library_copies_address_recovery": "사본 주소 복구",
+  "library_copies_address_clear": "선택자를 지우고 모든 사본 표시",
+  "library_copies_address_restart": "첫 페이지부터 다시 열기",
+  "library_copies_address_cursor_restarted": "이 페이지 위치는 더 이상 유효하지 않습니다. 같은 사본 보기의 첫 페이지를 표시합니다."
 }

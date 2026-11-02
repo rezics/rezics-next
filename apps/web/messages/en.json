@@ -4532,5 +4532,14 @@
   "search_input_recovery_input_label": "Input for {parameter}",
   "search_input_recovery_apply": "Apply correction",
   "search_input_recovery_remove": "Remove this input",
-  "search_query_limit_error": "Search queries can use up to 512 UTF-8 bytes. Your draft is kept; shorten it to search."
+  "search_query_limit_error": "Search queries can use up to 512 UTF-8 bytes. Your draft is kept; shorten it to search.",
+  "library_copies_address_subject_invalid": "This subject selector is invalid. No copies were loaded. Correct it or open all copies.",
+  "library_copies_address_cursor_invalid": "This page position is invalid or too long. No copies were loaded. Correct it or restart this view; your subject filter will be kept.",
+  "library_copies_address_subject_label": "Subject ID",
+  "library_copies_address_cursor_label": "Page position",
+  "library_copies_address_correct": "Open corrected view",
+  "library_copies_address_recovery": "Recover Copies address",
+  "library_copies_address_clear": "Clear selector and show all copies",
+  "library_copies_address_restart": "Restart from the first page",
+  "library_copies_address_cursor_restarted": "This page position is no longer valid. The first page of the same Copies view is shown."
 }

@@ -4497,5 +4497,14 @@
   "search_input_recovery_input_label": "{parameter} の入力",
   "search_input_recovery_apply": "修正を適用",
   "search_input_recovery_remove": "この入力を削除",
-  "search_query_limit_error": "検索語は UTF-8 で最大512バイトです。入力内容は保持されます。短くして検索してください。"
+  "search_query_limit_error": "検索語は UTF-8 で最大512バイトです。入力内容は保持されます。短くして検索してください。",
+  "library_copies_address_subject_invalid": "対象の指定が無効です。コピーは読み込まれていません。指定を修正するか、すべてのコピーを開いてください。",
+  "library_copies_address_cursor_invalid": "ページ位置が無効か、長すぎます。コピーは読み込まれていません。位置を修正するか、この表示を最初から開いてください。対象の絞り込みは維持されます。",
+  "library_copies_address_subject_label": "対象ID",
+  "library_copies_address_cursor_label": "ページ位置",
+  "library_copies_address_correct": "修正した表示を開く",
+  "library_copies_address_recovery": "コピーのアドレスを修正",
+  "library_copies_address_clear": "指定を解除してすべてのコピーを表示",
+  "library_copies_address_restart": "最初のページから開く",
+  "library_copies_address_cursor_restarted": "このページ位置は無効になりました。同じコピー一覧の最初のページを表示しています。"
 }

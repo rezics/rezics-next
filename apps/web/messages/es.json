@@ -4497,5 +4497,14 @@
   "search_input_recovery_input_label": "Entrada para {parameter}",
   "search_input_recovery_apply": "Aplicar corrección",
   "search_input_recovery_remove": "Eliminar esta entrada",
-  "search_query_limit_error": "Las consultas admiten hasta 512 bytes UTF-8. Se conserva el borrador; acórtalo para buscar."
+  "search_query_limit_error": "Las consultas admiten hasta 512 bytes UTF-8. Se conserva el borrador; acórtalo para buscar.",
+  "library_copies_address_subject_invalid": "Este selector de tema no es válido. No se cargó ningún ejemplar. Corrígelo o abre todos los ejemplares.",
+  "library_copies_address_cursor_invalid": "Esta posición de página no es válida o es demasiado larga. No se cargó ningún ejemplar. Corrígela o reinicia esta vista; se conservará el filtro de tema.",
+  "library_copies_address_subject_label": "ID del tema",
+  "library_copies_address_cursor_label": "Posición de página",
+  "library_copies_address_correct": "Abrir vista corregida",
+  "library_copies_address_recovery": "Recuperar dirección de ejemplares",
+  "library_copies_address_clear": "Borrar selector y mostrar todos los ejemplares",
+  "library_copies_address_restart": "Reiniciar desde la primera página",
+  "library_copies_address_cursor_restarted": "Esta posición de página ya no es válida. Se muestra la primera página de la misma vista de ejemplares."
 }

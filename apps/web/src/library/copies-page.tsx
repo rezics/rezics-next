@@ -1001,6 +1001,7 @@ function LoadedCopiesPage({
           </button>
         ) : null}
       </header>
+      {page.cursorRestarted ? <p role="status">{m.library_copies_address_cursor_restarted()}</p> : null}
       {failure ? (
         <p role="alert">{failure === 'unsupported' ? m.library_copy_unsupported() : m.library_copy_failure()}</p>
       ) : null}

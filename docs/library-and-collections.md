@@ -174,11 +174,19 @@ original support and terminal: a withheld original never becomes public because 
 
 ## Destinations and actions
 
-Decision: Copies, Labels, Following and private follow counts admit authorized current-subject reads, detail, cursor navigation and read-only retry
-Decision: The embedded Subject Library slot, Copies and Labels admit authorized current-subject reads, detail, cursor navigation and read-only retry
+Decision: The embedded Subject Library slot, Copies, Labels, Following and private follow counts admit authorized
+current-subject reads, detail, cursor navigation and read-only retry
 without a CSRF token; commands require the actual current token, while uncertain retries retain their original
 credential, sender, key and operands and token arrival never submits them automatically. Private follow-count
 payloads retire with their session/exposure observation and require a fresh authorized read after renewal.
+
+Copies admits only a UUID subject selector and an opaque page cursor of at most 2048 characters; an empty selector
+means all copies. Invalid nonempty selectors or malformed/oversized page positions retain the requested URL and
+perform no copy or subject read. Decision: address recovery uses explicit read-only GET correction or clearing;
+correcting a selector starts page one, while correcting or restarting a page position preserves its valid subject.
+The existing native invalid-cursor fallback remains bounded to one retry with the same subject and credentials,
+and visibly announces that it restarted at page one.
+Detail/edit return and page recovery keep that subject; recovery cannot discard an open draft or uncertain write.
 
 The destinations are **Library**, **Following** and **History**. Library contains a bounded Continue row, Everything,
 Liked, pinned Collections and All Collections. Desktop uses a short pinned sidebar; phone uses a Collection selector

@@ -4497,5 +4497,14 @@
   "search_input_recovery_input_label": "Eingabe für {parameter}",
   "search_input_recovery_apply": "Korrektur anwenden",
   "search_input_recovery_remove": "Diese Eingabe entfernen",
-  "search_query_limit_error": "Suchanfragen dürfen bis zu 512 UTF-8-Byte lang sein. Ihr Entwurf bleibt erhalten; kürzen Sie ihn, um zu suchen."
+  "search_query_limit_error": "Suchanfragen dürfen bis zu 512 UTF-8-Byte lang sein. Ihr Entwurf bleibt erhalten; kürzen Sie ihn, um zu suchen.",
+  "library_copies_address_subject_invalid": "Diese Themenauswahl ist ungültig. Es wurden keine Exemplare geladen. Korrigiere sie oder öffne alle Exemplare.",
+  "library_copies_address_cursor_invalid": "Diese Seitenposition ist ungültig oder zu lang. Es wurden keine Exemplare geladen. Korrigiere sie oder starte diese Ansicht neu; der Themenfilter bleibt erhalten.",
+  "library_copies_address_subject_label": "Themen-ID",
+  "library_copies_address_cursor_label": "Seitenposition",
+  "library_copies_address_correct": "Korrigierte Ansicht öffnen",
+  "library_copies_address_recovery": "Exemplaradresse wiederherstellen",
+  "library_copies_address_clear": "Auswahl löschen und alle Exemplare anzeigen",
+  "library_copies_address_restart": "Bei der ersten Seite neu starten",
+  "library_copies_address_cursor_restarted": "Diese Seitenposition ist nicht mehr gültig. Die erste Seite derselben Exemplaransicht wird angezeigt."
 }

@@ -55,6 +55,7 @@ export type CopiesPageData = {
   subjectId: string | null;
   /** Original requested cursor, including when the existing invalid-cursor fallback reads page one. */
   requestedCursor?: string | null;
+  cursorRestarted?: boolean;
   copies: CopyItem[];
   next: string | null;
   addKey: string;
@@ -298,7 +299,13 @@ async function bearer(request: Request, sessionEnv: Partial<SessionEnv>): Promis
   return authorization;
 }
 
-async function readCopyPage(client: KernelClient, authorization: string, subjectId?: string, cursor?: string) {
+async function readCopyPage(
+  client: KernelClient,
+  authorization: string,
+  subjectId?: string,
+  cursor?: string,
+  recovered?: () => void,
+) {
   const read = async (pageCursor?: string) => {
     const result = await client.copies.get({
       query: { ...libraryListQuery(pageCursor), ...(subjectId ? { subjectId } : {}) },
@@ -313,6 +320,7 @@ async function readCopyPage(client: KernelClient, authorization: string, subject
     return await read(cursor);
   } catch (error) {
     if (!(error instanceof StaleCursorError) || !cursor) throw error;
+    recovered?.();
     return read();
   }
 }
@@ -330,12 +338,24 @@ export async function loadCopiesPage(
   const provenance = input.cursor ? { requestedCursor: input.cursor } : {};
   if (!authorization)
     return { signedIn: false, subjectId, ...provenance, copies: [], next: null, addKey: crypto.randomUUID() };
-  const page = await readCopyPage(client, authorization, subjectId ?? undefined, input.cursor);
+  let cursorRestarted = false;
+  const page = await readCopyPage(client, authorization, subjectId ?? undefined, input.cursor, () => {
+    cursorRestarted = true;
+  });
   // The activated profile choice is part of every current copy create request,
   // including an empty filtered page. Do not infer producer support from rows.
   const sendKind = true;
   const copies = page.copies.map(present);
-  return { signedIn: true, subjectId, ...provenance, copies, next: page.next, addKey: crypto.randomUUID(), sendKind };
+  return {
+    signedIn: true,
+    subjectId,
+    ...provenance,
+    ...(cursorRestarted ? { cursorRestarted: true } : {}),
+    copies,
+    next: page.next,
+    addKey: crypto.randomUUID(),
+    sendKind,
+  };
 }
 
 export type CopyDetailResult = { ok: true; copy: CopyItem } | { ok: false; reason: 'forbidden' | 'unavailable' };

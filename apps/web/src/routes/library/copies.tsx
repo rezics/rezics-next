@@ -9,7 +9,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { CopiesCurrent } from '../../library/copies-current';
 import { getLocale } from '../../paraglide/runtime.js';
 import { readCopiesCurrent } from '../../library/copies-actions';
-import { copiesSubjectId } from '../../library/copies-query';
+import { copiesQuery } from '../../library/copies-query';
 import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/library/copies')({
@@ -29,13 +29,9 @@ export const Route = createFileRoute('/library/copies')({
   },
   beforeLoad: requireSignedIn,
   validateSearch: (search: Record<string, unknown>) => {
-    const subjectId = copiesSubjectId(search.subjectId);
     return {
       ...(typeof search.copyFailure === 'string' ? { copyFailure: search.copyFailure } : {}),
-      ...(subjectId ? { subjectId } : {}),
-      ...(typeof search.cursor === 'string' && search.cursor.length > 0 && search.cursor.length <= 2048
-        ? { cursor: search.cursor }
-        : {}),
+      ...copiesQuery(search),
     };
   },
   loaderDeps: ({ search }) => search,

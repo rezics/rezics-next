@@ -748,28 +748,6 @@ test(
 );
 
 test(
-  'a malformed subject id in the URL shows all copies instead of an error',
-  async () => {
-    reset();
-    for (const subjectId of ['not-a-uuid', '<script>alert(1)</script>', '0192f3a0-6c1e-7b2a-9d4e-000000000011/extra']) {
-      const { page, response } = await open(`/en/library/copies?subjectId=${encodeURIComponent(subjectId)}`);
-      try {
-        expect(response?.status()).toBe(200);
-        const main = page.locator('main');
-        expect(await main.locator('article').count()).toBe(2);
-        expect(await main.innerText()).toContain('Waiting');
-        expect(await main.innerText()).not.toContain('Secret other copy');
-        expect(await main.getByRole('form', { name: 'Add a copy' }).getByLabel('Edition').inputValue()).toBe('');
-        expect(new URLSearchParams(lists().at(-1)?.search).has('subjectId')).toBe(false);
-      } finally {
-        await closeContext(page.context());
-      }
-    }
-  },
-  timeout,
-);
-
-test(
   'suite teardown refuses a new Vite startup',
   async () => {
     await cleanupSuite();

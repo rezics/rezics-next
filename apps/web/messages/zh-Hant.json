@@ -4497,5 +4497,14 @@
   "search_input_recovery_input_label": "{parameter} 輸入",
   "search_input_recovery_apply": "套用修正",
   "search_input_recovery_remove": "移除此輸入",
-  "search_query_limit_error": "搜尋詞最多為 512 個 UTF-8 位元組。草稿會保留，請縮短後再搜尋。"
+  "search_query_limit_error": "搜尋詞最多為 512 個 UTF-8 位元組。草稿會保留，請縮短後再搜尋。",
+  "library_copies_address_subject_invalid": "主題選擇無效。尚未載入任何副本。請修正選擇，或開啟全部副本。",
+  "library_copies_address_cursor_invalid": "分頁位置無效或過長。尚未載入任何副本。請修正位置或從頭開啟此檢視；主題篩選會保留。",
+  "library_copies_address_subject_label": "主題 ID",
+  "library_copies_address_cursor_label": "分頁位置",
+  "library_copies_address_correct": "開啟修正後的檢視",
+  "library_copies_address_recovery": "修正副本網址",
+  "library_copies_address_clear": "清除選擇並顯示全部副本",
+  "library_copies_address_restart": "從第一頁重新開始",
+  "library_copies_address_cursor_restarted": "此分頁位置已失效。目前顯示同一副本檢視的第一頁。"
 }

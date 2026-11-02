@@ -8,7 +8,8 @@ import { readSessionIdentity } from '../session/state';
 import { getLocale } from '../paraglide/runtime.js';
 import { prepareSession, viewerCredential, sessionSubject, requestCsrfToken } from '../session/request';
 import type { KernelClient } from '@rezics/client';
-import { copiesSubjectId } from './copies-query';
+import { copiesAddress, copiesQuery as validateQuery, copiesSubjectId, type CopiesAddress } from './copies-query';
+export { copiesAddress, sameCopiesAddress, type CopiesAddress } from './copies-query';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import {
@@ -24,31 +25,6 @@ import {
 } from './copies-read';
 import { subjectOf as presentSubject, type LibrarySubject } from './reads';
 
-function validateQuery(input: unknown): { subjectId?: string; cursor?: string } {
-  if (!input || typeof input !== 'object') return {};
-  const record = input as Record<string, unknown>;
-  const subjectId =
-    typeof record.subjectId === 'string' && record.subjectId.length > 0 && record.subjectId.length <= 128
-      ? record.subjectId
-      : undefined;
-  const cursor =
-    typeof record.cursor === 'string' && record.cursor.length > 0 && record.cursor.length <= 2048
-      ? record.cursor
-      : undefined;
-  return {
-    ...(subjectId ? { subjectId } : {}),
-    ...(cursor ? { cursor } : {}),
-  };
-}
-
-export type CopiesAddress = { subjectId: string | null; cursor: string | null; locale: string };
-export function copiesAddress(input: unknown, locale: string): CopiesAddress {
-  const query = validateQuery(input);
-  return { subjectId: copiesSubjectId(query.subjectId) ?? null, cursor: query.cursor ?? null, locale };
-}
-export function sameCopiesAddress(a: CopiesAddress, b: CopiesAddress): boolean {
-  return a.subjectId === b.subjectId && a.cursor === b.cursor && a.locale === b.locale;
-}
 export type CopiesCurrentRead = { sessionSubject: string | null; requested: CopiesAddress; page: CopiesPageData };
 export type CopyDetailCurrentRead = {
   sessionSubject: string | null;
@@ -107,6 +83,23 @@ function observeCopiesRead(client: KernelClient, observe: (authorization: string
 async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesCurrentRead> {
   const request = current ? new Request(getRequest()) : getRequest();
   const requested = copiesAddress(input, getLocale());
+  if (requested.issue) {
+    // Session admission remains native; a malformed address performs no copy or subject read.
+    const refused = await prepareSession(request, env as Partial<SessionEnv>);
+    const subject = refused ? null : (sessionSubject(request) ?? null);
+    return {
+      sessionSubject: subject,
+      requested,
+      page: {
+        signedIn: !!subject,
+        subjectId: requested.subjectId,
+        requestedCursor: requested.cursor,
+        copies: [],
+        next: null,
+        addKey: crypto.randomUUID(),
+      },
+    };
+  }
   let origin: Preparation | undefined;
   let dispatched = false;
   const client = observeCopiesRead(kernelClient(), (authorization) => {
@@ -116,7 +109,10 @@ async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesC
     else if (origin?.subject !== actual?.subject || origin?.authorization !== actual?.authorization) origin = undefined;
     dispatched = true;
   });
-  const page = await loadCopiesPage(client, request, env as Partial<SessionEnv>, validateQuery(input));
+  const page = await loadCopiesPage(client, request, env as Partial<SessionEnv>, {
+    ...(requested.subjectId ? { subjectId: requested.subjectId } : {}),
+    ...(requested.cursor ? { cursor: requested.cursor } : {}),
+  });
   if (current && !origin?.subject) {
     return {
       sessionSubject: null,
@@ -169,6 +165,8 @@ async function copyDetailBody(input: unknown, current: boolean): Promise<CopyDet
   const request = current ? new Request(getRequest()) : getRequest();
   const record = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
   const requested = copiesAddress(record, getLocale());
+  if (requested.issue)
+    return { sessionSubject: null, requested, id: null, result: { ok: false, reason: 'unavailable' } };
   let origin: Preparation | undefined;
   const client = observeCopiesRead(kernelClient(), (authorization) => {
     origin = prepared(request, authorization);
@@ -299,6 +297,7 @@ export const readCopySubjectCurrent = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<CopySubjectCurrentRead> => {
     setResponseHeader('cache-control', 'private, no-store');
     const requested = copiesAddress(data, getLocale());
+    if (requested.issue) return { sessionSubject: null, requested, id: data.id, result: { state: 'unavailable' } };
     let origin: Preparation | undefined;
     const result = await resolveSubject(
       data.id,

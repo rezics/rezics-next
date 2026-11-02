@@ -4497,5 +4497,14 @@
   "search_input_recovery_input_label": "{parameter} 输入",
   "search_input_recovery_apply": "应用更正",
   "search_input_recovery_remove": "删除此输入",
-  "search_query_limit_error": "搜索词最多为 512 个 UTF-8 字节。草稿会保留，请缩短后再搜索。"
+  "search_query_limit_error": "搜索词最多为 512 个 UTF-8 字节。草稿会保留，请缩短后再搜索。",
+  "library_copies_address_subject_invalid": "主题选择无效。尚未加载任何副本。请修正选择，或打开全部副本。",
+  "library_copies_address_cursor_invalid": "分页位置无效或过长。尚未加载任何副本。请修正位置或从头打开此视图；主题筛选会保留。",
+  "library_copies_address_subject_label": "主题 ID",
+  "library_copies_address_cursor_label": "分页位置",
+  "library_copies_address_correct": "打开修正后的视图",
+  "library_copies_address_recovery": "修正副本地址",
+  "library_copies_address_clear": "清除选择并显示全部副本",
+  "library_copies_address_restart": "从第一页重新开始",
+  "library_copies_address_cursor_restarted": "此分页位置已失效。当前显示同一副本视图的第一页。"
 }
