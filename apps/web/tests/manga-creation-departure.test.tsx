@@ -165,9 +165,9 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
     expect((within(host).getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value).toBe(
       'Recovered title',
     );
-    expect((within(host).getByRole('textbox', { name: m.catalogue_create_aliases() }) as HTMLTextAreaElement).value).toBe(
-      'Sibling alias',
-    );
+    expect(
+      (within(host).getByRole('textbox', { name: m.catalogue_create_aliases() }) as HTMLTextAreaElement).value,
+    ).toBe('Sibling alias');
     expect(host.textContent).not.toContain(m.correction_invalid());
     await click(m.manga_title());
     await until(() => host.textContent!.includes(m.manga_created()));
@@ -252,11 +252,7 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
     await act(async () => removedLabel({ target: { value: 'Removed row mutation' } }));
     expect(within(host).getAllByRole('textbox', { name: m.catalogue_create_label() })).toHaveLength(2);
 
-    const retained = [
-      changeHandler(labels[1]!),
-      changeHandler(aliases[1]!),
-      changeHandler(languages[1]!),
-    ];
+    const retained = [changeHandler(labels[1]!), changeHandler(aliases[1]!), changeHandler(languages[1]!)];
     expect(commands).toHaveLength(0);
     await click(m.manga_title());
     await createEntered;
@@ -333,9 +329,7 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
     ]) {
       router = await mount(mangaFixture(), pending);
       await replace(m.catalogue_create_label(), 'Retiring');
-      const retiredLabelChange = changeHandler(
-        within(host).getByRole('textbox', { name: m.catalogue_create_label() }),
-      );
+      const retiredLabelChange = changeHandler(within(host).getByRole('textbox', { name: m.catalogue_create_label() }));
       await click(m.manga_title());
       await leaveAttempt();
       await act(async () => client.setQueryData(sessionQuery.queryKey, session));
@@ -343,9 +337,9 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
       expect(blocked()).toBe(false);
       await until(() => !!within(host).queryByRole('textbox', { name: m.catalogue_create_label() }));
       await act(async () => retiredLabelChange({ target: { value: 'Retired reader mutation' } }));
-      expect(
-        (within(host).getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value,
-      ).toBe('');
+      expect((within(host).getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value).toBe(
+        '',
+      );
       await act(async () => finish({ ok: true, id: mangaSeriesId, reader: { state: 'ready', href } }));
       expect(host.textContent).not.toContain(m.manga_created());
       await act(async () => router.navigate({ to: '/en/search' }));
