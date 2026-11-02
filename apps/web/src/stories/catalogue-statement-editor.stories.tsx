@@ -1,9 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { expect, fn, mocked, userEvent, waitFor, within } from 'storybook/test';
-import { StatementEditor, EditorFailure } from '../features/catalogue/statement-editor-view';
-import { readStatementEditor } from '../features/catalogue/statement-editor';
+import {
+  StatementEditor,
+  EditorFailure,
+  StatementFields,
+  PartValue,
+} from '../features/catalogue/statement-editor-view';
+import { readStatementEditor, statementInput } from '../features/catalogue/statement-editor';
 import { statementFixture, type StatementScenario } from '../kernel/fake/catalogue-statements';
 import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
@@ -297,5 +302,207 @@ export const InvalidDate: Story = {
     await userEvent.type(day, '30');
     await userEvent.click(canvas.getByRole('button', { name: m.correction_submit() }));
     await canvas.findByText(m.correction_error_invalid_format() + ' ' + m.correction_error_date());
+  },
+};
+
+// Supplied relation fields exercise the same installed family used by creation and relation
+// consumers. They do not claim that the standalone scalar-correction route edits relations.
+function SuppliedFields({ name }: { name: string }) {
+  const locale = getLocale();
+  const supplied = useMemo(() => {
+    const fixture = statementFixture('ready', locale, 'schema:author');
+    const release = structuredClone(fixture.release);
+    for (const property of ['schema:author', 'wdt:P1932', 'schema:url']) {
+      const definition = release.properties[property]!;
+      for (const [language, label] of Object.entries(definition.labels))
+        definition.labels[language] = `${label} · ${label} · ${label} · ${label}`;
+    }
+    const current = { release, public: fixture.publicRead, source: fixture.source };
+    const draft = statementInput(fixture.source);
+    draft.qualifiers = [
+      { property: { id: 'schema:position' }, value: { type: 'value', content: '1' } },
+      { property: { id: 'wdt:P1932' }, value: { type: 'value', content: 'Antoine de Saint-Exupéry · 原文署名' } },
+    ];
+    draft.references.push({
+      parts: [
+        {
+          property: { id: 'schema:url' },
+          value: { type: 'value', content: 'https://example.org/catalogue/source/complete-publication-evidence' },
+        },
+        {
+          property: { id: 'schema:name' },
+          value: { type: 'value', content: { text: 'Le Petit Prince · 完整來源名稱', language: 'fr' } },
+        },
+        {
+          property: { id: 'schema:height' },
+          value: {
+            type: 'value',
+            content: {
+              amount: '+1.75',
+              unit: 'http://www.wikidata.org/entity/Q11573',
+              lowerBound: '+1.74',
+              upperBound: '+1.76',
+            },
+          },
+        },
+        { property: { id: 'schema:genre' }, value: { type: 'somevalue' } },
+      ],
+    });
+    return { current, draft };
+  }, [locale]);
+  const [draft, change] = useState(supplied.draft);
+  return (
+    <section data-family-editor={name} className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
+      <h3 className="text-lg font-semibold">{name}</h3>
+      <StatementFields
+        current={supplied.current}
+        draft={draft}
+        change={change}
+        locale={locale}
+        heading="h4"
+        valueControl={<PartValue part={draft} read={supplied.current} locale={locale} />}
+      />
+    </section>
+  );
+}
+
+function FamilyExample({ rtl = false }: { rtl?: boolean }) {
+  const locale = getLocale();
+  return (
+    <PatternStory visitor="Signed In">
+      <AppShell>
+        <div dir={rtl ? 'rtl' : 'ltr'} data-statement-family className="min-w-0">
+          <EditorExample scenario="ready" />
+          <section className="mx-auto w-full min-w-0 max-w-4xl space-y-6 p-4 sm:p-6">
+            <h2 className="text-xl font-semibold">{m.correction_title({}, { locale: locale as never })}</h2>
+            <SuppliedFields key={`first:${locale}`} name="A" />
+            <SuppliedFields key={`second:${locale}`} name="B" />
+          </section>
+        </div>
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+async function familyJourney(canvasElement: HTMLElement, width: number) {
+  const canvas = within(canvasElement);
+  await canvas.findByRole('form', { name: m.correction_title() });
+  const family = canvasElement.querySelector<HTMLElement>('[data-statement-family]')!;
+  const first = family.querySelector<HTMLElement>('[data-family-editor="A"]')!;
+  const second = family.querySelector<HTMLElement>('[data-family-editor="B"]')!;
+  const document = canvasElement.ownerDocument;
+  await expect(document.documentElement.clientWidth).toBe(width);
+  for (const editor of [first, second]) {
+    await expect(within(editor).getAllByRole('heading', { level: 4 })).toHaveLength(3);
+    await expect(editor.querySelectorAll('fieldset > legend')).toHaveLength(2);
+    for (const label of editor.querySelectorAll<HTMLLabelElement>('label')) {
+      await expect(label.htmlFor).not.toBe('');
+      const control = document.getElementById(label.htmlFor)!;
+      await expect(editor.contains(control)).toBe(true);
+      await expect(control.closest('[data-slot="field"]')).toBe(label.closest('[data-slot="field"]'));
+      await expect([...document.querySelectorAll('[id]')].filter((node) => node.id === label.htmlFor)).toHaveLength(1);
+    }
+    await expect(editor.querySelector('a[data-slot="list-row-link"], a input, a select, a button')).toBeNull();
+    await expect(within(editor).getByRole('textbox', { name: m.correction_language() })).toHaveValue('fr');
+    await expect(within(editor).getByRole('textbox', { name: m.correction_lower() })).toHaveValue('+1.74');
+    await expect(within(editor).getByRole('textbox', { name: m.correction_upper() })).toHaveValue('+1.76');
+    await expect(editor).toHaveTextContent(m.correction_preserved());
+  }
+  const addQualifier = within(first).getByRole('combobox', { name: m.correction_add_qualifier() });
+  const label = [...first.querySelectorAll<HTMLLabelElement>('label')].find(
+    (node) => node.htmlFor === addQualifier.id,
+  )!;
+  await userEvent.click(label);
+  await expect(addQualifier).toHaveFocus();
+  await userEvent.selectOptions(addQualifier, 'schema:position');
+  await userEvent.tab();
+  const add = within(addQualifier.closest('[data-slot="field"]')!.parentElement!).getByRole('button', {
+    name: m.correction_add(),
+  });
+  await expect(add).toHaveFocus();
+  await userEvent.keyboard('{Enter}');
+  await expect(within(first).getAllByRole('textbox', { name: m.correction_value() })).toHaveLength(4);
+  await expect(within(second).getAllByRole('textbox', { name: m.correction_value() })).toHaveLength(3);
+  await expect(within(second).getByRole('combobox', { name: m.correction_add_qualifier() })).toHaveValue('');
+
+  // A citation addition belongs only to its own group and editor, retaining every supplied part.
+  const part = within(second).getAllByRole('combobox', { name: m.correction_add_part() })[1]!;
+  await userEvent.selectOptions(part, 'schema:url');
+  await userEvent.click(
+    within(part.closest('[data-slot="field"]')!.parentElement!).getByRole('button', { name: m.correction_add() }),
+  );
+  const addedUrl = within(second).getAllByRole('textbox', { name: m.correction_url() }).at(-1)!;
+  await userEvent.type(addedUrl, 'https://example.org/second-editor/additional-source');
+  await expect(addedUrl).toHaveFocus();
+  await expect(within(first).getAllByRole('textbox', { name: m.correction_url() })).toHaveLength(2);
+  await expect(within(second).getAllByRole('textbox', { name: m.correction_url() })).toHaveLength(3);
+  for (const editor of [first, second])
+    await expect(within(editor).getAllByRole('textbox', { name: m.correction_url() })[0]).toHaveValue(
+      'https://www.wikidata.org/wiki/Q25338',
+    );
+
+  // Actual browser rectangles and full text runs, authored only. DOM construction is not this proof.
+  for (const panel of [family, first, second])
+    await expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+  for (const target of family.querySelectorAll<HTMLElement>('input, select, button[data-slot="button"]')) {
+    const rect = target.getBoundingClientRect();
+    const panel = target.closest('[data-family-editor], article')!.getBoundingClientRect();
+    await expect(rect.height).toBeGreaterThanOrEqual(width === 390 ? 44 : 32);
+    await expect(rect.width).toBeGreaterThanOrEqual(44);
+    await expect(rect.left).toBeGreaterThanOrEqual(panel.left - 1);
+    await expect(rect.right).toBeLessThanOrEqual(panel.right + 1);
+  }
+  for (const text of family.querySelectorAll<HTMLElement>(
+    'label, legend, h1, h2, h3, h4, button[data-slot="button"]',
+  )) {
+    const bounds = text.getBoundingClientRect();
+    const walker = document.createTreeWalker(text, 4);
+    while (walker.nextNode()) {
+      if (!walker.currentNode.textContent?.trim()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(walker.currentNode);
+      for (const line of range.getClientRects()) {
+        await expect(line.left).toBeGreaterThanOrEqual(bounds.left - 1);
+        await expect(line.right).toBeLessThanOrEqual(bounds.right + 1);
+        await expect(line.bottom).toBeLessThanOrEqual(bounds.bottom + 1);
+      }
+    }
+  }
+  await userEvent.tab();
+  const focused = document.activeElement as HTMLElement;
+  await expect(second.contains(focused)).toBe(true);
+  const style = document.defaultView!.getComputedStyle(focused);
+  await expect(
+    style.boxShadow !== 'none' || (style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0),
+  ).toBe(true);
+}
+
+const familyEvidence = {
+  docs: {
+    description: {
+      story:
+        'UNRUN: actual standalone scalar editor plus two independent shared relation-field compositions using supplied native-format author/citation data. Full localized labels, h4 nesting, native label activation/Tab/Enter, complete citations and real phone/desktop/RTL geometry assertions are authored; native, browser, visual and original acceptance remain deferred. No relation-correction route or backend growth proof is claimed.',
+    },
+  },
+};
+export const FamilyPhone: Story = {
+  render: () => <FamilyExample />,
+  globals: { viewport: { value: 'phone390', isRotated: false }, locale: 'de' },
+  parameters: familyEvidence,
+  play: ({ canvasElement }) => familyJourney(canvasElement, 390),
+};
+export const FamilyDesktop: Story = {
+  render: () => <FamilyExample />,
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  parameters: familyEvidence,
+  play: ({ canvasElement }) => familyJourney(canvasElement, 1280),
+};
+export const FamilyRtl: Story = {
+  render: () => <FamilyExample rtl />,
+  globals: { viewport: { value: 'phone390', isRotated: false }, locale: 'fr' },
+  parameters: familyEvidence,
+  play: async ({ canvasElement }) => {
+    await familyJourney(canvasElement, 390);
+    await expect(canvasElement.querySelector('[data-statement-family]')).toHaveAttribute('dir', 'rtl');
   },
 };

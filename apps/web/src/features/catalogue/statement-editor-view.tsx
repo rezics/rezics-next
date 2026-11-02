@@ -2,6 +2,7 @@ import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import type { ReactNode } from 'react';
 import type { PropertyDefinition } from '@rezics/definitions';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -52,17 +53,22 @@ const actionClassName =
 const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
 // NativeSelect's className belongs to its wrapper; the target is the select itself.
 const selectClassName = 'w-full min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
-const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
+const labelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
+const sectionClassName =
+  'min-w-0 space-y-3 [overflow-wrap:anywhere] rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const headingClassName = 'min-w-0 text-lg font-semibold leading-snug [overflow-wrap:anywhere]';
 const linkClassName =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center underline underline-offset-4 md:pointer-fine:min-h-8';
+  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 rounded-sm [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
 // Scope the composed review/recovery controls here without changing the other review callers.
 const reviewControlsClassName = [
-  'min-w-0 space-y-4',
+  'min-w-0 space-y-4 [overflow-wrap:anywhere]',
   '[&_[data-slot=button]]:h-auto [&_[data-slot=button]]:min-h-11 [&_[data-slot=button]]:min-w-11',
   '[&_[data-slot=button]]:max-w-full [&_[data-slot=button]]:whitespace-normal [&_[data-slot=button]]:py-2',
   'md:pointer-fine:[&_[data-slot=button]]:min-h-8 md:pointer-fine:[&_[data-slot=button]]:py-1',
   '[&_[data-slot=native-select-wrapper]]:w-full [&_[data-slot=native-select-wrapper]]:min-w-0',
   '[&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8 [&_label]:min-w-0 [&_label]:flex-wrap',
+  '[&_label]:max-w-full [&_label]:whitespace-normal [&_label]:[overflow-wrap:anywhere]',
+  '[&_[data-slot=button]]:[overflow-wrap:anywhere]',
   '[&_[role=status]_a]:inline-flex [&_[role=status]_a]:min-h-11 [&_[role=status]_a]:min-w-11',
   '[&_[role=status]_a]:max-w-full [&_[role=status]_a]:items-center md:pointer-fine:[&_[role=status]_a]:min-h-8',
 ].join(' ');
@@ -388,22 +394,27 @@ function PartEditor({
   onChange: (value: SnakInput['value']) => void;
 }) {
   return (
-    <div className="min-w-0 space-y-2 rounded-lg border border-border p-3">
-      <p className="font-medium">
+    <ContentItemFrame
+      as="div"
+      className="grid min-w-0 gap-3 rounded-lg border border-border bg-card p-3 [overflow-wrap:anywhere] md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:items-start"
+    >
+      <p className="min-w-0 font-medium leading-snug">
         {pageText(read.release.properties[part.property.id]?.labels, locale).text ||
           m.subject_value_unlabelled({}, { locale: locale as never })}
       </p>
-      {control?.(part, onChange) ?? (
-        <ScalarControl
-          part={part}
-          feedback={feedback}
-          definition={read.release.properties[part.property.id]}
-          read={read}
-          locale={locale}
-          onChange={onChange}
-        />
-      )}
-    </div>
+      <div className="min-w-0 max-w-full">
+        {control?.(part, onChange) ?? (
+          <ScalarControl
+            part={part}
+            feedback={feedback}
+            definition={read.release.properties[part.property.id]}
+            read={read}
+            locale={locale}
+            onChange={onChange}
+          />
+        )}
+      </div>
+    </ContentItemFrame>
   );
 }
 
@@ -422,6 +433,7 @@ function AddPart({
   label: string;
   onAdd: (id: string) => void;
 }) {
+  const selectId = useId();
   const [property, setProperty] = useState('');
   const choices = ids.flatMap((id) => {
     const definition = read.release.properties[id];
@@ -431,11 +443,14 @@ function AddPart({
   });
   if (!choices.length) return null;
   return (
-    <div className="flex flex-wrap items-end gap-3">
+    <div className="flex min-w-0 flex-wrap items-end gap-3">
       <Field className="min-w-0 flex-1 basis-full sm:basis-48">
-        <FieldLabel className={labelClassName}>{label}</FieldLabel>
+        <FieldLabel className={labelClassName} htmlFor={selectId}>
+          {label}
+        </FieldLabel>
         <NativeSelect
           className={selectClassName}
+          id={selectId}
           aria-label={label}
           value={property}
           onChange={(event) => setProperty(event.target.value)}
@@ -492,37 +507,46 @@ export function StatementFields({
   const scalarFeedback = (address: string) => (feedback ? { ...feedback, address } : undefined);
   return (
     <>
-      <section {...section('fact')} className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4">
-        <Heading className="font-semibold">{m.correction_replacement({}, o)}</Heading>
-        <DefinitionGuideLink
-          locale={locale}
-          field
-          address={{
-            type: current.public.subject.type,
-            property: draft.property.id,
-            release: current.source?.rezics.release,
-            returnTo: guideReturn,
-          }}
-        />
-        <p className="text-sm text-muted-foreground">
-          <DefinitionMeaning values={definition?.descriptions} locale={locale} />
-        </p>
-        {valueControl ?? (
-          <ScalarControl
-            part={draft}
-            feedback={scalarFeedback('fact')}
-            definition={definition}
-            read={current}
+      <section {...section('fact')} className={sectionClassName}>
+        <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4">
+          <ContentItemHeading level={Heading === 'h4' ? 4 : 2} className={headingClassName}>
+            {m.correction_replacement({}, o)}
+          </ContentItemHeading>
+          <p className="min-w-0 font-medium">
+            {pageText(definition?.labels, locale).text || m.subject_value_unlabelled({}, o)}
+          </p>
+          <DefinitionGuideLink
             locale={locale}
-            onChange={(value) => change({ ...draft, value })}
+            field
+            address={{
+              type: current.public.subject.type,
+              property: draft.property.id,
+              release: current.source?.rezics.release,
+              returnTo: guideReturn,
+            }}
           />
-        )}
-        <p className="text-sm text-muted-foreground">
-          {definition?.multivalued ? m.correction_multiple({}, o) : m.correction_single({}, o)}
-        </p>
+          <p className="text-sm text-muted-foreground">
+            <DefinitionMeaning values={definition?.descriptions} locale={locale} />
+          </p>
+          {valueControl ?? (
+            <ScalarControl
+              part={draft}
+              feedback={scalarFeedback('fact')}
+              definition={definition}
+              read={current}
+              locale={locale}
+              onChange={(value) => change({ ...draft, value })}
+            />
+          )}
+          <p className="text-sm text-muted-foreground">
+            {definition?.multivalued ? m.correction_multiple({}, o) : m.correction_single({}, o)}
+          </p>
+        </ContentItemFrame>
       </section>
-      <section {...section('qualifiers')} className="space-y-3">
-        <Heading className="font-semibold">{m.correction_qualifiers({}, o)}</Heading>
+      <section {...section('qualifiers')} className={sectionClassName}>
+        <ContentItemHeading level={Heading === 'h4' ? 4 : 2} className={headingClassName}>
+          {m.correction_qualifiers({}, o)}
+        </ContentItemHeading>
         {(draft.qualifiers ?? []).map((part, index) => (
           <PartEditor
             control={partControl}
@@ -553,12 +577,14 @@ export function StatementFields({
           }
         />
       </section>
-      <section {...section('references')} className="space-y-4">
-        <Heading className="font-semibold">{m.correction_references({}, o)}</Heading>
+      <section {...section('references')} className={`${sectionClassName} space-y-4`}>
+        <ContentItemHeading level={Heading === 'h4' ? 4 : 2} className={headingClassName}>
+          {m.correction_references({}, o)}
+        </ContentItemHeading>
         <p className="text-sm text-muted-foreground">{m.correction_citation_hint({}, o)}</p>
         {draft.references.map((reference, index) => (
           <fieldset key={index} className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4">
-            <legend className="px-1 text-sm font-medium">
+            <legend className="max-w-full whitespace-normal px-1 text-sm font-medium [overflow-wrap:anywhere]">
               {m.correction_references({}, o)} {index + 1}
             </legend>
             {reference.parts.map((part, partIndex) => (
@@ -741,7 +767,7 @@ function StatementEditorLive({
   }
   return (
     <article
-      className="mx-auto min-w-0 w-full max-w-4xl space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6"
+      className="mx-auto min-w-0 w-full max-w-4xl space-y-6 p-4 [overflow-wrap:anywhere] [&_[tabindex='-1']:focus]:outline-2 [&_[tabindex='-1']:focus]:outline-offset-2 [&_[tabindex='-1']:focus]:outline-ring sm:p-6"
       aria-busy={busy}
     >
       <header className="space-y-2">
@@ -844,30 +870,43 @@ function StatementEditorLive({
           }}
         >
           {current.source && (
-            <section className="min-w-0 space-y-3 rounded-xl border border-border bg-muted/30 p-4">
-              <h2 className="font-semibold">
-                {m.candidate_current({}, o)} · {pageText(definition?.labels, locale).text}
-              </h2>
-              <PartValue part={current.source} read={current} locale={locale} />
-              {current.source.qualifiers.map((part, index) => (
-                <div key={index}>
-                  <span className="text-sm text-muted-foreground">
-                    {pageText(current.release.properties[part.property.id]?.labels, locale).text ||
-                      m.subject_value_unlabelled({}, o)}
-                    :{' '}
-                  </span>
-                  <PartValue part={part} read={current} locale={locale} />
-                </div>
-              ))}
-              {current.source.references.map((reference, index) => (
-                <div key={index} className="border-s-2 border-border ps-3">
-                  {reference.parts.map((part, partIndex) => (
-                    <div key={partIndex}>
+            <section className="min-w-0 [overflow-wrap:anywhere]">
+              <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+                <ContentItemHeading level={2} className={headingClassName}>
+                  {m.candidate_current({}, o)} · {pageText(definition?.labels, locale).text}
+                </ContentItemHeading>
+                <PartValue part={current.source} read={current} locale={locale} />
+                {current.source.qualifiers.map((part, index) => (
+                  <div key={index} className="grid min-w-0 gap-1 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:gap-3">
+                    <span className="text-sm text-muted-foreground">
+                      {pageText(current.release.properties[part.property.id]?.labels, locale).text ||
+                        m.subject_value_unlabelled({}, o)}
+                      :{' '}
+                    </span>
+                    <div className="min-w-0">
                       <PartValue part={part} read={current} locale={locale} />
                     </div>
-                  ))}
-                </div>
-              ))}
+                  </div>
+                ))}
+                {current.source.references.map((reference, index) => (
+                  <div key={index} className="min-w-0 space-y-2 border-s-2 border-border ps-3">
+                    {reference.parts.map((part, partIndex) => (
+                      <div
+                        key={partIndex}
+                        className="grid min-w-0 gap-1 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:gap-3"
+                      >
+                        <span className="min-w-0 text-sm text-muted-foreground">
+                          {pageText(current.release.properties[part.property.id]?.labels, locale).text ||
+                            m.subject_value_unlabelled({}, o)}
+                        </span>
+                        <div className="min-w-0">
+                          <PartValue part={part} read={current} locale={locale} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </ContentItemFrame>
             </section>
           )}
           <fieldset disabled={busy || !!pending.current} className="min-w-0 space-y-6">
