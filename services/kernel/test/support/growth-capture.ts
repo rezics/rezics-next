@@ -1233,10 +1233,7 @@ async function disableAutovacuum(database: GrowthDatabase, relations?: readonly 
   await disableAutovacuumOn(database, await relationMaintenance(database, relations));
 }
 
-async function disableAutovacuumOn(
-  database: GrowthDatabase,
-  relations: readonly RelationMaintenance[],
-): Promise<void> {
+async function disableAutovacuumOn(database: GrowthDatabase, relations: readonly RelationMaintenance[]): Promise<void> {
   for (const { schema, name, kind, options, toast_disabled } of relations) {
     if (kind !== 'r') continue;
     if (options?.includes('autovacuum_enabled=false') && toast_disabled) continue;

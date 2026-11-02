@@ -1,7 +1,14 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient, QueryConfig } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
-import { capture, captureMeasuredRun, openGrowthDatabase, settle, trackGrow, type GrowthDatabase } from './growth-capture.ts';
+import {
+  capture,
+  captureMeasuredRun,
+  openGrowthDatabase,
+  settle,
+  trackGrow,
+  type GrowthDatabase,
+} from './growth-capture.ts';
 import type { Capture } from './growth-cost.ts';
 import { statementOccurrences } from './growth-report.ts';
 import { checkGrowth } from './growth.ts';
