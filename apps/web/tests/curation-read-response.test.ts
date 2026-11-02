@@ -67,7 +67,9 @@ test('coherent shorthand and multi-view profiles are admitted', async () => {
 });
 
 test('native refusals keep their mapped failure and skip a later profile read', async () => {
-  await expect(admitCurationReads(reader, { status: 403, error: { value: { code: 'forbidden' } } }, unused)).resolves.toEqual({
+  await expect(
+    admitCurationReads(reader, { status: 403, error: { value: { code: 'forbidden' } } }, unused),
+  ).resolves.toEqual({
     ok: false,
     reason: 'forbidden',
   });
