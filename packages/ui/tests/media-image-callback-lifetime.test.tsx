@@ -1,10 +1,12 @@
 import { expect, test } from 'bun:test';
+import { dirname, join } from 'node:path';
 import { act, createElement } from 'react';
 import { createRoot, hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { MediaImage } from '../src/components/media-image.tsx';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', import.meta.dir));
+const webTests = join(import.meta.dir, '../../../apps/web/tests');
+const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', webTests))));
 const window = new Window();
 for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true }))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
