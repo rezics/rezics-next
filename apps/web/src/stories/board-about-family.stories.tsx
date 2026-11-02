@@ -85,20 +85,23 @@ async function loadExample(state: State) {
   const recorded = createStoryRecordedKernelFetch();
   return loadBoardPageWithAuthors(
     createKernelClient('https://kernel.story', {
-      fetch: async (input, init) => {
-        const path = new URL(new Request(input, init).url).pathname;
-        if (state !== 'global' && path === `/v1/boards/${realmBoard.board.id}`) {
-          return Response.json({
-            board: {
-              ...realmBoard.board,
-              ...(state === 'source-unavailable' ? {} : { community }),
-            },
-          });
-        }
-        if (state === 'source-unavailable' && path.startsWith('/v1/realms/'))
-          return Response.json({ code: 'not_found' }, { status: 404 });
-        return recorded(input, init);
-      },
+      fetch: Object.assign(
+        async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): ReturnType<typeof fetch> => {
+          const path = new URL(new Request(input, init).url).pathname;
+          if (state !== 'global' && path === `/v1/boards/${realmBoard.board.id}`) {
+            return Response.json({
+              board: {
+                ...realmBoard.board,
+                ...(state === 'source-unavailable' ? {} : { community }),
+              },
+            });
+          }
+          if (state === 'source-unavailable' && path.startsWith('/v1/realms/'))
+            return Response.json({ code: 'not_found' }, { status: 404 });
+          return recorded(input, init);
+        },
+        { preconnect: recorded.preconnect },
+      ),
     }),
     { id: state === 'global' ? board.board.id : realmBoard.board.id },
   );
