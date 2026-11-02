@@ -61,7 +61,12 @@ export function profileFailure(status: number): Failure {
   if (status === 404) return 'missing';
   return 'unavailable';
 }
-export async function readTarget(client: KernelClient, authorization: string, target: Selection, signal?: AbortSignal): Promise<ProfilePage> {
+export async function readTarget(
+  client: KernelClient,
+  authorization: string,
+  target: Selection,
+  signal?: AbortSignal,
+): Promise<ProfilePage> {
   try {
     const profile = await loadProfileRecord(client, authorization, target.accountId, undefined, signal);
     return { state: 'ready', viewerId: target.viewerId, profile };
@@ -71,7 +76,12 @@ export async function readTarget(client: KernelClient, authorization: string, ta
 }
 
 /** Native current authorization is read again before every write, including an exact retry. */
-export async function writeTarget(client: KernelClient, authorization: string, input: Submission, signal?: AbortSignal) {
+export async function writeTarget(
+  client: KernelClient,
+  authorization: string,
+  input: Submission,
+  signal?: AbortSignal,
+) {
   const current = await readTarget(client, authorization, input, signal);
   if (current.state !== 'ready')
     return {
@@ -90,10 +100,14 @@ export async function writeTarget(client: KernelClient, authorization: string, i
     return { ok: false as const, status: 400, message: '' };
   // PATCH evaluates current actor/principal/assignment/floor, grants, operator and consent natively at command T.
   const headers = { authorization, 'idempotency-key': input.idempotencyKey, 'cache-control': 'no-store' };
-  const result = await withProfileDeadline((bounded) => client.accounts({ accountId: input.accountId }).patch(input.patch as ProfilePatch, {
-    headers,
-    fetch: { cache: 'no-store', signal: bounded },
-  }), signal);
+  const result = await withProfileDeadline(
+    (bounded) =>
+      client.accounts({ accountId: input.accountId }).patch(input.patch as ProfilePatch, {
+        headers,
+        fetch: { cache: 'no-store', signal: bounded },
+      }),
+    signal,
+  );
   if (result.error || !result.data)
     return {
       ok: false as const,

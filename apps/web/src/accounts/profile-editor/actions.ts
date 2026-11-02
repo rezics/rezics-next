@@ -20,7 +20,9 @@ export const readAccountProfile = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<ProfilePage> => {
     try {
       const authorization = await viewer(data);
-      return authorization ? readTarget(kernelClient(), authorization, data, getRequest().signal) : { state: 'signed-out' };
+      return authorization
+        ? readTarget(kernelClient(), authorization, data, getRequest().signal)
+        : { state: 'signed-out' };
     } catch {
       return { state: 'unavailable' };
     }
