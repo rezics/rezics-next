@@ -1311,7 +1311,9 @@ directories.
 
 - **Touches:** one indexed count of running and ready tasks, the stopped tasks through the task-state index with one
   latest-event lookup each, the running manager rows, and the backlog directories' entries.
-- **Bound:** at most four dispatches per sweep; the stopped scan is proportional to stopped tasks, not task history.
+- **Bound:** dispatch runs Git and dependency installation synchronously in the host, so a sweep dispatches at most
+  four briefs and yields to the socket between them; the stopped scan is proportional to stopped tasks, not task
+  history.
 
 ### Check result reuse
 
