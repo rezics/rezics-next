@@ -242,6 +242,7 @@ Unavailable value-explanation reads offer Retry this page with the exact attempt
 returned session, or the attempted session when no page returned; Back to first page deliberately abandons the
 continuation. Denied, missing, invalid or changed readings retire recovery, and every reread hides the prior explanation.
 A changed transport or locale rereads from the first page unless it also supplies a new initial reading.
+Recovery stays inside the existing viewer/session and visit lifetime; saved controls belong to the read that offered them.
 
 ### Recorded changes
 

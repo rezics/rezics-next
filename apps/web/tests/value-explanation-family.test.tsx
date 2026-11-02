@@ -482,8 +482,8 @@ test('selected-value evidence has independent family sections, complete supplied
     expect(requests.at(-1)).toEqual({ cursor: undefined, session: undefined });
     await resolve(first);
 
-    // Transport, locale and supplied-reading replacement each retire an outstanding read and its recovery.
-    for (const changed of ['transport', 'locale', 'initial'] as const) {
+    // Transport, locale, visit and supplied-reading replacement retire outstanding reads and recovery.
+    for (const changed of ['transport', 'locale', 'episode', 'initial'] as const) {
       const seed = { ...first };
       await render(h(ValueExplanation, { locale: 'en', transport: recover, initial: seed }));
       await act(async () => button(container, m.value_more()).click());
@@ -492,6 +492,7 @@ test('selected-value evidence has independent family sections, complete supplied
           locale: changed === 'locale' ? 'fr' : 'en',
           transport: changed === 'transport' ? (cursor, session) => recover(cursor, session) : recover,
           initial: changed === 'initial' ? { kind: 'denied' } : seed,
+          ...(changed === 'episode' ? { episode: 'refreshed-visit' } : {}),
         }),
       );
       const current = container.innerHTML;
