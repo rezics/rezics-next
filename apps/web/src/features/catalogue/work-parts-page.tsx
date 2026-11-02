@@ -226,7 +226,9 @@ function WorkPartsPageLive({
                       <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
                         {row.summary && (
                           <ListRowLink
-                            href={subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale).href}
+                            href={
+                              subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale).href
+                            }
                             lang={row.summary.label?.language}
                             aria-labelledby={`${streamId}-part-${index}`}
                           >

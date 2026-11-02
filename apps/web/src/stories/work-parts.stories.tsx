@@ -269,14 +269,19 @@ function suppliedComposition(fixture: ReturnType<typeof workPartsFixture>) {
   row.statement = structuredClone(row.statement!);
   row.statement.qualifiers.push({
     property: { id: 'schema:name', data_type: 'monolingualtext' },
-    value: { type: 'value', content: { text: 'Édition originale — toutes les informations conservées', language: 'fr' } },
+    value: {
+      type: 'value',
+      content: { text: 'Édition originale — toutes les informations conservées', language: 'fr' },
+    },
   });
   row.statement.references.push({
     hash: 'complete-second-reference',
-    parts: [{
-      property: { id: 'schema:url', data_type: 'url' },
-      value: { type: 'value', content: 'https://archive.example.test/' + 'complete-reference/'.repeat(12) },
-    }],
+    parts: [
+      {
+        property: { id: 'schema:url', data_type: 'url' },
+        value: { type: 'value', content: 'https://archive.example.test/' + 'complete-reference/'.repeat(12) },
+      },
+    ],
   });
   initial.labels['schema:name'] = { text: 'معلومات الطبعة الأصلية كاملة', lang: 'ar' };
   return initial;
@@ -432,7 +437,9 @@ export const IndependentMounts: Story = {
     expect(fixtures[0]!.calls).toHaveLength(2);
     expect(fixtures[1]!.calls).toHaveLength(2);
     await userEvent.selectOptions(controls[0]!, original);
-    await waitFor(() => expect(within(articles[0]!).getByRole('button', { name: m.work_parts_correct() })).toBeVisible());
+    await waitFor(() =>
+      expect(within(articles[0]!).getByRole('button', { name: m.work_parts_correct() })).toBeVisible(),
+    );
     const calls = fixtures[0]!.calls.length;
     const row = articles[0]!.querySelector('li')!;
     const summary = row.querySelector('summary')!;

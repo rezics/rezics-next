@@ -9,24 +9,41 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 // Authored UNRUN. This actual-component campaign is supplied-data/HTTP-seam evidence only.
 // Real keyboard, hit testing and geometry belong to the connected browser plays; native,
 // BFF reader/credential and SSR acceptance remain with the unchanged original campaigns.
-async function mounted(run: (ui: {
-  host: HTMLElement;
-  render: (node: ReactNode) => Promise<void>;
-  click: (name: string, scope?: ParentNode) => Promise<void>;
-  change: (select: HTMLSelectElement, value: string) => Promise<void>;
-  input: (element: HTMLInputElement, value: string) => Promise<void>;
-  until: (predicate: () => boolean) => Promise<void>;
-}) => Promise<void>) {
+async function mounted(
+  run: (ui: {
+    host: HTMLElement;
+    render: (node: ReactNode) => Promise<void>;
+    click: (name: string, scope?: ParentNode) => Promise<void>;
+    change: (select: HTMLSelectElement, value: string) => Promise<void>;
+    input: (element: HTMLInputElement, value: string) => Promise<void>;
+    until: (predicate: () => boolean) => Promise<void>;
+  }) => Promise<void>,
+) {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en/subjects/book/title' });
-  const keys = ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'DocumentFragment', 'MutationObserver',
-    'ResizeObserver', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame', 'IS_REACT_ACT_ENVIRONMENT'];
+  const keys = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'Element',
+    'Node',
+    'DocumentFragment',
+    'MutationObserver',
+    'ResizeObserver',
+    'getComputedStyle',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ];
   const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const key of keys) Object.defineProperty(globalThis, key, {
-    configurable: true, writable: true,
-    value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key],
-  });
+  for (const key of keys)
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key],
+    });
   const { createRoot } = await import('react-dom/client');
   const { setLocale } = await import('../src/paraglide/runtime.js');
   setLocale('en', { reload: false });
@@ -63,7 +80,9 @@ async function mounted(run: (ui: {
       },
       until: async (predicate) => {
         for (let attempt = 0; attempt < 100 && !predicate(); attempt++) {
-          await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+          await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          });
         }
         expect(predicate()).toBe(true);
       },
@@ -101,15 +120,35 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
       [...scope.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === name)!;
     let mount = 0;
     const show = (fixture: ReturnType<typeof workPartsFixture>, initial = fixture.snapshot(), locale = 'en') =>
-      render(h(WorkPartsPage, { key: ++mount, id: fixture.id, locale, initial, search: fixture.search,
-        transport: fixture.transport }));
+      render(
+        h(WorkPartsPage, {
+          key: ++mount,
+          id: fixture.id,
+          locale,
+          initial,
+          search: fixture.search,
+          transport: fixture.transport,
+        }),
+      );
 
     const left = workPartsFixture('partial');
     const right = workPartsFixture('partial');
-    await render(h('div', {}, ...[left, right].map((fixture, index) => h(WorkPartsPage, {
-      key: `independent-${index}`, id: fixture.id, locale: 'en', initial: fixture.snapshot(),
-      search: fixture.search, transport: fixture.transport,
-    }))));
+    await render(
+      h(
+        'div',
+        {},
+        ...[left, right].map((fixture, index) =>
+          h(WorkPartsPage, {
+            key: `independent-${index}`,
+            id: fixture.id,
+            locale: 'en',
+            initial: fixture.snapshot(),
+            search: fixture.search,
+            transport: fixture.transport,
+          }),
+        ),
+      ),
+    );
     const panels = [...host.querySelectorAll<HTMLElement>('article')];
     const controls = panels.map((panel) => panel.querySelector<HTMLSelectElement>('select')!);
     expect(controls[0]!.id).not.toBe(controls[1]!.id);
@@ -161,7 +200,12 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
     expect(position.value).toBe('3');
     expect(host.contains(position)).toBe(true);
     expect(left.calls).toHaveLength(beforeMore + 2);
-    expect(left.calls.at(-1)!.query).toMatchObject({ property: left.property, cursor: 'native-next', language: 'en', limit: '20' });
+    expect(left.calls.at(-1)!.query).toMatchObject({
+      property: left.property,
+      cursor: 'native-next',
+      language: 'en',
+      limit: '20',
+    });
     expect(left.calls.at(-1)!.session).toBe('parts-session');
     await click(m.work_parts_correct(), panels[0]);
     expect(panels[0]!.querySelectorAll(':scope > div > section')).toHaveLength(3); // Add plus two drafts.
@@ -184,11 +228,22 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
     const long = '旅人の物語 第二巻 — 長い道のりを越えて、ふたたび出会う人々と終わらない読書の記録';
     row.summary = { ...row.summary!, label: { value: long, language: 'ja' } };
     row.statement = structuredClone(row.statement!);
-    row.statement.qualifiers.push({ property: { id: 'schema:name', data_type: 'monolingualtext' },
-      value: { type: 'value', content: { text: 'Édition originale — toutes les informations conservées', language: 'fr' } } });
-    row.statement.references.push({ hash: 'second-reference', parts: [
-      { property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: 'https://archive.example.test/' + 'complete-reference/'.repeat(12) } },
-    ] });
+    row.statement.qualifiers.push({
+      property: { id: 'schema:name', data_type: 'monolingualtext' },
+      value: {
+        type: 'value',
+        content: { text: 'Édition originale — toutes les informations conservées', language: 'fr' },
+      },
+    });
+    row.statement.references.push({
+      hash: 'second-reference',
+      parts: [
+        {
+          property: { id: 'schema:url', data_type: 'url' },
+          value: { type: 'value', content: 'https://archive.example.test/' + 'complete-reference/'.repeat(12) },
+        },
+      ],
+    });
     supplied.labels['schema:name'] = { text: 'معلومات الطبعة الأصلية كاملة', lang: 'ar' };
     const immutable = structuredClone(supplied);
     for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']) {
@@ -196,12 +251,15 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
       const item = host.querySelector('li')!;
       expect(item.querySelector('h2')!.textContent).toBe(long);
       expect(item.querySelector('h2')!.getAttribute('lang')).toBe('ja');
-      expect(item.querySelector('a')!.getAttribute('href')).toBe(subjectHref({ id: row.summary.id, label: long }, locale).href);
+      expect(item.querySelector('a')!.getAttribute('href')).toBe(
+        subjectHref({ id: row.summary.id, label: long }, locale).href,
+      );
       expect(item.textContent).toContain('Édition originale — toutes les informations conservées');
       expect(item.querySelector('[lang="ar"]')!.textContent).toBe(supplied.labels['schema:name']!.text);
       expect(item.querySelector('pre')!.textContent).toBe(JSON.stringify(row.statement, null, 2));
       const references = item.querySelector('details dl')!.textContent!;
-      for (const reference of [row.holder, supplied.stream!.property, row.statementId]) expect(references).toContain(reference);
+      for (const reference of [row.holder, supplied.stream!.property, row.statementId])
+        expect(references).toContain(reference);
       expect(item.querySelector('details')!.open).toBe(false);
       expect(item.querySelectorAll('a')).toHaveLength(4); // Primary, value subject, two independent citations.
       const clone = partCorrection(row, supplied.stream!)!;
@@ -211,11 +269,25 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
     expect(supplied).toEqual(immutable);
     expect(rich.calls).toHaveLength(0);
 
-    for (const scenario of ['empty', 'denied', 'stale', 'unavailable', 'pending', 'missing-assertion', 'no-position'] as const) {
+    for (const scenario of [
+      'empty',
+      'denied',
+      'stale',
+      'unavailable',
+      'pending',
+      'missing-assertion',
+      'no-position',
+    ] as const) {
       const fixture = workPartsFixture(scenario);
       await show(fixture);
       if (scenario === 'denied' || scenario === 'stale' || scenario === 'unavailable') {
-        expect(host.querySelector('[role="alert"]')!.textContent).toBe(scenario === 'denied' ? m.candidate_denied() : scenario === 'stale' ? m.relation_stale() : m.candidate_unavailable());
+        expect(host.querySelector('[role="alert"]')!.textContent).toBe(
+          scenario === 'denied'
+            ? m.candidate_denied()
+            : scenario === 'stale'
+              ? m.relation_stale()
+              : m.candidate_unavailable(),
+        );
         expect(host.textContent).not.toContain('Volume Two');
       } else if (scenario === 'empty') {
         expect(host.textContent).toContain(m.work_parts_empty());
@@ -243,8 +315,21 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
 
     const loading = workPartsFixture();
     let loadingReads = 0;
-    await render(h(WorkPartsPage, { key: 'loading', id: loading.id, locale: 'en', search: loading.search,
-      transport: { ...loading.transport, read: () => { loadingReads++; return new Promise(() => {}); } } }));
+    await render(
+      h(WorkPartsPage, {
+        key: 'loading',
+        id: loading.id,
+        locale: 'en',
+        search: loading.search,
+        transport: {
+          ...loading.transport,
+          read: () => {
+            loadingReads++;
+            return new Promise(() => {});
+          },
+        },
+      }),
+    );
     expect(host.querySelector('article')!.getAttribute('aria-busy')).toBe('true');
     expect(host.querySelector('[role="status"]')!.textContent).toBe(m.candidate_loading());
     expect(host.querySelectorAll('li')).toHaveLength(0);
@@ -268,11 +353,16 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
     expect(post.path).toBe(`/v1/subjects/${workPartId}/candidates`);
     expect(post.authorization).toBe('Bearer contributor');
     expect(post.key).toMatch(/^[0-9a-f-]{36}$/);
-    expect(post.body).toEqual({ statement: {
-      property: { id: original.property.id }, value: original.value,
-      qualifiers: original.qualifiers.map(({ property, value }) => ({ property: { id: property.id }, value })),
-      references: original.references.map(({ parts }) => ({ parts: parts.map(({ property, value }) => ({ property: { id: property.id }, value })) })),
-    } });
+    expect(post.body).toEqual({
+      statement: {
+        property: { id: original.property.id },
+        value: original.value,
+        qualifiers: original.qualifiers.map(({ property, value }) => ({ property: { id: property.id }, value })),
+        references: original.references.map(({ parts }) => ({
+          parts: parts.map(({ property, value }) => ({ property: { id: property.id }, value })),
+        })),
+      },
+    });
     expect(action.holder.subject.statements[action.property]![0]).toEqual(original);
     expect(host.querySelector('fieldset')!.disabled).toBe(true);
     expect(button(m.candidate_cancel()).disabled).toBe(true);
@@ -297,8 +387,12 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
     await click(m.candidate_adopt(), editor);
     await until(() => action.calls.some((call) => call.path.endsWith(':adopt')));
     const adopt = action.calls.find((call) => call.path.endsWith(':adopt'))!;
-    expect(adopt.body).toMatchObject({ property: action.property, target: action.id, expected_head: 3,
-      selection: [{ candidate: '00000000-0000-4000-8000-000000000804', rank: 'normal' }] });
+    expect(adopt.body).toMatchObject({
+      property: action.property,
+      target: action.id,
+      expected_head: 3,
+      selection: [{ candidate: '00000000-0000-4000-8000-000000000804', rank: 'normal' }],
+    });
     expect(adopt.authorization).toBe('Bearer contributor');
     expect(adopt.session).toBe('parts-session');
     expect(adopt.key).not.toBe(accept.key);
@@ -306,9 +400,23 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
 
     // Retain a queued control across reader A-B-A and unmount: no late action/read or focus theft.
     const retired = workPartsFixture();
-    const observed = (subject: string) => ({ state: 'signed-in' as const, subject, csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' });
-    const boundary = (reader: string) => h(CandidateReaderBoundary, { observed: observed(reader), address: 'work-parts-family' },
-      h(WorkPartsPage, { id: retired.id, locale: 'en', initial: retired.snapshot(), search: retired.search, transport: retired.transport }));
+    const observed = (subject: string) => ({
+      state: 'signed-in' as const,
+      subject,
+      csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
+    });
+    const boundary = (reader: string) =>
+      h(
+        CandidateReaderBoundary,
+        { observed: observed(reader), address: 'work-parts-family' },
+        h(WorkPartsPage, {
+          id: retired.id,
+          locale: 'en',
+          initial: retired.snapshot(),
+          search: retired.search,
+          transport: retired.transport,
+        }),
+      );
     await render(boundary('reader-a'));
     const old = queuedClick(button(m.work_parts_correct()));
     await render(boundary('reader-b'));
@@ -317,13 +425,17 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
     const outside = host.ownerDocument.createElement('button');
     host.ownerDocument.body.append(outside);
     outside.focus();
-    await act(async () => { old(); });
+    await act(async () => {
+      old();
+    });
     expect(retired.calls).toHaveLength(reads);
     expect(button(m.relation_open())).toBeUndefined();
     expect(host.ownerDocument.activeElement).toBe(outside);
     const unmounted = queuedClick(button(m.work_parts_restart()));
     await render(null);
-    await act(async () => { unmounted(); });
+    await act(async () => {
+      unmounted();
+    });
     expect(retired.calls).toHaveLength(reads);
     outside.remove();
 
@@ -334,15 +446,32 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
       const seed = ready(fixture.snapshot());
       const nodes: ReactNode[] = [];
       for (let offset = 0; offset < scale; offset += 20) {
-        const page = { ...seed, rows: Array.from({ length: Math.min(20, scale - offset) }, (_, index) => ({
-          ...seed.rows[0]!, holder: `supplied-holder-${offset + index}`, statementId: `supplied-statement-${offset + index}`,
-          summary: { ...seed.rows[0]!.summary!, label: { value: `Supplied part ${offset + index}`, language: 'en' } },
-        })) };
+        const page = {
+          ...seed,
+          rows: Array.from({ length: Math.min(20, scale - offset) }, (_, index) => ({
+            ...seed.rows[0]!,
+            holder: `supplied-holder-${offset + index}`,
+            statementId: `supplied-statement-${offset + index}`,
+            summary: { ...seed.rows[0]!.summary!, label: { value: `Supplied part ${offset + index}`, language: 'en' } },
+          })),
+        };
         // A rendering pass must not inspect unrelated whole-subject statement populations.
-        Object.defineProperty(page.public.subject, 'statements', { configurable: true,
-          get: () => { throw new Error('Unexpected whole-population traversal'); } });
-        nodes.push(h(WorkPartsPage, { key: `growth-${scale}-${offset}`, id: fixture.id, locale: 'en', initial: page,
-          search: fixture.search, transport: fixture.transport }));
+        Object.defineProperty(page.public.subject, 'statements', {
+          configurable: true,
+          get: () => {
+            throw new Error('Unexpected whole-population traversal');
+          },
+        });
+        nodes.push(
+          h(WorkPartsPage, {
+            key: `growth-${scale}-${offset}`,
+            id: fixture.id,
+            locale: 'en',
+            initial: page,
+            search: fixture.search,
+            transport: fixture.transport,
+          }),
+        );
       }
       await render(h('div', {}, ...nodes));
       expect(host.querySelectorAll('li')).toHaveLength(scale);
