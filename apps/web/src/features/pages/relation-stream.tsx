@@ -144,7 +144,7 @@ function useRelationIncarnation(): string {
 }
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 function failure(status: number | undefined, locale: string): string {
   const options = { locale: locale as never };
