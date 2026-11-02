@@ -166,7 +166,9 @@ async function surface(session: 'signed-in' | 'signed-out' | 'unavailable' = 'si
     await act(async () => button.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
   }
   async function retry() {
-    const button = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent === m.subject_view_retry());
+    const button = [...host.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent === m.subject_view_retry(),
+    );
     if (!button) throw new Error('Missing review discovery retry');
     await act(async () => button.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
   }
