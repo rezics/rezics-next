@@ -78,6 +78,7 @@ type Harness = {
 };
 
 type Hooks = {
+  goto?: (index: number, url: string) => Promise<unknown>;
   newContext?: (index: number, width: number) => Promise<BrowserContext>;
   newPage?: (index: number) => Promise<Page>;
   addInitScript?: (index: number) => Promise<void>;
@@ -117,7 +118,7 @@ function setup(hooks: Hooks = {}): {
       async goto(url: string) {
         currentStoryId = new URL(url).searchParams.get('id') ?? '';
         events.navigations.push(currentStoryId);
-        return null;
+        return (await hooks.goto?.(pageIndex, url)) ?? null;
       },
       async waitForFunction() {
         return undefined;
@@ -341,21 +342,35 @@ test.each(['addInitScript', 'newPage'] as const)('%s setup failure retires every
 });
 
 test.each(['reject', 'hang'] as const)(
-  'one context close that %s does not prevent independent cleanup',
+  'a retired width scope whose context close %s keeps the build occupied after independent outer cleanup',
   async (mode) => {
     const { runtime, events } = setup({
       closeContext: async (index) => {
-        if (index === 0 && mode === 'reject') throw new Error('context close rejected');
-        if (index === 0 && mode === 'hang') await new Promise<void>(() => undefined);
+        if (index === 2 && mode === 'reject') throw new Error('context close rejected');
+        if (index === 2 && mode === 'hang') await new Promise<void>(() => undefined);
       },
       cleanupTimeoutMs: 8,
     });
 
-    await expect(runCaptureLifecycle(options(['--story', 'components-example--*']), runtime)).rejects.toThrow(
-      'Build directory retained at /fake/.temp/storybook-build-lifetime',
+    const running = runCaptureLifecycle(
+      options(['--story', 'components-example--*', '--width', '390', '--width', '1280']),
+      runtime,
     );
-    expect(events.contextClosed.sort()).toEqual([0, 1]);
-    expect(events.pageClosed.sort()).toEqual([0, 1]);
+    const failure = await running.then(
+      () => undefined,
+      (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
+    );
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure!.message).toContain('Build directory retained at /fake/.temp/storybook-build-lifetime');
+    expect(failure!.message).toContain(
+      mode === 'reject'
+        ? 'context 1 at 1280px close failed: context close rejected'
+        : 'context 1 at 1280px close did not settle within 8ms.',
+    );
+    expect(events.widths).toEqual([390, 390, 1280, 1280]);
+    expect(events.contextClosed.sort()).toEqual([0, 1, 2, 3]);
+    expect(events.pageClosed.sort()).toEqual([0, 1, 2, 3]);
     expect(events.serverClosed).toBe(1);
     expect(events.browserClosed).toBe(1);
     expect(events.removed).toEqual([]);
@@ -431,8 +446,20 @@ test.each(['browser', 'context', 'page'] as const)(
     const running = runCaptureLifecycle(options(['--story', 'components-example--a']), runtime);
     await reached.promise;
     signals.fire('SIGTERM');
-    await expect(running).rejects.toThrow('Build directory retained');
+    const failure = await running.then(
+      () => undefined,
+      (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
+    );
+    expect(failure).toBeInstanceOf(Error);
+    const reason =
+      target === 'browser'
+        ? 'Playwright browser acquisition did not settle within 8ms.'
+        : target === 'context'
+          ? 'context 1 at 1280px acquisition did not settle within 8ms.'
+          : 'page 1 at 1280px acquisition did not settle within 8ms.';
+    expect(failure!.message).toContain(`Build directory retained at /fake/.temp/storybook-build-lifetime because ${reason}`);
     expect(base.events.navigations).toEqual([]);
+    expect(base.events.removed).toEqual([]);
 
     late.resolve(lateHandle as unknown as Browser | BrowserContext | Page);
     await closed.promise;
@@ -441,3 +468,42 @@ test.each(['browser', 'context', 'page'] as const)(
     expect(signals.count()).toBe(0);
   },
 );
+
+test('an in-flight capture job that outlives page close keeps the build occupied through late completion', async () => {
+  const signals = signalHarness();
+  const started = deferred<void>();
+  const navigation = deferred<unknown>();
+  const { runtime, events } = setup({
+    signals,
+    stories: ['components-example--a'],
+    cleanupTimeoutMs: 8,
+    goto: async () => {
+      started.resolve();
+      return navigation.promise;
+    },
+  });
+
+  const running = runCaptureLifecycle(options(['--story', 'components-example--a']), runtime);
+  await started.promise;
+  signals.fire('SIGTERM');
+  const failure = await running.then(
+    () => undefined,
+    (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
+  );
+
+  expect(failure).toBeInstanceOf(Error);
+  expect(failure!.message).toContain(
+    'Build directory retained at /fake/.temp/storybook-build-lifetime because capture job components-example--a en dark at 1280px acquisition did not settle within 8ms.',
+  );
+  expect(events.pageClosed).toEqual([0]);
+  expect(events.contextClosed).toEqual([0]);
+  expect(events.serverClosed).toBe(1);
+  expect(events.browserClosed).toBe(1);
+  expect(events.removed).toEqual([]);
+  expect(events.navigations).toEqual(['components-example--a']);
+  expect(signals.count()).toBe(0);
+
+  navigation.resolve(null);
+  await Promise.resolve();
+  expect(events.removed).toEqual([]);
+});

@@ -117,6 +117,32 @@ function waitForSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T>
   });
 }
 
+/** Retires a page operation only after it settles, so page close can prove the job has drained. */
+function waitForRetirement<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    let retired = signal.aborted;
+    const remove = () => signal.removeEventListener('abort', onAbort);
+    const onAbort = () => {
+      retired = true;
+      remove();
+    };
+    if (!retired) signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        remove();
+        if (retired || signal.aborted) reject(abortedError(signal));
+        else resolve(value);
+      },
+      (error: unknown) => {
+        remove();
+        if (retired || signal.aborted) reject(abortedError(signal));
+        else reject(error);
+      },
+    );
+  });
+}
+
 type Bounded<T> = { state: 'fulfilled'; value: T } | { state: 'rejected'; error: unknown } | { state: 'timeout' };
 
 function bounded<T>(promise: Promise<T>, timeoutMs: number): Promise<Bounded<T>> {
@@ -269,7 +295,7 @@ class ResourceRegistry {
     const acquired = await bounded(record.acquired!, this.timeoutMs);
     if (acquired.state === 'timeout') {
       const message = `${record.label} acquisition did not settle within ${this.timeoutMs}ms.`;
-      return { issues: [{ label: record.label, message }], unproved: [record.label] };
+      return { issues: [{ label: record.label, message }], unproved: [message] };
     }
     if (record.hasValue) return this.waitForClose(record);
     return { issues: [], unproved: [] };
@@ -281,16 +307,16 @@ class ResourceRegistry {
     if (result.state === 'timeout') {
       const message = `${record.label} close did not settle within ${this.timeoutMs}ms.`;
       record.state = 'unproved';
-      return { issues: [{ label: record.label, message }], unproved: [record.label] };
+      return { issues: [{ label: record.label, message }], unproved: [message] };
     }
     if (result.state === 'rejected') {
       const message = `${record.label} close failed: ${errorMessage(result.error)}`;
       record.state = 'unproved';
-      return { issues: [{ label: record.label, message }], unproved: [record.label] };
+      return { issues: [{ label: record.label, message }], unproved: [message] };
     }
     if (result.value) {
       const message = `${record.label} close failed: ${result.value}`;
-      return { issues: [{ label: record.label, message }], unproved: [record.label] };
+      return { issues: [{ label: record.label, message }], unproved: [message] };
     }
     return { issues: [], unproved: [] };
   }
@@ -633,6 +659,7 @@ class CaptureLifetime {
   readonly resources: ResourceRegistry;
   readonly cleanupFailures: string[] = [];
   readonly unproved: string[] = [];
+  private readonly cleanupIssues: CleanupIssue[] = [];
   private readonly scopes = new Set<ResourceRegistry>();
   private retired = false;
   private retirement: Promise<CleanupReport> | undefined;
@@ -660,19 +687,19 @@ class CaptureLifetime {
     this.signal.abort(new Error(reason));
     const reports = [this.resources.retire(reason), ...[...this.scopes].map((scope) => scope.retire(reason))];
     this.retirement = Promise.all(reports).then((values) => {
-      const report = {
-        issues: values.flatMap((value) => value.issues),
-        unproved: values.flatMap((value) => value.unproved),
-      };
-      this.absorb(report);
-      return report;
+      values.forEach((report) => this.absorb(report));
+      return { issues: [...this.cleanupIssues], unproved: [...this.unproved] };
     });
     return this.retirement;
   }
 
   private absorb(report: CleanupReport): void {
-    this.cleanupFailures.push(...report.issues.map((issue) => `${issue.label}: ${issue.message}`));
-    this.unproved.push(...report.unproved);
+    for (const issue of report.issues) {
+      if (this.cleanupIssues.some((seen) => seen.label === issue.label && seen.message === issue.message)) continue;
+      this.cleanupIssues.push(issue);
+      this.cleanupFailures.push(`${issue.label}: ${issue.message}`);
+    }
+    for (const reason of report.unproved) if (!this.unproved.includes(reason)) this.unproved.push(reason);
   }
 }
 
@@ -686,14 +713,14 @@ export async function navigateStory(
 ): ReturnType<Page['goto']> {
   const options = { waitUntil: 'load' as const, timeout: 60_000 };
   try {
-    return await waitForSignal(page.goto(url, options), signal);
+    return await waitForRetirement(page.goto(url, options), signal);
   } catch (error) {
     if (signal?.aborted) throw abortedError(signal);
     const message = error instanceof Error ? error.message : String(error);
     if (!message.includes('net::ERR_NETWORK_CHANGED')) throw error;
     writeProgress(`Retrying navigation for story ${id} after net::ERR_NETWORK_CHANGED.`);
     try {
-      return await waitForSignal(page.goto(url, options), signal);
+      return await waitForRetirement(page.goto(url, options), signal);
     } catch (retryError) {
       const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
       throw new Error(`Story ${id} navigation failed after retry: ${retryMessage}`, { cause: retryError });
@@ -893,7 +920,7 @@ async function prepareFullPageCapture(page: Page): Promise<void> {
 }
 
 async function captureOne(page: Page, origin: string, job: Job, out: string, signal?: AbortSignal): Promise<string> {
-  const wait = <T>(operation: Promise<T>) => (signal ? waitForSignal(operation, signal) : operation);
+  const wait = <T>(operation: Promise<T>) => waitForRetirement(operation, signal);
   const clip = (value: string) => (value.length <= 1_000 ? value : `${value.slice(0, 1_000)}…`);
   const url = `${origin}/iframe.html?id=${encodeURIComponent(job.id)}&globals=locale:${job.locale};theme:${job.theme}`;
   const pageErrors: string[] = [];
@@ -1072,7 +1099,11 @@ async function capture(
       const result = await captureJobs(
         widthJobs,
         async (job, worker) => {
-          const file = await captureOne(pages[worker]!, origin, job, out, lifetime.signal.signal);
+          const file = await scope.acquire(
+            `capture job ${job.id} ${job.locale} ${job.theme} at ${width}px`,
+            () => captureOne(pages[worker]!, origin, job, out, lifetime.signal.signal),
+            () => undefined,
+          );
           completed += 1;
           progress.captured(completed, jobs.length, file);
           return file;
