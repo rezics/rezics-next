@@ -194,6 +194,7 @@ export function RealmClaimControls({
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
+                nativeButton={false}
                 render={<a href={localizeHref(`/realms/${realmId}/claim-requests/${request.requestId}`)} />}
               >
                 {m.realm_claim_status_open()}
@@ -205,6 +206,7 @@ export function RealmClaimControls({
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
+              nativeButton={false}
               render={<a href={localizeHref(`/realms/${realmId}/claim-requests/${receipt.requestId}`)} />}
             >
               {m.realm_claim_status_open()}
@@ -227,7 +229,7 @@ export function RealmClaimControls({
           </p>
         ) : null}
         {orphan && current?.admission === 'signed-out' ? (
-          <Button render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}>
+          <Button nativeButton={false} render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}>
             {m.realm_claim_sign_in()}
           </Button>
         ) : null}
