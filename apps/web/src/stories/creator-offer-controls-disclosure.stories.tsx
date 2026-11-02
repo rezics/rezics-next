@@ -101,7 +101,8 @@ export const Normal: Story = {
   play: async ({ canvasElement }) => {
     const { view, toggle } = await openManagement(canvasElement);
     await expect(view.getByRole('link', { name: creatorOfferFixture.title })).toHaveAttribute(
-      'href', `/${getLocale()}/offers/${creatorOfferFixture.id}`,
+      'href',
+      `/${getLocale()}/offers/${creatorOfferFixture.id}`,
     );
     await expect(view.getByText(m.creator_offers_active(), { exact: true })).toBeVisible();
     await expect(view.getByText(m.creator_offers_delisted(), { exact: true })).toBeVisible();
@@ -141,9 +142,11 @@ export const UnavailableRules: Story = {
   render: () => <Example variant="rules-unavailable" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await userEvent.click(await view.findByRole('button', {
-      name: m.creator_offer_controls_manage_offer({ title: creatorOfferFixture.title }),
-    }));
+    await userEvent.click(
+      await view.findByRole('button', {
+        name: m.creator_offer_controls_manage_offer({ title: creatorOfferFixture.title }),
+      }),
+    );
     await expect(view.getByText(m.creator_offers_amount_unavailable(), { exact: false })).toBeVisible();
     await expect(view.getByText(m.creator_price_unavailable())).toBeVisible();
     await expect(view.getByRole('textbox', { name: m.creator_amount() })).toBeDisabled();
@@ -158,9 +161,11 @@ export const AuthorityRetired: Story = {
     await userEvent.type(view.getByRole('textbox', { name: m.creator_amount() }), '13.25');
     await userEvent.click(view.getByRole('button', { name: 'Retire illustrative authority' }));
     await expect(view.queryByRole('textbox')).toBeNull();
-    await expect(view.queryByRole('button', {
-      name: m.creator_offer_controls_manage_offer({ title: creatorOfferFixture.title }),
-    })).toBeNull();
+    await expect(
+      view.queryByRole('button', {
+        name: m.creator_offer_controls_manage_offer({ title: creatorOfferFixture.title }),
+      }),
+    ).toBeNull();
     await expect(view.queryByRole('heading', { name: creatorOfferFixture.title })).toBeNull();
     await expect(view.getByText(m.creator_closed())).toBeVisible();
   },

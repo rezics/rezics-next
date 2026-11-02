@@ -88,12 +88,15 @@ async function surface() {
     keys: { [first.id]: { reprice: id(1), delist: id(2) }, [second.id]: { reprice: id(3), delist: id(4) } },
   };
   const show = (next = data, available = true) =>
-    act(async () => root.render(<CreatorOffersPage data={next} locale="en" guard={guard} offerPageAvailable={available} />));
+    act(async () =>
+      root.render(<CreatorOffersPage data={next} locale="en" guard={guard} offerPageAvailable={available} />),
+    );
   const rows = () => [...host.querySelectorAll<HTMLLIElement>('ul > li')];
   const toggle = (row = rows()[0]!) => row.querySelector<HTMLButtonElement>('button[aria-controls]')!;
   const panel = (row = rows()[0]!) => document.getElementById(toggle(row).getAttribute('aria-controls')!)!;
   const price = () => panel().querySelector<HTMLInputElement>('input[name="price"]')!;
-  const button = (name: string) => [...panel().querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === name)!;
+  const button = (name: string) =>
+    [...panel().querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === name)!;
   const click = (node: HTMLElement) => act(async () => user.click(node));
   const type = (text: string) => act(async () => user.type(price(), text));
   const settle = (index: number, result: CreatorOfferResult | Error) =>
@@ -102,8 +105,23 @@ async function surface() {
       else writes[index]!.work.resolve(result);
     });
   return {
-    host, data, first, second, show, rows, toggle, panel, price, button, click, type, settle, user,
-    retire() { current = false; },
+    host,
+    data,
+    first,
+    second,
+    show,
+    rows,
+    toggle,
+    panel,
+    price,
+    button,
+    click,
+    type,
+    settle,
+    user,
+    retire() {
+      current = false;
+    },
     async close() {
       await act(async () => root.unmount());
       host.remove();
@@ -122,7 +140,9 @@ test('Offer identity, money, state and full title stay outside independent keybo
   try {
     await p.show();
     expect(p.rows().map((row) => row.querySelector('h2')!.textContent)).toEqual([
-      p.first.title, delistedCreatorOfferFixture.title, p.second.title,
+      p.first.title,
+      delistedCreatorOfferFixture.title,
+      p.second.title,
     ]);
     const row = p.rows()[0]!;
     expect(row.querySelector('a')?.getAttribute('href')).toBe(`/en/offers/${p.first.id}`);
@@ -156,7 +176,9 @@ test('Offer identity, money, state and full title stay outside independent keybo
     expect(p.rows()[0]!.querySelector('a')).toBeNull();
     expect(p.rows()[0]!.querySelector('h2')!.textContent).toBe(p.first.title);
     expect(writes).toHaveLength(0);
-  } finally { await p.close(); }
+  } finally {
+    await p.close();
+  }
 });
 
 test('An edited draft cannot collapse or disappear during a same-origin omitted-row refresh', async () => {
@@ -178,7 +200,9 @@ test('An edited draft cannot collapse or disappear during a same-origin omitted-
     await p.click(p.toggle(retained));
     expect(p.panel(retained).hidden).toBe(false);
     expect(writes).toHaveLength(0);
-  } finally { await p.close(); }
+  } finally {
+    await p.close();
+  }
 });
 
 test('Pending, uncertain and saved reprice outcomes stay open with the exact original request and token', async () => {
@@ -190,7 +214,12 @@ test('Pending, uncertain and saved reprice outcomes stay open with the exact ori
     await p.click(p.button(m.creator_reprice()));
     expect(writes).toHaveLength(1);
     const original = writes[0]!;
-    expect(original.data).toEqual({ operation: 'reprice', offerId: p.first.id, unitAmountMinor: 1325, idempotencyKey: id(1) });
+    expect(original.data).toEqual({
+      operation: 'reprice',
+      offerId: p.first.id,
+      unitAmountMinor: 1325,
+      idempotencyKey: id(1),
+    });
     expect(original.headers).toEqual({ 'X-CSRF-Token': 'origin-csrf' });
     expect(p.panel().querySelector('[role="status"]')!.textContent).toBe(m.creator_saving());
     await p.click(p.toggle());
@@ -201,7 +230,9 @@ test('Pending, uncertain and saved reprice outcomes stay open with the exact ori
     await p.settle(0, new Error('Response lost'));
     expect(p.panel().querySelector('[role="alert"]')!.textContent).toBe(m.creator_uncertain());
     await p.show({
-      ...p.data, schema: null, csrfToken: 'replacement-loader-token',
+      ...p.data,
+      schema: null,
+      csrfToken: 'replacement-loader-token',
       keys: { [p.first.id]: { reprice: id(50), delist: id(51) } },
       page: { kind: 'ready', offers: [{ ...p.first, unitAmountMinor: 9900, state: 'delisted' }], next: null },
     });
@@ -216,7 +247,9 @@ test('Pending, uncertain and saved reprice outcomes stay open with the exact ori
     expect(p.panel().hidden).toBe(false);
     expect(p.panel().querySelector('[role="status"]')!.textContent).toBe(m.creator_saved());
     expect(p.price().disabled).toBe(true);
-  } finally { await p.close(); }
+  } finally {
+    await p.close();
+  }
 });
 
 test('Delist is discoverable without a price draft; rejection and uncertain original delist stay recoverable', async () => {
@@ -239,15 +272,22 @@ test('Delist is discoverable without a price draft; rejection and uncertain orig
     await p.click(p.button(m.creator_retry()));
     expect(writes[2]!.data).toBe(writes[1]!.data);
     await p.settle(2, { kind: 'saved', id: p.first.id });
-  } finally { await p.close(); }
+  } finally {
+    await p.close();
+  }
 });
 
 test('Unavailable price rules preserve recorded unknowns and a separately usable delist command', async () => {
   const p = await surface();
   try {
     await p.show({
-      ...p.data, schema: null,
-      page: { kind: 'ready', offers: [{ ...p.first, moneyUnit: null, taxBehavior: null, contentEdition: null }], next: null },
+      ...p.data,
+      schema: null,
+      page: {
+        kind: 'ready',
+        offers: [{ ...p.first, moneyUnit: null, taxBehavior: null, contentEdition: null }],
+        next: null,
+      },
     });
     const facts = p.rows()[0]!.querySelector('[data-content-item-slot="metadata"]')!.textContent;
     expect(facts).toContain(m.creator_offers_amount_unavailable());
@@ -262,7 +302,9 @@ test('Unavailable price rules preserve recorded unknowns and a separately usable
     await p.click(p.button(m.creator_delist()));
     expect(writes[0]!.data.operation).toBe('delist');
     await p.settle(0, { kind: 'saved', id: p.first.id });
-  } finally { await p.close(); }
+  } finally {
+    await p.close();
+  }
 });
 
 test('Authority retirement removes private disclosure and rejects a late completion and retained submit handler', async () => {
@@ -282,5 +324,7 @@ test('Authority retirement removes private disclosure and rejects a late complet
     await p.settle(0, { kind: 'saved', id: p.first.id });
     expect(p.host.textContent).not.toContain(m.creator_saved());
     expect(p.host.textContent).toContain(m.creator_offers_denied());
-  } finally { await p.close(); }
+  } finally {
+    await p.close();
+  }
 });
