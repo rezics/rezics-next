@@ -136,11 +136,13 @@ async function mountForm(hydrate = false) {
       const tree = (
         <StrictMode>
           <QueryClientProvider client={client}>
-            {visible
-              ? sender
-                ? <NewCollectionForm csrfToken={session.csrfToken ?? ''} types={loaded.types} sender={sender} />
-                : <Page />
-              : null}
+            {visible ? (
+              sender ? (
+                <NewCollectionForm csrfToken={session.csrfToken ?? ''} types={loaded.types} sender={sender} />
+              ) : (
+                <Page />
+              )
+            ) : null}
           </QueryClientProvider>
         </StrictMode>
       );
