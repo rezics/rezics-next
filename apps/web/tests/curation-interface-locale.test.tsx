@@ -1,10 +1,9 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, createRef } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PROFILE_FORMAT, profileDigest, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
 import { presentationEditorDictionary } from '../src/features/pages/curate-view-editor-messages';
-import { PresentationViewEditor, presentationViewNames } from '../src/features/pages/curate-view-editor';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 
@@ -25,7 +24,7 @@ const initial = {
   digest: profileDigest(profile),
 };
 
-test('dictionary, view labels and editor controls follow an explicit locale while ambient English differs', () => {
+test('dictionary follows an explicit locale, keeps Puck tokens, and stays ambient when locale is omitted', () => {
   const previous = getLocale();
   setLocale('en', { reload: false });
   try {
@@ -42,7 +41,17 @@ test('dictionary, view labels and editor controls follow an explicit locale whil
     expect(dictionary['drawer-category-collapse']).not.toBe(m.curation_puck_collapse_title({ title: '{title}' }));
     expect(presentationEditorDictionary()['header-undo']).toBe(m.curation_puck_undo());
     expect(presentationEditorDictionary('not-a-locale')['header-undo']).toBe(m.curation_puck_undo());
+  } finally {
+    setLocale(previous, { reload: false });
+  }
+});
 
+test('view labels and editor controls follow an explicit locale while ambient English differs', async () => {
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const { PresentationViewEditor, presentationViewNames } = await import('../src/features/pages/curate-view-editor');
+  const previous = getLocale();
+  setLocale('en', { reload: false });
+  try {
     const views = presentationViewNames('ja');
     expect(views.overview).toBe(m.subject_overview({}, ja));
     expect(views.overview).not.toBe(m.subject_overview());
