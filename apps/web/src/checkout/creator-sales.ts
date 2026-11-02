@@ -149,9 +149,8 @@ async function loadPreparedCreatorSales(
       query: { limit: CREATOR_SALES_PAGE_SIZE, ...query },
       headers: { authorization },
     });
-    if ([401, 403, 404].includes(result.status)) return { kind: 'denied' };
-    if (result.status === 409) return { kind: 'stale' };
-    if (result.status === 400) return { kind: 'error' };
+    const failure = creatorSalesFailure(result.status);
+    if (failure) return failure;
     if (result.status !== 200 && result.status !== 202) return { kind: 'unavailable' };
     const page = parseCreatorSalesPage(result.data);
     if (!page || (result.status === 202 && page.projectionState !== 'preparing')) return { kind: 'unavailable' };
@@ -159,6 +158,13 @@ async function loadPreparedCreatorSales(
   } catch (error) {
     return { kind: isPlatformClosedError(error) ? 'denied' : 'unavailable' };
   }
+}
+
+function creatorSalesFailure(status: number): CreatorSalesData | null {
+  if ([401, 403, 404].includes(status)) return { kind: 'denied' };
+  if (status === 409) return { kind: 'stale' };
+  if (status === 400) return { kind: 'error' };
+  return null;
 }
 
 export const readCreatorSales = createServerFn({ method: 'GET' })
@@ -193,6 +199,8 @@ export const readCreatorSalesCurrent = createServerFn({ method: 'GET' })
         headers: { authorization },
         fetch: { cache: 'no-store', redirect: 'manual' },
       });
+      const failure = creatorSalesFailure(exposure.status);
+      if (failure) return { ...result, page: failure };
       if (exposure.error || !exposure.data) return { ...result, page: { kind: 'unavailable' } };
       if (!exposure.data.admitted.includes('selling')) return result;
       result.selling = true;

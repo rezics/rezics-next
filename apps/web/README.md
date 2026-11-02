@@ -3210,6 +3210,9 @@ uncertain commands retain their original payload and key.
 session, observes selling exposure and calls the real generated `kernelClient().commerceSales.get` with that
 credential, a 20-row limit and the signed cursor. Every call sets `cache: no-store` and `redirect: manual`;
 responses are private/no-store/noindex/nofollow and route retention is zero. Native authorization remains final.
+An exposure refusal stops the sales request and preserves its denied, error or stale outcome; transport failure,
+redirect or missing exposure data remains unavailable. Losing authority between session preparation and exposure
+does not become an empty sales page.
 The shared current-origin observer retires viewer, admission and locale/cursor replacements synchronously,
 including ABA before React commits. A healthy credential renewal may retain accepted same-viewer data while
 retiring its in-flight read. No caller-selected creator, token or CSRF value enters the returned page envelope.
@@ -3227,6 +3230,7 @@ Cost: current sales read
 - Bound: per-call restrictive transport, source DTO validation and zero personal query retention; repeats and
   failures charge their actual calls. The native owner's eight-axis composed SQL/Work total remains explicitly
   unknown until actual complete terms arrive; existing local Accounts admission supplies no child funding.
-- Growth check: `creator-sales-native.test.ts` and `creator-sales-current-viewer.test.tsx` author default transport,
-  current preparation, healthy rotation, delayed viewer/admission/address ABA and foreign-empty rejection.
+- Growth check: `creator-sales-native.test.ts`, `creator-sales-current-outcomes.test.ts` and
+  `creator-sales-current-viewer.test.tsx` author default transport, current preparation, genuine exposure failures,
+  healthy rotation, delayed viewer/admission/address ABA and foreign-empty rejection.
   These source cases are UNRUN; native/browser/visual/full acceptance remains controller-owned after integration.
