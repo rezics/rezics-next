@@ -7,6 +7,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -343,6 +344,10 @@ function LiteraryProfileLive({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  const readingKey = JSON.stringify([id, locale, lifetime.generation]);
+  const refreshSequence = useRef(0);
+  const [refresh, setRefresh] = useState({ key: readingKey, sequence: 0, pending: false });
+  const readingRefresh = refresh.key === readingKey ? refresh : { key: readingKey, sequence: 0, pending: false };
   const creationMetadata = useRef<{ id: string | undefined; locale: string; value: Ready } | undefined>(undefined);
   if (!id && !query.isError && query.data?.ok) creationMetadata.current = { id, locale, value: query.data };
   // A failed metadata refresh must not unmount the entered terms, facts or sealed create command.
@@ -466,7 +471,26 @@ function LiteraryProfileLive({
     );
   // A previous successful subject read is never authority for the current public page.
   const admitted =
-    !query.isError && query.data?.ok && query.data.current?.public.subject.id === id ? query.data : undefined;
+    !readingRefresh.pending &&
+    !query.isError &&
+    query.data?.ok &&
+    query.data.current?.public.subject.id === id
+      ? query.data
+      : undefined;
+  const reload = () => {
+    if (!id || !lifetime.active() || query.isFetching || readingRefresh.pending) return;
+    const sequence = ++refreshSequence.current;
+    const settle = () =>
+      setRefresh((current) =>
+        current.key === readingKey && current.sequence === sequence ? { ...current, pending: false } : current,
+      );
+    flushSync(() => setRefresh({ key: readingKey, sequence, pending: true }));
+    try {
+      void query.refetch().then(settle, settle);
+    } catch {
+      settle();
+    }
+  };
   return (
     <LiteraryCorrection
       read={admitted}
@@ -478,10 +502,10 @@ function LiteraryProfileLive({
       authored={authored}
       heading={heading}
       failure={query.isError ? 'unavailable' : query.data && !query.data.ok ? query.data.reason : undefined}
-      pending={query.isPending}
-      fetching={query.isFetching}
-      revision={id ?? ''}
-      reload={() => lifetime.active() && void query.refetch()}
+      pending={query.isPending || readingRefresh.pending}
+      fetching={query.isFetching || readingRefresh.pending}
+      revision={JSON.stringify([id, readingRefresh.sequence])}
+      reload={reload}
       observe={(next) => {
         if (lifetime.active())
           client.setQueryData<LiteraryRead>(
