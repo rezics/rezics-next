@@ -1311,6 +1311,7 @@
   "search_sort_label": "排序方式",
   "search_sort_rating": "評分最高",
   "search_sort_relevance": "相關度",
+  "search_sort_submit_button": "套用",
   "search_stale_cursor_restarted": "結果已更新，現顯示第一頁。",
   "library_copy_kind": "類型",
   "library_copy_unsupported": "此項目的書架設定不支援該複本類型與狀態。",

@@ -31,7 +31,7 @@ export const searchParams = v.objectWithRest(
     ),
     condition: v.optional(v.pipe(v.string(), v.maxLength(32768))),
     filter: v.optional(v.pipe(v.string(), v.maxLength(16384))),
-    sort: v.optional(v.picklist(['rating'])),
+    sort: v.optional(v.union([v.picklist(['rating']), v.literal('')])),
   },
   facetValue,
 );

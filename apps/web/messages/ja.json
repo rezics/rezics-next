@@ -1311,6 +1311,7 @@
   "search_sort_label": "並べ替え",
   "search_sort_rating": "高評価順",
   "search_sort_relevance": "関連度順",
+  "search_sort_submit_button": "適用",
   "search_stale_cursor_restarted": "検索結果が更新されました。1ページ目を表示しています。",
   "library_copy_kind": "種類",
   "library_copy_unsupported": "この項目のライブラリプロフィールでは、この種類と状態の組み合わせは使えません。",

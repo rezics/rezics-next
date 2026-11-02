@@ -1,6 +1,7 @@
 import type { SearchLoaderDeps } from './search-params';
 import { discoverySearchHref, searchFormFields } from './search-params';
 import { useRouter } from '@tanstack/react-router';
+import { useId } from 'react';
 import { m } from '../paraglide/messages.js';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -35,6 +36,7 @@ export function SearchSort({
 }) {
   // The selector also supports static form rendering outside the connected application.
   const router = useRouter({ warn: false });
+  const sortId = useId();
   return (
     <form
       method="get"
@@ -42,13 +44,14 @@ export function SearchSort({
       className="flex max-w-full flex-wrap items-center justify-end gap-2"
     >
       <Field orientation="horizontal" className="w-auto flex-wrap justify-end gap-2">
-        <FieldLabel htmlFor="search-sort" className="text-sm text-muted-foreground">
+        <FieldLabel htmlFor={sortId} className="text-sm text-muted-foreground">
           {m.search_sort_label()}
         </FieldLabel>
         <NativeSelect
-          id="search-sort"
+          id={sortId}
+          name={disabled ? undefined : 'sort'}
           disabled={disabled}
-          value={sort}
+          value={sort === 'rating' ? 'rating' : ''}
           className="h-9 shrink-0 rounded-md border border-input bg-background px-2 text-sm [&_select]:w-auto"
           onChange={(event) => {
             void router?.navigate({
@@ -60,7 +63,7 @@ export function SearchSort({
             });
           }}
         >
-          <NativeSelectOption value="relevance">{m.search_sort_relevance()}</NativeSelectOption>
+          <NativeSelectOption value="">{m.search_sort_relevance()}</NativeSelectOption>
           <NativeSelectOption value="rating">{m.search_sort_rating()}</NativeSelectOption>
         </NativeSelect>
       </Field>
@@ -70,7 +73,7 @@ export function SearchSort({
         </summary>
         <p className="mt-1 px-2 text-muted-foreground">{m.rating_public_ordering({}, { locale: locale as never })}</p>
       </details>
-      {sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
+      {disabled && sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
       {state &&
         searchFormFields({
           kinds: state.kinds,
@@ -88,6 +91,13 @@ export function SearchSort({
           <input key={`${property}:${value}`} type="hidden" name={`f.${property}`} value={value} />
         )),
       )}
+      <button
+        type="submit"
+        disabled={disabled}
+        className="h-9 shrink-0 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50"
+      >
+        {m.search_sort_submit_button()}
+      </button>
     </form>
   );
 }

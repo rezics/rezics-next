@@ -33,3 +33,5 @@ does not establish those outcomes.
 
 Recent history keeps failed local writes in its memory fallback until a write succeeds; observed durable removals and `localStorage.clear()` invalidate cached durable values, while account labels remain native-hydrated. Keyboard removal focuses the next available row action, then the previous action, and falls back to the labeled history region; explicit clear focuses that region and announces completion.
 Filters edits result-language preferences as an ordered list of at most eight: add from supported locales, preserve existing valid authored tags verbatim, remove or move individual entries, and use the page-language default only when the user clears the list.
+
+Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only explicit sort value.

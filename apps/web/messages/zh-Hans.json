@@ -1311,6 +1311,7 @@
   "search_sort_label": "排序方式",
   "search_sort_rating": "评分最高",
   "search_sort_relevance": "相关性",
+  "search_sort_submit_button": "应用",
   "search_stale_cursor_restarted": "结果已更新，现显示第一页。",
   "library_copy_kind": "类型",
   "library_copy_unsupported": "此条目的书架配置不支持该副本类型和状态。",

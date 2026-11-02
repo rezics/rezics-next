@@ -1311,6 +1311,7 @@
   "search_sort_label": "Trier par",
   "search_sort_rating": "Mieux notées",
   "search_sort_relevance": "Pertinence",
+  "search_sort_submit_button": "Appliquer",
   "search_stale_cursor_restarted": "Les résultats ont changé. La première page est affichée.",
   "library_copy_kind": "Type",
   "library_copy_unsupported": "Le profil de bibliothèque de cet élément ne prend pas en charge ce type d’exemplaire et cet état.",

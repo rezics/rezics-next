@@ -1311,6 +1311,7 @@
   "search_sort_label": "Ordenar por",
   "search_sort_rating": "Mejor valorados",
   "search_sort_relevance": "Relevancia",
+  "search_sort_submit_button": "Aplicar",
   "search_stale_cursor_restarted": "Los resultados han cambiado. Se muestra la primera página.",
   "library_copy_kind": "Tipo",
   "library_copy_unsupported": "El perfil de biblioteca de este elemento no admite ese tipo de ejemplar ni ese estado.",
