@@ -16,8 +16,7 @@ export function captureBulkAddSelection(
   const seen = new Set<string>();
   for (const row of loaded) {
     const id = row.subject?.id;
-    if (!id || (row.subjectId !== undefined && row.subjectId !== id))
-      return { ok: false, reason: 'unavailable' };
+    if (!id || (row.subjectId !== undefined && row.subjectId !== id)) return { ok: false, reason: 'unavailable' };
     // Canonical Subjects are unique in the native manifest. This is not destination membership deduplication.
     if (!seen.has(id)) {
       seen.add(id);

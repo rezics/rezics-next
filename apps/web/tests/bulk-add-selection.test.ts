@@ -39,6 +39,7 @@ test('refuses the whole capture for an unavailable or mismatched subject or an o
   expect(captureBulkAddSelection([])).toEqual({ ok: false, reason: 'empty' });
   expect(captureBulkAddSelection([first, { subject: null }])).toEqual({ ok: false, reason: 'unavailable' });
   expect(captureBulkAddSelection([{ ...first, subjectId: 'different' }])).toEqual({ ok: false, reason: 'unavailable' });
-  expect(captureBulkAddSelection(Array.from({ length: 1001 }, (_, i) => ({ subject: { id: `subject-${i}` } }))))
-    .toEqual({ ok: false, reason: 'limit' });
+  expect(
+    captureBulkAddSelection(Array.from({ length: 1001 }, (_, i) => ({ subject: { id: `subject-${i}` } }))),
+  ).toEqual({ ok: false, reason: 'limit' });
 });
