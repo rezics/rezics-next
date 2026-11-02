@@ -211,13 +211,14 @@ function inlineValue(snak: Snak, related: Related, options: Options): ReactNode 
     const entry = Object.hasOwn(related, content) ? related[content] : undefined;
     return itemLink(entry?.redirect ?? content, entry?.labels, options);
   }
-  if (property.data_type === 'quantity' && isRecord(content) && typeof content.amount === 'string') {
-    const amount = Number(content.amount);
-    const formatted = Number.isFinite(amount) ? new Intl.NumberFormat(options.locale).format(amount) : content.amount;
+  if (property.data_type === 'quantity') {
+    const quantity = quantityPresentation(content, related, options.locale);
+    if (!quantity) return null;
+    const unit = quantity.unitLabel ?? m.quantity_unit_unavailable({}, { locale: options.locale as never });
     return (
       <span>
-        {formatted}
-        {typeof content.unit === 'string' && content.unit !== '1' ? ` ${content.unit}` : ''}
+        {quantity.numbers}
+        {unit ? ` ${unit}` : ''}
       </span>
     );
   }
@@ -557,13 +558,18 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
         <>
           {value}
           {qualifiers.length > 0 && (
-            <dl className="ms-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            <dl className="ms-4 min-w-0 space-y-2 text-sm text-muted-foreground">
               {qualifiers.map(({ qualifier, shownValue }, index) => {
                 const name = fieldLabel(relatedLabel(qualifier.property.id), options.locale);
                 return (
-                  <div className="contents" key={index}>
-                    <dt lang={name.lang}>{name.text || options.messages.unlabelled}</dt>
-                    <dd>{shownValue}</dd>
+                  <div
+                    className="grid min-w-0 grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
+                    key={index}
+                  >
+                    <dt lang={name.lang} className="min-w-0 [overflow-wrap:anywhere]">
+                      {name.text || options.messages.unlabelled}
+                    </dt>
+                    <dd className="min-w-0 [overflow-wrap:anywhere]">{shownValue}</dd>
                   </div>
                 );
               })}
@@ -572,7 +578,10 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
         </>
       );
       return [
-        <dd key={statement.id} className="min-w-0 space-y-2 break-words sm:col-start-2">
+        <dd
+          key={statement.id}
+          className="min-w-0 space-y-2 [overflow-wrap:anywhere] sm:col-start-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-ring [&_a]:focus-visible:outline-offset-2"
+        >
           {gated ? (
             <SpoilerGate label={options.messages.spoilerShow} hideLabel={options.labels.spoilerHide}>
               {body}
@@ -580,22 +589,24 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
           ) : (
             body
           )}
-          <StatementCorrectionLink
-            id={read.subject.id}
-            title={pageText(read.subject.labels, options.locale).text}
-            statement={statement.id}
-            property={property}
-            datatype={statement.property.data_type}
-            locale={options.locale}
-          />
-          <ValueExplanationEntry
-            id={read.subject.id}
-            title={pageText(read.subject.labels, options.locale, original).text}
-            statement={statement.id}
-            property={property}
-            context={read.subject.context}
-            locale={options.locale}
-          />
+          <div className="flex min-w-0 flex-wrap items-start gap-x-3 [&_a]:ms-0">
+            <StatementCorrectionLink
+              id={read.subject.id}
+              title={pageText(read.subject.labels, options.locale).text}
+              statement={statement.id}
+              property={property}
+              datatype={statement.property.data_type}
+              locale={options.locale}
+            />
+            <ValueExplanationEntry
+              id={read.subject.id}
+              title={pageText(read.subject.labels, options.locale, original).text}
+              statement={statement.id}
+              property={property}
+              context={read.subject.context}
+              locale={options.locale}
+            />
+          </div>
         </dd>,
       ];
     });
@@ -604,9 +615,9 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
       property,
       <div
         key={property}
-        className="grid gap-y-2 border-b border-border/60 pb-5 last:border-0 last:pb-0 sm:grid-cols-[minmax(10rem,1fr)_3fr] sm:gap-x-6 in-data-[density=compact]:pb-3"
+        className="grid min-w-0 gap-y-2 border-b border-border/60 pb-5 last:border-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,3fr)] sm:gap-x-6 in-data-[density=compact]:pb-3"
       >
-        <dt lang={label.lang} className="font-semibold">
+        <dt lang={label.lang} className="min-w-0 font-semibold [overflow-wrap:anywhere]">
           {fieldLabel(label, options.locale).text || options.messages.unlabelled}
         </dt>
         {values}
