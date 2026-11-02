@@ -149,7 +149,7 @@ function OfferCommands({
       if (!lifetime.active || !guard.isCurrent() || !current || current.revision <= observed.revision) return;
       pending.current = null;
       keys.current = { reprice: crypto.randomUUID(), delist: crypto.randomUUID() };
-      memory.value = undefined;
+      delete memory.value;
       setDraft(undefined);
       setText('');
       setConfirmed(true);
