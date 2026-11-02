@@ -913,3 +913,90 @@ test('initial Manga recovery is single-flight, focuses its matching result, and 
     outside.remove();
   });
 });
+
+
+test('Manga withdrawn correction recovery preserves siblings, captured discard and exact uncertain commands', async () => {
+  await mounted(async (ui) => {
+    const { MangaCorrections } = await import('../src/features/catalogue/manga-profile-corrections');
+    const { mangaFixture, mangaVolumeId } = await import('../src/kernel/fake/catalogue-manga-profile');
+    const { readMangaProfile } = await import('../src/features/catalogue/manga-profile');
+    const { m } = await import('../src/paraglide/messages.js');
+    const property = 'schema:numberOfPages';
+    const callback = (node: Element) => Reflect.get(node,
+      Object.keys(node).find((key) => key.startsWith('__reactProps$'))!).onClick as () => void;
+    for (const state of ['unsent', 'uncertain', 'pending', 'confirmed'] as const) {
+      const read = await readMangaProfile(mangaFixture().client, mangaVolumeId);
+      if (!read.ok || !read.public) throw new Error('Expected current Manga volume');
+      const withdrawn = structuredClone(read);
+      withdrawn.release.types[read.public.subject.type]!.properties =
+        withdrawn.release.types[read.public.subject.type]!.properties.filter((id) => id !== property);
+      const commands: FactCommand[] = [];
+      const late = deferred<import('../src/features/catalogue/subject-facts').FactResult>();
+      const ports: MangaCorrectionPorts = {
+        facts: { read: async () => ({ ...read, public: read.public!, source: null }), propose: async (command) => {
+          commands.push(command);
+          if (state === 'pending' && commands.length === 1) return late.promise;
+          return state === 'confirmed'
+            ? { ok: true, candidate: 'confirmed', revision: 2 }
+            : { ok: false, reason: commands.length === 1 ? 'uncertain' : 'invalid' };
+        } },
+        review: () => { throw new Error('Recovery must not invent a review'); },
+        relations: null, authored: null,
+      };
+      const page = (current = read) => <MangaCorrections read={current} locale="en" disabled={false}
+        ports={ports} reload={async () => {}} />;
+      await ui.render(page());
+      await ui.click(button(field(ui.host, 'number of pages'), m.facts_edit_field()));
+      await ui.input(amount(field(ui.host, 'number of pages'), m.correction_amount()), '+241');
+      if (state !== 'unsent') await ui.click(button(ui.host, m.facts_submit()));
+      // The valid sibling stays private and excluded from the next batch by its explicit choice.
+      await ui.update(page(withdrawn));
+      await ui.click(button(field(ui.host, 'ISBN-13'), m.facts_edit_field()));
+      await ui.input(amount(field(ui.host, 'ISBN-13'), m.correction_value()), 'private-sibling');
+      const sibling = field(ui.host, 'ISBN-13');
+      await ui.click(sibling.querySelector('[role="checkbox"]')!);
+      const recovery = () => ui.host.querySelector<HTMLElement>('section[aria-label="number of pages"]')!;
+      expect(recovery().querySelector('pre')!.textContent).toContain('+241');
+      expect(recovery().textContent).toContain(m.facts_private());
+      expect(recovery().querySelector('input, select, a')).toBeNull();
+      const remove = m.album_remove_draft({ field: 'number of pages' });
+      if (state === 'unsent') {
+        expect(button(ui.host, m.facts_submit()).disabled).toBe(true);
+        await ui.click(button(recovery(), remove));
+        await ui.click(button(recovery(), m.candidate_cancel()));
+        const original = recovery().querySelector('pre')!.textContent;
+        await ui.click(button(recovery(), remove));
+        const retiredConfirm = callback(button(recovery(), remove));
+        await ui.update(page());
+        expect(amount(field(ui.host, 'number of pages'), m.correction_amount()).value).toBe('+241');
+        await ui.update(page(withdrawn));
+        await act(async () => retiredConfirm());
+        expect(recovery().querySelector('pre')!.textContent).toBe(original);
+        await ui.click(button(recovery(), remove));
+        await ui.click(button(recovery(), remove));
+        expect(recovery()).toBeNull();
+        expect(commands).toEqual([]);
+      } else {
+        expect(button(recovery(), remove).disabled).toBe(true);
+        if (state === 'pending') {
+          await act(async () => late.resolve({ ok: true, candidate: 'retired-success', revision: 2 }));
+          expect(ui.host.textContent).not.toContain(m.correction_proposed());
+        }
+        if (state === 'confirmed') {
+          expect(recovery().textContent).toContain(m.correction_proposed());
+          expect(button(ui.host, m.facts_submit()).disabled).toBe(true);
+        } else {
+          const original = structuredClone(commands[0]!);
+          await ui.click(button(ui.host, m.facts_submit()));
+          expect(commands).toHaveLength(2);
+          expect(commands[1]).toBe(commands[0]);
+          expect(commands[1]).toEqual(original);
+          expect(recovery().textContent).toContain(m.correction_invalid());
+          expect(button(recovery(), remove).disabled).toBe(true);
+        }
+      }
+      expect(amount(field(ui.host, 'ISBN-13'), m.correction_value()).value).toBe('private-sibling');
+      expect(field(ui.host, 'ISBN-13').querySelector('[role="checkbox"]')!.getAttribute('aria-checked')).toBe('false');
+    }
+  });
+});

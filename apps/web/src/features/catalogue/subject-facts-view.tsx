@@ -514,7 +514,7 @@ function FactField({
 }
 
 /** Withdrawn metadata cannot authorize an editor or public reading; only the contributor's holder survives. */
-function ExcludedFact({
+export function ExcludedFact({
   draft,
   read,
   locale,

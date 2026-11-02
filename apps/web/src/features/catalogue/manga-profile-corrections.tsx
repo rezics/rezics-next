@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { pickText } from '@rezics/composition';
+import { pageText } from '../pages/data';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
@@ -13,9 +14,9 @@ import { subjectHref } from '../../subject/subject-href';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import type { FactsTransport, FactDraft } from './subject-facts';
 import { factChanged, factLimit, factLocked, sealFacts, sendFacts, stageFact } from './subject-facts';
-import { FactField } from './subject-facts-view';
+import { ExcludedFact, FactField } from './subject-facts-view';
 import { correctionProperty } from './statement-editor';
-import { PartValue } from './statement-editor-view';
+import { EditorFailure, PartValue } from './statement-editor-view';
 import { isMangaType, mangaGroups } from './manga-profile';
 import { CatalogueCurrentReading, useCurrentReadingActive } from './editor-lifetime';
 import { mangaGroupLabels, type MangaReady } from './manga-profile-view';
@@ -65,6 +66,9 @@ type CorrectionProps = {
 const correctionAddress = (location: AuthoringLocation) => JSON.stringify([location.pathname, location.search]);
 
 export function MangaCorrections(props: CorrectionProps) {
+  const reading = useRef({ read: props.read, generation: 0 });
+  if (reading.current.read !== props.read)
+    reading.current = { read: props.read, generation: reading.current.generation + 1 };
   const original = useRef<{ id: string; type: string } | undefined>(undefined);
   const subject = props.read?.public?.subject;
   if (!original.current && subject && isMangaType(subject.type))
@@ -73,7 +77,11 @@ export function MangaCorrections(props: CorrectionProps) {
     !!subject && !props.disabled && subject.id === original.current?.id && subject.type === original.current?.type;
   return (
     <AuthoringDepartureBoundary sessionBound={false} navigationContext={correctionAddress}>
-      <CatalogueCurrentReading visible={visible} ready={visible} revision={props.revision ?? ''}>
+      <CatalogueCurrentReading
+        visible={visible}
+        ready={visible}
+        revision={`${props.revision ?? ''}:${reading.current.generation}`}
+      >
         <MangaCorrectionsLive {...props} read={visible ? props.read : undefined} />
       </CatalogueCurrentReading>
     </AuthoringDepartureBoundary>
@@ -91,28 +99,38 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
   const [reviewing, setReviewing] = useState<ReviewAddress>();
   const running = useRef(false);
   const subject = read?.public?.subject;
-  const current = read?.public
-    ? { ok: true as const, release: read.release, public: read.public, source: null }
-    : undefined;
+  const current = useMemo(
+    () => read?.public ? { ok: true as const, release: read.release, public: read.public, source: null } : undefined,
+    [read],
+  );
   const label = subject ? pickText(subject.labels, locale) : undefined;
   const href = subject ? subjectHref({ id: subject.id, label: label!.text }, locale).href : '';
   const groups = subject && read ? mangaGroups(read.release, subject.type, locale) : undefined;
   const labels = mangaGroupLabels(locale);
   const authored = useRef(false);
   if (groups?.writing.length) authored.current = true;
-  const wasCurrent = useRef(!!subject);
-  if (wasCurrent.current !== !!subject) {
-    wasCurrent.current = !!subject;
-    if (!subject) {
-      running.current = false;
-      setBusy(false);
-      setDrafts((previous) =>
-        previous.map((draft) =>
-          draft.command && !draft.result ? { ...draft, result: { ok: false, reason: 'unavailable' } } : draft,
-        ),
-      );
-    }
+  const previousReading = useRef(readingActive);
+  if (previousReading.current !== readingActive) {
+    previousReading.current = readingActive;
+    running.current = false;
+    setBusy(false);
+    setDrafts((previous) =>
+      previous.map((draft) =>
+        draft.command && !draft.result ? { ...draft, result: { ok: false, reason: 'unavailable' } } : draft,
+      ),
+    );
   }
+  const admitted = new Set(
+    Object.entries(groups ?? {}).flatMap(([group, fields]) =>
+      group === 'writing' ? [] : fields.filter((property) =>
+        !!current && !!subject && correctionProperty(current.release, subject.type, property)),
+    ),
+  );
+  const excluded = drafts.filter((draft) => !admitted.has(draft.property));
+  // A retained unsent holder must be reconciled before any new batch is sealed.
+  // Existing commands keep their original native replay boundary.
+  const needsReconciliation = excluded.some((draft) => !draft.command && !draft.result?.ok);
+  const draftLabels = useRef(new Map<string, ReturnType<typeof pageText>>());
   const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
   // Batch inclusion does not release private assertions. Inspection is pure: no
   // validation, command preparation or sealing belongs in a departure predicate.
@@ -141,8 +159,14 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
   );
   const discardState = useRef({ read, disabled, ports, busy });
   discardState.current = { read, disabled, ports, busy };
+  function discard(original: FactDraft) {
+    const now = discardState.current;
+    if (!active() || !now.read?.public || now.read !== read || now.disabled || !now.ports || now.busy || running.current)
+      return;
+    setDrafts((previous) => previous.filter((item) => item !== original || !!item.command || factLocked(item)));
+  }
   async function submit() {
-    if (!active() || !subject || !read || !ports || disabled || running.current) return;
+    if (!active() || !subject || !read || !ports || disabled || running.current || needsReconciliation) return;
     const sealed = sealFacts(subject.id, read.release, drafts);
     setDrafts(sealed);
     running.current = true;
@@ -266,6 +290,18 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
             </details>
           </header>
           <p className="text-muted-foreground">{m.facts_separate_results({}, o)}</p>
+          {!!excluded.length && <EditorFailure reason="stale" locale={locale} />}
+          {excluded.map((draft) => (
+            <ExcludedFact
+              key={draft.property}
+              draft={draft}
+              read={current}
+              locale={locale}
+              label={draftLabels.current.get(draft.property)}
+              busy={busy || disabled || !ports}
+              onDiscard={discard}
+            />
+          ))}
           {Object.entries(groups)
             .filter(([group, fields]) => group !== 'writing' && fields.length)
             .map(([group, fields]) => (
@@ -288,22 +324,7 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
                       busy={busy || disabled || !ports}
                       canStage={drafts.length < factLimit}
                       draft={drafts.find((draft) => draft.property === property)}
-                      onDiscard={(original) => {
-                        const now = discardState.current;
-                        if (
-                          !active() ||
-                          !now.read?.public ||
-                          now.read !== read ||
-                          now.disabled ||
-                          !now.ports ||
-                          now.busy ||
-                          running.current
-                        )
-                          return;
-                        setDrafts((previous) =>
-                          previous.filter((item) => item !== original || !!item.command || factLocked(item)),
-                        );
-                      }}
+                      onDiscard={discard}
                       onChange={(next) =>
                         active() &&
                         setDrafts((previous) =>
@@ -314,6 +335,8 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
                       onStage={(source) => {
                         if (!active()) return;
                         const next = stageFact(current, property, source);
+                        if (next)
+                          draftLabels.current.set(property, pageText(current.release.properties[property]!.labels, locale));
                         if (next)
                           active() &&
                             setDrafts((previous) => (previous.length < factLimit ? [...previous, next] : previous));
@@ -403,7 +426,7 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
             <div className="flex min-w-0 flex-col flex-wrap gap-2 sm:flex-row">
               <Button
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:py-1"
-                disabled={busy || disabled || !ports || !changed.length}
+                disabled={busy || disabled || !ports || !changed.length || needsReconciliation}
                 onClick={() => void submit()}
               >
                 {busy ? m.correction_saving({}, o) : m.facts_submit({}, o)}
