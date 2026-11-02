@@ -666,6 +666,36 @@ function lowerMedian(values: readonly number[]): number {
   return [...values].sort((left, right) => left - right)[(values.length - 1) >> 1]!;
 }
 
+type OptionalCostField =
+  | 'requestBytes'
+  | 'responseBytes'
+  | 'backgroundStatements'
+  | 'backgroundRequestBytes'
+  | 'backgroundResponseBytes'
+  | 'backgroundRows'
+  | 'backgroundBlocks'
+  | 'backgroundCosts';
+
+function hasConsistentCoverage(
+  costs: readonly Cost[],
+  field: OptionalCostField,
+  indexes: readonly number[],
+): boolean {
+  if (indexes.length === 0) return false;
+  const present = indexes.filter((index) => costs[index]![field] !== undefined);
+  if (present.length !== 0 && present.length !== indexes.length) {
+    const missing = indexes.filter((index) => costs[index]![field] === undefined);
+    throw new TypeError(
+      `Inconsistent telemetry for ${field}: present in repetitions ${present.join(', ')}; missing in repetitions ${missing.join(', ')}`,
+    );
+  }
+  return present.length === indexes.length;
+}
+
+function anyCoverage(costs: readonly Cost[], field: OptionalCostField): boolean {
+  return costs.some((cost) => cost[field] !== undefined);
+}
+
 function validateCostEvidence(cost: Cost, index: number): void {
   if (!isRecord(cost)) throw new TypeError(`Cost repetition ${index} must be an object`);
   const coreFields = [
@@ -728,22 +758,62 @@ export function medianCost(costs: readonly Cost[]): Cost {
   requireDenseArray(costs, 'Cost repetitions');
   if (costs.length === 0) throw new RangeError('Cannot take the median of no costs');
   costs.forEach(validateCostEvidence);
+  const allIndexes = costs.map((_, index) => index);
+  const foregroundWork = allIndexes.filter(
+    (index) =>
+      costs[index]!.statements + costs[index]!.controlStatements + costs[index]!.catalogStatements > 0,
+  );
+  const requestBytesAvailable = hasConsistentCoverage(costs, 'requestBytes', foregroundWork) ||
+    (foregroundWork.length === 0 && anyCoverage(costs, 'requestBytes'));
+  const responseBytesAvailable = hasConsistentCoverage(costs, 'responseBytes', foregroundWork) ||
+    (foregroundWork.length === 0 && anyCoverage(costs, 'responseBytes'));
+
+  const backgroundFields: OptionalCostField[] = [
+    'backgroundRequestBytes',
+    'backgroundResponseBytes',
+    'backgroundRows',
+    'backgroundBlocks',
+    'backgroundCosts',
+  ];
+  const hasBackgroundDetails = backgroundFields.some((field) => anyCoverage(costs, field));
+  const backgroundStatementsAvailable = hasConsistentCoverage(costs, 'backgroundStatements', allIndexes);
+  if (!backgroundStatementsAvailable && hasBackgroundDetails) {
+    const missing = allIndexes.filter((index) => costs[index]!.backgroundStatements === undefined);
+    throw new TypeError(
+      `Inconsistent telemetry for backgroundStatements: background activity is reported but the execution count is missing in repetitions ${missing.join(', ')}`,
+    );
+  }
+  const backgroundWork = backgroundStatementsAvailable
+    ? allIndexes.filter((index) => costs[index]!.backgroundStatements! > 0)
+    : [];
+  const backgroundRequestBytesAvailable = backgroundStatementsAvailable &&
+    (hasConsistentCoverage(costs, 'backgroundRequestBytes', backgroundWork) ||
+      (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundRequestBytes')));
+  const backgroundResponseBytesAvailable = backgroundStatementsAvailable &&
+    (hasConsistentCoverage(costs, 'backgroundResponseBytes', backgroundWork) ||
+      (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundResponseBytes')));
+  const backgroundRowsAvailable = backgroundStatementsAvailable &&
+    (hasConsistentCoverage(costs, 'backgroundRows', backgroundWork) ||
+      (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundRows')));
+  const backgroundBlocksAvailable = backgroundStatementsAvailable &&
+    (hasConsistentCoverage(costs, 'backgroundBlocks', backgroundWork) ||
+      (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundBlocks')));
+  const backgroundCostsAvailable = backgroundStatementsAvailable &&
+    (hasConsistentCoverage(costs, 'backgroundCosts', backgroundWork) ||
+      (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundCosts')));
+
   const blocks = lowerMedian(costs.map((cost) => cost.blocks));
   const representative = costs.find((cost) => cost.blocks === blocks)!;
-  const requestBytes = costs.flatMap(({ requestBytes }) => (requestBytes === undefined ? [] : [requestBytes]));
-  const responseBytes = costs.flatMap(({ responseBytes }) => (responseBytes === undefined ? [] : [responseBytes]));
-  const backgroundRequestBytes = costs.flatMap(({ backgroundRequestBytes }) =>
-    backgroundRequestBytes === undefined ? [] : [backgroundRequestBytes],
-  );
-  const backgroundResponseBytes = costs.flatMap(({ backgroundResponseBytes }) =>
-    backgroundResponseBytes === undefined ? [] : [backgroundResponseBytes],
-  );
   const limitations = [...new Set(costs.flatMap((cost) => cost.limitations ?? []))];
 
   const median = {
     statements: lowerMedian(costs.map((cost) => cost.statements)),
-    ...(requestBytes.length === 0 ? {} : { requestBytes: lowerMedian(requestBytes) }),
-    ...(responseBytes.length === 0 ? {} : { responseBytes: lowerMedian(responseBytes) }),
+    ...(requestBytesAvailable
+      ? { requestBytes: lowerMedian(costs.map((cost) => cost.requestBytes ?? 0)) }
+      : {}),
+    ...(responseBytesAvailable
+      ? { responseBytes: lowerMedian(costs.map((cost) => cost.responseBytes ?? 0)) }
+      : {}),
     controlStatements: lowerMedian(costs.map((cost) => cost.controlStatements)),
     catalogStatements: lowerMedian(costs.map((cost) => cost.catalogStatements)),
     plans: lowerMedian(costs.map((cost) => cost.plans)),
@@ -760,18 +830,23 @@ export function medianCost(costs: readonly Cost[]): Cost {
   return {
     ...median,
     ...(failedStatements.size === 0 ? {} : { failedStatements: Object.fromEntries(failedStatements) }),
-    ...(costs.some((cost) => cost.backgroundStatements !== undefined)
+    ...(backgroundStatementsAvailable
       ? {
-          backgroundStatements: lowerMedian(costs.map((cost) => cost.backgroundStatements ?? 0)),
-          ...(backgroundRequestBytes.length === 0
-            ? {}
-            : { backgroundRequestBytes: lowerMedian(backgroundRequestBytes) }),
-          ...(backgroundResponseBytes.length === 0
-            ? {}
-            : { backgroundResponseBytes: lowerMedian(backgroundResponseBytes) }),
-          backgroundRows: lowerMedian(costs.map((cost) => cost.backgroundRows ?? 0)),
-          backgroundBlocks: lowerMedian(costs.map((cost) => cost.backgroundBlocks ?? 0)),
-          backgroundCosts: Object.fromEntries(
+          backgroundStatements: lowerMedian(costs.map((cost) => cost.backgroundStatements!)),
+          ...(backgroundRequestBytesAvailable
+            ? { backgroundRequestBytes: lowerMedian(costs.map((cost) => cost.backgroundRequestBytes ?? 0)) }
+            : {}),
+          ...(backgroundResponseBytesAvailable
+            ? { backgroundResponseBytes: lowerMedian(costs.map((cost) => cost.backgroundResponseBytes ?? 0)) }
+            : {}),
+          ...(backgroundRowsAvailable
+            ? { backgroundRows: lowerMedian(costs.map((cost) => cost.backgroundRows ?? 0)) }
+            : {}),
+          ...(backgroundBlocksAvailable
+            ? { backgroundBlocks: lowerMedian(costs.map((cost) => cost.backgroundBlocks ?? 0)) }
+            : {}),
+          ...(backgroundCostsAvailable
+            ? { backgroundCosts: Object.fromEntries(
             [...new Set(costs.flatMap((cost) => Object.keys(cost.backgroundCosts ?? {})))].map((statement) => [
               statement,
               {
@@ -780,7 +855,8 @@ export function medianCost(costs: readonly Cost[]): Cost {
                 bounded: costs.some((cost) => cost.backgroundCosts?.[statement]?.bounded ?? false),
               },
             ]),
-          ),
+          ) }
+            : {}),
         }
       : {}),
   };
