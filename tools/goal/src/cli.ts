@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { createRuntime, type Runtime } from './config.ts';
+import { checkSettings, createRuntime, settingsFile, type Runtime } from './config.ts';
 import { runIntegration, type IntegrationRuntime, recordManagerCommand } from './integration-cli.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import { installPrivate } from './shared-dependencies.ts';
@@ -49,6 +49,21 @@ export async function run(
       return 0;
     } catch (error) {
       console.error(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+      return 1;
+    }
+  }
+  if (command === 'config') {
+    if (args[0] !== 'check' || args.length > 2) {
+      console.error('usage: goal config check [file]');
+      return 2;
+    }
+    const file = settingsFile(args[1] === undefined ? {} : { localFile: args[1] });
+    try {
+      checkSettings({ localFile: file });
+      console.log(`valid: ${file}`);
+      return 0;
+    } catch (error) {
+      console.error(`invalid: ${file}: ${error instanceof Error ? error.message : String(error)}`);
       return 1;
     }
   }

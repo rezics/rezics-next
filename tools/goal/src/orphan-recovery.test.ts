@@ -218,12 +218,14 @@ test('a short command leaves an orphan whose worker runs to the host and skips a
   }
 });
 
-// The first attempt ends without a report, the way a killed worker does; the next one succeeds.
+// The first attempt is killed before its report; the next one succeeds. (An exit 0 without a report is asked for the
+// report instead; see final-report-recovery.test.ts.)
 const reportsOnRetry = `#!/usr/bin/env bun
 import { writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session'}));
-if (process.env.GOAL_ATTEMPT !== '1') {
+if (process.env.GOAL_ATTEMPT === '1') process.kill(process.pid, 'SIGKILL');
+else {
   writeFileSync('result.txt', 'accepted');
   spawnSync('git', ['add', 'result.txt']);
   spawnSync('git', ['commit', '-m', 'Complete fixture']);

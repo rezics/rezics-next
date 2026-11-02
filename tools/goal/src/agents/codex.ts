@@ -142,15 +142,11 @@ function command(options: AgentLaunchOptions): [string, string[]] {
   }
   const { profile, pool, worktree, prompt } = options;
   const codex = options.codex ?? defaults.codex;
-  const mcp: string[] = [];
-  const config = join(pool.configDirectory, 'config.toml');
-  if (existsSync(config)) {
-    const servers = (Bun.TOML.parse(readFileSync(config, 'utf8')) as { mcp_servers?: Record<string, unknown> })
-      .mcp_servers;
-    // An inline table merges the server settings; dotted quoted paths create a server without a transport.
-    const disabled = Object.keys(servers ?? {}).map((name) => `${JSON.stringify(name)}={enabled=false}`);
-    if (disabled.length) mcp.push('-c', `mcp_servers={${disabled.join(',')}}`);
-  }
+  // The account's MCP servers (browser, Playwright) stay available; a launch only adds its own HTTP servers.
+  const mcp = (options.consultation ? [] : (options.mcpServers ?? [])).flatMap((server) => [
+    '-c',
+    `mcp_servers.${JSON.stringify(server.name)}.url=${JSON.stringify(server.url)}`,
+  ]);
   return [
     pool.command,
     [
@@ -351,8 +347,15 @@ function codexEvent(event: Record<string, any>, hasRollout: boolean): AgentEvent
       },
     ];
   }
-  if (item.type === 'agent_message') result.answer = item.text ?? '';
-  if (payload.type === 'message' && payload.role === 'assistant')
+  // Only a completed message is an answer: a started or streamed item, or a rollout event_msg echo, carries partial or
+  // no text, and replacing the answer with it lost a worker's final report.
+  if (item.type === 'agent_message' && event.type === 'item.completed')
+    result.answer = typeof item.text === 'string' ? item.text : '';
+  if (
+    payload.type === 'message' &&
+    payload.role === 'assistant' &&
+    (event.type === 'response_item' || event === payload)
+  )
     result.answer = (payload.content ?? []).map((part: { text?: string }) => part.text ?? '').join('\n');
   return Object.keys(result).length ? result : null;
 }

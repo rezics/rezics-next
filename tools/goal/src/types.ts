@@ -127,6 +127,7 @@ export type Settings = {
     batchSize: number;
     batchAcceptanceConcurrency: number;
     devLandingChecks: boolean;
+    devPrelandingTypecheck?: boolean;
     gateConcurrency: number;
     gateTimeoutMs: number;
     managerDirectory: string;
@@ -204,6 +205,8 @@ export type Task = {
   priorityGrants?: PriorityGrant[];
   /** A held contract change is recorded on the next attempt once its dependencies are met. */
   pendingBriefChange?: { previousBriefHash: string; newBriefHash: string };
+  /** `retry --fresh-session`: the next attempt starts a new provider session; cleared when that attempt is created. */
+  freshSession?: boolean;
   integratedBase?: string;
   integratedCommits?: string[];
   integratedCommit?: string;
