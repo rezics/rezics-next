@@ -5,6 +5,8 @@ import { consult, CONSULTATION_LIMIT_MS } from './consult.ts';
 import { sameProcess } from './process.ts';
 import { harness } from './test-support.ts';
 
+type TimeoutParameters = Parameters<typeof setTimeout>;
+
 const advice = 'Root cause: a missing guard. Add the guard. Acceptance is consistent.';
 
 function consultCli(body: string): string {
@@ -98,13 +100,20 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_t
   }
 
   const original = globalThis.setTimeout;
-  globalThis.setTimeout = ((fn, delay, ...rest) =>
-    original(fn, delay === CONSULTATION_LIMIT_MS ? 0 : delay, ...rest)) as typeof setTimeout;
-  const hanging = await prepared(`
+  globalThis.setTimeout = ((...args: TimeoutParameters) => {
+    if (args[1] === CONSULTATION_LIMIT_MS) {
+      const immediate = [...args] as unknown[];
+      immediate[1] = 100;
+      return original(...(immediate as unknown as TimeoutParameters));
+    }
+    return original(...args);
+  }) as typeof setTimeout;
+  let hanging: Awaited<ReturnType<typeof prepared>> | undefined;
+  try {
+    hanging = await prepared(`
 console.error('still waiting on provider');
 setInterval(() => {}, 1000);
 `);
-  try {
     await expect(consult(hanging.h.tasks, hanging.ref, hanging.directory)).rejects.toThrow(
       /consultation timed out: still waiting on provider/,
     );
@@ -112,6 +121,6 @@ setInterval(() => {}, 1000);
     await refusedSecond(hanging.h, hanging.ref, hanging.directory);
   } finally {
     globalThis.setTimeout = original;
-    hanging.h.dispose();
+    hanging?.h.dispose();
   }
-});
+}, 60_000);
