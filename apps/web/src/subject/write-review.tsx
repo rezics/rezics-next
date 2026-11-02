@@ -122,6 +122,21 @@ function WriteReviewVisitView({
     if (reviewEntryVisitIsCurrent(visit)) setExpanded((value) => !value);
   }
 
+  function retryRealmRead() {
+    const ticket = beginReviewEntryRead(visit, 'realms');
+    if (!ticket) return;
+    setRealmRead({ state: 'loading' });
+    void readMyRealms(ticket);
+  }
+
+  function retryBoardRead() {
+    if (realmRead.state !== 'ready') return;
+    const ticket = beginReviewEntryRead(visit, 'boards');
+    if (!ticket) return;
+    setBoardRead({ state: 'loading', choices: null });
+    void readBoards(ticket, realmRead.realms);
+  }
+
   function preventStaleNavigation(event: MouseEvent<HTMLAnchorElement>) {
     if (!reviewEntryVisitIsCurrent(visit)) event.preventDefault();
   }
@@ -152,7 +167,14 @@ function WriteReviewVisitView({
           {realmRead.state === 'loading' ? (
             <p className="text-sm text-muted-foreground">{m.thread_review_boards_loading()}</p>
           ) : null}
-          {realmRead.state === 'failed' ? <p role="alert">{m.thread_review_unavailable()}</p> : null}
+          {realmRead.state === 'failed' ? (
+            <>
+              <p role="alert">{m.thread_review_unavailable()}</p>
+              <Button type="button" variant="outline" onClick={retryRealmRead}>
+                {m.subject_view_retry()}
+              </Button>
+            </>
+          ) : null}
           {realmRead.state === 'ready' && realmRead.realms.length === 0 ? (
             <p className="text-sm text-muted-foreground">{m.thread_review_no_realms()}</p>
           ) : null}
@@ -161,7 +183,14 @@ function WriteReviewVisitView({
               {boardRead.state === 'loading' ? (
                 <p className="text-sm text-muted-foreground">{m.thread_review_boards_loading()}</p>
               ) : null}
-              {boardRead.state === 'failed' ? <p role="alert">{m.thread_review_unavailable()}</p> : null}
+              {boardRead.state === 'failed' ? (
+                <>
+                  <p role="alert">{m.thread_review_unavailable()}</p>
+                  <Button type="button" variant="outline" onClick={retryBoardRead}>
+                    {m.subject_view_retry()}
+                  </Button>
+                </>
+              ) : null}
               {boardRead.state === 'ready' && boardRead.choices.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{m.thread_review_no_board()}</p>
               ) : null}

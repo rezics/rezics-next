@@ -165,6 +165,11 @@ async function surface(session: 'signed-in' | 'signed-out' | 'unavailable' = 'si
     if (!button) throw new Error('Missing deliberate review entry');
     await act(async () => button.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
   }
+  async function retry() {
+    const button = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent === m.subject_view_retry());
+    if (!button) throw new Error('Missing review discovery retry');
+    await act(async () => button.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+  }
   async function unmount() {
     await act(async () => root.unmount());
     host.remove();
@@ -261,7 +266,7 @@ test('initial load, deliberate expansion, full identity, independent destination
   }
 });
 
-test('empty memberships, denied/zero boards, failed reads and mismatched provenance remain distinct without retry', async () => {
+test('empty memberships, denied/zero boards and mismatched provenance remain distinct; failed reads recover explicitly', async () => {
   for (const mode of [
     'no-realms',
     'denied',
@@ -293,8 +298,38 @@ test('empty memberships, denied/zero boards, failed reads and mismatched provena
             : m.thread_review_unavailable();
       await until(() => (view.host.textContent ?? '').includes(message));
       expect(view.host.querySelectorAll('a, ul')).toHaveLength(0);
-      expect(view.host.querySelectorAll('button')).toHaveLength(1);
+      expect(view.host.querySelectorAll('button')).toHaveLength(message === m.thread_review_unavailable() ? 2 : 1);
       expect(view.host.querySelector('[role="alert"]') !== null).toBe(message === m.thread_review_unavailable());
+      if (mode === 'failed-page' || mode === 'failed-boards') {
+        const firstRetry = gate<Response>();
+        if (mode === 'failed-page') membershipRead = () => firstRetry.promise;
+        else boardRead = async () => firstRetry.promise;
+        const beforeRetry = calls.length;
+        await view.retry();
+        await until(() => calls.length > beforeRetry);
+        expect(view.host.textContent).toContain(m.thread_review_boards_loading());
+        expect(view.host.querySelectorAll('button')).toHaveLength(1);
+        firstRetry.resolve(new Response(null, { status: 503 }));
+        await until(() => view.host.querySelectorAll('button').length === 2);
+        const current = gate<Response>();
+        if (mode === 'failed-page') {
+          membershipRead = () => current.promise;
+          boardRead = async () => response([recordedBoard]);
+        } else boardRead = async () => current.promise;
+        await view.retry();
+        await until(() => calls.length > beforeRetry + 1);
+        expect(view.host.textContent).toContain(m.thread_review_boards_loading());
+        current.resolve(mode === 'failed-page' ? response(realms) : response(choices));
+        if (mode === 'failed-page') await until(() => navigations.length === 1);
+        else await until(() => view.host.querySelectorAll('li').length === 2);
+        expect(navigations).toEqual(
+          mode === 'failed-page' ? [reviewThreadHref('en', recordedBoard.id, subjectId, subjectTitle)] : [],
+        );
+        if (mode === 'failed-boards')
+          expect([...view.host.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual(
+            choices.map((board) => reviewThreadHref('en', board.id, subjectId, subjectTitle)),
+          );
+      }
       const count = calls.length;
       await view.toggle();
       await view.toggle();

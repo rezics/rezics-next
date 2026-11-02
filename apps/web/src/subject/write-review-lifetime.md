@@ -19,9 +19,10 @@ navigation. A pending ticket is released only by its own finalizer. The mounted 
 a microtask retires a final unmount while allowing StrictMode's synchronous effect replay to reconnect the same
 visit without duplicating its read.
 
-The original 20 Realm page, review-board pagination and disclosure filters, route destinations, empty/failure
-states, public component props and subject-route mount remain the existing interface. No reads, cursors or
-credentials are added to the kernel boundary.
+The original 20 Realm page, review-board pagination and disclosure filters, route destinations, empty states,
+public component props and subject-route mount remain the existing interface. Realm and board discovery failures
+stay in the expanded entry and expose the existing localized “Try again” action, which begins a fresh reader-ticket
+read. No reads, cursors or credentials are added to the kernel boundary.
 
 The connected regression is `apps/web/tests/write-review-lifetime.test.tsx`. It uses the actual QueryClient,
 component, session preparation, My Realms and board server boundaries; only the native transport and session store
