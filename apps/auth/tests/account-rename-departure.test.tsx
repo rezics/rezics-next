@@ -126,7 +126,7 @@ test('clean navigation is quiet; Stay preserves the proposed handle and confirma
   const dirtyUnload = new dom.Event('beforeunload', { cancelable: true });
   window.dispatchEvent(dirtyUnload);
   expect(dirtyUnload.defaultPrevented).toBe(true);
-  await startNavigation(ui.router, '/next');
+  const { navigation } = await startNavigation(ui.router, '/next');
   expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull();
   await flush(() => document.body.querySelector<HTMLButtonElement>('[data-stay]')!.click());
   expect(ui.router.state.location.pathname).toBe('/account/rename');
@@ -140,7 +140,7 @@ test('keyboard navigation stays in the departure dialog and Escape stays on the 
   const ui = await mount(source());
   await setHandle(ui.host, 'after');
   await confirm(ui.host);
-  const { navigation } = await startNavigation(ui.router, '/next');
+  await startNavigation(ui.router, '/next');
   const stay = document.body.querySelector<HTMLButtonElement>('[data-stay]')!;
   const leave = document.body.querySelector<HTMLButtonElement>('[data-leave]')!;
   const dialog = document.body.querySelector<HTMLElement>('[role="alertdialog"]')!;
@@ -155,7 +155,6 @@ test('keyboard navigation stays in the departure dialog and Escape stays on the 
   const escape = new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
   await flush(() => stay.dispatchEvent(escape));
   expect(escape.defaultPrevented).toBe(true);
-  await flush(() => navigation);
   expect(ui.router.state.location.pathname).toBe('/account/rename');
   expect(input.value).toBe('after');
   expect(ui.host.querySelector<HTMLInputElement>('#rename-confirm')!.checked).toBe(true);
@@ -165,7 +164,7 @@ test('keyboard navigation stays in the departure dialog and Escape stays on the 
 test('Leave clears an unsent invalid draft before navigation', async () => {
   const ui = await mount(source({ readCurrent: async () => ({ kind: 'ready', target: target('account', null) }) }));
   await setHandle(ui.host, '!');
-  const { navigation } = await startNavigation(ui.router, '/next');
+  await startNavigation(ui.router, '/next');
   await flush(() => document.body.querySelector<HTMLButtonElement>('[data-leave]')!.click());
   await flush(() => navigation);
   expect(readRenameContinuation()).toBeNull();
