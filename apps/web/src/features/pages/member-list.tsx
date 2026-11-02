@@ -12,6 +12,7 @@ import { OverviewContext, pageRepresentation, type Item, type OverviewValue, typ
 import { isRecord, pageText } from './shared';
 import { loadMemberList, type MemberListRequest, type MemberPageTarget } from './member-list-query';
 import { useListReaderAdmission, type ListReaderSession } from './list-reader-admission';
+import { admitMemberPage, admitMemberSection } from './member-page-admission';
 import { createMemberPageProgress, memberPageCursor } from './member-page-progress';
 import { admitMemberRetry, memberRetryAt } from './member-retry-admission';
 import { useSearchRetryWait } from '../../search/search-recovery-retry';
@@ -60,38 +61,44 @@ function useReadingLifetime(onRetire?: () => void) {
   );
 }
 
+function boundSummary(row: Record<string, unknown>, id: string): SubjectSummary | undefined {
+  const match = (value: unknown): value is Exclude<SubjectSummary, null> =>
+    isRecord(value) && typeof value.id === 'string' && value.id.toLowerCase() === id.toLowerCase();
+  if (match(row.subject)) return row.subject as Exclude<SubjectSummary, null>;
+  if (match(row.summary)) return row.summary as Exclude<SubjectSummary, null>;
+  return undefined;
+}
+
 /** Preserve native member order and fields. Common-members already canonicalizes; no per-row reads. */
 export function memberItems(section: Section, value: OverviewValue): Item[] {
   if (!section.ok) return [];
-  const rows = section.read.kind === 'search' ? section.body.subjects : section.body.members;
+  const body = admitMemberPage(section.read, section.body);
+  if (!body) return [];
+  const rows = section.read.kind === 'search' ? body.subjects : body.members;
   if (!Array.isArray(rows)) return [];
-  return rows.flatMap((row) => {
-    if (!isRecord(row)) return [];
-    const id = section.read.kind === 'search' ? row.id : row.subjectId;
-    if (typeof id !== 'string') return [];
-    const summary =
-      isRecord(row.subject) && row.subject.id === id ? row.subject : isRecord(row.summary) ? row.summary : undefined;
+  return rows.map((row) => {
+    const record = row as Record<string, unknown>;
+    const id = String(section.read.kind === 'search' ? record.id : record.subjectId);
+    const summary = boundSummary(record, id);
     const nativeLabel = summary?.label;
     const label =
       isRecord(nativeLabel) && typeof nativeLabel.value === 'string'
         ? { text: nativeLabel.value, lang: typeof nativeLabel.language === 'string' ? nativeLabel.language : undefined }
         : typeof nativeLabel === 'string'
           ? { text: nativeLabel, lang: undefined }
-          : pageText(row.labels, value.locale);
-    return [
-      {
-        id,
-        label,
-        ...(typeof summary?.type === 'string'
-          ? { type: summary.type }
-          : typeof row.type === 'string'
-            ? { type: row.type }
-            : {}),
-        ...(summary ? { summary: summary as SubjectSummary } : {}),
-        notes: [],
-        gated: false,
-      },
-    ];
+          : pageText(record.labels, value.locale);
+    return {
+      id,
+      label,
+      ...(typeof summary?.type === 'string'
+        ? { type: summary.type }
+        : typeof record.type === 'string'
+          ? { type: record.type }
+          : {}),
+      ...(summary ? { summary } : {}),
+      notes: [],
+      gated: false,
+    };
   });
 }
 
@@ -280,9 +287,11 @@ export function MemberList({
   paged?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const [page, setPage] = useState(section);
+  const [page, setPage] = useState(() => admitMemberSection(section));
   const [restart, setRestart] = useState(false);
-  const progress = useRef(createMemberPageProgress(section.ok ? memberPageCursor(section.body) : undefined));
+  const progress = useRef(
+    createMemberPageProgress(page.ok ? memberPageCursor(page.body) : undefined),
+  );
   const [error, setError] = useState<Section>();
   const [retryAt, setRetryAt] = useState(() => (section.ok ? undefined : memberRetryAt(section.retryAfter)));
   const waiting = useSearchRetryWait(retryAt);
@@ -391,11 +400,12 @@ export function MemberList({
         },
       });
       if (!isCurrent()) return;
-      if (!next.ok) {
-        setError((previous) => (isCurrent() ? next : previous));
-        setRetryAt((previous) => (isCurrent() ? memberRetryAt(next.retryAfter) : previous));
-        if ([401, 403, 404, 409].includes(next.status ?? 0)) {
-          setPage((previous) => (isCurrent() ? next : previous));
+      const admitted = admitMemberSection(next);
+      if (!admitted.ok) {
+        setError((previous) => (isCurrent() ? admitted : previous));
+        setRetryAt((previous) => (isCurrent() ? memberRetryAt(admitted.retryAfter) : previous));
+        if ([401, 403, 404, 409].includes(admitted.status ?? 0)) {
+          setPage((previous) => (isCurrent() ? admitted : previous));
           progress.current = createMemberPageProgress();
           setRestart((previous) => (isCurrent() ? false : previous));
         }
@@ -403,21 +413,21 @@ export function MemberList({
         // A fresh restart gets fresh progress only after native admission succeeds. A transport failure keeps
         // the accepted window and repeats this exact request, including an absent cursor for a fresh restart.
         const nextProgress = cursor ? progress.current : createMemberPageProgress();
-        if (!nextProgress.accept(memberPageCursor(next.body))) {
+        if (!nextProgress.accept(memberPageCursor(admitted.body))) {
           setRestart((previous) => (isCurrent() ? true : previous));
           return;
         }
         progress.current = nextProgress;
         const visible = new Set(unique.keys());
-        for (const item of memberItems(next, value)) visible.add(item.id);
-        setPage((previous) => (isCurrent() ? next : previous));
+        for (const item of memberItems(admitted, value)) visible.add(item.id);
+        setPage((previous) => (isCurrent() ? admitted : previous));
         setRestart((previous) => (isCurrent() ? false : previous));
         setCompletion((previous) =>
           isCurrent()
             ? {
                 generation,
                 added: visible.size - unique.size,
-                exhausted: !paged || typeof next.body.next !== 'string' || !next.body.next,
+                exhausted: !paged || typeof admitted.body.next !== 'string' || !admitted.body.next,
                 trigger: trigger.ownerDocument.activeElement === trigger ? trigger : null,
               }
             : previous,

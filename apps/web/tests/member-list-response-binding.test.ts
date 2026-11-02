@@ -24,7 +24,23 @@ const document: CompositionDocument = {
   ],
 };
 const continuation = { node: 'members', cursor: 'opaque:next/==' };
-const body = { members: [{ id: subject }], next: 'opaque:after/==' };
+const body = {
+  members: [
+    {
+      kind: 'dynamic',
+      subjectId: subject,
+      summary: {
+        id: subject,
+        type: 'schema:Book',
+        types: ['schema:Book'],
+        label: { value: 'Bound', language: 'en' },
+        creativeWork: true,
+        cover: null,
+      },
+    },
+  ],
+  next: 'opaque:after/==',
+};
 async function read(target: MemberPageTarget, changes: Record<string, unknown> = {}, status = 200) {
   const { identity, ...nativeChanges } = changes;
   const page = {

@@ -15,6 +15,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { SessionEnv } from '../../session/client';
 import { requestLanguages } from '../../kernel/languages';
+import { admitMemberPage } from './member-page-admission';
 import { isRecord } from './shared';
 import { validatePageNode, validatePageRealm, validateViewCursor } from './view-cursor';
 import type { PageRepresentation, Section } from './overview';
@@ -148,9 +149,11 @@ export async function readMemberList(
   const read = key ? plan.reads[key] : undefined;
   const result = key ? page.reads[key] : undefined;
   if (!read || (read.kind !== 'members' && read.kind !== 'search')) return { ok: false, status: 400 };
-  return result?.status === 200 && isRecord(result.body)
+  if (result?.status !== 200 || !isRecord(result.body))
+    return failedMemberRead(result?.status, isRecord(result) ? result.headers : undefined);
+  return admitMemberPage(read, result.body)
     ? { ok: true, read, body: result.body }
-    : failedMemberRead(result?.status, isRecord(result) ? result.headers : undefined);
+    : { ok: false, status: 422 };
 }
 
 function failedMemberRead(status: number | undefined, headers: unknown): Section {
