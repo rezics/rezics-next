@@ -55,6 +55,11 @@ export async function readTypeDescriptors(
   return descriptors;
 }
 
+/** Relation editing requires the bounded effective properties of the exact current Type. */
+export async function readRelationTypeDescriptor(typeId: string, locale: string): Promise<CurrentTypeRead> {
+  return readCurrentDescriptor(kernelClient(locale), typeId, locale);
+}
+
 export const readCreateTypePage = createServerFn({ method: 'GET' })
   .validator((input: TypeDirectoryQuery): TypeDirectoryQuery => {
     const prefix = typeof input?.query === 'string';

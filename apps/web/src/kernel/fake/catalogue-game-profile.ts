@@ -8,6 +8,7 @@ import { readStatementEditor, type StatementInput } from '../../features/catalog
 import { proposeFact } from '../../features/catalogue/subject-facts';
 import { candidateContext, readCandidates, selectCandidate, type Candidate } from '../../subject/candidates';
 import { readRelationEditor, proposeRelation, confirmRelation } from '../../subject/relation-candidates';
+import { relationDescriptorReader } from './relation-descriptor';
 import type { CandidateTransport } from '../../subject/candidate-review';
 import definitions from '../recorded/definitions-release.json';
 
@@ -230,9 +231,18 @@ export function gameProfileFixture(
     classificationReview: review,
     relations: {
       read: (slot, cursor, session) =>
-        readRelationEditor(client, 'Bearer fixture', Promise.resolve(release), gameId, locale, slot, cursor, session),
-      propose: (command) => proposeRelation(client, 'Bearer fixture', release, command),
-      confirm: (command) => confirmRelation(client, 'Bearer fixture', release, command),
+        readRelationEditor(
+          client,
+          'Bearer fixture',
+          relationDescriptorReader(release),
+          gameId,
+          locale,
+          slot,
+          cursor,
+          session,
+        ),
+      propose: (command) => proposeRelation(client, 'Bearer fixture', relationDescriptorReader(release), command),
+      confirm: (command) => confirmRelation(client, 'Bearer fixture', command),
     },
   };
   return {

@@ -2,9 +2,8 @@ import { candidateAuthorization } from '../../subject/candidate-admission';
 import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
-import type { Release } from '@rezics/definitions';
 import { kernelClient, requestLocale } from '../../kernel/client';
-import { readRelease } from '../../subject/definitions';
+import { readRelationTypeDescriptor } from './type-directory';
 import {
   confirmRelation,
   proposeRelation,
@@ -48,22 +47,17 @@ function address(input: unknown) {
   };
 }
 
-// readRelease retains the complete emitted JSON; its display-facing type omits effective editor metadata.
-async function release(): Promise<Release> {
-  return (await readRelease()) as unknown as Release;
-}
-
 export const readSubjectRelationEditor = createServerFn({ method: 'POST', strict: false })
   .validator(originalReaderInput(address))
   .handler(async ({ data }): Promise<RelationRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
     const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     try {
-      const definitions = release();
       return await readRelationEditor(
         kernelClient(),
         authorization,
-        definitions,
+        readRelationTypeDescriptor,
         data.id,
         requestLocale() ?? 'en',
         data.slot,
@@ -81,6 +75,7 @@ export const proposeSubjectRelation = createServerFn({ method: 'POST', strict: f
       const checked = address(input);
       const value = record(input);
       if (!checked.slot || typeof value.key !== 'string' || !uuid.test(value.key)) throw new Error('Invalid proposal');
+      if (value.retry !== undefined && value.retry !== true) throw new Error('Invalid retry');
       // The native release validator checks the full statement and admitted qualifiers before sending it.
       const statement = record(value.statement);
       if (!Array.isArray(statement.qualifiers) || !Array.isArray(statement.references))
@@ -90,14 +85,16 @@ export const proposeSubjectRelation = createServerFn({ method: 'POST', strict: f
         slot: checked.slot,
         key: value.key,
         statement: statement as RelationProposal['statement'],
+        ...(value.retry === true ? { retry: true } : {}),
       };
     }),
   )
   .handler(async ({ data }): Promise<RelationProposalResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
     const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     try {
-      return await proposeRelation(kernelClient(), authorization, release(), data);
+      return await proposeRelation(kernelClient(), authorization, readRelationTypeDescriptor, data);
     } catch {
       return { ok: false, reason: 'unavailable' };
     }
@@ -133,10 +130,11 @@ export const confirmSubjectRelation = createServerFn({ method: 'POST', strict: f
     }),
   )
   .handler(async ({ data }): Promise<RelationResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
     const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     try {
-      return await confirmRelation(kernelClient(), authorization, release(), data);
+      return await confirmRelation(kernelClient(), authorization, data);
     } catch {
       return { ok: false, reason: 'unavailable' };
     }

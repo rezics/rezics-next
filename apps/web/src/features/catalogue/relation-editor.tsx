@@ -130,6 +130,7 @@ function RelationEditorLive({
   const nativeSession = useRef<string | undefined>(undefined);
   if (!nativeSession.current && composition?.session) nativeSession.current = composition.session;
   const request = useRef<RelationProposal | RelationConfirmation | undefined>(undefined);
+  const proposalReplay = useRef(false);
   const pageCursor = useRef<string | undefined>(undefined);
   // Keep the attempted address before I/O, independently of the last successful page.
   const reading = useRef<
@@ -145,6 +146,7 @@ function RelationEditorLive({
     wasVisible.current = visible;
     if (!visible) {
       resumeRead.current = !!(read?.ok || reading.current);
+      if (request.current && 'statement' in request.current) proposalReplay.current = true;
       readGeneration.current++;
       running.current = false;
       candidateReadFocus.current = undefined;
@@ -187,6 +189,10 @@ function RelationEditorLive({
   const frozen = busy || !!confirmation || uncertain || failure?.reason === 'stale';
   const name = (property: string) =>
     pickText(current?.names[property] ?? {}, locale).text || m.subject_value_unlabelled({}, options);
+  const pinnedNames = (release: string | undefined) =>
+    current && current.descriptor && release === current.descriptor.releaseDigest ? current.names : {};
+  const pinnedName = (property: string, release: string | undefined) =>
+    pickText(pinnedNames(release)[property] ?? {}, locale).text || property;
   const target = (value: unknown): EntityPickerSubject[] =>
     typeof value === 'string'
       ? [
@@ -287,6 +293,7 @@ function RelationEditorLive({
     proposedCandidate.current = undefined;
     setFailure(undefined);
     request.current = undefined;
+    proposalReplay.current = false;
     pageCursor.current = undefined;
     reading.current = undefined;
     candidateReadFocus.current = undefined;
@@ -378,6 +385,7 @@ function RelationEditorLive({
     if (running.current || !confirmation || !field) return;
     const address = confirmation === 'propose' ? draftSlot() : slot;
     if (!address || (!request.current && !candidate && confirmation !== 'propose')) return;
+    const reused = !!request.current;
     request.current ??=
       confirmation === 'propose'
         ? { id, slot: address, statement: structuredClone(draft), key: crypto.randomUUID() }
@@ -392,15 +400,17 @@ function RelationEditorLive({
             ...(nativeSession.current ? { session: nativeSession.current } : {}),
             key: crypto.randomUUID(),
           };
+    if (!reused) proposalReplay.current = false;
     running.current = true;
     setBusy(true);
     setFailure(undefined);
     try {
       const pending = request.current;
       if ('statement' in pending) {
-        const next = await transport.propose(pending);
+        const next = await transport.propose(proposalReplay.current ? { ...pending, retry: true } : pending);
         if (!lifetime.active()) return;
         if (!next.ok) {
+          if (next.retry) proposalReplay.current = true;
           failed(next);
           return;
         }
@@ -420,6 +430,7 @@ function RelationEditorLive({
         setSlot(address);
         setConfirmation(undefined);
         request.current = undefined;
+        proposalReplay.current = false;
         await readPage(address, undefined, nativeSession.current, next.candidate);
       } else {
         const next = await transport.confirm(pending);
@@ -437,6 +448,7 @@ function RelationEditorLive({
       }
     } catch {
       if (!lifetime.active()) return;
+      if (request.current && 'statement' in request.current) proposalReplay.current = true;
       failed({ ok: false, reason: 'unavailable' });
     } finally {
       if (!mount.active()) return;
@@ -844,12 +856,12 @@ function RelationEditorLive({
                         <li key={item.id}>
                           <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl bg-card p-4 sm:p-5">
                             <ContentItemHeading level={3} className="text-base font-semibold">
-                              {name(item.statement.property.id)}
+                              {pinnedName(item.statement.property.id, item.release)}
                             </ContentItemHeading>
                             <Statement
                               statement={item.statement}
                               publicRead={current.public}
-                              names={current.names}
+                              names={pinnedNames(item.release)}
                               locale={locale}
                             />
                             <p>
@@ -943,7 +955,7 @@ function RelationEditorLive({
                                     key={item.id}
                                     statement={item}
                                     publicRead={publicRead}
-                                    names={current.names}
+                                    names={pinnedNames(item.rezics?.release)}
                                     locale={locale}
                                   />
                                 ))
@@ -960,7 +972,7 @@ function RelationEditorLive({
                               <Statement
                                 statement={candidate.statement}
                                 publicRead={current.public}
-                                names={current.names}
+                                names={pinnedNames(candidate.release)}
                                 locale={locale}
                               />
                             </ContentItemFrame>
@@ -1075,7 +1087,7 @@ function RelationEditorLive({
             <Statement
               statement={candidate.statement}
               publicRead={current.public}
-              names={current.names}
+              names={pinnedNames(candidate.release)}
               locale={locale}
             />
           )}
@@ -1194,9 +1206,7 @@ function Statement({
       {statement.qualifiers.map((snak, index) => (
         <div key={index}>
           <span className="text-muted-foreground">
-            {pickText(names[snak.property.id] ?? {}, locale).text ||
-              m.subject_value_unlabelled({}, { locale: locale as never })}
-            :{' '}
+            {pickText(names[snak.property.id] ?? {}, locale).text || snak.property.id}:{' '}
           </span>
           <CandidateValue snak={snak} related={publicRead.related} locale={locale} />
         </div>

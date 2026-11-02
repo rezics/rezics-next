@@ -6,6 +6,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { candidateFixture } from '../src/kernel/fake/subject-candidates';
 import { contextFixture } from '../src/kernel/fake/context-curation';
 import { relationFixture } from '../src/kernel/fake/catalogue-relations';
+import { relationDescriptorReader } from '../src/kernel/fake/relation-descriptor';
 import { readRelationEditor } from '../src/subject/relation-candidates';
 import { selectCandidate } from '../src/subject/candidates';
 import type { CandidateCommand, CandidateRead, CandidateResult } from '../src/subject/candidates';
@@ -667,7 +668,7 @@ test('candidate family preserves comparison, private whole selection, independen
         readRelationEditor(
           relation.client,
           'Bearer fixture',
-          relation.release,
+          relationDescriptorReader(relation.release),
           relation.id,
           'en',
           relation.slot,

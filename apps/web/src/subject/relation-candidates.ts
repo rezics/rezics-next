@@ -1,5 +1,5 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
-import type { Release, PropertyDefinition } from '@rezics/definitions';
+import type { PropertyDefinition, Release, TypeDefinition } from '@rezics/definitions';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import { pickText } from '@rezics/composition';
 import {
@@ -28,11 +28,22 @@ export type RelationField = RelationQualifier & {
   slotKey?: string;
   qualifiers: RelationQualifier[];
 };
+export type RelationTypeDescriptor = {
+  typeId: string;
+  releaseDigest: string;
+  definition: TypeDefinition;
+  properties: Record<string, PropertyDefinition>;
+};
+export type RelationTypeDescriptorRead =
+  | { ok: true; descriptor: RelationTypeDescriptor }
+  | { ok: false; reason: 'missing' | 'unavailable' };
+export type RelationTypeDescriptorReader = (typeId: string, locale: string) => Promise<RelationTypeDescriptorRead>;
 export type RelationRead =
   | CandidateFailure
   | {
       ok: true;
       public: SubjectRead;
+      descriptor?: RelationTypeDescriptor;
       fields: RelationField[];
       names: Record<string, Record<string, string>>;
       page: CandidatePage | null;
@@ -46,14 +57,23 @@ export type RelationStatementInput = InputSnak & {
   qualifiers: InputSnak[];
   references: { parts: InputSnak[] }[];
 };
-export type RelationProposal = { id: string; slot: RelationSlot; statement: RelationDraft; key: string };
+export type RelationProposal = {
+  id: string;
+  slot: RelationSlot;
+  statement: RelationDraft;
+  key: string;
+  /** Sent only when replaying a command whose first native response was uncertain. */
+  retry?: true;
+};
 export type RelationConfirmation = Omit<CandidateCommand, 'property' | 'slot' | 'operation'> & {
   slot: RelationSlot;
   operation: 'accept' | 'reject' | 'adopt';
   cursor?: string;
 };
 export type RelationResult = CandidateResult | { ok: true; kind: 'rejected'; public: SubjectRead | null };
-export type RelationProposalResult = CandidateFailure | { ok: true; candidate: string; session?: string };
+export type RelationProposalResult =
+  | (CandidateFailure & { retry?: true })
+  | { ok: true; candidate: string; session?: string };
 export type RelationTransport = {
   read: (slot?: RelationSlot, cursor?: string, session?: string) => Promise<RelationRead>;
   propose: (input: RelationProposal) => Promise<RelationProposalResult>;
@@ -74,16 +94,28 @@ export function validRelationSlot(slot: RelationSlot): boolean {
   );
 }
 
-/** Emitted effective Type properties own admission; classifications remain in scalar review. */
-export function relationFields(release: Release, type: string, locale: string): RelationField[] {
+/** The exact released Type descriptor owns admission; classifications remain in scalar review. */
+export function relationFields(descriptor: RelationTypeDescriptor, locale: string): RelationField[];
+/** Profile-specific editors still consume their already selected full release. */
+export function relationFields(release: Release, type: string, locale: string): RelationField[];
+export function relationFields(
+  metadata: RelationTypeDescriptor | Release,
+  typeOrLocale: string,
+  selectedLocale?: string,
+): RelationField[] {
+  const descriptor = selectedLocale === undefined ? (metadata as RelationTypeDescriptor) : undefined;
+  const release = selectedLocale === undefined ? undefined : (metadata as Release);
+  const locale = selectedLocale ?? typeOrLocale;
+  const properties = descriptor?.properties ?? release!.properties;
+  const propertyIds = descriptor?.definition.properties ?? release!.types[typeOrLocale]?.properties ?? [];
   const named = (id: string): RelationQualifier | undefined => {
-    const property = release.properties[id];
+    const property = properties[id];
     const label = property && pickText(property.labels, locale).text;
     return label ? { id, label, datatype: property!.datatype, targets: property!.targets ?? [] } : undefined;
   };
-  return (release.types[type]?.properties ?? [])
+  return propertyIds
     .flatMap((id) => {
-      const property = release.properties[id];
+      const property = properties[id];
       const field = named(id);
       if (
         !field ||
@@ -106,6 +138,32 @@ export function relationFields(release: Release, type: string, locale: string): 
       ];
     })
     .sort((a, b) => a.label.localeCompare(b.label, locale));
+}
+
+function completeRelationDescriptor(descriptor: RelationTypeDescriptor, typeId: string): boolean {
+  if (
+    descriptor.typeId !== typeId ||
+    typeof descriptor.releaseDigest !== 'string' ||
+    !descriptor.releaseDigest ||
+    !descriptor.definition ||
+    !Array.isArray(descriptor.definition.properties) ||
+    !descriptor.properties ||
+    typeof descriptor.properties !== 'object'
+  )
+    return false;
+  for (const id of descriptor.definition.properties) {
+    const property = descriptor.properties[id];
+    if (!property || !property.labels || typeof property.labels !== 'object' || !Object.keys(property.labels).length)
+      return false;
+    if (property.relation && property.relation.group !== 'classification') {
+      if (!Array.isArray(property.qualifiers)) return false;
+      for (const qualifier of property.qualifiers) {
+        const definition = descriptor.properties[qualifier];
+        if (!definition || !definition.labels || !Object.keys(definition.labels).length) return false;
+      }
+    }
+  }
+  return true;
 }
 
 export function relationSlotMatches(
@@ -153,7 +211,7 @@ function statementInput(draft: RelationDraft): RelationStatementInput {
 export async function readRelationEditor(
   client: KernelClient,
   authorization: string,
-  release: Release | Promise<Release>,
+  descriptor: RelationTypeDescriptorReader,
   id: string,
   locale: string,
   slot?: RelationSlot,
@@ -161,14 +219,19 @@ export async function readRelationEditor(
   session?: string,
 ): Promise<RelationRead> {
   if (slot && !validRelationSlot(slot)) return candidateFailure(400);
-  const [result, definitions] = await Promise.all([
-    readCandidates(client, authorization, id, slot?.property, cursor, slot, session),
-    release,
-  ]);
+  const result = await readCandidates(client, authorization, id, slot?.property, cursor, slot, session);
   if (!result.ok) return result;
   if (result.public.subject.id !== id || result.public.subject.context !== candidateContext)
     return candidateFailure(400);
-  const fields = relationFields(definitions, result.public.subject.type, locale);
+  let exact: RelationTypeDescriptorRead;
+  try {
+    exact = await descriptor(result.public.subject.type, locale);
+  } catch {
+    return candidateFailure(503);
+  }
+  if (!exact.ok || !completeRelationDescriptor(exact.descriptor, result.public.subject.type))
+    return candidateFailure(503);
+  const fields = relationFields(exact.descriptor, locale);
   if (
     slot &&
     (!validRelationSlot(slot) || !fields.some((field) => field.id === slot.property && (!slot.key || field.slotKey)))
@@ -176,28 +239,33 @@ export async function readRelationEditor(
     return candidateFailure(400);
   return {
     ...result,
+    descriptor: exact.descriptor,
     fields,
-    names: Object.fromEntries(Object.entries(definitions.properties).map(([id, value]) => [id, value.labels])),
+    names: Object.fromEntries(Object.entries(exact.descriptor.properties).map(([id, value]) => [id, value.labels])),
   };
 }
 
 export async function proposeRelation(
   client: KernelClient,
   authorization: string,
-  release: Release | Promise<Release>,
+  descriptor: RelationTypeDescriptorReader,
   input: RelationProposal,
 ): Promise<RelationProposalResult> {
-  try {
-    const current = await readRelationEditor(client, authorization, release, input.id, 'en', input.slot);
+  if (!input.retry) {
+    const current = await readRelationEditor(client, authorization, descriptor, input.id, 'en', input.slot);
     if (!current.ok) return current;
+    if (!current.descriptor) return candidateFailure(503);
     const field = current.fields.find((field) => field.id === input.slot.property);
     const statement = statementInput(input.statement);
     if (
       !field ||
       !relationSlotMatches(input.statement, input.slot, field) ||
-      checkStatementInput(statement, await release).violations.length
+      checkStatementInput(statement, current.descriptor, { allowUnknownReferences: true }).violations.length
     )
       return candidateFailure(400);
+  }
+  try {
+    const statement = statementInput(input.statement);
     const result = await client.subjects({ id: input.id }).candidates.post(
       { statement },
       {
@@ -207,9 +275,11 @@ export async function proposeRelation(
     const session = new Headers(result.headers).get('rezics-session-token');
     return result.status === 201 && result.data
       ? { ok: true, candidate: result.data.candidate, ...(session ? { session } : {}) }
-      : candidateFailure(result.status);
+      : result.status >= 500 || result.status === 201
+        ? { ...candidateFailure(result.status), retry: true }
+        : candidateFailure(result.status);
   } catch {
-    return candidateFailure(503);
+    return { ...candidateFailure(503), retry: true };
   }
 }
 
@@ -217,29 +287,20 @@ export async function proposeRelation(
 export async function confirmRelation(
   client: KernelClient,
   authorization: string,
-  release: Release | Promise<Release>,
   input: RelationConfirmation,
 ): Promise<RelationResult> {
-  const current = await readRelationEditor(
+  const current = await readCandidates(
     client,
     authorization,
-    release,
     input.id,
-    'en',
-    input.slot,
+    input.slot.property,
     input.cursor,
+    input.slot,
     input.session,
   );
   if (!current.ok) return current;
-  const field = current.fields.find((field) => field.id === input.slot.property);
   const candidate = current.page?.candidates.find((candidate) => candidate.id === input.candidate);
-  if (
-    !field ||
-    !candidate ||
-    candidate.retracted !== null ||
-    !relationSlotMatches(candidate.statement, input.slot, field)
-  )
-    return candidateFailure(400);
+  if (!candidate || candidate.retracted !== null) return candidateFailure(400);
   if (
     input.operation === 'adopt' &&
     (candidate.decision !== 'accepted' ||
@@ -289,9 +350,7 @@ export async function confirmRelation(
     result.kind === 'selected' &&
     !result.public?.subject.statements[input.slot.property]?.some(
       (statement) =>
-        statement.id === input.candidate &&
-        statement.rank !== 'deprecated' &&
-        relationSlotMatches(statement, input.slot, field),
+        statement.id === candidate.id && statement.rank !== 'deprecated',
     )
   )
     return { ...result, kind: input.operation === 'accept' ? 'accepted' : 'pending' };

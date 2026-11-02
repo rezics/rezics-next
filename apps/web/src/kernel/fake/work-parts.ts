@@ -2,6 +2,7 @@ import { createKernelClient, type SubjectRead } from '@rezics/client';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { candidateContext, type Candidate } from '../../subject/candidates';
+import { relationDescriptorReader } from './relation-descriptor';
 import {
   confirmRelation,
   proposeRelation,
@@ -253,9 +254,18 @@ export function workPartsFixture(initialScenario: WorkPartsScenario = 'current',
       readWorkParts(client, 'Bearer contributor', release, workPartsId, locale, stream, cursor, session),
     relation: (id) => ({
       read: (slot, cursor, session) =>
-        readRelationEditor(client, 'Bearer contributor', release, id, locale, slot, cursor, session),
-      propose: (input) => proposeRelation(client, 'Bearer contributor', release, input),
-      confirm: (input) => confirmRelation(client, 'Bearer contributor', release, input),
+        readRelationEditor(
+          client,
+          'Bearer contributor',
+          relationDescriptorReader(release),
+          id,
+          locale,
+          slot,
+          cursor,
+          session,
+        ),
+      propose: (input) => proposeRelation(client, 'Bearer contributor', relationDescriptorReader(release), input),
+      confirm: (input) => confirmRelation(client, 'Bearer contributor', input),
     }),
   };
   const search: EntityPickerSearch = async () => [

@@ -287,13 +287,13 @@ const authoredDocument = Compile({
   },
 });
 
-const validators = new WeakMap<Release, Map<string, ReturnType<typeof Compile>>>();
+const validators = new WeakMap<object, Map<string, ReturnType<typeof Compile>>>();
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const at = (pointer: string, key: string | number) =>
   `${pointer}/${String(key).replaceAll('~', '~0').replaceAll('/', '~1')}`;
 
-function validator(release: Release, id: string, property: PropertyDefinition) {
+function validator(release: Pick<Release, 'properties'>, id: string, property: PropertyDefinition) {
   let properties = validators.get(release);
   if (!properties) {
     properties = new Map();
@@ -355,10 +355,11 @@ function dateExists(time: string, precision: number): boolean {
 
 export function checkSubjectRelease(
   input: unknown,
-  release: Release,
+  release: Pick<Release, 'properties'> & Partial<Pick<Release, 'types'>>,
   rejectContent?: (property: PropertyDefinition) => boolean,
   catalogueOnly = false,
   authoredDocuments = false,
+  allowUnknownReferences = false,
 ): { violations: Violation[]; items: ItemTarget[] } {
   const violations: Violation[] = [];
   const items: ItemTarget[] = [];
@@ -369,9 +370,10 @@ export function checkSubjectRelease(
   if (!record(input)) return result;
   if (!catalogueOnly && input.type === undefined) add('/type', 'required');
   else if (!catalogueOnly && typeof input.type !== 'string') add('/type', 'invalid_type');
-  else if (!catalogueOnly && !Object.hasOwn(release.types, input.type as string)) add('/type', 'unsupported');
+  else if (!catalogueOnly && (!release.types || !Object.hasOwn(release.types, input.type as string)))
+    add('/type', 'unsupported');
   if (violations.length) return result;
-  const type = release.types[input.type as string]!;
+  const type = catalogueOnly ? undefined : release.types![input.type as string]!;
   if (!record(input.statements)) return result;
 
   const checkValue = (raw: Record<string, unknown>, property: PropertyDefinition, id: string, path: string) => {
@@ -442,10 +444,15 @@ export function checkSubjectRelease(
   };
   const propertyId = (raw: unknown): string | undefined =>
     record(raw) && record(raw.property) && typeof raw.property.id === 'string' ? raw.property.id : undefined;
-  const checkPart = (raw: unknown, path: string, allowed?: readonly string[]) => {
+  const checkPart = (raw: unknown, path: string, allowed?: readonly string[], allowUnknown = false) => {
     const id = propertyId(raw);
     if (id === undefined) return;
-    if (!Object.hasOwn(release.properties, id) || (allowed && !allowed.includes(id))) {
+    if (!Object.hasOwn(release.properties, id)) {
+      if (allowUnknown) return;
+      add(`${path}/property/id`, 'unsupported');
+      return;
+    }
+    if (allowed && !allowed.includes(id)) {
       add(`${path}/property/id`, 'unsupported');
       return;
     }
@@ -454,7 +461,7 @@ export function checkSubjectRelease(
 
   for (const [id, list] of Object.entries(input.statements)) {
     const path = at('/statements', id);
-    if (catalogueOnly ? !Object.hasOwn(release.properties, id) : !type.properties.includes(id)) {
+    if (catalogueOnly ? !Object.hasOwn(release.properties, id) : !type!.properties.includes(id)) {
       add(path, 'unsupported');
       continue;
     }
@@ -473,7 +480,9 @@ export function checkSubjectRelease(
       if (Array.isArray(statement.references))
         statement.references.forEach((reference, k) => {
           if (record(reference) && Array.isArray(reference.parts))
-            reference.parts.forEach((part, m) => checkPart(part, `${pointer}/references/${k}/parts/${m}`));
+            reference.parts.forEach((part, m) =>
+              checkPart(part, `${pointer}/references/${k}/parts/${m}`, undefined, allowUnknownReferences),
+            );
         });
     });
   }
@@ -516,8 +525,13 @@ export function checkSubjectInput(
 /** Proposal pointers match the single-statement HTTP envelope. */
 export function checkStatementInput(
   raw: unknown,
-  release: Release | undefined,
-  options: { rejectContent?: (property: PropertyDefinition) => boolean; authoredDocuments?: boolean } = {},
+  release: Pick<Release, 'properties'> | undefined,
+  options: {
+    rejectContent?: (property: PropertyDefinition) => boolean;
+    authoredDocuments?: boolean;
+    /** Exact Type descriptors need not include every otherwise valid reference property. Native writes validate those. */
+    allowUnknownReferences?: boolean;
+  } = {},
 ): { violations: Violation[]; targets: ItemTarget[] } {
   const property =
     isObject(raw) && isObject(raw.property) && typeof raw.property.id === 'string' ? raw.property.id : '';
@@ -533,7 +547,14 @@ export function checkStatementInput(
   // A proposal's subject type must be checked by the caller against its database.
   const input = { type: '', labels: { en: 'Validation' }, statements: { [property]: [raw] } };
   const typed = release
-    ? checkSubjectRelease(input, release, options.rejectContent, true, options.authoredDocuments)
+    ? checkSubjectRelease(
+        input,
+        release,
+        options.rejectContent,
+        true,
+        options.authoredDocuments,
+        options.allowUnknownReferences,
+      )
     : { violations: [], items: [] };
   const violations = typed.violations.map(remap);
   if (

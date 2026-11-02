@@ -177,6 +177,11 @@ admitted `schema:position` on a relation declaring position order is editable; a
 An emitted relation without that qualifier remains readable without an invented order field. Choosing a new
 containment target opens its separate slot and does not remove the original assertion.
 
+Relation fields and qualifiers come from one exact descriptor for the authorized Subject Type, with its release
+digest retained. Missing or incomplete descriptors stay unavailable and recover in place with drafts intact; stored
+candidates keep their own immutable release pins. An uncertain proposal retries with its original command key and
+payload, leaving current authorization and validation to the native command.
+
 Each opened assertion retains an independent draft and native idempotency key. Proposing creates a candidate;
 acceptance and selection are separate explicit actions. No atomic composition save, automatic adoption, identity
 merge or work/edition/release conversion exists. Selection rereads the actual current stream; an incomplete or

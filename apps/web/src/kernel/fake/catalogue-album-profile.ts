@@ -13,6 +13,7 @@ import { readStatementEditor, type StatementInput } from '../../features/catalog
 import { proposeFact } from '../../features/catalogue/subject-facts';
 import { candidateContext, readCandidates, selectCandidate, type Candidate } from '../../subject/candidates';
 import { confirmRelation, proposeRelation, readRelationEditor } from '../../subject/relation-candidates';
+import { relationDescriptorReader } from './relation-descriptor';
 import definitions from '../recorded/definitions-release.json';
 
 export const albumId = '00000000-0000-4000-8000-00000000a101';
@@ -273,9 +274,18 @@ export function albumFixture(scenario: AlbumScenario = 'ready', locale = 'en') {
     }),
     relations: {
       read: (slot, cursor, session) =>
-        readRelationEditor(client, 'Bearer fixture', release, albumId, locale, slot, cursor, session),
-      propose: (command) => proposeRelation(client, 'Bearer fixture', release, command),
-      confirm: (command) => confirmRelation(client, 'Bearer fixture', release, command),
+        readRelationEditor(
+          client,
+          'Bearer fixture',
+          relationDescriptorReader(release),
+          albumId,
+          locale,
+          slot,
+          cursor,
+          session,
+        ),
+      propose: (command) => proposeRelation(client, 'Bearer fixture', relationDescriptorReader(release), command),
+      confirm: (command) => confirmRelation(client, 'Bearer fixture', command),
     },
   };
   return {

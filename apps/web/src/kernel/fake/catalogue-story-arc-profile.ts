@@ -14,6 +14,7 @@ import { createTypes } from '../../features/catalogue/create-subject';
 import { catalogueCreateFixture, catalogueCreatedId, type CreateScenario } from './catalogue-create';
 import { relationFixture } from './catalogue-relations';
 import { candidateContext, readCandidates, selectCandidate, type Candidate } from '../../subject/candidates';
+import { relationDescriptorReader } from './relation-descriptor';
 import {
   readRelationEditor,
   proposeRelation,
@@ -238,9 +239,18 @@ export function storyArcProfileFixture(scenario: StoryArcScenario = 'ready', loc
         ? work.transport
         : {
             read: (slot, cursor, session) =>
-              readRelationEditor(client, 'Bearer fixture', release, id, locale, slot, cursor, session),
-            propose: (command) => proposeRelation(client, 'Bearer fixture', release, command),
-            confirm: (command) => confirmRelation(client, 'Bearer fixture', release, command),
+              readRelationEditor(
+                client,
+                'Bearer fixture',
+                relationDescriptorReader(release),
+                id,
+                locale,
+                slot,
+                cursor,
+                session,
+              ),
+            propose: (command) => proposeRelation(client, 'Bearer fixture', relationDescriptorReader(release), command),
+            confirm: (command) => confirmRelation(client, 'Bearer fixture', command),
           },
   };
   return { release, client, arc, work, creation, transport, props, candidates, calls, original };

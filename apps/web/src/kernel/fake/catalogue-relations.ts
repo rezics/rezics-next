@@ -8,6 +8,7 @@ import {
   type RelationStatementInput,
   type RelationSlot,
   type RelationTransport,
+  type RelationTypeDescriptor,
 } from '../../subject/relation-candidates';
 import { candidateContext, type Candidate } from '../../subject/candidates';
 import recording from '../recorded/subject.json';
@@ -29,7 +30,23 @@ export type RelationScenario =
   | 'loading'
   | 'retracted'
   | 'unresolved'
-  | 'lost-response';
+  | 'lost-response'
+  | 'lost-proposal-response';
+
+function exactDescriptor(release: Release, typeId: string, digest: string): RelationTypeDescriptor {
+  const definition = release.types[typeId]!;
+  const ids = new Set(definition.properties);
+  for (const id of definition.properties)
+    for (const qualifier of release.properties[id]?.qualifiers ?? []) ids.add(qualifier);
+  return {
+    typeId,
+    releaseDigest: digest,
+    definition,
+    properties: Object.fromEntries(
+      [...ids].flatMap((id) => (release.properties[id] ? [[id, release.properties[id]]] : [])),
+    ),
+  };
+}
 
 /** Small request-seam fixture shared by the page stories and focused exact-slot cases. */
 export function relationFixture(scenario: RelationScenario = 'ready', locale = 'en') {
@@ -37,6 +54,8 @@ export function relationFixture(scenario: RelationScenario = 'ready', locale = '
   const publicRead = structuredClone(recording) as unknown as SubjectRead;
   publicRead.subject.type = 'schema:Movie';
   publicRead.subject.context = candidateContext;
+  let descriptor = exactDescriptor(release, publicRead.subject.type, publicRead.subject.release);
+  let descriptorAvailable = true;
   const id = publicRead.subject.id;
   const slot: RelationSlot = { property: relationProperty, target: relationActor, key: relationRole };
   const snak = (
@@ -89,6 +108,7 @@ export function relationFixture(scenario: RelationScenario = 'ready', locale = '
   let revision = 2;
   let adopted = false;
   let lost = false;
+  let proposalLost = false;
   let failedRead = false;
   const calls: {
     method: string;
@@ -179,6 +199,10 @@ export function relationFixture(scenario: RelationScenario = 'ready', locale = '
       candidates.push(added);
       const receipt = { candidate: added.id, revision };
       if (key) receipts.set(key, receipt);
+      if (scenario === 'lost-proposal-response' && !proposalLost) {
+        proposalLost = true;
+        throw new Error('Response lost');
+      }
       return json(receipt, 201);
     }
     const selected = candidates.find((item) => url.pathname.includes(item.id));
@@ -221,10 +245,15 @@ export function relationFixture(scenario: RelationScenario = 'ready', locale = '
     return json({ code: 'not_found' }, 404);
   }) as typeof fetch;
   const client = createKernelClient('https://relations.test', { fetch: fetcher });
+  const descriptorReader = async (typeId: string) =>
+    descriptorAvailable && typeId === descriptor.typeId
+      ? { ok: true as const, descriptor }
+      : { ok: false as const, reason: 'unavailable' as const };
   const transport: RelationTransport = {
-    read: (address, cursor) => readRelationEditor(client, 'Bearer fixture', release, id, locale, address, cursor),
-    propose: (input) => proposeRelation(client, 'Bearer fixture', release, input),
-    confirm: (input) => confirmRelation(client, 'Bearer fixture', release, input),
+    read: (address, cursor, session) =>
+      readRelationEditor(client, 'Bearer fixture', descriptorReader, id, locale, address, cursor, session),
+    propose: (input) => proposeRelation(client, 'Bearer fixture', descriptorReader, input),
+    confirm: (input) => confirmRelation(client, 'Bearer fixture', input),
   };
   return {
     id,
@@ -236,6 +265,7 @@ export function relationFixture(scenario: RelationScenario = 'ready', locale = '
     candidates,
     publicRead,
     release,
+    descriptor,
     client,
     transport,
     calls,
@@ -245,6 +275,12 @@ export function relationFixture(scenario: RelationScenario = 'ready', locale = '
     },
     setScenario(next: RelationScenario) {
       scenario = next;
+    },
+    setDescriptor(next: RelationTypeDescriptor) {
+      descriptor = next;
+    },
+    setDescriptorAvailable(available: boolean) {
+      descriptorAvailable = available;
     },
   };
 }

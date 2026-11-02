@@ -14,6 +14,7 @@ import type { StatementInput } from '../../features/catalogue/statement-editor';
 import { readCreatedSubject } from '../../features/catalogue/create-subject-request';
 import { proposeFact } from '../../features/catalogue/subject-facts';
 import { candidateContext, readCandidates, selectCandidate, type Candidate } from '../../subject/candidates';
+import { relationDescriptorReader } from './relation-descriptor';
 import {
   readRelationEditor,
   proposeRelation,
@@ -294,9 +295,18 @@ export function addonProfileFixture(scenario: AddonScenario = 'ready', locale = 
     }),
     relations: (id) => ({
       read: (slot, cursor, session) =>
-        readRelationEditor(client, 'Bearer fixture', release, id, locale, slot, cursor, session),
-      propose: (command) => proposeRelation(client, 'Bearer fixture', release, command),
-      confirm: (command) => confirmRelation(client, 'Bearer fixture', release, command),
+        readRelationEditor(
+          client,
+          'Bearer fixture',
+          relationDescriptorReader(release),
+          id,
+          locale,
+          slot,
+          cursor,
+          session,
+        ),
+      propose: (command) => proposeRelation(client, 'Bearer fixture', relationDescriptorReader(release), command),
+      confirm: (command) => confirmRelation(client, 'Bearer fixture', command),
     }),
   };
   return { client, release, current, work, transport, props, calls, candidates };
