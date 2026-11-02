@@ -5477,6 +5477,13 @@ CREATE INDEX label_assignment_reserved_source ON library.label_assignment USING 
 
 
 --
+-- Name: members_preparation_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX members_preparation_expiry ON library.members_preparation USING btree (route, last_read_at, owner_account_id, collection_id, episode_id) WHERE (state = 'live'::text);
+
+
+--
 -- Name: members_preparation_idle; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -6875,10 +6882,3 @@ ALTER TABLE ONLY library.type_preparation_slot
 --
 
 
-
-
---
--- Name: members_preparation_expiry; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX members_preparation_expiry ON library.members_preparation USING btree (route, last_read_at, owner_account_id, collection_id, episode_id) WHERE (state = 'live'::text);
