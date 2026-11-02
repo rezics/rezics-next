@@ -214,6 +214,14 @@ test('mounted current Type pages and descriptors span releases, survive staging 
       next = page.body.next;
     }
     expect(all).toEqual(shards.flatMap((release) => Object.keys(release.types)).sort());
+    // Retiring a release through a smaller active catalogue also invalidates its pages.
+    expect((await call(`/v1/definitions/catalogues/${first.rootDigest}:activate`, { expected_head: 2 })).status).toBe(
+      200,
+    );
+    expect(
+      (await call(`/v1/definitionTypes?query=Shared&cursor=${encodeURIComponent(current.body.next)}`)).status,
+    ).toBe(409);
+    expect((await call('/v1/definitionTypes/test%3AT2000')).status).toBe(404);
     expect((await call(`/v1/definitions/releases/${legacyDigest}`)).body.release).toEqual(shards[0]);
     // At both catalogue sizes, the actual next-edge plan uses a range index and a fixed lookahead.
     for (const catalogue of [first.rootDigest, grown.rootDigest]) {
