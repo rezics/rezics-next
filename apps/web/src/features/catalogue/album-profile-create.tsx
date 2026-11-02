@@ -28,6 +28,7 @@ import type { StatementInput } from './statement-editor';
 import { ScalarControl } from './statement-editor-view';
 import { DefinitionMeaning } from './definition-meaning';
 import { InitialFieldChoice } from './initial-field-choice';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 
 type Row = AlbumRow;
 
@@ -46,7 +47,15 @@ const qualifierClassName =
   'min-w-0 w-full sm:w-auto sm:basis-64 sm:flex-1 [&_input]:min-h-11 md:pointer-fine:[&_input]:min-h-8 [&_[data-slot=field-label]]:min-w-0 [&_[data-slot=field-label]]:max-w-full [&_[data-slot=field-label]]:flex-wrap [&_[data-slot=field-label]]:[overflow-wrap:anywhere]';
 
 /** Initial facts only. Every optional assertion begins with the reader explicitly adding its field. */
-export const AlbumProfileCreate = catalogueEditor(AlbumProfileCreateLive);
+export const AlbumProfileCreate = catalogueEditor(AlbumProfileCreateBoundary);
+
+function AlbumProfileCreateBoundary(props: Parameters<typeof AlbumProfileCreateLive>[0]) {
+  return (
+    <AuthoringDepartureBoundary>
+      <AlbumProfileCreateLive {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
 
 function AlbumProfileCreateLive({
   release,
@@ -84,6 +93,40 @@ function AlbumProfileCreateLive({
   const choices = metadataReady ? [...fields.scalar, ...fields.relations, ...fields.classifications] : [];
   const locked = busy || !!pending.current || !enabled || !metadataReady;
   const definiteFailure = failure && failure.reason !== 'unavailable';
+  const [departed, setDeparted] = useState(false);
+  // Observe the producer's retained state, including rows whose metadata is unavailable.
+  // The default language and an extra blank language scaffold are not authored terms.
+  const dirty =
+    rows.length > 0 ||
+    terms.some(
+      (term) =>
+        !!(term.label || term.description || term.aliases) ||
+        (term.id === 0 ? term.language !== locale : !!term.language),
+    );
+  const departure = useAuthoringDeparture(
+    () => lifetime.active() && !created && (dirty || !!pending.current),
+    () => !!pending.current,
+    String(lifetime.generation),
+    undefined,
+    () => {
+      // Retire local recovery before the router starts destination reads. A sent create
+      // still belongs to the native producer and is neither cancelled nor reversed.
+      lifetime.retire();
+      pending.current = null;
+      running.current = false;
+      setTerms([]);
+      setRows([]);
+      setFailure(undefined);
+      setCorrections([]);
+      setDeparted(true);
+    },
+    undefined,
+    {
+      title: m.thread_authoring_leave_title({}, o),
+      unsaved: m.thread_authoring_leave_unsaved({}, o),
+      pending: m.thread_authoring_leave_pending({}, o),
+    },
+  );
 
   async function submit() {
     if (!lifetime.active()) return;
@@ -108,7 +151,11 @@ function AlbumProfileCreateLive({
     try {
       const result = await transport.create(pending.current);
       if (!lifetime.active()) return;
-      if (result.ok) setCreated(result);
+      if (result.ok) {
+        // Native success releases departure protection before exposing its returned reader.
+        departure.release();
+        setCreated(result);
+      }
       else {
         setFailure(result);
         setCorrections(albumCreateCorrections(result.errors ?? [], terms, rows, release, locale, termsId));
@@ -123,6 +170,8 @@ function AlbumProfileCreateLive({
       setBusy(false);
     }
   }
+
+  if (departed) return null;
 
   if (created)
     return (
