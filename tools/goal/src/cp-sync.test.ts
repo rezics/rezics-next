@@ -104,13 +104,7 @@ test('cp-sync runs the main-release proof steps', () => {
   expect(PROOF_CHECKS.map((check) => [...check.argv])).toEqual(CONTROL_PLANE_CHECKS.map((command) => [...command]));
   expect(PROOF_CHECKS.find((check) => check.kind === 'suite')?.timeoutMs).toBe(30 * 60_000);
   // The default gate is the installs, the type check, live config/routing parse and the CLI smoke; --full adds the suite.
-  expect(syncChecks('/live').map((check) => check.kind)).toEqual([
-    'prepare',
-    'prepare',
-    'typecheck',
-    'smoke',
-    'smoke',
-  ]);
+  expect(syncChecks('/live').map((check) => check.kind)).toEqual(['prepare', 'prepare', 'typecheck', 'smoke', 'smoke']);
   expect(syncChecks('/live', true).map((check) => check.kind)).toEqual([
     'prepare',
     'prepare',
