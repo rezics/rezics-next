@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
-import { act } from 'react';
+import { act, Profiler } from 'react';
 import type { FactCommand, FactsCurrent, FactResult } from '../src/features/catalogue/subject-facts';
 import type { EditorRead } from '../src/features/catalogue/statement-editor';
 import type { AlbumCommand, AlbumRead } from '../src/features/catalogue/album-profile';
@@ -102,6 +102,15 @@ test('Album recovery retires every current surface and retains private drafts an
     });
   const click = (name: string, scope = host) =>
     act(async () => user.click(within(scope).getByRole('button', { name })));
+  const retainedChange = (control: HTMLInputElement | HTMLTextAreaElement) => {
+    const key = Object.getOwnPropertyNames(control).find((name) => name.startsWith('__reactProps$'));
+    const callback =
+      key &&
+      (control as unknown as Record<string, { onChange?: (event: { target: { value: string } }) => void }>)[key]
+        ?.onChange;
+    if (!callback) throw new Error('Expected a mounted term edit callback');
+    return callback;
+  };
   const field = (property: string) => within(host).getByRole('region', { name: property });
   const show = (csrfToken = 'first', subject = 'viewer') =>
     act(async () =>
@@ -305,8 +314,12 @@ test('Album recovery retires every current surface and retains private drafts an
     const admitted: AlbumRead = { ok: true, release: creation.release, public: null };
     let metadata: AlbumRead | Error = admitted;
     const submitted: AlbumCommand[] = [];
+    let finishFirstCreate!: (result: Awaited<ReturnType<typeof creation.transport.create>>) => void;
     let finishReader!: (reader: { state: 'ready'; href: string }) => void;
     let finishCreate!: (result: { ok: true; id: string; reader: { state: 'ready'; href: string } }) => void;
+    let workspaceLive = true;
+    let workspaceAdmission = { reader: 'viewer', live: () => workspaceLive };
+    let holderCommits = 0;
     const transport = {
       load: async () => {
         if (metadata instanceof Error) throw metadata;
@@ -314,7 +327,10 @@ test('Album recovery retires every current surface and retains private drafts an
       },
       create: async (command: AlbumCommand) => {
         submitted.push(command);
-        if (submitted.length === 1) return { ok: false as const, reason: 'invalid' as const, refreshDefinitions: true };
+        if (submitted.length === 1)
+          return new Promise<Awaited<ReturnType<typeof creation.transport.create>>>((resolve) => {
+            finishFirstCreate = resolve;
+          });
         if (submitted.length === 2) {
           Object.assign(command, { credential: 'original-native-credential' });
           return { ok: false as const, reason: 'unavailable' as const };
@@ -337,21 +353,24 @@ test('Album recovery retires every current surface and retains private drafts an
             <CandidateReaderBoundary
               observed={{ state: 'signed-in', subject: 'viewer', csrfToken }}
               address="album-create"
+              admission={workspaceAdmission}
             >
-              <AlbumProfile
-                locale="en"
-                session="signed-in"
-                transport={transport}
-                search={async () => [
-                  {
-                    id: artistId,
-                    title: 'Private artist',
-                    types: [creation.publicRead.related[artistId]!.type!],
-                    typeLabel: '',
-                    cover: null,
-                  },
-                ]}
-              />
+              <Profiler id="album-private-holder" onRender={() => holderCommits++}>
+                <AlbumProfile
+                  locale="en"
+                  session="signed-in"
+                  transport={transport}
+                  search={async () => [
+                    {
+                      id: artistId,
+                      title: 'Private artist',
+                      types: [creation.publicRead.related[artistId]!.type!],
+                      typeLabel: '',
+                      cover: null,
+                    },
+                  ]}
+                />
+              </Profiler>
             </CandidateReaderBoundary>
           </QueryClientProvider>,
         ),
@@ -368,6 +387,15 @@ test('Album recovery retires every current surface and retains private drafts an
     const secondTerms = host.querySelectorAll<HTMLElement>('#album-terms fieldset')[1]!;
     await type(text(m.catalogue_create_language(), secondTerms), 'fr');
     await type(text(m.catalogue_create_label(), secondTerms), 'Album privé');
+    const termEdit = retainedChange(text(m.catalogue_create_label(), secondTerms));
+    await click(m.catalogue_create_add_language());
+    const removedTerms = host.querySelectorAll<HTMLElement>('#album-terms fieldset')[2]!;
+    const removedTermEdit = retainedChange(text(m.catalogue_create_label(), removedTerms));
+    await click(m.catalogue_create_remove_language(), removedTerms);
+    expect(host.querySelectorAll('#album-terms fieldset')).toHaveLength(2);
+    const beforeRemovedEdit = holderCommits;
+    await act(async () => removedTermEdit({ target: { value: 'Removed row edit' } }));
+    expect(holderCommits).toBe(beforeRemovedEdit);
     const addFact = async (id: string) => {
       await act(async () =>
         user.selectOptions(within(host).getByRole('combobox', { name: m.character_add_fact() }), id),
@@ -388,7 +416,15 @@ test('Album recovery retires every current surface and retains private drafts an
     );
     metadata = new Error('metadata offline');
     await click(m.album_create());
-    await settle();
+    const originalCommand = submitted[0]!;
+    const exactFirstCommand = structuredClone(originalCommand);
+    await act(async () => termEdit({ target: { value: 'Late pending edit' } }));
+    expect(text(m.catalogue_create_label(), secondTerms).value).toBe('Album privé');
+    expect(submitted[0]).toBe(originalCommand);
+    expect(submitted[0]).toEqual(exactFirstCommand);
+    await settle(() =>
+      finishFirstCreate({ ok: false, reason: 'invalid', refreshDefinitions: true }),
+    );
     const retiredCreation = () => {
       expect(host.querySelector('form')).toBe(form);
       expect(host.textContent).not.toContain('Original Album authority');
@@ -402,8 +438,23 @@ test('Album recovery retires every current surface and retains private drafts an
       expect(text(m.catalogue_create_label(), secondTerms).value).toBe('Album privé');
     };
     retiredCreation();
+    const beforeUnavailableEdit = holderCommits;
+    await act(async () => termEdit({ target: { value: 'Metadata unavailable edit' } }));
+    expect(text(m.catalogue_create_label(), secondTerms).value).toBe('Album privé');
+    expect(holderCommits).toBe(beforeUnavailableEdit);
+    const feedback = host.querySelector('[role="alert"], [role="status"]');
+    expect(feedback).not.toBeNull();
+    const feedbackText = feedback!.textContent;
+    await act(async () => {
+      termEdit({ target: { value: 'Metadata unavailable edit' } });
+      removedTermEdit({ target: { value: 'Removed row edit' } });
+    });
+    expect(text(m.catalogue_create_label(), secondTerms).value).toBe('Album privé');
+    expect(host.querySelector('[role="alert"], [role="status"]')?.textContent).toBe(feedbackText);
     await click(m.catalogue_create_review_new());
     expect((within(host).getByRole('button', { name: m.album_create() }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => termEdit({ target: { value: 'Still unavailable edit' } }));
+    expect(text(m.catalogue_create_label(), secondTerms).value).toBe('Album privé');
     for (const refusal of [
       { ok: false, reason: 'denied' },
       { ...admitted, release: { ...creation.release, types: {} } },
@@ -425,6 +476,8 @@ test('Album recovery retires every current surface and retains private drafts an
     await settle();
     expect(host.textContent).toContain('Fresh Album authority');
     expect(host.textContent).toContain('https://private.test/citation');
+    await type(text(m.catalogue_create_label(), secondTerms), 'Album français');
+    expect(text(m.catalogue_create_label()).value).toBe('Private Album');
     await click(m.album_create()); // Fresh validation rejects the retained retired fact.
     expect(submitted).toHaveLength(1);
     await click(m.recipe_remove_field(), host.querySelector<HTMLElement>(`#${scalar.id}`)!);
@@ -438,6 +491,10 @@ test('Album recovery retires every current surface and retains private drafts an
     expect(submitted).toHaveLength(3);
     expect(submitted[2]).toBe(submitted[1]);
     expect(submitted[2]).toEqual(exact);
+    await act(async () => termEdit({ target: { value: 'Late uncertain edit' } }));
+    expect(text(m.catalogue_create_label(), secondTerms).value).toBe('Album français');
+    expect(submitted[1]).toBe(submitted[2]);
+    expect(submitted[2]).toEqual(exact);
     await click(m.catalogue_create_retry());
     await settle(() => finishReader({ state: 'ready', href: '/en/exact-returned-reader?session=kept' }));
     expect(within(host).getByRole('link', { name: m.catalogue_create_open() }).getAttribute('href')).toBe(
@@ -448,10 +505,20 @@ test('Album recovery retires every current surface and retains private drafts an
     await showCreation('new-csrf-session');
     await settle();
     expect(text(m.catalogue_create_label()).value).toBe('');
+    await act(async () => termEdit({ target: { value: 'Retired workspace edit' } }));
+    expect(text(m.catalogue_create_label()).value).toBe('');
     expect(host.textContent).not.toContain(artistId);
+    const currentWorkspaceEdit = retainedChange(text(m.catalogue_create_label()));
+    workspaceLive = false;
+    await act(async () => currentWorkspaceEdit({ target: { value: 'Retired live holder edit' } }));
+    expect(text(m.catalogue_create_label()).value).toBe('');
+    workspaceAdmission = { reader: 'viewer', live: () => true };
+    await showCreation('third-csrf-session');
+    await settle();
+    expect(text(m.catalogue_create_label()).value).toBe('');
     await type(text(m.catalogue_create_label()), 'Retired private Album');
     await click(m.album_create());
-    await showCreation('third-csrf-session');
+    await showCreation('fourth-csrf-session');
     await settle(() =>
       finishCreate({ ok: true, id: albumId, reader: { state: 'ready', href: '/en/late-created-reader' } }),
     );

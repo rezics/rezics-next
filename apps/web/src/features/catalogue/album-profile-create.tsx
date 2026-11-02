@@ -83,6 +83,8 @@ function AlbumProfileCreateLive({
   const [terms, setTerms] = useState<(TermDraft & { id: number })[]>([
     { id: 0, language: locale, label: '', description: '', aliases: '' },
   ]);
+  const termIds = useRef<ReadonlySet<number>>(new Set());
+  termIds.current = new Set(terms.map((term) => term.id));
   const [rows, setRows] = useState<Row[]>([]);
   const currentRows = useRef(rows);
   const replaceRows = (next: Row[]) => {
@@ -109,6 +111,24 @@ function AlbumProfileCreateLive({
     metadataCurrent(release);
   const definiteFailure = failure && failure.reason !== 'unavailable';
   const [departed, setDeparted] = useState(false);
+  const termEditingAdmitted = useRef<() => boolean>(() => false);
+  termEditingAdmitted.current = () =>
+    lifetime.active() &&
+    !departed &&
+    !created &&
+    !busy &&
+    !running.current &&
+    !pending.current &&
+    enabled &&
+    metadataCurrent(release);
+  const updateTerm = (id: number, field: keyof TermDraft, value: string) => {
+    const admitted = () => termEditingAdmitted.current() && termIds.current.has(id);
+    if (!admitted()) return;
+    setTerms((previous) => {
+      if (!admitted() || !previous.some((row) => row.id === id)) return previous;
+      return previous.map((row) => (row.id === id ? { ...row, [field]: value } : row));
+    });
+  };
   // Observe the producer's retained state, including rows whose metadata is unavailable.
   // The default language and an extra blank language scaffold are not authored terms.
   const dirty =
@@ -269,10 +289,7 @@ function AlbumProfileCreateLive({
                     description: m.catalogue_create_description({}, o),
                     aliases: m.catalogue_create_aliases({}, o),
                   }[field];
-                  const update = (value: string) =>
-                    setTerms((previous) =>
-                      previous.map((row) => (row.id === term.id ? { ...row, [field]: value } : row)),
-                    );
+                  const update = (value: string) => updateTerm(term.id, field, value);
                   return (
                     <Field key={field} className="min-w-0">
                       <FieldLabel className={labelClassName} htmlFor={`${termsId}-${field}-${term.id}`}>
