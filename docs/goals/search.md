@@ -32,6 +32,7 @@ Realm browsing advances one explicit page at a time: successful More replaces th
 A relation stream admits a native links or relations page only when its raw row count is within the composition descriptor limit; an over-limit continuation keeps the last admitted window for retry and does not use Retry-After metadata.
 After profile persistence, any activation refusal remains retryable with its original head and idempotency keys; later edits stay in the separate draft.
 A native save or activation Retry-After is captured once as an absolute deadline; expiry enables a manual retry of that original intent and never publishes on its own.
+A focused curation publication Retry or revised-intent activation recovers to the named recovery region when successful confirmation removes that action; a surviving refusal keeps its action, and visit replacement, unmount or reader focus movement retires the pending handoff. Waiting for Retry-After, a background result or rendering success does not move focus.
 A curation editor baseline is admitted only when native active metadata and the returned profile share the canonical profile digest; extra native fields never replace the session reader or the success flag.
 Publication success binds to the submitted profile digest; extra native JSON fields are ignored when that digest and a nonnegative head admit.
 A rate-limited curation profile read waits for the native Retry-After deadline bound to the current reader, admission version or admitted visit, then exposes a manual retry; expiry never dispatches.

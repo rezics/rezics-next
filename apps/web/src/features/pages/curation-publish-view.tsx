@@ -15,6 +15,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { languageName } from '../../subject/language';
 import { useSearchRetryWait } from '../../search/search-recovery-retry';
 import { presentationMessageOptions } from './curate-view-editor-messages';
+import { useCurationPublicationFocus } from './curation-publication-focus';
 import {
   CurationPublication,
   type ActiveCuration,
@@ -410,6 +411,12 @@ export function CurationPublicationRecovery({
     publication.getSnapshot,
     publication.getSnapshot,
   );
+  const focus = useCurationPublicationFocus(
+    visit ? { publication, visit } : { publication },
+    busy,
+    intent,
+    result,
+  );
   const waiting = useSearchRetryWait(result?.ok === false && result.reason === 'rate-limited' ? retryAt : undefined);
   const inspectionWaiting = useSearchRetryWait(readRetryAt);
   const options = presentationMessageOptions(locale);
@@ -426,6 +433,13 @@ export function CurationPublicationRecovery({
     const confirmation = visit ? await visit.retry() : await publication.retry();
     if (mounted.current && (!visit || visit.isCurrent()) && confirmation) onPublished(confirmation);
   }
+  async function replaceIntent() {
+    if (!mounted.current || (visit && !visit.isCurrent())) return;
+    const confirmation = visit
+      ? await visit.replaceInvalid(profile, head)
+      : await publication.replaceInvalid(profile, head);
+    if (mounted.current && (!visit || visit.isCurrent()) && confirmation) onPublished(confirmation);
+  }
   const inspect = () => {
     if (!mounted.current || (visit && !visit.isCurrent())) return;
     void (visit ? visit.inspect() : publication.inspect());
@@ -438,8 +452,10 @@ export function CurationPublicationRecovery({
   const controlClass = 'min-h-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
   return (
     <section
+      ref={focus.regionRef}
+      tabIndex={-1}
       aria-label={m.curation_recovery({}, options)}
-      className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 [overflow-wrap:anywhere]"
+      className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       aria-busy={busy}
     >
       <h2 className="font-semibold">{m.curation_recovery({}, options)}</h2>
@@ -524,10 +540,14 @@ export function CurationPublicationRecovery({
             <div className="space-y-2">
               <p className="text-sm">{m.curation_review_retry_help({}, options)}</p>
               <Button
+                ref={focus.actionRef}
                 variant="outline"
                 className={controlClass}
                 disabled={busy || waiting}
-                onClick={() => void retry()}
+                onClick={(event) => {
+                  focus.noteActivation(event.currentTarget);
+                  void retry();
+                }}
               >
                 {m.curation_retry_original({}, options)}
               </Button>
@@ -539,14 +559,12 @@ export function CurationPublicationRecovery({
                 <p className="text-sm">{m.curation_review_revision_required({}, options)}</p>
               ) : null}
               <Button
+                ref={focus.actionRef}
                 className={controlClass}
                 disabled={busy || !revisedValid || !laterChanges}
-                onClick={async () => {
-                  if (!mounted.current || (visit && !visit.isCurrent())) return;
-                  const confirmation = visit
-                    ? await visit.replaceInvalid(profile, head)
-                    : await publication.replaceInvalid(profile, head);
-                  if (mounted.current && (!visit || visit.isCurrent()) && confirmation) onPublished(confirmation);
+                onClick={(event) => {
+                  focus.noteActivation(event.currentTarget);
+                  void replaceIntent();
                 }}
               >
                 {m.curation_new_intent({}, options)}
