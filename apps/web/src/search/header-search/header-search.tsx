@@ -128,32 +128,37 @@ export function HeaderSearchView({
   const retryable = onRetry !== undefined && ['error', 'unavailable', 'preparing', 'restart'].includes(suggestions);
   const retryWaiting = useSearchRetryWait(retryable ? state.retryAt : undefined);
   const action = headerSearchAction(locale, scope);
+  const messageOptions = { locale: locale as never };
   const count = new Intl.NumberFormat(locale).format(region?.activeCount ?? 0);
   const subjects = suggestions === 'ready' ? (result?.subjects ?? []) : [];
-  const triggerLabel = query || (scope ? m.header_search_in_scope({ scope: scope.name }) : m.header_search_global());
+  const triggerLabel =
+    query ||
+    (scope
+      ? m.header_search_in_scope({ scope: scope.name }, messageOptions)
+      : m.header_search_global({}, messageOptions));
   const shortcutLabel = 'Ctrl/⌘ K';
   const triggerName = keyboardShortcut ? `${triggerLabel} ${shortcutLabel}` : triggerLabel;
   const showQueryLimitError = !scope && queryLimitError;
   const status = !action
-    ? m.header_search_scope_unavailable()
+    ? m.header_search_scope_unavailable({}, messageOptions)
     : suggestions === 'closed'
-      ? m.platform_closed_message()
+      ? m.platform_closed_message({}, messageOptions)
       : suggestions === 'restart'
-        ? m.search_suggestions_restart()
+        ? m.search_suggestions_restart({}, messageOptions)
         : suggestions === 'credentials'
-          ? m.search_suggestions_credentials()
+          ? m.search_suggestions_credentials({}, messageOptions)
           : suggestions === 'invalid'
-            ? m.search_suggestions_invalid()
+            ? m.search_suggestions_invalid({}, messageOptions)
             : suggestions === 'preparing'
-              ? m.discovery_not_ready()
+              ? m.discovery_not_ready({}, messageOptions)
               : suggestions === 'error'
-                ? m.search_suggestions_failed()
+                ? m.search_suggestions_failed({}, messageOptions)
                 : suggestions === 'loading'
-                  ? m.header_search_loading()
+                  ? m.header_search_loading({}, messageOptions)
                   : suggestions === 'empty'
-                    ? m.search_no_suggestions()
+                    ? m.search_no_suggestions({}, messageOptions)
                     : suggestions === 'unavailable'
-                      ? m.search_suggestions_unavailable()
+                      ? m.search_suggestions_unavailable({}, messageOptions)
                       : '';
   // Plain GET forms replace an action's query string; retain its declared context as hidden controls.
   const target = action ? new URL(action, 'https://rezics.invalid') : undefined;
@@ -166,12 +171,12 @@ export function HeaderSearchView({
       data-expanded={expanded}
       role={phoneSheet ? 'dialog' : undefined}
       aria-modal={phoneSheet || undefined}
-      aria-label={phoneSheet ? m.search_label() : undefined}
+      aria-label={phoneSheet ? m.search_label({}, messageOptions) : undefined}
       className="relative min-w-0 w-full"
     >
       {keyboardShortcut && (
         <span id={`${id}-keyboard-help`} className="sr-only">
-          {m.header_search_keyboard_help()}
+          {m.header_search_keyboard_help({}, messageOptions)}
         </span>
       )}
       <button
@@ -183,7 +188,7 @@ export function HeaderSearchView({
         aria-controls={`${id}-form`}
         aria-keyshortcuts={keyboardShortcut ? 'Control+k Meta+k' : undefined}
         aria-describedby={keyboardShortcut ? `${id}-keyboard-help` : undefined}
-        title={keyboardShortcut ? m.header_search_keyboard_help() : undefined}
+        title={keyboardShortcut ? m.header_search_keyboard_help({}, messageOptions) : undefined}
         className={cn(
           'header-search-trigger flex h-11 w-full min-w-0 items-center gap-3 rounded-full border border-border/60 bg-muted/50 px-4 text-start text-sm text-muted-foreground outline-none hover:bg-accent lg:hidden',
           controlFocus,
@@ -204,7 +209,7 @@ export function HeaderSearchView({
         ref={formRef}
         id={`${id}-form`}
         role="search"
-        aria-label={m.search_label()}
+        aria-label={m.search_label({}, messageOptions)}
         method="get"
         action={target?.pathname}
         data-phone-sheet={phoneSheet}
@@ -231,7 +236,7 @@ export function HeaderSearchView({
               <button
                 type="button"
                 onClick={onClose}
-                aria-label={m.header_search_close()}
+                aria-label={m.header_search_close({}, messageOptions)}
                 className={cn(
                   'grid size-11 shrink-0 place-items-center rounded-full outline-none hover:bg-accent',
                   controlFocus,
@@ -248,14 +253,14 @@ export function HeaderSearchView({
                 expanded && (phoneSheet ? 'hidden' : 'hidden lg:block'),
               )}
             />
-            {scope && <ScopeChip scope={scope} onRemove={onRemoveScope} />}
+            {scope && <ScopeChip scope={scope} locale={locale} onRemove={onRemoveScope} />}
             <input
               {...inputProps}
               ref={inputRef}
               name={action ? 'q' : undefined}
               type="text"
               role="combobox"
-              aria-label={m.search_label()}
+              aria-label={m.search_label({}, messageOptions)}
               aria-autocomplete="list"
               aria-haspopup="listbox"
               aria-expanded={expanded}
@@ -272,8 +277,12 @@ export function HeaderSearchView({
                   .filter(Boolean)
                   .join(' ') || undefined
               }
-              title={keyboardShortcut ? m.header_search_keyboard_help() : undefined}
-              placeholder={scope ? m.header_search_in_scope({ scope: scope.name }) : m.header_search_global()}
+              title={keyboardShortcut ? m.header_search_keyboard_help({}, messageOptions) : undefined}
+              placeholder={
+                scope
+                  ? m.header_search_in_scope({ scope: scope.name }, messageOptions)
+                  : m.header_search_global({}, messageOptions)
+              }
               value={query}
               autoComplete="off"
               maxLength={scope ? 256 : undefined}
@@ -294,10 +303,10 @@ export function HeaderSearchView({
                 className={cn('min-h-11', controlFocus)}
                 disabled={!region}
                 onClick={onFilters}
-                title={!region ? m.header_search_filters_unavailable() : undefined}
+                title={!region ? m.header_search_filters_unavailable({}, messageOptions) : undefined}
               >
                 <SlidersHorizontal aria-hidden="true" className="size-4" />
-                {m.search_filters()}
+                {m.search_filters({}, messageOptions)}
                 {region && region.activeCount > 0 ? ` (${count})` : ''}
               </Button>
               <Button
@@ -305,7 +314,7 @@ export function HeaderSearchView({
                 size="icon"
                 className={cn('size-11 rounded-full', controlFocus)}
                 disabled={!action || !query.trim()}
-                aria-label={m.search_submit()}
+                aria-label={m.search_submit({}, messageOptions)}
               >
                 <ArrowUp aria-hidden="true" className="size-4" />
               </Button>
@@ -314,7 +323,7 @@ export function HeaderSearchView({
         </div>
         {showQueryLimitError && (
           <p id={`${id}-query-limit-error`} role="alert" className="px-4 pb-3 text-sm text-destructive">
-            {m.search_query_limit_error()}
+            {m.search_query_limit_error({}, messageOptions)}
           </p>
         )}
         {expanded && (
@@ -339,18 +348,18 @@ export function HeaderSearchView({
             )}
             {retryWaiting && retryable && (
               <p role="status" className="px-4 pb-2 text-sm text-muted-foreground">
-                {m.settings_retry_wait()}
+                {m.settings_retry_wait({}, messageOptions)}
               </p>
             )}
             {retryable && (
               <Button type="button" variant="outline" className="mx-4 w-fit" onClick={onRetry} disabled={retryWaiting}>
-                {m.search_facet_retry()}
+                {m.search_facet_retry({}, messageOptions)}
               </Button>
             )}
             <ul
               id={`${id}-suggestions`}
               role="listbox"
-              aria-label={m.header_search_suggestions()}
+              aria-label={m.header_search_suggestions({}, messageOptions)}
               aria-busy={suggestions === 'loading'}
               className="px-2 py-2"
             >
@@ -429,7 +438,7 @@ export function HeaderSearchView({
         {/* Keep a default submit control for plain GET submission before the composer is expanded. */}
         {!expanded && (
           <button type="submit" className="sr-only" tabIndex={-1} disabled={!action}>
-            {m.search_submit()}
+            {m.search_submit({}, messageOptions)}
           </button>
         )}
       </form>
