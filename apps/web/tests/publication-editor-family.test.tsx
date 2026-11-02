@@ -170,7 +170,7 @@ test('independent publication creation, local corrections, immutable recovery an
       const target = window.document.getElementById(decodeURIComponent(link.hash.slice(1)))!;
       expect(current.contains(target)).toBe(true);
       expect(target.matches('input, select, button, [tabindex="-1"]')).toBe(true);
-      // Programmatic focusability only: browser fragment navigation is asserted only in the UNRUN stories.
+      // Programmatic focusability only: browser fragment navigation needs a browser witness.
       await act(async () => target.focus());
       expect(window.document.activeElement).toBe(target);
     }
@@ -467,6 +467,8 @@ test('independent publication creation, local corrections, immutable recovery an
     expect(recovery.commands).toHaveLength(3);
     expect(recovery.commands[2]!.key).not.toBe(corrected.key);
     expect(Object.keys(recovery.commands[2]!.item.statements)).toEqual(['schema:exampleOfWork']);
+    expect(searchCalls).toEqual(['Supplied']);
+    searchCalls.length = 0;
 
     // Constructed supplied release/profile tests DOM injectivity independently of native vocabulary acceptance.
     const collision = tracked();

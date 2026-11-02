@@ -74,6 +74,7 @@ The work's Editions view and a work header that supports Editions offer
 work is concealed, and a merged identity is not silently substituted. Discovery opens the existing search page
 before creation. A separate confirmation identifies an independent publication: a file, language/format combination,
 personal Library Copy or distribution event alone does not establish this grain.
+Publication independence uses a native checkbox button so validation links focus the visible control.
 
 Only emitted profiles and effective fields are offered: Book editions use `bf:Instance`, video works use
 `rezics:AnimeRelease`, and software/game works use `wd:Q20631656` where the released work target permits it.
@@ -929,5 +930,3 @@ template and selected Context again and dispatches only that group's relation re
 returned as unrequested (204), retaining their existing client state. A continued document opened directly offers
 those groups a fresh-start link. No first-page slice or cross-group cursor represents a complete graph or total.
 The existing 16-read, 128-slot and native request bounds still apply.
-
-Publication independence uses a native checkbox button so validation links focus the visible control.
