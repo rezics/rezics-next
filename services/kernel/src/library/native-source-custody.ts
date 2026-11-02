@@ -305,16 +305,18 @@ function parameters(identity: NativeSourceIdentity): Parameters {
   };
 }
 /** Fixed projections and primary-key/route-leading range plans only; no observed row-count cost classifier. */
-function footprint(text: string, values: unknown[], rows: number, points: number, keys = 0) {
+function footprint(text: string, values: unknown[], rows: number, points: number, keys = 0, metadata = 0) {
   return {
     nativeRows: rows,
     nativePoints: points,
     candidateKeys: keys,
-    identityMetadataRows: 0,
+    identityMetadataRows: metadata,
     witnessKeys: 0,
     statements: 1,
     bytes: Buffer.byteLength(text) + Buffer.byteLength(JSON.stringify(values)) + 4096 + keys * 1024,
-    emptySeeks: keys ? 1 : 0,
+    // Native point probes can miss even without a returned raw key. Keep these
+    // admitted slots inclusive; a positive outer join result cannot measure inner misses.
+    emptySeeks: keys ? 1 : points,
   };
 }
 function executor(client: CommandTransaction, work: NativeCollectionWork, deadline: number) {
@@ -327,7 +329,8 @@ function executor(client: CommandTransaction, work: NativeCollectionWork, deadli
   ): Promise<R[]> => {
     if (Date.now() >= deadline) throw new Refused('allowance');
     const args = query.params.map((name) => values[name]);
-    const admitted = work.reserve(footprint(query.sql, args, rows, points, keys));
+    const metadata = query === partitionQuery || query === finishQuery || query === proofQuery || query === outputQuery ? 1 : 0;
+    const admitted = work.reserve(footprint(query.sql, args, rows, points, keys, metadata));
     admitted.dispatch();
     try {
       const config = {
@@ -336,7 +339,8 @@ function executor(client: CommandTransaction, work: NativeCollectionWork, deadli
         query_timeout: Math.max(1, deadline - Date.now()),
       };
       const result = await admitted.query(() => client.query<R>(config));
-      admitted.settle({ emptySeeks: keys && result.rows.length === 0 ? 1 : 0 });
+      // Dispatched native bounds, including possible inner misses, are never repriced from output.
+      admitted.settle();
       return result.rows;
     } catch (error) {
       admitted.settle();

@@ -12,4 +12,5 @@ JOIN core.partition o ON o.partition_no=c.partition_no AND o.epoch=c.epoch AND o
 WHERE s.route=$1 AND s.collection_id=$2 AND s.plan_key=$3 AND s.version=p.version
  AND s.transaction_id=p.seal_transaction_id AND p.state='sealed' AND p.driver='done' AND p.phase='raw'
  AND s.generation=p.generation AND s.frontier=p.frontier AND s.capture_frontier=p.capture_frontier
- AND c.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid;
+ AND c.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
+FOR SHARE OF s,g,c,o;

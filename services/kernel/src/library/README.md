@@ -2492,7 +2492,7 @@ The admitted saved `IdentityJob` and `identityEpochStore.pageChanges` transform 
 originals. Ordinary pending mappings never supply a guessed destination. Metadata, raw capture and raw
 planning are independent of ordinary Source readiness. Supported placement is a genuine same-home account,
 Source and admitted job: curated members, private built-in entry/label/session/copy, and committed active
-account-backed explicit output. State Sources traverse the independent four-family owner ranges, including
+account-backed explicit output. Private built-in Sources traverse the independent four-family owner ranges, including
 excluded originals and unreserved label keys. Public-output, frozen and foreign-home authority stays unavailable.
 
 The native `identity_scope_plan` IS the expected manifest. It retains capture, writer/prearm fences,
@@ -2538,7 +2538,7 @@ physical custody or infer destination erasure.
   metadata, one statement, SQL+binds+12288 bytes, one empty seek. Current capture: seven joined native
   rows/points, one identity metadata row, one statement, SQL+binds+64 bytes, one empty seek. Current
   admitted job: admission/owner, at most two inputs plus EOF, group/bridge/directory and bounded CTE
-  revisits admit 15 native/identity rows, 12 points, one statement, SQL+binds+2048 bytes, four possible
+  revisits plus the actual claim admit 16 native/identity rows, 13 points, one statement, SQL+binds+2048 bytes, four possible
   empty seeks. Seal receipt: five native rows/points, two identity metadata rows, one statement,
   SQL+binds+256 bytes, one empty seek. Insert-plan additionally charges all three possible FK points.
   Known transaction controls have zero rows/points/metadata/candidates/witnesses/seeks but one statement
@@ -2547,7 +2547,8 @@ physical custody or infer destination erasure.
   its real transform read; no unbounded projection is priced as a fabricated constant. Native metadata,
   raw and custody calls transfer only the actual remaining reservation to their existing declared ledger,
   then settle its exact eight-axis receipt back. Their SQL/projection bounds remain in
-  `collection-source-native.ts` and `native-source-custody.ts`, including capture/receipt/retention.
+  `collection-source-native.ts` and `native-source-custody.ts`, including capture/receipt/retention. Custody reserves point-miss slots even for a positive outer result;
+  native Core ownership/publication/proof controls also declare their identity-metadata row.
 - Growth check: `test/library/identity-scope-effects.test.ts` supplies focused native outcome cases for all
   six drivers, bounded positive pages, omitted enrollment/rollback, genuine exhaustive zero, late first apply,
   writer/rekey/prearm changes, repeat and failure accounting. These tests are authored, not executed in this

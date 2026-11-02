@@ -101,7 +101,7 @@ export function libraryIdentityFootprint(sql: string, values: readonly unknown[]
   if (equal(sql, plan.sql) || equal(sql, plan.sql.replace(/;\s*$/, ' FOR UPDATE'))) return point(1,1,0,12288,1);
   if (equal(sql, current.sql)) return point(7,7,1,64,1);
   // Admission input cardinality is contractually <=2. EXISTS and NOT EXISTS each use that prefix.
-  if (equal(sql, job.sql)) return point(15,12,15,2048,4);
+  if (equal(sql, job.sql)) return point(16,13,16,2048,4);
   if (equal(sql, seal.sql)) return point(5,5,2,256,1);
   if (equal(sql, libraryIdentityJobSizeSQL)) return point(1,1,1,32,1);
   if (equal(sql, savedJob.sql)) {
@@ -118,7 +118,7 @@ export function libraryIdentityFootprint(sql: string, values: readonly unknown[]
     return n === undefined ? undefined : point(n*perRow,n*points,n*perRow,n*output,n);
   }
   if (equal(sql, facts.sql) || equal(sql, labels.sql)) {
-    const n = count(values[equal(sql, facts.sql) ? 4 : 4],100);
+    const n = count(values[4],100);
     return n === undefined ? undefined : cost(sql,values,n+1,1,0,n*256,n,1);
   }
   for (const name of Object.keys(libraryIdentitySQL) as (keyof typeof libraryIdentitySQL)[]) {

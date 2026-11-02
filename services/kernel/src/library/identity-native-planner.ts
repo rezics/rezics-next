@@ -4,6 +4,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool, QueryResultRow } from 'pg';
 import { shareAccount } from '../access/account-share.ts';
+import { deadlineClient } from '../access/authenticate.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
 import {
   currentCommand,
   currentCommandResources,
@@ -253,7 +255,7 @@ async function plannedOriginal(
   const change: IdentityChange | undefined = page.changes.find((item) => item.original === key.storedSubjectId);
   if (change) return { key, change, terminal: change.terminal, mappingEpoch: null };
   const mapping = await bounded(ledger, () =>
-    identityEpochStore.readMapping(pool, key.storedSubjectId),
+    withRequestDeadline(deadlineOf(ledger), () => identityEpochStore.readMapping(pool, key.storedSubjectId)),
   );
   return mapping.state === 'mapped'
     ? { key, change: null, terminal: mapping.terminal, mappingEpoch: mapping.epoch.toString() }
@@ -282,7 +284,7 @@ async function readRetainedIdentityReferences(
         pool,
         async (tx) =>
           (
-            await tx.query<{ storedSubjectId: string; factId: string }>(
+            await deadlineClient(tx, deadlineOf(ledger)).query<{ storedSubjectId: string; factId: string }>(
               legacy
                 ? libraryIdentitySQL.oldFacts
                 : libraryIdentitySQL.oldReferences,
@@ -570,8 +572,8 @@ async function advanceNativePlan(
             Math.min(input.limit, remainingAllowance(l).remaining.candidateKeys),
             l,
           )
-        : metadata.authority === 'private_builtin' && metadata.builtinKind === 'state'
-          ? await bounded(l, () => withConnection(pool, client => readOwnerNativeFactPage(client, s.accountId, plan!.driver as OwnerNativeFactDriver, plan!.after_subject && plan!.after_fact ? {driver: plan!.driver as OwnerNativeFactDriver, storedSubjectId: plan!.after_subject, factId: plan!.after_fact} : null, Math.min(input.limit, l.available('candidateKeys')))))
+        : metadata.authority === 'private_builtin'
+          ? await bounded(l, () => withConnection(pool, client => readOwnerNativeFactPage(deadlineClient(client, input.deadline), s.accountId, plan!.driver as OwnerNativeFactDriver, plan!.after_subject && plan!.after_fact ? {driver: plan!.driver as OwnerNativeFactDriver, storedSubjectId: plan!.after_subject, factId: plan!.after_fact} : null, Math.min(input.limit, l.available('candidateKeys')))))
         : await l.compose((allowance) =>
             readNativeCollectionRawPage(pool, metadata, {
               driver: plan!.driver as CanonicalRawKey['driver'],
@@ -761,7 +763,7 @@ export async function nextLibraryIdentityNativePlan(
           pool,
           async (tx) =>
             (
-              await tx.query<{
+              await deadlineClient(tx, input.deadline).query<{
                 source_identity: LibraryScopeEffectsKey['sourceIdentity'];
                 scope: string;
               }>(
@@ -805,7 +807,7 @@ export async function readLibraryIdentityPendingJobs(
   const work = bindLibraryIdentityDeadline(new NativeCollectionWork(input.allowance, input.deadline), input.deadline);
   try {
     return await withLibraryIdentityWork(pool, work, async () => {
-      const mappings = originals.length ? await bounded(work, () => identityEpochStore.readMappings(pool, originals)) : [];
+      const mappings = originals.length ? await bounded(work, () => withRequestDeadline(input.deadline, () => identityEpochStore.readMappings(pool, originals))) : [];
       const jobs = [...new Map(mappings.flatMap(mapping => mapping.state === 'pending'
         ? [[mapping.job.jobId, {jobId: mapping.job.jobId, epoch: mapping.job.epoch.toString()}] as const] : [])).values()];
       return {jobs, work: work.receipt()};
