@@ -173,7 +173,7 @@ test('sparse empty keeps its exact opaque Next cursor and supplied updating stat
   const concepts = mock(async (input: Parameters<BoardChoiceSource['concepts']>[0]) => ({
     concepts: input.cursor === undefined ? [] : choices,
     next: input.cursor === undefined ? cursor : null,
-    freshness: { consistency: 'eventual' as const, target_seconds: 10, caught_up: false },
+    freshness: { consistency: 'eventual', target_seconds: 10, caught_up: false } as const,
   }));
   await paint(props({ source: { ...source, concepts } }));
   await tick(280);

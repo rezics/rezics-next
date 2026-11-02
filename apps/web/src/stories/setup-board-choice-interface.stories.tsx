@@ -58,7 +58,7 @@ function BoardChoiceExample({
             : choices,
         next: mode === 'sparse' && input.cursor === undefined ? cursor : null,
         ...(mode === 'updating'
-          ? { freshness: { consistency: 'eventual' as const, target_seconds: 10, caught_up: false } }
+          ? { freshness: { consistency: 'eventual', target_seconds: 10, caught_up: false } as const }
           : {}),
       };
     }
