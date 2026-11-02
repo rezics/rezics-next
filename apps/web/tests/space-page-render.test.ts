@@ -70,6 +70,7 @@ test('The default Space home shows one community identity with participation and
         const setup = await readSetup(native, `Bearer ${persona}`, page.space.id);
         expect(setup.kind).toBe('ready');
         expect(setup.kind === 'ready' && Object.values(setup.permitted).some(Boolean)).toBe(persona === 'manager');
+        // An obsolete actor-only cache entry cannot supply current hydrated reader admission.
         queries.setQueryData(['space-setup-entry', page.space.id, persona], setup);
         // Both signed-in viewers have the same ordinary membership. It supplies no management authority.
         const membership = await loadRealmMembership(native, page.realm.id, {
@@ -104,13 +105,8 @@ test('The default Space home shows one community identity with participation and
           m.space_setup_entry(),
         ])
           expect(html).not.toContain(label);
-        if (persona === 'manager') {
-          expect(html).toContain(m.community_manage());
-          expect(html).toContain('aria-expanded="false"');
-          const destination = html.match(/aria-controls="([^"]+)"/)?.[1];
-          expect(destination).toBeDefined();
-          expect(html).toContain(`id="${destination}" hidden=""`);
-        } else expect(html).not.toContain(m.community_manage());
+        // Private admission is established after hydration, including for a genuinely permitted manager.
+        expect(html).not.toContain(m.community_manage());
       } finally {
         queries.clear();
       }
