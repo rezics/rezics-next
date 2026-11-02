@@ -1494,6 +1494,8 @@
   "moderation_target_withheld": "This content is withheld.",
   "library_labels_heading": "Labels",
   "library_label_name": "Name",
+  "library_label_name_reader_expand": "Read full name",
+  "library_label_name_reader_collapse": "Collapse name",
   "library_label_create": "Create label",
   "library_label_actions": "Actions for {name}",
   "library_label_delete_confirmation": "Delete “{name}”?",

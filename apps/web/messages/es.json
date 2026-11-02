@@ -1466,6 +1466,8 @@
   "moderation_target_withheld": "Este contenido está oculto.",
   "library_labels_heading": "Etiquetas",
   "library_label_name": "Nombre",
+  "library_label_name_reader_expand": "Leer el nombre completo",
+  "library_label_name_reader_collapse": "Contraer nombre",
   "library_label_create": "Crear etiqueta",
   "library_label_actions": "Acciones para {name}",
   "library_label_delete_confirmation": "¿Eliminar «{name}»?",

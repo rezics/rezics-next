@@ -1466,6 +1466,8 @@
   "moderation_target_withheld": "このコンテンツは非表示です。",
   "library_labels_heading": "ラベル",
   "library_label_name": "名前",
+  "library_label_name_reader_expand": "名前をすべて読む",
+  "library_label_name_reader_collapse": "名前を折りたたむ",
   "library_label_create": "ラベルを作成",
   "library_label_actions": "{name}の操作",
   "library_label_delete_confirmation": "「{name}」を削除しますか？",

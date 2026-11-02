@@ -1466,6 +1466,8 @@
   "moderation_target_withheld": "Ce contenu est masqué.",
   "library_labels_heading": "Étiquettes",
   "library_label_name": "Nom",
+  "library_label_name_reader_expand": "Lire le nom complet",
+  "library_label_name_reader_collapse": "Replier le nom",
   "library_label_create": "Créer une étiquette",
   "library_label_actions": "Actions pour {name}",
   "library_label_delete_confirmation": "Supprimer « {name} » ?",

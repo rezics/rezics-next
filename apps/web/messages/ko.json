@@ -1466,6 +1466,8 @@
   "moderation_target_withheld": "이 콘텐츠는 공개되지 않습니다.",
   "library_labels_heading": "라벨",
   "library_label_name": "이름",
+  "library_label_name_reader_expand": "이름 전체 읽기",
+  "library_label_name_reader_collapse": "이름 접기",
   "library_label_create": "라벨 만들기",
   "library_label_actions": "{name} 작업",
   "library_label_delete_confirmation": "“{name}”을(를) 삭제할까요?",

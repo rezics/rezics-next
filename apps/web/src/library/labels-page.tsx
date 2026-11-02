@@ -6,7 +6,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
-import { ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
+import { ContentItemTitleLink } from '@rezics/ui/content-item';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { EllipsisIcon } from 'lucide-react';
@@ -20,6 +20,7 @@ import type { LibraryLabelSummary } from './subject-labels';
 import type { ManagementGuard } from './management-current-origin';
 import type { GatedOperation } from '../kernel/exposure';
 import { hasUnsentLabelName, useLabelDraftNavigation } from './label-draft-navigation';
+import { LabelNameReader } from './label-name-reader';
 
 /** A catalogue label opens its complete personal shelf. */
 export function LabelShelfLink({ label, locale }: { label: LibraryLabelSummary; locale: string }) {
@@ -29,17 +30,12 @@ export function LabelShelfLink({ label, locale }: { label: LibraryLabelSummary; 
         as={ListRowLink}
         stretch={false}
         data-library-label-link
+        lang={locale}
         href={shelfHref(locale, { label: label.id })}
       >
         {label.name}
       </ContentItemTitleLink>
-      <ContentItemHeading
-        level={2}
-        className="min-w-0 flex-1 line-clamp-2 break-words text-[17px] leading-snug font-semibold [overflow-wrap:anywhere] sm:line-clamp-1 sm:text-lg md:text-xl"
-        title={label.name}
-      >
-        {label.name}
-      </ContentItemHeading>
+      <LabelNameReader key={label.name} name={label.name} locale={locale} />
     </>
   );
 }

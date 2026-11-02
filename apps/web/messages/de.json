@@ -1466,6 +1466,8 @@
   "moderation_target_withheld": "Dieser Inhalt wird zurückgehalten.",
   "library_labels_heading": "Schlagwörter",
   "library_label_name": "Name",
+  "library_label_name_reader_expand": "Vollständigen Namen lesen",
+  "library_label_name_reader_collapse": "Namen einklappen",
   "library_label_create": "Schlagwort erstellen",
   "library_label_actions": "Aktionen für {name}",
   "library_label_delete_confirmation": "„{name}“ löschen?",

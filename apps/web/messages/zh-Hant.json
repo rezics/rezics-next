@@ -1466,6 +1466,8 @@
   "moderation_target_withheld": "此內容已被隱去。",
   "library_labels_heading": "標籤",
   "library_label_name": "名稱",
+  "library_label_name_reader_expand": "閱讀完整名稱",
+  "library_label_name_reader_collapse": "收起名稱",
   "library_label_create": "建立標籤",
   "library_label_actions": "{name}的操作",
   "library_label_delete_confirmation": "刪除「{name}」？",
