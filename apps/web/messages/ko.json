@@ -2486,6 +2486,8 @@
   "moderation_queue_post": "게시물 신고",
   "moderation_queue_thread": "스레드 신고",
   "moderation_queue_board": "게시판 신고",
+  "moderation_queue_details_reference": "참조 정보",
+  "moderation_queue_details_report_id": "신고 ID",
   "moderation_queue_submitted": "제출 일시",
   "moderation_queue_submission": "제출된 신고",
   "moderation_queue_resolved_at": "처리 일시",

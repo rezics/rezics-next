@@ -2486,6 +2486,8 @@
   "moderation_queue_post": "Beitragsmeldung",
   "moderation_queue_thread": "Themenmeldung",
   "moderation_queue_board": "Board-Meldung",
+  "moderation_queue_details_reference": "Referenz",
+  "moderation_queue_details_report_id": "Meldungs-ID",
   "moderation_queue_submitted": "Eingereicht",
   "moderation_queue_submission": "Eingereichte Meldung",
   "moderation_queue_resolved_at": "Erledigt",

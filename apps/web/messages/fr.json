@@ -2486,6 +2486,8 @@
   "moderation_queue_post": "Signalement de publication",
   "moderation_queue_thread": "Signalement de discussion",
   "moderation_queue_board": "Signalement de forum",
+  "moderation_queue_details_reference": "Référence",
+  "moderation_queue_details_report_id": "ID du signalement",
   "moderation_queue_submitted": "Envoyé le",
   "moderation_queue_submission": "Signalement envoyé",
   "moderation_queue_resolved_at": "Résolu le",

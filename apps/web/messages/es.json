@@ -2486,6 +2486,8 @@
   "moderation_queue_post": "Denuncia de publicación",
   "moderation_queue_thread": "Denuncia de hilo",
   "moderation_queue_board": "Denuncia de foro",
+  "moderation_queue_details_reference": "Referencia",
+  "moderation_queue_details_report_id": "ID de la denuncia",
   "moderation_queue_submitted": "Enviada",
   "moderation_queue_submission": "Denuncia enviada",
   "moderation_queue_resolved_at": "Resuelta",

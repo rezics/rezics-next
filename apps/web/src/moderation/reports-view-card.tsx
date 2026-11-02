@@ -6,7 +6,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/
 import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
 import { reportDecisionReason } from './actions';
 import { createReportReviewAction, type ReportReviewResult } from './reports-view-action';
 import type { Report, ReportTargetValue, ResolvedReportTarget } from './reports-read';
@@ -15,8 +14,9 @@ import type { ReportsBulkAction } from './reports-bulk-action';
 import { moderationTargetContent } from './target-content';
 
 type Confirmation = { action: 'dismiss' } | { action: 'take-down'; reason: string };
-const date = (value: string) =>
-  new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+const utcSuffix = /Z$/;
+// Keep the supplied UTC precision, including fractions finer than JavaScript Date's milliseconds.
+const date = (value: string) => value.replace('T', ' ').replace(utcSuffix, ' UTC');
 function submittedReason(reason: string) {
   switch (reason) {
     case 'spam':
@@ -189,7 +189,14 @@ export function ReportReviewCard({
           <Badge variant="secondary">{status}</Badge>
         </div>
         <p className="text-sm text-muted-foreground">
-          {m.moderation_queue_submitted()} <time dateTime={report.createdAt}>{date(report.createdAt)}</time>
+          {m.moderation_queue_submitted()}{' '}
+          <time
+            dateTime={report.createdAt}
+            dir="ltr"
+            className="inline-block max-w-full select-text tabular-nums [overflow-wrap:anywhere]"
+          >
+            {date(report.createdAt)}
+          </time>
         </p>
       </header>
       <section aria-labelledby={`${id}-submission`} className="space-y-3 rounded-xl bg-muted/50 p-4">
@@ -199,12 +206,14 @@ export function ReportReviewCard({
         <dl className="space-y-3 text-sm">
           <div>
             <dt className="text-muted-foreground">{m.moderation_reason_label()}</dt>
-            <dd className="mt-1 font-medium">{submittedReason(report.reason)}</dd>
+            <dd className="mt-1 whitespace-pre-wrap font-medium [overflow-wrap:anywhere]">
+              {submittedReason(report.reason)}
+            </dd>
           </div>
           {report.evidence ? (
             <div>
               <dt className="text-muted-foreground">{m.moderation_submitted_evidence_label()}</dt>
-              <dd className="mt-1 whitespace-pre-wrap break-words">{report.evidence}</dd>
+              <dd className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{report.evidence}</dd>
             </div>
           ) : null}
         </dl>
@@ -245,12 +254,19 @@ export function ReportReviewCard({
             {confirmed && !report.outcome ? <p className="font-medium">{status}</p> : null}
             {report.resolvedAt ? (
               <p className="text-muted-foreground">
-                {m.moderation_queue_resolved_at()} <time dateTime={report.resolvedAt}>{date(report.resolvedAt)}</time>
+                {m.moderation_queue_resolved_at()}{' '}
+                <time
+                  dateTime={report.resolvedAt}
+                  dir="ltr"
+                  className="inline-block max-w-full select-text tabular-nums [overflow-wrap:anywhere]"
+                >
+                  {date(report.resolvedAt)}
+                </time>
               </p>
             ) : null}
             {confirmed?.action === 'take-down' ? (
               <>
-                <p className="whitespace-pre-wrap break-words">{confirmed.reason}</p>
+                <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{confirmed.reason}</p>
                 <p className="text-muted-foreground">{m.moderation_queue_projection_pending()}</p>
               </>
             ) : null}
@@ -359,6 +375,22 @@ export function ReportReviewCard({
           </Collapsible>
         )}
       </div>
+      <details className="min-w-0 border-t pt-3" aria-labelledby={`${id}-reference`}>
+        <summary
+          id={`${id}-reference`}
+          className="min-h-11 cursor-pointer rounded-md py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {m.moderation_queue_details_reference()}
+        </summary>
+        <dl className="min-w-0 py-2 text-sm">
+          <div className="min-w-0">
+            <dt className="text-muted-foreground">{m.moderation_queue_details_report_id()}</dt>
+            <dd dir="ltr" className="mt-1 select-text break-all font-mono [overflow-wrap:anywhere]">
+              {report.id}
+            </dd>
+          </div>
+        </dl>
+      </details>
     </ContentItemFrame>
   );
 }

@@ -386,3 +386,61 @@ export const BulkUncertain: Story = {
     await expect(args.onAction).toHaveBeenCalledTimes(2);
   },
 };
+
+// Fixture-derived presentation examples; added observations are UNRUN, with native proof deferred.
+const referenceExample = {
+  ...postReport,
+  id: `${postReport.id}-${postReport.id}-${postReport.id}`,
+  evidence: Array.from({ length: 8 }, () => postReport.evidence).join('\n\n'),
+  createdAt: '2026-10-28T15:30:12.123456Z',
+  outcome: 'dismissed' as const,
+  resolvedAt: '2026-10-29T08:45:23.120400Z',
+};
+
+export const IllustrativeReferenceAndPreciseDates: Story = {
+  name: 'Illustrative reference and precise UTC dates (fixture-derived)',
+  args: {
+    reports: [referenceExample],
+    revisions: [{ ...moderationQueueFixture.revisions[0]!, reportId: referenceExample.id }],
+  },
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    const article = view.getByRole('article', {
+      name: new RegExp(`${m.moderation_reports_tab()}.*${m.moderation_queue_post()}`),
+    });
+    await expect(view.getByText(currentText)).toBeVisible();
+    await expect(view.getByText(revisionText)).toBeVisible();
+    await expect(article.textContent).toContain(referenceExample.evidence);
+    await expect(view.getByText('2026-10-28 15:30:12.123456 UTC')).toBeVisible();
+    await expect(view.getByText('2026-10-29 08:45:23.120400 UTC')).toBeVisible();
+    await expect(article.querySelector('time')).toHaveAttribute('datetime', referenceExample.createdAt);
+    const summary = within(article).getByText(m.moderation_queue_details_reference(), { exact: true });
+    const details = summary.closest('details')!;
+    await expect(details).not.toHaveAttribute('open');
+    summary.focus();
+    await expect(summary).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(details).toHaveAttribute('open');
+    const references = within(details);
+    await expect(references.getByText(m.moderation_queue_details_report_id())).toBeVisible();
+    await expect(references.getByText(referenceExample.id, { exact: true })).toBeVisible();
+    await expect([...details.querySelectorAll('dd')].map((value) => value.textContent)).toEqual([referenceExample.id]);
+    await expect(details.textContent).not.toContain(postReport.target.id);
+    await expect(details.textContent).not.toContain(postReport.revisionId!);
+    await expect(summary.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    await expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth);
+    await expect(args.onAction).not.toHaveBeenCalled();
+  },
+};
+
+export const IllustrativeReferenceAndPreciseDatesRtl: Story = {
+  ...IllustrativeReferenceAndPreciseDates,
+  name: 'Illustrative reference and precise UTC dates · RTL',
+  decorators: [
+    (Story) => (
+      <div dir="rtl">
+        <Story />
+      </div>
+    ),
+  ],
+};

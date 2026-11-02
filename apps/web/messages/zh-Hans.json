@@ -2487,6 +2487,8 @@
   "moderation_queue_post": "帖子举报",
   "moderation_queue_thread": "主题举报",
   "moderation_queue_board": "版块举报",
+  "moderation_queue_details_reference": "引用信息",
+  "moderation_queue_details_report_id": "举报 ID",
   "moderation_queue_submitted": "提交于",
   "moderation_queue_submission": "提交的举报",
   "moderation_queue_resolved_at": "处理于",

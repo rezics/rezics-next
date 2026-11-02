@@ -179,3 +179,51 @@ export const SelectedPending: Story = {
 };
 export const ReadDenied: Story = { args: { reports: [], targets: [], revisions: [], state: 'denied', next: null } };
 export const StaleSelection: Story = { args: { reports: [], targets: [], revisions: [], state: 'stale', next: null } };
+
+// Added illustrative observations are UNRUN; the queue example supplies the same fixture-derived record.
+export const IllustrativeReferenceAndPreciseDates: Story = {
+  name: 'Illustrative reference and precise UTC dates (fixture-derived)',
+  args: { ...Queue.IllustrativeReferenceAndPreciseDates.args, next: null },
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    const report = args.reports[0]!;
+    await expect(view.getByRole('heading', { level: 1, name: m.moderation_reports_heading() })).toBeVisible();
+    await expect(view.getByRole('link', { name: m.moderation_queue_back() })).toBeVisible();
+    const article = view.getByRole('article', {
+      name: new RegExp(`${m.moderation_reports_tab()}.*${m.moderation_queue_post()}`),
+    });
+    await expect(article.textContent).toContain(report.evidence!);
+    const summary = within(article).getByText(m.moderation_queue_details_reference(), { exact: true });
+    summary.focus();
+    await expect(summary).toHaveFocus();
+    await userEvent.keyboard(' ');
+    const details = summary.closest('details')!;
+    await expect(details).toHaveAttribute('open');
+    await expect(within(details).getByText(m.moderation_queue_details_report_id())).toBeVisible();
+    await expect(within(details).getByText(report.id, { exact: true })).toBeVisible();
+    await expect(details.textContent).not.toContain(report.target.id);
+    await expect(details.textContent).not.toContain(report.revisionId!);
+    const dates = [...article.querySelectorAll('time')];
+    await expect(dates.map((time) => time.getAttribute('datetime'))).toEqual([report.createdAt, report.resolvedAt]);
+    await expect(dates.map((time) => time.textContent)).toEqual([
+      '2026-10-28 15:30:12.123456 UTC',
+      '2026-10-29 08:45:23.120400 UTC',
+    ]);
+    await expect(summary.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    await expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth);
+    await expect(args.onAction).not.toHaveBeenCalled();
+    await expect(args.onNext).not.toHaveBeenCalled();
+  },
+};
+
+export const IllustrativeReferenceAndPreciseDatesRtl: Story = {
+  ...IllustrativeReferenceAndPreciseDates,
+  name: 'Illustrative reference and precise UTC dates · RTL',
+  decorators: [
+    (Story) => (
+      <div dir="rtl">
+        <Story />
+      </div>
+    ),
+  ],
+};

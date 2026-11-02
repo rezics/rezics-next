@@ -2486,6 +2486,8 @@
   "moderation_queue_post": "投稿の通報",
   "moderation_queue_thread": "スレッドの通報",
   "moderation_queue_board": "掲示板の通報",
+  "moderation_queue_details_reference": "参照情報",
+  "moderation_queue_details_report_id": "報告 ID",
   "moderation_queue_submitted": "送信日時",
   "moderation_queue_submission": "送信された通報",
   "moderation_queue_resolved_at": "処理日時",

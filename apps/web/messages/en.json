@@ -2473,6 +2473,8 @@
   "moderation_queue_post": "Post report",
   "moderation_queue_thread": "Thread report",
   "moderation_queue_board": "Board report",
+  "moderation_queue_details_reference": "Reference",
+  "moderation_queue_details_report_id": "Report ID",
   "moderation_queue_submitted": "Submitted",
   "moderation_queue_submission": "Submitted report",
   "moderation_queue_resolved_at": "Resolved",

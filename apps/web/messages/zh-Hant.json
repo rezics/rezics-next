@@ -2486,6 +2486,8 @@
   "moderation_queue_post": "貼文檢舉",
   "moderation_queue_thread": "討論串檢舉",
   "moderation_queue_board": "看板檢舉",
+  "moderation_queue_details_reference": "參照資訊",
+  "moderation_queue_details_report_id": "檢舉 ID",
   "moderation_queue_submitted": "提交於",
   "moderation_queue_submission": "提交的檢舉",
   "moderation_queue_resolved_at": "處理於",
