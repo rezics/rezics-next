@@ -52,9 +52,7 @@ export function ConditionSavedFilter({
     <div className="flex flex-wrap items-end gap-2" data-condition-saved-filter>
       <Field>
         <FieldLabel htmlFor={selectId}>
-          {adding
-            ? m.condition_saved_filter_add_label({}, options)
-            : m.condition_saved_filter_reference({}, options)}
+          {adding ? m.condition_saved_filter_add_label({}, options) : m.condition_saved_filter_reference({}, options)}
         </FieldLabel>
         <NativeSelect
           id={selectId}
@@ -66,9 +64,7 @@ export function ConditionSavedFilter({
             else if (next && next !== value && canSelect(next)) onSelect(next);
           }}
         >
-          {adding && (
-            <NativeSelectOption value="">{m.condition_saved_filter_choose({}, options)}</NativeSelectOption>
-          )}
+          {adding && <NativeSelectOption value="">{m.condition_saved_filter_choose({}, options)}</NativeSelectOption>}
           {unavailable && (
             <NativeSelectOption value={value} disabled>
               {m.condition_saved_filter_unavailable_reference({ id: value }, options)}
