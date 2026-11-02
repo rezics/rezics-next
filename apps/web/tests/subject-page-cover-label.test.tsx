@@ -19,7 +19,26 @@ test('cover replacement focuses the displayed-locale subject cover group and lea
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window({ url: 'https://site.test/en/subjects/book', width: 1280 });
-  const globals = { window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true };
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    Event: window.Event,
+    FocusEvent: window.FocusEvent,
+    MouseEvent: window.MouseEvent,
+    PointerEvent: window.PointerEvent,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
   const previous = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, value });
