@@ -320,9 +320,7 @@ function OrderLifetime({
               {order.subject.subject.title}
             </p>
             {order.settlement === 'paid' && (
-              <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2 text-sm">
-                <dt className="text-muted-foreground">{m.order_reference()}</dt>
-                <dd className="break-all font-mono">{order.id}</dd>
+              <dl className="grid min-w-0 grid-cols-1 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-2">
                 <dt className="text-muted-foreground">{m.order_ordered_at()}</dt>
                 <dd>
                   <time>
@@ -333,7 +331,7 @@ function OrderLifetime({
                 </dd>
               </dl>
             )}
-            <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2 text-sm">
+            <dl className="grid min-w-0 grid-cols-1 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-2 [&>dd]:mb-3 [&>dd]:break-words sm:[&>dd]:mb-0">
               <dt className="text-muted-foreground">{m.order_currency()}</dt>
               <dd>{money?.currency?.toUpperCase() || m.order_currency_unavailable()}</dd>
               <dt className="text-muted-foreground">
@@ -348,12 +346,6 @@ function OrderLifetime({
                   <dd>{tax || m.order_tax_unavailable()}</dd>
                 </>
               )}
-              {money?.taxCode ? (
-                <>
-                  <dt className="text-muted-foreground">{m.order_tax_code()}</dt>
-                  <dd className="break-all">{money.taxCode}</dd>
-                </>
-              ) : null}
             </dl>
           </div>
         </div>
@@ -497,6 +489,23 @@ function OrderLifetime({
           </a>
         </p>
       </Exposure>
+      <details className="min-w-0 text-sm">
+        <summary className="min-h-11 cursor-pointer content-center rounded-sm py-3 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {m.order_technical_details()}
+        </summary>
+        <dl className="space-y-3 [overflow-wrap:anywhere]">
+          <div>
+            <dt className="text-muted-foreground">{m.order_reference()}</dt>
+            <dd className="mt-1 select-all font-mono">{order.id}</dd>
+          </div>
+          {money?.taxCode ? (
+            <div>
+              <dt className="text-muted-foreground">{m.order_tax_code()}</dt>
+              <dd className="mt-1 select-all font-mono">{money.taxCode}</dd>
+            </div>
+          ) : null}
+        </dl>
+      </details>
     </article>
   );
 }

@@ -72,22 +72,49 @@ export function EntitlementPage({
               <>
                 <dt>{m.entitlements_revoke_reason()}</dt>
                 <dd>
-                  {record.revokeReason === 'refund' ? m.entitlements_refund() : m.entitlements_dispute()}{' '}
-                  <span className="text-muted-foreground">({record.revokeReason})</span>
+                  {record.revokeReason === 'refund' ? m.entitlements_refund() : m.entitlements_dispute()}
+                  <p className="mt-2 max-w-prose leading-relaxed">
+                    {record.revokeReason === 'refund'
+                      ? m.entitlements_refund_consequence()
+                      : m.entitlements_dispute_consequence()}
+                  </p>
                 </dd>
               </>
             ) : null}
-            <dt>{m.order_reference()}</dt>
-            <dd>
-              <a
-                href={`/${locale}/orders/${record.orderId}`}
-                className="inline-flex min-h-11 break-all items-center text-primary underline underline-offset-4"
-              >
-                {record.orderId}
-              </a>
-            </dd>
           </dl>
+          <p>
+            <a
+              href={`/${locale}/orders/${record.orderId}`}
+              className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+            >
+              {m.order_receipt()}
+            </a>
+          </p>
           <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.entitlements_history_hint()}</p>
+          <details className="min-w-0 text-sm">
+            <summary className="min-h-11 cursor-pointer content-center rounded-sm py-3 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              {m.entitlements_technical_details()}
+            </summary>
+            <dl className="space-y-3 [overflow-wrap:anywhere]">
+              <div>
+                <dt className="text-muted-foreground">{m.order_reference()}</dt>
+                <dd>
+                  <a
+                    href={`/${locale}/orders/${record.orderId}`}
+                    className="inline-flex min-h-11 items-center break-all font-mono text-primary underline underline-offset-4"
+                  >
+                    {record.orderId}
+                  </a>
+                </dd>
+              </div>
+              {record.revokeReason !== null ? (
+                <div>
+                  <dt className="text-muted-foreground">{m.entitlements_revoke_code()}</dt>
+                  <dd className="mt-1 select-all font-mono">({record.revokeReason})</dd>
+                </div>
+              ) : null}
+            </dl>
+          </details>
         </>
       ) : null}
     </article>

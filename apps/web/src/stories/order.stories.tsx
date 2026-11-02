@@ -26,14 +26,37 @@ const meta = {
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+// Authored disclosure interactions remain UNRUN at this source boundary.
+async function receiptDetails(canvasElement: HTMLElement, id: string, taxCode?: string) {
+  const canvas = within(canvasElement);
+  const summary = await canvas.findByText(m.order_technical_details());
+  const details = summary.closest('details')!;
+  await expect(details).not.toHaveAttribute('open');
+  const reference = within(details).getByText(id);
+  await expect(reference).not.toBeVisible();
+  summary.focus();
+  await userEvent.keyboard('{Enter}');
+  await expect(details).toHaveAttribute('open');
+  await expect(reference).toBeVisible();
+  if (taxCode) await expect(within(details).getByText(taxCode)).toBeVisible();
+}
+
 export const Paid: Story = {
   name: 'Buyer, paid',
-  play: orderPaidReady,
+  async play(context) {
+    await orderPaidReady(context);
+    await receiptDetails(context.canvasElement, paidRecording.order.id);
+  },
   render: () => <PageStory visitor="Signed In" path={pagePaths['order-paid']} />,
 };
 export const Pending: Story = {
   name: 'Buyer, pending',
-  play: orderPendingReady,
+  async play(context) {
+    await orderPendingReady(context);
+    await expect(within(context.canvasElement).queryByText(m.order_paid_total())).toBeNull();
+    await receiptDetails(context.canvasElement, pendingRecording.order.id);
+  },
   render: () => <PageStory visitor="Signed In" path={pagePaths['order-pending']} />,
 };
 export const Failed: Story = {
@@ -77,6 +100,7 @@ function currentReceiptReady(label: () => string) {
     await canvas.findByRole('heading', { name: m.order_paid(), level: 1 });
     await canvas.findByText(label());
     await canvas.findByText(m.order_paid_total());
+    await receiptDetails(canvasElement, paidRecording.order.id, receiptStoryMoney.taxCode!);
   };
 }
 export const Active: Story = {
@@ -112,7 +136,83 @@ export const RecordedCharge: Story = {
     return () => setReceiptMoneyStory(false);
   },
   render: () => <PageStory visitor="Signed In" path={pagePaths['order-paid']} />,
-  play: orderPaidReady,
+  async play(context) {
+    await orderPaidReady(context);
+    await within(context.canvasElement).findByText(m.order_recorded_tax());
+    await receiptDetails(context.canvasElement, paidRecording.order.id, receiptStoryMoney.taxCode!);
+  },
+};
+
+export const LongReceiptNarrow: Story = {
+  name: 'Buyer, long receipt and unavailable access, phone (component)',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => {
+    const order = currentOrder({ kind: 'unavailable' });
+    const title =
+      'A reader’s annotated edition with translations, illustrations and extensive historical notes — '.repeat(3);
+    return (
+      <PatternStory visitor="Signed In" path={`/orders/${order.id}`}>
+        <OrderPage
+          order={{
+            ...order,
+            subject: { ...order.subject, subject: { ...order.subject.subject, title } },
+          }}
+        />
+      </PatternStory>
+    );
+  },
+  play: currentReceiptReady(() => m.order_entitlement_unavailable()),
+};
+
+export const UnknownSettlement: Story = {
+  name: 'Buyer, unknown payment and unavailable access (component)',
+  render: () => {
+    const order = pendingRecording.order;
+    return (
+      <PatternStory visitor="Signed In" path={`/orders/${order.id}`}>
+        <OrderPage
+          order={{
+            ...order,
+            settlement: 'unknown',
+            entitlement: { kind: 'unavailable' },
+            money: receiptStoryMoney,
+            canUseBenefit: false,
+            subject: subjectCover(getLocale(), order.targetSubjectId, order.title, order.subject),
+          }}
+        />
+      </PatternStory>
+    );
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { name: m.order_pending(), level: 1 });
+    await canvas.findByText(m.order_confirming());
+    await canvas.findByText(m.order_entitlement_unavailable());
+    await expect(canvas.queryByText(m.order_paid_total())).toBeNull();
+    await expect(canvas.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
+    await receiptDetails(canvasElement, pendingRecording.order.id, receiptStoryMoney.taxCode!);
+  },
+};
+
+export const RecordedMoneyUnavailable: Story = {
+  name: 'Buyer, paid with unrecorded amounts (component)',
+  render: () => {
+    const order = currentOrder({ kind: 'unavailable' });
+    delete order.money;
+    return (
+      <PatternStory visitor="Signed In" path={`/orders/${order.id}`}>
+        <OrderPage order={order} />
+      </PatternStory>
+    );
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { name: m.order_paid(), level: 1 });
+    await canvas.findByText(m.order_paid_total_unavailable());
+    await canvas.findByText(m.order_tax_unavailable());
+    await canvas.findByText(m.order_entitlement_unavailable());
+    await receiptDetails(canvasElement, paidRecording.order.id);
+  },
 };
 
 export const MappedCurrentUse: Story = {

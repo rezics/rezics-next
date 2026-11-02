@@ -39,12 +39,33 @@ const ready = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   await canvas.findByRole('heading', { level: 1, name: m.entitlements_detail_heading() });
 };
 
+// Authored disclosure interactions remain UNRUN at this source boundary.
+async function accessDetails(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await expect(await canvas.findByRole('link', { name: m.order_receipt() })).toHaveAttribute(
+    'href',
+    `/${getLocale()}/orders/${activeEntitlement.orderId}`,
+  );
+  const summary = await canvas.findByText(m.entitlements_technical_details());
+  const details = summary.closest('details')!;
+  await expect(details).not.toHaveAttribute('open');
+  await expect(within(details).getByText(activeEntitlement.orderId)).not.toBeVisible();
+  summary.focus();
+  await userEvent.keyboard('{Enter}');
+  await expect(details).toHaveAttribute('open');
+  await expect(within(details).getByRole('link', { name: activeEntitlement.orderId })).toHaveAttribute(
+    'href',
+    `/${getLocale()}/orders/${activeEntitlement.orderId}`,
+  );
+}
+
 export const Active: Story = {
   render: () => <EntitlementStory mode="active" />,
   async play(context) {
     await ready(context);
     const canvas = within(context.canvasElement);
     await canvas.findByText(m.entitlements_delivery_unknown());
+    await accessDetails(context.canvasElement);
     await expect(canvas.getByRole('link', { name: activeEntitlement.orderId })).toHaveAttribute(
       'href',
       `/${getLocale()}/orders/${activeEntitlement.orderId}`,
@@ -57,12 +78,43 @@ export const RefundedWithPaidOrder: Story = {
   async play(context) {
     await ready(context);
     await within(context.canvasElement).findByText(m.entitlements_revoked());
+    await within(context.canvasElement).findByText(m.entitlements_refund_consequence());
+    await accessDetails(context.canvasElement);
     await within(context.canvasElement).findByText(/\(refund\)/);
   },
 };
 export const AnotherAccountDenied: Story = { render: () => <EntitlementStory mode="denied" />, play: ready };
-export const LegacyUnknownMapping: Story = { render: () => <EntitlementStory mode="legacy" />, play: ready };
-export const Unavailable: Story = { render: () => <EntitlementStory mode="unavailable" />, play: ready };
+export const LegacyUnknownMapping: Story = {
+  render: () => <EntitlementStory mode="legacy" />,
+  async play(context) {
+    await ready(context);
+    const canvas = within(context.canvasElement);
+    await canvas.findByText(m.benefit_details_unknown());
+    await expect(canvas.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
+    await accessDetails(context.canvasElement);
+  },
+};
+export const Unavailable: Story = {
+  render: () => <EntitlementStory mode="unavailable" />,
+  async play(context) {
+    await ready(context);
+    const canvas = within(context.canvasElement);
+    await canvas.findByText(m.entitlements_unavailable());
+    await canvas.findByRole('button', { name: m.entitlements_retry() });
+    await expect(canvas.queryByText(m.entitlements_technical_details())).toBeNull();
+    await expect(canvas.queryByRole('link', { name: m.order_receipt() })).toBeNull();
+  },
+};
+export const Preparing: Story = {
+  render: () => <EntitlementStory mode="preparing" />,
+  async play(context) {
+    await ready(context);
+    const canvas = within(context.canvasElement);
+    await canvas.findByText(m.entitlements_preparing());
+    await expect(canvas.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
+    await expect(canvas.queryByText(m.entitlements_technical_details())).toBeNull();
+  },
+};
 export const Retry: Story = {
   render: () => <EntitlementStory mode="retry" />,
   async play({ canvasElement }) {
@@ -73,7 +125,15 @@ export const Retry: Story = {
     await canvas.findByText(m.entitlements_active());
   },
 };
-export const LongTitles: Story = { render: () => <EntitlementStory mode="long" />, play: ready };
+export const LongTitles: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <EntitlementStory mode="long" />,
+  async play(context) {
+    await ready(context);
+    await within(context.canvasElement).findByText(m.benefit_details_unknown());
+    await accessDetails(context.canvasElement);
+  },
+};
 
 export const MappedFixedEdition: Story = {
   render: () => <EntitlementStory mode="mapped" />,
@@ -87,6 +147,7 @@ export const MappedFixedEdition: Story = {
     );
     for (let step = 0; step < 45 && document.activeElement !== link; step++) await userEvent.tab();
     await expect(link).toHaveFocus();
+    await accessDetails(context.canvasElement);
   },
 };
 export const MappedRefunded: Story = {
@@ -95,6 +156,8 @@ export const MappedRefunded: Story = {
     await ready(context);
     const canvas = within(context.canvasElement);
     await canvas.findByText(m.entitlements_revoked());
+    await canvas.findByText(m.entitlements_refund_consequence());
+    await accessDetails(context.canvasElement);
     await canvas.findByText(/\(refund\)/);
     await expect(canvas.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
   },
@@ -104,6 +167,8 @@ export const MappedDisputed: Story = {
   async play(context) {
     await ready(context);
     const canvas = within(context.canvasElement);
+    await canvas.findByText(m.entitlements_dispute_consequence());
+    await accessDetails(context.canvasElement);
     await canvas.findByText(/\(dispute\)/);
     await expect(canvas.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
   },
