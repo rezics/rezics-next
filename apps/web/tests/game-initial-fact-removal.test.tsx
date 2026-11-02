@@ -71,7 +71,9 @@ test('Game whole-fact removal preserves complete mounted drafts on Cancel and ob
       expect(rows).toEqual(snapshot);
       expect(window.document.activeElement).toBe(remove(selected.key));
       expect([...region(selected.key).querySelectorAll('input, select, textarea, [id]')]).toEqual(controls);
-      if (selected.key === 'item') expect(within(region('item')).getByRole('combobox').value).toBe('Selected platform');
+      if (selected.key === 'item') expect(within(region('item')).getByRole('combobox', {
+        name: release.properties['schema:gamePlatform']!.labels.en!,
+      }).value).toBe('Selected platform');
       await click(remove(selected.key));
       await act(async () => user.keyboard('{Escape}'));
       expect(window.document.activeElement).toBe(remove(selected.key));
