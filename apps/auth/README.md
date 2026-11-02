@@ -289,6 +289,7 @@ Auth's cookie-authenticated `POST /account-management/profile`, backed by the na
 and its `account:update` permission formula. Only account ID, actor kind and nullable handle reach the page; unavailable
 reads offer Retry and never permit mutation. The selected management profile is exactly `account:update`.
 Step-up uses the shared management continuation and returns to a new explicit confirmation with the original command/key.
+Departure prompts cover nonblank changed handle input, including invalid values, and unresolved operations; opening, focusing or confirming the current handle alone does not prompt.
 
 ## Operated session opening
 

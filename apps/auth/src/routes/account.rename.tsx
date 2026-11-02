@@ -1,5 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MutableRefObject } from 'react';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
@@ -17,6 +17,7 @@ import {
   type RenameAttempt,
   type RenameRead,
   type RenameSource,
+  type RenameTarget,
 } from '../account-rename';
 
 export const Route = createFileRoute('/account/rename')({
@@ -26,6 +27,7 @@ export const Route = createFileRoute('/account/rename')({
 
 export function RenameAccountPage({ source = nativeRenameSource }: { source?: RenameSource } = {}) {
   const [review, setReview] = useState({ source, generation: 0 });
+  const router = useRouter({ warn: false });
   // A different native source starts a fresh review, including its busy gate and draft.
   if (review.source !== source) setReview({ source, generation: review.generation + 1 });
   useEffect(() => {
@@ -37,10 +39,61 @@ export function RenameAccountPage({ source = nativeRenameSource }: { source?: Re
     window.addEventListener('pageshow', resume);
     return () => window.removeEventListener('pageshow', resume);
   }, []);
-  return <RenameReview key={review.generation} source={source} />;
+  return router ? (
+    <RoutedRenameReview key={review.generation} source={source} />
+  ) : (
+    <RenameReview key={review.generation} source={source} />
+  );
 }
 
-function RenameReview({ source }: { source: RenameSource }) {
+type DepartureState = { protected: boolean; allow: boolean };
+type DepartureBlocker =
+  | { status: 'idle'; proceed: undefined; reset: undefined }
+  | { status: 'blocked'; proceed: () => void; reset: () => void };
+
+function RoutedRenameReview({ source }: { source: RenameSource }) {
+  const departure = useRef<DepartureState>({ protected: false, allow: false });
+  const blocker = useBlocker({
+    shouldBlockFn: () => departure.current.protected && !departure.current.allow,
+    enableBeforeUnload: () => departure.current.protected && !departure.current.allow,
+    withResolver: true,
+  }) as DepartureBlocker;
+  const blockerRef = useRef(blocker);
+  blockerRef.current = blocker;
+  const revoke = useCallback(() => {
+    departure.current.protected = false;
+    departure.current.allow = false;
+    if (blockerRef.current.status === 'blocked') blockerRef.current.proceed();
+  }, []);
+  useLayoutEffect(
+    () => () => {
+      if (blockerRef.current.status === 'blocked') blockerRef.current.proceed();
+    },
+    [],
+  );
+  return <RenameReview source={source} departure={departure} blocker={blocker} revoke={revoke} />;
+}
+
+function sameRenameSession(left: RenameTarget, right: RenameTarget) {
+  return (
+    left.accountId === right.accountId &&
+    left.clientId === right.clientId &&
+    left.scopes?.length === right.scopes?.length &&
+    left.scopes?.every((scope, index) => scope === right.scopes?.[index])
+  );
+}
+
+function RenameReview({
+  source,
+  departure,
+  blocker,
+  revoke,
+}: {
+  source: RenameSource;
+  departure?: MutableRefObject<DepartureState>;
+  blocker?: DepartureBlocker;
+  revoke?: () => void;
+}) {
   const [current, setCurrent] = useState<RenameRead | null>(null);
   const [handle, setHandle] = useState('');
   const [confirmed, setConfirmed] = useState(false);
@@ -54,33 +107,61 @@ function RenameReview({ source }: { source: RenameSource }) {
   const busy = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const departureDialog = useRef<HTMLDivElement>(null);
+  const focusAfterStay = useRef(false);
   const owner = useRef<(() => boolean) | null>(null);
+  const retire = useRef<() => void>(() => {});
+  const currentTarget = useRef<RenameTarget | null>(null);
 
   useLayoutEffect(() => {
     let active = true;
     const isCurrent = () => active;
     owner.current = isCurrent;
     busy.current = false;
-    const leave = () => {
+    const retireReview = () => {
       active = false;
     };
-    window.addEventListener('pagehide', leave);
-    return () => {
-      leave();
-      window.removeEventListener('pagehide', leave);
+    const pagehide = () => {
+      retireReview();
+      if (!attempt.current?.submitted && !departure?.current.allow) clearRenameContinuation();
     };
-  }, []);
+    retire.current = retireReview;
+    window.addEventListener('pagehide', pagehide);
+    return () => {
+      retireReview();
+      retire.current = () => {};
+      window.removeEventListener('pagehide', pagehide);
+    };
+  }, [departure]);
 
   const receiveCurrent = useCallback((result: RenameRead) => {
+    const previous = currentTarget.current;
+    const changedSession = previous !== null && result.kind === 'ready' && !sameRenameSession(previous, result.target);
+    const authorityLost = result.kind === 'signed-out' || result.kind === 'denied';
+    if (result.kind === 'ready') currentTarget.current = result.target;
+    else if (authorityLost) currentTarget.current = null;
+    if (changedSession || authorityLost) {
+      clearRenameContinuation();
+      attempt.current = null;
+      setLocked(false);
+      setHandle('');
+      setConfirmed(false);
+      setReturned(false);
+      setInputError('');
+      setMessage('');
+      revoke?.();
+    }
     const saved = readRenameContinuation();
-    if (saved && result.kind === 'ready') {
+    if (!changedSession && !authorityLost && saved && result.kind === 'ready') {
       if (saved.accountId !== result.target.accountId) {
         clearRenameContinuation();
         attempt.current = null;
         setLocked(false);
         setHandle('');
         setConfirmed(false);
+        setReturned(false);
         setMessage(m.auth_rename_denied());
+        revoke?.();
       } else if (saved.submitted || saved.operation.expectedHandle === result.target.handle) {
         attempt.current = saved;
         setHandle(saved.operation.handle);
@@ -95,7 +176,7 @@ function RenameReview({ source }: { source: RenameSource }) {
       }
     }
     setCurrent(result);
-  }, []);
+  }, [revoke]);
 
   // Initial loading and explicit recovery share the same ownership boundary.
   const reload = useCallback(async () => {
@@ -122,6 +203,13 @@ function RenameReview({ source }: { source: RenameSource }) {
     if (inputError) input.current?.focus();
     else if (message || current?.kind === 'unavailable' || current?.kind === 'denied') alert.current?.focus();
   }, [inputError, message, current?.kind]);
+  useLayoutEffect(() => {
+    if (blocker?.status === 'blocked') departureDialog.current?.querySelector<HTMLButtonElement>('[data-stay]')?.focus();
+    else if (focusAfterStay.current) {
+      focusAfterStay.current = false;
+      input.current?.focus();
+    }
+  }, [blocker?.status]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -145,19 +233,36 @@ function RenameReview({ source }: { source: RenameSource }) {
       setLocked(selected.submitted);
       if (result.kind === 'renamed') {
         clearRenameContinuation();
+        attempt.current = null;
+        revoke?.();
         setRenamed(result.target.handle ?? '');
       } else if (result.kind === 'step-up') {
         saveRenameContinuation(selected);
         setConfirmed(false);
+        if (departure) departure.current.allow = true;
         const handedOff = await source.stepUp(selected, isCurrent);
-        if (isCurrent() && !handedOff) setMessage(m.auth_rename_unavailable());
+        if (isCurrent() && !handedOff) {
+          if (departure) departure.current.allow = false;
+          setMessage(m.auth_rename_unavailable());
+        }
       } else if (result.kind === 'conflict') {
         clearRenameContinuation();
         attempt.current = null;
         setLocked(false);
         setConfirmed(false);
-        setCurrent(result.current);
+        receiveCurrent(result.current);
         setMessage(m.auth_rename_conflict());
+      } else if (result.kind === 'denied') {
+        clearRenameContinuation();
+        attempt.current = null;
+        setLocked(false);
+        setHandle('');
+        setConfirmed(false);
+        setReturned(false);
+        setInputError('');
+        setCurrent({ kind: 'denied' });
+        revoke?.();
+        setMessage(m.auth_rename_denied());
       } else {
         setMessage(
           result.kind === 'unknown'
@@ -169,6 +274,7 @@ function RenameReview({ source }: { source: RenameSource }) {
       }
     } catch {
       if (isCurrent()) {
+        if (departure) departure.current.allow = false;
         setLocked(selected.submitted);
         setMessage(selected.submitted ? m.auth_rename_unknown() : m.auth_rename_unavailable());
       }
@@ -181,6 +287,24 @@ function RenameReview({ source }: { source: RenameSource }) {
   }
 
   const candidate = normalizeSignupHandle(handle);
+  const hasChangedInput = handle.trim().length > 0 && candidate !== (current?.kind === 'ready' ? current.target.handle : null);
+  if (departure)
+    departure.current.protected = !renamed && (hasChangedInput || Boolean(attempt.current?.submitted) || (pending && attempt.current !== null));
+
+  function stay() {
+    focusAfterStay.current = true;
+    blocker?.status === 'blocked' && blocker.reset();
+  }
+
+  function leave() {
+    departure && (departure.current.allow = true);
+    if (!attempt.current?.submitted) {
+      attempt.current = null;
+      clearRenameContinuation();
+    }
+    retire.current();
+    blocker?.status === 'blocked' && blocker.proceed();
+  }
 
   if (renamed)
     return (
@@ -191,7 +315,8 @@ function RenameReview({ source }: { source: RenameSource }) {
       </AuthPage>
     );
   return (
-    <AuthPage returnToSecurity heading={m.auth_rename_heading()}>
+    <>
+      <AuthPage returnToSecurity heading={m.auth_rename_heading()}>
       <div className="auth-account-operation-copy">
         <p>{m.auth_rename_description()}</p>
         <p>{m.auth_rename_forwarding()}</p>
@@ -208,7 +333,7 @@ function RenameReview({ source }: { source: RenameSource }) {
       ) : current.kind !== 'ready' ? (
         <>
           <ErrorAlert ref={alert} tabIndex={-1}>
-            {m.auth_rename_unavailable()}
+            {current.kind === 'denied' ? m.auth_rename_denied() : m.auth_rename_unavailable()}
           </ErrorAlert>
           <Button type="button" disabled={pending} aria-busy={pending} onClick={() => void reload()}>
             {m.auth_rename_reload()}
@@ -276,6 +401,33 @@ function RenameReview({ source }: { source: RenameSource }) {
           </Button>
         </form>
       )}
-    </AuthPage>
+      </AuthPage>
+      {blocker?.status === 'blocked' ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div
+            ref={departureDialog}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="rename-departure-heading"
+            className="w-full max-w-md rounded-lg border bg-background p-6 text-foreground shadow-xl"
+          >
+            <h2 id="rename-departure-heading" className="text-lg font-semibold">
+              {m.auth_rename_departure_heading()}
+            </h2>
+            <p className="mt-2 text-sm">
+              {attempt.current?.submitted ? m.auth_rename_departure_pending() : m.auth_rename_departure_unsent()}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="outline" data-stay onClick={stay}>
+                {m.auth_rename_stay()}
+              </Button>
+              <Button type="button" data-leave onClick={leave}>
+                {m.auth_rename_leave()}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
