@@ -197,7 +197,7 @@ function createJourney(client: QueryClient) {
     signOut: () => client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null }),
   };
   const native = createKernelClient('https://kernel.example.test', {
-    fetch: async (input, init) => {
+    fetch: (async (input, init) => {
       const request = new Request(input, init);
       journey.calls.push(request);
       if (request.url.endsWith('/outgoing'))
@@ -209,7 +209,7 @@ function createJourney(client: QueryClient) {
           headers: { 'retry-after': '7', 'cache-control': 'private, no-store' },
         },
       );
-    },
+    }) as typeof fetch,
   });
   const read: FollowCountsReader = async ({ data }) => {
     journey.reads++;
