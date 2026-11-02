@@ -179,7 +179,9 @@ function HistoryDisclosure({
     continuationBoundary.current = undefined;
     setContinuationStatus(null);
     const keyboardOwner =
-      cursor !== undefined && keyboardElement && document.activeElement === keyboardElement ? keyboardElement : undefined;
+      cursor !== undefined && keyboardElement && document.activeElement === keyboardElement
+        ? keyboardElement
+        : undefined;
     const request = lifetime.begin(connection, source, postId, cursor, locale, credentialMode, viewerId);
     if (!request) return;
     const intent = keyboardOwner ? { connection, element: keyboardOwner } : undefined;
