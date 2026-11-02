@@ -404,10 +404,7 @@ function RecipeEditorLive({
       source,
       epoch,
       active: () =>
-        lifetime.active() &&
-        isReadEpochCurrent(epoch) &&
-        opener.isConnected &&
-        document.activeElement === opener,
+        lifetime.active() && isReadEpochCurrent(epoch) && opener.isConnected && document.activeElement === opener,
       cancel,
     };
     document.addEventListener('focusin', cancel, true);
