@@ -57,6 +57,11 @@ export function ConsentError({ reason, locale }: { reason: ConsentFailure['reaso
     </p>
   );
 }
+type ConsentConfirmation = {
+  operation: ConsentCommand['operation'];
+  observation: number;
+  epoch: number;
+};
 function PublicResult({ value, locale }: { value: ConsentPublic; locale: string }) {
   const options = { locale: locale as never };
   return (
@@ -106,7 +111,7 @@ function StatementConsentPageLive({
   }, []);
   const focus = useConsentFocus();
   const confirmationHeading = useRef<HTMLHeadingElement | null>(null);
-  const confirmationOrigin = useRef<{ operation: ConsentCommand['operation']; read: ConsentRead } | null>(null);
+  const confirmationOrigin = useRef<{ operation: ConsentCommand['operation']; observation: number } | null>(null);
   const transition = useRef<object | null>(null);
   function orient(
     event: MouseEvent<HTMLButtonElement> | undefined,
@@ -125,12 +130,16 @@ function StatementConsentPageLive({
   const [read, setRead] = useState(initial);
   const [result, setResult] = useState<Extract<ConsentResult, { ok: true }>>();
   const [failure, setFailure] = useState<ConsentFailure>();
-  const [confirmation, setConfirmation] = useState<ConsentCommand['operation']>();
+  const [confirmation, setConfirmation] = useState<ConsentConfirmation>();
   const [own, setOwn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(false);
   const request = useRef<ConsentCommand | null>(null);
   const running = useRef(false);
+  const observation = useRef(0);
+  const actionEpoch = useRef(0);
+  const confirmationRef = useRef<ConsentConfirmation | undefined>(undefined);
+  const ownRef = useRef(false);
   const page = useRef<{ cursor?: string; session: string | undefined }>({
     session: initial?.ok ? initial.session : undefined,
   });
@@ -142,6 +151,8 @@ function StatementConsentPageLive({
   const attempt = candidate && current?.disclosure && !candidate.statement.references.length && !terminal;
   const uncertain = !!request.current;
   const assertion = current ? consentAssertion(current, address, locale) : undefined;
+  const observedAtRender = observation.current;
+  const actionEpochAtRender = actionEpoch.current;
   const assertionView = (
     <dl className="grid min-w-0 gap-3 break-words [overflow-wrap:anywhere] sm:grid-cols-3">
       {(
@@ -160,20 +171,118 @@ function StatementConsentPageLive({
       ))}
     </dl>
   );
-  function openConfirmation(operation: ConsentCommand['operation'], event: MouseEvent<HTMLButtonElement>) {
+  function revokeConfirmation() {
+    actionEpoch.current += 1;
+    confirmationRef.current = undefined;
+    ownRef.current = false;
+    setConfirmation(undefined);
+    setOwn(false);
+  }
+  function renewAction() {
+    const epoch = ++actionEpoch.current;
+    const active = confirmationRef.current;
+    if (active) {
+      const renewed = { ...active, epoch };
+      confirmationRef.current = renewed;
+      setConfirmation(renewed);
+    }
+    return epoch;
+  }
+  function isCurrentConfirmation(action: ConsentConfirmation | undefined, expectedEpoch: number) {
+    return (
+      !!action &&
+      confirmationRef.current === action &&
+      action.observation === observation.current &&
+      action.epoch === expectedEpoch &&
+      expectedEpoch === actionEpoch.current
+    );
+  }
+  function openConfirmation(
+    operation: ConsentCommand['operation'],
+    event: MouseEvent<HTMLButtonElement>,
+    expectedObservation: number,
+    expectedEpoch: number,
+  ) {
     if (!lifetime.active()) return;
-    if (running.current || request.current || busy || reload || uncertain || !attempt || !assertion?.identified) return;
-    confirmationOrigin.current = { operation, read: current! };
+    if (
+      expectedObservation !== observation.current ||
+      expectedEpoch !== actionEpoch.current ||
+      confirmationRef.current ||
+      running.current ||
+      request.current ||
+      busy ||
+      reload ||
+      uncertain ||
+      !attempt ||
+      !assertion?.identified
+    )
+      return;
+    const action = { operation, observation: expectedObservation, epoch: ++actionEpoch.current };
+    confirmationRef.current = action;
+    ownRef.current = false;
+    confirmationOrigin.current = { operation, observation: expectedObservation };
     orient(event, () => confirmationHeading.current);
-    setConfirmation(operation);
+    setConfirmation(action);
+    setOwn(false);
+  }
+  function acknowledgeOwnership(
+    action: ConsentConfirmation | undefined,
+    expectedEpoch: number,
+    checked: boolean,
+  ) {
+    if (
+      !lifetime.active() ||
+      !isCurrentConfirmation(action, expectedEpoch) ||
+      running.current ||
+      request.current ||
+      busy
+    )
+      return;
+    const renewed = { ...action!, epoch: ++actionEpoch.current };
+    confirmationRef.current = renewed;
+    ownRef.current = checked;
+    setConfirmation(renewed);
+    setOwn(checked);
+  }
+  function cancelConfirmation(
+    action: ConsentConfirmation | undefined,
+    expectedEpoch: number,
+    event: MouseEvent<HTMLButtonElement>,
+  ) {
+    if (
+      !lifetime.active() ||
+      !isCurrentConfirmation(action, expectedEpoch) ||
+      running.current ||
+      request.current
+    )
+      return;
+    const origin = confirmationOrigin.current;
+    orient(
+      event,
+      () => origin && actionButtons.current[origin.operation],
+      () => !!origin && origin.observation === observation.current && !reload && !!attempt && !!assertion?.identified,
+    );
+    confirmationOrigin.current = null;
+    revokeConfirmation();
   }
 
   async function load(
     input: { cursor?: string; session: string | undefined } = { session: session.current },
     event?: MouseEvent<HTMLButtonElement>,
+    expectedObservation = observation.current,
+    expectedEpoch = actionEpoch.current,
   ) {
     if (!lifetime.active()) return;
-    if (running.current || request.current || terminal) return;
+    if (
+      expectedObservation !== observation.current ||
+      expectedEpoch !== actionEpoch.current ||
+      running.current ||
+      request.current ||
+      terminal
+    )
+      return;
+    observation.current += 1;
+    revokeConfirmation();
     running.current = true;
     setBusy(true);
     setFailure(undefined);
@@ -209,19 +318,29 @@ function StatementConsentPageLive({
       ? m.candidate_reload({}, options)
       : m.statement_consent_retry_page({}, options);
 
-  async function change(event?: MouseEvent<HTMLButtonElement>) {
+  async function change(
+    event: MouseEvent<HTMLButtonElement> | undefined,
+    action: ConsentConfirmation | undefined,
+    expectedEpoch: number,
+  ) {
     if (!lifetime.active()) return;
+    if (running.current || !current) return;
     if (
-      running.current ||
-      !current ||
-      (!request.current && (!confirmation || !own || !attempt || !assertion?.identified || reload))
+      !request.current &&
+      (!isCurrentConfirmation(action, expectedEpoch) ||
+        !ownRef.current ||
+        !attempt ||
+        !assertion?.identified ||
+        reload)
     )
       return;
-    orient(event, () => recoveryFocusTarget.current ?? readFocusTarget.current);
-    confirmationOrigin.current = null;
+    if (isCurrentConfirmation(action, expectedEpoch)) {
+      orient(event, () => recoveryFocusTarget.current ?? readFocusTarget.current);
+      confirmationOrigin.current = null;
+    }
     request.current ??= {
       ...address,
-      operation: confirmation!,
+      operation: action!.operation,
       key: crypto.randomUUID(),
       ...(session.current ? { session: session.current } : {}),
     };
@@ -235,11 +354,11 @@ function StatementConsentPageLive({
         setFailure(next);
         if (next.reason !== 'unavailable') {
           request.current = null;
-          setConfirmation(undefined);
-          setOwn(false);
+          revokeConfirmation();
           setReload(true);
           // A current denial/concealment clears all previously prepared private values.
           if (next.reason === 'denied' || next.reason === 'missing') {
+            observation.current += 1;
             setRead(undefined);
             setResult(undefined);
           }
@@ -249,9 +368,9 @@ function StatementConsentPageLive({
       session.current = next.session ?? session.current;
       setRead(consentAfterChange(current, next));
       setResult(next);
+      observation.current += 1;
       request.current = null;
-      setConfirmation(undefined);
-      setOwn(false);
+      revokeConfirmation();
     } catch {
       if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
@@ -261,9 +380,17 @@ function StatementConsentPageLive({
       setBusy(false);
     }
   }
-  async function refreshPublic() {
+  async function refreshPublic(expectedObservation: number, expectedEpoch: number) {
     if (!lifetime.active()) return;
-    if (running.current || request.current) return;
+    if (
+      expectedObservation !== observation.current ||
+      expectedEpoch !== actionEpoch.current ||
+      running.current ||
+      request.current ||
+      !current
+    )
+      return;
+    renewAction();
     focus.cancel();
     running.current = true;
     setBusy(true);
@@ -278,6 +405,7 @@ function StatementConsentPageLive({
       setRead((previous) => (previous?.ok ? { ...previous, public: { state: 'unavailable' } } : previous));
     } finally {
       if (!lifetime.active()) return;
+      renewAction();
       running.current = false;
       setBusy(false);
     }
@@ -306,7 +434,7 @@ function StatementConsentPageLive({
       {!read && !failure && !busy && (
         <Button
           className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          onClick={(event) => void load(undefined, event)}
+          onClick={(event) => void load(undefined, event, observedAtRender, actionEpochAtRender)}
         >
           {m.statement_consent_open({}, options)}
         </Button>
@@ -325,7 +453,11 @@ function StatementConsentPageLive({
               variant="outline"
               className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               disabled={busy}
-              onClick={(event) => void (uncertain ? change(event) : load(page.current, event))}
+              onClick={(event) =>
+                void (uncertain
+                  ? change(event, confirmation, actionEpochAtRender)
+                  : load(page.current, event, observedAtRender, actionEpochAtRender))
+              }
             >
               {recoveryLabel}
             </Button>
@@ -334,7 +466,7 @@ function StatementConsentPageLive({
                 variant="outline"
                 className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 disabled={busy}
-                onClick={(event) => void load(undefined, event)}
+                onClick={(event) => void load(undefined, event, observedAtRender, actionEpochAtRender)}
               >
                 {m.statement_consent_restart({}, options)}
               </Button>
@@ -369,7 +501,14 @@ function StatementConsentPageLive({
                   variant="outline"
                   className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   disabled={busy}
-                  onClick={(event) => void load({ cursor: current.next!, session: session.current }, event)}
+                  onClick={(event) =>
+                    void load(
+                      { cursor: current.next!, session: session.current },
+                      event,
+                      observedAtRender,
+                      actionEpochAtRender,
+                    )
+                  }
                 >
                   {m.statement_consent_continue({}, options)}
                 </Button>
@@ -414,7 +553,9 @@ function StatementConsentPageLive({
                                 actionButtons.current.disclose = node;
                               }}
                               disabled={busy || reload || !assertion?.identified}
-                              onClick={(event) => openConfirmation('disclose', event)}
+                              onClick={(event) =>
+                                openConfirmation('disclose', event, observedAtRender, actionEpochAtRender)
+                              }
                             >
                               {m.statement_consent_share({}, options)}
                             </Button>
@@ -426,7 +567,9 @@ function StatementConsentPageLive({
                               actionButtons.current.retract = node;
                             }}
                             disabled={busy || reload || !assertion?.identified}
-                            onClick={(event) => openConfirmation('retract', event)}
+                            onClick={(event) =>
+                              openConfirmation('retract', event, observedAtRender, actionEpochAtRender)
+                            }
                           >
                             {m.statement_consent_retract({}, options)}
                           </Button>
@@ -446,12 +589,12 @@ function StatementConsentPageLive({
                             tabIndex={-1}
                             className="font-semibold focus:outline-2 focus:outline-offset-2 focus:outline-ring"
                           >
-                            {confirmation === 'disclose'
+                            {confirmation.operation === 'disclose'
                               ? m.statement_consent_share({}, options)
                               : m.statement_consent_retract({}, options)}
                           </h3>
                           <p>
-                            {confirmation === 'disclose'
+                            {confirmation.operation === 'disclose'
                               ? m.statement_consent_share_help({}, options)
                               : m.statement_consent_retract_help({}, options)}
                           </p>
@@ -466,7 +609,7 @@ function StatementConsentPageLive({
                               checked={own}
                               disabled={busy || uncertain}
                               onCheckedChange={(checked) =>
-                                lifetime.active() && !running.current && !request.current && setOwn(checked === true)
+                                acknowledgeOwnership(confirmation, actionEpochAtRender, checked === true)
                               }
                             />
                             <FieldLabel
@@ -481,7 +624,7 @@ function StatementConsentPageLive({
                               <Button
                                 className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                                 disabled={busy || !own || !assertion?.identified}
-                                onClick={(event) => void change(event)}
+                                onClick={(event) => void change(event, confirmation, actionEpochAtRender)}
                               >
                                 {m.statement_consent_confirm({}, options)}
                               </Button>
@@ -489,23 +632,9 @@ function StatementConsentPageLive({
                                 variant="outline"
                                 className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                                 disabled={busy}
-                                onClick={(event) => {
-                                  if (!lifetime.active() || running.current || request.current) return;
-                                  const origin = confirmationOrigin.current;
-                                  orient(
-                                    event,
-                                    () => origin && actionButtons.current[origin.operation],
-                                    () =>
-                                      !!origin &&
-                                      origin.read === read &&
-                                      !reload &&
-                                      !!attempt &&
-                                      !!assertion?.identified,
-                                  );
-                                  confirmationOrigin.current = null;
-                                  setConfirmation(undefined);
-                                  setOwn(false);
-                                }}
+                                onClick={(event) =>
+                                  cancelConfirmation(confirmation, actionEpochAtRender, event)
+                                }
                               >
                                 {m.candidate_cancel({}, options)}
                               </Button>
@@ -519,7 +648,7 @@ function StatementConsentPageLive({
                         variant="outline"
                         className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                         disabled={busy}
-                        onClick={(event) => void load(undefined, event)}
+                        onClick={(event) => void load(undefined, event, observedAtRender, actionEpochAtRender)}
                       >
                         {m.candidate_reload({}, options)}
                       </Button>
@@ -543,7 +672,7 @@ function StatementConsentPageLive({
             variant="outline"
             className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             disabled={busy || uncertain}
-            onClick={() => void refreshPublic()}
+            onClick={() => void refreshPublic(observedAtRender, actionEpochAtRender)}
           >
             {m.statement_consent_refresh_public({}, options)}
           </Button>

@@ -75,6 +75,21 @@ test('Statement consent composes the complete family with isolated confirmation,
     expect(found).toBeDefined();
     return found!;
   };
+  const hasButton = (scope: ParentNode, text: string) =>
+    [...scope.querySelectorAll<HTMLButtonElement>('button')].some((node) => node.textContent?.trim() === text);
+  const clickHandler = (node: HTMLElement) => {
+    const key = Object.keys(node).find((key) => key.startsWith('__reactProps$'));
+    expect(key).toBeDefined();
+    const props = Reflect.get(node, key!) as { onClick?: (event: unknown) => void };
+    return () =>
+      props.onClick?.({
+        currentTarget: node,
+        target: node,
+        preventDefault() {},
+        stopPropagation() {},
+        defaultPrevented: false,
+      });
+  };
   const label = (scope: ParentNode) => scope.querySelector<HTMLLabelElement>('label')!;
   const checkbox = (scope: ParentNode) => scope.querySelector<HTMLElement>('[role="checkbox"]')!;
   const panel = (fixture: ReturnType<typeof consentFixture>, transport = fixture.transport, initial?: ConsentRead) => (
@@ -561,6 +576,48 @@ test('Statement consent composes the complete family with isolated confirmation,
       expect(host.querySelector('[data-consent-part="confirmation"], [data-consent-part="shared"]')).toBeNull();
       expect(window.document.activeElement).toBe(outside);
     }
+
+    const currentAction = consentFixture();
+    const currentRead = await prepared(currentAction);
+    let changes = 0;
+    const currentTransport: ConsentTransport = {
+      read: (...args) => currentAction.transport.read(...args),
+      change: async (command) => {
+        changes += 1;
+        return changes === 1 ? { ok: false, reason: 'conflict' } : currentAction.transport.change(command);
+      },
+      public: (...args) => currentAction.transport.public(...args),
+    };
+    await show(panel(currentAction, currentTransport, currentRead));
+    const staleOpen = clickHandler(button(host, m.statement_consent_share()));
+    await click(button(host, m.statement_consent_share()));
+    await click(label(host));
+    const staleOwnership = clickHandler(checkbox(host));
+    const staleConfirmation = clickHandler(button(host, m.statement_consent_confirm()));
+    await click(button(host, m.statement_consent_refresh_public()));
+    await until(() => !button(host, m.statement_consent_refresh_public()).disabled);
+    await act(async () => staleOwnership());
+    expect(button(host, m.statement_consent_confirm()).disabled).toBe(false);
+
+    await click(button(host, m.candidate_cancel()));
+    await click(button(host, m.statement_consent_share()));
+    await click(label(host));
+    await click(button(host, m.statement_consent_confirm()));
+    expect(changes).toBe(1);
+    await click(button(host, m.candidate_reload()));
+    await until(() => hasButton(host, m.statement_consent_share()) && !hasButton(host, m.candidate_reload()));
+    await act(async () => {
+      staleOpen();
+      staleOwnership();
+      staleConfirmation();
+    });
+    expect(host.querySelector('[data-consent-part="confirmation"]')).toBeNull();
+    expect(changes).toBe(1);
+    await click(button(host, m.statement_consent_share()));
+    await click(label(host));
+    await click(button(host, m.statement_consent_confirm()));
+    await until(() => host.textContent?.includes(m.statement_consent_shared()));
+    expect(changes).toBe(2);
   } finally {
     await act(async () => root.unmount());
     setLocale(previousLocale, { reload: false });

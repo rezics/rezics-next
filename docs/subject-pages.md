@@ -800,6 +800,8 @@ the assertion payload; a lagging public result reports pending removal without r
 retry never repeats a confirmed mutation. Private reads and values use no-store responses and component state,
 never public SSR, dehydrated query caches or local-success previews.
 
+Refreshing the public result keeps the open confirmation and ownership declaration for the same candidate read.
+
 ## Principles
 
 - **Readers first.** A page shows covers, titles, people, scores, what people say and what to do next, in words
