@@ -1,6 +1,6 @@
 import { agentAdapter, isAgentCli, pinnedModelProfile, requireOriginalProofProfile } from './agents.ts';
 import { readFileSync } from 'node:fs';
-import type { Brief, Profile, TaskClass } from './types.ts';
+import type { Brief, Effort, Profile, TaskClass } from './types.ts';
 
 // fallbacks are tried in order when no pool of the first profile's CLI has quota. A new task of a paced class goes to
 // the allowed profile whose allowance most needs spending; `paced: false` keeps the order, for work that belongs on its
@@ -12,47 +12,100 @@ export type RoutingTable = {
   experiments: { name: string; class: TaskClass; open: boolean; profiles: Profile[] }[];
   consultation: Profile;
 };
-export function readRouting(file: string): RoutingTable {
-  const table = JSON.parse(readFileSync(file, 'utf8')) as RoutingTable;
-  if (!table.version || !Array.isArray(table.experiments)) throw new Error('invalid routing table');
-  const profile = (p: Profile) => {
-    if (
-      !p ||
-      !isAgentCli(p.cli) ||
-      !p.model ||
-      !p.poolClass ||
-      !['low', 'medium', 'high', 'xhigh', 'max'].includes(p.effort)
-    )
-      throw new Error('invalid routing profile');
-    if (p.serviceTier !== undefined && p.serviceTier !== 'default')
-      throw new Error('routing profiles cannot choose a service tier other than default; the tier is a setting');
+const ROUTED_CLASSES = [
+  'implementation',
+  'interface',
+  'bulk-text',
+  'claim',
+  'specification',
+  'critical-path',
+  'research',
+] as const satisfies readonly Exclude<TaskClass, 'mechanical'>[];
+const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+function object(value: unknown, label: string): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    throw new Error(`${label} must be an object`);
+  return value as Record<string, unknown>;
+}
+function text(value: unknown, label: string): string {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} must be a nonempty string`);
+  return value;
+}
+function finitePositive(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) throw new Error(`invalid ${label}`);
+  return value;
+}
+function parseProfile(value: unknown, label: string): Profile {
+  const profile = object(value, label);
+  if (!isAgentCli(profile.cli)) throw new Error(`invalid ${label}.cli`);
+  if (typeof profile.effort !== 'string' || !EFFORTS.includes(profile.effort as Effort))
+    throw new Error(`invalid ${label}.effort`);
+  if (profile.serviceTier !== undefined && profile.serviceTier !== 'default')
+    throw new Error('routing profiles cannot choose a service tier other than default; the tier is a setting');
+  return {
+    cli: profile.cli,
+    model: text(profile.model, `${label}.model`),
+    effort: profile.effort as Effort,
+    poolClass: text(profile.poolClass, `${label}.poolClass`),
+    ...(profile.serviceTier === undefined ? {} : { serviceTier: 'default' as const }),
   };
-  for (const key of [
-    'implementation',
-    'interface',
-    'bulk-text',
-    'claim',
-    'specification',
-    'critical-path',
-    'research',
-  ] as const) {
-    const route = table.classes[key];
-    if (!route || !(route.maxSteps > 0) || !(route.maxMs > 0)) throw new Error(`invalid route: ${key}`);
-    if (route.paced !== undefined && typeof route.paced !== 'boolean') throw new Error(`invalid route paced: ${key}`);
-    profile(route.first);
-    (route.fallbacks ?? []).forEach(profile);
+}
+function parseRoute(value: unknown, label: string): Route {
+  const route = object(value, label);
+  const first = parseProfile(route.first, `${label}.first`);
+  let fallbacks: Profile[] | undefined;
+  if (route.fallbacks !== undefined) {
+    if (!Array.isArray(route.fallbacks)) throw new Error(`${label}.fallbacks must be an array`);
+    fallbacks = route.fallbacks.map((item, index) => parseProfile(item, `${label}.fallbacks[${index}]`));
   }
-  profile(table.consultation);
-  if (agentAdapter(table.consultation.cli).supportsConsultation?.(table.consultation) === false)
-    throw new Error('consultation must use Codex Sol medium');
+  if (route.paced !== undefined && typeof route.paced !== 'boolean') throw new Error(`invalid ${label}.paced`);
+  return {
+    first,
+    ...(fallbacks === undefined ? {} : { fallbacks }),
+    maxSteps: finitePositive(route.maxSteps, `${label}.maxSteps`),
+    maxMs: finitePositive(route.maxMs, `${label}.maxMs`),
+    ...(route.paced === undefined ? {} : { paced: route.paced }),
+  };
+}
+function parseExperiment(value: unknown, label: string): RoutingTable['experiments'][number] {
+  const experiment = object(value, label);
+  if (
+    typeof experiment.class !== 'string' ||
+    !(ROUTED_CLASSES as readonly string[]).includes(experiment.class)
+  )
+    throw new Error(`invalid ${label}.class`);
+  if (typeof experiment.open !== 'boolean') throw new Error(`invalid ${label}.open`);
+  if (!Array.isArray(experiment.profiles)) throw new Error(`${label}.profiles must be an array`);
+  if (!experiment.profiles.length) throw new Error(`empty ${label}.profiles`);
+  return {
+    name: text(experiment.name, `${label}.name`),
+    class: experiment.class as Exclude<TaskClass, 'mechanical'>,
+    open: experiment.open,
+    profiles: experiment.profiles.map((item, index) => parseProfile(item, `${label}.profiles[${index}]`)),
+  };
+}
+/** Validate a routing document at the configuration boundary; every error names the responsible field. */
+export function parseRouting(value: unknown): RoutingTable {
+  const table = object(value, 'routing');
+  const classesValue = object(table.classes, 'classes');
+  const classes = {} as RoutingTable['classes'];
+  for (const key of ROUTED_CLASSES) classes[key] = parseRoute(classesValue[key], `classes.${key}`);
+  if (!Array.isArray(table.experiments)) throw new Error('experiments must be an array');
   const open = new Set<TaskClass>();
-  for (const experiment of table.experiments) {
-    if (!experiment.profiles.length) throw new Error('empty experiment');
-    experiment.profiles.forEach(profile);
-    if (experiment.open && open.has(experiment.class)) throw new Error('multiple open experiments for a class');
+  const experiments = table.experiments.map((item, index) => {
+    const experiment = parseExperiment(item, `experiments[${index}]`);
+    if (experiment.open && open.has(experiment.class))
+      throw new Error(`multiple open experiments for class ${experiment.class}`);
     if (experiment.open) open.add(experiment.class);
-  }
-  return table;
+    return experiment;
+  });
+  const consultation = parseProfile(table.consultation, 'consultation');
+  if (agentAdapter(consultation.cli).supportsConsultation?.(consultation) === false)
+    throw new Error('consultation must use Codex Sol medium');
+  return { version: text(table.version, 'version'), classes, experiments, consultation };
+}
+export function readRouting(file: string): RoutingTable {
+  return parseRouting(JSON.parse(readFileSync(file, 'utf8')));
 }
 /** A retry keeps its attempt's profile while that has quota; otherwise it reroutes as a new task of its class would. */
 export function retryFallbacks(table: RoutingTable, taskClass: TaskClass): Profile[] {
