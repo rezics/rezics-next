@@ -50,16 +50,13 @@ function RouterDepartureGuard({ active, locale }: { active: boolean; locale: str
   const leaving = useRef(false);
   const latest = useRef(active);
   latest.current = active;
-  const shouldBlockFn = useCallback<ShouldBlockFn>(
-    ({ current, next }) => {
-      if (!latest.current || !isStatementConsentDeparture(current, next)) return false;
-      returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      resolved.current = false;
-      leaving.current = false;
-      return true;
-    },
-    [],
-  );
+  const shouldBlockFn = useCallback<ShouldBlockFn>(({ current, next }) => {
+    if (!latest.current || !isStatementConsentDeparture(current, next)) return false;
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    resolved.current = false;
+    leaving.current = false;
+    return true;
+  }, []);
   const blocker = useBlocker({
     shouldBlockFn,
     disabled: !active,
@@ -100,9 +97,7 @@ function RouterDepartureGuard({ active, locale }: { active: boolean; locale: str
       {blocker.status === 'blocked' && (
         <AlertDialogContent
           initialFocus={stayButton}
-          finalFocus={() =>
-            leaving.current ? false : returnFocus.current?.isConnected ? returnFocus.current : false
-          }
+          finalFocus={() => (leaving.current ? false : returnFocus.current?.isConnected ? returnFocus.current : false)}
         >
           <AlertDialogHeader>
             <AlertDialogTitle>{m.statement_consent_title({}, options)}</AlertDialogTitle>

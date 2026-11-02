@@ -513,8 +513,8 @@ test('Statement consent treats a changed address query as a departure from the m
     params: { id: 'book', slug: 'title' },
     search: { property: 'P1', candidate: 'claim-1', target: 'agent-1', sameAs: 'same', key: 'slot-1' },
   };
-  expect(isStatementConsentDeparture(current, { ...current, search: { ...current.search, candidate: 'claim-2' } })).toBe(
-    true,
-  );
+  expect(
+    isStatementConsentDeparture(current, { ...current, search: { ...current.search, candidate: 'claim-2' } }),
+  ).toBe(true);
   expect(isStatementConsentDeparture(current, current)).toBe(false);
 });
