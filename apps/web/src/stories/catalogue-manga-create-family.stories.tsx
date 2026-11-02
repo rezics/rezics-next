@@ -177,7 +177,7 @@ async function inspect(canvasElement: HTMLElement) {
   await expect(canvas.getByRole('heading', { name: m.manga_grain(), level: 2 })).toBeVisible();
   await expect(canvas.getByRole('heading', { name: m.catalogue_create_terms(), level: 2 })).toBeVisible();
   await expect(canvasElement.querySelector('[data-slot="list-row-link"], a button, a input, a select')).toBeNull();
-  for (const control of canvasElement.querySelectorAll<HTMLSelectElement>('select')) {
+  for (const control of canvasElement.querySelectorAll('select')) {
     await expect(control.tagName).toBe('SELECT');
     const label = [...canvasElement.querySelectorAll<HTMLLabelElement>('label')].find(
       (label) => label.htmlFor === control.id,
