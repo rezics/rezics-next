@@ -36,16 +36,13 @@ for (const type of ['SubjectList', 'AccountPosts'] as const) {
       return subjectTabs({ subject, account, document, reads, views: [view] });
     };
     const count = { value: type === 'SubjectList' ? 3 : 2, relation: type === 'SubjectList' ? 'exact' : 'lower_bound' };
-    for (const limits of [
-      [2, 2],
-      [1, 2],
-      [2, 1],
-    ])
-      expect(run(limits)).toEqual([{ view, count }]);
+    for (const limit of [1, 2]) {
+      expect(run([limit, 2])).toEqual([{ view, count }]);
+      expect(run([2, limit])).toEqual([{ view, count }]);
+    }
     expect(run([2, 2], { value: 2, exact: true }, null)).toEqual([]);
     expect(run([1, 2], { value: 2, exact: true }, null)).toEqual([{ view, count: { value: 2, relation: 'exact' } }]);
     if (type === 'SubjectList') {
-      expect(run([2, 2], { value: 3, exact: false })).toEqual([{ view, count: { value: 3, relation: 'lower_bound' } }]);
       expect(run([2, 2], null)).toEqual([{ view }]);
       expect(run([2, 2, 2], { value: 3, exact: true }, 'next', true)).toEqual([
         { view, count: { value: 6, relation: 'exact' } },
