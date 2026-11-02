@@ -24,12 +24,17 @@ import {
   type HomeFeedResult,
 } from './home-feed-read';
 
+function requestIdentity({ stream, cursor, kind, spaceId, ratingQuestionId }: FeedInput) {
+  return JSON.stringify([stream, cursor ?? null, kind ?? null, spaceId ?? null, ratingQuestionId ?? null]);
+}
+
 export function HomeFeed({
   result,
   locale,
   stream = 'home',
   signedIn = false,
   busy = false,
+  input,
   onSelect,
   activeFilters = [],
   kindControl,
@@ -45,6 +50,8 @@ export function HomeFeed({
   stream?: FeedStream;
   signedIn?: boolean;
   busy?: boolean;
+  /** Current native request: a replacement selection or refresh cancels pagination focus. */
+  input?: FeedInput;
   onSelect?: (stream: FeedStream) => void;
   activeFilters?: ReactNode[];
   kindControl?: ReactNode;
@@ -59,13 +66,19 @@ export function HomeFeed({
   const options = { locale: locale as Locale };
   const filterId = useId();
   const boundary = useRef<HTMLElement>(null);
-  const advancing = useRef(false);
+  const advancing = useRef<{ request: string | null } | null>(null);
+  const requestKey = input ? requestIdentity(input) : null;
   useEffect(() => {
-    if (busy || !advancing.current) return;
-    advancing.current = false;
+    if (!advancing.current) return;
+    if (requestKey !== null && advancing.current.request !== requestKey) {
+      advancing.current = null;
+      return;
+    }
+    if (busy) return;
+    advancing.current = null;
     boundary.current?.focus({ preventScroll: true });
     boundary.current?.scrollIntoView?.({ block: 'start' });
-  }, [busy, result]);
+  }, [busy, result, requestKey]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const page = result.state === 'ready' ? result.page : undefined;
   const hasPreparing = page ? Object.values(page.sources).includes('preparing') : false;
@@ -188,7 +201,7 @@ export function HomeFeed({
               disabled={busy || !page.next}
               onClick={() => {
                 if (busy || advancing.current || !page.next) return;
-                advancing.current = true;
+                advancing.current = { request: input ? requestIdentity({ ...input, cursor: page.next }) : null };
                 onNext(page.next);
               }}
             >
@@ -379,6 +392,7 @@ export function HomeFeedConsumer({
       signedIn={signedIn}
       stream={snapshot.input.stream}
       busy={snapshot.busy}
+      input={snapshot.input}
       activeFilters={activeFilters}
       suppressResultMessage={filterOwnsResultMessage}
       spaceControl={

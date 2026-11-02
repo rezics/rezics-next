@@ -29,7 +29,29 @@ export type HomeFeedStory =
 let selected: HomeFeedStory = 'mixed';
 let homeActive = false;
 let spaceReads = 0;
+let continuation: { requests: Request[]; wait: Promise<void>; release: () => void } | undefined;
+
+/** Hold the real fake-route request so the existing Home stories can exercise pending Next. */
+export function holdHomeFeedContinuation() {
+  continuation?.release();
+  let resume!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const held = {
+    requests: [] as Request[],
+    wait,
+    release: () => {
+      resume();
+      if (continuation === held) continuation = undefined;
+    },
+  };
+  continuation = held;
+  return held;
+}
+
 export function selectHomeFeedStory(state: HomeFeedStory = 'mixed', active = true) {
+  continuation?.release();
   selected = state;
   spaceReads = 0;
   homeActive = active;
@@ -282,8 +304,13 @@ export const routes: FakeRoute[] = [
   {
     method: 'GET',
     path: '/v1/feedItems',
-    story: ({ request }) => {
+    story: async ({ request }) => {
       const url = new URL(request.url);
+      const held = continuation;
+      if (held && url.searchParams.has('cursor')) {
+        held.requests.push(request.clone());
+        await held.wait;
+      }
       if (selected === 'expired-page' && url.searchParams.has('cursor')) return { status: 409, code: 'invalid_cursor' };
       const locale = request.headers.get('accept-language')?.split(',')[0] ?? 'en';
       const personal = request.headers.has('authorization');

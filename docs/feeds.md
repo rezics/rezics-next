@@ -218,6 +218,10 @@ Discovery/Continue Space membership and Context membership remain pending their 
 Home Space choice reads retain the resolved Space identity on point-read failure so a failed
 revalidation disables that selection; platform closure remains distinct from access denial.
 
+Home Next retains the current page while one same-selection request is pending; concurrent callers share
+its completion. The replacement page focuses and scrolls to the existing results boundary on desktop and
+phone. Decision: changing any selection or refreshing the head cancels a pending Next's focus intent.
+
 ## Native review question witnesses
 
 Content's [native witness reader](../services/kernel/src/content/README.md#review-backed-question-witnesses)

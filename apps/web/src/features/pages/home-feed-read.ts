@@ -118,6 +118,7 @@ export function createHomeFeedWindow(
   let snapshot: FeedWindow = { result: initial, busy: false, input: { stream: 'home' } };
   let generation = 0;
   let pending: AbortController | undefined;
+  let completion: Promise<void> | undefined;
   const listeners = new Set<() => void>();
   const selectionListeners = new Set<() => void>();
   let selectionIdentity = JSON.stringify(['home', null, null, null]);
@@ -157,7 +158,7 @@ export function createHomeFeedWindow(
       snapshot = { result, busy: false, input: selection };
       emit();
     },
-    async load(input: FeedInput) {
+    load(input: FeedInput): Promise<void> {
       // A repeated Next click shares the in-flight selection/frontier. A new selection
       // still aborts the old generation and removes its private rows synchronously.
       if (
@@ -168,11 +169,19 @@ export function createHomeFeedWindow(
         input.spaceId === snapshot.input.spaceId &&
         input.ratingQuestionId === snapshot.input.ratingQuestionId
       )
-        return;
+        return completion!;
+      input = { ...input };
       const current = ++generation;
       pending?.abort();
       const controller = new AbortController();
       pending = controller;
+      // Install completion before notifying subscribers, so reentrant callers
+      // also join the actual request rather than completing ahead of it.
+      let complete!: () => void;
+      const done = new Promise<void>((resolve) => {
+        complete = resolve;
+      });
+      completion = done;
       snapshot = {
         result:
           input.stream === snapshot.input.stream &&
@@ -185,15 +194,22 @@ export function createHomeFeedWindow(
         input,
       };
       emit();
-      let result: HomeFeedResult;
-      try {
-        result = await read(input, controller.signal);
-      } catch {
-        result = { state: 'unavailable', code: 'dependency_unavailable' };
-      }
-      if (generation !== current) return;
-      snapshot = { result, busy: false, input };
-      emit();
+      void (async () => {
+        try {
+          let result: HomeFeedResult;
+          try {
+            result = await read(input, controller.signal);
+          } catch {
+            result = { state: 'unavailable', code: 'dependency_unavailable' };
+          }
+          if (generation !== current) return;
+          snapshot = { result, busy: false, input };
+          emit();
+        } finally {
+          complete();
+        }
+      })();
+      return done;
     },
   };
 }

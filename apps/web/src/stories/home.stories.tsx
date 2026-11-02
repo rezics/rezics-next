@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within, userEvent, waitFor } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths, pageReady } from './page';
+import { holdHomeFeedContinuation } from '../kernel/fake/home-feed-stories';
 
 const meta = {
   title: 'Pages/Discovery/Home',
@@ -18,6 +19,41 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+// The same play runs with the catalogue's desktop and phone viewport globals.
+async function advanceHome(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const previous = [...canvasElement.querySelectorAll('[data-feed-id]')].map((row) => row.getAttribute('data-feed-id'));
+  const held = holdHomeFeedContinuation();
+  try {
+    const next = canvas.getByRole('button', { name: m.library_next_page() });
+    await userEvent.dblClick(next);
+    await waitFor(() => expect(held.requests).toHaveLength(1));
+    await expect(next).toBeDisabled();
+    await expect(next).toHaveTextContent(m.home_feed_loading());
+    await expect(canvasElement.querySelector('main')).toHaveAttribute('aria-busy', 'true');
+    await expect(
+      [...canvasElement.querySelectorAll('[data-feed-id]')].map((row) => row.getAttribute('data-feed-id')),
+    ).toEqual(previous);
+    const query = new URL(held.requests[0]!.url).searchParams;
+    await expect(Object.fromEntries(query)).toEqual({
+      stream: 'home',
+      limit: '20',
+      cursor: 'illustrative-signed-frontier',
+    });
+    held.release();
+    await expect(await canvas.findByRole('link', { name: 'Books I come back to' })).toBeVisible();
+    await waitFor(() =>
+      expect(canvasElement.ownerDocument.activeElement).toBe(canvas.getByRole('region', { name: m.nav_home() })),
+    );
+    await expect(canvasElement.querySelectorAll('[data-feed-id]')).toHaveLength(1);
+    await expect(canvas.queryByRole('link', { name: 'Letters from B-612' })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.library_next_page() })).toBeNull();
+    await expect(held.requests).toHaveLength(1);
+  } finally {
+    held.release();
+  }
+}
+
 export const SignedIn: Story = {
   name: 'Member, mixed ready',
   render: () => <PageStory visitor="Signed In" path={pagePaths.home} />,
@@ -33,13 +69,7 @@ export const SignedIn: Story = {
       row.getAttribute('data-feed-source'),
     );
     await expect(nativeOrder).toEqual(['discovery', 'following', 'continue']);
-    await userEvent.click(canvas.getByRole('button', { name: m.library_next_page() }));
-    await waitFor(() =>
-      expect(context.canvasElement.ownerDocument.activeElement).toBe(
-        canvas.getByRole('region', { name: m.nav_home() }),
-      ),
-    );
-    await expect(canvas.queryByRole('button', { name: m.library_next_page() })).toBeNull();
+    await advanceHome(context.canvasElement);
   },
 };
 export const SignedOut: Story = {
@@ -303,8 +333,6 @@ export const SparseContinuation: Story = {
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByText(m.home_feed_sparse())).toBeVisible();
     await expect(canvas.queryByText(m.home_feed_empty())).toBeNull();
-    await userEvent.click(canvas.getByRole('button', { name: m.library_next_page() }));
-    await expect(await canvas.findByRole('link', { name: 'Books I come back to' })).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: m.library_next_page() })).toBeNull();
+    await advanceHome(context.canvasElement);
   },
 };

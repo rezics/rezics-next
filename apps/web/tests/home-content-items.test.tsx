@@ -265,6 +265,41 @@ test('Home composes ordered ContentItems and keeps bounded filters accessible in
     expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.library_next_page())).toBe(
       false,
     );
+
+    // Changing selection during Next retires that navigation's focus intent.
+    await act(async () =>
+      root.render(<HomeFeed result={followingSparse} locale="en" input={{ stream: 'home' }} onNext={onNext} />),
+    );
+    const pendingNext = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === m.library_next_page(),
+    )!;
+    await act(async () => pendingNext.click());
+    await act(async () =>
+      root.render(
+        <HomeFeed
+          result={followingSparse}
+          locale="en"
+          busy
+          input={{ stream: 'home', cursor: 'opaque-following-cursor' }}
+          onNext={onNext}
+        />,
+      ),
+    );
+    const filters = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === m.search_filters(),
+    )!;
+    filters.focus();
+    await act(async () =>
+      root.render(
+        <HomeFeed result={empty} locale="en" busy input={{ stream: 'home', kind: 'schema:Book' }} onNext={onNext} />,
+      ),
+    );
+    await act(async () =>
+      root.render(
+        <HomeFeed result={empty} locale="en" input={{ stream: 'home', kind: 'schema:Book' }} onNext={onNext} />,
+      ),
+    );
+    expect(window.document.activeElement).toBe(filters);
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous) {
