@@ -272,7 +272,8 @@ statistics, or publication capability.
 
 The scalar `vn.alias` field contains newline-separated alternate names. Use
 `und` for nonempty lines in bootstrap aliases and cited `schema:alternateName`
-proposals; omit empty lines and never infer from `vn.olang`. At most 64 lines are accepted,
+proposals; omit empty lines and never infer from `vn.olang`. At most 64 nonempty
+lines are accepted,
 each under the existing 4,096-byte and 1,500-codepoint title bounds, with the
 whole projection still capped at 64 KiB. Empty cells and empty lines mean no
 alias; whitespace-only lines remain invalid. Aliases remain in the source

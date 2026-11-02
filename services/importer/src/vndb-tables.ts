@@ -48,8 +48,8 @@ type Options = {
 // COPY TO STDOUT, not executable SQL. Official generator/dump evidence and hashes:
 // specs/imports-vndb-tables-driver.ts. Only identity, original language, titles
 // and native revision are required by the grouped input; vn.alias is carried forward.
-// Other VN columns are
-// validated and discarded, including Bayesian ratings, description and image identifiers.
+// Other VN columns are validated and discarded, including Bayesian ratings,
+// description and image identifiers.
 // The licensed average and count are retained only for a separate source statistic.
 const COLUMNS: Record<Table, readonly string[]> = {
   vn: [
