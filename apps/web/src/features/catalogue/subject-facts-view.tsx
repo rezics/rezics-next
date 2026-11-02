@@ -325,20 +325,13 @@ function FactField({
   const canEdit = canStage && !busy && (sourceSelected || (!selected.length && !sourceUnavailable));
   const sourceIndex = draft?.source ? selected.findIndex((item) => item.id === draft.source) : -1;
   const locked = !!draft && factLocked(draft);
-  const invalidResult =
-    draft?.result?.ok === false && draft.result.reason === 'invalid' ? draft.result : undefined;
+  const invalidResult = draft?.result?.ok === false && draft.result.reason === 'invalid' ? draft.result : undefined;
   // Result and statement travel in the same draft; editing any part clears this positional feedback.
   const feedback: StatementFeedback | undefined =
     draft && invalidResult?.errors?.length
       ? {
           id: feedbackId,
-          errors: presentStatementViolations(
-            invalidResult.errors,
-            draft.statement,
-            read.release,
-            locale,
-            feedbackId,
-          ),
+          errors: presentStatementViolations(invalidResult.errors, draft.statement, read.release, locale, feedbackId),
         }
       : undefined;
   const row = useRef<HTMLElement>(null);

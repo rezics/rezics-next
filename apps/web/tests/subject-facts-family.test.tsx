@@ -587,7 +587,9 @@ test('Mounted fact correction links quantity and nested violations, clears revis
     expect(amountLink.getAttribute('href')).toBe(`#${amount.id}`);
     await act(async () => amountLink.click());
     expect(host.ownerDocument.activeElement).toBe(amount);
-    const fallback = [...summary().querySelectorAll('a')].find((item) => item.textContent === m.correction_qualifiers())!;
+    const fallback = [...summary().querySelectorAll('a')].find(
+      (item) => item.textContent === m.correction_qualifiers(),
+    )!;
     const section = host.ownerDocument.getElementById(fallback.getAttribute('href')!.slice(1))!;
     expect(section.tagName).toBe('SECTION');
     expect(section.id).toContain('qualifiers');
