@@ -229,7 +229,7 @@ function Updated({ entry, locale }: { entry: PersonalLibraryEntry; locale: strin
   return <RelativeTime value={entry.lastActivityAt ?? entry.updatedAt} locale={locale} timeZone="UTC" />;
 }
 function selectionProps(entry: PersonalLibraryEntry, controls: Controls) {
-  if ((!controls.writeAdmitted && !controls.labelWriteAdmitted) || !controls.hydrated || !selectableEntry(entry))
+  if ((!controls.writeAdmitted && !controls.labelWriteAdmitted && !controls.labelRemoveAdmitted) || !controls.hydrated || !controls.selectable(entry))
     return {};
   if (!controls.selected.length) return { onSelect: () => controls.select(entry.subjectId, true) };
   return {
@@ -242,11 +242,11 @@ function selectionProps(entry: PersonalLibraryEntry, controls: Controls) {
 function SelectionBar({ controls }: { controls: Controls }) {
   const [chosen, setChosen] = useState('');
   const selectedState = controls.commonStates.some((option) => option.id === chosen) ? chosen : '';
-  if (!controls.writeAdmitted && !controls.labelWriteAdmitted) return null;
-  const eligible = controls.rows.some((row) => selectableEntry(row.entry));
+  if (!controls.writeAdmitted && !controls.labelWriteAdmitted && !controls.labelRemoveAdmitted) return null;
+  const eligible = controls.rows.some((row) => controls.selectable(row.entry));
   if (!controls.selected.length)
     return eligible ? (
-      <Button variant="outline" disabled={!controls.hydrated || controls.pending} onClick={controls.selectPage}>
+      <Button variant="outline" disabled={!controls.hydrated || controls.selectionPending} onClick={controls.selectPage}>
         {m.library_selection_page()}
       </Button>
     ) : null;
@@ -259,10 +259,10 @@ function SelectionBar({ controls }: { controls: Controls }) {
       <p role="status" className="text-sm">
         {m.library_selection_count({ count: controls.selected.length })}
       </p>
-      <Button variant="ghost" disabled={controls.pending} onClick={controls.selectPage}>
+      <Button variant="ghost" disabled={controls.selectionPending} onClick={controls.selectPage}>
         {m.library_selection_page()}
       </Button>
-      <Button variant="ghost" disabled={controls.pending} onClick={controls.clearSelection}>
+      <Button variant="ghost" disabled={controls.selectionPending} onClick={controls.clearSelection}>
         {m.library_selection_clear()}
       </Button>
       {controls.writeAdmitted && controls.commonStates.length ? (
@@ -295,6 +295,7 @@ function SelectionBar({ controls }: { controls: Controls }) {
         <p className="text-sm">{m.library_selection_no_common()}</p>
       ) : null}
       <ShelfLabelAction controls={controls} />
+      <ShelfLabelAction controls={controls} kind="unassign" />
       {controls.selectionBlocked ? <p className="text-sm">{m.library_selection_unknown()}</p> : null}
     </div>
   );

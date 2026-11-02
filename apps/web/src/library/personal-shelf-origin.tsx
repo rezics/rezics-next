@@ -15,6 +15,8 @@ const operations = [
   'library_entry.restore',
   'library_label.list',
   'library_label.assign',
+  'library_label.unassign',
+  'library_label.assignment_list',
   'copy.list',
 ] as const satisfies readonly Operation[];
 export type ShelfOrigin = {

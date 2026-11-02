@@ -39,3 +39,31 @@ export const readSubjectLabelPage = createServerFn({ method: 'GET' })
       ...(data.cursor ? { cursor: data.cursor } : {}),
     });
   });
+
+/** A removal captures the native assignment CAS before sending any destructive command. */
+export const readShelfLabelAssignment = createServerFn({ method: 'GET' })
+  .validator((input: { subjectId: string; labelId: string }) => {
+    if (!input || [input.subjectId, input.labelId].some((id) => typeof id !== 'string' || !id || id.length > 128))
+      throw new Error('Invalid shelf label assignment');
+    return { subjectId: input.subjectId, labelId: input.labelId };
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const { readSubjectSlotSession } = await import('./subject-slot');
+    const identity = await readSubjectSlotSession(getRequest(), env as Partial<SessionEnv>);
+    if (identity.state !== 'signed-in')
+      return { state: identity.state === 'signed-out' ? 'signed-out' as const : 'unavailable' as const };
+    const provenance = { viewer: identity.subject, csrfToken: identity.csrfToken, ...data };
+    try {
+      const { readSubjectLabelAssignments } = await import('./subject-labels.ts');
+      const labels = await readSubjectLabelAssignments(kernelClient(), data.subjectId, identity.authorization);
+      const assignment = labels.find((label) => label.labelId === data.labelId);
+      return {
+        state: 'loaded' as const,
+        provenance,
+        assignment: assignment ? { id: assignment.id, revision: assignment.revision } : null,
+      };
+    } catch {
+      return { state: 'unavailable' as const, provenance };
+    }
+  });

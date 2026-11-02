@@ -16,6 +16,7 @@ import { useSession } from '../session/query';
 import { readSubjectLabelPage } from './labels-actions';
 import { labelReadMessage, SubjectLabelMore, SubjectLabelReadNotice } from './subject-labels.tsx';
 import type { useShelfRows } from './shelf-rows';
+import type { ShelfLabelKind } from './shelf-label-request';
 import type { ShelfLabelOutcome } from './shelf-selection';
 import { PersonalShelfOrigin } from './personal-shelf-origin';
 
@@ -23,7 +24,9 @@ type Controls = ReturnType<typeof useShelfRows>;
 type LabelPage = Awaited<ReturnType<typeof readSubjectLabelPage>>;
 
 /** A single current signed search page supplies both the label ID and its recognizable name. */
-export function ShelfLabelAction({ controls }: { controls: Controls }) {
+export function ShelfLabelAction({ controls, kind = 'assign' }: { controls: Controls; kind?: ShelfLabelKind }) {
+  const removing = kind === 'unassign';
+  const heading = removing ? m.library_selected_labels_remove_open() : m.library_selected_labels_open();
   const listAdmitted = useOperation('library_label.list');
   const session = useSession();
   const origin = useContext(PersonalShelfOrigin);
@@ -40,10 +43,10 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
   const selected = controls.selected.join(':');
   const searchScope = useMemo(
     () => ({}),
-    [open, query, session.state, session.subject, controls.labelVersion, selected],
+    [open, query, session.state, session.subject, controls.labelVersion, selected, controls.labelSelectionIdentity, kind],
   );
   const scope = useMemo(
-    () => ({ active: true, current: controls.captureLabel() }),
+    () => ({ active: true, current: controls.captureLabel(kind) }),
     [searchScope, controls.labelEpoch, origin],
   );
   const previous = useRef({ scope, searchScope });
@@ -144,17 +147,17 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
   const ready = isCurrent() && listAdmitted && page?.state === 'loaded' && !labelReadMessage(page.reason);
   const choice = ready ? page.labels.find((label) => label.id === choiceId) : undefined;
   const acceptedMore = useRef<LabelPage | null>(null);
-  if (!controls.labelWriteAdmitted) return null;
+  if (!(removing ? controls.labelRemoveAdmitted : controls.labelWriteAdmitted)) return null;
   return (
     <Dialog open={open && isCurrent()} onOpenChange={changeOpen}>
       <DialogTrigger render={<Button variant="outline" disabled={blocked || !controls.selected.length} />}>
-        {m.library_selected_labels_open()}
+        {heading}
       </DialogTrigger>
       {open && isCurrent() ? (
         <DialogContent showCloseButton={false} className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{m.library_selected_labels_open()}</DialogTitle>
-            <DialogDescription>{m.library_selected_labels_description()}</DialogDescription>
+            <DialogTitle>{heading}</DialogTitle>
+            <DialogDescription>{removing ? m.library_selected_labels_remove_description() : m.library_selected_labels_description()}</DialogDescription>
           </DialogHeader>
           <label className="grid min-w-0 gap-1 text-sm font-medium">
             {m.library_selected_labels_search()}
@@ -249,7 +252,9 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
           )}
           {choice ? (
             <p role="status" className="break-words">
-              {m.library_selected_labels_confirm({ name: choice.name, count: controls.selected.length })}
+              {removing
+                ? m.library_selected_labels_remove_confirm({ name: choice.name, count: controls.selected.length })
+                : m.library_selected_labels_confirm({ name: choice.name, count: controls.selected.length })}
             </p>
           ) : null}
           <DialogFooter>
@@ -264,14 +269,14 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
                   !choice ||
                   choice.id !== liveChoice.current ||
                   blocked ||
-                  !controls.captureLabel()()
+                  !controls.captureLabel(kind)()
                 )
                   return;
-                void controls.assignSelectedLabel(choice);
+                void controls.assignSelectedLabel(choice, kind);
                 changeOpen(false);
               }}
             >
-              {m.library_selected_labels_apply()}
+              {removing ? m.library_selected_labels_remove_apply() : m.library_selected_labels_apply()}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -282,6 +287,9 @@ export function ShelfLabelAction({ controls }: { controls: Controls }) {
 
 const outcomeLabels: Record<ShelfLabelOutcome['status'], () => string> = {
   assigned: () => m.library_selected_labels_assigned(),
+  removed: () => m.library_subject_label_removed_status(),
+  unchanged: () => m.library_selected_labels_absent(),
+  conflicted: () => m.library_selection_conflicted(),
   failed: () => m.library_selection_failed(),
   unknown: () => m.library_selection_unknown_label(),
   'not-attempted': () => m.library_selection_not_attempted(),
@@ -292,7 +300,7 @@ export function ShelfLabelOutcomes({ controls }: { controls: Controls }) {
   return (
     <section aria-label={m.library_selected_labels_results()} className="space-y-2 rounded-lg border p-3 text-sm">
       <p className="break-words">{m.library_selected_labels_result_name({ name: controls.assignedLabelName })}</p>
-      <p>{m.library_selected_labels_partial()}</p>
+      <p>{controls.labelKind === 'unassign' ? m.library_selected_labels_remove_partial() : m.library_selected_labels_partial()}</p>
       <dl role="status" className="flex flex-wrap gap-x-4 gap-y-1">
         {Object.entries(outcomeLabels).map(([status, label]) => (
           <div key={status} className="flex gap-1">
@@ -313,23 +321,25 @@ export function ShelfLabelOutcomes({ controls }: { controls: Controls }) {
                   ? m.library_subject_label_capacity()
                   : outcome.reason === 'closed'
                     ? m.library_subject_label_closed()
-                    : m.library_sign_in()}
+                    : outcome.reason === 'signed-out' ? m.library_sign_in() : m.library_subject_label_unavailable()}
               </span>
             ) : null}
+            {outcome.status === 'conflicted' ? <span>{m.library_selected_labels_conflict()}</span> : null}
             {outcome.status === 'unknown' ? (
               <>
-                <span>{m.library_selected_labels_unknown()}</span>
+                <span>{controls.labelKind === 'unassign' ? m.library_selected_labels_remove_unknown() : m.library_selected_labels_unknown()}</span>
+                {!controls.canRetryLabel(outcome.subjectId) ? <span>{m.library_selected_labels_changed_recovery()}</span> : null}
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={controls.pending || !controls.labelWriteAdmitted}
+                  disabled={controls.pending || !controls.canRetryLabel(outcome.subjectId) || !(controls.labelKind === 'unassign' ? controls.labelRemoveAdmitted : controls.labelWriteAdmitted)}
                   onClick={() => void controls.retryLabel(outcome.subjectId)}
-                  aria-label={m.library_selected_labels_retry_title({
+                  aria-label={(controls.labelKind === 'unassign' ? m.library_selected_labels_remove_retry_title : m.library_selected_labels_retry_title)({
                     title: outcome.title,
                     name: controls.assignedLabelName,
                   })}
                 >
-                  {m.library_selected_labels_retry()}
+                  {controls.labelKind === 'unassign' ? m.library_selected_labels_remove_retry() : m.library_selected_labels_retry()}
                 </Button>
               </>
             ) : null}

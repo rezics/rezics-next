@@ -36,6 +36,7 @@ export type SubjectLabelMutationResult =
   | {
       ok: false;
       reason:
+        | 'conflict'
         | 'capacity'
         | 'restore-stale'
         | 'restore-expired'
@@ -64,6 +65,7 @@ function refused(result: Result<unknown>, intent: SubjectLabelMutationInput['int
   const status = statusOf(result);
   const code = problemCode(result);
   if (isPlatformClosedProblem(status, result.error?.value)) return { ok: false, reason: 'closed' };
+  if (code === 'conflict' && intent !== 'restore') return { ok: false, reason: 'conflict' };
   if (code === 'library_label_capacity') return { ok: false, reason: 'capacity' };
   if (intent === 'restore') {
     if (code === 'library_label_restore_stale') return { ok: false, reason: 'restore-stale' };
@@ -131,6 +133,7 @@ export async function readSubjectLabelAssignments(
     if (isPlatformClosedProblem(statusOf(result), result.error?.value)) throw new Error('library labels closed');
     throw new Error('Library label assignments could not be read');
   }
+  if (result.data.next) throw new Error('Library label assignments are incomplete');
   return result.data.assignments.map((row) => {
     if (!('label' in row)) throw new Error('FULL subject labels omitted their names');
     return { id: row.id, labelId: row.labelId, name: row.label.name, revision: row.revision };

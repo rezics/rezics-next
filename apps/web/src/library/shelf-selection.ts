@@ -12,18 +12,22 @@ export type ShelfOutcome = {
 
 /** A label command retains its original input and the entry identity, independently of entry-state keys. */
 export type ShelfLabelIntent = {
-  input: Extract<SubjectLabelMutationInput, { intent: 'assign' }>;
+  input: Extract<SubjectLabelMutationInput, { intent: 'assign' | 'unassign' | 'restore' }> & { intent: 'assign' | 'unassign' };
+  operationId: string;
   labelName: string;
   entry: Pick<PersonalLibraryEntry, 'subjectId' | 'revision' | 'incarnationId' | 'changeKey' | 'removeKey'>;
 };
 export type ShelfLabelOutcome = {
   subjectId: string;
   title: string;
-  status: 'assigned' | 'failed' | 'unknown' | 'not-attempted';
-  reason?: 'capacity' | 'closed' | 'signed-out';
+  status: 'assigned' | 'removed' | 'unchanged' | 'conflicted' | 'failed' | 'unknown' | 'not-attempted';
+  reason?: 'capacity' | 'closed' | 'signed-out' | 'unavailable';
 };
 
-export function matchesShelfLabelIntent(entry: PersonalLibraryEntry, intent: ShelfLabelIntent): boolean {
+export function matchesShelfLabelIntent(
+  entry: ShelfLabelIntent['entry'],
+  intent: Pick<ShelfLabelIntent, 'input' | 'entry'>,
+): boolean {
   return (
     entry.subjectId === intent.input.subjectId &&
     entry.subjectId === intent.entry.subjectId &&
