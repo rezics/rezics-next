@@ -16,6 +16,7 @@ export function ZonesRouteError() {
   const capture = snapshot.capture;
   const [retryPending, setRetryPending] = useState(false);
   const retrying = useRef(false);
+  // Invalidating the active location reloads its authorized loader without changing the requested URL.
   async function retry() {
     if (retrying.current || !lifetime.isCurrent(capture)) return;
     retrying.current = true;
