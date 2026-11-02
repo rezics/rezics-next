@@ -21,7 +21,7 @@ test('the agent templates define the account views beside the graph views, in th
   expect(validateProfile(platformRegistry, profile)).toEqual([]);
   const person = templateViews(entry('schema:Person'));
   expect(person.overview?.content.map((node) => node.props.id).join(',')).toBe(
-    'header,actions,summary,author,illustrator,director,music,voice-roles,side-stories,adaptations,versions,related,account-posts,account-reviews,account-collections,threads,lists,sources',
+    'header,summary,author,illustrator,director,music,voice-roles,side-stories,adaptations,versions,related,account-posts,account-reviews,account-collections,threads,lists,sources',
   );
   expect(person.details?.content.map((node) => node.type).join(',')).toBe('MoreStatements,Sources');
   expect(definedViews(profile, { type: 'schema:Person' })).toEqual([
