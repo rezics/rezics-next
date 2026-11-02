@@ -163,7 +163,9 @@ test('empty pages require explicit Next; self and longer cycles stop visibly and
     const before = directories().length;
     for (let i = 0; i < loop.length - 1; i++) {
       await click(next());
-      await settle(() => !!next());
+      await settle(() =>
+        i === loop.length - 2 ? host.textContent!.includes(m.relation_window_cycle()) : !next().disabled,
+      );
     }
     await settle(() => host.textContent!.includes(m.relation_window_cycle()));
     expect(next().disabled).toBe(true);
@@ -190,7 +192,7 @@ test('64 successful reads include the first, exclude failures, and keep director
       directory = produce;
       await click(retryDirectory());
     } else await click(next());
-    await settle(() => !!next() && (page === 63 || !next().disabled));
+    await settle(() => (page === 63 ? host.textContent!.includes(m.relation_window_limit()) : !next().disabled));
     expect(boxes()).toHaveLength(0);
     expect(
       cache
