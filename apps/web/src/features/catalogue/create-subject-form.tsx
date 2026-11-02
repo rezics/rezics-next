@@ -550,7 +550,7 @@ function CreateSubjectFormLive({
                       aria-invalid={invalid('create-type')}
                       aria-describedby={`create-grain create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
                       onChange={(event) => {
-                        profileEdit.current.allowed = false;
+                        currentEdit.current = null;
                         setType(event.target.value);
                         setFailure(undefined);
                       }}
