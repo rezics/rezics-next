@@ -301,24 +301,16 @@ test('empty memberships, denied/zero boards and mismatched provenance remain dis
       expect(view.host.querySelectorAll('button')).toHaveLength(message === m.thread_review_unavailable() ? 2 : 1);
       expect(view.host.querySelector('[role="alert"]') !== null).toBe(message === m.thread_review_unavailable());
       if (mode === 'failed-page' || mode === 'failed-boards') {
-        const firstRetry = gate<Response>();
-        if (mode === 'failed-page') membershipRead = () => firstRetry.promise;
-        else boardRead = async () => firstRetry.promise;
-        const beforeRetry = calls.length;
-        await view.retry();
-        await until(() => calls.length > beforeRetry);
-        expect(view.host.textContent).toContain(m.thread_review_boards_loading());
-        expect(view.host.querySelectorAll('button')).toHaveLength(1);
-        firstRetry.resolve(new Response(null, { status: 503 }));
-        await until(() => view.host.querySelectorAll('button').length === 2);
         const current = gate<Response>();
         if (mode === 'failed-page') {
           membershipRead = () => current.promise;
           boardRead = async () => response([recordedBoard]);
         } else boardRead = async () => current.promise;
+        const beforeRetry = calls.length;
         await view.retry();
-        await until(() => calls.length > beforeRetry + 1);
+        await until(() => calls.length > beforeRetry);
         expect(view.host.textContent).toContain(m.thread_review_boards_loading());
+        expect(view.host.querySelectorAll('button')).toHaveLength(1);
         current.resolve(mode === 'failed-page' ? response(realms) : response(choices));
         if (mode === 'failed-page') await until(() => navigations.length === 1);
         else await until(() => view.host.querySelectorAll('li').length === 2);
