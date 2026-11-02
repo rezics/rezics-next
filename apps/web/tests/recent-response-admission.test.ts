@@ -7,11 +7,7 @@ import {
   type RecentEntry,
   type RecentStorage,
 } from '../src/search/recent-history';
-import {
-  createRecentSearchSyncAdapter,
-  RecentSyncError,
-  type RecentSearchTransport,
-} from '../src/search/recent-sync';
+import { createRecentSearchSyncAdapter, RecentSyncError, type RecentSearchTransport } from '../src/search/recent-sync';
 import type { RecentItem, RecentPage, Pending } from '../src/search/recent';
 
 const accountId = '019f0000-0000-7000-8000-734100000001';
@@ -79,7 +75,10 @@ test('Malformed native Recent pages never replace accepted local history or supp
       },
     ]),
     page([
-      { ...scoped, display: { name: 'Reading', href: queryHref(`/realms/${collectionId}`, 'Scoped query'), avatar: null } },
+      {
+        ...scoped,
+        display: { name: 'Reading', href: queryHref(`/realms/${collectionId}`, 'Scoped query'), avatar: null },
+      },
     ]),
     page([
       {
@@ -154,7 +153,12 @@ test('Malformed native Recent pages never replace accepted local history or supp
   const mixed = [
     globalQuery('Global query', languages),
     item(
-      { kind: 'query', text: 'Collection query', languages: [...languages], scope: { kind: 'collection', id: collectionId } },
+      {
+        kind: 'query',
+        text: 'Collection query',
+        languages: [...languages],
+        scope: { kind: 'collection', id: collectionId },
+      },
       {
         name: 'Reading',
         href: queryHref(`/collections/${collectionId}`, 'Collection query', languages),
@@ -181,7 +185,12 @@ test('Malformed native Recent pages never replace accepted local history or supp
     searchAction: `/collections/${collectionId}`,
   });
   expect(byQuery('Collection query')?.languages).toEqual(['fr', 'en']);
-  expect(byKind('Library')?.scope).toEqual({ kind: 'Library', id: 'library', name: 'Library', searchAction: '/library' });
+  expect(byKind('Library')?.scope).toEqual({
+    kind: 'Library',
+    id: 'library',
+    name: 'Library',
+    searchAction: '/library',
+  });
   expect(byKind('Realm')?.scope).toEqual({ kind: 'Realm', id: realmId, name: '' });
   expect(byKind('Collection')?.scope).toEqual({ kind: 'Collection', id: collectionId, name: '' });
   expect(readRecentHistory(storage, bucket).every((entry) => !entry.scope?.searchAction)).toBe(true);

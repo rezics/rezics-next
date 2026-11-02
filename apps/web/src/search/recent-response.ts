@@ -3,12 +3,7 @@ import type { RecentEntry, RecentItem, RecentPage } from './recent';
 
 const id = v.pipe(v.string(), v.uuid());
 const revision = v.pipe(v.number(), v.safeInteger(), v.minValue(0), v.maxValue(2_147_483_646));
-const language = v.pipe(
-  v.string(),
-  v.minLength(1),
-  v.maxLength(35),
-  v.regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/),
-);
+const language = v.pipe(v.string(), v.minLength(1), v.maxLength(35), v.regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/));
 const cover = v.nullable(
   v.strictObject({
     media: id,
@@ -16,7 +11,10 @@ const cover = v.nullable(
     height: v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
     placeholder: v.strictObject({ thumbhash: v.string(), color: v.string() }),
     variants: v.array(
-      v.strictObject({ format: v.picklist(['avif', 'webp']), width: v.pipe(v.number(), v.safeInteger(), v.minValue(1)) }),
+      v.strictObject({
+        format: v.picklist(['avif', 'webp']),
+        width: v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
+      }),
     ),
     focalPoint: v.nullable(v.strictObject({ x: v.pipe(v.number(), v.finite()), y: v.pipe(v.number(), v.finite()) })),
     credit: v.strictObject({
@@ -56,7 +54,11 @@ const pageSchema = v.strictObject({
 });
 
 export function recentScopePath(scope: NonNullable<RecentEntry['scope']>): string {
-  return scope.kind === 'route' ? '/library' : scope.kind === 'realm' ? `/realms/${scope.id}` : `/collections/${scope.id}`;
+  return scope.kind === 'route'
+    ? '/library'
+    : scope.kind === 'realm'
+      ? `/realms/${scope.id}`
+      : `/collections/${scope.id}`;
 }
 
 function queryKeys(entry: Extract<RecentEntry, { kind: 'query' }>): string[] {
