@@ -12778,4 +12778,3 @@ $$;
 CREATE TRIGGER immutable_kind_type_evidence_body
   BEFORE UPDATE ON semantic.kind_type_evidence_body
   FOR EACH ROW EXECUTE FUNCTION semantic.immutable_kind_type_evidence_body();
-
