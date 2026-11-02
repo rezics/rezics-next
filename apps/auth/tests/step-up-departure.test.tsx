@@ -1,10 +1,16 @@
-import { afterEach, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { creationFixture, button, dom, fill, flush, open as mount, send } from './creation-page-fixture';
 import type { PasskeySignInResult } from '../src/passkeys';
 
 creationFixture();
 let cleanup = () => {};
 afterEach(() => cleanup());
+const previousScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
+Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true, writable: true });
+afterAll(() => {
+  if (previousScrollTo) Object.defineProperty(globalThis, 'scrollTo', previousScrollTo);
+  else Reflect.deleteProperty(globalThis, 'scrollTo');
+});
 const { createRootRoute, createRoute, createRouter, createBrowserHistory, RouterProvider } =
   await import('@tanstack/react-router');
 const { Route } = await import('../src/routes/step-up');
@@ -68,6 +74,7 @@ test('Stay keeps validation and masked input; replacement resets it and Leave cl
   expect(email.getAttribute('aria-invalid')).toBe('true');
   expect(page.unload()).toBe(true);
   await page.navigate('/away');
+  expect(document.querySelector('[role=alertdialog]')).not.toBeNull();
   await page.choose('Stay');
   expect([email.value, password.value, password.type, email.getAttribute('aria-invalid')]).toEqual([
     'invalid',

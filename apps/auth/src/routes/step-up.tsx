@@ -143,9 +143,14 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
     enableBeforeUnload: false,
     withResolver: true,
   });
+  const blockerRef = useRef(blocker);
+  blockerRef.current = blocker;
 
   useLayoutEffect(() => {
-    if (blocker.status === 'blocked' && !shouldWarn()) blocker.proceed();
+    if (blocker.status === 'blocked' && !shouldWarn()) {
+      if (journey.completed) blocker.reset();
+      else blocker.proceed();
+    }
   });
 
   useLayoutEffect(() => {
@@ -220,7 +225,7 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
     const outcome = await confirmStepUpWithPasskey(completion.query, completion.origin, completion.isCurrent);
     if (!completion.finish(outcome.ok)) return;
     if (outcome.ok) {
-      if (blocker.status === 'blocked') blocker.reset();
+      if (blockerRef.current.status === 'blocked') blockerRef.current.reset();
       window.location.assign(outcome.target);
       return;
     }
@@ -251,7 +256,7 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
     passwordValue.current = '';
     setPassword('');
     if (outcome.ok) {
-      if (blocker.status === 'blocked') blocker.reset();
+      if (blockerRef.current.status === 'blocked') blockerRef.current.reset();
       window.location.assign(outcome.target);
       return;
     }
