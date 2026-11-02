@@ -3,6 +3,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import type { Capture } from './growth-cost.ts';
+import { drainCaptureWork } from './growth-capture-drain.ts';
 
 export type GrowthDatabase = {
   readonly url: string;
@@ -609,7 +610,10 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       },
     );
     state.setupTasks.add(task);
-    void task.then(() => state.setupTasks.delete(task));
+    const remove = () => {
+      state.setupTasks.delete(task);
+    };
+    void task.then(remove, remove);
   };
 
   const interceptedQuery = ((...args: Parameters<PoolClient['query']>) => {
@@ -679,7 +683,10 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       if (!attribution) return;
       const capture = attribution.capture;
       capture.pending.add(task);
-      void task.then(() => capture.pending.delete(task));
+      const remove = () => {
+        capture.pending.delete(task);
+      };
+      void task.then(remove, remove);
     };
 
     if (typeof callback === 'function') {
@@ -777,7 +784,10 @@ function instrument(client: PoolClient, state: CaptureState): void {
     if (failed?.status === 'rejected') state.setupError ??= asError(failed.reason);
   });
   state.setupTasks.add(setupTask);
-  void setupTask.then(() => state.setupTasks.delete(setupTask));
+  const removeSetupTask = () => {
+    state.setupTasks.delete(setupTask);
+  };
+  void setupTask.then(removeSetupTask, removeSetupTask);
 }
 
 function instrumentPool(pool: Pool, state: CaptureState): void {
@@ -915,15 +925,21 @@ async function captureInternal<T>(
       operationError = error;
       operationFailed = true;
     }
-    // node-postgres delivers a query's notices before its completion. Await every tracked query so its plan has been
-    // recorded before returning, including queries the operation queued without awaiting itself.
-    while (active.pending.size > 0 || state.setupTasks.size > 0) {
-      const pending = [...active.pending, ...state.setupTasks];
-      if (pending.length > 0) await Promise.all(pending);
+    // Wait through failures too: queued queries and setup work must settle before attribution is restored.
+    const cleanupErrors = await drainCaptureWork(active.pending, state.setupTasks);
+    const primaryError = operationFailed ? operationError : (state.setupError ?? active.error);
+    if (operationFailed || state.setupError || active.error) {
+      if (cleanupErrors.length > 0) {
+        throw new AggregateError(
+          [primaryError, ...cleanupErrors],
+          'Growth capture failed while pending work was settling',
+          { cause: primaryError },
+        );
+      }
+      throw primaryError;
     }
-    if (operationFailed) throw operationError;
-    if (state.setupError) throw state.setupError;
-    if (active.error) throw active.error;
+    if (cleanupErrors.length > 0)
+      throw new AggregateError(cleanupErrors, 'Growth capture pending work failed while settling');
     const foregroundPlanOwners = new Set(active.planStatements);
     const backgroundPlanOwners = new Set(active.backgroundPlanStatements);
     for (const record of active.statementRecords) {

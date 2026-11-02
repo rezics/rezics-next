@@ -442,6 +442,10 @@ including array framing; an individual row that cannot fit is rejected before in
 import the public API from `test/support/growth.ts`. A check uses three to five scales, and its largest scale must not
 exceed 4096.
 
+Every capture drains registered query and connection setup work, including tasks added while earlier work settles,
+before restoring attribution on success or failure. If cleanup also fails, the initiating error remains the aggregate's
+cause and cleanup failures remain available in its errors.
+
 Byte totals are recorded for each captured statement. Request bytes include the UTF-8 statement text whenever an
 unnamed statement is sent and once when a named statement is first prepared on a connection, plus each parameter after
 node-postgres prepares it: UTF-8 bytes for strings, the length for buffers, and zero for null or undefined. Response
