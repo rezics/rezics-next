@@ -499,6 +499,11 @@ function postDeleteFailureText(failure: WriteFailure): string {
   return failure.reason === 'closed' ? m.thread_write_closed() : m.thread_delete_failure();
 }
 
+export function copyThreadPostLink(post: Pick<ThreadPost, 'id' | 'threadId'>): Promise<void> {
+  const href = threadLocation(getLocale(), { id: post.threadId }, undefined, post.id);
+  return navigator.clipboard.writeText(new URL(href, window.location.origin).href);
+}
+
 export function ThreadReadingPost({
   post,
   readAuthority,
@@ -669,8 +674,7 @@ export function ThreadReadingPost({
   };
 
   async function copyLink() {
-    const href = threadLocation(getLocale(), { id: post.threadId }, undefined, post.id);
-    await navigator.clipboard.writeText(new URL(href, window.location.origin).href);
+    await copyThreadPostLink(post);
   }
 
   function cancelEdit() {
