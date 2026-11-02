@@ -1,5 +1,18 @@
 import type { Pool } from 'pg';
 import {
+  cataloguePublisherInvocation,
+  cataloguePublisherQuery,
+  cataloguePublisherControl,
+  captureCataloguePublisherPosition,
+} from './definition-catalogue-publication-work.ts';
+import {
+  registerCatalogueRoot,
+  requestCatalogueActivation,
+  advanceCatalogueActivation,
+  finishCatalogueActivation,
+  advanceCatalogueRetirement,
+} from './definition-catalogue-lifecycle.ts';
+import {
   CATALOGUE_LIMITS,
   RELEASE_LIMITS,
   CatalogueArtifactError,
@@ -30,10 +43,15 @@ import {
   DefinitionInputError,
   GLOBAL_CONTEXT,
   readRelease,
-  StaleEditorialHeadError,
   type WriteOptions,
 } from './definitions.ts';
-import { CATALOGUE_BUILD_REQUESTED, CATALOGUE_PROGRESS, CATALOGUE_ACTIVATED, CATALOGUE_ARTIFACT } from './events.ts';
+import {
+  CATALOGUE_BUILD_REQUESTED,
+  CATALOGUE_PROGRESS,
+  CATALOGUE_ACTIVATED,
+  CATALOGUE_ARTIFACT,
+  CATALOGUE_ACTIVATION_REQUESTED,
+} from './events.ts';
 
 export type CatalogueArtifactKind = 'root' | 'node' | 'release' | 'declaration';
 export type CatalogueBuildStatus = {
@@ -60,8 +78,6 @@ type Task = {
   next_node: string | null;
   offset_rows: number;
 };
-const progressColumns =
-  'pin,state,phase,steps,nodes,releases,declarations,indexed_rows,examined_bytes,missing_digest,error';
 export const catalogueKey = (value: string) => catalogueDigest(catalogueBytes(value));
 /** UTF-16 BE preserves the package's exact JS string ordering, including supplementary characters. */
 export function catalogueSort(value: string): Buffer {
@@ -81,10 +97,7 @@ function result<T>(command: Awaited<ReturnType<typeof runCommand<T>>>) {
 export function catalogueArtifactReader(tx: CommandTransaction): CatalogueArtifactReader {
   return {
     async read(digest) {
-      const row = await tx.query<{ bytes: Buffer }>(
-        'SELECT bytes FROM semantic.definition_catalogue_artifact WHERE route=0 AND digest=$1',
-        [digest],
-      );
+      const row = await cataloguePublisherQuery<{ bytes: Buffer }>(tx, 'artifactRead', [digest]);
       return row.rows[0]?.bytes;
     },
   };
@@ -114,6 +127,7 @@ export async function publishCatalogueArtifact(
   pool: Pool,
   options: WriteOptions & { kind: CatalogueArtifactKind; artifact: unknown },
 ) {
+  const invocation = cataloguePublisherInvocation(pool, 'artifact', options.deadline);
   // Snapshot inert input before any await. All durable writes and receipts follow fresh command authorization.
   const bytes = catalogueBytes(options.artifact);
   const maximum =
@@ -125,12 +139,14 @@ export async function publishCatalogueArtifact(
   if (bytes.length > maximum) catalogueFail('invalid', 'Artifact exceeds its original byte bound');
   const digest = catalogueDigest(bytes);
   return result(
-    await runCommand(
-      pool,
+    await invocation.run(
+      digest,
       commandOptions(options, 'definition_catalogues.publish_artifact', 'definitions:publish'),
       async (tx, { transactionId }) => {
         // Decode/check inside authorized command, preserving denial-before-receipt semantics.
-        const value = await readCatalogueArtifact({ read: async () => bytes }, digest, maximum);
+        const value = await cataloguePublisherControl(tx, 'artifactDecode', () =>
+          readCatalogueArtifact({ read: async () => bytes }, digest, maximum),
+        );
         if (options.kind === 'release') {
           const admission = releaseAdmission(value);
           if (admission.length) throw new DefinitionInputError(admission);
@@ -139,17 +155,17 @@ export async function publishCatalogueArtifact(
           if (caps.length && !(await readRelease(tx, digest, { composed: false })))
             throw new DefinitionInputError(caps);
         }
-        admit(options.kind, value);
-        const inserted = await tx.query(
-          `INSERT INTO semantic.definition_catalogue_artifact(route,digest,kind,bytes,recorded_transaction_id)
-       VALUES(0,$1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING digest`,
-          [digest, options.kind, Buffer.from(bytes), transactionId],
-        );
+        await cataloguePublisherControl(tx, 'artifactValidate', async () => admit(options.kind, value));
+        const inserted = await cataloguePublisherQuery(tx, 'artifactInsert', [
+          digest,
+          options.kind,
+          Buffer.from(bytes),
+          transactionId,
+        ]);
         if (!inserted.rowCount) {
-          const existing = await tx.query<{ kind: string; bytes: Buffer }>(
-            'SELECT kind,bytes FROM semantic.definition_catalogue_artifact WHERE route=0 AND digest=$1',
-            [digest],
-          );
+          const existing = await cataloguePublisherQuery<{ kind: string; bytes: Buffer }>(tx, 'artifactConflict', [
+            digest,
+          ]);
           if (existing.rows[0]?.kind !== options.kind || !existing.rows[0].bytes.equals(Buffer.from(bytes)))
             catalogueFail('conflict', 'Addressed artifact conflict');
         }
@@ -162,30 +178,27 @@ export async function publishCatalogueArtifact(
   );
 }
 export async function startCatalogueBuild(pool: Pool, options: WriteOptions & { pin: KindCataloguePin }) {
+  const invocation = cataloguePublisherInvocation(pool, 'build', options.deadline);
   const pin = parseCataloguePin(options.pin);
   return result(
-    await runCommand(
-      pool,
+    await invocation.run(
+      pin.rootDigest,
       commandOptions(options, 'definition_catalogues.build', 'definitions:publish'),
-      async (tx, { transactionId }) => {
-        const root = parseCatalogueRoot(
-          await readCatalogueArtifact(catalogueArtifactReader(tx), pin.rootDigest, CATALOGUE_LIMITS.nodeBytes),
+      async (tx, { transactionId }, work) => {
+        const root = await cataloguePublisherControl(tx, 'rootDecode', async () =>
+          parseCatalogueRoot(
+            await readCatalogueArtifact(catalogueArtifactReader(tx), pin.rootDigest, CATALOGUE_LIMITS.nodeBytes),
+          ),
         );
-        const inserted = await tx.query(
-          `INSERT INTO semantic.definition_catalogue_build(route,root_digest,pin,state,recorded_transaction_id)
-       VALUES(0,$1,$2,'building',$3) ON CONFLICT DO NOTHING RETURNING root_digest`,
-          [pin.rootDigest, pin, transactionId],
-        );
+        const inserted = await cataloguePublisherQuery(tx, 'buildInsert', [pin.rootDigest, pin, transactionId]);
         if (inserted.rowCount) {
-          const task = await tx.query<{ task_id: string }>(
-            `INSERT INTO semantic.definition_catalogue_task(route,root_digest,kind,digest)
-         VALUES(0,$1,'node',$2) RETURNING task_id`,
-            [pin.rootDigest, root.directoryDigest],
-          );
-          await tx.query(
-            'UPDATE semantic.definition_catalogue_build SET next_node=$2 WHERE route=0 AND root_digest=$1',
-            [pin.rootDigest, task.rows[0]!.task_id],
-          );
+          await registerCatalogueRoot(tx, pin.rootDigest, transactionId, work);
+          await captureCataloguePublisherPosition(tx);
+          const task = await cataloguePublisherQuery<{ task_id: string }>(tx, 'firstTask', [
+            pin.rootDigest,
+            root.directoryDigest,
+          ]);
+          await cataloguePublisherQuery(tx, 'buildNext', [pin.rootDigest, task.rows[0]!.task_id]);
         }
         const value = await readCatalogueBuild(tx, pin);
         return { value: value!, events: [event(CATALOGUE_BUILD_REQUESTED, { rootDigest: pin.rootDigest })] };
@@ -197,29 +210,26 @@ export async function readCatalogueBuild(
   tx: CommandTransaction,
   pin: KindCataloguePin,
 ): Promise<CatalogueBuildStatus | null> {
-  return (
-    (
-      await tx.query<CatalogueBuildStatus>(
-        `SELECT ${progressColumns} FROM semantic.definition_catalogue_build WHERE route=0 AND root_digest=$1`,
-        [pin.rootDigest],
-      )
-    ).rows[0] ?? null
-  );
+  return (await cataloguePublisherQuery<CatalogueBuildStatus>(tx, 'buildStatus', [pin.rootDigest])).rows[0] ?? null;
 }
 async function identity(tx: CommandTransaction, root: string, name: string, body: unknown) {
-  const digest = catalogueDigest(catalogueBytes(body));
-  const saved = await tx.query<{ identity: Buffer; digest: string }>(
-    `INSERT INTO semantic.definition_catalogue_identity(route,root_digest,identity_key,identity,digest)
-     VALUES(0,$1,$2,$3,$4) ON CONFLICT(route,root_digest,identity_key) DO UPDATE
-     SET digest=semantic.definition_catalogue_identity.digest RETURNING identity,digest`,
-    [root, catalogueKey(name), Buffer.from(name), digest],
+  const digest = await cataloguePublisherControl(tx, 'memberIdentity', async () =>
+    catalogueDigest(catalogueBytes(body)),
   );
+  const saved = await cataloguePublisherQuery<{ identity: Buffer; digest: string }>(tx, 'identityUpsert', [
+    root,
+    catalogueKey(name),
+    Buffer.from(name),
+    digest,
+  ]);
   if (saved.rows[0]?.identity.toString('utf8') !== name || saved.rows[0].digest !== digest)
     catalogueFail('conflict', `Conflicting immutable identity ${name}`);
 }
 async function nodeStep(tx: CommandTransaction, root: string, task: Task): Promise<number> {
-  const node = parseCatalogueNode(
-    await readCatalogueArtifact(catalogueArtifactReader(tx), task.digest, CATALOGUE_LIMITS.nodeBytes),
+  const node = await cataloguePublisherControl(tx, 'nodeDecode', async () =>
+    parseCatalogueNode(
+      await readCatalogueArtifact(catalogueArtifactReader(tx), task.digest, CATALOGUE_LIMITS.nodeBytes),
+    ),
   );
   const range = catalogueNodeRange(node);
   if (
@@ -231,34 +241,29 @@ async function nodeStep(tx: CommandTransaction, root: string, task: Task): Promi
   if (node.node === 'branch') {
     // Durable DFS stack, reversed insertion: visit every sibling in exact package order, regardless of height.
     for (const child of [...node.children].reverse()) {
-      const added = await tx.query<{ task_id: string }>(
-        `INSERT INTO semantic.definition_catalogue_task(route,root_digest,kind,digest,first_key,last_key,next_node)
-         VALUES(0,$1,'node',$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING task_id`,
-        [root, child.digest, Buffer.from(child.first), Buffer.from(child.last), next],
-      );
+      const added = await cataloguePublisherQuery<{ task_id: string }>(tx, 'branchTask', [
+        root,
+        child.digest,
+        Buffer.from(child.first),
+        Buffer.from(child.last),
+        next,
+      ]);
       if (!added.rowCount) catalogueFail('conflict', 'Repeated directory subtree or cycle');
       next = added.rows[0]!.task_id;
     }
   } else {
     // task_id ordinals capture declaration ID order without indexing unbounded text IDs in a B-tree.
     for (const entry of node.entries)
-      await tx.query(
-        `INSERT INTO semantic.definition_catalogue_task(route,root_digest,kind,digest,entry_key) VALUES(0,$1,$2,$3,$4)`,
-        [root, entry.kind, entry.digest, Buffer.from(entry.key)],
-      );
+      await cataloguePublisherQuery(tx, 'leafTask', [root, entry.kind, entry.digest, Buffer.from(entry.key)]);
   }
-  await tx.query(
-    'UPDATE semantic.definition_catalogue_build SET next_node=$2,nodes=nodes+1 WHERE route=0 AND root_digest=$1',
-    [root, next],
-  );
-  await tx.query(
-    'UPDATE semantic.definition_catalogue_task SET done=true WHERE route=0 AND root_digest=$1 AND task_id=$2',
-    [root, task.task_id],
-  );
+  await cataloguePublisherQuery(tx, 'nodeProgress', [root, next]);
+  await cataloguePublisherQuery(tx, 'taskDone', [root, task.task_id]);
   return node.node === 'branch' ? node.children.length : node.entries.length;
 }
 async function releaseStep(tx: CommandTransaction, root: string, task: Task): Promise<number> {
-  const body = release(await readCatalogueArtifact(catalogueArtifactReader(tx), task.digest, RELEASE_LIMITS.bytes));
+  const body = await cataloguePublisherControl(tx, 'releaseDecode', async () =>
+    release(await readCatalogueArtifact(catalogueArtifactReader(tx), task.digest, RELEASE_LIMITS.bytes)),
+  );
   if (releaseDigest(body) !== task.digest || task.entry_key?.toString('utf8') !== `release:${task.digest}`)
     catalogueFail('corrupt', 'Release directory identity mismatch');
   if (task.offset_rows === 0)
@@ -272,47 +277,43 @@ async function releaseStep(tx: CommandTransaction, root: string, task: Task): Pr
   const page = members.slice(task.offset_rows, task.offset_rows + 64);
   for (const member of page) {
     await identity(tx, root, `${member.category}:${member.id}`, member.body);
-    const saved = await tx.query<{ id: Buffer }>(
-      `INSERT INTO semantic.definition_catalogue_member(route,root_digest,release_digest,category,id_key,id,body)
-       VALUES(0,$1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING id`,
-      [root, task.digest, member.category, catalogueKey(member.id), Buffer.from(member.id), member.body],
-    );
+    const saved = await cataloguePublisherQuery<{ id: Buffer }>(tx, 'memberInsert', [
+      root,
+      task.digest,
+      member.category,
+      catalogueKey(member.id),
+      Buffer.from(member.id),
+      member.body,
+    ]);
     if (!saved.rowCount) catalogueFail('conflict', 'Repeated member or identity hash collision');
   }
   const done = task.offset_rows + page.length === members.length;
-  await tx.query(
-    'UPDATE semantic.definition_catalogue_task SET offset_rows=offset_rows+$3,done=$4 WHERE route=0 AND root_digest=$1 AND task_id=$2',
-    [root, task.task_id, page.length, done],
-  );
-  if (done)
-    await tx.query(
-      'UPDATE semantic.definition_catalogue_build SET releases=releases+1 WHERE route=0 AND root_digest=$1',
-      [root],
-    );
+  await cataloguePublisherQuery(tx, 'taskOffset', [root, task.task_id, page.length, done]);
+  if (done) await cataloguePublisherQuery(tx, 'releaseProgress', [root]);
   return page.length * 2;
 }
 async function typeClosure(tx: CommandTransaction, root: string, digest: string, id: string) {
   const member = (
-    await tx.query<{ id: Buffer; body: TypeDefinition }>(
-      `SELECT id,body FROM semantic.definition_catalogue_member WHERE route=0 AND root_digest=$1 AND release_digest=$2 AND category='type' AND id_key=$3`,
-      [root, digest, catalogueKey(id)],
-    )
+    await cataloguePublisherQuery<{ id: Buffer; body: TypeDefinition }>(tx, 'typeClosure', [
+      root,
+      digest,
+      catalogueKey(id),
+    ])
   ).rows[0];
   if (member?.id.toString('utf8') !== id) catalogueFail('missing', `Missing exact Type closure ${digest}/${id}`);
   if (member.body.library) {
     const profileId = member.body.library.profileId;
     const profile = (
-      await tx.query<{ id: Buffer }>(
-        `SELECT id FROM semantic.definition_catalogue_member WHERE route=0 AND root_digest=$1 AND release_digest=$2 AND category='profile' AND id_key=$3`,
-        [root, digest, catalogueKey(profileId)],
-      )
+      await cataloguePublisherQuery<{ id: Buffer }>(tx, 'profileClosure', [root, digest, catalogueKey(profileId)])
     ).rows[0];
     if (profile?.id.toString('utf8') !== profileId) catalogueFail('missing', 'Missing exact presentation profile');
   }
 }
 async function declarationStep(tx: CommandTransaction, root: string, task: Task): Promise<number> {
-  const body = parseKindDeclaration(
-    await readCatalogueArtifact(catalogueArtifactReader(tx), task.digest, CATALOGUE_LIMITS.declarationBytes),
+  const body = await cataloguePublisherControl(tx, 'declarationDecode', async () =>
+    parseKindDeclaration(
+      await readCatalogueArtifact(catalogueArtifactReader(tx), task.digest, CATALOGUE_LIMITS.declarationBytes),
+    ),
   );
   requireConstructibleKind(body);
   if (body.condition.op !== 'exact-type') catalogueFail('unsupported', 'Unsupported native condition');
@@ -321,41 +322,34 @@ async function declarationStep(tx: CommandTransaction, root: string, task: Task)
   if (task.offset_rows === 0) {
     for (const pin of [body.condition.type, body.presentation.type])
       await typeClosure(tx, root, pin.releaseDigest, pin.typeId);
-    const inserted = await tx.query(
-      `INSERT INTO semantic.definition_catalogue_kind(route,root_digest,id_key,id,ordinal,declaration_digest,body,exact_type_key,exact_type_id,precedence,eligible)
-       VALUES(0,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING RETURNING id`,
-      [
-        root,
-        catalogueKey(body.id),
-        Buffer.from(body.id),
-        task.task_id,
-        task.digest,
-        body,
-        catalogueKey(body.condition.type.typeId),
-        Buffer.from(body.condition.type.typeId),
-        body.auto.precedence,
-        body.auto.eligible,
-      ],
-    );
+    const inserted = await cataloguePublisherQuery(tx, 'kindInsert', [
+      root,
+      catalogueKey(body.id),
+      Buffer.from(body.id),
+      task.task_id,
+      task.digest,
+      body,
+      catalogueKey(body.condition.type.typeId),
+      Buffer.from(body.condition.type.typeId),
+      body.auto.precedence,
+      body.auto.eligible,
+    ]);
     if (!inserted.rowCount) catalogueFail('conflict', 'Duplicate declaration identity');
   }
   const labels = Object.entries(body.labels);
   const page = labels.slice(task.offset_rows, task.offset_rows + 64);
   for (const [language, label] of page)
-    await tx.query(
-      `INSERT INTO semantic.definition_catalogue_label(route,root_digest,language_key,language,label_sort,ordinal,id_key) VALUES(0,$1,$2,$3,$4,$5,$6)`,
-      [root, catalogueKey(language), language, catalogueSort(label), task.task_id, catalogueKey(body.id)],
-    );
+    await cataloguePublisherQuery(tx, 'labelInsert', [
+      root,
+      catalogueKey(language),
+      language,
+      catalogueSort(label),
+      task.task_id,
+      catalogueKey(body.id),
+    ]);
   const done = task.offset_rows + page.length === labels.length;
-  await tx.query(
-    'UPDATE semantic.definition_catalogue_task SET offset_rows=offset_rows+$3,done=$4 WHERE route=0 AND root_digest=$1 AND task_id=$2',
-    [root, task.task_id, page.length, done],
-  );
-  if (done)
-    await tx.query(
-      'UPDATE semantic.definition_catalogue_build SET declarations=declarations+1 WHERE route=0 AND root_digest=$1',
-      [root],
-    );
+  await cataloguePublisherQuery(tx, 'taskOffset', [root, task.task_id, page.length, done]);
+  if (done) await cataloguePublisherQuery(tx, 'declarationProgress', [root]);
   return page.length + (task.offset_rows === 0 ? 1 : 0);
 }
 /** Mechanical continuation of the immutable, already authorized input, never a restored publisher Actor. */
@@ -364,70 +358,38 @@ export async function advanceCatalogueBuild(
   pin: KindCataloguePin,
 ): Promise<CatalogueBuildStatus> {
   const root = pin.rootDigest;
-  let build = (
-    await tx.query<Build>(
-      `SELECT ${progressColumns},next_node FROM semantic.definition_catalogue_build WHERE route=0 AND root_digest=$1 FOR UPDATE`,
-      [root],
-    )
-  ).rows[0];
+  let build = (await cataloguePublisherQuery<Build>(tx, 'buildLock', [root])).rows[0];
   if (!build) throw new DefinitionNotFoundError();
   if (build.state === 'ready' || build.state === 'refused') {
     const { next_node, ...status } = build;
     return status;
   }
-  await tx.query('SAVEPOINT catalogue_step');
+  await cataloguePublisherQuery(tx, 'stepSavepoint');
   let examined = 0;
   try {
     let task: Task | undefined;
     if (build.phase === 'node' && build.next_node !== null)
-      task = (
-        await tx.query<Task>(
-          'SELECT * FROM semantic.definition_catalogue_task WHERE route=0 AND root_digest=$1 AND task_id=$2',
-          [root, build.next_node],
-        )
-      ).rows[0];
+      task = (await cataloguePublisherQuery<Task>(tx, 'nodeTask', [root, build.next_node])).rows[0];
     if (!task && build.phase === 'node') {
-      await tx.query(
-        "UPDATE semantic.definition_catalogue_build SET phase='release' WHERE route=0 AND root_digest=$1",
-        [root],
-      );
+      await cataloguePublisherQuery(tx, 'phaseRelease', [root]);
       build.phase = 'release';
     }
     if (!task && build.phase === 'release') {
-      task = (
-        await tx.query<Task>(
-          "SELECT * FROM semantic.definition_catalogue_task WHERE route=0 AND root_digest=$1 AND kind='release' AND NOT done ORDER BY task_id LIMIT 1",
-          [root],
-        )
-      ).rows[0];
+      task = (await cataloguePublisherQuery<Task>(tx, 'releaseTask', [root])).rows[0];
       if (!task) {
         if (build.releases === '0') catalogueFail('invalid', 'Catalogue contains no bounded Release members');
-        await tx.query(
-          "UPDATE semantic.definition_catalogue_build SET phase='declaration' WHERE route=0 AND root_digest=$1",
-          [root],
-        );
+        await cataloguePublisherQuery(tx, 'phaseDeclaration', [root]);
         build.phase = 'declaration';
       }
     }
     if (!task && build.phase === 'declaration')
-      task = (
-        await tx.query<Task>(
-          "SELECT * FROM semantic.definition_catalogue_task WHERE route=0 AND root_digest=$1 AND kind='declaration' AND NOT done ORDER BY task_id LIMIT 1",
-          [root],
-        )
-      ).rows[0];
+      task = (await cataloguePublisherQuery<Task>(tx, 'declarationTask', [root])).rows[0];
     let rows = 0;
     if (task) {
-      const saved = await tx.query<{ size: number; kind: string }>(
-        'SELECT octet_length(bytes) AS size,kind FROM semantic.definition_catalogue_artifact WHERE route=0 AND digest=$1',
-        [task.digest],
-      );
+      const saved = await cataloguePublisherQuery<{ size: number; kind: string }>(tx, 'artifactSize', [task.digest]);
       if (!saved.rows[0]) {
-        await tx.query(
-          "UPDATE semantic.definition_catalogue_build SET state='incomplete',missing_digest=$2,steps=steps+1 WHERE route=0 AND root_digest=$1",
-          [root, task.digest],
-        );
-        await tx.query('RELEASE SAVEPOINT catalogue_step');
+        await cataloguePublisherQuery(tx, 'buildMissing', [root, task.digest]);
+        await cataloguePublisherQuery(tx, 'stepRelease');
         return (await readCatalogueBuild(tx, pin))!;
       }
       examined = saved.rows[0].size;
@@ -439,17 +401,15 @@ export async function advanceCatalogueBuild(
             ? await releaseStep(tx, root, task)
             : await declarationStep(tx, root, task);
     }
-    await tx.query(
-      `UPDATE semantic.definition_catalogue_build SET state=$2,missing_digest=NULL,error=NULL,steps=steps+1,indexed_rows=indexed_rows+$3,examined_bytes=examined_bytes+$4 WHERE route=0 AND root_digest=$1`,
-      [root, task ? 'building' : 'ready', rows, examined],
-    );
-    await tx.query('RELEASE SAVEPOINT catalogue_step');
+    await cataloguePublisherQuery(tx, 'buildProgress', [root, task ? 'building' : 'ready', rows, examined]);
+    await cataloguePublisherQuery(tx, 'stepRelease');
   } catch (error) {
     if (!(error instanceof CatalogueArtifactError)) throw error;
-    await tx.query('ROLLBACK TO SAVEPOINT catalogue_step');
-    await tx.query('RELEASE SAVEPOINT catalogue_step');
-    await tx.query(
-      "UPDATE semantic.definition_catalogue_build SET state='refused',error=$2,steps=steps+1,examined_bytes=examined_bytes+$3 WHERE route=0 AND root_digest=$1",
+    await cataloguePublisherQuery(tx, 'stepRollback');
+    await cataloguePublisherQuery(tx, 'stepRelease');
+    await cataloguePublisherQuery(
+      tx,
+      'buildRefused',
       // Code-point truncation keeps valid Unicode and at most 6 KiB of escaped JSON in the status projection.
       [
         root,
@@ -461,21 +421,29 @@ export async function advanceCatalogueBuild(
   return (await readCatalogueBuild(tx, pin))!;
 }
 export async function stepCatalogueBuild(pool: Pool, options: WriteOptions & { pin: KindCataloguePin }) {
+  const invocation = cataloguePublisherInvocation(pool, 'step', options.deadline);
   const pin = parseCataloguePin(options.pin);
   return result(
-    await runCommand(pool, commandOptions(options, 'definition_catalogues.step', 'definitions:publish'), async (tx) => {
-      const value = await advanceCatalogueBuild(tx, pin);
-      return {
-        value,
-        events: [event(CATALOGUE_PROGRESS, { rootDigest: pin.rootDigest, state: value.state, steps: value.steps })],
-      };
-    }),
+    await invocation.run(
+      pin.rootDigest,
+      commandOptions(options, 'definition_catalogues.step', 'definitions:publish'),
+      async (tx) => {
+        const value = await advanceCatalogueBuild(tx, pin);
+        await captureCataloguePublisherPosition(tx);
+        return {
+          value,
+          events: [event(CATALOGUE_PROGRESS, { rootDigest: pin.rootDigest, state: value.state, steps: value.steps })],
+        };
+      },
+    ),
   );
 }
 export async function runCatalogueBuildStep(pool: Pool, pin: KindCataloguePin, clock: () => Date) {
+  const invocation = cataloguePublisherInvocation(pool, 'step');
   return (
-    await runCommand(pool, { partition: 0, clock }, async (tx) => {
+    await invocation.run(pin.rootDigest, { partition: 0, clock }, async (tx) => {
       const value = await advanceCatalogueBuild(tx, parseCataloguePin(pin));
+      await captureCataloguePublisherPosition(tx);
       return {
         value,
         events: [event(CATALOGUE_PROGRESS, { rootDigest: pin.rootDigest, state: value.state, steps: value.steps })],
@@ -483,37 +451,74 @@ export async function runCatalogueBuildStep(pool: Pool, pin: KindCataloguePin, c
     })
   ).value;
 }
+/** A bounded mechanical step consumes only the durable authorized activation intent.
+ * It cannot finish publication: that requires a new actual definitions:activate command.
+ */
+export async function runCatalogueActivationStep(
+  pool: Pool,
+  pin: KindCataloguePin,
+  activationId: string,
+  clock: () => Date,
+) {
+  const invocation = cataloguePublisherInvocation(pool, 'activation-step');
+  const parsed = parseCataloguePin(pin);
+  return (
+    await invocation.run(parsed.rootDigest, { partition: 0, clock }, async (tx, _context, work) => {
+      const progress = await advanceCatalogueActivation(tx, parsed.rootDigest, activationId, work);
+      // Close and cut are separate replay-safe transitions. At most two are dispatched.
+      const value =
+        progress.state === 'closing'
+          ? await advanceCatalogueActivation(tx, parsed.rootDigest, activationId, work)
+          : progress;
+      await captureCataloguePublisherPosition(tx);
+      if (value.state === 'active') await advanceCatalogueRetirement(tx, parsed.rootDigest, work);
+      return { value, events: [] };
+    })
+  ).value;
+}
+
 export async function activateCatalogue(
   pool: Pool,
   options: WriteOptions & { pin: KindCataloguePin; expectedHead: number | null },
 ) {
+  const invocation = cataloguePublisherInvocation(pool, 'activate', options.deadline);
   const pin = parseCataloguePin(options.pin);
-  return result(
-    await runCommand(
-      pool,
-      commandOptions(options, 'definition_catalogues.activate', 'definitions:activate'),
-      async (tx, { transactionId }) => {
-        const build = await readCatalogueBuild(tx, pin);
-        if (!build) throw new DefinitionNotFoundError();
-        if (build.state !== 'ready') catalogueFail('missing', 'Catalogue indexes are not complete');
-        const saved = await tx.query<{ head: number }>(
-          `UPDATE semantic.definition_catalogue_head SET root_digest=$1,head=head+1,recorded_transaction_id=$3 WHERE route=0 AND head=$2 RETURNING head`,
-          [pin.rootDigest, options.expectedHead ?? 0, transactionId],
-        );
-        if (!saved.rows[0]) throw new StaleEditorialHeadError();
-        const value = { pin, head: saved.rows[0].head };
-        return {
-          value,
-          events: [
-            event(CATALOGUE_ACTIVATED, {
-              rootDigest: pin.rootDigest,
-              head: value.head,
-              kindSpec: pin.kindSpec,
-              reduction: pin.reduction,
-            }),
-          ],
-        };
-      },
-    ),
+  const command = await invocation.run(
+    pin.rootDigest,
+    commandOptions(options, 'definition_catalogues.activate', 'definitions:activate'),
+    async (tx, { transactionId }, work) => {
+      const build = await readCatalogueBuild(tx, pin);
+      if (!build) throw new DefinitionNotFoundError();
+      if (build.state !== 'ready') catalogueFail('missing', 'Catalogue indexes are not complete');
+      const activation = await requestCatalogueActivation(tx, pin, options.expectedHead ?? 0, transactionId, work);
+      const first = await advanceCatalogueActivation(tx, pin.rootDigest, activation.activation_id, work);
+      if (first.state === 'closing')
+        await advanceCatalogueActivation(tx, pin.rootDigest, activation.activation_id, work);
+      const head = await finishCatalogueActivation(tx, pin, activation.activation_id, transactionId, work);
+      await captureCataloguePublisherPosition(tx);
+      if (head !== null) await advanceCatalogueRetirement(tx, pin.rootDigest, work);
+      return {
+        value: { pin, head },
+        events: [
+          head === null
+            ? event(CATALOGUE_ACTIVATION_REQUESTED, {
+                rootDigest: pin.rootDigest,
+                activationId: activation.activation_id,
+              })
+            : event(CATALOGUE_ACTIVATED, {
+                rootDigest: pin.rootDigest,
+                head,
+                kindSpec: pin.kindSpec,
+                reduction: pin.reduction,
+              }),
+        ],
+      };
+    },
   );
+  // Pending progress, receipt and wakeup commit together. Throwing inside the
+  // command would roll back the close and lose the retained withdrawal cut.
+  // A replay preserves this result; fresh final authorization uses a fresh key.
+  if (command.value.head === null)
+    catalogueFail('missing', 'Catalogue Source withdrawal acknowledgements are unavailable');
+  return result({ ...command, value: { pin: command.value.pin, head: command.value.head! } });
 }

@@ -11,9 +11,8 @@ export function registerDefinitionCatalogueWork(context: WorkContext) {
     (rootDigest: string) => runCatalogueBuildStep(context.pool, cataloguePin(rootDigest), context.clock),
     {
       name: `${workflowName}.step`,
-      retriesAllowed: true,
-      maxAttempts: 10,
-      intervalSeconds: 1,
+      // A failed original dispatch stays spent; DBOS may not start a fresh allowance.
+      retriesAllowed: false,
     },
   );
   DBOS.registerWorkflow(
