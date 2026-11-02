@@ -1,12 +1,18 @@
 import { useContext } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { Exposure } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import type { LibraryRestoreInput, LibraryRestoreResult } from './entries-read';
 import { LibraryTitle } from './title';
 
 export type EntryFormContext = { locale: string; csrfToken?: string | null; returnTo?: string };
+
+const entryActionClassName = cn(
+  buttonVariants({ variant: 'outline', size: 'sm' }),
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring',
+);
 
 function ContextFields({ locale, csrfToken, returnTo }: EntryFormContext) {
   return (
@@ -22,14 +28,20 @@ function ContextFields({ locale, csrfToken, returnTo }: EntryFormContext) {
 export function EntryUndoForm({ undo, ...context }: EntryFormContext & { undo: LibraryRestoreInput }) {
   return (
     <Exposure operation="library_entry.restore">
-      <form method="post" action="/library/entry" className="flex flex-wrap items-center gap-3 text-sm">
+      <form
+        method="post"
+        action="/library/entry"
+        className="flex min-w-0 max-w-full flex-wrap items-center gap-3 text-sm [overflow-wrap:anywhere]"
+      >
         <ContextFields {...context} />
         <input type="hidden" name="intent" value="restore" />
         <input type="hidden" name="subjectId" value={undo.subjectId} />
         <input type="hidden" name="deletionId" value={undo.deletionId} />
         <input type="hidden" name="revision" value={undo.revision} />
-        <p role="status">{m.library_removed()}</p>
-        <button className={buttonVariants({ variant: 'outline', size: 'sm' })} type="submit">
+        <p role="status" className="min-w-0 max-w-full">
+          {m.library_removed()}
+        </p>
+        <button className={entryActionClassName} type="submit">
           {m.editor_undo()}
         </button>
       </form>
@@ -54,7 +66,7 @@ export function EntryRemoveForm({
   return (
     <Exposure operation="library_entry.restore">
       <Exposure operation="library_entry.delete">
-        <form method="post" action="/library/entry" className="my-2">
+        <form method="post" action="/library/entry" className="my-2 min-w-0 max-w-full">
           <ContextFields {...context} csrfToken={context.csrfToken ?? session?.csrfToken ?? null} />
           <input type="hidden" name="intent" value="remove" />
           <input type="hidden" name="subjectId" value={subjectId} />
@@ -63,7 +75,7 @@ export function EntryRemoveForm({
             <input type="hidden" name="incarnationId" value={incarnationId} />
           ) : null}
           <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-          <button className={buttonVariants({ variant: 'outline', size: 'sm' })} type="submit">
+          <button className={entryActionClassName} type="submit">
             {m.library_remove_from_library()}
           </button>
         </form>
@@ -86,7 +98,7 @@ export function EntryRestoreFeedback({ restore, locale }: { restore: LibraryRest
   const entry = restore.ok || restore.reason === 'occupied' ? restore.entry : undefined;
   const message = restoreFailureText(restore);
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 max-w-full space-y-3 [overflow-wrap:anywhere]">
       {message ? (
         <p role="status" className="text-sm text-muted-foreground">
           {message}
@@ -96,7 +108,7 @@ export function EntryRestoreFeedback({ restore, locale }: { restore: LibraryRest
         <article
           data-restored-entry
           data-entry-revision={entry.revision}
-          className="rounded-lg border border-border p-4"
+          className="min-w-0 max-w-full rounded-lg border border-border p-4"
         >
           <p className="font-medium">
             {entry.subject ? (
@@ -130,13 +142,16 @@ export function EntryFormPage({
   conflict?: boolean;
 }) {
   return (
-    <main className="mx-auto max-w-2xl space-y-6 p-6 text-foreground">
+    <main className="mx-auto min-w-0 max-w-2xl space-y-6 p-6 text-foreground [overflow-wrap:anywhere]">
       <h1 className="text-2xl font-semibold">{m.library_heading()}</h1>
       {undo ? <EntryUndoForm undo={undo} locale={locale} csrfToken={csrfToken} returnTo={returnTo} /> : null}
       {removed && !undo ? <p role="status">{m.library_removed()}</p> : null}
       {conflict ? <p role="status">{m.library_conflict()}</p> : null}
       {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
-      <a className="text-primary underline" href={returnTo}>
+      <a
+        className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-primary underline whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+        href={returnTo}
+      >
         {m.library_menu_back()}
       </a>
     </main>
