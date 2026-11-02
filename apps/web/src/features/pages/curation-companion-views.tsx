@@ -73,9 +73,13 @@ export function CurationCompanionViews({
                 if (candidate) setView(candidate);
               }}
             >
-              <NativeSelectOption value="" disabled>{m.curation_companion_choose_view()}</NativeSelectOption>
+              <NativeSelectOption value="" disabled>
+                {m.curation_companion_choose_view()}
+              </NativeSelectOption>
               {availableViews.map((candidate) => (
-                <NativeSelectOption key={candidate} value={candidate}>{viewNames[candidate]}</NativeSelectOption>
+                <NativeSelectOption key={candidate} value={candidate}>
+                  {viewNames[candidate]}
+                </NativeSelectOption>
               ))}
             </NativeSelect>
           </Field>
@@ -87,11 +91,12 @@ export function CurationCompanionViews({
               value={source}
               disabled={disabled}
               onChange={(event) => {
-                if (event.target.value === 'overview' || event.target.value === 'empty')
-                  setSource(event.target.value);
+                if (event.target.value === 'overview' || event.target.value === 'empty') setSource(event.target.value);
               }}
             >
-              <NativeSelectOption value="" disabled>{m.curation_companion_choose_source()}</NativeSelectOption>
+              <NativeSelectOption value="" disabled>
+                {m.curation_companion_choose_source()}
+              </NativeSelectOption>
               {hasOverview && (
                 <NativeSelectOption value="overview">{m.curation_companion_source_overview()}</NativeSelectOption>
               )}

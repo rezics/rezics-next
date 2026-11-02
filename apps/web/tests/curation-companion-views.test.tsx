@@ -12,17 +12,8 @@ import {
   type PresentationProfile,
   type View,
 } from '@rezics/composition';
-import {
-  addCompanionView,
-  resetCompanionView,
-  viewOf,
-  type Template,
-} from '../src/features/pages/curate';
-import {
-  draftPublicationProfile,
-  editView,
-  presentationDraft,
-} from '../src/features/pages/curate-view-editor-state';
+import { addCompanionView, resetCompanionView, viewOf, type Template } from '../src/features/pages/curate';
+import { draftPublicationProfile, editView, presentationDraft } from '../src/features/pages/curate-view-editor-state';
 import { fromComposition } from '../src/features/pages/editor-config';
 import { CurationPublication } from '../src/features/pages/curation-publish';
 
@@ -106,7 +97,11 @@ test('a curator adds, edits, publishes and confirms reset of one companion view'
       const data = fromComposition(source);
       data.content[0]!.props.text = { en: 'edited companion' };
       const draft = editView(
-        { ...presentationDraft({ ok: true, reader, profile: initial, head: 7, digest: profileDigest(initial) }), profile, selection },
+        {
+          ...presentationDraft({ ok: true, reader, profile: initial, head: 7, digest: profileDigest(initial) }),
+          profile,
+          selection,
+        },
         selection,
         data,
       );
@@ -130,7 +125,9 @@ test('a curator adds, edits, publishes and confirms reset of one companion view'
             setSelection({ template, view: 'overview' });
           }}
         />
-        <button data-publish type="button" onClick={publish}>Publish</button>
+        <button data-publish type="button" onClick={publish}>
+          Publish
+        </button>
         <output data-profile>{JSON.stringify(profile)}</output>
         <output data-resolved>{resolveView(profile, target, 'relations')?.scope ?? 'none'}</output>
       </>
@@ -156,8 +153,13 @@ test('a curator adds, edits, publishes and confirms reset of one companion view'
     const companion = output.querySelector(`section[aria-label="${m.curation_companion_views()}"]`)!;
     const add = button(m.curation_companion_add(), companion);
     expect(add.disabled).toBe(true);
-    expect(viewOf(JSON.parse(output.querySelector('[data-profile]')!.textContent!) as PresentationProfile, template, 'relations'))
-      .toBeUndefined();
+    expect(
+      viewOf(
+        JSON.parse(output.querySelector('[data-profile]')!.textContent!) as PresentationProfile,
+        template,
+        'relations',
+      ),
+    ).toBeUndefined();
     await select(0, 'relations');
     expect(add.disabled).toBe(true);
     await select(1, 'overview');
@@ -182,8 +184,13 @@ test('a curator adds, edits, publishes and confirms reset of one companion view'
     await click(button(m.curation_companion_reset(), companion));
     let dialog = window.document.querySelector('[role="alertdialog"]')!;
     await click(button(m.curation_companion_reset_cancel(), dialog));
-    expect(viewOf(JSON.parse(output.querySelector('[data-profile]')!.textContent!) as PresentationProfile, template, 'relations'))
-      .toBeDefined();
+    expect(
+      viewOf(
+        JSON.parse(output.querySelector('[data-profile]')!.textContent!) as PresentationProfile,
+        template,
+        'relations',
+      ),
+    ).toBeDefined();
     await click(button(m.curation_companion_reset(), companion));
     dialog = window.document.querySelector('[role="alertdialog"]')!;
     await click(button(m.curation_companion_reset_confirm(), dialog));

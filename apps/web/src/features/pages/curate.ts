@@ -160,11 +160,7 @@ export function addCompanionView(
 }
 
 /** Remove only the selected local override; overview shorthand and every sibling remain intact. */
-export function resetCompanionView(
-  profile: PresentationProfile,
-  template: Template,
-  view: View,
-): PresentationProfile {
+export function resetCompanionView(profile: PresentationProfile, template: Template, view: View): PresentationProfile {
   if (template.scope === 'route' || !isView(view) || view === 'overview')
     throw new TypeError('Unsupported companion view');
 
