@@ -278,6 +278,8 @@ type SpaceSetupFormProps = {
   transport: SetupTransport;
   boardChoices?: BoardChoiceSource;
 };
+type StepFocusActivation = { source: HTMLElement; generation: number; pointer: number };
+type StepFocusIntent = StepFocusActivation & { ticket: number; operation: number; step: number | null };
 
 export function SpaceSetupForm({
   initial,
@@ -324,6 +326,12 @@ function SpaceSetupFormVisit({
   const inFlight = useRef(false);
   const operation = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
+  const focusGeneration = useRef(0);
+  const pointerGeneration = useRef(0);
+  const keyboardActivation = useRef<StepFocusActivation | null>(null);
+  const focusIntent = useRef<StepFocusIntent | null>(null);
+  const focusingHeading = useRef(false);
+  const [focusCommit, setFocusCommit] = useState(0);
   const [boardId, setBoardId] = useState<string | null>(null);
   const [acceptedBoard, setAcceptedBoard] = useState<Extract<SetupCommand, { step: 'board' }> | null>(null);
   const [contextReferenceBaseline, setContextReferenceBaseline] = useState(snapshot.realm?.contextId ?? '');
@@ -370,6 +378,53 @@ function SpaceSetupFormVisit({
   const readReady = caller.binding.readReady ?? caller.binding.ready;
   const commandReady = caller.binding.commandReady ?? caller.binding.ready;
   const locked = busy || pending !== null || needsRefresh || !callerCurrent || !readReady;
+  function retireStepFocus() {
+    focusGeneration.current++;
+    keyboardActivation.current = null;
+    focusIntent.current = null;
+  }
+  useEffect(() => {
+    const onPointerDown = () => {
+      pointerGeneration.current++;
+      retireStepFocus();
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      const intent = focusIntent.current ?? keyboardActivation.current;
+      if (intent && event.target !== intent.source && event.target !== document.body && !focusingHeading.current)
+        retireStepFocus();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('focusin', onFocusIn);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('focusin', onFocusIn);
+      retireStepFocus();
+    };
+  }, []);
+  function noteKeyboardActivation(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    if (!(event.target instanceof HTMLElement)) return;
+    const generation = ++focusGeneration.current;
+    focusIntent.current = null;
+    keyboardActivation.current = { source: event.target, generation, pointer: pointerGeneration.current };
+  }
+  function currentFocusIntent(intent: StepFocusIntent) {
+    return (
+      intent.generation === focusGeneration.current &&
+      intent.pointer === pointerGeneration.current &&
+      intent.operation === operation.current &&
+      caller.owns(intent.ticket) &&
+      caller.current()
+    );
+  }
+  useCallerLayoutEffect(() => {
+    const intent = focusIntent.current;
+    if (!intent || intent.step !== step || !currentFocusIntent(intent)) return;
+    focusingHeading.current = true;
+    heading.current?.focus();
+    focusingHeading.current = false;
+    focusIntent.current = null;
+  }, [caller, callerRevision, focusCommit, step]);
   const { space, realm, permitted } = snapshot;
   const concept = currentBoardConcept(currentConceptSelection, realm?.schemeId ?? null)?.choice ?? null;
   // Each resource snapshot is its accepted baseline; another step's success cannot consume these local fields.
@@ -487,8 +542,18 @@ function SpaceSetupFormVisit({
       !contextPicker.selection(command.contextId, contextSelectionVersion)
     )
       return;
+    const activation = keyboardActivation.current;
+    keyboardActivation.current = null;
     const ticket = caller.ticket();
     const request = ++operation.current;
+    focusIntent.current =
+      activation &&
+      activation.generation === focusGeneration.current &&
+      activation.pointer === pointerGeneration.current &&
+      command.step !== 'space' &&
+      command.step !== 'board'
+        ? { ...activation, ticket, operation: request, step: null }
+        : null;
     inFlight.current = true;
     setPending(command);
     setBusy(true);
@@ -498,6 +563,8 @@ function SpaceSetupFormVisit({
       if (!caller.owns(ticket) || operation.current !== request) return;
       if (!retainSetupAttempt(result)) setPending(null);
       if (result.kind === 'failure') {
+        focusGeneration.current++;
+        focusIntent.current = null;
         setProblem(result);
         if (result.reason === 'conflict' || result.reason === 'denied') setNeedsRefresh(true);
         return;
@@ -525,16 +592,24 @@ function SpaceSetupFormVisit({
       if (current.kind === 'ready') {
         setSnapshot(current);
         setNeedsRefresh(false);
-        if (command.step === 'address') advance(1);
-        if (command.step === 'realm' || command.step === 'settings') advance(2);
-        if (command.step === 'scheme') advance(3);
+        const intent = focusIntent.current;
+        const source =
+          intent?.step === null && currentFocusIntent(intent) ? intent.source : undefined;
+        if (command.step === 'address') advance(1, source, source ? intent : undefined);
+        if (command.step === 'realm' || command.step === 'settings') advance(2, source, source ? intent : undefined);
+        if (command.step === 'scheme') advance(3, source, source ? intent : undefined);
       } else {
+        focusGeneration.current++;
+        focusIntent.current = null;
         setProblem(current);
         setNeedsRefresh(true);
       }
     } catch {
-      if (caller.owns(ticket) && operation.current === request)
+      if (caller.owns(ticket) && operation.current === request) {
+        focusGeneration.current++;
+        focusIntent.current = null;
         setProblem({ kind: 'failure', reason: 'unavailable', status: 503 });
+      }
     } finally {
       if (caller.owns(ticket) && operation.current === request) {
         inFlight.current = false;
@@ -557,14 +632,25 @@ function SpaceSetupFormVisit({
           ? permitted.scheme
           : permitted.board;
   const titleId = useId();
-  function advance(next: number) {
+  function advance(next: number, source?: HTMLElement, carried?: StepFocusIntent) {
+    const generation = ++focusGeneration.current;
+    const ticket = carried?.ticket ?? caller.ticket();
+    const request = carried?.operation ?? operation.current;
+    focusIntent.current =
+      source && caller.current() && caller.owns(ticket) && operation.current === request
+        ? { source, generation, pointer: pointerGeneration.current, ticket, operation: request, step: next }
+        : null;
+    keyboardActivation.current = null;
     setStep(next);
-    // The heading persists across steps, so keyboard navigation keeps a stable focus target.
-    heading.current?.focus();
+    setFocusCommit((commit) => commit + 1);
   }
   function nextButton(next: number) {
     return (
-      <Button type="button" disabled={locked} onClick={() => advance(next)}>
+      <Button
+        type="button"
+        disabled={locked}
+        onClick={(event) => advance(next, event.detail === 0 ? event.currentTarget : undefined)}
+      >
         {m.space_setup_continue()}
         <ArrowRight className="shrink-0 rtl:rotate-180" aria-hidden="true" />
       </Button>
@@ -637,6 +723,7 @@ function SpaceSetupFormVisit({
     <div
       className="min-w-0 space-y-6 [overflow-wrap:anywhere] [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:h-auto [&_button]:whitespace-normal [&_button]:text-start [&_input]:min-w-0 [&_select]:min-w-0 [&_p]:text-start [&_summary]:min-h-11 [&_summary]:content-center"
       aria-busy={busy}
+      onKeyDownCapture={noteKeyboardActivation}
     >
       <p className="max-w-2xl text-base leading-relaxed text-muted-foreground">{m.space_setup_journey_intro()}</p>
       <nav aria-label={m.space_setup_steps()}>
@@ -649,7 +736,7 @@ function SpaceSetupFormVisit({
                   type="button"
                   disabled={!reachable[index] || locked || paused || Boolean(boardId)}
                   aria-current={index === step ? 'step' : undefined}
-                  onClick={() => advance(index)}
+                  onClick={(event) => advance(index, event.detail === 0 ? event.currentTarget : undefined)}
                   className="flex min-h-14 min-w-0 w-full items-center gap-2 rounded-xl border border-border px-3 py-3 text-start text-sm font-medium aria-[current=step]:border-primary aria-[current=step]:bg-primary/5 aria-[current=step]:text-primary disabled:opacity-50"
                 >
                   {completed[index] ? (
@@ -920,7 +1007,12 @@ function SpaceSetupFormVisit({
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   {step > 0 ? (
-                    <Button variant="ghost" type="button" disabled={locked} onClick={() => advance(step - 1)}>
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      disabled={locked}
+                      onClick={(event) => advance(step - 1, event.detail === 0 ? event.currentTarget : undefined)}
+                    >
                       <ArrowLeft className="shrink-0 rtl:rotate-180" aria-hidden="true" />
                       {m.space_setup_back()}
                     </Button>
