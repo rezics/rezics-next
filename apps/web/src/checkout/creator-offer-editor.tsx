@@ -355,27 +355,18 @@ function CreatorOfferForm({
       ) : (
         <>
           <section
-            className="space-y-4 rounded-xl border bg-card p-5 text-card-foreground"
+            className="min-w-0 space-y-4 rounded-xl border bg-card p-5 text-card-foreground"
             aria-labelledby={`${fieldId}-version`}
           >
             <h2 id={`${fieldId}-version`} className="text-lg font-semibold">
               {m.creator_edition()}
             </h2>
             <p className="text-sm leading-relaxed">{m.creator_fixed_version()}</p>
-            <dl className="space-y-3 text-sm">
-              {[
-                [m.creator_edition(), editor.edition.editionId],
-                [m.creator_revision(), editor.edition.revisionId],
-                [m.creator_digest(), editor.edition.sha256],
-                [m.creator_licence(), editor.edition.licence],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <dt className="text-muted-foreground">{label}</dt>
-                  <dd className="break-all">{value}</dd>
-                </div>
-              ))}
+            <dl className="min-w-0 text-sm">
+              <dt className="text-muted-foreground">{m.creator_licence()}</dt>
+              <dd className="min-w-0 [overflow-wrap:anywhere]">{editor.edition.licence}</dd>
             </dl>
-            <p className="text-sm text-muted-foreground">{m.creator_current_rights()}</p>
+            <p className="text-sm leading-relaxed">{m.creator_current_rights()}</p>
           </section>
           <form onSubmit={submit} className="space-y-6 rounded-xl border bg-card p-5 text-card-foreground sm:p-6">
             <Field>
@@ -445,6 +436,23 @@ function CreatorOfferForm({
               </Button>
             )}
           </form>
+          <details className="min-w-0 rounded-xl border bg-card p-5 text-card-foreground">
+            <summary className="min-h-11 cursor-pointer content-center rounded-sm text-sm font-medium [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              {m.creator_edition_details_summary()}
+            </summary>
+            <dl className="mt-3 min-w-0 space-y-3 text-sm">
+              {[
+                [m.creator_edition_details_edition_id(), editor.edition.editionId],
+                [m.creator_edition_details_revision_id(), editor.edition.revisionId],
+                [m.creator_edition_details_digest(), editor.edition.sha256],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <dt className="text-muted-foreground">{label}</dt>
+                  <dd className="min-w-0 select-text break-all font-mono text-xs">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </details>
         </>
       )}
     </article>
