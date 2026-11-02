@@ -45,7 +45,8 @@ test('reservePerHour accepts every finite positive fractional hourly value while
       ).toThrow('invalid reservePerHour');
     }
 
-    expect(reloadWithReserve(0)).toEqual(initial[0]!);
+    // An invalid edit keeps the last valid version's pools, not the start-time ones.
+    expect(reloadWithReserve(0).policy.reservePerHour).toBe(100 / 168);
     expect(events).toHaveLength(1);
     expect(events[0]).toContain('invalid reservePerHour');
   } finally {
@@ -93,7 +94,7 @@ test('a long-running control-plane process chooses with the current local pool p
   }
 });
 
-test('unreadable or invalid settings preserve start-time pools and report the error once', () => {
+test('unreadable or invalid settings preserve the last valid pools and report the error once', () => {
   const h = harness();
   try {
     const events: string[] = [];

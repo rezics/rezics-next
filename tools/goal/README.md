@@ -48,6 +48,13 @@ them: `bun test <files>`, the kernel check for kernel tests and the focused Web 
 these commands for the files the branch already changes, including the sibling tests of changed sources. Waits use one
 call with a yield of at least 300 seconds. The task's acceptance command defines when its work is done.
 
+A task whose paths touch `apps/web` or `packages/ui`, or an interface task without either, works against Storybook
+served from its own worktree (`storybook.ts`). Each catalogue gets a loopback port derived from the worktree path, so
+resumes reconnect and concurrent worktrees never share a server; a Web task also gets its own UI catalogue for the
+`STORYBOOK_UI_URL` ref. The prompt names the start commands and `/mcp` endpoints, and the Codex adapter adds those
+endpoints as MCP servers on fresh launches and resumes. The account's own MCP servers, such as the browser and
+Playwright, stay enabled; consultations still ignore the account configuration.
+
 The dev landing train runs exactly one mandatory root typecheck on each final candidate: once for a combined batch or
 once for an individual landing. It does not run affected, sibling, acceptance, native, import or page-story checks
 before dev advances. Those checks run through the independent verifier after integration. Promotion runs the full
@@ -130,6 +137,12 @@ the current run from that offset, so a resumed CLI that fails before writing a n
 previous turn's `waiting` result. Attempt measurements still include the available log history. A waiting attempt gets
 up to three resume launch attempts; if all fail before opening a session, Goal stops the attempt and sends one
 environment notice with the launch error line to the supermanager.
+
+Only a completed agent message is a Codex answer; started or streamed items and rollout echoes never replace it. A
+worker that exits 0 with a resumable session but without its exit object is asked for it once, in the same session and
+attempt: settlement leaves the attempt waiting with a `final-report-requested` event, and the host resumes it like a
+check wake with only a short report-only prompt (no edits, commands or checks). If that run still gives no report, the
+attempt ends as an ordinary missing-report failure.
 
 Every fresh launch, retry, held-task release and check wake renders a bounded controller launch context from the current
 task generation under its lease. It records the current contract hash and path, task base and worktree identity, and one
@@ -298,6 +311,15 @@ is in `risk-areas.json`. Account names, pool mapping, executable/configuration p
 in the untracked `<main checkout>/.temp/goal/local.json`. The loader refuses a tracked local file. There is no implicit
 account or pool policy.
 
+Any object in the file may carry `note` or `$comment` annotations; they are dropped before validation, and every other
+unknown field is an error. Validate an edit before replacing the live file with
+`bun tools/goal/src/cli.ts config check [file]` (the live file when omitted): it applies the strict schema, never falls
+back and changes nothing. Each valid version of a local file is kept in `<main checkout>/.temp/goal/configuration/`. When
+the live file later fails to read or validate, every process, including a new CLI command, uses that file's last valid
+version (revalidated with the current schema and environment) and reports the exact error once to the operations
+manager and the supermanager; the next valid version is adopted normally. Without a valid version on record the error
+stops the command as before.
+
 The following illustrates the local schema. Replace placeholders with local values and supply the required policy
 fields listed below; the empty policy object deliberately provides no account policy.
 
@@ -343,9 +365,9 @@ one pool within an hour temporarily exclude its allowance for one hour. Other na
 aliases of that allowance immediately. There is no credit purchase or reset-card redemption path.
 
 Control-plane processes reload only the `pools` entries from their startup local settings file whenever they choose a
-pool. An unchanged file is not reparsed; the rest of the process settings retain their startup values. If the file
-cannot be read or its pool entries are invalid, the process keeps its startup pool policies and sends one error event
-to the supermanager inbox.
+pool. An unchanged file is not reparsed; the rest of the process settings retain their startup values. If a changed
+file cannot be read or its pool entries are invalid, the process keeps the pools of the last valid version and sends one
+error event per changed version to the supermanager inbox.
 
 `mainCheckout`, `stateDirectory`, `worktreeRoot`, `mainBranch`, `integrationBranch`, `promotionParallelism`,
 `branchPrefix`, `terminationGraceMs`, `silenceMs`,
@@ -611,7 +633,10 @@ experiments measure it.
 The watchdog runs with reminder delivery and reports running tasks, or ready tasks with a pending retry intent, that
 have had no worker for ten minutes after an attempt ended and its recorded driver identity is no longer live. A reused
 PID does not count as the same driver. A live driver may still be settling the attempt, including running affected tests
-or waiting for a check-host slot. It also reports a `stabilize` branch that has stayed out of the integration branch for
+or waiting for a check-host slot. A pending retry that waits by design is not reported: one whose `after` dependencies
+are not yet integrated, whose backoff time has not come, or that waits out a check-host outage. `goal status` shows
+such a retry's `pendingRetry` reason (`dependencies`, `backoff`, `check-hosts`, or `start` when it waits only for a
+starter or capacity). It also reports a `stabilize` branch that has stayed out of the integration branch for
 thirty minutes. Failure signatures from attempts ended in the previous thirty minutes are grouped: three matching
 failures across at least two tasks produce one incident with the attempt and task counts, affected Goal names and one
 example. The incident repeats after two hours while the signature remains present.
@@ -915,6 +940,17 @@ sorted conflict paths recur without progress: a second time in a row for product
 newer target, changed paths or a new worker commit remains retryable.
 
 Attempts persist the driver process identity alongside the worker identity. Orphan recovery waits for the worker group to exit, then settles its run log under the task lifecycle lease; unexpected driver exceptions are recorded as environment failures and delivered to the manager.
+
+Settlement runs Git (commit of leftover work, evidence bundles, branch checks) outside the store's write
+transactions, so it never holds the SQLite lock while a child process runs. A settlement write that meets another
+process's lock beyond the busy timeout is retried after 0.5, 1, 2, 4 and 8 seconds; a successful exit then lands once,
+as if there had been no contention. If the lock outlasts every try, the attempt is not classified as a worker failure:
+its driver is released and the host's orphan sweep settles the same exit again.
+
+Each task's step in a recovery sweep (cancelled-dependency notice, dependency release, proof reservation release,
+orphaned landing, pending or first start, worker adoption) is isolated: its failure is logged, reported once per
+process to the supermanager with the task and step, and the sweep goes on with the other tasks. A store-wide failure,
+such as reading the task list, still fails the sweep; store contention is only logged.
 
 Process cleanup verifies the leader's PID, start time, boot and detached group before sending signals. A reused
 leader PID may settle only when the original group has no live members and the kernel confirms it is absent with
@@ -1336,7 +1372,7 @@ the supermanager receives one alert with links to the earlier and fresh logs.
 
 ```sh
 bun tools/goal/src/cli.ts status [task]
-bun tools/goal/src/cli.ts retry <task> [--brief <file>]
+bun tools/goal/src/cli.ts retry <task> [--brief <file>] [--fresh-session]
 bun tools/goal/src/cli.ts stop <task>
 bun tools/goal/src/cli.ts cancel <task>
 bun tools/goal/src/cli.ts consult <task>
@@ -1357,6 +1393,11 @@ bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] 
 ```
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
+
+A retry resumes the previous attempt's provider session while the pool, CLI and model stay the same. `--fresh-session`
+starts the next attempt in a new session instead, keeping the branch, worktree, commits and uncommitted work; the
+choice is kept on the task through capacity waits, dependency holds and restarts, and the attempt it creates consumes
+it, so later retries resume again. It combines with `--brief` but not with the proof options.
 Explicit retries are recorded with their amended brief as pending host start intents and return without waiting for capacity. The host consumes pending intents on recovery ticks in their saved order, starting each once as capacity becomes available.
 Product work integrating into dev can be retried at any generation: `retry <task>`, with or without
 `--expected-attempt 0`, also starts a never-started task, and `--brief` also amends a retry that is still waiting to

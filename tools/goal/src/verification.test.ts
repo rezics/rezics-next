@@ -755,7 +755,7 @@ import { WorkerTasks } from './tasks.ts';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
 import { reading } from './test-support.ts';
 import { proofExecutionUnavailable, ProofUnavailableError } from './verification.ts';
-import { createRuntime, loadSettings } from './config.ts';
+import { checkSettings, createRuntime, loadSettings } from './config.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import type { Brief } from './types.ts';
 
@@ -1681,7 +1681,7 @@ test('historical reader settings resolve only the explicit local source and reje
     );
     local.integration.checkScriptReaderRoot = '';
     writeFileSync(h.settings.localFile, JSON.stringify(local));
-    expect(() => loadSettings({ cwd: h.root, env: {} })).toThrow('nonempty');
+    expect(() => checkSettings({ cwd: h.root, env: {} })).toThrow('nonempty');
   } finally {
     h.dispose();
   }

@@ -243,6 +243,8 @@ export type RetryOptions = {
   awaitCheckHosts?: boolean;
   /** Start only while this is still the current attempt: a retry another process already started is not repeated. */
   expectedAttempt?: number;
+  /** Start the next attempt in a new provider session, keeping the branch and worktree. */
+  freshSession?: boolean;
 };
 /** Metadata-only first/future proof registration, including stopped/exited runs with historical reservations. */
 export type ProofStartOptions = {
@@ -960,6 +962,7 @@ export class WorkerTasks {
             current.brief = reshaped.brief;
             current.briefPath = briefPath;
             current.taskClass = reshaped.taskClass;
+            if (options.freshSession) current.freshSession = true;
             priorityChanged = this.applyRetryPriority(current, previousCritical, actor, authorization);
             current.state = 'held';
             current.pendingBriefChange = {
@@ -979,6 +982,7 @@ export class WorkerTasks {
                 const retryOptions = { ...options };
                 delete retryOptions.brief;
                 delete retryOptions.expectedAttempt;
+                delete retryOptions.freshSession;
                 this.store.saveRetryIntent(ref, retryOptions);
               }
             }
@@ -1007,6 +1011,7 @@ export class WorkerTasks {
     const retryOptions = { ...options };
     delete retryOptions.brief;
     delete retryOptions.expectedAttempt;
+    delete retryOptions.freshSession;
     let priorityChanged = false;
     try {
       this.store.recordExplicitRetry(
@@ -1018,6 +1023,7 @@ export class WorkerTasks {
           }
           if (!['ready', 'running', 'landing', 'stopped'].includes(current.state))
             throw new Error(`cannot retry ${current.state} task`);
+          if (options.freshSession) current.freshSession = true;
           if (reshaped) {
             const previousCritical = criticalPriority(current.brief, current.taskClass);
             current.brief = reshaped.brief;
@@ -1526,7 +1532,9 @@ export class WorkerTasks {
       // different: release stops its waiting attempt, but its saved checks still need their original session.
       // Terminal records take precedence over checks retained from an earlier waiting turn.
       const continuingCheckWait = old?.state === 'stopped' && Boolean(old.checks?.length) && !this.store.record(old);
+      // The flag lives on the task, so it survives capacity waits, dependency holds and restarts until used.
       const resumeSession =
+        !task.freshSession &&
         !(heldRelease && briefChange && !continuingCheckWait) &&
         oldSession &&
         agentAdapter(profile.cli).canResume &&
@@ -1608,6 +1616,10 @@ export class WorkerTasks {
           delete current.pendingBriefChange;
         });
       } else task = this.store.task(taskId);
+      if (task.freshSession)
+        task = this.store.updateTask({ taskId, attempt: next.attempt }, (current) => {
+          delete current.freshSession;
+        });
       let setupStep = 'checking worktree leftovers';
       let retryPrepared = false;
       try {

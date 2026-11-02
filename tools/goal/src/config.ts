@@ -6,6 +6,12 @@ import type { DerivedFile, Pool, PromotionPlacementSettings, Settings } from './
 import { validatePath } from './briefs.ts';
 import { readWebModules } from './workspace.ts';
 import { readPoolPolicies } from './pools.ts';
+import {
+  configurationProblem,
+  loadLocalSettings,
+  readLocalFile,
+  reportedConfigurationProblem,
+} from './local-settings.ts';
 
 import type { Database } from 'bun:sqlite';
 import { openDb } from './db.ts';
@@ -177,8 +183,8 @@ export function mainCheckout(cwd = process.cwd()): string {
   return dirname(common);
 }
 
-/** Package defaults < untracked local settings < explicit environment paths. No account fallback is implicit. */
-export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings {
+type SettingsSource = { env: NodeJS.ProcessEnv; initialMain: string; localFile: string };
+function settingsSource(options: SettingsOptions): SettingsSource {
   const env = options.env ?? process.env;
   const cwd = resolve(options.cwd ?? process.cwd());
   const initialMain = resolve(cwd, env.GOAL_MAIN_CHECKOUT || mainCheckout(cwd));
@@ -186,7 +192,30 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
     cwd,
     options.localFile ?? env.GOAL_LOCAL_CONFIG ?? join(initialMain, '.temp/goal/local.json'),
   );
-  const local = existsSync(localFile) ? object(JSON.parse(readFileSync(localFile, 'utf8')), 'local settings') : {};
+  return { env, initialMain, localFile };
+}
+/** The live local file the options resolve to. */
+export function settingsFile(options: SettingsOptions = {}): string {
+  return settingsSource(options).localFile;
+}
+
+/**
+ * Package defaults < untracked local settings < explicit environment paths. No account fallback is implicit.
+ * When the live file is invalid, the last version of that same file that validated is used instead (see
+ * `local-settings.ts`), so one bad edit does not stop every command; the error is reported by `createRuntime`.
+ */
+export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings {
+  const source = settingsSource(options);
+  return loadLocalSettings(source.localFile, source.initialMain, (local) => settingsFromLocal(local, source));
+}
+/** Validate a candidate strictly: no last-valid fallback, and the live state is neither read nor written. */
+export function checkSettings(options: SettingsOptions = {}): ConfiguredSettings {
+  const source = settingsSource(options);
+  return settingsFromLocal(readLocalFile(source.localFile), source);
+}
+
+function settingsFromLocal(value: unknown, { env, initialMain, localFile }: SettingsSource): ConfiguredSettings {
+  const local = object(value, 'local settings');
   keys(
     local,
     [
@@ -372,6 +401,15 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
         if (typeof integration.devLandingChecks !== 'boolean') throw new Error('devLandingChecks must be a boolean');
         return integration.devLandingChecks;
       })(),
+      ...(integration.devPrelandingTypecheck === undefined
+        ? {}
+        : {
+            devPrelandingTypecheck: (() => {
+              if (typeof integration.devPrelandingTypecheck !== 'boolean')
+                throw new Error('devPrelandingTypecheck must be a boolean');
+              return integration.devPrelandingTypecheck;
+            })(),
+          }),
       tmuxCommand: text(integration.tmuxCommand, 'tmuxCommand'),
       tmuxSession: text(integration.tmuxSession, 'tmuxSession'),
       managerCompactTokens: positive(integration.managerCompactTokens, 'managerCompactTokens'),
@@ -431,6 +469,13 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const tasks = options.tasks ?? new WorkerTasks(settings, store);
   const queue = new SqliteLandingQueue(db, store);
   const inbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
+  const problem = configurationProblem(settings);
+  if (problem && !problem.reported) {
+    const summary = `Local settings ${problem.file} are invalid: ${problem.error}. Goal keeps using the last valid version of that file until it changes; validate an edit with \`goal config check\` first.`;
+    for (const managerId of new Set([settings.integration.operationsManager, settings.integration.supermanager]))
+      if (managerId) inbox.deliver({ managerId, kind: 'instruction', summary });
+    reportedConfigurationProblem(problem);
+  }
   const sharedInbox = new SharedInboxQueries(db);
   const checkResultOptions = {
     root: settings.mainCheckout,

@@ -1242,6 +1242,7 @@ export type TrainOptions = {
     batchSize?: number;
     batchAcceptanceConcurrency?: number;
     devLandingChecks?: boolean;
+    devPrelandingTypecheck?: boolean;
     gateTimeoutMs?: number;
   };
   queue: SqliteLandingQueue;
@@ -1331,6 +1332,11 @@ export class MergeTrain {
     logPath: string,
   ): Promise<{ command: string[]; result: GateResult }> {
     const command = rootTypecheckCommand(changedFiles(tree, base));
+    // With devPrelandingTypecheck off, dev lands without a compiler run; the verifier checks dev after the merge.
+    if (this.options.integration?.devPrelandingTypecheck === false) {
+      appendFileSync(logPath, 'Prelanding typecheck skipped (devPrelandingTypecheck off); dev is verified after the merge\n');
+      return { command, result: { passed: true, output: '', timedOut: false } };
+    }
     const run =
       this.options.runTypecheck ??
       this.options.runGate ??

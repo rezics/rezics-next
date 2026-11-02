@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { loadSettings } from './config.ts';
+import { checkSettings, loadSettings } from './config.ts';
 import defaults from '../defaults.json';
 import { launchCommand } from './launch.ts';
 import { fixturePool, harness } from './test-support.ts';
@@ -34,7 +34,7 @@ test('a burn ceiling below one percent an hour is a valid pool policy; zero and 
     for (const invalid of [0, -1]) {
       local.pools[0].policy.maxBurnPerHour = invalid;
       writeFileSync(initial.localFile, JSON.stringify(local));
-      expect(() => loadSettings({ cwd: h.root, env: {} })).toThrow('invalid maxBurnPerHour');
+      expect(() => checkSettings({ cwd: h.root, env: {} })).toThrow('invalid maxBurnPerHour');
     }
   } finally {
     h.dispose();

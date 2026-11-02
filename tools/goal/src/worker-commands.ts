@@ -13,6 +13,7 @@ import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import type { LandingQueue, ManagerInbox } from './contracts.ts';
 import type { AttemptRecord, Effort, Settings, Task, Tokens } from './types.ts';
 import { devVerificationState } from './dev-verifier.ts';
+import { retryWait } from './watchdog.ts';
 import { authenticatedCallingManager } from './integration-cli.ts';
 import { authenticatedManager } from './priority-authority.ts';
 
@@ -79,10 +80,24 @@ export async function runWorkerCommand(
       print(JSON.stringify(tasks.amend(arg, { expectedAttempt, brief }, authenticatedManager(store.db, env) ?? null)));
     } else if (command === 'status') {
       if (argv.length > 1) throw new Error('usage: status [task]');
-      const show = (task: Task) =>
-        task.state === 'held'
-          ? { ...task, waitingFor: (task.brief.after ?? []).filter((id) => store.task(id).state !== 'merged') }
-          : task;
+      const show = (task: Task) => {
+        const intent = task.currentAttempt
+          ? store.retryIntent({ taskId: task.id, attempt: task.currentAttempt })
+          : undefined;
+        const wait =
+          intent?.status === 'pending'
+            ? (retryWait(intent, task, (id) => store.dependency(id)?.state, Date.now(), settings.stateDirectory) ?? {
+                reason: 'start',
+              })
+            : undefined;
+        return {
+          ...task,
+          ...(task.state === 'held'
+            ? { waitingFor: (task.brief.after ?? []).filter((id) => store.task(id).state !== 'merged') }
+            : {}),
+          ...(wait ? { pendingRetry: wait } : {}),
+        };
+      };
       const tasksValue = arg ? show(store.task(arg)) : store.tasks().map(show);
       print(
         JSON.stringify(
@@ -163,14 +178,20 @@ export async function runWorkerCommand(
     } else if (command === 'retry') {
       if (!arg)
         throw new Error(
-          'usage: retry <task> [--proof-start | --release-proof] [--expected-attempt <n>] [--brief <file>] [--remove-after <task>]',
+          'usage: retry <task> [--proof-start | --release-proof] [--expected-attempt <n>] [--brief <file>] [--remove-after <task>] [--fresh-session]',
         );
       let brief: string | undefined;
       let expectedAttempt: number | undefined;
       const removeAfter: string[] = [];
       let proofStart = false;
       let releaseProof = false;
+      let freshSession = false;
       for (let index = 1; index < argv.length;) {
+        if (argv[index] === '--fresh-session' && !freshSession) {
+          freshSession = true;
+          index++;
+          continue;
+        }
         if (argv[index] === '--release-proof' && !releaseProof) {
           releaseProof = true;
           index++;
@@ -196,6 +217,8 @@ export async function runWorkerCommand(
         else throw new Error(`invalid retry option: ${flag}`);
         index += 2;
       }
+      if (freshSession && (releaseProof || proofStart))
+        throw new Error('--fresh-session applies only to an ordinary retry');
       if (releaseProof) {
         if (expectedAttempt === undefined || proofStart || brief || removeAfter.length)
           throw new Error('--release-proof requires only --expected-attempt <current-generation>');
@@ -219,7 +242,11 @@ export async function runWorkerCommand(
         try {
           tasks.queueRetry(
             arg,
-            { ...(brief ? { brief } : {}), ...(expectedAttempt === undefined ? {} : { expectedAttempt }) },
+            {
+              ...(brief ? { brief } : {}),
+              ...(expectedAttempt === undefined ? {} : { expectedAttempt }),
+              ...(freshSession ? { freshSession } : {}),
+            },
             priorityActor,
           );
         } catch (error) {

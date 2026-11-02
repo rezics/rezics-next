@@ -56,6 +56,33 @@ test('a running task whose attempt ended and that nothing will retry is a violat
   expect(found[1]!.summary).toContain('pending retry for 45 min');
 });
 
+test('a pending retry held for dependencies or a backoff is waiting by design, not missing its starter', () => {
+  const tasks = [
+    { id: 'held', state: 'ready' as const, currentAttempt: 1, brief: { goal: 'web', after: ['producer'] } },
+    { id: 'backoff', state: 'ready' as const, currentAttempt: 1, brief: { goal: 'web', after: [] } },
+    { id: 'lost', state: 'ready' as const, currentAttempt: 1, brief: { goal: 'web', after: ['done'] } },
+  ] as Partial<Task>[];
+  const attempts = tasks.map((task) => ({
+    taskId: task.id!,
+    attempt: 1,
+    state: 'exited' as const,
+    endedAt: minutesAgo(393),
+  }));
+  const intents = [
+    { taskId: 'held', attempt: 1, status: 'pending' as const, options: {} },
+    {
+      taskId: 'backoff',
+      attempt: 1,
+      status: 'pending' as const,
+      options: { notBefore: new Date(now + 60_000).toISOString() },
+    },
+    { taskId: 'lost', attempt: 1, status: 'pending' as const, options: {} },
+  ];
+  const states: Record<string, string> = { producer: 'running', done: 'integrated' };
+  const found = violations({ ...store(tasks, attempts, intents), dependency: (id) => ({ state: states[id]! }) }, now);
+  expect(found.map((violation) => violation.key)).toEqual(['no-worker:lost:1']);
+});
+
 test('an exited attempt with a live driver is not reported while its driver settles it', () => {
   const driver = processIdentity();
   expect(driver).not.toBeNull();

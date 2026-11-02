@@ -5,7 +5,7 @@ import { join, sep } from 'node:path';
 import { sameProcess } from './process.ts';
 import { CHECK_HOST_TRANSPORT, readLogTail } from './records.ts';
 import type { WorkerStore } from './store.ts';
-import type { Attempt, Task } from './types.ts';
+import type { Attempt, RetryIntent, Task } from './types.ts';
 import type { ManagerEventKind } from './contracts.ts';
 import { capacityWaiters, checkWaitMs } from './launch.ts';
 
@@ -390,20 +390,47 @@ function head(checkout: string, branch: string): string | undefined {
   return result.status === 0 ? result.stdout.trim() : undefined;
 }
 
+/**
+ * Why a pending retry deliberately does not start yet: unmet `after` dependencies, a backoff time, or a check-host
+ * outage it waits out. Null when it is waiting only for a starter or capacity.
+ */
+export function retryWait(
+  intent: RetryIntent,
+  task: Pick<Task, 'brief'>,
+  dependencyState: (id: string) => string | undefined,
+  now: number,
+  stateDirectory?: string,
+):
+  | { reason: 'dependencies'; waitingFor: string[] }
+  | { reason: 'backoff'; until: string }
+  | { reason: 'check-hosts'; hosts: string[] }
+  | null {
+  const waitingFor = (task.brief.after ?? []).filter(
+    (id) => !['integrated', 'merged'].includes(dependencyState(id) ?? ''),
+  );
+  if (waitingFor.length) return { reason: 'dependencies', waitingFor };
+  const until = intent.options?.notBefore;
+  if (until && Date.parse(until) > now) return { reason: 'backoff', until };
+  const hosts = intent.options?.awaitCheckHosts && stateDirectory ? checkHostsInOutage(stateDirectory) : [];
+  return hosts.length ? { reason: 'check-hosts', hosts } : null;
+}
+
 /** The violations present now, keyed so that one violation is reported once per period. */
 export function violations(
-  store: Pick<WorkerStore, 'attempt' | 'retryIntents'> & Partial<Pick<WorkerStore, 'tasks' | 'activeTasks'>>,
+  store: Pick<WorkerStore, 'attempt' | 'retryIntents'> &
+    Partial<Pick<WorkerStore, 'tasks' | 'activeTasks' | 'dependency'>>,
   now: number,
   tasks = store.activeTasks?.() ?? store.tasks?.() ?? [],
   stateDirectory?: string,
 ): { key: string; summary: string }[] {
   const found: { key: string; summary: string }[] = [];
-  const pending = new Set(
+  const pending = new Map(
     store
       .retryIntents()
       .filter((intent) => intent.status === 'pending')
-      .map((intent) => `${intent.taskId}:${intent.attempt}`),
+      .map((intent) => [`${intent.taskId}:${intent.attempt}`, intent] as const),
   );
+  const dependencyState = (id: string) => store.dependency?.(id)?.state;
   const waiting = stateDirectory ? capacityWaiters(stateDirectory) : new Set<string>();
   for (const task of tasks) {
     if (!task.currentAttempt || !['running', 'ready'].includes(task.state)) continue;
@@ -412,9 +439,12 @@ export function violations(
     if (attempt.driver && sameProcess(attempt.driver)) continue;
     const idle = now - Date.parse(attempt.endedAt);
     if (idle < NO_WORKER_MS) continue;
-    const intent = pending.has(`${task.id}:${attempt.attempt}`);
+    const retry = pending.get(`${task.id}:${attempt.attempt}`);
+    const intent = retry !== undefined;
     if (task.state === 'ready' && !intent) continue;
     if (task.state === 'ready' && intent && waiting.has(task.id)) continue;
+    // A retry held for dependencies, a backoff or a host outage is waiting by design, not missing its starter.
+    if (retry && retryWait(retry, task, dependencyState, now, stateDirectory)) continue;
     const minutes = Math.round(idle / 60_000);
     found.push({
       key: `no-worker:${task.id}:${attempt.attempt}`,
@@ -429,7 +459,7 @@ export function violations(
 /** Report violations to the supermanager; returns how many were delivered. */
 export function watch(
   store: Pick<WorkerStore, 'attempt' | 'retryIntents' | 'attemptsEndedBetween'> &
-    Partial<Pick<WorkerStore, 'tasks' | 'activeTasks'>>,
+    Partial<Pick<WorkerStore, 'tasks' | 'activeTasks' | 'dependency'>>,
   checkout: string,
   branches: { stabilize: string; integration: string },
   stateDirectory: string,

@@ -37,8 +37,9 @@ import type { AcceptancePlacement, Attempt, Brief, Pool, Profile, Settings, Task
 import type { WorkerStore } from './store.ts';
 import { recordFlow } from './flow.ts';
 import { launchWorkerProcess } from './worker-slice.ts';
-import { agentAdapter, cleanAgentEnvironment } from './agents.ts';
+import { agentAdapter, cleanAgentEnvironment, type McpServer } from './agents.ts';
 import { renderLaunchContext, type LaunchContext } from './launch-context.ts';
+import { storybookPrompt, storybookServers } from './storybook.ts';
 import { devProductBrief } from './briefs.ts';
 import { workerTestCommands } from './affected-tests.ts';
 import { branchHead } from './attempt-progress.ts';
@@ -56,6 +57,7 @@ export type LaunchOptions = {
   /** A fresh, bounded train editing session through an adapter that supports it. */
   resolver?: boolean;
   codex?: Settings['codex'];
+  mcpServers?: readonly McpServer[];
   resumeSession?: string;
 };
 export function launchCommand(
@@ -350,6 +352,7 @@ export function workerPrompt(
       : '',
     renderLaunchContext(launchContext),
     consultation ? `Read-only consultation:\n${consultation}` : '',
+    storybookPrompt(task),
     resolutionFiles.length
       ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.`
       : '',
@@ -749,6 +752,7 @@ export async function launch(
     pool,
     worktree: task.worktree,
     prompt,
+    mcpServers: storybookServers(task.worktree, task.brief),
     ...(resumeSession ? { resumeSession } : {}),
     logPath: attempt.logPath,
     ...(codex ? { codex } : {}),
