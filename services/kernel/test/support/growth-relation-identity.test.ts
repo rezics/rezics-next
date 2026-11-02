@@ -96,7 +96,10 @@ test('relation catalog lookups request only distinct measured identities in boun
     name: `table_${index}`,
   }));
   const chunks = relationCatalogLookupRequests([...large, large[0]!]);
-  assert.deepEqual(chunks.map(({ values }) => values[3].length), [128, 128, 1]);
+  assert.deepEqual(
+    chunks.map(({ values }) => values[3].length),
+    [128, 128, 1],
+  );
 });
 
 test('access-path checks select the matching database and schema footprint', () => {
