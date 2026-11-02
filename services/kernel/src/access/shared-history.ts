@@ -27,6 +27,11 @@ import { lockRecordedAgentIdentityHistory } from '../history/agent-identity-sdk-
 import { deadlineFor } from '../request/deadline.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { systemClock } from '../clock.ts';
+import {
+  consumeSelectedHistoryOriginal, currentIdentityOriginalTransfer, identityOriginalRemainder,
+  IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING, lockSelectedHistoryOriginalPosition, type SelectedHistoryPosition,
+  recordSelectedHistoryOriginalProgress, withSelectedHistoryOriginalChild, guardSelectedHistoryOriginalTransaction,
+} from './identity-original-admission.ts';
 
 type Job = {
   job_id: string;
@@ -95,14 +100,20 @@ export async function advanceSharedHistory(
   deps: { pool: Pool; client: WorkClient; registry: HistoryRegistry } & Partial<Pick<WorkContext, 'env' | 'clock'>>,
   jobId: string,
 ): Promise<SharedHistoryResult> {
-  const deferred = await withConnection(deps.pool, async (tx) => {
+  const original = currentIdentityOriginalTransfer(deps, jobId);
+  if (original) await consumeSelectedHistoryOriginal(deps, original, jobId);
+  const originalDeadline = original ? identityOriginalRemainder(deps, original, jobId).deadline : null;
+  const deferred = await withConnection(deps.pool, async (connection) => {
+    const tx = original ? guardSelectedHistoryOriginalTransaction(deps, original, jobId, connection) : connection;
+    if (original) identityOriginalRemainder(deps, original, jobId);
     await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
     try {
       await tx.query("SET LOCAL lock_timeout='200ms'");
-      await tx.query("SET LOCAL statement_timeout='2s'");
-      const job = (await tx.query<Job>('SELECT * FROM core.preference_history_job WHERE job_id=$1 FOR UPDATE', [jobId]))
+      await tx.query(`SET LOCAL statement_timeout='${originalDeadline === null ? 2000 : Math.max(1, Math.min(2000, originalDeadline - Date.now()))}ms'`);
+      const job = (await tx.query<Job & SelectedHistoryPosition>('SELECT * FROM core.preference_history_job WHERE job_id=$1 FOR UPDATE', [jobId]))
         .rows[0];
       if (!job) throw new TypeError('Shared history job unavailable');
+      if (original) await lockSelectedHistoryOriginalPosition(deps, original, job, tx);
       const proof = await barrier(tx, job);
       let answer: SharedHistoryResult | { work: Buffer; job: Job; proof: HistoryBarrier; identity: boolean };
       if (job.phase === 'pending' || job.phase === 'complete') answer = result(job.phase);
@@ -195,7 +206,9 @@ export async function advanceSharedHistory(
                   ])
                 ).rows[0]?.owner === 'access.agent-identity';
             }
-            if (first.artifact_type === 'durable-work/v1' && (first.state === 'pending' || identity))
+            if (original && !identity)
+              answer = result('more', 'identity-history-original-artifact-declaration-unavailable');
+            else if (first.artifact_type === 'durable-work/v1' && (first.state === 'pending' || identity))
               answer = { work: first.locator, job, proof, identity };
             else {
               let gap =
@@ -236,6 +249,7 @@ export async function advanceSharedHistory(
           }
         }
       }
+      if (original) await recordSelectedHistoryOriginalProgress(deps, original, jobId, tx);
       await tx.query('COMMIT');
       return answer;
     } catch (error) {
@@ -247,13 +261,21 @@ export async function advanceSharedHistory(
   // No source checkout survives SDK calls. Permanent native retirement makes either crash cut replayable.
   const { job, work, proof } = deferred;
   if (deferred.identity) {
+    // The installed Source callback creates its own random reservation. It cannot receive
+    // this durable original until its owner supplies the authenticated transfer integration
+    // and all reached child declarations. Never enter it under a fresh allocation here.
+    const parent = original ? identityOriginalRemainder(deps, original, jobId) : null;
+    if (!parent || parent.source === null || parent.library === null) return result('more', IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING);
     if (!deps.env) return result('more', IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE);
     const clock = deps.clock ?? systemClock;
     try {
-      return await withAgentIdentityHistoryUnit(
-        { pool: deps.pool, client: deps.client, env: deps.env, clock },
-        { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) },
-        async (funded) => {
+      const unitDeps = { pool: deps.pool, client: deps.client, env: deps.env, clock, registry: deps.registry };
+      const enter = original
+        ? <T>(body: (funded: import('../history/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceContext) => Promise<T>) =>
+          withSelectedHistoryOriginalChild(unitDeps, original, jobId, body)
+        : <T>(body: (funded: import('../history/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceContext) => Promise<T>) =>
+          withAgentIdentityHistoryUnit(unitDeps, { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) }, body);
+      return await enter(async (funded) => {
           const gap = await minimizeHistoryWork(
             deps.pool,
             deps.client,
@@ -307,6 +329,7 @@ export async function advanceSharedHistory(
             if (receivingGap) return result('more', receivingGap);
             await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 0));
             await scannedArtifact(tx, current, 'durable-work/v1', work, null);
+            if (original) await recordSelectedHistoryOriginalProgress(deps, original, jobId, tx);
             // The real Source/domain/fence and receiving locks survive this command's COMMIT.
             return result('more');
           });
@@ -317,6 +340,7 @@ export async function advanceSharedHistory(
       throw error;
     }
   }
+  if (original) return result('more', 'identity-history-original-artifact-declaration-unavailable');
   let gap = await minimizeHistoryWork(
     deps.pool,
     deps.client,

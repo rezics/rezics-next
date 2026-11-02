@@ -4329,3 +4329,113 @@ It requires genuine lifecycle T, accepted verify/reversal, actual same-Pool SDK 
 History engine and all receiving copies before default native minimization. It checks refusal before closure,
 surviving decider attribution, retained technical undo and retry. Original acceptance/native/browser proof and full
 Goal completion remain deferred; workspace typing establishes none of those outcomes.
+
+
+### Selected History original and private transfer
+
+The default History worker calls `history/work.ts:advanceSelectedHistoryOriginal`. Its native producer is
+`identity-original-admission.ts:withSelectedHistoryOriginal(deps, body)`, where `deps` contains the actual
+`Pool`, `WorkClient` and `HistoryRegistry`, and `body(jobId, transfer)` receives the opaque
+`IdentityOriginalTransfer`. The native command locks the selected job and current registry, checks the account's
+immutable erasure barrier, and persists its genuine transaction ID, exact job/account/home/phase/cursors, registry
+and absolute five-second deadline. The command commits its entire dispatch debit and immutable allocation before
+the handle escapes. Operational checkout, a job lease, callback identity and ALS are insufficient independently.
+
+`consumeSelectedHistoryOriginal(deps, transfer, jobId)` commits a one-shot entry before affected work. It locks and
+checks the original, job, registry and barrier. Failed validation poisons the live entry; rollback never refunds
+its already committed reservation. `lockSelectedHistoryOriginalPosition` checks the same original inside the
+real locked operational job transaction. `guardSelectedHistoryOriginalTransaction` checks liveness around each
+awaited query, preserving failure ROLLBACK after expiry. Neither adapter issues native command resources or casts
+an operational checkout into native authority.
+
+The actual execution records its changed position through `recordSelectedHistoryOriginalProgress` before COMMIT.
+Settlement accepts only that recorded position matching the current native job, then marks the original advanced.
+A later changed cursor, registry wake/reset, workflow result or callback return alone cannot settle it. A genuinely
+advanced native unit can be admitted independently; an unfinished original cannot change its identity, position,
+partitions, spent balance or deadline on replay. A pending/complete phase transition is execution progress only.
+It never claims physical custody closure.
+
+The complete parent formula is the disjoint inclusive sum:
+
+```
+AccountsLocalControl + SourceHistoryNativeAllReachedCalls
+                     + LibraryAllReachedCalls + AdditionalOriginalTransferControl
+```
+
+`ORIGINAL_AXES` fixes the SQL encoding order to candidate keys, native rows, identity metadata rows, native points,
+witness keys, statements, bytes and empty seeks. Every vector requires exactly these eight own safe nonnegative
+integer properties; the sum rejects overflow. The SQL representation additionally enforces eight bounded bigint
+entries, immutable partitions and monotone entry/progress states. Discovery reserves the finite declared envelope
+before its first SQL; native admission durably prepays it before any capability or child IO. The existing local
+components remain `HISTORY_ORIGINAL_LOCAL_ALLOWANCE`. Their entire reservation is spent; no remainder of it is a
+Source/Library allowance.
+
+`HISTORY_ORIGINAL_TRANSFER_CONTROL` is the literal additional SQL declaration. It includes released discovery's
+BEGIN/settings/COMMIT/failure ROLLBACK; allocation INSERT, original guard and FK points; the entry barrier check;
+native progress read/write; settlement allocation read; and separate pre-grant/post-callback native commands.
+Each transfer command includes original/allocation locks, selected job, registry, barrier, and its irreversible
+state update. Their returned JSON/vector/column maxima are bounded independently. The exported sum is
+`ADDITIONAL_ORIGINAL_TRANSFER_CONTROL`. Its candidate, identity metadata and witness axes are zero because those
+operations do not occur in these control bodies, rather than by conversion from a legacy declaration.
+
+Accounts reads child declarations only from the actual installed owner modules, before discovery:
+
+- `semantic/identity-source-consumer-maintenance.ts:IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION`
+- `library/collection-source-work.ts:IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION`
+
+Each has type `IdentityHistoryOriginalBodyDeclaration`, containing `work: WorkDimensions` and `engineRequests: 0`.
+The Source declaration must include every reached/repeated History, inventory, receiving, H/G/A, outbox, released,
+current and final validator, settings, failed attempt, rollback and settlement body. Library must declare its real
+page, verifier, planner, locked-plan, exhaustion, seal and final fence bodies. Five-value declarations do not fill
+unclassified axes with zero. Configuration may reduce child limits; it cannot enlarge the original. No public
+function accepts a structural funding declaration or caller price. An absent declaration is SQL NULL, not zero.
+`identityOriginalRemainder(deps, transfer, jobId)` reports only these actual immutable partitions and the original
+ID/deadline/position. Source and Library currently remain null; there is no adopted whole-parent numeric ceiling.
+
+The Accounts private callable is:
+
+```
+withIdentityOriginalSourceTransfer(deps, transfer, jobId, body): Promise<T>
+body(parent: IdentityOriginalSourceContext): Promise<T>
+```
+
+The parent supplies the actual original ID, job ID, exact position, unchanged deadline, prepaid native partition,
+opaque `IdentityOriginalSourceGrant` and one cumulative `NativeCollectionWork`. Before callback escape a separate
+native commit marks that original's child partition consumed. The callback cannot be reentered, even after failed
+checkout, rollback, exception or an unavailable result. Before and after awaits, the producer validates actual
+Pool/WorkClient/registry, native original/position/barrier/deadline and callback lifetime. Its final native command
+revalidates the current/recorded position and permanently ends the callback. Failure leaves it consumed.
+
+Source calls `reserveIdentityOriginalSourceWork(deps, parent.original, parent.jobId, amount)` before each native
+dispatch; only the already prepaid native partition can pay. `identityOriginalLibraryWork` returns the SAME Library
+ledger used by all descendants, receiving/current verification, exhaustion and the final same-command fence.
+Saved ledger methods and reservation handles validate callback lifetime before dispatch and after awaits. Copies,
+wrong dependencies, ended/expired callbacks and attempts to replace private counters fail. No new UUID, second
+Library ledger, post-IO funding or refund is introduced.
+
+`withSelectedHistoryOriginalChild` is the selected caller adapter. It requires the actual History private export
+`withPrepaidAgentIdentityHistoryUnit` with the exported `PrepaidAgentIdentityHistoryUnit` signature:
+`(deps, parent: IdentityOriginalSourceContext, body(funded: IdentitySourceConsumerMaintenanceContext)) => Promise<T>`.
+That export must enter the existing History unit under the authentic Source prepaid frame and the same Library
+ledger. The current independent configured caller is ineligible. Until the complete real declarations and that
+private caller exist, the selected identity dispatch retains
+`identity-history-original-source-transfer-unavailable`. Other undeclared artifact children retain
+`identity-history-original-artifact-declaration-unavailable`; neither path spends local control work as child money.
+Independent admission/allocation/entry/progress machinery remains available.
+
+Only `agent_verification_reversal` with `com.rezics.access.agent-verification.reversing.v1` uses identity fx originals.
+Work composition privately binds its existing effect object to the actual Pool/WorkClient without changing the
+Semantic-owned verification workflow. The effects wrapper associates both relay and direct-enqueue paths with
+one durable original keyed by native event epoch/partition/position/event sequence/effect and exact workflow ID.
+The source command checks the real intent, sealed native inventory, SDK obligation, physical receipt/outbox,
+undo job, source home/domain and full role union. Its LIMIT 65 sentinel refuses more than 64 account keys before
+building the separate full-key barrier read. Source COMMIT/release precedes home-zero receiving, which binds the
+actual receiver epoch and domain generation. Replays prepay their repeated local controls against the existing
+original, never a renewed deadline or a child receipt.
+
+The fx ten-attempt local ceiling covers only these source/receiving/replay controls, including the encoded scalar
+columns outside bounded JSON. Complete SDK/framework dispatch/receiving/replay/rollback work remains a separate
+missing child operand. `requireIdentityFxOriginalDispatch` refuses with
+`identity-fx-original-child-declaration-unavailable` before wrapper enqueue or effect execution. Receiving retains
+`pending-physical-owner`; consumer/workflow completion, SDK observations, registration and EOF never close it.
+Source/Library/Search physical custody and private SDK closure remain their independent owner boundaries.

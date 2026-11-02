@@ -55,20 +55,23 @@ requested deadline before charging the cumulative native balance. A copied, malf
 exhausted Source context refuses. It never creates a replacement frame or refunds work after a failed attempt,
 rollback or repeated call. The separate Library balance is untouched.
 
-The real independent History/Work entry is `history/work.ts` → `sharedHistoryWorkModule` in
-`access/shared-history-work.ts` → the one selected `core.preference_history_job` lease → `advanceSharedHistory`.
-That owner selects one bounded native cursor, commits the lease before entering the owner, and visits at most one
-selected artifact per unit. This persisted lease admits that cursor work; it is not a Source native allocation.
-`advanceSharedHistory` and its nested `receiving.ts` readiness call run from operational `withConnection`
-transactions, which do not carry live command resources. `verifyAgentIdentityRecoveryArtifactReadiness` therefore
-keeps this Work producer at the precise fail-closed gap `agent-identity-recovery-command-resources-unavailable`
-before readiness SQL. The recovery receiver's association and readiness costs are 2/2/1/512 and 100/100/36/24576;
-this Work path does not claim those costs are funded or that its readiness completed. A caller that does hold an
-actual live `CommandTransaction` retains its own command admission and runs the same verifier with those bounds;
-the focused regression exercises that boundary through `runCommand`, without claiming it is the Work service's
-current producer. Identity SDK retirement uses the different selected identity path and enters
-`withAgentIdentityHistoryUnit` before its first History mapping read; it cannot become an independent uncharged
-retirement when Source provenance is invalid.
+The independent History/Work entry is `history/work.ts:advanceSelectedHistoryOriginal` from
+`access/shared-history-work.ts`. It admits the actual selected `core.preference_history_job` phase and scan/verify
+cursors through a released native command. The command's real transaction identity, immutable account barrier,
+registry generation and absolute five-second deadline are persisted before its private callback. The job lease
+only schedules this work. Durable original admission, one-shot entry, immutable allocations and recorded native
+progress provide its execution provenance; neither a UUID nor the lease supplies Source/Library funding.
+[Access's selected original contract](../access/README.md#selected-history-original-and-private-transfer) owns the
+callable signatures and disjoint allocation/control declarations.
+
+`advanceSharedHistory` and nested `receiving.ts` readiness retain their operational transactions. Their query-only
+liveness adapter does not manufacture `currentCommandResources` or an authorization principal.
+`verifyAgentIdentityRecoveryArtifactReadiness` therefore retains
+`agent-identity-recovery-command-resources-unavailable` before readiness SQL in that context. A caller with a real
+live `CommandTransaction` independently retains its own admission and the same verifier bounds. The selected
+identity SDK branch requires genuine additional Source/History and Library partitions and the installed prepaid
+private caller. Their absence refuses only the affected child dispatch. It cannot enter the configured independent
+`withAgentIdentityHistoryUnit` under a new reservation or fund a child from spent local controls.
 
 In `durable.ts`, the eight-table physical inspection's complete 148/8/12/11888 bound (including its controls and
 rollback slot) is reserved before checkout whenever it runs inside a Source frame. The mapping-only reservation is

@@ -8,6 +8,9 @@ import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Relay } from './relays.ts';
 import { lookupEventType } from './catalogue.ts';
 import { projectBatch, type CloudEvent, type Envelope } from './log.ts';
+import {
+  associateIdentityFxOriginal, isIdentityOriginalEffect, requireIdentityFxOriginalDispatch,
+} from '../history/identity-original-association.ts';
 
 export { DBOS_SCHEMA } from '../work/client.ts';
 export const EFFECTS_QUEUE = 'effects';
@@ -29,6 +32,7 @@ export type NativeEffect = {
 type RegisteredEffect = Effect | NativeEffect;
 
 type RegisteredEffects = {
+  prepareIdentityOriginals(envelopes: readonly Envelope[]): Promise<void>;
   enqueue(envelopes: readonly Envelope[]): Promise<void>;
   admit?: (client: PoolClient, envelopes: readonly Envelope[]) => Promise<void>;
 };
@@ -65,6 +69,11 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
     async (name: string, event: CloudEvent) => {
       const effect = byName.get(name);
       if (!effect || effect.delivery === 'native') throw new Error('Unknown durable effect');
+      if (isIdentityOriginalEffect(effect, event)) {
+        const selected = pool ?? compatibilityPool;
+        if (!selected) throw new Error('Identity original requires the actual work Pool');
+        requireIdentityFxOriginalDispatch(effect, selected);
+      }
       await effect.run(event);
       const selected = pool ?? compatibilityPool;
       if (selected)
@@ -132,9 +141,23 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
     }
   };
 
+  // Independent native source and receiving commands finish before the generic consumer
+  // transaction opens. Neither a consumer state nor a child receipt issues this association.
+  const prepareIdentityOriginals = async (envelopes: readonly Envelope[]) => {
+    for (const envelope of envelopes) for (const [eventSeq, event] of envelope.events.entries()) {
+      for (const effect of effects) if (effect.delivery !== 'native' && isIdentityOriginalEffect(effect, event)) {
+        await associateIdentityFxOriginal(effect, locatorPool(), envelope, eventSeq,
+          effectWorkflowId(envelope, eventSeq, effect.name));
+      }
+    }
+  };
+
   return {
+    prepareIdentityOriginals,
     ...(admit === undefined ? {} : { admit }),
     async enqueue(envelopes) {
+      // Direct enqueuers converge on the same durable original too.
+      await prepareIdentityOriginals(envelopes);
       const partitions = new Map<
         number,
         Array<{ envelope: Envelope; eventSeq: number; event: CloudEvent; effect: RegisteredEffect }>
@@ -178,6 +201,7 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
                 : 1,
           );
           for (const { envelope, eventSeq, event, effect } of jobs) {
+            if (isIdentityOriginalEffect(effect, event)) requireIdentityFxOriginalDispatch(effect as Effect, locatorPool());
             await DBOS.startWorkflow(workflow, {
               workflowID: effectWorkflowId(envelope, eventSeq, effect.name),
               workflowIDReusePolicy: 'return-existing',
@@ -243,6 +267,7 @@ export function relayEffects(pool: Pool, effects: ReturnType<typeof registerEffe
     consumer: EFFECTS_CONSUMER,
     partition,
     apply: async (envelopes) => {
+      await effects.prepareIdentityOriginals(envelopes);
       if (effects.admit) {
         await withConnection(pool, async (client) => {
           await client.query('BEGIN');

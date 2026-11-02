@@ -8,6 +8,10 @@ import { minimizeRecordHistoryPurge, prepareRecordHistoryPurge } from './record-
 import { sharedHistoryWorkModule as localHistoryWorkModule } from '../access/shared-history-work.ts';
 import { registerHistoryFamilyCoverage } from './family-coverage-work.ts';
 import type { WorkModule } from '../work/registry.ts';
+import type { WorkClient } from '../work/client.ts';
+import type { HistoryRegistry } from './registry.ts';
+import { advanceSharedHistory, type SharedHistoryResult } from '../access/shared-history.ts';
+import { withSelectedHistoryOriginal } from '../access/identity-original-admission.ts';
 
 /** Preserve the delivered local minimizers and add the independent selected-family aggregate. */
 export const sharedHistoryWorkModule: WorkModule = {
@@ -18,6 +22,13 @@ export const sharedHistoryWorkModule: WorkModule = {
   },
 };
 export { sharedHistoryWorkModule as preferenceHistoryWorkModule };
+
+/** The default worker's actual selected caller, independently of Source callback allocation. */
+export function advanceSelectedHistoryOriginal(deps: Readonly<{ pool: Pool; client: WorkClient;
+  registry: HistoryRegistry; env: Readonly<Record<string, string | undefined>>; clock: () => Date;
+}>): Promise<SharedHistoryResult | null> {
+  return withSelectedHistoryOriginal(deps, (jobId) => advanceSharedHistory(deps, jobId));
+}
 
 /** Redrive one existing native record job from its durable source locator. A restart always
  * reissues the real native authority; saved source observations never authorize payload changes. */

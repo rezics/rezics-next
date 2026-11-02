@@ -1,8 +1,7 @@
-import { advanceOutstandingRecordHistory } from '../history/work.ts';
+import { advanceOutstandingRecordHistory, advanceSelectedHistoryOriginal } from '../history/work.ts';
 import type { WorkModule } from '../work/registry.ts';
-import { withConnection } from '../database/pool.ts';
 import { verifyAgentIdentityRecoveryArtifactReadiness } from '../history/agent-identity-recovery-receiving.ts';
-import { admitSharedHistory, advanceSharedHistory } from './shared-history.ts';
+import { admitSharedHistory } from './shared-history.ts';
 import { advancePendingContextRoleProvenance, type ContextRoleOccurrence } from './shared-history-context.ts';
 
 /** One native receiving worker. Its progress, barrier and errors are never a DBOS argument or
@@ -123,35 +122,8 @@ export const sharedHistoryWorkModule: WorkModule = {
                  FOR UPDATE SKIP LOCKED)`,
               [digest, generation],
             );
-            const selected = await withConnection(context.pool, async (tx) => {
-              // Lease selection commits before any other home or SDK is entered. An expired
-              // lease retries the same native cursor; artifact locks make duplicate work safe.
-              const rows = await tx.query<{ job_id: string }>(
-                `UPDATE core.preference_history_job SET next_run=now()+interval '10 seconds'
-                 WHERE job_id=(SELECT job_id FROM core.preference_history_job
-                   WHERE phase IN ('scan','verify') AND next_run<=now()
-                   ORDER BY next_run,job_id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING job_id`,
-              );
-              return rows.rows[0]?.job_id;
-            });
-            if (selected) {
-              const answer = await advanceSharedHistory(
-                {
-                  pool: context.pool,
-                  client: context.client,
-                  registry: history,
-                  env: context.env,
-                  clock: context.clock,
-                },
-                selected,
-              );
-              if (!answer.gap)
-                await context.pool.query(
-                  `UPDATE core.preference_history_job SET next_run=now() WHERE job_id=$1
-                 AND phase IN ('scan','verify') AND next_run>now()`,
-                  [selected],
-                );
-            }
+            await advanceSelectedHistoryOriginal({ pool: context.pool, client: context.client,
+              registry: history, env: context.env, clock: context.clock });
           } catch {
             // Private source/SDK exceptions stay out of diagnostic and durable history.
             console.error('shared_history_retry');

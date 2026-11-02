@@ -8,6 +8,7 @@ import { HistoryRegistry } from '../history/registry.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { createWorkerAuthorization, type WorkerAuthorization } from './authorization.ts';
 import type { KindConsentParticipant } from '@rezics/auth-contract';
+import { bindIdentityOriginalEffect, IDENTITY_FX_EFFECT } from '../history/identity-original-association.ts';
 import { readAuthConsentConfig } from '../access/auth-consent.ts';
 import { createKindConsentParticipantTransport } from './kind-consent-transport.ts';
 
@@ -95,7 +96,8 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     },
     addEffects(effects) {
       if (!accepting) throw new Error('Cannot add effects after work composition');
-      collectedEffects.push(...effects);
+      collectedEffects.push(...effects.map((effect) => effect.name === IDENTITY_FX_EFFECT
+        ? bindIdentityOriginalEffect(effect, { pool: options.pool, client: options.client }) : effect));
     },
     addNativeEffects(effects) {
       if (!accepting) throw new Error('Cannot add native effects after work composition');
