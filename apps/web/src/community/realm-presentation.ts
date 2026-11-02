@@ -69,7 +69,7 @@ export type RealmAppearanceAdapter = Readonly<{
   change(command: RealmAppearanceCommand): Promise<RealmAppearanceResult>;
   select(choice: RealmAppearanceChoice): Promise<RealmAppearanceSelection>;
   upload(realmId: string, slot: RealmImageSlot, file: File, signal: AbortSignal): Promise<{ id: string }>;
-  resume(mediaId: string, signal: AbortSignal): Promise<{ id: string }>;
+  resume(mediaId: string, file: File, realmId: string, signal: AbortSignal): Promise<{ id: string }>;
 }>;
 
 /** A DTO is never permission. Every resulting request still uses current media download authorization. */
@@ -150,6 +150,13 @@ export function createRealmAppearance(
     pendingUpload: null,
   };
   let uploadAbort: AbortController | null = null;
+  // The original file stays in this caller only. A retry never reserves another object.
+  let retainedUpload: {
+    file: File;
+    slot: RealmImageSlot;
+    purpose: 'realm-icon' | 'realm-banner';
+    mediaId: string | null;
+  } | null = null;
   let readVersion = 0;
   let operationGeneration = 0;
   let connected = true;
@@ -164,6 +171,7 @@ export function createRealmAppearance(
   function retireLocal() {
     if (retired) return;
     retired = true;
+    retainedUpload = null;
     operationGeneration++;
     uploadAbort?.abort();
     uploadAbort = null;
@@ -182,6 +190,7 @@ export function createRealmAppearance(
   }
   function update(change: Partial<RealmAppearanceState>) {
     if (!active()) return;
+    if ('pendingUpload' in change && change.pendingUpload === null) retainedUpload = null;
     state = { ...state, ...change };
     publish();
   }
@@ -426,6 +435,18 @@ export function createRealmAppearance(
     const uploadSlot = pending?.slot ?? slot;
     if (!pending && !editable()) return;
     if (state.busy || !admitted(state.read) || !state.read.snapshot.canManage || (!file && !pending)) return;
+    const purpose = uploadSlot === 'avatar' ? 'realm-icon' : 'realm-banner';
+    if (file) retainedUpload = { file, slot: uploadSlot, purpose, mediaId: null };
+    else if (
+      !pending ||
+      !retainedUpload ||
+      retainedUpload.slot !== pending.slot ||
+      retainedUpload.purpose !== purpose ||
+      (retainedUpload.mediaId !== null && retainedUpload.mediaId !== pending.mediaId)
+    )
+      return;
+    const original = file ?? retainedUpload?.file;
+    if (!original) return;
     const ticket = operation();
     if (!ticket) return;
     const abort = new AbortController();
@@ -435,10 +456,11 @@ export function createRealmAppearance(
     try {
       if (!owns(ticket) || abort.signal.aborted) return;
       const media = pending
-        ? await adapter.resume(pending.mediaId, abort.signal)
-        : await adapter.upload(realmId, uploadSlot, file!, abort.signal);
+        ? await adapter.resume(pending.mediaId, original, realmId, abort.signal)
+        : await adapter.upload(realmId, uploadSlot, original, abort.signal);
       mediaId = media.id;
       if (abort.signal.aborted || !owns(ticket)) return;
+      if (retainedUpload?.file === original) retainedUpload = { ...retainedUpload, mediaId };
       update({ pendingUpload: { slot: uploadSlot, mediaId } });
       if (!owns(ticket) || abort.signal.aborted) return;
       const choice = await adapter.select({
@@ -466,6 +488,11 @@ export function createRealmAppearance(
       if (abort.signal.aborted || !owns(ticket)) return;
       if (!mediaId && error && typeof error === 'object' && 'mediaId' in error && typeof error.mediaId === 'string')
         mediaId = error.mediaId;
+      if (error && typeof error === 'object' && 'reason' in error && error.reason === 'rejected') {
+        update({ busy: false, phase: 'idle', notice: 'unavailable', pendingUpload: null });
+        return;
+      }
+      if (retainedUpload?.file === original && mediaId) retainedUpload = { ...retainedUpload, mediaId };
       update({
         busy: false,
         phase: 'idle',

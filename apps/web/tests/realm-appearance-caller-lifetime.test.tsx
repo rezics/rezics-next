@@ -108,7 +108,7 @@ mock.module('../src/threads/upload', () => ({
     calls.uploads.push({ realmId, purpose, signal });
     return operations.upload(realmId, purpose, signal);
   },
-  resumeRealmImageUpload: async (mediaId: string, signal: AbortSignal) => {
+  resumeRealmImageUpload: async (mediaId: string, _file: File, _realmId: string, signal: AbortSignal) => {
     calls.resumes.push({ mediaId, signal });
     return operations.resume(mediaId, signal);
   },
@@ -674,7 +674,7 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
       upload: async () => {
         throw failedWithReservation;
       },
-      resume: async (_mediaId, signal) => {
+      resume: async (_mediaId, _file, _realmId, signal) => {
         expect(signal.aborted).toBe(false);
         if (resumeCalls++ === 0) return resumed.promise;
         return { id: imageId };

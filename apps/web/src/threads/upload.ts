@@ -34,7 +34,7 @@ export class UploadRefusal extends Error {
   }
 }
 
-type ReservedMedia = { id: string; state: string; mediaType: string; byteCount: number };
+type ReservedMedia = { id: string; state: string; mediaType: string; byteCount: number; containerId?: string };
 type FutureThread = { boardId: string; idempotencyKey: string };
 type PostReserveTarget = string | { containerId: string } | { newThread: FutureThread };
 type ReserveTarget = PostReserveTarget | { realmId: string };
@@ -125,7 +125,14 @@ function mediaOf(value: unknown): ReservedMedia | null {
     typeof record.byteCount !== 'number'
   )
     return null;
-  return { id: record.id, state: record.state, mediaType: record.mediaType, byteCount: record.byteCount };
+  const containerId = record.containerId;
+  return {
+    id: record.id,
+    state: record.state,
+    mediaType: record.mediaType,
+    byteCount: record.byteCount,
+    ...(typeof containerId === 'string' && containerId !== '' ? { containerId } : {}),
+  };
 }
 
 function pause(ms: number, signal: AbortSignal): Promise<void> {
@@ -360,7 +367,7 @@ export async function uploadRealmImage(
     mediaId = reserved.id;
     throwIfAborted(signal);
     await putBytes(reserved, file, signal);
-    return await resumeRealmImageUpload(mediaId, signal);
+    return await finishRealmUpload(mediaId, signal);
   } catch (error) {
     if (isAbort(error)) throw error;
     const failure = error instanceof UploadRefusal ? error : new UploadRefusal('unavailable');
@@ -369,11 +376,41 @@ export async function uploadRealmImage(
   }
 }
 
-/** Check the original reservation on manual retry instead of creating another upload. */
-export async function resumeRealmImageUpload(mediaId: string, signal: AbortSignal): Promise<{ id: string }> {
+async function finishRealmUpload(mediaId: string, signal: AbortSignal): Promise<{ id: string }> {
   const settled = await poll(mediaId, signal);
   if (settled.state !== 'available') throw new UploadRefusal('rejected');
   return { id: mediaId };
+}
+
+/**
+ * Re-read the original reservation before any byte transfer.
+ * Purpose stays with the caller: this read has no purpose field.
+ */
+export async function resumeRealmImageUpload(
+  mediaId: string,
+  file: File,
+  realmId: string,
+  signal: AbortSignal,
+): Promise<{ id: string }> {
+  try {
+    throwIfAborted(signal);
+    if (!isPostImageType(file.type)) throw new UploadRefusal('type');
+    if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
+    if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
+    const current = await readReservation(mediaId, signal);
+    if (current.containerId !== realmId || current.mediaType !== file.type || current.byteCount !== file.size)
+      throw new UploadRefusal('unavailable');
+    if (current.state === 'rejected') throw new UploadRefusal('rejected');
+    throwIfAborted(signal);
+    if (current.state === 'reserved') await putBytes(current, file, signal);
+    return await finishRealmUpload(mediaId, signal);
+  } catch (error) {
+    throwIfAborted(signal);
+    if (isAbort(error)) throw error;
+    const failure = error instanceof UploadRefusal ? error : new UploadRefusal('unavailable');
+    failure.mediaId = mediaId;
+    throw failure;
+  }
 }
 
 /** Distinct image sources in document order. */

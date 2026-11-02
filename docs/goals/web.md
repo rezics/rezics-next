@@ -16,6 +16,9 @@ capabilities and disclosure rules on every page and device.
 - Checkout start/return and entitlements expose the commerce outcomes without treating a redirect as fulfilment.
 - Auth pages support sign-in, sign-up, consent, security settings and step-up through the accounts contract.
 - The session BFF, upload completion and every download preserve caller identity and current API decisions.
+- A Realm icon or banner retry keeps the original file only in that appearance caller and finishes the same
+  reservation when its container is that Realm. Purpose stays the caller slot because the site media read omits it,
+  and a rejected image drops the retry without saving appearance.
 - Pages render useful preparation, empty, denied and unavailable states; metadata, sitemaps and sharing reflect only
   permitted public representations. Safe JSON-LD agrees with rendered content.
 - Reviewed running pages and recorded-response stories demonstrate accessible phone/desktop layouts, both themes,
