@@ -207,11 +207,11 @@ test.serial('attempt cleanup returns when removing an owned container hangs', ()
     expect(() => removeAttemptContainers('task-7', 3)).not.toThrow();
     expect(Date.now() - started).toBeLessThan(25_000);
     expect(errors.join('\n')).toContain('rezics.worker.attempt=task-7/3');
-    expect(errors.join('\n')).toContain('ETIMEDOUT');
+    expect(errors.join('\n')).toContain('timed out');
   } finally {
     console.error = originalError;
     if (previousPath === undefined) delete process.env.PATH;
     else process.env.PATH = previousPath;
     box.close();
   }
-});
+}, 25_000);

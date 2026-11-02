@@ -19,9 +19,8 @@ export function removeAttemptContainers(taskId: string, attempt: number): void {
       timeout: DOCKER_TIMEOUT_MS,
     });
     if (listed.error || listed.status !== 0) {
-      logRemovalError(
-        `Could not list worker containers for ${label}: ${listed.error ?? listed.stderr ?? listed.status}`,
-      );
+      const reason = listed.error?.message || listed.stderr?.trim() || (listed.status === null ? 'timed out' : listed.status);
+      logRemovalError(`Could not list worker containers for ${label}: ${reason}`);
       return;
     }
     const ids = listed.stdout.trim().split(/\s+/).filter(Boolean);
@@ -30,10 +29,10 @@ export function removeAttemptContainers(taskId: string, attempt: number): void {
       encoding: 'utf8',
       timeout: DOCKER_TIMEOUT_MS,
     });
-    if (removed.error || removed.status !== 0)
-      logRemovalError(
-        `Could not remove worker containers for ${label}: ${removed.error ?? removed.stderr ?? removed.status}`,
-      );
+    if (removed.error || removed.status !== 0) {
+      const reason = removed.error?.message || removed.stderr?.trim() || (removed.status === null ? 'timed out' : removed.status);
+      logRemovalError(`Could not remove worker containers for ${label}: ${reason}`);
+    }
   } catch (error) {
     logRemovalError(`Could not remove worker containers for ${label}: ${String(error)}`);
   }

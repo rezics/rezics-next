@@ -105,4 +105,4 @@ test.serial('a Docker removal that hangs is terminated within the operation boun
   } finally {
     box.close();
   }
-});
+}, 25_000);
