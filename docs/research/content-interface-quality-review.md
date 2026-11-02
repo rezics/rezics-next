@@ -1,0 +1,181 @@
+# Content interface quality review
+
+## Result and reviewed source
+
+The route inventory and owner-bar mapping below cover source revision
+`88a6a9c65a15ad5314f9337a2ddf4362c9df9bed`, inspected on 2026-11-03. **Current visual quality remains
+unmeasured.** No screenshot was available in this worktree's configured `.temp/screenshots/` directory,
+and no shared capture with a bound revision was supplied to this attempt. No image was inspected.
+Consequently this report establishes no visual pass, visible product defect, keyboard pass or native API result.
+
+The launch policy defers browser checks and acceptance to integration. The configured screenshot runner exists;
+its runtime availability was not tested. This is unfinished measurement, not a missing-service diagnosis.
+Earlier screenshots described by [the owner status report](design-status-content.md) are not current evidence:
+that report explicitly leaves moderator queues, setup, reporter layouts and full journeys unproved.
+
+Decision: retain the source inventory as a partial result and continue the screenshot review under the existing
+capture owners; infer neither defects nor passes from source, story plays or earlier reviews.
+The manager was sent this decision through the Goal inbox.
+
+This report applies [Content's six completion clauses](../goals/content.md#done-when), the
+[interface review rule](../development/verification.md#review) and
+[Storybook's page/pattern distinction](../development/storybook.md#catalogue-and-ownership).
+It proposes no new design authority. The available `rezics-workflow` skill supplied the verification procedure;
+no separate frontend-testing or design-audit skill was present in the supplied skill catalogue. Web was asked for
+an applicable skill reference with its frame-capture handoff.
+
+## Evidence and capture coordination
+
+| Surface | Capture responsibility and handoff | Admitted screenshot artifacts / provenance |
+| --- | --- | --- |
+| Inbox, including entry and seen recovery | Performance retains the assigned Inbox capture. Requested its exact revision, Page IDs and four viewport/theme combinations; Content must reuse them. | None supplied. Do not recapture Inbox or substitute a Content-owned fixture capture. |
+| Mixed Home | Content retains capture responsibility; supply the Home IDs below, source revision and resulting artifacts to Web for shared-pattern review. | None captured under this launch policy. The source/ID handoff is available; image provenance remains outstanding. |
+| Subject and catalogue page frames | Web retains frame review; requested its existing images and exact revision. Content reviews its supplied rating/review and moderation regions within those frames. | None supplied. A shell-free rating Pattern cannot establish page-frame quality. |
+| Settings notification preferences | Accounts retains preference authority; requested the existing page-frame/region handoff. Content reviews notice semantics and mandatory outcomes only. | None supplied. No second Settings writer or capture assignment is created. |
+| Remaining Content pages | Use the configured Web screenshot runner with normal admission when browser review is permitted. | No worktree artifacts available; service availability remains unknown. |
+
+Coordination requests were sent using `bun tools/goal/src/cli.ts inbox send` to Performance, Web and Accounts.
+Attempting to retrieve the named shared Inbox conversation returned
+`Error: workers cannot read the shared manager inbox`. No conversation content or capture provenance was obtained.
+This access restriction does not establish a browser failure; the capture handoff must come through the managers.
+
+The configured path is documented in [Web's recording runbook](../../apps/web/README.md#storybook-and-page-recordings)
+and implemented by [screenshots.ts](../../apps/web/scripts/screenshots.ts). It captures rendered, font-settled,
+full-page PNGs into `.temp/screenshots/` by default. The
+[Storybook review-build instructions](../../apps/web/.storybook/README.md#build-and-review-locally) describe
+`build.json` containing the full commit and build time. For each admitted image, the continuation must record
+producer, full source revision, build identity, exact story/export, locale, theme, viewport, fixture/recording basis
+and actual artifact path. A mutable review URL or a filename alone cannot bind an image to this source.
+
+Review every selected Page at `phone390` and `desktop1280`, light and dark, using the existing globals. Include
+long text, populated/empty/loading/unavailable/error outcomes and applicable anonymous, author, member, moderator,
+owner, banned and suspended viewers. A nonexistent story or unprovided persona remains a missing cell.
+Interactive focus, tab order, keyboard actions and retry behavior also need browser evidence; static PNGs alone
+cannot establish them. No locale or theme result is inferred from English source.
+
+## Route and Page inventory
+
+Routes below omit the locale prefix. `S/` means
+[`apps/web/src/stories/`](../../apps/web/src/stories/); file/export references identify current source exactly.
+The displayed IDs follow the current CSF titles and exports. A running story index was not opened, so runtime
+index admission and successful rendering remain to be confirmed. A suffix list applies to the displayed prefix.
+Every row has **no admitted image** and **no visual verdict**.
+
+| Actual route or integrated region | Current Page story/export → ID | State/persona review inputs and evidence limits |
+| --- | --- | --- |
+| `/` mixed Home | [home.stories.tsx](../../apps/web/src/stories/home.stories.tsx): `SignedIn`, `SignedOut`, `PartialSources`, `Preparing`, `Unavailable`, `Empty`, `Following`, `SparseContinuation` → `pages-discovery-home--signed-in`, `--signed-out`, `--partial-sources`, `--preparing`, `--unavailable`, `--empty`, `--following`, `--sparse-continuation` | Actual root-route consumer; envelopes are illustrative compositions, not native feed recordings. Also use `KindSelection`, `KindChoicesUnavailable`, `KindChoicesNextPage`, `SpaceSelection`, `SpaceUnavailable`, `SpaceIdentityChanged`, `QuestionSelection`, `QuestionChoicesUnavailable`, `QuestionChoicesNextPage`, `QuestionSelectionLost`, `ExpiredPageRecovery` from the same file. |
+| `/boards?purpose=discussion\|reviews` | [board-directory-pages.stories.tsx](../../apps/web/src/stories/board-directory-pages.stories.tsx): `Current`, `SelectPurpose`, `Continue`, `Open`, `Retry`, `Loading`, `Empty`, `Sparse`, `Unavailable`, `Denied`, `Closed` → `pages-community-board-directory--current` and corresponding kebab-case suffixes | One directory page, purpose selection, sparse Next and distinct native refusals. No per-board primitive substitute. |
+| `/boards/{id}` | [board.stories.tsx](../../apps/web/src/stories/board.stories.tsx): `SignedIn`, `SignedOut`, `PresentationStates` → `pages-community-board--signed-in`, `--signed-out`, `--presentation-states`; [board-continuation-pages.stories.tsx](../../apps/web/src/stories/board-continuation-pages.stories.tsx): `ContinueHot` → `pages-community-board-continuation--continue-hot` | Global/Realm context also has [board-community-pages.stories.tsx](../../apps/web/src/stories/board-community-pages.stories.tsx): `Global`, `Realm`, `ContinueHot` under `pages-community-community-board`. Active/Hot/New and terminal versus sparse continuation must be reviewed in the page. |
+| `/boards/{id}/new` | [composer.stories.tsx](../../apps/web/src/stories/composer.stories.tsx): `NewThreadEmpty`, `NewThreadLong`, `NewThreadDeparture`, `NewThreadSubjects` → `pages-community-post-editor--new-thread-empty`, `--new-thread-long`, `--new-thread-departure`, `--new-thread-subjects` | Uses `PageStory` and the actual board-new path. Empty and long drafts, subject choices and departure protection; native permission personas remain to be measured. |
+| `/threads/{id}` → `/threads/{id}/{slug}` | [thread-reading.stories.tsx](../../apps/web/src/stories/thread-reading.stories.tsx): `Populated`, `LongDocument`, `SignedOut`, `Community`, `ExistingReplyRelationship`, `SelectedParent`, `CancelledParent`, `DeletedPost`, `DeletedOrganization`, `WithheldPost`, `OwnEdit`, `EditDiscardProtection`, `History`, `HistoryRetry`, `Report`, `Loading`, `Unavailable`, `CurrentDenial`, `RestorablePost` → prefix `pages-community-thread-reading--` | Exact representative IDs: `--long-document`, `--selected-parent`, `--withheld-post`, `--history`, `--history-retry`, `--current-denial`. History and reply selection are states of this page, not separate routes. |
+| `/posts/{id}/revisions/{revisionId}` | [exact-revision.stories.tsx](../../apps/web/src/stories/exact-revision.stories.tsx): `SelectedRevision`, `LongDocument`, `Unavailable`, `Loading`, `NativeRetry`, `DifferentCurrentHead`, `LongSourceReferences`, `DocumentMediaUnavailable`, `DocumentMediaAvailable` → prefix `pages-community-exact-revision--` | Exact provenance, independent availability and current-head mismatch; `--different-current-head` must not display today's body as the citation. |
+| Thread author erasure and `/operations/{id}` | [author-erasure.stories.tsx](../../apps/web/src/stories/author-erasure.stories.tsx): `CurrentAdmissionAvailable`, `CurrentAdmissionDenied`, `CurrentAdmissionUnavailable`, `EnqueueLostResponse`, `RunningCounters`, `TerminalPermissionDenial`, `Completed`, `SignedOutReader` → prefix `pages-community-author-erasure--`; [erasure-progress/erasure-progress.stories.tsx](../../apps/web/src/stories/erasure-progress/erasure-progress.stories.tsx): `AuthorQueued`, `AuthorRunning`, `AuthorCompleted`, `AuthorFailed`, `AuthorPermissionStopped`, `AuthorDependencyUnavailable`, `AuthorStatusUnavailable`, `AuthorSignedOut`, `AuthorNotFound`, `AuthorConflict`, `AuthorStatusCheckPending` → prefix `pages-account-erasure-progress--` | [The operation route](../../apps/web/src/routes/operations/$id.tsx) mounts `AuthorErasureOperationPage`. Account-wide `/platform/accounts/{accountId}/erasure` shares this story file but belongs to Accounts; review only Content's author-operation region here. Illustrative counters are not participant or physical-cleanup proof. |
+| `/spaces/{address}` and `/realms/{id}` canonical entry | [space.stories.tsx](../../apps/web/src/stories/space.stories.tsx): `SignedIn`, `SignedOut`, `NoBanner`, `Member`, `Unavailable`, `BoardsUnavailable` → prefix `pages-community-space--`; [board-community-pages.stories.tsx](../../apps/web/src/stories/board-community-pages.stories.tsx): `SpaceHomeSignedOut`, `SpaceHomeMember`, `SpaceHomeSourceUnavailable`, `SpaceHomeMembershipUnavailable` → prefix `pages-community-community-board--space-home-` | Canonical Realm entry may redirect to the addressed Space. The source-unavailable and membership-unavailable compositions are necessary page inputs, not passing screenshots. |
+| `/realms/new` Space/Realm setup | [space-setup-page.stories.tsx](../../apps/web/src/stories/space-setup-page.stories.tsx): `NewCommunity` → `pages-community-space-setup--new-community` | [Actual route](../../apps/web/src/routes/realms/new.tsx) renders `SpaceSetupPage`, including existing-Space search state. Context unavailable/denied page compositions are `S/patterns/space-setup/space-setup-context-page.stories.tsx`; owning Web runbook names `pages-community-space-setup-context--unavailable-search` and `--current-context-denied`. Later step, loading/error and authority personas need explicit frame coverage. |
+| Space home Realm appearance management | [realm-presentation-page.stories.tsx](../../apps/web/src/stories/realm-presentation-page.stories.tsx): `Management`, `ManagementInteractions`, `SignedOutManagement` → `pages-community-realm-appearance--management`, `--management-interactions`, `--signed-out-management` | Management is integrated on the existing home, not another route. Keep Content's exact rules/media authority and Web's shared-control review. |
+| Space home publication shelf | [patterns/realm-publication/realm-publication.pages.stories.tsx](../../apps/web/src/stories/patterns/realm-publication/realm-publication.pages.stories.tsx): `Selection`, `Chosen` → `pages-community-realm-publication--selection`, `--chosen` | Full Space route and shared shell. Other shelf states are supplied regions listed below; their page context remains unmeasured. |
+| Membership, attention and lifecycle on Space home | [realm-leave-recovery.stories.tsx](../../apps/web/src/stories/realm-leave-recovery.stories.tsx): `OwnerRequired`, `GenericRefusal`, `AccessDenied`, `UncertainRetry`, `AcceptedPending` → prefix `pages-community-realm-leave-recovery--`; [community-lifecycle.stories.tsx](../../apps/web/src/stories/community-lifecycle.stories.tsx): `ManagementJourney`, `RefusalDetails`, `ConflictNeedsReview`, `RemovedRestoreIndependentDestination`, `MissingCurrentAdmission`, `LoadingCurrentState`, `OrphanedCurrentState`, `SignedInWithoutAdmission`, `UncertainExactRetry`, `LongLocalizedCopy` → prefix `pages-community-container-lifecycle--` | Settlement differs from accepted workflow; following differs from membership. Restored destinations need independent current authority. |
+| `/realms` private membership directory | [realms.stories.tsx](../../apps/web/src/stories/realms.stories.tsx): `SignedIn`, `AccountMenuNavigation` → `pages-community-realms--signed-in`, `--account-menu-navigation` | Later pages, ready empty, loading/unavailable and applicable session states need page evidence; menu-play source is not keyboard acceptance. |
+| Space home ban management | [realm-bans.stories.tsx](../../apps/web/src/stories/realm-bans.stories.tsx): `ManagementJourney` → `pages-community-realm-bans--management-journey` | Integrated management region; inspect pending/denied and ban/unban transitions against current authority, without treating unban as rejoin. |
+| Space home orphan claim initiation | [realm-claim.stories.tsx](../../apps/web/src/stories/realm-claim.stories.tsx): `Journey`, `Orphaned`, `PendingReceipt`, `ApprovedReceipt`, `UncertainExactRetry`, `Refused`, `ConflictNeedsReview`, `MissingCurrentAdmission`, `SignedInWithoutAdmission` → prefix `pages-community-realm-claim--` | Reading an orphan does not confer management or claim authority. |
+| `/realms/{id}/claim-requests/{requestId}` | [realm-claim-status.stories.tsx](../../apps/web/src/stories/realm-claim-status.stories.tsx): `Pending`, `Approved`, `Unrelated`, `Unavailable`, `Reload`, `ObsoleteEpisode`, `SessionWithheld`, `ReferenceDetails`, `RefreshBusy` → prefix `pages-community-realm-claim-status--` | Native claimant/episode identity and private current status; long references require normal globals as well as any supplied width-specific examples. |
+| `/realms/{id}/claims` | [realm-claim-review.stories.tsx](../../apps/web/src/stories/realm-claim-review.stories.tsx): `Pending`, `Empty`, `Sparse`, `Denied`, `Conflict`, `UncertainRetry`, `Success`, `Confirmation`, `Refused`, `Loading`, `Unavailable`, `SignedOut`, `Closed` → prefix `pages-community-realm-claim-review--` | Platform reviewer, exact claimant/episode confirmation, sparse queue, uncertain retry and withheld session. Queue presence alone grants no approval permission. |
+| `/subjects/{id}` → `/subjects/{id}/{slug}`, plus its review/discussion view | [subject.stories.tsx](../../apps/web/src/stories/subject.stories.tsx): `GlobalScore`, `RealmsAndOwnVote`, `BelowThreshold`, `ImportedScores`, `OwnVoteForbidden`, `CountUnavailable`, `RatingSourceFailure`, `SparseRatingPopulations` → prefix `pages-subjects-subject--`; [composed-discussion-review.stories.tsx](../../apps/web/src/stories/composed-discussion-review.stories.tsx): `Overview`, `ReviewContinuation`, `DiscussionContinuation`, `CursorRefused` → prefix `pages-subjects-composed-discussion-review--` | Web owns the Subject frame. Content retains native vote, population/freshness, citation and review-list semantics. Require shared frame images before judging integrated region quality. |
+| Report entry within a thread | [report-entry.stories.tsx](../../apps/web/src/stories/report-entry.stories.tsx): `DeferredSubmission` → `pages-community-report-entry--deferred-submission`; thread Page `Report` above | Follow actual report result into its receipt; a dialog primitive is insufficient. |
+| `/moderation/reports/{id}` private receipt | [reporter-status-page.stories.tsx](../../apps/web/src/stories/reporter-status-page.stories.tsx): `SubmittedReport`, `CurrentTarget`, `IllustrativeLongReferences`, `ReadUnavailable`, `SessionRetired` → `pages-reporter-status--submitted-report`, `--current-target`, `--illustrative-long-references`, `--read-unavailable`, `--session-retired` | Submitted reason/evidence must remain distinct from current availability; no implied target-read permission. |
+| `/boards/{id}/moderation` reports and appeals | [moderation-reports.stories.tsx](../../apps/web/src/stories/moderation-reports.stories.tsx): `OpenReports`, `ResolvedReports`, `Appeals`, `TargetUnavailable`, `RevisionDiffers`, `NativeDenied`, `UncertainRetry`, `EmptyWithNext`, `Loading`, `Error`, `SelectedReports`, `SelectedPending`, `ReadDenied`, `StaleSelection`, `IllustrativeReferenceAndPreciseDates` → prefix `pages-community-moderation-reports--`; [moderation-appeals.stories.tsx](../../apps/web/src/stories/moderation-appeals.stories.tsx): `Pending`, `Empty`, `IllustrativeCurrentTargetWithLongReferences` → prefix `pages-moderation-appeals--` | Board, descendant thread/post reports, independent current target checks, selected/bulk-action clarity and independent appeal review. |
+| `/moderation/catalogue` | [catalogue-reports.stories.tsx](../../apps/web/src/stories/catalogue-reports.stories.tsx): `Loaded`, `Empty`, `Denied`, `Retry` → `pages-moderation-catalogue-reports--loaded`, `--empty`, `--denied`, `--retry` | [Running-route source](../../apps/web/src/routes/moderation/catalogue.tsx) mounts `CatalogueReportsVisit`. These stories supply `CatalogueReportsView` state; the frame and integration must be confirmed with Web, not inferred from the Pages title. |
+| `/moderation/decisions/{id}` appeal entry/result | [moderation-decision.stories.tsx](../../apps/web/src/stories/moderation-decision.stories.tsx): `Open`, `Pending`, `ReversedUnavailable`, `Upheld`, `Available`, `OpenWithAvailableTarget`, `Expired`, `NativeDenied`, `Conflict`, `UncertainRetry`, `Loading`, `ReadUnavailable`, `ReadClosed`, `PlatformClosed`, `RefreshRecovery`, `IllustrativeLongReferences` → prefix `pages-community-moderation-decision--` | Reason, deadline, actual resolution and current target availability; reversal does not recreate erased bytes or rewrite the report disposition. |
+| `/inbox` | [inbox.stories.tsx](../../apps/web/src/stories/inbox.stories.tsx): `Empty`, `Mixed`, `Unavailable`, `Preparing`, `RetryAfterRecovery`, `Closed`, `ReporterAvailable`, `ReporterUnavailable`, `ViewerBecomesUnknown`, `RejectedContinuation`, `RestartAfterRejectedContinuation`, `FirstPageRestartUnavailable`, `SeenRetryAfterRecovery`, `SeenUnavailable`, `SeenClosed`, `SeenDenied`, `SeenViewerBecomesUnknown`, `SeenDeniedAccessRecovery` → prefix `pages-account-inbox--` | Performance capture only. Include [inbox-entry-phone.stories.tsx](../../apps/web/src/stories/inbox-entry-phone.stories.tsx): `SignedOutAndSessionRecovery` → `pages-account-inbox-entry--signed-out-and-session-recovery` when provided by that owner. No Inbox recapture is authorized by this inventory. |
+| `/settings#notifications` shared supplied region | [settings-notifications.stories.tsx](../../apps/web/src/stories/settings-notifications.stories.tsx): `OptionalNotices`, `SavedAndRestored`, `OriginalSaveRecoveredWithDraft`, `StaleChoicesReviewed`, `RecoveryReadUnavailable`, `Refused`, `NativeRetryDelay`, `DefaultReadRecovery` → prefix `patterns-account-notice-preferences--` | This is a Pattern region, not a page-frame measurement. Reuse Accounts/Web's Settings frame; preserve mandatory moderation notices and existing preference authority. |
+
+The [page-story map](../development/page-stories.md) is useful inventory, not current visual coverage. Its board
+moderation section still names `PendingEnglishLightDesktop`, `PendingEnglishLightPhone`,
+`EmptyEnglishLightDesktop` and `EmptyEnglishLightPhone`; the current appeals source exports `Pending` and `Empty`.
+Use those current exports with viewport/theme globals. This source-reference discrepancy warrants inventory
+reconciliation during capture selection; it is not a visible page defect and does not authorize UI work here.
+The map also lacks several newer route headings shown above. Missing ledger cells cannot establish that a
+current source story is absent; conversely, additional source exports do not establish a reviewed cell.
+
+## Supplied regions and owner bars
+
+These are the concrete comparisons for the continuation. **None has been visually tested in this attempt.**
+Patterns can supplement the Page images, never replace their integrated frame. The six research reports are
+historical design inputs; their old gap lists must not be treated as defects on the reviewed revision.
+
+| Owner bar and authoritative section | Page/region comparison and representative state | Required observation / present result |
+| --- | --- | --- |
+| [Mixed Home](../feeds.md#home-dimensions), [Web Home](../../apps/web/README.md#home-page-locale) | Home `SignedIn`, `SignedOut`, `PartialSources`, `Following`, dimension choices and `SparseContinuation` | One mixed ordered stream; bounded kind/Space/question controls; no sections per kind/Space/Context. Only supported choices are selectable; unavailable lanes differ from known empty. Next replaces one bounded page with usable focus; current rows remain while pending. **Unmeasured.** |
+| [Threads/boards research](content-threads-boards-design.md), [Web board continuation](../../apps/web/README.md#board-page-localeboardsid) | Board, directory and new-thread Pages; continuation, sparse/terminal empty, denied and long draft | Active/Hot/New and supplied refresh time remain understandable; sparse Next survives; clear board purpose/destination; authoring work and retry intent survive refusal. **Unmeasured.** |
+| [Reply contract](../../apps/web/README.md#reply), [thread reading](../../apps/web/README.md#thread-reading), [exact revisions](../../apps/web/README.md#exact-recorded-revision-postsidrevisionsrevisionid) | Thread `SelectedParent`, `CancelledParent`, `WithheldPost`, `History`, `HistoryRetry`; exact revision `DifferentCurrentHead`, `LongSourceReferences` | Stable reply target and revision-specific licence/subjects/citation; neutral deleted/unloaded context; concealed bodies never appear in previews/history/current-head fallback. Check focus into composer and recovery without losing work. **Unmeasured.** |
+| [Author erasure](../../apps/web/README.md#author-erasure-in-a-thread) | Thread erasure plus operation-page queued/running/stopped/completed/error | Accepted work differs from completed work; counters and stopped reason remain legible; retry/status check does not invent success or current authority. Account-wide erasure stays with Accounts. **Unmeasured.** |
+| [Realms/Spaces research](content-realms-spaces-design.md), [Web setup](../../apps/web/README.md#guided-community-setup), [Realm home](../../apps/web/README.md#carried-realm-on-space-home) | Space member/signed-out/source-failure Pages, setup, leave recovery, bans, claim and lifecycle | One usable home with distinct attention, participation and management; readable pending settlement; no false empty board/shelf; independent boards/publications Next. Context choices grant no editorial authority; orphan reading differs from frozen writes. **Unmeasured.** |
+| [Appearance and rules](../../apps/web/README.md#realm-appearance-and-rules) | Appearance Page; `S/realm-presentation.stories.tsx#Manage/#Conflict/#UncertainRetry/#OptionalUnavailable` under `patterns-community-realm-appearance-settings--`; home presentation `Available`, `SourceUnavailable`, `CurrentDenied`, `OrphanReadable` under `patterns-community-realm-home-presentation--` | Avatar/banner/rules/count form one coherent header; count unknown differs from zero; credit/licence and exact rules provenance remain readable. Optional failures differ from concealed sources. No member-count editor or borrowed ownership authority. **Unmeasured.** |
+| [Publication choice](../../apps/web/README.md#realm-publication-subject-choice) | Publication Page `Selection`, `Chosen`; `S/realm-publications.stories.tsx#LaterItems/#Empty/#Loading/#Denied/#Unavailable/#CursorExpired/#Conflict/#Uncertain/#LongSelectedSubject` | Selection differs from Publish here; current subject label/type/cover and confirmation remain clear; unavailable differs from empty; sparse continuation survives and conflict preserves work. Content does not duplicate Semantic's Realm-bound subject writer. **Unmeasured.** |
+| [Ratings/reviews research](content-ratings-reviews-design.md), [owner status boundaries](design-status-content.md#ratings-and-reviews) | Subject Pages above; `S/subject-rating/subject-rating.stories.tsx#SaveClearZero/#PublishedZero/#BelowThreshold/#Pending/#PopulationChooser/#SparsePopulationPage/#IndependentSources` under `patterns-subjects-subject-rating--`; provenance `ChangedVote` under `patterns-community-revision-provenance--` | Personal vote versus published mean, population/count/question/units/freshness and imported figures; zero differs from clear and suppressed figure. Exact citation is immutable; only author sees private current-vote comparison. Review destinations/list continuation preserve place and current disclosure. **Unmeasured; shared frame missing.** |
+| [Moderation research](content-moderation-appeals-design.md), [receipt](../../apps/web/README.md#report-receipt-moderationreportsid), [queues](../../apps/web/README.md#board-moderation-reports-boardsidmoderation) | Receipt `IllustrativeLongReferences`, board queue `RevisionDiffers`/`TargetUnavailable`/`EmptyWithNext`, catalogue queue, decision `Open`/`Expired`/`ReversedUnavailable`, appeals | Submitted target/revision/reason/evidence differ from current target and availability. Long reasons/references/dates wrap; one legible takedown reason, intentional target selection and independent appeal result. Resolution does not imply erased body recovery. **Unmeasured.** |
+| [Notification research](content-notifications-design.md), [Web Inbox](../../apps/web/README.md#notifications-inbox-inbox) | Performance's Inbox images, especially mixed/withheld/session-change/seen retry; shared Settings region | Private recipient presentation; honest unavailable destinations; explicit seen retry and distinct failure; mandatory notices remain independent of optional preferences. Opening a page does not imply every target was read. **Unmeasured; external capture handoff missing.** |
+| [Realm discovery research](content-realm-discovery-design.md), [current source status](design-status-content.md#realms-and-spaces) | Existing shared discovery section within the Space/Home navigation frame where applicable | Popular/Trending reflect declared completed windows, not people tracking or fabricated counts; sparse continuation and unavailable summaries remain honest. Confirm actual integrated frame before selecting captures. **Unmeasured.** |
+| [Interface review rule](../development/verification.md#review), [catalogue rules](../development/storybook.md#catalogue-and-ownership) | Every admitted Page and supplied region in all four viewport/theme combinations | Hierarchy, density, legible metadata/reasons, contrast, focus visibility, clipping/overflow, keyboard reachability and consistency with shared Web frames. Long UUIDs, multilingual text and pending/error controls must remain usable. **Unmeasured.** |
+
+Participation-region inputs also exist in `S/realm-participation.stories.tsx` under
+`patterns-realm-participation--`: `JoinAndLeave`, `StillPending`, `ManualRetry`, `ReadUnavailable`, `Protected`,
+`Banned`, `NativeDenial`, `Closed`, `IndependentUnfollow`, `SectionHierarchy`. Review them within the Space frame
+and the supplied region, preserving attention versus membership versus authority. These are not extra routes.
+
+## Primary-source patterns and recommendation
+
+Reuse the six linked Content design reports; this is not another competitor survey. For the existing research
+basis, two retained source clones were inspected without installation, builds or execution:
+
+- Discourse, revision `589325e2b8466178ee83acac9ec411de555a0093`, retained at
+  `/home/edge/projects/rezics/rezics-next/.reference/partitioned-sitemap-feeds/discourse/`.
+  [`lib/guardian/category_guardian.rb`](https://github.com/discourse/discourse/blob/589325e2b8466178ee83acac9ec411de555a0093/lib/guardian/category_guardian.rb)
+  separates reading, posting and management checks;
+  [`app/controllers/notifications_controller.rb`](https://github.com/discourse/discourse/blob/589325e2b8466178ee83acac9ec411de555a0093/app/controllers/notifications_controller.rb)
+  checks inbox authority and filters inaccessible notification targets. Licence: GPL-2.0-or-later,
+  declared in `README.md` with `LICENSE.txt`.
+- Lemmy, revision `1cc23de9ec0baf13dc4f02c47f6722985c0c60d3`, retained at
+  `/home/edge/projects/rezics/rezics-next/.reference/content-moderation-appeals/lemmy/`.
+  [`crates/db_schema/src/source/post_report.rs`](https://github.com/LemmyNet/lemmy/blob/1cc23de9ec0baf13dc4f02c47f6722985c0c60d3/crates/db_schema/src/source/post_report.rs)
+  separates original reported fields, reason, resolver and resolution. Licence: AGPL-3.0 in `Cargo.toml`,
+  with the AGPL v3 text in `LICENSE`.
+
+The shared pattern, also reflected in the earlier research, is separation of a user's submitted intent/reference,
+current permission and later outcome. REZICS should retain that separation in its existing generated-client,
+React route, shared document and native Content/Community/Rating stack. Lemmy's stored body snapshots are not a
+recommendation to copy bodies; REZICS's exact references and current disclosure remain authoritative.
+The reference index records this reuse. No external implementation is proposed for copying.
+
+The manager can adopt one measurement continuation: review the current integrated Pages, reuse the assigned shared
+captures and then brief only visible failures against the bars above. Keep native vote/review behavior and Realm
+appearance with Content, shared frames with Web and preferences with Accounts. Preserve the single mixed Home
+consumer and single existing Space home. An attractive fixture result cannot establish real API, privacy,
+membership settlement, aggregate convergence or physical-cleanup behavior.
+
+## Ready continuation proposal
+
+**Outcome:** finish the Content page screenshot measurement on one retained revision and identify actual defects.
+**Pages:** all route rows above, including delegated Home and Content's supplied Subject/Settings regions.
+**Owner bars:** the linked comparison table; no policy adoption is needed to measure them.
+**Visible failing screenshot:** none available. This is a measurement proposal, not a product repair proposal.
+**Narrow scope:** obtain existing Performance Inbox and Web frame provenance, capture Content-owned Home and other
+Content Pages through normal admission when permitted, inspect all four viewport/theme combinations and exercise
+focused keyboard/recovery states. Supply Home revision/story/artifact identifiers to Web. Change only this report
+unless a separate owner authorizes a product repair.
+**Focused acceptance:** each route has an actual Page image or an explicit missing measurement; every verdict names
+the exact revision/story/artifact and tested owner bar. Report each visible defect once per defect class across
+affected pages, with page, failing image/location, owner bar, narrow repair and observable behavior acceptance.
+Keep uncovered personas/states/locales and fixture/native boundaries explicit. Missing shared captures require
+coordination, never duplicate capture ownership. No source inspection may be presented as a visual finding.
+
+No UI repair brief can yet name a visible failing screenshot. Inventing a repair before that observation would
+violate the contract. The continuation must replace these unmeasured results with image-based findings, rather than
+carry forward historical gap lists as current defects.
+
+## Validation limits
+
+This change adds research prose only and changes no typed workspace or test file. There is no focused test file to
+run and no supplied landing acceptance command for this documentation outcome. Typechecking is inapplicable;
+acceptance, native, browser, screenshot and broader checks remain deferred under the launch policy. No test pass,
+completion of Content clauses 1–6, promotion or main claim is made.
