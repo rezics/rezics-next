@@ -124,6 +124,41 @@ describe('check result reuse keys', () => {
     expect(reusableCommand(['bun', 'test', 'live-mail.test.ts'])).toBe(false);
   });
 
+  test('Reuse a passing check only for the same complete source inputs', () => {
+    write('tools/goal/package.json', JSON.stringify({ name: '@fixture/goal' }));
+    write('tools/goal/src.ts', 'export const g = 1;');
+    write('docs/note.md', 'a');
+    write('tools/other/src.ts', 'b');
+    commit();
+    const cmd = ['bun', 'test'];
+    const app = key(join(root, 'apps/app'));
+    const goal = checkResultKey({ root, cwd: join(root, 'tools/goal'), command: cmd, env: process.env });
+    const docs = checkResultKey({ root, cwd: join(root, 'docs'), command: cmd, env: process.env });
+    const other = checkResultKey({ root, cwd: join(root, 'tools/other'), command: cmd, env: process.env });
+    expect(docs.key).not.toBe(other.key);
+    results.record({
+      key: goal.key,
+      unit: goal.unit,
+      passed: true,
+      producer: 'test',
+      host: 'host',
+      duration: 1,
+      logPath: 'goal.log',
+      time: Date.now(),
+      schemaVersion: 1,
+    });
+    expect(results.lookup(goal.key)?.passed).toBe(true);
+    write('docs/note.md', 'changed');
+    commit();
+    expect(checkResultKey({ root, cwd: join(root, 'docs'), command: cmd, env: process.env }).key).not.toBe(docs.key);
+    write('tools/goal/src.ts', 'export const g = 2;');
+    commit();
+    const changed = checkResultKey({ root, cwd: join(root, 'tools/goal'), command: cmd, env: process.env });
+    expect(changed.key).not.toBe(goal.key);
+    expect(results.lookup(changed.key)).toBeUndefined();
+    expect(key(join(root, 'apps/app'))).toBe(app);
+  });
+
   test('shadow mode logs hits, runs fresh checks, and alerts once when a hit fails', async () => {
     const freshCommand = ['sh', '-c', 'echo fresh; exit 1'];
     const k = checkResultKey({ root, cwd: root, command: freshCommand, env: process.env });
