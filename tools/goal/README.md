@@ -735,7 +735,9 @@ integration. The defaults cover kernel affected mode, workspace imports, the Per
 regressions and the client page-story/component check. Local `affectedTests` and `integrationChecks` remain compatible
 inputs to this verifier when `verifierChecks` is not explicitly set; `bun install` and old typecheck entries are
 excluded. An explicit `verifierChecks` array replaces those legacy selections. `siblingTests.command` selects sibling
-tests after integration, excluding spec-tree files. These settings cannot disable or add work to the mandatory
+tests after integration, excluding spec-tree files. Discovery uses the shared `siblingTestFiles` selection of existing
+`.test`/`.spec` JS/TS module and JSX files beside the source and in workspace test directories, and still places a
+`bun test` command in the workspace that owns those files. These settings cannot disable or add work to the mandatory
 prelanding typecheck.
 
 Main and stabilize train checks retain their existing baseline behavior. They compare recorded failing files with the
