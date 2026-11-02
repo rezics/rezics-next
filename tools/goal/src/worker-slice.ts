@@ -49,8 +49,12 @@ export class WorkerSlice {
     report: (message: string) => void = (message) => console.error(message),
   ): SpawnSyncReturns<Buffer> {
     if (!this.configured) {
+      try {
+        this.configurationError = this.configure(options);
+      } catch (error) {
+        this.configurationError = error instanceof Error ? error.message : String(error);
+      }
       this.configured = true;
-      this.configurationError = this.configure(options);
     }
     if (this.configurationError) {
       report(`Worker systemd scope unavailable; starting without a scope: ${this.configurationError}`);
