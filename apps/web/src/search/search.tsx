@@ -382,6 +382,14 @@ function searchHref(
   return discoverySearchHref(locale, { ...state, query, type, facets, cursor, sort });
 }
 
+function languageDisplayName(tag: string, locale: string) {
+  try {
+    return new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? tag;
+  } catch {
+    return tag;
+  }
+}
+
 const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
 
 export function SearchPage({
@@ -511,7 +519,7 @@ export function SearchPage({
   for (const tag of draft.languages ?? [])
     add(
       `language:${tag}`,
-      `${m.condition_language()}: ${new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? tag}`,
+      `${m.condition_language()}: ${languageDisplayName(tag, locale)}`,
       {
         ...navigationState,
         languages: draft.languages?.filter((entry) => entry !== tag),
