@@ -40,19 +40,17 @@ function unsupported(pointer: string): never {
 
 /** Copy bounded caller fields before the first await. Omitted keys stay omitted. */
 export function ownDiscoveryRequest(request: MixedDiscoveryRequest): MixedDiscoveryRequest {
-  const owned: MixedDiscoveryRequest = { representation: request.representation };
+  const owned: Record<string, unknown> = { representation: request.representation };
   for (const key of OWNED_FIELDS) {
     if (!Object.hasOwn(request, key)) continue;
     const value = request[key];
-    (owned as MixedDiscoveryRequest)[key] = (
-      Array.isArray(value)
-        ? [...value]
-        : value !== null && typeof value === 'object'
-          ? structuredClone(value)
-          : value
-    ) as MixedDiscoveryRequest[typeof key];
+    owned[key] = Array.isArray(value)
+      ? [...value]
+      : value !== null && typeof value === 'object'
+        ? structuredClone(value)
+        : value;
   }
-  return owned;
+  return owned as MixedDiscoveryRequest;
 }
 
 /** Admission precedes any native enumeration. Saved/private domains remain closed here. */

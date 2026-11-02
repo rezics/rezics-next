@@ -10,6 +10,7 @@ import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts'
 import { admitDiscoveryRequest, type MixedDiscoveryRequest } from '../../src/search/discovery-request.ts';
 import { createDiscoverySearch } from '../../src/search/discovery-service.ts';
 import { encodeDiscoveryCursor } from '../../src/search/cursor.ts';
+import type { OpenSearch } from '../../src/search/opensearch.ts';
 import { installPublicFilterCoveragePage } from '../../src/search/public-filter-coverage-page.ts';
 import type { DiscoveryReadContext, DiscoveryRegistry } from '../../src/search/discovery.ts';
 import type {
@@ -25,6 +26,17 @@ import * as hydration from '../../src/search/discovery-hydration.ts';
 const now = 1_000;
 const id = '018f0000-0000-7000-8000-00a000000001';
 const keys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
+const cost = {
+  inputKeys: 0,
+  candidates: 0,
+  accessPoints: 0,
+  dependencyPoints: 0,
+  engineSearches: 0,
+  engineIteratorSteps: 0,
+  outputSlots: 0,
+  resultWrites: 0,
+  frontierWrites: 0,
+};
 const unused = async (): Promise<never> => {
   throw new Error('Unexpected producer operation');
 };
@@ -143,7 +155,7 @@ function fixture() {
     async capture(plan) {
       plans.push(structuredClone(plan));
       if (captureHold) await captureHold.promise;
-      return { status: 'captured' as const, queried, repair: { consumer, job: 'job' }, cost: {} };
+      return { status: 'captured' as const, queried, repair: { consumer, job: 'job' }, cost };
     },
     query: unused,
     async queryDiscovery() {
@@ -165,14 +177,14 @@ function fixture() {
           ],
         },
         window: { positions: [0], examined: 1, exhausted: true },
-        cost: {},
+        cost,
       };
     },
     async consume() {},
     async finish() {},
     async dispose() {},
     failure() {
-      return { status: 'unavailable' as const, reason: 'observation_lost' as const, cost: {} };
+      return { status: 'unavailable' as const, reason: 'observation_lost' as const, cost };
     },
   }));
   const current = registry();
@@ -372,7 +384,7 @@ test('default discovery owns hydration languages before activeRelease', async ()
     search: {
       request: async () => ({ status: 503, body: {} }),
       bulk: async () => ({ errors: true }),
-    },
+    } as OpenSearch,
     prefix: 'own-',
     clock: () => new Date(now),
     keys,
