@@ -143,7 +143,12 @@ function validateSamples(samples: readonly GrowthSample[]): void {
   }
 }
 
-function validateSlack(slack: Slack, metric: GrowthMetric): void {
+export function validateGrowthBound(bound: unknown, metric: string): asserts bound is Bound {
+  if (bound !== 'constant' && bound !== 'logarithmic' && bound !== 'linear')
+    throw new TypeError(`Unknown growth bound for ${metric}`);
+}
+
+export function validateGrowthSlack(slack: Slack, metric: GrowthMetric): void {
   if (
     !Number.isFinite(slack.absolute) ||
     slack.absolute < 0 ||
@@ -163,10 +168,9 @@ export function growthViolations(
   const violations: Violation[] = [];
   for (const metric of METRICS) {
     const bound = bounds[metric];
-    if (bound !== 'constant' && bound !== 'logarithmic' && bound !== 'linear')
-      throw new TypeError(`Unknown growth bound for ${metric}`);
+    validateGrowthBound(bound, metric);
     const tolerance = slack[metric] ?? DEFAULT_SLACK[metric];
-    validateSlack(tolerance, metric);
+    validateGrowthSlack(tolerance, metric);
     for (let index = 0; index < samples.length - 2; index++) {
       const triple = samples.slice(index, index + 3);
       const scales = triple.map(({ scale }) => scale) as [number, number, number];
@@ -212,10 +216,9 @@ export function growthByteViolations(
   const violations: Violation[] = [];
   for (const metric of metrics) {
     const bound = bounds[metric]!;
-    if (bound !== 'constant' && bound !== 'logarithmic' && bound !== 'linear')
-      throw new TypeError(`Unknown growth bound for ${metric}`);
+    validateGrowthBound(bound, metric);
     const tolerance = slack[metric] ?? DEFAULT_BYTE_SLACK[metric];
-    validateSlack(tolerance, metric);
+    validateGrowthSlack(tolerance, metric);
     for (const sample of samples)
       if (!Number.isFinite(sample.cost[metric]) || sample.cost[metric]! < 0)
         throw new TypeError(`Growth value for ${metric} must be finite and non-negative`);

@@ -44,10 +44,10 @@ import {
   type StatementOccurrences,
 } from './growth-report.ts';
 import { appendGrowthProfile, growthProfileExportMode, type GrowthProfileExportMode } from './growth-profile-output.ts';
+import { admitGrowthCheck, type AdmittedGrowthCheck } from './growth-config.ts';
 import {
   countedSample,
   countedViolations,
-  validateCountedConfig,
   validateCountedRun,
   type CountedCheck,
   type CountedSample,
@@ -60,6 +60,7 @@ import {
 } from './growth-retry-verdict.ts';
 
 export * from './growth-counters.ts';
+export { admitGrowthCheck, type AdmittedGrowthCheck, type GrowthCheckConfiguration } from './growth-config.ts';
 
 export * from './growth-cost.ts';
 export * from './growth-access-path.ts';
@@ -835,54 +836,20 @@ async function assertRunTransactionsClosed(run: Awaited<ReturnType<typeof captur
 }
 
 export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promise<GrowthReport> {
-  return withGrowthCheck(db, () => runGrowthCheck(db, check));
+  const admitted = admitGrowthCheck(check);
+  check = { ...check, ...admitted };
+  return withGrowthCheck(db, () => runGrowthCheck(db, check, admitted));
 }
 
-async function runGrowthCheck(db: GrowthDatabase, check: GrowthCheck): Promise<GrowthReport> {
+async function runGrowthCheck(
+  db: GrowthDatabase,
+  check: GrowthCheck,
+  admitted: AdmittedGrowthCheck,
+): Promise<GrowthReport> {
   const growthRule = process.env.GROWTH_RULE;
-  if (growthRule !== undefined && growthRule !== 'series')
-    throw new TypeError(`${check.name}: GROWTH_RULE must be 'series' when set`);
   const profileMode = growthProfileExportMode(process.env.GROWTH_PROFILE_REQUIRED);
   const listed = GROWTH_BASELINE.some(({ name }) => name === check.name);
-  if (listed && check.rule !== undefined)
-    throw new TypeError(`${check.name}: listed checks must not set rule in growth-baseline.ts`);
-  const rule = check.rule ?? (growthRule === 'series' || !listed ? 'series' : 'step');
-  const scales = check.scales ?? [1, 8, 64];
-  const repetitions = check.repetitions ?? 5;
-  const warmups = check.warmups ?? 1;
-  if (check.attempts) {
-    if (!Number.isSafeInteger(check.attempts.commands) || check.attempts.commands <= 0)
-      throw new TypeError(`${check.name}: attempts.commands must be a positive safe integer`);
-  }
-  if (check.indexProbes !== undefined) {
-    if (!Number.isSafeInteger(check.indexProbes) || check.indexProbes <= 0)
-      throw new TypeError(`${check.name}: indexProbes must be a positive safe integer`);
-    if (check.bounds.blocks === 'constant')
-      throw new TypeError(`${check.name}: indexProbes cannot be used with a constant blocks bound`);
-  }
-  if (check.counted) validateCountedConfig(check.counted);
-  if (scales.length < 3 || scales.length > 5) throw new TypeError('Growth checks require three to five scales');
-  const [first, second] = scales;
-  const firstRatio = second / first;
-  if (
-    scales.some(
-      (scale, index) =>
-        !Number.isFinite(scale) || scale <= 0 || scale > 4096 || (index > 0 && scale <= scales[index - 1]!),
-    ) ||
-    firstRatio < 4 ||
-    scales.slice(2).some((scale, index) => {
-      const ratio = scale / scales[index + 1]!;
-      return Math.abs(firstRatio - ratio) / Math.max(firstRatio, ratio) >= 1e-9;
-    })
-  ) {
-    throw new TypeError(
-      'Growth scales must be positive, increasing and equally spaced by a ratio of at least four, with a largest scale no greater than 4096',
-    );
-  }
-  if (!Number.isSafeInteger(repetitions) || repetitions < 1)
-    throw new RangeError('Growth repetitions must be a positive safe integer');
-  if (!Number.isSafeInteger(warmups) || warmups < 1)
-    throw new RangeError('Growth warmups must be a positive safe integer; use the warmup hook for consumable state');
+  const { scales, repetitions, warmups, rule } = admitted;
 
   let previous = 0;
   let repetition = 0;

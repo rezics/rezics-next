@@ -438,8 +438,10 @@ shared blocks and statements, never time. An optional `byteBounds` can also boun
 using the same `constant`, `logarithmic` and `linear` rules. Its default slack is 0 absolute and 10% relative, and a
 check can override that slack with `slack.requestBytes` or `slack.responseBytes`. A check without `byteBounds` is
 unchanged. That 10% allowance covers about four extra bytes per value for integer text keys through scale 4096 when
-the payload is at least 40 bytes. `bounds` remains required for rows, blocks and statements. Use `checkGrowth`
-from `test/support/growth.ts` with `seed` in `grow` to add rows between scales. Grow both the total data and hot
+the payload is at least 40 bytes. `bounds` remains required for rows, blocks and statements. `checkGrowth` admits the
+complete configuration before `grow`, `warmup` or `operation`, keeps that snapshot for the run, and names the check and
+field on configuration errors. Use `checkGrowth` from `test/support/growth.ts` with `seed` in `grow` to add rows between
+scales. Grow both the total data and hot
 partition, while keeping the operation's own neighbourhood fixed. Seed through production writes or bulk rows of
 identical shape. Bulk seed transactions hold at most 500 rows and 1 MiB of serialized JSON across all table payloads,
 including array framing; an individual row that cannot fit is rejected before insertion. The existing default slack is
