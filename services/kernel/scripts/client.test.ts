@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { expect, expectTypeOf, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
 import { clientDeclarationCacheDirectory, clientDeclarations, withOrderReconcileAuthorization } from './client.ts';
+import type { KernelClient } from '../../../packages/client/src/index.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
 
@@ -104,4 +105,18 @@ test('the generated order reconcile call includes bearer authorization, idempote
   expect(generated).toContain('reconciliation: "queued"');
   expect(generated.indexOf('authorization: string;')).toBeLessThan(generated.indexOf('"idempotency-key": string;'));
   expect(withOrderReconcileAuthorization(generated)).toBe(generated);
+});
+
+test('KernelClient accepts order reconciliation headers and types the queued response', () => {
+  const reconcile = (client: KernelClient) =>
+    client.orders({ orderId: 'order-id' }).$reconcile.post(
+      {},
+      { headers: { authorization: 'Bearer token', 'idempotency-key': 'request-key' } },
+    );
+  type QueuedResponse = Extract<
+    NonNullable<Awaited<ReturnType<typeof reconcile>>['data']>,
+    { reconciliation: 'queued' }
+  >;
+  const response: QueuedResponse = { orderId: 'order-id', reconciliation: 'queued' };
+  expect(response.reconciliation).toBe('queued');
 });
