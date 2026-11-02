@@ -28,9 +28,11 @@ function Example({
     if (scenario === 'delegated') page.authority.principalId = '0192f3a0-6c1e-7b2a-a001-000200000099';
     if (scenario === 'generic') page.resource.type = 'illustrative.unrecognized_resource_type_' + 'exact_'.repeat(20);
     if (scenario === 'long') {
+      const acting = page.identities[0]!;
       const identity = page.identities[1]!;
+      if (acting.state !== 'active' || identity.state !== 'active') throw new Error('Expected active illustrative identities');
       page.identities = [
-        { ...page.identities[0]!, displayName: 'Mira · 管理者 · Administratrice · 관리자' },
+        { ...acting, displayName: 'Mira · 管理者 · Administratrice · 관리자' },
         { ...identity, id: '0192f3a0-6c1e-7b2a-a001-000200000098', displayName: 'Delegating account · 委任元' },
         ...Array.from({ length: 20 }, (_, index) => ({
           ...identity,
@@ -334,7 +336,7 @@ export const GenericResource: Story = {
   args: { scenario: 'generic' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('heading', { name: m.access_resource(), exact: true })).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: m.access_resource() })).toBeVisible();
     const section = canvas.getByRole('region', { name: m.access_resource() });
     await userEvent.click(within(section).getByText(m.access_identity_details(), { selector: 'summary' }));
     const type = within(section).getByText(/^illustrative\.unrecognized_resource_type_/, { selector: 'dd' });

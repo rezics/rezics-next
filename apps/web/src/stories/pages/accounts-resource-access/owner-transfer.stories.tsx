@@ -25,8 +25,11 @@ function Example({ scenario = 'current' }: { scenario?: 'current' | 'lost' | 'de
       ],
     };
     if (scenario === 'long') {
-      page.identities[0] = { ...snapshot.identities[0]!, displayName: 'Mira · 管理者 · ' + 'Responsable de la communauté '.repeat(8) };
-      page.identities[1] = { ...snapshot.identities[1]!, displayName: 'Aki · 新しい所有者 · ' + '독서 모임 관리자 '.repeat(12) };
+      const source = page.identities[0]!;
+      const recipient = page.identities[1]!;
+      if (source.state !== 'active' || recipient.state !== 'active') throw new Error('Expected active illustrative identities');
+      page.identities[0] = { ...source, displayName: 'Mira · 管理者 · ' + 'Responsable de la communauté '.repeat(8) };
+      page.identities[1] = { ...recipient, displayName: 'Aki · 新しい所有者 · ' + '독서 모임 관리자 '.repeat(12) };
     }
     if (scenario === 'unresolved') page.identities = page.identities.filter((item) => item.id !== managerId);
     if (scenario === 'deleted') page.identities[0] = { id: managerId, kind: 'actor', state: 'deleted' };

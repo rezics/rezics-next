@@ -50,6 +50,11 @@ afterAll(async () => {
   }
 });
 const show = async (node: ReactNode) => { await act(async () => root.render(node)); };
+function activeIdentity(id: string) {
+  const identity = snapshot.identities.find((item) => item.id === id);
+  if (identity?.state !== 'active') throw new Error('Expected active illustrative identity');
+  return identity;
+}
 function ioFor(page: AccessSnapshot) {
   return {
     read: mock(async (): Promise<AccessState> => ({ status: 'ready', page: structuredClone(page) })),
@@ -93,7 +98,7 @@ for (const width of [390, 1280]) test(`full 20-grant/22-identity DTO keeps long 
   const page = structuredClone(snapshot);
   const long = '読書会 · Cercle de lecture · 독서 모임 · ' + '共同研究'.repeat(60);
   page.identities.push(...Array.from({ length: 20 }, (_, index) => ({
-    ...snapshot.identities[1]!, id: `0192f3a0-6c1e-7b2a-a001-${String(300000000 + index).padStart(12, '0')}`, displayName: `${long} ${index}`,
+    ...activeIdentity(readerId), id: `0192f3a0-6c1e-7b2a-a001-${String(300000000 + index).padStart(12, '0')}`, displayName: `${long} ${index}`,
   })));
   page.grants = page.identities.slice(2).map((identity) => ({ ...page.grants[0]!, subject: { kind: 'account', id: identity.id } }));
   page.authority.principalId = readerId;
@@ -130,7 +135,7 @@ test('missing identity is unavailable, only explicit deletion is tombstoned, and
   page.resource.type = 'illustrative.unsupported_' + 'exact_type_'.repeat(40);
   page.grants.push({ ...page.grants[0]!, subject: { kind: 'account', id: missing }, manageable: false });
   const unnamed = '0192f3a0-6c1e-7b2a-a001-000200000098';
-  page.identities.push({ ...snapshot.identities[0]!, id: unnamed, handle: null, displayName: null });
+  page.identities.push({ ...activeIdentity(managerId), id: unnamed, handle: null, displayName: null });
   page.grants.push({ ...page.grants[0]!, subject: { kind: 'account', id: unnamed }, manageable: false });
   const io = ioFor(page);
   await show(<ResourceAccessPage initial={{ status: 'ready', page }} io={io} />);
@@ -148,7 +153,7 @@ test('missing identity is unavailable, only explicit deletion is tombstoned, and
   expect(host.innerHTML).not.toContain('@aki');
   expect(canvas.getByText(m.access_acting_as({ name: m.access_unknown_account() })).closest('details')).toBeNull();
   expect(canvas.getByText(m.access_delegated_by({ name: m.access_unknown_account() })).closest('details')).toBeNull();
-  expect(canvas.getByRole('heading', { name: m.access_resource(), exact: true })).toBeTruthy();
+  expect(canvas.getByRole('heading', { name: m.access_resource() })).toBeTruthy();
   await details(rows[1]!, [missing, page.grants[1]!.valid]);
   await details(rows[2]!, [unnamed, page.grants[2]!.valid]);
   await details(canvas.getByRole('region', { name: m.access_resource() }), [page.resource.id, page.resource.type, page.resource.route, missing, missing]);
