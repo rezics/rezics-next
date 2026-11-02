@@ -414,10 +414,27 @@ test('claim approval and ban target forms keep confirmation, uncertain retry and
     expect(host.textContent).toContain(longBanReason);
     expect(host.querySelector(`time[datetime="${previousBan.at}"]`)).toBeTruthy();
 
-    const previousRow = [...host.querySelectorAll('li')].find(
-      (candidate) => candidate.querySelector('h4')?.textContent === previousAccountId,
+    for (const details of host.querySelectorAll('details')) details.open = false;
+    const previousRow = [...host.querySelectorAll('ul > li')].find((candidate) =>
+      [...candidate.querySelectorAll('dt')].some(
+        (label) =>
+          label.textContent === m.realm_bans_details_account() &&
+          label.nextElementSibling?.textContent === previousAccountId &&
+          label.closest('li') === candidate &&
+          !label.closest('details') &&
+          !label.nextElementSibling.closest('details'),
+      ),
     );
-    const unbanButton = previousRow?.querySelector('button');
+    expect(previousRow?.parentElement?.getAttribute('aria-label')).toBe(m.realm_bans_current());
+    expect(previousRow?.querySelector('h4')?.textContent).toBe(m.realm_bans_details_banned_heading());
+    const disclosedAccount = [...(previousRow?.querySelectorAll('dt') ?? [])].find(
+      (label) => label.textContent === m.realm_bans_details_account(),
+    )?.nextElementSibling;
+    expect(disclosedAccount?.textContent).toBe(previousAccountId);
+    expect(disclosedAccount?.closest('details, [hidden], [aria-hidden="true"]')).toBeNull();
+    const unbanButton = [...(previousRow?.querySelectorAll('button') ?? [])].find(
+      (candidate) => candidate.textContent?.trim() === m.realm_bans_unban(),
+    );
     if (!unbanButton) throw new Error('The existing ban row should expose its own unban action.');
     await act(async () => unbanButton.click());
     await flush();

@@ -7,7 +7,6 @@ import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { initials } from '@rezics/ui/avatar-initials';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
 import {
   parseRealmBanTarget,
   revalidateRealmBanTarget,
@@ -35,10 +34,39 @@ export function RealmBanOutcome({ result }: { result: Extract<BanWriteResult, { 
   const id = useId();
   const accountId = result.action === 'ban' ? result.ban.accountId : result.accountId;
   return (
-    <ContentItemFrame as="article" role="status" aria-labelledby={`${id}-account`} className="space-y-2 p-4 text-sm">
-      <ContentItemHeading level={3} id={`${id}-account`} className="break-all whitespace-normal font-medium">
-        {accountId}
+    <ContentItemFrame
+      as="article"
+      role="status"
+      aria-labelledby={`${id}-account`}
+      className="min-w-0 space-y-3 wrap-anywhere p-4 text-sm"
+    >
+      <ContentItemHeading level={3} id={`${id}-account`} className="whitespace-normal font-medium">
+        {result.action === 'ban' ? m.realm_bans_details_banned_heading() : m.realm_bans_details_lifted_heading()}
       </ContentItemHeading>
+      <dl className="min-w-0 space-y-3">
+        <div>
+          <dt className="font-medium">{m.realm_bans_details_account()}</dt>
+          <dd className="wrap-anywhere">
+            <bdi>{accountId}</bdi>
+          </dd>
+        </div>
+        {result.action === 'ban' ? (
+          <>
+            <div>
+              <dt className="font-medium">{m.realm_bans_details_reason()}</dt>
+              <dd className="whitespace-pre-wrap wrap-anywhere">{result.ban.reason || m.realm_bans_no_reason()}</dd>
+            </div>
+            <div>
+              <dt className="font-medium">{m.realm_bans_details_at()}</dt>
+              <dd>
+                <time dateTime={result.ban.at} dir="ltr" className="wrap-anywhere">
+                  {result.ban.at.replace('T', ' ').replace(/Z$/, '')} UTC
+                </time>
+              </dd>
+            </div>
+          </>
+        ) : null}
+      </dl>
       <p>{result.action === 'ban' ? m.realm_bans_active() : m.realm_bans_lifted()}</p>
       {result.action === 'ban' && result.ban.workflowId !== null ? <p>{m.realm_bans_removal_pending()}</p> : null}
     </ContentItemFrame>
@@ -424,7 +452,7 @@ function RealmBansVisit({
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
           disabled={disabled || view.state === 'loading'}
           onClick={() => {
             if (!gate.current() || generation.current !== renderGeneration) return;
@@ -454,7 +482,7 @@ function RealmBansVisit({
               <FieldLabel htmlFor={`${id}-account`}>{m.realm_bans_account()}</FieldLabel>
               <Input
                 id={`${id}-account`}
-                className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                className="min-h-11 min-w-11"
                 required
                 autoComplete="off"
                 spellCheck={false}
@@ -474,7 +502,7 @@ function RealmBansVisit({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
                 disabled={disabled || !query.trim() || target.state === 'pending'}
                 onClick={() => void findTarget()}
               >
@@ -492,7 +520,7 @@ function RealmBansVisit({
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
                     disabled={disabled}
                     onClick={() => {
                       if (!gate.current() || working.current || uncertain.current) return;
@@ -529,22 +557,39 @@ function RealmBansVisit({
             </Field>
             <Button
               type="submit"
-              className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
               disabled={disabled || !selected || target.state !== 'ready'}
             >
               {m.realm_bans_ban()}
             </Button>
             {banConfirm && selected ? (
-              <ContentItemFrame as="div" className="space-y-3 p-4">
-                <ContentItemHeading level={3} className="line-clamp-none font-medium leading-6">
+              <ContentItemFrame
+                as="div"
+                role="group"
+                aria-labelledby={`${id}-ban-confirm`}
+                className="min-w-0 space-y-3 wrap-anywhere p-4"
+              >
+                <ContentItemHeading
+                  level={3}
+                  id={`${id}-ban-confirm`}
+                  className="line-clamp-none font-medium leading-6"
+                >
                   {m.realm_bans_ban_confirm()}
                 </ContentItemHeading>
                 <TargetPreview target={selected} headingLevel={4} />
+                <dl className="min-w-0 text-sm">
+                  <div>
+                    <dt className="font-medium">{m.realm_bans_details_account()}</dt>
+                    <dd className="wrap-anywhere">
+                      <bdi>{selected.account.id}</bdi>
+                    </dd>
+                  </div>
+                </dl>
                 <p className="whitespace-pre-wrap wrap-anywhere text-sm">{reason || m.realm_bans_no_reason()}</p>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
-                    className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
                     disabled={disabled}
                     onClick={() => void submitBan()}
                   >
@@ -553,7 +598,7 @@ function RealmBansVisit({
                   <Button
                     type="button"
                     variant="ghost"
-                    className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
                     disabled={disabled}
                     onClick={() => {
                       if (gate.current() && !working.current) {
@@ -572,31 +617,40 @@ function RealmBansVisit({
           {view.page.items.length === 0 ? (
             <p className="text-sm text-muted-foreground">{m.realm_bans_empty()}</p>
           ) : (
-            <ul className="space-y-3">
+            <ul aria-label={m.realm_bans_current()} className="min-w-0 space-y-3">
               {view.page.items.map((ban) => (
                 <ContentItem
                   key={ban.accountId}
-                  title={ban.accountId}
+                  title={m.realm_bans_details_banned_heading()}
                   headingLevel={4}
-                  className="[&_h4]:line-clamp-none [&_h4]:break-all [&_h4]:whitespace-normal"
+                  className="wrap-anywhere [&_h4]:line-clamp-none [&_h4]:whitespace-normal"
                   metadata={
-                    <div className="space-y-2 whitespace-pre-wrap wrap-anywhere">
-                      <p>{ban.reason || m.realm_bans_no_reason()}</p>
-                      <time dateTime={ban.at}>
-                        {new Intl.DateTimeFormat(getLocale(), {
-                          dateStyle: 'medium',
-                          timeStyle: 'short',
-                          timeZone: 'UTC',
-                        }).format(new Date(ban.at))}{' '}
-                        UTC
-                      </time>
-                    </div>
+                    <dl className="min-w-0 flex-1 space-y-3">
+                      <div>
+                        <dt className="font-medium">{m.realm_bans_details_account()}</dt>
+                        <dd className="wrap-anywhere">
+                          <bdi>{ban.accountId}</bdi>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-medium">{m.realm_bans_details_reason()}</dt>
+                        <dd className="whitespace-pre-wrap wrap-anywhere">{ban.reason || m.realm_bans_no_reason()}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-medium">{m.realm_bans_details_at()}</dt>
+                        <dd>
+                          <time dateTime={ban.at} dir="ltr" className="wrap-anywhere">
+                            {ban.at.replace('T', ' ').replace(/Z$/, '')} UTC
+                          </time>
+                        </dd>
+                      </div>
+                    </dl>
                   }
                   actions={
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                      className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
                       disabled={disabled}
                       onClick={() => {
                         if (
@@ -615,14 +669,31 @@ function RealmBansVisit({
                   }
                   preview={
                     confirm === ban.accountId ? (
-                      <ContentItemFrame as="div" className="space-y-3 p-4">
-                        <ContentItemHeading level={4} className="line-clamp-none font-medium leading-6">
+                      <ContentItemFrame
+                        as="div"
+                        role="group"
+                        aria-labelledby={`${id}-unban-${ban.accountId}`}
+                        className="min-w-0 space-y-3 wrap-anywhere p-4"
+                      >
+                        <ContentItemHeading
+                          level={4}
+                          id={`${id}-unban-${ban.accountId}`}
+                          className="line-clamp-none font-medium leading-6"
+                        >
                           {m.realm_bans_unban_confirm()}
                         </ContentItemHeading>
+                        <dl className="min-w-0">
+                          <div>
+                            <dt className="font-medium">{m.realm_bans_details_account()}</dt>
+                            <dd className="wrap-anywhere">
+                              <bdi>{ban.accountId}</bdi>
+                            </dd>
+                          </div>
+                        </dl>
                         <div className="flex flex-wrap gap-2">
                           <Button
                             type="button"
-                            className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
                             disabled={disabled}
                             onClick={() =>
                               void change({
@@ -639,7 +710,7 @@ function RealmBansVisit({
                           <Button
                             type="button"
                             variant="ghost"
-                            className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
                             disabled={disabled}
                             onClick={() => {
                               if (gate.current() && !working.current) {
@@ -662,7 +733,7 @@ function RealmBansVisit({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
               disabled={disabled}
               onClick={() => {
                 if (!gate.current() || generation.current !== renderGeneration) return;
@@ -685,7 +756,7 @@ function RealmBansVisit({
             <Button
               type="button"
               variant="outline"
-              className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal wrap-anywhere py-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
               disabled={busy || view.state !== 'ready'}
               onClick={() => void change(retry)}
             >
