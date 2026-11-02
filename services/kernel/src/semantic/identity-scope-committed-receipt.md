@@ -72,7 +72,10 @@ This slice remains incomplete at these concrete existing owner boundaries:
   or ready native transaction column. `register`/capture advancement records an
   identity native registration, but the final `advance` ready transition neither
   retains its transaction nor records an identity native component. The summary's
-  later `xmin` cannot recover an earlier transaction. Foreign enrollment receipts
+  later `xmin` cannot recover an earlier transaction. The native hold is also
+  updated by `readAndHold` during final ready validation, so its `xmin` no longer
+  identifies the earlier registration component; its stored transaction ID belongs
+  to the Library capture, not the Semantic registration. Foreign enrollment receipts
   and Library capture receipts are not that missing association. Initial dispatch
   returns `initial_binding_missing`; it never invents a repair job.
 * `library/identity-scope-effects.ts` still returns unavailable from
@@ -96,7 +99,13 @@ is activated. Existing observation/type files are unchanged.
 Source material read: the current scope types, observation registration/advance/
 finish/repair/revalidate bodies, identity native writer/contract/schema, consumer
 native receipt reconcilers, binding reconciler, Library custody SQL and effects
-adapter; retained `worker/30b4bf6d-0a72-41bd-8282-11169921328c` Kind evidence,
+adapter; retained Kind evidence,
 definition catalogue and audience source; and the full exact foreign disposition
 `kind-fresh-current1-foreign-operand-20261102.md`. No reference project was named
 for this locator surface. Native/unit/growth/full acceptance execution is deferred.
+
+The single permitted `bun run --cwd services/kernel typecheck` completed with
+exit 2: Reylo rejected repeated positional parameters in the new SQL. Both literals
+now bind each parameter once in a typed input CTE and reuse its scalar columns.
+Those fixes are committed; a second compiler run and all native/unit/growth/full
+acceptance execution remain unrun under the launch execution policy.

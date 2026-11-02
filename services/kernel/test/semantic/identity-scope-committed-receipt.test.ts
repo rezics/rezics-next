@@ -390,7 +390,7 @@ test('body-derived bounds stay constant with unrelated retained jobs and cannot 
     expect(bound?.nativeRows).toBe(rows);
     expect(bound?.nativePoints).toBe(rows);
     expect(bound?.statements).toBe(1);
-    expect(query).toContain('s.partition_no=$1 AND s.source_key=$2 AND s.scope_id=$3');
+    expect(query).toContain('s.partition_no=i.partition_no AND s.source_key=i.source_key AND s.scope_id=i.scope_id');
     expect(query).not.toMatch(/OFFSET|count\(\*\)|ORDER BY/i);
   }
   expect(identityScopeCommittedReceiptFootprint('SELECT 1', [])).toBeUndefined();
