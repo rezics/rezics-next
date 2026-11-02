@@ -58,7 +58,9 @@ function parsePrepare(command: string[]) {
     cwd: value('--cwd'),
     sourceRevision: value('--source-revision'),
     environmentFile: value('--env-file'),
-    returns: command.slice(0, separator).flatMap((part, index, list) => part === '--returns' ? [list[index + 1]!] : []),
+    returns: command
+      .slice(0, separator)
+      .flatMap((part, index, list) => (part === '--returns' ? [list[index + 1]!] : [])),
     command: command.slice(separator + 1),
   };
 }
@@ -89,14 +91,31 @@ function descriptorFor(input: WebCheckDriverInvocation): PreparedCheckRunDescrip
     invocationId: '11111111-1111-4111-8111-111111111111',
     nonce: 'a'.repeat(64),
     binding,
-    cancellation: { file: join(dirname(parsed.descriptorFile), 'cancel.json'), id: '11111111-1111-4111-8111-111111111111' },
+    cancellation: {
+      file: join(dirname(parsed.descriptorFile), 'cancel.json'),
+      id: '11111111-1111-4111-8111-111111111111',
+    },
   };
 }
 
-function terminalMessages(descriptor: PreparedCheckRunDescriptor, exitCode: number, returns: string[], duplicateFinal = false) {
+function terminalMessages(
+  descriptor: PreparedCheckRunDescriptor,
+  exitCode: number,
+  returns: string[],
+  duplicateFinal = false,
+) {
   const physical = { host: 'a' as const, run: 'fixture-physical-run' };
-  const receipt = { schema: 1 as const, host: physical.host, run: physical.run, exitCode, lifetimeFailure: null, resources: null };
-  const receiptSha256 = sha(JSON.stringify({ schema: receipt.schema, host: receipt.host, run: receipt.run, exitCode, lifetimeFailure: null }));
+  const receipt = {
+    schema: 1 as const,
+    host: physical.host,
+    run: physical.run,
+    exitCode,
+    lifetimeFailure: null,
+    resources: null,
+  };
+  const receiptSha256 = sha(
+    JSON.stringify({ schema: receipt.schema, host: receipt.host, run: receipt.run, exitCode, lifetimeFailure: null }),
+  );
   const native = {
     schema: 1 as const,
     type: 'native-terminal' as const,
@@ -114,20 +133,41 @@ function terminalMessages(descriptor: PreparedCheckRunDescriptor, exitCode: numb
     binding: descriptor.binding,
     physical,
     native: { exitCode, lifetimeFailure: false, receiptSha256 },
-    preparedInputs: { status: 'verified' as const, sourceSha256: descriptor.binding.sourceSha256, manifestSha256: 'f'.repeat(64), fileCount: 1, totalBytes: 1 },
+    preparedInputs: {
+      status: 'verified' as const,
+      sourceSha256: descriptor.binding.sourceSha256,
+      manifestSha256: 'f'.repeat(64),
+      fileCount: 1,
+      totalBytes: 1,
+    },
     returns: {
-      status: returns.length ? 'restored' as const : 'empty' as const,
+      status: returns.length ? ('restored' as const) : ('empty' as const),
       declarationsSha256: descriptor.binding.returnsSha256,
       entries: returns.map((path) => ({ path, size: 0, sha256: sha('') })),
       missing: [],
       failures: [],
     },
-    cleanup: { disposition: 'settled' as const, remote: 'verified' as const, transportChild: 'reaped' as const, source: 'verified' as const, localWorktree: 'removed' as const, failures: [] },
+    cleanup: {
+      disposition: 'settled' as const,
+      remote: 'verified' as const,
+      transportChild: 'reaped' as const,
+      source: 'verified' as const,
+      localWorktree: 'removed' as const,
+      failures: [],
+    },
     failures: { primary: [], cleanup: [] },
   };
   const nativeLine = `${JSON.stringify(native)}\n`;
   const finalLine = `${JSON.stringify(final)}\n`;
-  return { physical, receipt, native, final, nativeLine, finalLine, bytes: Buffer.from(nativeLine + finalLine + (duplicateFinal ? finalLine : '')) };
+  return {
+    physical,
+    receipt,
+    native,
+    final,
+    nativeLine,
+    finalLine,
+    bytes: Buffer.from(nativeLine + finalLine + (duplicateFinal ? finalLine : '')),
+  };
 }
 
 type ProducerReferences = {
@@ -136,9 +176,15 @@ type ProducerReferences = {
   preparationIntent: { file: string; sha256: string } | null;
 };
 
-function registrationFor(descriptor: PreparedCheckRunDescriptor, prepared: ReturnType<typeof parsePrepare>): ProducerReferences {
+function registrationFor(
+  descriptor: PreparedCheckRunDescriptor,
+  prepared: ReturnType<typeof parsePrepare>,
+): ProducerReferences {
   return {
-    preparedExecution: { file: join(dirname(prepared.descriptorFile), 'prepared-execution.json'), sha256: sha('prepared execution bytes') },
+    preparedExecution: {
+      file: join(dirname(prepared.descriptorFile), 'prepared-execution.json'),
+      sha256: sha('prepared execution bytes'),
+    },
     descriptor: { file: prepared.descriptorFile, sha256: sha(`${JSON.stringify(descriptor)}\n`) },
     preparationIntent: null,
   };
@@ -160,7 +206,12 @@ function preparationStatusFor(
     physical: null,
     transportChild: null,
     native: null,
-    snapshot: { workspace: '/frozen/workspace', scratch: '/frozen', sourceSha256: descriptor.binding.sourceSha256, inputFiles: [] },
+    snapshot: {
+      workspace: '/frozen/workspace',
+      scratch: '/frozen',
+      sourceSha256: descriptor.binding.sourceSha256,
+      inputFiles: [],
+    },
     candidateWorkspace: prepared.workspace,
     preparedExecution: registration.preparedExecution,
     descriptor: registration.descriptor,
@@ -195,7 +246,9 @@ function statusFor(
     returnsSha256: descriptor.binding.returnsSha256,
     preparedExecutionReferenceSha256: sha(JSON.stringify(registration.preparedExecution)),
     descriptorReferenceSha256: sha(JSON.stringify(registration.descriptor)),
-    preparationIntentReferenceSha256: registration.preparationIntent ? sha(JSON.stringify(registration.preparationIntent)) : null,
+    preparationIntentReferenceSha256: registration.preparationIntent
+      ? sha(JSON.stringify(registration.preparationIntent))
+      : null,
   };
   const finalCustody = {
     schema: 1,
@@ -206,7 +259,15 @@ function statusFor(
     reconciliation: 'settled',
     originalFinalSha256: sha(JSON.stringify(messages.final)),
     identity: { sha256: sha(JSON.stringify(identityCore)), ...identityCore },
-    observations: [{ observedAt: '2026-11-02T00:00:01.000Z', disposition: 'settled', transportIdentity: null, final: messages.final, reason: null }],
+    observations: [
+      {
+        observedAt: '2026-11-02T00:00:01.000Z',
+        disposition: 'settled',
+        transportIdentity: null,
+        final: messages.final,
+        reason: null,
+      },
+    ],
     continuation: null,
   };
   return {
@@ -263,7 +324,12 @@ function fixture() {
   const custody: WebCheckCustodyRuntime = {
     async invoke(input) {
       if (input.phase === 'prepare') {
-        calls.push({ command: input.command, cwd: input.cwd, env: input.env, ...(input.signal ? { signal: input.signal } : {}) });
+        calls.push({
+          command: input.command,
+          cwd: input.cwd,
+          env: input.env,
+          ...(input.signal ? { signal: input.signal } : {}),
+        });
         descriptor = descriptorFor(input);
         prepared = parsePrepare(input.command);
         const output = `${JSON.stringify(descriptor)}\n`;
@@ -272,7 +338,12 @@ function fixture() {
         return { code: 0, signal: null, closed: true, output, outputOverflow: false };
       }
       if (input.phase === 'run-prepared') {
-        runCalls.push({ command: input.command, cwd: input.cwd, env: input.env, ...(input.signal ? { signal: input.signal } : {}) });
+        runCalls.push({
+          command: input.command,
+          cwd: input.cwd,
+          env: input.env,
+          ...(input.signal ? { signal: input.signal } : {}),
+        });
         if (transportError) throw transportError;
         messages = terminalMessages(descriptor!, nativeExitCode, prepared!.returns, duplicateFinal);
         input.onReceipt?.(Buffer.from(missingFinal ? `${messages.nativeLine}` : messages.bytes));
@@ -336,11 +407,21 @@ function fixture() {
     workspace,
     app: join(workspace, 'apps/web'),
     hostsFile,
-    setNativeExitCode: (value: number) => { nativeExitCode = value; },
-    setMissingFinal: (value: boolean) => { missingFinal = value; },
-    setDuplicateFinal: (value: boolean) => { duplicateFinal = value; },
-    setTransportError: (value: unknown) => { transportError = value; },
-    setCleanupError: (value: unknown) => { cleanupError = value; },
+    setNativeExitCode: (value: number) => {
+      nativeExitCode = value;
+    },
+    setMissingFinal: (value: boolean) => {
+      missingFinal = value;
+    },
+    setDuplicateFinal: (value: boolean) => {
+      duplicateFinal = value;
+    },
+    setTransportError: (value: unknown) => {
+      transportError = value;
+    },
+    setCleanupError: (value: unknown) => {
+      cleanupError = value;
+    },
     files: () => lastFiles!,
     descriptor: () => descriptor!,
     closed: () => closed,
@@ -651,7 +732,11 @@ test('every finite heavy route crosses the exact driver with ordered argv, cwd, 
     expect(args.slice(separator + 1)).toEqual(route.command);
     expect(f.runCalls).toHaveLength(1);
     expect(f.runCalls[0]!.command).toEqual([
-      'bun', join('/trusted/producer', 'scripts/check-run.ts'), 'run-prepared', '--descriptor', f.files().descriptorFile,
+      'bun',
+      join('/trusted/producer', 'scripts/check-run.ts'),
+      'run-prepared',
+      '--descriptor',
+      f.files().descriptorFile,
     ]);
     expect(f.runCalls[0]!.env.REMOTE_CHECK_RECEIPT_FD).toBe('3');
     expect(f.runCalls[0]!.env.REMOTE_CHECK_RECEIPT_NONCE).toBe(f.descriptor().nonce);
@@ -724,7 +809,11 @@ test('local publication requires the exact committed revision and a clean source
   const malformed = fixture();
   malformed.adapter.custody = () => false;
   await expect(
-    routeWebCheck(fixtureRun(malformed, run), { [localStorybookPublicationRevisionEnvironment]: 'head' }, malformed.adapter),
+    routeWebCheck(
+      fixtureRun(malformed, run),
+      { [localStorybookPublicationRevisionEnvironment]: 'head' },
+      malformed.adapter,
+    ),
   ).rejects.toThrow('full committed revision');
   expect(malformed.calls).toHaveLength(0);
 });
@@ -756,7 +845,9 @@ test('unreachable transport, timeout and native exits are returned without a loc
   for (const status of [75, 124, 1, 17, 130, 143]) {
     const f = fixture();
     f.setNativeExitCode(status);
-    expect(await routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['unknown', '--local'] }), forged, f.adapter)).toBe(status);
+    expect(
+      await routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['unknown', '--local'] }), forged, f.adapter),
+    ).toBe(status);
     expect(f.calls).toHaveLength(1);
     expect(f.runCalls).toHaveLength(1);
     expect(f.closed()).toBe(1);
@@ -783,7 +874,9 @@ test('private environment cleanup cannot hide native or transport failure', asyn
   const cleanup = new Error('private environment cleanup failed');
   native.setNativeExitCode(17);
   native.setCleanupError(cleanup);
-  expect(await routeWebCheck(fixtureRun(native, { root, cwd: app, command: ['bun', 'test'] }), {}, native.adapter)).toBe(17);
+  expect(
+    await routeWebCheck(fixtureRun(native, { root, cwd: app, command: ['bun', 'test'] }), {}, native.adapter),
+  ).toBe(17);
   expect(native.closed()).toBe(0);
   expect(readFileSync(native.files().evidenceFile, 'utf8')).toContain('native-terminal');
   expect(readFileSync(native.files().evidenceFile, 'utf8')).toContain('final-settlement');
@@ -791,7 +884,9 @@ test('private environment cleanup cannot hide native or transport failure', asyn
   const transport = fixture();
   transport.setTransportError(new Error('transport terminality unknown'));
   transport.setCleanupError(cleanup);
-  expect(await routeWebCheck(fixtureRun(transport, { root, cwd: app, command: ['bun', 'test'] }), {}, transport.adapter)).toBe(75);
+  expect(
+    await routeWebCheck(fixtureRun(transport, { root, cwd: app, command: ['bun', 'test'] }), {}, transport.adapter),
+  ).toBe(75);
   expect(transport.closed()).toBe(0);
 });
 
@@ -837,7 +932,11 @@ test('ambient Nix trust path stays out of the remote overlay while semantics, ar
   const originalEnvironment = { ...env };
   const command = ['bun', 'test', 'tests/check placement.test.ts', '--test-name-pattern', 'a "quote"'];
 
-  await routeWebCheck(fixtureRun(f, { root, cwd: app, command, returns: ['apps/web/reports/check.json'] }), env, f.adapter);
+  await routeWebCheck(
+    fixtureRun(f, { root, cwd: app, command, returns: ['apps/web/reports/check.json'] }),
+    env,
+    f.adapter,
+  );
 
   expect(f.overlays).toHaveLength(1);
   expect(f.overlays[0]).toEqual({
@@ -929,7 +1028,9 @@ test('cancellation before dispatch cannot start queued work and the driver obser
   const f = fixture();
   const controller = new AbortController();
   controller.abort();
-  expect(await routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['bun', 'test'] }), {}, f.adapter, controller.signal)).toBe(143);
+  expect(
+    await routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['bun', 'test'] }), {}, f.adapter, controller.signal),
+  ).toBe(143);
   expect(f.calls).toHaveLength(0);
   const active = new AbortController();
   const invoke = f.adapter.receiver.invoke;
@@ -940,7 +1041,9 @@ test('cancellation before dispatch cannot start queued work and the driver obser
     }
     return invoke(input);
   };
-  expect(await routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['bun', 'test'] }), {}, f.adapter, active.signal)).toBe(143);
+  expect(
+    await routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['bun', 'test'] }), {}, f.adapter, active.signal),
+  ).toBe(143);
   expect(f.closed()).toBe(1);
 });
 

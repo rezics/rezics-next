@@ -382,7 +382,10 @@ function validateBinding(value: unknown): CheckRunBinding {
   if (
     !cwd ||
     (cwd !== '.' &&
-      (cwd.startsWith('/') || /^[A-Za-z]:/.test(cwd) || /[\\\0\r\n]/.test(cwd) || cwd.split('/').some((part) => ['.', '..', ''].includes(part))))
+      (cwd.startsWith('/') ||
+        /^[A-Za-z]:/.test(cwd) ||
+        /[\\\0\r\n]/.test(cwd) ||
+        cwd.split('/').some((part) => ['.', '..', ''].includes(part))))
   )
     throw new Error('Web check custody: cwd is not workspace-relative');
   return {
@@ -423,7 +426,11 @@ function validatePhysical(value: unknown): PhysicalIdentity {
 
 function validateLifetimeFailure(value: unknown, host: string, run: string, exitCode: number): unknown {
   if (value === null) return null;
-  const item = closed(value, ['schema', 'status', 'phase', 'host', 'run', 'limitMs', 'elapsedMs', 'command'], 'native lifetime failure');
+  const item = closed(
+    value,
+    ['schema', 'status', 'phase', 'host', 'run', 'limitMs', 'elapsedMs', 'command'],
+    'native lifetime failure',
+  );
   if (
     item.schema !== 1 ||
     item.status !== 'infrastructure-failure' ||
@@ -458,10 +465,29 @@ function validateResources(value: unknown, host: string, run: string): unknown {
   if (value === null) return null;
   const item = closed(
     value,
-    ['schema', 'host', 'run', 'boot', 'supervisor', 'cgroup', 'cadenceMs', 'startedMonoMs', 'commandStartedMonoMs', 'terminalMonoMs', 'samples', 'sampledMaxCores'],
+    [
+      'schema',
+      'host',
+      'run',
+      'boot',
+      'supervisor',
+      'cgroup',
+      'cadenceMs',
+      'startedMonoMs',
+      'commandStartedMonoMs',
+      'terminalMonoMs',
+      'samples',
+      'sampledMaxCores',
+    ],
     'physical resource receipt',
   );
-  if (item.schema !== 1 || item.host !== host || item.run !== run || typeof item.boot !== 'string' || item.cadenceMs !== 5000)
+  if (
+    item.schema !== 1 ||
+    item.host !== host ||
+    item.run !== run ||
+    typeof item.boot !== 'string' ||
+    item.cadenceMs !== 5000
+  )
     throw new Error('Web check custody: physical resource receipt identity mismatch');
   const supervisor = closed(item.supervisor, ['pid', 'start', 'group'], 'resource supervisor');
   count(supervisor.pid, 'supervisor pid', 2 ** 31 - 1);
@@ -469,7 +495,11 @@ function validateResources(value: unknown, host: string, run: string): unknown {
   count(supervisor.group, 'supervisor group', 2 ** 31 - 1);
   if (item.cgroup !== null) {
     const cgroup = closed(item.cgroup, ['path', 'device', 'inode', 'invocation'], 'resource cgroup');
-    if (typeof cgroup.path !== 'string' || !cgroup.path.startsWith('/') || !text(cgroup.invocation, 'cgroup invocation', 128))
+    if (
+      typeof cgroup.path !== 'string' ||
+      !cgroup.path.startsWith('/') ||
+      !text(cgroup.invocation, 'cgroup invocation', 128)
+    )
       throw new Error('Web check custody: invalid resource cgroup');
     count(cgroup.device, 'cgroup device');
     count(cgroup.inode, 'cgroup inode');
@@ -478,19 +508,32 @@ function validateResources(value: unknown, host: string, run: string): unknown {
   const terminal = item.terminalMonoMs;
   if (!finite(started) || !finite(terminal) || terminal < started)
     throw new Error('Web check custody: invalid resource receipt time range');
-  if (item.commandStartedMonoMs !== null && (!finite(item.commandStartedMonoMs) || item.commandStartedMonoMs < started || item.commandStartedMonoMs > terminal))
+  if (
+    item.commandStartedMonoMs !== null &&
+    (!finite(item.commandStartedMonoMs) || item.commandStartedMonoMs < started || item.commandStartedMonoMs > terminal)
+  )
     throw new Error('Web check custody: invalid command start time');
-  if (!Array.isArray(item.samples) || item.samples.length > 1444 || (item.sampledMaxCores !== null && !finite(item.sampledMaxCores)))
+  if (
+    !Array.isArray(item.samples) ||
+    item.samples.length > 1444 ||
+    (item.sampledMaxCores !== null && !finite(item.sampledMaxCores))
+  )
     throw new Error('Web check custody: invalid resource samples');
   let prior = started;
   for (const raw of item.samples) {
-    const sample = closed(raw, ['monoMs', 'phase', 'usageUsec', 'memoryPeakBytes', 'intervalMs', 'cores', 'unavailable'], 'resource sample');
+    const sample = closed(
+      raw,
+      ['monoMs', 'phase', 'usageUsec', 'memoryPeakBytes', 'intervalMs', 'cores', 'unavailable'],
+      'resource sample',
+    );
     if (
       !finite(sample.monoMs) ||
       sample.monoMs < prior ||
       sample.monoMs > terminal ||
       !['preparation', 'command', 'terminal'].includes(String(sample.phase)) ||
-      [sample.usageUsec, sample.memoryPeakBytes, sample.intervalMs, sample.cores].some((value) => value !== null && !finite(value)) ||
+      [sample.usageUsec, sample.memoryPeakBytes, sample.intervalMs, sample.cores].some(
+        (value) => value !== null && !finite(value),
+      ) ||
       (sample.unavailable !== null && typeof sample.unavailable !== 'string')
     )
       throw new Error('Web check custody: invalid ordered resource sample');
@@ -500,13 +543,27 @@ function validateResources(value: unknown, host: string, run: string): unknown {
 }
 
 function validateNativeTerminal(value: unknown, descriptor: PreparedCheckRunDescriptor): NativeTerminal {
-  const item = closed(value, ['schema', 'type', 'invocationId', 'nonce', 'binding', 'physical', 'receipt'], 'native terminal message');
-  if (item.schema !== 1 || item.type !== 'native-terminal' || item.invocationId !== descriptor.invocationId || item.nonce !== descriptor.nonce)
+  const item = closed(
+    value,
+    ['schema', 'type', 'invocationId', 'nonce', 'binding', 'physical', 'receipt'],
+    'native terminal message',
+  );
+  if (
+    item.schema !== 1 ||
+    item.type !== 'native-terminal' ||
+    item.invocationId !== descriptor.invocationId ||
+    item.nonce !== descriptor.nonce
+  )
     throw new Error('Web check custody: native terminal belongs to another prepared invocation');
   const binding = validateBinding(item.binding);
-  if (jsonSha256(binding) !== jsonSha256(descriptor.binding)) throw new Error('Web check custody: native binding differs from preparation');
+  if (jsonSha256(binding) !== jsonSha256(descriptor.binding))
+    throw new Error('Web check custody: native binding differs from preparation');
   const physical = validatePhysical(item.physical);
-  const receipt = closed(item.receipt, ['schema', 'host', 'run', 'exitCode', 'lifetimeFailure', 'resources'], 'native physical receipt');
+  const receipt = closed(
+    item.receipt,
+    ['schema', 'host', 'run', 'exitCode', 'lifetimeFailure', 'resources'],
+    'native physical receipt',
+  );
   if (
     receipt.schema !== 1 ||
     receipt.host !== physical.host ||
@@ -516,7 +573,12 @@ function validateNativeTerminal(value: unknown, descriptor: PreparedCheckRunDesc
     (receipt.exitCode as number) > 255
   )
     throw new Error('Web check custody: native receipt does not match its physical run');
-  const lifetimeFailure = validateLifetimeFailure(receipt.lifetimeFailure, physical.host, physical.run, receipt.exitCode as number);
+  const lifetimeFailure = validateLifetimeFailure(
+    receipt.lifetimeFailure,
+    physical.host,
+    physical.run,
+    receipt.exitCode as number,
+  );
   const resources = validateResources(receipt.resources, physical.host, physical.run);
   return {
     schema: 1,
@@ -538,7 +600,13 @@ function validateNativeTerminal(value: unknown, descriptor: PreparedCheckRunDesc
 
 function validatePath(value: unknown, label: string, max = 1024): string {
   const path = text(value, label, max);
-  if (!path || path.startsWith('/') || /^[A-Za-z]:/.test(path) || /[\\\0\r\n]/.test(path) || path.split('/').some((part) => ['', '.', '..'].includes(part)))
+  if (
+    !path ||
+    path.startsWith('/') ||
+    /^[A-Za-z]:/.test(path) ||
+    /[\\\0\r\n]/.test(path) ||
+    path.split('/').some((part) => ['', '.', '..'].includes(part))
+  )
     throw new Error(`Web check custody: invalid ${label}`);
   return path;
 }
@@ -548,12 +616,39 @@ function validateStringList(value: unknown, label: string): string[] {
   return value.map((item) => text(item, label));
 }
 
-function validateFinalSettlement(value: unknown, descriptor: PreparedCheckRunDescriptor, native: NativeTerminal, expected: ExpectedInvocation): FinalSettlement {
-  const item = closed(value, ['schema', 'type', 'invocationId', 'nonce', 'binding', 'physical', 'native', 'preparedInputs', 'returns', 'cleanup', 'failures'], 'final settlement message');
-  if (item.schema !== 1 || item.type !== 'final-settlement' || item.invocationId !== descriptor.invocationId || item.nonce !== descriptor.nonce)
+function validateFinalSettlement(
+  value: unknown,
+  descriptor: PreparedCheckRunDescriptor,
+  native: NativeTerminal,
+  expected: ExpectedInvocation,
+): FinalSettlement {
+  const item = closed(
+    value,
+    [
+      'schema',
+      'type',
+      'invocationId',
+      'nonce',
+      'binding',
+      'physical',
+      'native',
+      'preparedInputs',
+      'returns',
+      'cleanup',
+      'failures',
+    ],
+    'final settlement message',
+  );
+  if (
+    item.schema !== 1 ||
+    item.type !== 'final-settlement' ||
+    item.invocationId !== descriptor.invocationId ||
+    item.nonce !== descriptor.nonce
+  )
     throw new Error('Web check custody: final belongs to another prepared invocation');
   const binding = validateBinding(item.binding);
-  if (jsonSha256(binding) !== jsonSha256(descriptor.binding)) throw new Error('Web check custody: final binding differs from preparation');
+  if (jsonSha256(binding) !== jsonSha256(descriptor.binding))
+    throw new Error('Web check custody: final binding differs from preparation');
   const physical = validatePhysical(item.physical);
   if (physical.host !== native.physical.host || physical.run !== native.physical.run)
     throw new Error('Web check custody: final names a different physical run');
@@ -571,8 +666,13 @@ function validateFinalSettlement(value: unknown, descriptor: PreparedCheckRunDes
   )
     throw new Error('Web check custody: final native result differs from the original terminal receipt');
 
-  const prepared = closed(item.preparedInputs, ['status', 'sourceSha256', 'manifestSha256', 'fileCount', 'totalBytes'], 'prepared source evidence');
-  if (!['verified', 'unavailable'].includes(String(prepared.status))) throw new Error('Web check custody: invalid prepared source status');
+  const prepared = closed(
+    item.preparedInputs,
+    ['status', 'sourceSha256', 'manifestSha256', 'fileCount', 'totalBytes'],
+    'prepared source evidence',
+  );
+  if (!['verified', 'unavailable'].includes(String(prepared.status)))
+    throw new Error('Web check custody: invalid prepared source status');
   const preparedInputs = {
     status: prepared.status as 'verified' | 'unavailable',
     sourceSha256: prepared.sourceSha256 === null ? null : hash(prepared.sourceSha256, 'prepared source hash'),
@@ -585,11 +685,16 @@ function validateFinalSettlement(value: unknown, descriptor: PreparedCheckRunDes
   if (preparedInputs.status === 'unavailable' && (preparedInputs.sourceSha256 || preparedInputs.manifestSha256))
     throw new Error('Web check custody: unavailable source evidence contains hashes');
 
-  const rawReturns = closed(item.returns, ['status', 'declarationsSha256', 'entries', 'missing', 'failures'], 'return evidence');
+  const rawReturns = closed(
+    item.returns,
+    ['status', 'declarationsSha256', 'entries', 'missing', 'failures'],
+    'return evidence',
+  );
   if (!['empty', 'restored', 'missing', 'failed', 'unknown'].includes(String(rawReturns.status)))
     throw new Error('Web check custody: invalid return status');
   const entriesValue = rawReturns.entries;
-  if (!Array.isArray(entriesValue) || entriesValue.length > 64) throw new Error('Web check custody: invalid returned files');
+  if (!Array.isArray(entriesValue) || entriesValue.length > 64)
+    throw new Error('Web check custody: invalid returned files');
   const entries = entriesValue.map((entry) => {
     const artifact = closed(entry, ['path', 'size', 'sha256'], 'returned file');
     return {
@@ -598,7 +703,10 @@ function validateFinalSettlement(value: unknown, descriptor: PreparedCheckRunDes
       sha256: hash(artifact.sha256, 'returned file hash'),
     };
   });
-  if (new Set(entries.map((entry) => entry.path)).size !== entries.length || entries.reduce((sum, entry) => sum + entry.size, 0) > 256 * 1024 * 1024)
+  if (
+    new Set(entries.map((entry) => entry.path)).size !== entries.length ||
+    entries.reduce((sum, entry) => sum + entry.size, 0) > 256 * 1024 * 1024
+  )
     throw new Error('Web check custody: duplicate or oversized returned file evidence');
   if (!Array.isArray(rawReturns.missing)) throw new Error('Web check custody: invalid missing return paths');
   const missing = rawReturns.missing.map((path) => validatePath(path, 'missing return path'));
@@ -610,16 +718,33 @@ function validateFinalSettlement(value: unknown, descriptor: PreparedCheckRunDes
     missing,
     failures: returnFailures,
   };
-  if (returns.declarationsSha256 !== descriptor.binding.returnsSha256 || returns.declarationsSha256 !== expected.returnsSha256)
+  if (
+    returns.declarationsSha256 !== descriptor.binding.returnsSha256 ||
+    returns.declarationsSha256 !== expected.returnsSha256
+  )
     throw new Error('Web check custody: return declarations differ from the prepared caller request');
-  if ((expected.returns.length === 0 && returns.status !== 'empty') || (expected.returns.length > 0 && returns.status !== 'restored'))
+  if (
+    (expected.returns.length === 0 && returns.status !== 'empty') ||
+    (expected.returns.length > 0 && returns.status !== 'restored')
+  )
     throw new Error('Web check custody: final return status differs from the caller declarations');
-  const withinDeclaration = (path: string) => expected.returns.some((declared) => path === declared || path.startsWith(`${declared}/`));
+  const withinDeclaration = (path: string) =>
+    expected.returns.some((declared) => path === declared || path.startsWith(`${declared}/`));
   if (entries.some((entry) => !withinDeclaration(entry.path)) || missing.some((path) => !withinDeclaration(path)))
     throw new Error('Web check custody: return evidence escapes its declarations');
 
-  const rawCleanup = closed(item.cleanup, ['disposition', 'remote', 'transportChild', 'source', 'localWorktree', 'failures'], 'cleanup evidence');
-  if (!['settled', 'unknown'].includes(String(rawCleanup.disposition)) || !['verified', 'failed', 'unknown'].includes(String(rawCleanup.remote)) || !['reaped', 'unknown'].includes(String(rawCleanup.transportChild)) || !['verified', 'changed', 'unknown'].includes(String(rawCleanup.source)) || !['removed', 'retained', 'unknown'].includes(String(rawCleanup.localWorktree)))
+  const rawCleanup = closed(
+    item.cleanup,
+    ['disposition', 'remote', 'transportChild', 'source', 'localWorktree', 'failures'],
+    'cleanup evidence',
+  );
+  if (
+    !['settled', 'unknown'].includes(String(rawCleanup.disposition)) ||
+    !['verified', 'failed', 'unknown'].includes(String(rawCleanup.remote)) ||
+    !['reaped', 'unknown'].includes(String(rawCleanup.transportChild)) ||
+    !['verified', 'changed', 'unknown'].includes(String(rawCleanup.source)) ||
+    !['removed', 'retained', 'unknown'].includes(String(rawCleanup.localWorktree))
+  )
     throw new Error('Web check custody: invalid cleanup disposition');
   const cleanup = {
     disposition: rawCleanup.disposition as FinalSettlement['cleanup']['disposition'],
@@ -665,7 +790,8 @@ function expectedInvocation(input: {
   returns: readonly string[];
 }): ExpectedInvocation {
   const hostStats = lstatSync(input.hostsFile);
-  if (!hostStats.isFile() || hostStats.isSymbolicLink()) throw new Error('Web check custody: hosts file is not a regular file');
+  if (!hostStats.isFile() || hostStats.isSymbolicLink())
+    throw new Error('Web check custody: hosts file is not a regular file');
   const hostHash = sha256(readFileSync(input.hostsFile));
   const returns = [...new Set(input.returns)];
   const environmentHash = hashEnvironment(input.environment, input.priority);
@@ -698,7 +824,10 @@ function validatePreparedBinding(descriptor: PreparedCheckRunDescriptor, expecte
     throw new Error('Web check custody: prepared binding differs from the prior Web request');
 }
 
-function readPreparedFile(files: WebCheckPrivateFiles, expected: ExpectedInvocation): { descriptor: PreparedCheckRunDescriptor; raw: Buffer } {
+function readPreparedFile(
+  files: WebCheckPrivateFiles,
+  expected: ExpectedInvocation,
+): { descriptor: PreparedCheckRunDescriptor; raw: Buffer } {
   const stat = lstatSync(files.descriptorFile);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_DESCRIPTOR_BYTES || (stat.mode & 0o077) !== 0)
     throw new Error('Web check custody: prepared descriptor is not a private bounded file');
@@ -717,7 +846,11 @@ function validatePreparedFile(files: WebCheckPrivateFiles, expected: ExpectedInv
   return readPreparedFile(files, expected).descriptor;
 }
 
-function parsePreparedOutput(output: string, files: WebCheckPrivateFiles, expected: ExpectedInvocation): { descriptor: PreparedCheckRunDescriptor; raw: Buffer } {
+function parsePreparedOutput(
+  output: string,
+  files: WebCheckPrivateFiles,
+  expected: ExpectedInvocation,
+): { descriptor: PreparedCheckRunDescriptor; raw: Buffer } {
   if (!output.endsWith('\n') || output.includes('\r') || output.split('\n').length !== 2)
     throw new Error('Web check custody: prepare did not return one closed descriptor line');
   const descriptor = validateDescriptor(parseUniqueJson(output.slice(0, -1)));
@@ -730,7 +863,11 @@ function parsePreparedOutput(output: string, files: WebCheckPrivateFiles, expect
 }
 
 function assertPrivateFiles(files: WebCheckPrivateFiles, workspace: string): void {
-  if (![files.directory, files.environmentFile, files.descriptorFile, files.recordFile, files.evidenceFile].every(isAbsolute))
+  if (
+    ![files.directory, files.environmentFile, files.descriptorFile, files.recordFile, files.evidenceFile].every(
+      isAbsolute,
+    )
+  )
     throw new Error('Web check custody: private file paths must be absolute');
   const directory = resolve(files.directory);
   if (
@@ -747,7 +884,10 @@ function assertPrivateFiles(files: WebCheckPrivateFiles, workspace: string): voi
     throw new Error('Web check custody: private descriptor must be outside candidate source');
   const stats = lstatSync(directory);
   if (
-    !stats.isDirectory() || stats.isSymbolicLink() || (stats.mode & 0o077) !== 0 || realpathSync(directory) !== directory ||
+    !stats.isDirectory() ||
+    stats.isSymbolicLink() ||
+    (stats.mode & 0o077) !== 0 ||
+    realpathSync(directory) !== directory ||
     (typeof process.getuid === 'function' && stats.uid !== process.getuid())
   )
     throw new Error('Web check custody: invocation directory is not owner-private');
@@ -756,12 +896,17 @@ function assertPrivateFiles(files: WebCheckPrivateFiles, workspace: string): voi
     [files.evidenceFile, MAX_NATIVE_BYTES + MAX_FINAL_BYTES, false],
   ] as const) {
     let fileStats: ReturnType<typeof lstatSync>;
-    try { fileStats = lstatSync(file); } catch (error) {
+    try {
+      fileStats = lstatSync(file);
+    } catch (error) {
       if (optional && (error as NodeJS.ErrnoException).code === 'ENOENT') continue;
       throw error;
     }
     if (
-      !fileStats.isFile() || fileStats.isSymbolicLink() || (fileStats.mode & 0o077) !== 0 || fileStats.size > maxBytes ||
+      !fileStats.isFile() ||
+      fileStats.isSymbolicLink() ||
+      (fileStats.mode & 0o077) !== 0 ||
+      fileStats.size > maxBytes ||
       (typeof process.getuid === 'function' && fileStats.uid !== process.getuid())
     )
       throw new Error('Web check custody: environment/evidence input is not a private regular file');
@@ -770,7 +915,9 @@ function assertPrivateFiles(files: WebCheckPrivateFiles, workspace: string): voi
     try {
       const fileStats = lstatSync(file);
       if (
-        !fileStats.isFile() || fileStats.isSymbolicLink() || (fileStats.mode & 0o077) !== 0 ||
+        !fileStats.isFile() ||
+        fileStats.isSymbolicLink() ||
+        (fileStats.mode & 0o077) !== 0 ||
         (typeof process.getuid === 'function' && fileStats.uid !== process.getuid())
       )
         throw new Error('Web check custody: retained descriptor or record is not a private regular file');
@@ -781,7 +928,8 @@ function assertPrivateFiles(files: WebCheckPrivateFiles, workspace: string): voi
 }
 
 function writePrivate(path: string, contents: string, directory: string): void {
-  if (Buffer.byteLength(contents) > MAX_RECORD_BYTES) throw new Error('Web check custody: private evidence exceeds its byte bound');
+  if (Buffer.byteLength(contents) > MAX_RECORD_BYTES)
+    throw new Error('Web check custody: private evidence exceeds its byte bound');
   const temporary = `${path}.${process.pid}.pending`;
   const descriptor = openSync(temporary, 'wx', PRIVATE_FILE_MODE);
   try {
@@ -821,7 +969,13 @@ function emptyIngressMessage(): IngressMessage {
 }
 
 function emptyReceiptIngress(): ReceiptIngress {
-  return { streamBytes: 0, streamSha256: sha256(''), complete: true, native: emptyIngressMessage(), final: emptyIngressMessage() };
+  return {
+    streamBytes: 0,
+    streamSha256: sha256(''),
+    complete: true,
+    native: emptyIngressMessage(),
+    final: emptyIngressMessage(),
+  };
 }
 
 function emptyProcessLifetime(): ProcessLifetime {
@@ -838,7 +992,11 @@ function removeEnvironmentInput(files: WebCheckPrivateFiles, record: WebCustodyR
     record.cleanup.environmentInput = 'unknown';
     record.cleanup.state = 'unknown';
     record.cleanup.detail = 'private environment input disposal could not be verified';
-    try { persistRecord(files, record); } catch { /* Keep original descriptor/evidence on disk. */ }
+    try {
+      persistRecord(files, record);
+    } catch {
+      /* Keep original descriptor/evidence on disk. */
+    }
     return false;
   }
 }
@@ -854,7 +1012,11 @@ export function disposeWebCheckEnvironmentInput(files: WebCheckPrivateFiles): vo
       throw new Error('Web check custody: private environment input is not an owner-private regular file');
     unlinkSync(files.environmentFile);
     const directory = openSync(files.directory, 'r');
-    try { fsyncSync(directory); } finally { closeSync(directory); }
+    try {
+      fsyncSync(directory);
+    } finally {
+      closeSync(directory);
+    }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
     throw error;
@@ -951,7 +1113,15 @@ function commandForStatus(driverRoot: string, invocationId: string): string[] {
 }
 
 function commandForReconcile(driverRoot: string, descriptorFile: string, hostsFile: string): string[] {
-  return ['bun', join(driverRoot, 'scripts/check-run-settlement.ts'), 'reconcile', '--descriptor', descriptorFile, '--hosts', hostsFile];
+  return [
+    'bun',
+    join(driverRoot, 'scripts/check-run-settlement.ts'),
+    'reconcile',
+    '--descriptor',
+    descriptorFile,
+    '--hosts',
+    hostsFile,
+  ];
 }
 
 function baseEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -961,7 +1131,10 @@ function baseEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return output;
 }
 
-function processEnvironmentForPrepared(env: NodeJS.ProcessEnv, descriptor: PreparedCheckRunDescriptor): NodeJS.ProcessEnv {
+function processEnvironmentForPrepared(
+  env: NodeJS.ProcessEnv,
+  descriptor: PreparedCheckRunDescriptor,
+): NodeJS.ProcessEnv {
   return {
     ...baseEnvironment(env),
     REMOTE_CHECK_RECEIPT_FD: '3',
@@ -980,7 +1153,8 @@ function validatePrivateReference(value: unknown, label: string): { file: string
   if (value === null) return null;
   const item = closed(value, ['file', 'sha256'], `${label} reference`);
   const file = text(item.file, `${label} path`, 4096);
-  if (!isAbsolute(file) || resolve(file) !== file) throw new Error(`Web check custody: invalid ${label} reference path`);
+  if (!isAbsolute(file) || resolve(file) !== file)
+    throw new Error(`Web check custody: invalid ${label} reference path`);
   return { file, sha256: hash(item.sha256, `${label} reference hash`) };
 }
 
@@ -996,11 +1170,18 @@ function validateCustodyObservation(
   expected: ExpectedInvocation,
   native: NativeTerminal | null,
 ): { value: Record<string, unknown>; rejected: boolean } {
-  const item = closed(value, ['observedAt', 'disposition', 'transportIdentity', 'final', 'reason'], 'custody observation');
+  const item = closed(
+    value,
+    ['observedAt', 'disposition', 'transportIdentity', 'final', 'reason'],
+    'custody observation',
+  );
   const observedAt = validTimestamp(item.observedAt, 'custody observation time');
   if (!['unknown', 'settled', 'rejected'].includes(String(item.disposition)))
     throw new Error('Web check custody: invalid custody observation disposition');
-  if (item.transportIdentity !== null && !['live-same', 'gone-or-replaced', 'unknown'].includes(String(item.transportIdentity)))
+  if (
+    item.transportIdentity !== null &&
+    !['live-same', 'gone-or-replaced', 'unknown'].includes(String(item.transportIdentity))
+  )
     throw new Error('Web check custody: invalid custody transport identity');
   const rejected = item.disposition === 'rejected';
   let final: FinalSettlement | null = null;
@@ -1043,30 +1224,73 @@ function validateFinalCustody(
   final: FinalSettlement | null,
   registered: RegisteredInvocation | null,
 ): { value: NonNullable<StatusRecord['finalCustody']>; rejectedObservation: boolean } {
-  const item = closed(value, ['schema', 'aggregate', 'delivery', 'deliverySha256', 'privateFiles', 'reconciliation', 'originalFinalSha256', 'identity', 'observations', 'continuation'], 'aggregate final custody');
+  const item = closed(
+    value,
+    [
+      'schema',
+      'aggregate',
+      'delivery',
+      'deliverySha256',
+      'privateFiles',
+      'reconciliation',
+      'originalFinalSha256',
+      'identity',
+      'observations',
+      'continuation',
+    ],
+    'aggregate final custody',
+  );
   if (item.schema !== 1 || !['pending', 'settled', 'unknown'].includes(String(item.aggregate)))
     throw new Error('Web check custody: invalid aggregate custody');
   if (!['not-required', 'pending', 'delivered', 'unknown', 'received', 'reconciled'].includes(String(item.delivery)))
     throw new Error('Web check custody: invalid final delivery state');
-  if (!['pending', 'settled', 'unknown'].includes(String(item.privateFiles)) || !['unknown', 'settled'].includes(String(item.reconciliation)))
+  if (
+    !['pending', 'settled', 'unknown'].includes(String(item.privateFiles)) ||
+    !['unknown', 'settled'].includes(String(item.reconciliation))
+  )
     throw new Error('Web check custody: invalid private/reconciliation custody');
   const deliverySha256 = hash(item.deliverySha256, 'final delivery hash');
   const originalFinalSha256 = hash(item.originalFinalSha256, 'original final hash');
-  const identityValue = closed(item.identity, [
-    'sha256', 'bindingSha256', 'physical', 'sourceSha256', 'snapshotSha256', 'candidateWorkspaceSha256',
-    'returnsSha256', 'preparedExecutionReferenceSha256', 'descriptorReferenceSha256', 'preparationIntentReferenceSha256',
-  ], 'final custody identity');
+  const identityValue = closed(
+    item.identity,
+    [
+      'sha256',
+      'bindingSha256',
+      'physical',
+      'sourceSha256',
+      'snapshotSha256',
+      'candidateWorkspaceSha256',
+      'returnsSha256',
+      'preparedExecutionReferenceSha256',
+      'descriptorReferenceSha256',
+      'preparationIntentReferenceSha256',
+    ],
+    'final custody identity',
+  );
   const identityPhysical = validatePhysical(identityValue.physical);
   const identityCore = {
     bindingSha256: hash(identityValue.bindingSha256, 'final binding digest'),
     physical: identityPhysical,
     sourceSha256: identityValue.sourceSha256 === null ? null : hash(identityValue.sourceSha256, 'final source digest'),
-    snapshotSha256: identityValue.snapshotSha256 === null ? null : hash(identityValue.snapshotSha256, 'snapshot identity digest'),
-    candidateWorkspaceSha256: identityValue.candidateWorkspaceSha256 === null ? null : hash(identityValue.candidateWorkspaceSha256, 'candidate workspace identity digest'),
+    snapshotSha256:
+      identityValue.snapshotSha256 === null ? null : hash(identityValue.snapshotSha256, 'snapshot identity digest'),
+    candidateWorkspaceSha256:
+      identityValue.candidateWorkspaceSha256 === null
+        ? null
+        : hash(identityValue.candidateWorkspaceSha256, 'candidate workspace identity digest'),
     returnsSha256: hash(identityValue.returnsSha256, 'final returns digest'),
-    preparedExecutionReferenceSha256: identityValue.preparedExecutionReferenceSha256 === null ? null : hash(identityValue.preparedExecutionReferenceSha256, 'prepared execution reference digest'),
-    descriptorReferenceSha256: identityValue.descriptorReferenceSha256 === null ? null : hash(identityValue.descriptorReferenceSha256, 'prepared descriptor reference digest'),
-    preparationIntentReferenceSha256: identityValue.preparationIntentReferenceSha256 === null ? null : hash(identityValue.preparationIntentReferenceSha256, 'preparation intent reference digest'),
+    preparedExecutionReferenceSha256:
+      identityValue.preparedExecutionReferenceSha256 === null
+        ? null
+        : hash(identityValue.preparedExecutionReferenceSha256, 'prepared execution reference digest'),
+    descriptorReferenceSha256:
+      identityValue.descriptorReferenceSha256 === null
+        ? null
+        : hash(identityValue.descriptorReferenceSha256, 'prepared descriptor reference digest'),
+    preparationIntentReferenceSha256:
+      identityValue.preparationIntentReferenceSha256 === null
+        ? null
+        : hash(identityValue.preparationIntentReferenceSha256, 'preparation intent reference digest'),
   };
   if (
     hash(identityValue.sha256, 'final custody identity digest') !== jsonSha256(identityCore) ||
@@ -1076,15 +1300,14 @@ function validateFinalCustody(
     (snapshot && identityCore.snapshotSha256 !== jsonSha256(snapshot)) ||
     (snapshot && identityCore.sourceSha256 !== snapshot.sourceSha256) ||
     identityCore.candidateWorkspaceSha256 !== jsonSha256(expected.workspace) ||
-    (registered !== null && (
-      identityCore.preparedExecutionReferenceSha256 !== privateReferenceSha256(registered.preparedExecution) ||
-      identityCore.descriptorReferenceSha256 !== privateReferenceSha256(registered.descriptor) ||
-      identityCore.preparationIntentReferenceSha256 !== privateReferenceSha256(registered.preparationIntent) ||
-      identityCore.snapshotSha256 !== jsonSha256(registered.snapshot) ||
-      identityCore.sourceSha256 !== registered.snapshot.sourceSha256 ||
-      identityCore.candidateWorkspaceSha256 !== jsonSha256(registered.candidateWorkspace) ||
-      identityCore.returnsSha256 !== jsonSha256(registered.returns)
-    ))
+    (registered !== null &&
+      (identityCore.preparedExecutionReferenceSha256 !== privateReferenceSha256(registered.preparedExecution) ||
+        identityCore.descriptorReferenceSha256 !== privateReferenceSha256(registered.descriptor) ||
+        identityCore.preparationIntentReferenceSha256 !== privateReferenceSha256(registered.preparationIntent) ||
+        identityCore.snapshotSha256 !== jsonSha256(registered.snapshot) ||
+        identityCore.sourceSha256 !== registered.snapshot.sourceSha256 ||
+        identityCore.candidateWorkspaceSha256 !== jsonSha256(registered.candidateWorkspace) ||
+        identityCore.returnsSha256 !== jsonSha256(registered.returns)))
   )
     throw new Error('Web check custody: aggregate custody identity differs from the prepared invocation');
   if (final && originalFinalSha256 !== jsonSha256(final))
@@ -1099,17 +1322,24 @@ function validateFinalCustody(
   if (item.continuation !== null) {
     const raw = closed(item.continuation, ['count', 'sha256', 'first', 'latest'], 'custody observation continuation');
     const countValue = count(raw.count, 'custody continuation count');
-    if (countValue < 1 || observations.length !== 16) throw new Error('Web check custody: invalid custody continuation');
+    if (countValue < 1 || observations.length !== 16)
+      throw new Error('Web check custody: invalid custody continuation');
     const digest = hash(raw.sha256, 'custody continuation digest');
     const first = validateCustodyObservation(raw.first, descriptor, expected, native);
     const latest = validateCustodyObservation(raw.latest, descriptor, expected, native);
     rejectedObservation ||= first.rejected || latest.rejected;
-    if (countValue === 1 && (
-      JSON.stringify(first.value) !== JSON.stringify(latest.value) ||
-      digest !== observationChainHash(null, first.value)
-    ))
+    if (
+      countValue === 1 &&
+      (JSON.stringify(first.value) !== JSON.stringify(latest.value) ||
+        digest !== observationChainHash(null, first.value))
+    )
       throw new Error('Web check custody: invalid initial custody continuation');
-    continuation = { count: countValue, sha256: digest, first: first.value as CheckRunFinalCustody['observations'][number], latest: latest.value as CheckRunFinalCustody['observations'][number] };
+    continuation = {
+      count: countValue,
+      sha256: digest,
+      first: first.value as CheckRunFinalCustody['observations'][number],
+      latest: latest.value as CheckRunFinalCustody['observations'][number],
+    };
   }
   const unknown = item.delivery === 'unknown' || item.privateFiles === 'unknown' || item.reconciliation === 'unknown';
   const pending = item.delivery === 'pending' || item.privateFiles === 'pending';
@@ -1125,7 +1355,9 @@ function validateFinalCustody(
       reconciliation: item.reconciliation as NonNullable<StatusRecord['finalCustody']>['reconciliation'],
       originalFinalSha256,
       identity: { sha256: hash(identityValue.sha256, 'final custody identity digest'), ...identityCore },
-      observations: observations.map((observation) => observation.value as CheckRunFinalCustody['observations'][number]),
+      observations: observations.map(
+        (observation) => observation.value as CheckRunFinalCustody['observations'][number],
+      ),
       continuation,
     },
     rejectedObservation,
@@ -1139,41 +1371,80 @@ function validateStatusRecord(
   originalNative: NativeTerminal | null,
   registered: RegisteredInvocation | null = null,
 ): StatusRecord {
-  const item = closed(value, [
-    'schema', 'invocationId', 'nonce', 'createdAt', 'updatedAt', 'phase', 'binding', 'physical', 'transportChild',
-    'native', 'snapshot', 'candidateWorkspace', 'preparedExecution', 'descriptor', 'preparationIntent',
-    'snapshotCustody', 'returns', 'cancellation', 'final', 'finalCustody', 'failure',
-  ], 'registered invocation status');
+  const item = closed(
+    value,
+    [
+      'schema',
+      'invocationId',
+      'nonce',
+      'createdAt',
+      'updatedAt',
+      'phase',
+      'binding',
+      'physical',
+      'transportChild',
+      'native',
+      'snapshot',
+      'candidateWorkspace',
+      'preparedExecution',
+      'descriptor',
+      'preparationIntent',
+      'snapshotCustody',
+      'returns',
+      'cancellation',
+      'final',
+      'finalCustody',
+      'failure',
+    ],
+    'registered invocation status',
+  );
   if (
     item.schema !== 1 ||
     item.invocationId !== descriptor.invocationId ||
     item.nonce !== descriptor.nonce ||
-    !['registered', 'prepared', 'claimed', 'queued', 'uploading', 'running', 'native-terminal', 'settled', 'unknown', 'cancel-requested', 'cancelled'].includes(String(item.phase))
+    ![
+      'registered',
+      'prepared',
+      'claimed',
+      'queued',
+      'uploading',
+      'running',
+      'native-terminal',
+      'settled',
+      'unknown',
+      'cancel-requested',
+      'cancelled',
+    ].includes(String(item.phase))
   )
     throw new Error('Web check custody: status belongs to another invocation');
   validTimestamp(item.createdAt, 'status creation time');
   validTimestamp(item.updatedAt, 'status update time');
   const binding = validateBinding(item.binding);
-  if (jsonSha256(binding) !== jsonSha256(descriptor.binding)) throw new Error('Web check custody: status binding differs from original preparation');
+  if (jsonSha256(binding) !== jsonSha256(descriptor.binding))
+    throw new Error('Web check custody: status binding differs from original preparation');
   if (!Array.isArray(item.returns) || JSON.stringify(item.returns) !== JSON.stringify(expected.returns))
     throw new Error('Web check custody: registered returns differ from original declarations');
   const physical = item.physical === null ? null : validatePhysical(item.physical);
   const native = item.native === null ? null : validateNativeDisposition(item.native);
   const snapshot = item.snapshot === null ? null : validateSnapshot(item.snapshot, binding);
-  const candidateWorkspace = item.candidateWorkspace === null ? null : text(item.candidateWorkspace, 'candidate workspace', 4096);
+  const candidateWorkspace =
+    item.candidateWorkspace === null ? null : text(item.candidateWorkspace, 'candidate workspace', 4096);
   if (candidateWorkspace !== null && resolve(candidateWorkspace) !== expected.workspace)
     throw new Error('Web check custody: registered candidate workspace differs from the Web request');
   const preparedExecution = validatePrivateReference(item.preparedExecution, 'prepared execution');
   const descriptorReference = validatePrivateReference(item.descriptor, 'prepared descriptor');
   const preparationIntent = validatePrivateReference(item.preparationIntent, 'preparation intent');
-  if (registered && (
-    candidateWorkspace !== registered.candidateWorkspace ||
-    JSON.stringify(snapshot) !== JSON.stringify(registered.snapshot) ||
-    JSON.stringify(item.returns) !== JSON.stringify(registered.returns) ||
-    (preparedExecution !== null && JSON.stringify(preparedExecution) !== JSON.stringify(registered.preparedExecution)) ||
-    (descriptorReference !== null && JSON.stringify(descriptorReference) !== JSON.stringify(registered.descriptor)) ||
-    (preparationIntent !== null && JSON.stringify(preparationIntent) !== JSON.stringify(registered.preparationIntent))
-  ))
+  if (
+    registered &&
+    (candidateWorkspace !== registered.candidateWorkspace ||
+      JSON.stringify(snapshot) !== JSON.stringify(registered.snapshot) ||
+      JSON.stringify(item.returns) !== JSON.stringify(registered.returns) ||
+      (preparedExecution !== null &&
+        JSON.stringify(preparedExecution) !== JSON.stringify(registered.preparedExecution)) ||
+      (descriptorReference !== null && JSON.stringify(descriptorReference) !== JSON.stringify(registered.descriptor)) ||
+      (preparationIntent !== null &&
+        JSON.stringify(preparationIntent) !== JSON.stringify(registered.preparationIntent)))
+  )
     throw new Error('Web check custody: producer status changed the original prepared registration');
   if (item.transportChild !== null) {
     const child = closed(item.transportChild, ['pid', 'bootId', 'start'], 'transport child identity');
@@ -1182,15 +1453,32 @@ function validateStatusRecord(
     text(child.start, 'transport child start time', 64);
   }
   const cancellation = closed(item.cancellation, ['requested', 'signal'], 'cancellation status');
-  if (typeof cancellation.requested !== 'boolean' || (cancellation.signal !== null && (typeof cancellation.signal !== 'number' || ![1, 2, 15].includes(cancellation.signal))))
+  if (
+    typeof cancellation.requested !== 'boolean' ||
+    (cancellation.signal !== null &&
+      (typeof cancellation.signal !== 'number' || ![1, 2, 15].includes(cancellation.signal)))
+  )
     throw new Error('Web check custody: invalid registered cancellation status');
   const snapshotCustody = item.snapshotCustody;
   if (snapshotCustody !== null && !['owned', 'removed', 'unknown'].includes(String(snapshotCustody)))
     throw new Error('Web check custody: invalid snapshot custody');
-  const final = item.final === null ? null : validateFinalSettlement(item.final, descriptor, requireNative(originalNative), expected);
-  const rawFinalCustody = item.finalCustody === null ? null : validateFinalCustody(
-    item.finalCustody, descriptor, expected, originalNative, physical, snapshot, final, registered,
-  );
+  const final =
+    item.final === null
+      ? null
+      : validateFinalSettlement(item.final, descriptor, requireNative(originalNative), expected);
+  const rawFinalCustody =
+    item.finalCustody === null
+      ? null
+      : validateFinalCustody(
+          item.finalCustody,
+          descriptor,
+          expected,
+          originalNative,
+          physical,
+          snapshot,
+          final,
+          registered,
+        );
   const finalCustody = rawFinalCustody?.value ?? null;
   if (item.failure !== null) text(item.failure, 'registered failure', 1024);
   if (physical && final && (physical.host !== final.physical.host || physical.run !== final.physical.run))
@@ -1228,7 +1516,8 @@ function validateStatusRecord(
 
 function validateNativeDisposition(value: unknown): NativeDisposition {
   const item = closed(value, ['exitCode', 'lifetimeFailure', 'receiptSha256'], 'registered native disposition');
-  if (typeof item.lifetimeFailure !== 'boolean') throw new Error('Web check custody: invalid registered lifetime evidence');
+  if (typeof item.lifetimeFailure !== 'boolean')
+    throw new Error('Web check custody: invalid registered lifetime evidence');
   return {
     exitCode: count(item.exitCode, 'registered native exit code', 255),
     lifetimeFailure: item.lifetimeFailure,
@@ -1241,12 +1530,22 @@ function validateSnapshot(value: unknown, binding: CheckRunBinding): StatusRecor
   const sourceSha256 = hash(item.sourceSha256, 'registered snapshot source');
   if (
     sourceSha256 !== binding.sourceSha256 ||
-    typeof item.workspace !== 'string' || !isAbsolute(item.workspace) || resolve(item.workspace) !== item.workspace ||
-    typeof item.scratch !== 'string' || !isAbsolute(item.scratch) || resolve(item.scratch) !== item.scratch ||
-    !Array.isArray(item.inputFiles) || item.inputFiles.length > 50_000
+    typeof item.workspace !== 'string' ||
+    !isAbsolute(item.workspace) ||
+    resolve(item.workspace) !== item.workspace ||
+    typeof item.scratch !== 'string' ||
+    !isAbsolute(item.scratch) ||
+    resolve(item.scratch) !== item.scratch ||
+    !Array.isArray(item.inputFiles) ||
+    item.inputFiles.length > 50_000
   )
     throw new Error('Web check custody: registered snapshot differs from its prepared source');
-  return { workspace: text(item.workspace, 'snapshot workspace', 4096), scratch: text(item.scratch, 'snapshot scratch', 4096), sourceSha256, inputFiles: item.inputFiles.map((path) => validatePath(path, 'snapshot input', 4096)) };
+  return {
+    workspace: text(item.workspace, 'snapshot workspace', 4096),
+    scratch: text(item.scratch, 'snapshot scratch', 4096),
+    sourceSha256,
+    inputFiles: item.inputFiles.map((path) => validatePath(path, 'snapshot input', 4096)),
+  };
 }
 
 function requireNative(native: NativeTerminal | null): NativeTerminal {
@@ -1258,7 +1557,12 @@ function bindingHash(binding: CheckRunBinding): string {
   return checkRunBindingHash(binding);
 }
 
-function finalCustodySettled(status: StatusRecord, final: FinalSettlement, receivedFinalRaw: Uint8Array | null, registered: RegisteredInvocation): boolean {
+function finalCustodySettled(
+  status: StatusRecord,
+  final: FinalSettlement,
+  receivedFinalRaw: Uint8Array | null,
+  registered: RegisteredInvocation,
+): boolean {
   const custody = status.finalCustody;
   if (
     status.phase !== 'settled' ||
@@ -1292,7 +1596,8 @@ function finalCustodySettled(status: StatusRecord, final: FinalSettlement, recei
       custody.identity.preparedExecutionReferenceSha256 !== privateReferenceSha256(registered.preparedExecution) ||
       custody.identity.descriptorReferenceSha256 !== privateReferenceSha256(registered.descriptor) ||
       custody.identity.preparationIntentReferenceSha256 !== privateReferenceSha256(registered.preparationIntent)
-    ) return false;
+    )
+      return false;
   } else if (custody.delivery !== 'reconciled') return false;
   return (
     final.cleanup.disposition === 'settled' &&
@@ -1312,8 +1617,18 @@ function finalCustodySettled(status: StatusRecord, final: FinalSettlement, recei
   );
 }
 
-function validateStatusAgainstOriginal(status: StatusRecord, descriptor: PreparedCheckRunDescriptor, expected: ExpectedInvocation, native: NativeTerminal | null, registered: RegisteredInvocation): FinalSettlement | null {
-  if (status.physical && native && (status.physical.host !== native.physical.host || status.physical.run !== native.physical.run))
+function validateStatusAgainstOriginal(
+  status: StatusRecord,
+  descriptor: PreparedCheckRunDescriptor,
+  expected: ExpectedInvocation,
+  native: NativeTerminal | null,
+  registered: RegisteredInvocation,
+): FinalSettlement | null {
+  if (
+    status.physical &&
+    native &&
+    (status.physical.host !== native.physical.host || status.physical.run !== native.physical.run)
+  )
     throw new Error('Web check custody: status names a replacement physical run');
   if (status.native && native) {
     const expectedNative = nativeDisposition(native);
@@ -1327,7 +1642,10 @@ function validateStatusAgainstOriginal(status: StatusRecord, descriptor: Prepare
   const final = validateFinalSettlement(status.final, descriptor, native, expected);
   if (status.finalCustody?.originalFinalSha256 !== jsonSha256(final))
     throw new Error('Web check custody: retained final digest differs from original final');
-  if (JSON.stringify(status.snapshot) !== JSON.stringify(registered.snapshot) || status.candidateWorkspace !== registered.candidateWorkspace)
+  if (
+    JSON.stringify(status.snapshot) !== JSON.stringify(registered.snapshot) ||
+    status.candidateWorkspace !== registered.candidateWorkspace
+  )
     throw new Error('Web check custody: final status changed the original snapshot or candidate');
   return final;
 }
@@ -1348,7 +1666,11 @@ function validateRecovery(
   registered: RegisteredInvocation | null,
 ): { status: StatusRecord | null; cleanedPreparation: boolean } {
   if (isObject(value) && value.type === 'check-run-preparation-reconciliation') {
-    const preparation = closed(value, ['schema', 'type', 'invocationId', 'snapshotCustody', 'preparationIntent'], 'pre-exposure preparation reconciliation');
+    const preparation = closed(
+      value,
+      ['schema', 'type', 'invocationId', 'snapshotCustody', 'preparationIntent'],
+      'pre-exposure preparation reconciliation',
+    );
     if (
       preparation.schema !== 1 ||
       typeof preparation.invocationId !== 'string' ||
@@ -1433,8 +1755,11 @@ class FinalWireReceiver {
         this.#native = validateNativeTerminal(decoded, this.descriptor);
         this.record.native = this.#native;
         this.record.ingress.native = {
-          state: 'received', start, end: start + raw.length,
-          rawSha256: sha256(raw), bodySha256: sha256(raw.subarray(0, -1)),
+          state: 'received',
+          start,
+          end: start + raw.length,
+          rawSha256: sha256(raw),
+          bodySha256: sha256(raw.subarray(0, -1)),
           originalSha256: jsonSha256(this.#native),
         };
         persistRecord(this.files, this.record);
@@ -1447,13 +1772,20 @@ class FinalWireReceiver {
         this.#finalRaw = Buffer.from(raw);
         this.record.final = this.#final;
         this.record.ingress.final = {
-          state: 'received', start, end: start + raw.length,
-          rawSha256: sha256(raw), bodySha256: sha256(raw.subarray(0, -1)),
+          state: 'received',
+          start,
+          end: start + raw.length,
+          rawSha256: sha256(raw),
+          bodySha256: sha256(raw.subarray(0, -1)),
           originalSha256: jsonSha256(this.#final),
         };
         this.record.validation.source = this.#final.preparedInputs.status === 'verified' ? 'verified' : 'rejected';
-        this.record.validation.returns = ['empty', 'restored'].includes(this.#final.returns.status) &&
-          this.#final.returns.missing.length === 0 && this.#final.returns.failures.length === 0 ? 'verified' : 'rejected';
+        this.record.validation.returns =
+          ['empty', 'restored'].includes(this.#final.returns.status) &&
+          this.#final.returns.missing.length === 0 &&
+          this.#final.returns.failures.length === 0
+            ? 'verified'
+            : 'rejected';
         persistRecord(this.files, this.record);
         return;
       }
@@ -1462,8 +1794,11 @@ class FinalWireReceiver {
       this.#invalid = true;
       this.record.rejectedEvidence = true;
       const rejected = {
-        state: 'rejected' as const, start, end: start + raw.length,
-        rawSha256: sha256(raw), bodySha256: raw.length ? sha256(raw.subarray(0, -1)) : sha256(''),
+        state: 'rejected' as const,
+        start,
+        end: start + raw.length,
+        rawSha256: sha256(raw),
+        bodySha256: raw.length ? sha256(raw.subarray(0, -1)) : sha256(''),
         originalSha256: null,
       };
       if (!this.record.native) this.record.ingress.native = rejected;
@@ -1476,7 +1811,12 @@ class FinalWireReceiver {
     }
   }
 
-  finish(): { native: NativeTerminal | null; final: FinalSettlement | null; finalRaw: Buffer | null; invalid: boolean } {
+  finish(): {
+    native: NativeTerminal | null;
+    final: FinalSettlement | null;
+    finalRaw: Buffer | null;
+    invalid: boolean;
+  } {
     this.record.ingress.complete = this.record.ingress.complete && this.#buffer.length === 0;
     if (this.#buffer.length !== 0) this.record.ingress.streamBytes = this.#totalBytes;
     if (this.#invalid) {
@@ -1504,7 +1844,8 @@ function replayRetainedEvidence(
   record: WebCustodyRecord,
 ): { invalid: boolean; native: NativeTerminal | null; final: FinalSettlement | null; finalRaw: Buffer | null } {
   const raw = readFileSync(files.evidenceFile);
-  if (raw.length > MAX_NATIVE_BYTES + MAX_FINAL_BYTES) return { invalid: true, native: null, final: null, finalRaw: null };
+  if (raw.length > MAX_NATIVE_BYTES + MAX_FINAL_BYTES)
+    return { invalid: true, native: null, final: null, finalRaw: null };
   const descriptor = record.descriptor ?? descriptorFromRetainedFile(files.descriptorFile, record.expected);
   if (!descriptor) return { invalid: raw.length > 0, native: null, final: null, finalRaw: null };
   let offset = 0;
@@ -1530,8 +1871,11 @@ function replayRetainedEvidence(
         if (line.length > MAX_NATIVE_BYTES || native || final) throw new Error('duplicate native evidence');
         native = validateNativeTerminal(decoded, descriptor);
         record.ingress.native = {
-          state: 'received', start, end: offset,
-          rawSha256: sha256(line), bodySha256: sha256(line.subarray(0, -1)),
+          state: 'received',
+          start,
+          end: offset,
+          rawSha256: sha256(line),
+          bodySha256: sha256(line.subarray(0, -1)),
           originalSha256: jsonSha256(native),
         };
       } else {
@@ -1539,8 +1883,11 @@ function replayRetainedEvidence(
         final = validateFinalSettlement(decoded, descriptor, native, record.expected);
         finalRaw = Buffer.from(line);
         record.ingress.final = {
-          state: 'received', start, end: offset,
-          rawSha256: sha256(line), bodySha256: sha256(line.subarray(0, -1)),
+          state: 'received',
+          start,
+          end: offset,
+          rawSha256: sha256(line),
+          bodySha256: sha256(line.subarray(0, -1)),
           originalSha256: jsonSha256(final),
         };
       }
@@ -1556,7 +1903,11 @@ function replayRetainedEvidence(
     record.rejectedEvidence = true;
     return { invalid: true, native, final, finalRaw };
   }
-  if (record.final && record.ingress.final.state !== 'reconciled' && (!final || jsonSha256(final) !== jsonSha256(record.final))) {
+  if (
+    record.final &&
+    record.ingress.final.state !== 'reconciled' &&
+    (!final || jsonSha256(final) !== jsonSha256(record.final))
+  ) {
     record.rejectedEvidence = true;
     return { invalid: true, native, final, finalRaw };
   }
@@ -1565,7 +1916,10 @@ function replayRetainedEvidence(
   return { invalid: false, native, final, finalRaw };
 }
 
-function descriptorFromFile(files: WebCheckPrivateFiles, expected: ExpectedInvocation): PreparedCheckRunDescriptor | null {
+function descriptorFromFile(
+  files: WebCheckPrivateFiles,
+  expected: ExpectedInvocation,
+): PreparedCheckRunDescriptor | null {
   try {
     return validatePreparedFile(files, expected);
   } catch {
@@ -1574,7 +1928,12 @@ function descriptorFromFile(files: WebCheckPrivateFiles, expected: ExpectedInvoc
 }
 
 function recoveryHelperClosed(helper: RecoveryHelper): boolean {
-  return helper.state === 'closed' && helper.parentClosed === true && helper.outputClosed === true && helper.groupClosed === true;
+  return (
+    helper.state === 'closed' &&
+    helper.parentClosed === true &&
+    helper.outputClosed === true &&
+    helper.groupClosed === true
+  );
 }
 
 function recordRecoveryLifetime(
@@ -1590,11 +1949,13 @@ function recordRecoveryLifetime(
   if (lifetime.cancelled) helper.cancelled = true;
   if (lifetime.outputOverflow !== undefined) helper.outputOverflow = lifetime.outputOverflow;
   if (
-    helper.finishedAt !== null && helper.parentClosed === true && helper.outputClosed === true && helper.groupClosed === true
+    helper.finishedAt !== null &&
+    helper.parentClosed === true &&
+    helper.outputClosed === true &&
+    helper.groupClosed === true
   )
     helper.state = 'closed';
-  else if (helper.finishedAt !== null)
-    helper.state = 'unknown';
+  else if (helper.finishedAt !== null) helper.state = 'unknown';
   try {
     persistRecord(files, record);
     return true;
@@ -1610,10 +1971,7 @@ async function invokeRecoveryRuntime(
   files: WebCheckPrivateFiles,
   record: WebCustodyRecord,
 ): Promise<WebCheckDriverProcess | null> {
-  if (
-    record.recovery.length >= MAX_RECOVERY_HELPERS ||
-    record.recovery.some((helper) => !recoveryHelperClosed(helper))
-  )
+  if (record.recovery.length >= MAX_RECOVERY_HELPERS || record.recovery.some((helper) => !recoveryHelperClosed(helper)))
     return null;
   const helper: RecoveryHelper = {
     id: randomUUID(),
@@ -1747,7 +2105,13 @@ async function reconcileWithRuntime(
     return { status: null, cleanedPreparation: false };
   }
   try {
-    const recovered = validateRecovery(parseSingleOutput(result.output, 'original descriptor reconciliation'), descriptor, expected, native, registered);
+    const recovered = validateRecovery(
+      parseSingleOutput(result.output, 'original descriptor reconciliation'),
+      descriptor,
+      expected,
+      native,
+      registered,
+    );
     return recovered;
   } catch {
     onRejected?.();
@@ -1757,7 +2121,10 @@ async function reconcileWithRuntime(
 
 function outputCode(result: WebCheckDriverProcess): number {
   if (result.code !== null) return result.code;
-  if (result.signal) return 128 + (result.signal === 'SIGINT' ? 2 : result.signal === 'SIGTERM' ? 15 : result.signal === 'SIGHUP' ? 1 : 0);
+  if (result.signal)
+    return (
+      128 + (result.signal === 'SIGINT' ? 2 : result.signal === 'SIGTERM' ? 15 : result.signal === 'SIGHUP' ? 1 : 0)
+    );
   return 75;
 }
 
@@ -1777,8 +2144,18 @@ function outcome(
     custody,
     invocationId: descriptor?.invocationId ?? null,
     nativeExitCode: native?.receipt.exitCode ?? null,
-    source: final?.preparedInputs.status === 'verified' && final.preparedInputs.sourceSha256 === descriptor?.binding.sourceSha256 ? 'verified' : 'unknown',
-    returns: final && ['empty', 'restored'].includes(final.returns.status) && !final.returns.missing.length && !final.returns.failures.length ? 'verified' : 'unknown',
+    source:
+      final?.preparedInputs.status === 'verified' &&
+      final.preparedInputs.sourceSha256 === descriptor?.binding.sourceSha256
+        ? 'verified'
+        : 'unknown',
+    returns:
+      final &&
+      ['empty', 'restored'].includes(final.returns.status) &&
+      !final.returns.missing.length &&
+      !final.returns.failures.length
+        ? 'verified'
+        : 'unknown',
     finalCustody,
     privateCleanup,
     cancellation,
@@ -1787,7 +2164,14 @@ function outcome(
 }
 
 function isCancellationSettled(status: StatusRecord | null): boolean {
-  return Boolean(status && status.phase === 'cancelled' && status.cancellation.requested && status.snapshotCustody === 'removed' && !status.physical && !status.final);
+  return Boolean(
+    status &&
+    status.phase === 'cancelled' &&
+    status.cancellation.requested &&
+    status.snapshotCustody === 'removed' &&
+    !status.physical &&
+    !status.final,
+  );
 }
 
 async function finishPrivate(
@@ -1803,7 +2187,11 @@ async function finishPrivate(
 ): Promise<WebCheckCustodyOutcome> {
   if (record) {
     record.cleanup = { ...record.cleanup, state: 'dispatching', detail: null };
-    try { persistRecord(files, record); } catch { /* Keep descriptor custody if the journal cannot be refreshed. */ }
+    try {
+      persistRecord(files, record);
+    } catch {
+      /* Keep descriptor custody if the journal cannot be refreshed. */
+    }
   }
   try {
     await runtime.cleanup(files);
@@ -1813,9 +2201,23 @@ async function finishPrivate(
     // Keep the native result and private cleanup as separate evidence.
     if (record) {
       record.cleanup = { ...record.cleanup, state: 'unknown', detail: 'private receiver cleanup did not complete' };
-      try { persistRecord(files, record); } catch { /* Retained descriptor and wire bytes remain the recovery authority. */ }
+      try {
+        persistRecord(files, record);
+      } catch {
+        /* Retained descriptor and wire bytes remain the recovery authority. */
+      }
     }
-    return outcome(code === 0 ? 75 : code, files, descriptor, native, final, 'occupied', 'unknown', cancellation, finalCustody);
+    return outcome(
+      code === 0 ? 75 : code,
+      files,
+      descriptor,
+      native,
+      final,
+      'occupied',
+      'unknown',
+      cancellation,
+      finalCustody,
+    );
   }
 }
 
@@ -1848,8 +2250,7 @@ export async function runPreparedWebCheck(
   signal?: AbortSignal,
 ): Promise<WebCheckCustodyOutcome> {
   assertPrivateFiles(input.files, input.workspace);
-  if (signal?.aborted)
-    return finishPrivate(runtime, input.files, signalCode(signal), null, null, null, 'settled');
+  if (signal?.aborted) return finishPrivate(runtime, input.files, signalCode(signal), null, null, null, 'settled');
   const expected = expectedInvocation(input);
   const record: WebCustodyRecord = {
     schema: 1,
@@ -1870,14 +2271,26 @@ export async function runPreparedWebCheck(
     rejectedEvidence: false,
     failure: null,
   };
-  const command = commandForPrepare({ ...input, environmentFile: input.files.environmentFile, descriptorFile: input.files.descriptorFile });
+  const command = commandForPrepare({
+    ...input,
+    environmentFile: input.files.environmentFile,
+    descriptorFile: input.files.descriptorFile,
+  });
   try {
     persistRecord(input.files, record);
     record.caller.prepare = { ...emptyProcessLifetime(), state: 'dispatching' };
     persistRecord(input.files, record);
   } catch (error) {
-    try { disposeWebCheckEnvironmentInput(input.files); } catch { /* Preserve the journal error. */ }
-    try { await runtime.cleanup(input.files); } catch { /* No producer process was dispatched. */ }
+    try {
+      disposeWebCheckEnvironmentInput(input.files);
+    } catch {
+      /* Preserve the journal error. */
+    }
+    try {
+      await runtime.cleanup(input.files);
+    } catch {
+      /* No producer process was dispatched. */
+    }
     throw error;
   }
   let prepare: WebCheckDriverProcess;
@@ -1916,10 +2329,28 @@ export async function runPreparedWebCheck(
   if (!descriptor && !prepareRejected) descriptor = descriptorFromFile(input.files, expected);
 
   let registrationReady = false;
-  if (descriptor && descriptorRaw && prepare.closed && prepare.code === 0 && !prepare.outputOverflow && !prepareRejected) {
+  if (
+    descriptor &&
+    descriptorRaw &&
+    prepare.closed &&
+    prepare.code === 0 &&
+    !prepare.outputOverflow &&
+    !prepareRejected
+  ) {
     const preparedStatus = await statusFromRuntime(
-      runtime, input.files, record, input.driverRoot, input.workspace, descriptor, expected, null, input.env, null,
-      () => { record.rejectedEvidence = true; },
+      runtime,
+      input.files,
+      record,
+      input.driverRoot,
+      input.workspace,
+      descriptor,
+      expected,
+      null,
+      input.env,
+      null,
+      () => {
+        record.rejectedEvidence = true;
+      },
       signal?.aborted ? undefined : signal,
     );
     if (preparedStatus) {
@@ -1937,7 +2368,16 @@ export async function runPreparedWebCheck(
   }
 
   const abortAfterPrepare = Boolean(signal?.aborted);
-  if (!descriptor || !registrationReady || prepare.code !== 0 || !prepare.closed || prepare.outputOverflow || abortAfterPrepare || prepareRejected || record.cleanup.environmentInput !== 'removed') {
+  if (
+    !descriptor ||
+    !registrationReady ||
+    prepare.code !== 0 ||
+    !prepare.closed ||
+    prepare.outputOverflow ||
+    abortAfterPrepare ||
+    prepareRejected ||
+    record.cleanup.environmentInput !== 'removed'
+  ) {
     const recovered = await reconcileWithRuntime(
       runtime,
       input.files,
@@ -1951,7 +2391,9 @@ export async function runPreparedWebCheck(
       null,
       input.env,
       record.registered,
-      () => { record.rejectedEvidence = true; },
+      () => {
+        record.rejectedEvidence = true;
+      },
     );
     const canceled = isCancellationSettled(recovered.status) || recovered.cleanedPreparation;
     const callerPreparationClosed = record.caller.prepare.state === 'closed';
@@ -1968,7 +2410,16 @@ export async function runPreparedWebCheck(
       );
     }
     persistRecord(input.files, record);
-    return outcome(abortAfterPrepare ? signalCode(signal) : prepare.code === 0 ? 75 : outputCode(prepare), input.files, descriptor, null, null, 'occupied', 'retained', abortAfterPrepare ? 'unknown' : 'none');
+    return outcome(
+      abortAfterPrepare ? signalCode(signal) : prepare.code === 0 ? 75 : outputCode(prepare),
+      input.files,
+      descriptor,
+      null,
+      null,
+      'occupied',
+      'retained',
+      abortAfterPrepare ? 'unknown' : 'none',
+    );
   }
 
   const registered = record.registered;
@@ -1981,9 +2432,21 @@ export async function runPreparedWebCheck(
   if (signal?.aborted) {
     record.cancellation = { requested: true, signal: signalNumber(signal) };
     const recovered = await reconcileWithRuntime(
-      runtime, input.files, record, input.driverRoot, input.hostsFile, input.workspace, input.files.descriptorFile,
-      descriptor, expected, null, input.env, registered,
-      () => { record.rejectedEvidence = true; },
+      runtime,
+      input.files,
+      record,
+      input.driverRoot,
+      input.hostsFile,
+      input.workspace,
+      input.files.descriptorFile,
+      descriptor,
+      expected,
+      null,
+      input.env,
+      registered,
+      () => {
+        record.rejectedEvidence = true;
+      },
     );
     if (isCancellationSettled(recovered.status) && !record.rejectedEvidence)
       return finishPrivate(runtime, input.files, signalCode(signal), descriptor, null, null, 'settled', record);
@@ -2010,7 +2473,10 @@ export async function runPreparedWebCheck(
   }
   const wire = receiver.finish();
   const cancellationRequested = Boolean(signal?.aborted);
-  record.cancellation = { requested: cancellationRequested, signal: cancellationRequested ? signalNumber(signal) : null };
+  record.cancellation = {
+    requested: cancellationRequested,
+    signal: cancellationRequested ? signalNumber(signal) : null,
+  };
   persistRecord(input.files, record);
   if (wire.invalid) {
     return outcome(
@@ -2040,15 +2506,37 @@ export async function runPreparedWebCheck(
       wire.native,
       input.env,
       record.registered,
-      () => { record.rejectedEvidence = true; },
+      () => {
+        record.rejectedEvidence = true;
+      },
     );
     persistRecord(input.files, record);
-    return outcome(cancellationRequested ? signalCode(signal) : 75, input.files, descriptor, wire.native, wire.final, 'occupied', 'retained', cancellationRequested ? 'unknown' : 'none');
+    return outcome(
+      cancellationRequested ? signalCode(signal) : 75,
+      input.files,
+      descriptor,
+      wire.native,
+      wire.final,
+      'occupied',
+      'retained',
+      cancellationRequested ? 'unknown' : 'none',
+    );
   }
 
   let status = await statusFromRuntime(
-    runtime, input.files, record, input.driverRoot, input.workspace, descriptor, expected, wire.native, input.env, registered,
-    () => { record.rejectedEvidence = true; },
+    runtime,
+    input.files,
+    record,
+    input.driverRoot,
+    input.workspace,
+    descriptor,
+    expected,
+    wire.native,
+    input.env,
+    registered,
+    () => {
+      record.rejectedEvidence = true;
+    },
   );
   let final = wire.final;
   let finalCustodyOkay = false;
@@ -2067,10 +2555,7 @@ export async function runPreparedWebCheck(
 
   let cancellation: WebCheckCustodyOutcome['cancellation'] = cancellationRequested ? 'requested' : 'none';
   const needsReconciliation =
-    !status ||
-    !wire.native ||
-    (wire.native !== null && (!finalCustodyOkay || !final)) ||
-    cancellationRequested;
+    !status || !wire.native || (wire.native !== null && (!finalCustodyOkay || !final)) || cancellationRequested;
   if (needsReconciliation && !record.rejectedEvidence) {
     const recovered = await reconcileWithRuntime(
       runtime,
@@ -2085,7 +2570,9 @@ export async function runPreparedWebCheck(
       wire.native,
       input.env,
       registered,
-      () => { record.rejectedEvidence = true; },
+      () => {
+        record.rejectedEvidence = true;
+      },
     );
     if (recovered.status) {
       status = recovered.status;
@@ -2108,14 +2595,22 @@ export async function runPreparedWebCheck(
           if (!wire.final) {
             record.final = final;
             record.ingress.final = {
-              state: 'reconciled', start: null, end: null, rawSha256: null, bodySha256: null,
+              state: 'reconciled',
+              start: null,
+              end: null,
+              rawSha256: null,
+              bodySha256: null,
               originalSha256: jsonSha256(final),
             };
           }
           finalCustodyOkay = finalCustodySettled(status, final, wire.finalRaw, registered);
           record.validation.source = final.preparedInputs.status === 'verified' ? 'verified' : 'rejected';
-          record.validation.returns = ['empty', 'restored'].includes(final.returns.status) &&
-            final.returns.missing.length === 0 && final.returns.failures.length === 0 ? 'verified' : 'rejected';
+          record.validation.returns =
+            ['empty', 'restored'].includes(final.returns.status) &&
+            final.returns.missing.length === 0 &&
+            final.returns.failures.length === 0
+              ? 'verified'
+              : 'rejected';
           if (cancellationRequested && finalCustodyOkay) cancellation = 'settled';
         }
       } catch {
@@ -2129,21 +2624,52 @@ export async function runPreparedWebCheck(
 
   if (record.rejectedEvidence || !wire.native || !final || !status || !finalCustodyOkay) {
     const nativeCode = wire.native && wire.native.receipt.exitCode !== 0 ? wire.native.receipt.exitCode : null;
-    const code = nativeCode ?? (cancellationRequested ? signalCode(signal) : outputCode(run) === 0 ? 75 : outputCode(run));
+    const code =
+      nativeCode ?? (cancellationRequested ? signalCode(signal) : outputCode(run) === 0 ? 75 : outputCode(run));
     persistRecord(input.files, record);
-    return outcome(code, input.files, descriptor, wire.native, final, 'occupied', 'retained', cancellation ? cancellation : 'unknown', status?.finalCustody?.aggregate ?? 'unknown');
+    return outcome(
+      code,
+      input.files,
+      descriptor,
+      wire.native,
+      final,
+      'occupied',
+      'retained',
+      cancellation ? cancellation : 'unknown',
+      status?.finalCustody?.aggregate ?? 'unknown',
+    );
   }
 
   const nativeCode = wire.native.receipt.exitCode;
   if (!record.ingress.complete) {
     persistRecord(input.files, record);
-    return outcome(nativeCode !== 0 ? nativeCode : 75, input.files, descriptor, wire.native, final, 'occupied', 'retained', cancellation, status.finalCustody?.aggregate ?? 'unknown');
+    return outcome(
+      nativeCode !== 0 ? nativeCode : 75,
+      input.files,
+      descriptor,
+      wire.native,
+      final,
+      'occupied',
+      'retained',
+      cancellation,
+      status.finalCustody?.aggregate ?? 'unknown',
+    );
   }
   if (!cancellationRequested && outputCode(run) !== nativeCode) {
     record.rejectedEvidence = true;
     record.failure = 'run-prepared exit differs from the original native terminal';
     persistRecord(input.files, record);
-    return outcome(nativeCode !== 0 ? nativeCode : 75, input.files, descriptor, wire.native, final, 'occupied', 'retained', 'unknown', status.finalCustody?.aggregate ?? 'unknown');
+    return outcome(
+      nativeCode !== 0 ? nativeCode : 75,
+      input.files,
+      descriptor,
+      wire.native,
+      final,
+      'occupied',
+      'retained',
+      'unknown',
+      status.finalCustody?.aggregate ?? 'unknown',
+    );
   }
   return finishPrivate(
     runtime,
@@ -2183,24 +2709,50 @@ function validateProcessLifetime(value: unknown, label: string): ProcessLifetime
     throw new Error(`Web check custody: closed ${label} caller lacks its output receipt`);
   if (item.state === 'dispatching' && (item.code !== null || signal !== null || outputSha256 !== null))
     throw new Error(`Web check custody: dispatching ${label} caller already has terminal evidence`);
-  return { state: item.state as ProcessLifetime['state'], code: item.code as number | null, signal, outputSha256, outputOverflow: item.outputOverflow };
+  return {
+    state: item.state as ProcessLifetime['state'],
+    code: item.code as number | null,
+    signal,
+    outputSha256,
+    outputOverflow: item.outputOverflow,
+  };
 }
 
 function validateIngressMessage(value: unknown, label: string): IngressMessage {
-  const item = closed(value, ['state', 'start', 'end', 'rawSha256', 'bodySha256', 'originalSha256'], `${label} ingress receipt`);
+  const item = closed(
+    value,
+    ['state', 'start', 'end', 'rawSha256', 'bodySha256', 'originalSha256'],
+    `${label} ingress receipt`,
+  );
   if (!['absent', 'received', 'reconciled', 'rejected'].includes(String(item.state)))
     throw new Error(`Web check custody: invalid ${label} ingress state`);
   const state = item.state as IngressMessage['state'];
-  const start = item.start === null ? null : count(item.start, `${label} ingress start`, MAX_NATIVE_BYTES + MAX_FINAL_BYTES);
+  const start =
+    item.start === null ? null : count(item.start, `${label} ingress start`, MAX_NATIVE_BYTES + MAX_FINAL_BYTES);
   const end = item.end === null ? null : count(item.end, `${label} ingress end`, MAX_NATIVE_BYTES + MAX_FINAL_BYTES);
   const rawSha256 = item.rawSha256 === null ? null : hash(item.rawSha256, `${label} raw ingress digest`);
   const bodySha256 = item.bodySha256 === null ? null : hash(item.bodySha256, `${label} body ingress digest`);
-  const originalSha256 = item.originalSha256 === null ? null : hash(item.originalSha256, `${label} original ingress digest`);
-  if (state === 'absent' && (start !== null || end !== null || rawSha256 !== null || bodySha256 !== null || originalSha256 !== null))
+  const originalSha256 =
+    item.originalSha256 === null ? null : hash(item.originalSha256, `${label} original ingress digest`);
+  if (
+    state === 'absent' &&
+    (start !== null || end !== null || rawSha256 !== null || bodySha256 !== null || originalSha256 !== null)
+  )
     throw new Error(`Web check custody: absent ${label} ingress has evidence fields`);
-  if (state === 'received' && (start === null || end === null || end <= start || rawSha256 === null || bodySha256 === null || originalSha256 === null))
+  if (
+    state === 'received' &&
+    (start === null ||
+      end === null ||
+      end <= start ||
+      rawSha256 === null ||
+      bodySha256 === null ||
+      originalSha256 === null)
+  )
     throw new Error(`Web check custody: received ${label} ingress is incomplete`);
-  if (state === 'reconciled' && (start !== null || end !== null || rawSha256 !== null || bodySha256 !== null || originalSha256 === null))
+  if (
+    state === 'reconciled' &&
+    (start !== null || end !== null || rawSha256 !== null || bodySha256 !== null || originalSha256 === null)
+  )
     throw new Error(`Web check custody: reconciled ${label} ingress is not tied to the immutable final`);
   return { state, start, end, rawSha256, bodySha256, originalSha256 };
 }
@@ -2218,8 +2770,17 @@ function validateReceiptIngress(value: unknown): ReceiptIngress {
   };
 }
 
-function validateRegisteredInvocation(value: unknown, descriptor: PreparedCheckRunDescriptor, expected: ExpectedInvocation, files: WebCheckPrivateFiles): RegisteredInvocation {
-  const item = closed(value, ['binding', 'candidateWorkspace', 'snapshot', 'returns', 'preparedExecution', 'descriptor', 'preparationIntent'], 'prepared registration journal');
+function validateRegisteredInvocation(
+  value: unknown,
+  descriptor: PreparedCheckRunDescriptor,
+  expected: ExpectedInvocation,
+  files: WebCheckPrivateFiles,
+): RegisteredInvocation {
+  const item = closed(
+    value,
+    ['binding', 'candidateWorkspace', 'snapshot', 'returns', 'preparedExecution', 'descriptor', 'preparationIntent'],
+    'prepared registration journal',
+  );
   const binding = validateBinding(item.binding);
   const candidateWorkspace = text(item.candidateWorkspace, 'registered candidate workspace', 4096);
   const snapshot = validateSnapshot(item.snapshot, binding);
@@ -2228,7 +2789,9 @@ function validateRegisteredInvocation(value: unknown, descriptor: PreparedCheckR
   const descriptorReference = validatePrivateReference(item.descriptor, 'prepared descriptor');
   const preparationIntent = validatePrivateReference(item.preparationIntent, 'preparation intent');
   if (
-    !snapshot || !preparedExecution || !descriptorReference ||
+    !snapshot ||
+    !preparedExecution ||
+    !descriptorReference ||
     JSON.stringify(binding) !== JSON.stringify(descriptor.binding) ||
     candidateWorkspace !== expected.workspace ||
     snapshot.sourceSha256 !== descriptor.binding.sourceSha256 ||
@@ -2237,22 +2800,47 @@ function validateRegisteredInvocation(value: unknown, descriptor: PreparedCheckR
     descriptorReference.sha256 !== sha256(readPreparedFile(files, expected).raw)
   )
     throw new Error('Web check custody: retained registration differs from the original prepared request');
-  return { binding, candidateWorkspace, snapshot, returns, preparedExecution, descriptor: descriptorReference, preparationIntent };
+  return {
+    binding,
+    candidateWorkspace,
+    snapshot,
+    returns,
+    preparedExecution,
+    descriptor: descriptorReference,
+    preparationIntent,
+  };
 }
 
 function validateCallerLifetime(value: unknown): CallerLifetime {
   const item = closed(value, ['prepare', 'run'], 'caller process lifetime');
-  return { prepare: validateProcessLifetime(item.prepare, 'prepare'), run: validateProcessLifetime(item.run, 'run-prepared') };
+  return {
+    prepare: validateProcessLifetime(item.prepare, 'prepare'),
+    run: validateProcessLifetime(item.run, 'run-prepared'),
+  };
 }
 
 function validateRecoveryHelpers(value: unknown): RecoveryHelper[] {
   if (!Array.isArray(value) || value.length > MAX_RECOVERY_HELPERS)
     throw new Error('Web check custody: invalid bounded recovery helper journal');
   return value.map((raw) => {
-    const item = closed(raw, [
-      'id', 'operation', 'pid', 'startedAt', 'finishedAt', 'state', 'parentClosed', 'outputClosed',
-      'groupClosed', 'timedOut', 'cancelled', 'outputOverflow',
-    ], 'recovery helper lifetime');
+    const item = closed(
+      raw,
+      [
+        'id',
+        'operation',
+        'pid',
+        'startedAt',
+        'finishedAt',
+        'state',
+        'parentClosed',
+        'outputClosed',
+        'groupClosed',
+        'timedOut',
+        'cancelled',
+        'outputOverflow',
+      ],
+      'recovery helper lifetime',
+    );
     const id = text(item.id, 'recovery helper id', 64);
     if (!UUID.test(id) || (item.operation !== 'status' && item.operation !== 'reconcile'))
       throw new Error('Web check custody: invalid recovery helper identity');
@@ -2263,8 +2851,7 @@ function validateRecoveryHelpers(value: unknown): RecoveryHelper[] {
     if (!['dispatching', 'closed', 'unknown'].includes(String(item.state)))
       throw new Error('Web check custody: invalid recovery helper state');
     const closure = (entry: unknown, label: string): boolean | null => {
-      if (entry !== null && typeof entry !== 'boolean')
-        throw new Error(`Web check custody: invalid ${label} closure`);
+      if (entry !== null && typeof entry !== 'boolean') throw new Error(`Web check custody: invalid ${label} closure`);
       return entry as boolean | null;
     };
     if (typeof item.timedOut !== 'boolean' || typeof item.cancelled !== 'boolean')
@@ -2298,30 +2885,68 @@ function validateRecoveryHelpers(value: unknown): RecoveryHelper[] {
 function validateRecordFile(files: WebCheckPrivateFiles): WebCustodyRecord {
   const stat = lstatSync(files.recordFile);
   if (
-    !stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_RECORD_BYTES || (stat.mode & 0o077) !== 0 ||
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    stat.size > MAX_RECORD_BYTES ||
+    (stat.mode & 0o077) !== 0 ||
     (typeof process.getuid === 'function' && stat.uid !== process.getuid())
   )
     throw new Error('Web check custody: retained Web custody record is not private and bounded');
   const rawValue = parseUniqueJson(readFileSync(files.recordFile, 'utf8'));
-  const oldKeys = ['schema', 'type', 'descriptorFile', 'environmentFile', 'expected', 'descriptor', 'native', 'final', 'rejectedEvidence', 'failure'];
+  const oldKeys = [
+    'schema',
+    'type',
+    'descriptorFile',
+    'environmentFile',
+    'expected',
+    'descriptor',
+    'native',
+    'final',
+    'rejectedEvidence',
+    'failure',
+  ];
   const previousCurrentKeys = [
-    ...oldKeys.slice(0, 6), 'registered', 'caller', 'ingress', 'validation', 'cleanup', 'cancellation',
+    ...oldKeys.slice(0, 6),
+    'registered',
+    'caller',
+    'ingress',
+    'validation',
+    'cleanup',
+    'cancellation',
     ...oldKeys.slice(6),
   ];
   const currentKeys = [...previousCurrentKeys, 'recovery'];
   if (!isObject(rawValue)) throw new Error('Web check custody: retained Web custody record is invalid');
-  const legacy = Reflect.ownKeys(rawValue).length === oldKeys.length && oldKeys.every((key) => Object.hasOwn(rawValue, key));
-  const previousCurrent = Reflect.ownKeys(rawValue).length === previousCurrentKeys.length &&
+  const legacy =
+    Reflect.ownKeys(rawValue).length === oldKeys.length && oldKeys.every((key) => Object.hasOwn(rawValue, key));
+  const previousCurrent =
+    Reflect.ownKeys(rawValue).length === previousCurrentKeys.length &&
     previousCurrentKeys.every((key) => Object.hasOwn(rawValue, key));
-  const value = closed(rawValue, legacy ? oldKeys : previousCurrent ? previousCurrentKeys : currentKeys, 'retained Web custody record');
+  const value = closed(
+    rawValue,
+    legacy ? oldKeys : previousCurrent ? previousCurrentKeys : currentKeys,
+    'retained Web custody record',
+  );
   if (value.schema !== 1 || value.type !== 'web-check-custody')
     throw new Error('Web check custody: retained Web custody record is invalid');
   if (value.descriptorFile !== files.descriptorFile || value.environmentFile !== files.environmentFile)
     throw new Error('Web check custody: retained private paths differ from the original Web invocation');
-  const rawExpected = closed(value.expected, [
-    'driverRoot', 'hostsFile', 'workspace', 'cwd', 'sourceRevision', 'commandSha256',
-    'semanticEnvironmentSha256', 'relocatedEnvironmentSha256', 'returns', 'returnsSha256',
-  ], 'retained Web request');
+  const rawExpected = closed(
+    value.expected,
+    [
+      'driverRoot',
+      'hostsFile',
+      'workspace',
+      'cwd',
+      'sourceRevision',
+      'commandSha256',
+      'semanticEnvironmentSha256',
+      'relocatedEnvironmentSha256',
+      'returns',
+      'returnsSha256',
+    ],
+    'retained Web request',
+  );
   const absolute = (entry: unknown, label: string) => {
     const path = text(entry, label, 4096);
     if (!isAbsolute(path) || resolve(path) !== path) throw new Error(`Web check custody: invalid retained ${label}`);
@@ -2329,14 +2954,19 @@ function validateRecordFile(files: WebCheckPrivateFiles): WebCustodyRecord {
   };
   const workspace = absolute(rawExpected.workspace, 'candidate workspace');
   const cwd = text(rawExpected.cwd, 'workspace-relative cwd', 4096);
-  if (!cwd || (cwd !== '.' && (cwd.startsWith('/') || /[\\\0\r\n]/.test(cwd) || cwd.split('/').some((part) => ['', '.', '..'].includes(part)))))
+  if (
+    !cwd ||
+    (cwd !== '.' &&
+      (cwd.startsWith('/') || /[\\\0\r\n]/.test(cwd) || cwd.split('/').some((part) => ['', '.', '..'].includes(part))))
+  )
     throw new Error('Web check custody: invalid retained working directory');
   if (typeof rawExpected.sourceRevision !== 'string' || !/^[a-f0-9]{40}$/.test(rawExpected.sourceRevision))
     throw new Error('Web check custody: invalid retained source revision');
   if (!Array.isArray(rawExpected.returns) || rawExpected.returns.length > 64)
     throw new Error('Web check custody: invalid retained return declarations');
   const returns = rawExpected.returns.map((path) => validatePath(path, 'retained return declaration'));
-  if (new Set(returns).size !== returns.length) throw new Error('Web check custody: duplicate retained return declaration');
+  if (new Set(returns).size !== returns.length)
+    throw new Error('Web check custody: duplicate retained return declaration');
   const expected: ExpectedInvocation = {
     driverRoot: absolute(rawExpected.driverRoot, 'driver root'),
     hostsFile: absolute(rawExpected.hostsFile, 'hosts file'),
@@ -2349,18 +2979,29 @@ function validateRecordFile(files: WebCheckPrivateFiles): WebCustodyRecord {
     returns,
     returnsSha256: hash(rawExpected.returnsSha256, 'retained return declaration hash'),
   };
-  if (expected.returnsSha256 !== jsonSha256(returns)) throw new Error('Web check custody: retained returns hash is inconsistent');
+  if (expected.returnsSha256 !== jsonSha256(returns))
+    throw new Error('Web check custody: retained returns hash is inconsistent');
   const descriptor = value.descriptor === null ? null : validateDescriptor(value.descriptor);
   if (descriptor) validatePreparedBinding(descriptor, expected);
   const native = value.native === null ? null : validateNativeTerminal(value.native, requireDescriptor(descriptor));
-  const final = value.final === null ? null : validateFinalSettlement(value.final, requireDescriptor(descriptor), requireNative(native), expected);
+  const final =
+    value.final === null
+      ? null
+      : validateFinalSettlement(value.final, requireDescriptor(descriptor), requireNative(native), expected);
   if (native && final && jsonSha256(final.native) !== jsonSha256(nativeDisposition(native)))
     throw new Error('Web check custody: retained final differs from original native evidence');
-  if (typeof value.rejectedEvidence !== 'boolean') throw new Error('Web check custody: invalid rejected-evidence marker');
+  if (typeof value.rejectedEvidence !== 'boolean')
+    throw new Error('Web check custody: invalid rejected-evidence marker');
   const failure = value.failure === null ? null : text(value.failure, 'retained invocation failure', 512);
-  const registered = legacy || value.registered === null ? null : validateRegisteredInvocation(value.registered, requireDescriptor(descriptor), expected, files);
+  const registered =
+    legacy || value.registered === null
+      ? null
+      : validateRegisteredInvocation(value.registered, requireDescriptor(descriptor), expected, files);
   const caller = legacy
-    ? { prepare: { ...emptyProcessLifetime(), state: descriptor ? 'unknown' as const : 'not-started' as const }, run: { ...emptyProcessLifetime(), state: native ? 'unknown' as const : 'not-started' as const } }
+    ? {
+        prepare: { ...emptyProcessLifetime(), state: descriptor ? ('unknown' as const) : ('not-started' as const) },
+        run: { ...emptyProcessLifetime(), state: native ? ('unknown' as const) : ('not-started' as const) },
+      }
     : validateCallerLifetime(value.caller);
   const recovery = legacy || previousCurrent ? [] : validateRecoveryHelpers(value.recovery);
   const ingress = legacy ? emptyReceiptIngress() : validateReceiptIngress(value.ingress);
@@ -2368,15 +3009,26 @@ function validateRecordFile(files: WebCheckPrivateFiles): WebCustodyRecord {
   if (legacy) validation = { source: 'unknown', returns: 'unknown' };
   else {
     const rawValidation = closed(value.validation, ['source', 'returns'], 'source and returns validation record');
-    if (!['unknown', 'verified', 'rejected'].includes(String(rawValidation.source)) || !['unknown', 'verified', 'rejected'].includes(String(rawValidation.returns)))
+    if (
+      !['unknown', 'verified', 'rejected'].includes(String(rawValidation.source)) ||
+      !['unknown', 'verified', 'rejected'].includes(String(rawValidation.returns))
+    )
       throw new Error('Web check custody: invalid source or returns validation state');
     validation = { source: rawValidation.source as EvidenceState, returns: rawValidation.returns as EvidenceState };
   }
   let cleanup: WebCustodyRecord['cleanup'];
-  if (legacy) cleanup = { state: 'unknown', detail: 'legacy journal has no durable cleanup receipt', environmentInput: 'unknown' };
+  if (legacy)
+    cleanup = {
+      state: 'unknown',
+      detail: 'legacy journal has no durable cleanup receipt',
+      environmentInput: 'unknown',
+    };
   else {
     const rawCleanup = closed(value.cleanup, ['state', 'detail', 'environmentInput'], 'private cleanup receipt');
-    if (!['not-attempted', 'dispatching', 'settled', 'unknown'].includes(String(rawCleanup.state)) || !['present', 'removed', 'unknown'].includes(String(rawCleanup.environmentInput)))
+    if (
+      !['not-attempted', 'dispatching', 'settled', 'unknown'].includes(String(rawCleanup.state)) ||
+      !['present', 'removed', 'unknown'].includes(String(rawCleanup.environmentInput))
+    )
       throw new Error('Web check custody: invalid private cleanup state');
     cleanup = {
       state: rawCleanup.state as WebCustodyRecord['cleanup']['state'],
@@ -2388,17 +3040,24 @@ function validateRecordFile(files: WebCheckPrivateFiles): WebCustodyRecord {
   if (legacy) cancellation = { requested: false, signal: null };
   else {
     const rawCancellation = closed(value.cancellation, ['requested', 'signal'], 'Web cancellation receipt');
-    if (typeof rawCancellation.requested !== 'boolean' || (rawCancellation.signal !== null && ![1, 2, 15].includes(Number(rawCancellation.signal))))
+    if (
+      typeof rawCancellation.requested !== 'boolean' ||
+      (rawCancellation.signal !== null && ![1, 2, 15].includes(Number(rawCancellation.signal)))
+    )
       throw new Error('Web check custody: invalid Web cancellation receipt');
     cancellation = { requested: rawCancellation.requested, signal: rawCancellation.signal as 1 | 2 | 15 | null };
   }
   if (resolve(files.directory) === workspace || relative(workspace, resolve(files.directory)).split(sep)[0] !== '..')
     throw new Error('Web check custody: retained private files are inside candidate source');
   const driverInside = relative(workspace, expected.driverRoot);
-  if (driverInside === '' || (!driverInside.startsWith(`..${sep}`) && driverInside !== '..' && !isAbsolute(driverInside)))
+  if (
+    driverInside === '' ||
+    (!driverInside.startsWith(`..${sep}`) && driverInside !== '..' && !isAbsolute(driverInside))
+  )
     throw new Error('Web check custody: retained driver is inside candidate source');
   const hostsStats = lstatSync(expected.hostsFile);
-  if (!hostsStats.isFile() || hostsStats.isSymbolicLink()) throw new Error('Web check custody: retained hosts file is unavailable');
+  if (!hostsStats.isFile() || hostsStats.isSymbolicLink())
+    throw new Error('Web check custody: retained hosts file is unavailable');
   const hostInside = relative(workspace, expected.hostsFile);
   if (hostInside === '' || (!hostInside.startsWith(`..${sep}`) && hostInside !== '..' && !isAbsolute(hostInside)))
     throw new Error('Web check custody: retained hosts file is inside candidate source');
@@ -2465,37 +3124,77 @@ export async function reconcileWebCheckCustody(
     record.native,
     process.env,
     record.registered,
-    () => { record.rejectedEvidence = true; },
+    () => {
+      record.rejectedEvidence = true;
+    },
   );
   if (
-    reconciled.cleanedPreparation && !record.rejectedEvidence &&
-    record.caller.prepare.state === 'closed' && record.caller.run.state === 'not-started' &&
-    !record.native && !replayed.invalid
+    reconciled.cleanedPreparation &&
+    !record.rejectedEvidence &&
+    record.caller.prepare.state === 'closed' &&
+    record.caller.run.state === 'not-started' &&
+    !record.native &&
+    !replayed.invalid
   ) {
-    return finishPrivate(runtime, files, 75, descriptor, null, null, record.cancellation.requested ? 'settled' : 'none', record);
+    return finishPrivate(
+      runtime,
+      files,
+      75,
+      descriptor,
+      null,
+      null,
+      record.cancellation.requested ? 'settled' : 'none',
+      record,
+    );
   }
   const status = reconciled.status;
   let final: FinalSettlement | null = record.final;
   let settled = false;
-  if (status && descriptor && record.native && record.registered && record.caller.prepare.state === 'closed' && record.caller.run.state === 'closed') {
+  if (
+    status &&
+    descriptor &&
+    record.native &&
+    record.registered &&
+    record.caller.prepare.state === 'closed' &&
+    record.caller.run.state === 'closed'
+  ) {
     try {
-      const statusFinal = validateStatusAgainstOriginal(status, descriptor, record.expected, record.native, record.registered);
+      const statusFinal = validateStatusAgainstOriginal(
+        status,
+        descriptor,
+        record.expected,
+        record.native,
+        record.registered,
+      );
       if (statusFinal && (!record.final || jsonSha256(record.final) === jsonSha256(statusFinal))) {
         final = statusFinal;
         if (record.ingress.final.state !== 'received') {
           record.final = statusFinal;
           record.ingress.final = {
-            state: 'reconciled', start: null, end: null, rawSha256: null, bodySha256: null,
+            state: 'reconciled',
+            start: null,
+            end: null,
+            rawSha256: null,
+            bodySha256: null,
             originalSha256: jsonSha256(statusFinal),
           };
         }
         record.validation.source = statusFinal.preparedInputs.status === 'verified' ? 'verified' : 'rejected';
-        record.validation.returns = ['empty', 'restored'].includes(statusFinal.returns.status) &&
-          statusFinal.returns.missing.length === 0 && statusFinal.returns.failures.length === 0 ? 'verified' : 'rejected';
+        record.validation.returns =
+          ['empty', 'restored'].includes(statusFinal.returns.status) &&
+          statusFinal.returns.missing.length === 0 &&
+          statusFinal.returns.failures.length === 0
+            ? 'verified'
+            : 'rejected';
         const finalWire = record.ingress.final.state === 'received' ? replayed.finalRaw : null;
-        settled = !replayed.invalid && !record.rejectedEvidence && !status.rejectedObservation && record.ingress.complete &&
+        settled =
+          !replayed.invalid &&
+          !record.rejectedEvidence &&
+          !status.rejectedObservation &&
+          record.ingress.complete &&
           record.ingress.native.state === 'received' &&
-          record.validation.source === 'verified' && record.validation.returns === 'verified' &&
+          record.validation.source === 'verified' &&
+          record.validation.returns === 'verified' &&
           finalCustodySettled(status, statusFinal, finalWire, record.registered);
       }
     } catch {
@@ -2505,9 +3204,13 @@ export async function reconcileWebCheckCustody(
   persistRecord(files, record);
   if (!settled) {
     if (
-      status && !record.rejectedEvidence && !replayed.invalid &&
-      record.caller.prepare.state === 'closed' && record.caller.run.state === 'not-started' &&
-      !record.native && isCancellationSettled(status)
+      status &&
+      !record.rejectedEvidence &&
+      !replayed.invalid &&
+      record.caller.prepare.state === 'closed' &&
+      record.caller.run.state === 'not-started' &&
+      !record.native &&
+      isCancellationSettled(status)
     ) {
       const code = status.cancellation.signal === null ? 143 : 128 + status.cancellation.signal;
       return finishPrivate(runtime, files, code, descriptor, null, null, 'settled', record);
@@ -2525,15 +3228,26 @@ export async function reconcileWebCheckCustody(
     );
   }
   return finishPrivate(
-    runtime, files, record.native!.receipt.exitCode, descriptor, record.native, final,
-    record.cancellation.requested ? 'settled' : 'none', record, status?.finalCustody?.aggregate ?? 'unknown',
+    runtime,
+    files,
+    record.native!.receipt.exitCode,
+    descriptor,
+    record.native,
+    final,
+    record.cancellation.requested ? 'settled' : 'none',
+    record,
+    status?.finalCustody?.aggregate ?? 'unknown',
   );
 }
 
-function descriptorFromRetainedFile(descriptorFile: string, expected: ExpectedInvocation): PreparedCheckRunDescriptor | null {
+function descriptorFromRetainedFile(
+  descriptorFile: string,
+  expected: ExpectedInvocation,
+): PreparedCheckRunDescriptor | null {
   try {
     const stat = lstatSync(descriptorFile);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_DESCRIPTOR_BYTES || (stat.mode & 0o077) !== 0) return null;
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_DESCRIPTOR_BYTES || (stat.mode & 0o077) !== 0)
+      return null;
     const raw = readFileSync(descriptorFile, 'utf8');
     if (!raw.endsWith('\n') || raw.includes('\r') || raw.split('\n').length !== 2) return null;
     const descriptor = validateDescriptor(parseUniqueJson(raw.slice(0, -1)));
@@ -2595,8 +3309,10 @@ export function runWebCheckDriverProcess(
   return new Promise((resolvePromise) => {
     const isReceipt = input.phase === 'run-prepared';
     const isRecovery = recoveryPhase(input.phase);
-    const limits = isRecovery ? input.limits ?? WEB_CHECK_RECOVERY_LIMITS : undefined;
-    const stdio: ('inherit' | 'ignore' | 'pipe')[] = isReceipt ? ['ignore', 'inherit', 'inherit', 'pipe'] : ['ignore', 'pipe', 'inherit'];
+    const limits = isRecovery ? (input.limits ?? WEB_CHECK_RECOVERY_LIMITS) : undefined;
+    const stdio: ('inherit' | 'ignore' | 'pipe')[] = isReceipt
+      ? ['ignore', 'inherit', 'inherit', 'pipe']
+      : ['ignore', 'pipe', 'inherit'];
     const options: SpawnOptions = {
       cwd: input.cwd,
       env: input.env,
@@ -2644,7 +3360,11 @@ export function runWebCheckDriverProcess(
       outputOverflow,
     });
     const notify = () => {
-      try { input.onLifetime?.(facts()); } catch { /* The durable receiver keeps custody unknown on journal failure. */ }
+      try {
+        input.onLifetime?.(facts());
+      } catch {
+        /* The durable receiver keeps custody unknown on journal failure. */
+      }
     };
     const finish = (closed: boolean) => {
       if (resolved) return;
@@ -2693,7 +3413,11 @@ export function runWebCheckDriverProcess(
         if (sent === false) groupClosed = true;
         else if (sent === null) groupClosed = null;
       } else {
-        try { child.kill(next); } catch { /* Closure remains unknown until an event proves it. */ }
+        try {
+          child.kill(next);
+        } catch {
+          /* Closure remains unknown until an event proves it. */
+        }
       }
     };
     const beginTermination = (reason: 'timeout' | 'cancel' | 'cleanup', next: NodeJS.Signals = 'SIGTERM') => {
@@ -2733,8 +3457,7 @@ export function runWebCheckDriverProcess(
         else if (groupClosed === null && !terminationStarted)
           schedule(() => finish(false), limits?.outputSettleMs ?? 5_000);
         else if (groupClosed === true) startFinalSettlementDeadline();
-      }
-      else startFinalSettlementDeadline();
+      } else startFinalSettlementDeadline();
       maybeFinish();
     };
     const onParentExit = (exitCode: number | null, exitSignal: NodeJS.Signals | null) => {
@@ -2787,7 +3510,11 @@ export function runWebCheckDriverProcess(
       // A spawn error has no terminal authority; wait for close or the bounded recovery lifetime.
     });
     if (isRecovery) {
-      try { input.onStart?.({ pid, startedAt }); } catch { beginTermination('cleanup'); }
+      try {
+        input.onStart?.({ pid, startedAt });
+      } catch {
+        beginTermination('cleanup');
+      }
     }
     if (input.signal) {
       signalHandler = () => beginTermination('cancel');
@@ -2842,7 +3569,9 @@ if (import.meta.main) {
   try {
     const args = process.argv.slice(2);
     if (args.length !== 3 || args[0] !== 'reconcile' || args[1] !== '--descriptor' || !isAbsolute(args[2]!))
-      throw new Error('Usage: bun apps/web/scripts/check-placement-custody.ts reconcile --descriptor <absolute-private-json>');
+      throw new Error(
+        'Usage: bun apps/web/scripts/check-placement-custody.ts reconcile --descriptor <absolute-private-json>',
+      );
     const result = await reconcileWebCheckCustody(args[2]!);
     process.stdout.write(`${JSON.stringify(result)}\n`);
     process.exitCode = result.code;

@@ -38,7 +38,9 @@ function parsePrepare(command: string[]) {
     cwd: value('--cwd'),
     sourceRevision: value('--source-revision'),
     environmentFile: value('--env-file'),
-    returns: command.slice(0, separator).flatMap((part, index, list) => part === '--returns' ? [list[index + 1]!] : []),
+    returns: command
+      .slice(0, separator)
+      .flatMap((part, index, list) => (part === '--returns' ? [list[index + 1]!] : [])),
     command: command.slice(separator + 1),
   };
 }
@@ -50,7 +52,9 @@ function descriptorFor(
   const prepared = parsePrepare(input.command);
   const environment = JSON.parse(readFileSync(prepared.environmentFile, 'utf8')) as Record<string, string>;
   const priority = input.env.REMOTE_CHECK_PRIORITY ?? null;
-  const environmentHash = sha(JSON.stringify({ values: Object.entries(environment).sort(([a], [b]) => a.localeCompare(b)), priority }));
+  const environmentHash = sha(
+    JSON.stringify({ values: Object.entries(environment).sort(([a], [b]) => a.localeCompare(b)), priority }),
+  );
   const returns = [...new Set(prepared.returns)];
   const binding = {
     sourceRevision: prepared.sourceRevision,
@@ -72,7 +76,10 @@ function descriptorFor(
     invocationId: '11111111-1111-4111-8111-111111111111',
     nonce: 'b'.repeat(64),
     binding,
-    cancellation: { file: join(dirname(prepared.descriptorFile), 'cancel.json'), id: '11111111-1111-4111-8111-111111111111' },
+    cancellation: {
+      file: join(dirname(prepared.descriptorFile), 'cancel.json'),
+      id: '11111111-1111-4111-8111-111111111111',
+    },
   };
 }
 
@@ -90,13 +97,15 @@ function terminalMessages(
     lifetimeFailure: null,
     resources: null,
   };
-  const receiptSha256 = sha(JSON.stringify({
-    schema: receipt.schema,
-    host: receipt.host,
-    run: receipt.run,
-    exitCode,
-    lifetimeFailure: null,
-  }));
+  const receiptSha256 = sha(
+    JSON.stringify({
+      schema: receipt.schema,
+      host: receipt.host,
+      run: receipt.run,
+      exitCode,
+      lifetimeFailure: null,
+    }),
+  );
   const native = {
     schema: 1,
     type: 'native-terminal',
@@ -155,7 +164,10 @@ function registrationFor(
 ): ProducerReferences {
   const descriptorRaw = `${JSON.stringify(descriptor)}\n`;
   return {
-    preparedExecution: { file: join(dirname(prepared.descriptorFile), 'prepared-execution.json'), sha256: sha('prepared execution bytes') },
+    preparedExecution: {
+      file: join(dirname(prepared.descriptorFile), 'prepared-execution.json'),
+      sha256: sha('prepared execution bytes'),
+    },
     descriptor: { file: prepared.descriptorFile, sha256: sha(descriptorRaw) },
     preparationIntent: null,
   };
@@ -218,48 +230,59 @@ function statusFor(
     sourceSha256: descriptor.binding.sourceSha256,
     inputFiles: [],
   };
-  const native = messages ? {
-    exitCode: messages.final.native.exitCode,
-    lifetimeFailure: messages.final.native.lifetimeFailure,
-    receiptSha256: messages.final.native.receiptSha256,
-  } : null;
+  const native = messages
+    ? {
+        exitCode: messages.final.native.exitCode,
+        lifetimeFailure: messages.final.native.lifetimeFailure,
+        receiptSha256: messages.final.native.receiptSha256,
+      }
+    : null;
   const final = messages && !options.omitFinal ? messages.final : null;
-  const custody = final && messages ? (() => {
-    const identityCore = {
-      bindingSha256: sha(JSON.stringify(descriptor.binding)),
-      physical,
-      sourceSha256: descriptor.binding.sourceSha256,
-      snapshotSha256: sha(JSON.stringify(snapshot)),
-      candidateWorkspaceSha256: sha(JSON.stringify(prepared.workspace)),
-      returnsSha256: descriptor.binding.returnsSha256,
-      preparedExecutionReferenceSha256: sha(JSON.stringify(registration.preparedExecution)),
-      descriptorReferenceSha256: sha(JSON.stringify(registration.descriptor)),
-      preparationIntentReferenceSha256: registration.preparationIntent ? sha(JSON.stringify(registration.preparationIntent)) : null,
-    };
-    const delivery = options.delivery ?? 'delivered';
-    const privateFiles = options.privateFiles ?? (delivery === 'pending' || delivery === 'unknown' ? 'unknown' : 'settled');
-    const reconciliation = options.reconciliation ?? (delivery === 'pending' || delivery === 'unknown' ? 'unknown' : 'settled');
-    const unknown = delivery === 'unknown' || privateFiles === 'unknown' || reconciliation === 'unknown';
-    const pending = delivery === 'pending' || privateFiles === 'pending';
-    return {
-      schema: 1,
-      aggregate: unknown ? 'unknown' : pending ? 'pending' : 'settled',
-      delivery,
-      deliverySha256: sha(messages.finalLine.slice(0, -1)),
-      privateFiles,
-      reconciliation,
-      originalFinalSha256: sha(JSON.stringify(messages.final)),
-      identity: { sha256: sha(JSON.stringify(identityCore)), ...identityCore },
-      observations: [{
-        observedAt: '2026-11-02T00:00:01.000Z',
-        disposition: 'settled',
-        transportIdentity: null,
-        final: messages.final,
-        reason: null,
-      }],
-      continuation: null,
-    };
-  })() : null;
+  const custody =
+    final && messages
+      ? (() => {
+          const identityCore = {
+            bindingSha256: sha(JSON.stringify(descriptor.binding)),
+            physical,
+            sourceSha256: descriptor.binding.sourceSha256,
+            snapshotSha256: sha(JSON.stringify(snapshot)),
+            candidateWorkspaceSha256: sha(JSON.stringify(prepared.workspace)),
+            returnsSha256: descriptor.binding.returnsSha256,
+            preparedExecutionReferenceSha256: sha(JSON.stringify(registration.preparedExecution)),
+            descriptorReferenceSha256: sha(JSON.stringify(registration.descriptor)),
+            preparationIntentReferenceSha256: registration.preparationIntent
+              ? sha(JSON.stringify(registration.preparationIntent))
+              : null,
+          };
+          const delivery = options.delivery ?? 'delivered';
+          const privateFiles =
+            options.privateFiles ?? (delivery === 'pending' || delivery === 'unknown' ? 'unknown' : 'settled');
+          const reconciliation =
+            options.reconciliation ?? (delivery === 'pending' || delivery === 'unknown' ? 'unknown' : 'settled');
+          const unknown = delivery === 'unknown' || privateFiles === 'unknown' || reconciliation === 'unknown';
+          const pending = delivery === 'pending' || privateFiles === 'pending';
+          return {
+            schema: 1,
+            aggregate: unknown ? 'unknown' : pending ? 'pending' : 'settled',
+            delivery,
+            deliverySha256: sha(messages.finalLine.slice(0, -1)),
+            privateFiles,
+            reconciliation,
+            originalFinalSha256: sha(JSON.stringify(messages.final)),
+            identity: { sha256: sha(JSON.stringify(identityCore)), ...identityCore },
+            observations: [
+              {
+                observedAt: '2026-11-02T00:00:01.000Z',
+                disposition: 'settled',
+                transportIdentity: null,
+                final: messages.final,
+                reason: null,
+              },
+            ],
+            continuation: null,
+          };
+        })()
+      : null;
   if (custody && options.wrongFinalCustodyReference)
     custody.identity.preparedExecutionReferenceSha256 = sha('foreign prepared execution reference');
   return {
@@ -268,7 +291,13 @@ function statusFor(
     nonce: descriptor.nonce,
     createdAt: '2026-11-02T00:00:00.000Z',
     updatedAt: '2026-11-02T00:00:01.000Z',
-    phase: canceled ? 'cancelled' : custody?.aggregate === 'settled' ? 'settled' : final ? 'unknown' : 'native-terminal',
+    phase: canceled
+      ? 'cancelled'
+      : custody?.aggregate === 'settled'
+        ? 'settled'
+        : final
+          ? 'unknown'
+          : 'native-terminal',
     binding: descriptor.binding,
     physical: canceled ? null : messages ? physical : null,
     transportChild: null,
@@ -287,34 +316,36 @@ function statusFor(
   };
 }
 
-function fixture(options: {
-  returns?: string[];
-  nativeExitCode?: number;
-  wrongPrepareBinding?: boolean;
-  tamperNativeBinding?: boolean;
-  tamperFinalBinding?: boolean;
-  wrongRegistration?: boolean;
-  missingFinal?: boolean;
-  duplicateFinal?: boolean;
-  partialFinal?: boolean;
-  finalFirst?: boolean;
-  wrongFinalCustodyReference?: boolean;
-  sourceUnavailable?: boolean;
-  returnFailure?: boolean;
-  prepareUnknown?: boolean;
-  delivery?: 'delivered' | 'unknown' | 'pending' | 'reconciled';
-  reconcileDelivery?: 'delivered' | 'unknown' | 'pending' | 'reconciled';
-  privateFiles?: 'settled' | 'pending' | 'unknown';
-  reconciliation?: 'settled' | 'unknown';
-  reconcilePrivateFiles?: 'settled' | 'pending' | 'unknown';
-  reconcileReconciliation?: 'settled' | 'unknown';
-  cancelOnPrepare?: AbortController;
-  cancelOnRun?: AbortController;
-  cancelBeforePhysical?: boolean;
-  cleanupFailure?: Error;
-  statusUnsettled?: boolean;
-  reconcileUnsettled?: boolean;
-} = {}) {
+function fixture(
+  options: {
+    returns?: string[];
+    nativeExitCode?: number;
+    wrongPrepareBinding?: boolean;
+    tamperNativeBinding?: boolean;
+    tamperFinalBinding?: boolean;
+    wrongRegistration?: boolean;
+    missingFinal?: boolean;
+    duplicateFinal?: boolean;
+    partialFinal?: boolean;
+    finalFirst?: boolean;
+    wrongFinalCustodyReference?: boolean;
+    sourceUnavailable?: boolean;
+    returnFailure?: boolean;
+    prepareUnknown?: boolean;
+    delivery?: 'delivered' | 'unknown' | 'pending' | 'reconciled';
+    reconcileDelivery?: 'delivered' | 'unknown' | 'pending' | 'reconciled';
+    privateFiles?: 'settled' | 'pending' | 'unknown';
+    reconciliation?: 'settled' | 'unknown';
+    reconcilePrivateFiles?: 'settled' | 'pending' | 'unknown';
+    reconcileReconciliation?: 'settled' | 'unknown';
+    cancelOnPrepare?: AbortController;
+    cancelOnRun?: AbortController;
+    cancelBeforePhysical?: boolean;
+    cleanupFailure?: Error;
+    statusUnsettled?: boolean;
+    reconcileUnsettled?: boolean;
+  } = {},
+) {
   mkdirSync(join(root, '.temp'), { recursive: true });
   const fixtureRoot = mkdtempSync(join(root, '.temp', 'web-custody-fixture-'));
   fixtures.push(fixtureRoot);
@@ -372,9 +403,10 @@ function fixture(options: {
       invocations.push(invocation);
       if (invocation.phase === 'prepare') {
         prepared = parsePrepare(invocation.command);
-        descriptor = descriptorFor(invocation, options.wrongPrepareBinding === undefined
-          ? {}
-          : { wrongArgvBinding: options.wrongPrepareBinding });
+        descriptor = descriptorFor(
+          invocation,
+          options.wrongPrepareBinding === undefined ? {} : { wrongArgvBinding: options.wrongPrepareBinding },
+        );
         writeFileSync(descriptorFile, `${JSON.stringify(descriptor)}\n`, { mode: 0o600 });
         registration = registrationFor(descriptor, prepared);
         options.cancelOnPrepare?.abort();
@@ -402,7 +434,13 @@ function fixture(options: {
         }
         const preparedStatus = preparationStatusFor(descriptor, prepared, registration!);
         if (options.wrongRegistration) preparedStatus.snapshot.sourceSha256 = sha('different frozen source');
-        return { code: 0, signal: null, closed: true, output: `${JSON.stringify(preparedStatus)}\n`, outputOverflow: false };
+        return {
+          code: 0,
+          signal: null,
+          closed: true,
+          output: `${JSON.stringify(preparedStatus)}\n`,
+          outputOverflow: false,
+        };
       }
       if (invocation.phase === 'run-prepared') {
         const raw = terminalMessages(descriptor, options.nativeExitCode ?? 0, prepared.returns, options);
@@ -416,7 +454,12 @@ function fixture(options: {
         const finalLine = `${JSON.stringify(final)}\n`;
         const bytes = options.finalFirst
           ? finalLine + nativeLine
-          : nativeLine + (options.missingFinal ? '' : options.partialFinal ? finalLine.slice(0, -1) : finalLine + (options.duplicateFinal ? finalLine : ''));
+          : nativeLine +
+            (options.missingFinal
+              ? ''
+              : options.partialFinal
+                ? finalLine.slice(0, -1)
+                : finalLine + (options.duplicateFinal ? finalLine : ''));
         messages = { ...raw, native, final, nativeLine, finalLine, bytes: Buffer.from(bytes) };
         invocation.onReceipt?.(Buffer.from(messages.bytes));
         options.cancelOnRun?.abort();
@@ -442,14 +485,17 @@ function fixture(options: {
           timedOut: true,
         };
       }
-      const delivery = invocation.phase === 'reconcile' ? options.reconcileDelivery ?? runFinalDelivery : runFinalDelivery;
+      const delivery =
+        invocation.phase === 'reconcile' ? (options.reconcileDelivery ?? runFinalDelivery) : runFinalDelivery;
       const omitFinal = invocation.phase === 'status' && options.missingFinal;
-      const privateFiles = invocation.phase === 'reconcile'
-        ? options.reconcilePrivateFiles ?? options.privateFiles
-        : options.privateFiles;
-      const reconciliation = invocation.phase === 'reconcile'
-        ? options.reconcileReconciliation ?? options.reconciliation
-        : options.reconciliation;
+      const privateFiles =
+        invocation.phase === 'reconcile'
+          ? (options.reconcilePrivateFiles ?? options.privateFiles)
+          : options.privateFiles;
+      const reconciliation =
+        invocation.phase === 'reconcile'
+          ? (options.reconcileReconciliation ?? options.reconciliation)
+          : options.reconciliation;
       const status = statusFor(descriptor, prepared, messages, registration!, {
         delivery,
         ...(privateFiles === undefined ? {} : { privateFiles }),
@@ -470,12 +516,16 @@ function fixture(options: {
     files,
     workspace,
     descriptor: () => descriptor!,
-    setReconcileDelivery: (value: 'delivered' | 'unknown' | 'pending' | 'reconciled') => { options.reconcileDelivery = value; },
+    setReconcileDelivery: (value: 'delivered' | 'unknown' | 'pending' | 'reconciled') => {
+      options.reconcileDelivery = value;
+    },
     setReconcileCustody: (privateFiles: 'settled' | 'pending' | 'unknown', reconciliation: 'settled' | 'unknown') => {
       options.reconcilePrivateFiles = privateFiles;
       options.reconcileReconciliation = reconciliation;
     },
-    setRunDelivery: (value: 'delivered' | 'unknown' | 'pending' | 'reconciled') => { runFinalDelivery = value; },
+    setRunDelivery: (value: 'delivered' | 'unknown' | 'pending' | 'reconciled') => {
+      runFinalDelivery = value;
+    },
     exists: () => existsSync(filesDirectory),
     wasRemoved: () => removed,
     settleLateRecovery: () => lateRecoveryLifecycle?.({ parentClosed: true, outputClosed: true, groupClosed: true }),
@@ -483,7 +533,12 @@ function fixture(options: {
 }
 
 function productionRecoveryFixture(probe: () => boolean | null, onSpawn: () => void = () => {}) {
-  const child = new EventEmitter() as EventEmitter & { pid: number; stdout: EventEmitter; stdio: unknown[]; kill: () => boolean };
+  const child = new EventEmitter() as EventEmitter & {
+    pid: number;
+    stdout: EventEmitter;
+    stdio: unknown[];
+    kill: () => boolean;
+  };
   const output = new EventEmitter();
   child.pid = 7878;
   child.stdout = output;
@@ -494,7 +549,11 @@ function productionRecoveryFixture(probe: () => boolean | null, onSpawn: () => v
   const lifetimes: Array<Record<string, unknown>> = [];
   let spawnCount = 0;
   const processAdapter: WebCheckDriverProcessRuntime = {
-    spawn: () => { spawnCount += 1; onSpawn(); return child as never; },
+    spawn: () => {
+      spawnCount += 1;
+      onSpawn();
+      return child as never;
+    },
     setTimer(callback, delayMs) {
       const timer = { callback, delayMs, cleared: false };
       timers.push(timer);
@@ -504,7 +563,10 @@ function productionRecoveryFixture(probe: () => boolean | null, onSpawn: () => v
       (timer as { cleared: boolean }).cleared = true;
     },
     probeGroup: () => probe(),
-    signalGroup: (_pid, signal) => { signals.push(signal); return true; },
+    signalGroup: (_pid, signal) => {
+      signals.push(signal);
+      return true;
+    },
     now: () => '2026-11-02T00:00:00.000Z',
   };
   return {
@@ -525,19 +587,36 @@ test('prepare registers once, binds the prior Web request, then accepts the orig
   expect(f.invocations.filter((call) => call.phase === 'prepare')).toHaveLength(1);
   expect(f.invocations.filter((call) => call.phase === 'status')).toHaveLength(2);
   expect(f.invocations.filter((call) => call.phase === 'run-prepared')).toHaveLength(1);
-  expect(f.invocations.findIndex((call) => call.phase === 'status')).toBeLessThan(f.invocations.findIndex((call) => call.phase === 'run-prepared'));
+  expect(f.invocations.findIndex((call) => call.phase === 'status')).toBeLessThan(
+    f.invocations.findIndex((call) => call.phase === 'run-prepared'),
+  );
   const prepared = f.invocations.find((call) => call.phase === 'prepare')!;
   expect(prepared.command.slice(0, 5)).toEqual([
-    'bun', join('/trusted/producer', 'scripts/check-run.ts'), 'prepare', '--descriptor', f.files.descriptorFile,
+    'bun',
+    join('/trusted/producer', 'scripts/check-run.ts'),
+    'prepare',
+    '--descriptor',
+    f.files.descriptorFile,
   ]);
   const run = f.invocations.find((call) => call.phase === 'run-prepared')!;
   expect(run.command).toEqual([
-    'bun', join('/trusted/producer', 'scripts/check-run.ts'), 'run-prepared', '--descriptor', f.files.descriptorFile,
+    'bun',
+    join('/trusted/producer', 'scripts/check-run.ts'),
+    'run-prepared',
+    '--descriptor',
+    f.files.descriptorFile,
   ]);
   expect(run.env.REMOTE_CHECK_RECEIPT_FD).toBe('3');
   expect(run.env.REMOTE_CHECK_RECEIPT_NONCE).toBe(f.descriptor().nonce);
   expect(run.env.REMOTE_CHECK_INVOCATION_ID).toBe(f.descriptor().invocationId);
-  expect(result).toMatchObject({ code: 0, custody: 'settled', source: 'verified', returns: 'verified', finalCustody: 'settled', privateCleanup: 'settled' });
+  expect(result).toMatchObject({
+    code: 0,
+    custody: 'settled',
+    source: 'verified',
+    returns: 'verified',
+    finalCustody: 'settled',
+    privateCleanup: 'settled',
+  });
   expect(f.wasRemoved()).toBe(true);
 });
 
@@ -557,14 +636,21 @@ test('wrong prior binding, rejected native/final and duplicate final never relea
     expect(f.wasRemoved()).toBe(false);
     expect(f.exists()).toBe(true);
     expect(f.invocations.filter((call) => call.phase === 'prepare')).toHaveLength(1);
-    if (options.wrongPrepareBinding || options.wrongRegistration) expect(f.invocations.some((call) => call.phase === 'run-prepared')).toBe(false);
+    if (options.wrongPrepareBinding || options.wrongRegistration)
+      expect(f.invocations.some((call) => call.phase === 'run-prepared')).toBe(false);
   }
 });
 
 test('missing final remains occupied unless original-descriptor reconciliation proves its exact final', async () => {
   const uncertain = fixture({ missingFinal: true, delivery: 'unknown', reconcileDelivery: 'unknown' });
   const first = await runPreparedWebCheck(uncertain.input, uncertain.runtime);
-  expect(first).toMatchObject({ code: 75, custody: 'occupied', nativeExitCode: 0, finalCustody: 'unknown', privateCleanup: 'retained' });
+  expect(first).toMatchObject({
+    code: 75,
+    custody: 'occupied',
+    nativeExitCode: 0,
+    finalCustody: 'unknown',
+    privateCleanup: 'retained',
+  });
   expect(uncertain.wasRemoved()).toBe(false);
   expect(existsSync(uncertain.files.environmentFile)).toBe(false);
   const journal = JSON.parse(readFileSync(uncertain.files.recordFile, 'utf8')) as {
@@ -592,10 +678,14 @@ test('partial, out-of-order and reference-forged final ingress remain occupied a
     const first = await runPreparedWebCheck(f.input, f.runtime);
     expect(first.custody).toBe('occupied');
     expect(f.exists()).toBe(true);
-    const invocations = f.invocations.filter((call) => call.phase === 'prepare' || call.phase === 'run-prepared').length;
+    const invocations = f.invocations.filter(
+      (call) => call.phase === 'prepare' || call.phase === 'run-prepared',
+    ).length;
     const reconciled = await reconcileWebCheckCustody(f.files.descriptorFile, f.runtime);
     expect(reconciled.custody).toBe('occupied');
-    expect(f.invocations.filter((call) => call.phase === 'prepare' || call.phase === 'run-prepared')).toHaveLength(invocations);
+    expect(f.invocations.filter((call) => call.phase === 'prepare' || call.phase === 'run-prepared')).toHaveLength(
+      invocations,
+    );
   }
 });
 
@@ -677,7 +767,12 @@ test('abort before dispatch does not prepare; abort after prepare reconciles and
   const afterAbort = new AbortController();
   const afterPrepare = fixture({ cancelOnPrepare: afterAbort, cancelBeforePhysical: true });
   const afterResult = await runPreparedWebCheck(afterPrepare.input, afterPrepare.runtime, afterAbort.signal);
-  expect(afterResult).toMatchObject({ code: 143, custody: 'settled', cancellation: 'settled', finalCustody: 'unknown' });
+  expect(afterResult).toMatchObject({
+    code: 143,
+    custody: 'settled',
+    cancellation: 'settled',
+    finalCustody: 'unknown',
+  });
   expect(afterPrepare.invocations.some((call) => call.phase === 'run-prepared')).toBe(false);
   expect(afterPrepare.invocations.some((call) => call.phase === 'reconcile')).toBe(true);
   expect(afterPrepare.wasRemoved()).toBe(true);
@@ -687,7 +782,12 @@ test('abort before dispatch does not prepare; abort after prepare reconciles and
   const duringAbort = new AbortController();
   const abortDuringRun = fixture({ cancelOnRun: duringAbort });
   const duringResult = await runPreparedWebCheck(abortDuringRun.input, abortDuringRun.runtime, duringAbort.signal);
-  expect(duringResult).toMatchObject({ code: 143, custody: 'settled', cancellation: 'settled', privateCleanup: 'settled' });
+  expect(duringResult).toMatchObject({
+    code: 143,
+    custody: 'settled',
+    cancellation: 'settled',
+    privateCleanup: 'settled',
+  });
   const recoveryCall = abortDuringRun.invocations.find((call) => call.phase === 'reconcile');
   expect(recoveryCall?.signal).toBeUndefined();
   expect(recoveryCall?.limits).toEqual(WEB_CHECK_RECOVERY_LIMITS);
@@ -733,7 +833,12 @@ test('hung registration status keeps its helper identity and blocks a duplicate 
 
 test('production status timeout remains occupied through composition and late closure only updates its journal', async () => {
   const f = fixture();
-  const child = new EventEmitter() as EventEmitter & { pid: number; stdout: EventEmitter; stdio: unknown[]; kill: () => boolean };
+  const child = new EventEmitter() as EventEmitter & {
+    pid: number;
+    stdout: EventEmitter;
+    stdio: unknown[];
+    kill: () => boolean;
+  };
   const output = new EventEmitter();
   child.pid = 5151;
   child.stdout = output;
@@ -741,9 +846,14 @@ test('production status timeout remains occupied through composition and late cl
   child.kill = () => true;
   const timers: Array<{ callback: () => void; delayMs: number; cleared: boolean }> = [];
   let markSpawned!: () => void;
-  const spawned = new Promise<void>((resolve) => { markSpawned = () => resolve(); });
+  const spawned = new Promise<void>((resolve) => {
+    markSpawned = () => resolve();
+  });
   const processAdapter: WebCheckDriverProcessRuntime = {
-    spawn: () => { markSpawned(); return child as never; },
+    spawn: () => {
+      markSpawned();
+      return child as never;
+    },
     setTimer(callback, delayMs) {
       const timer = { callback, delayMs, cleared: false };
       timers.push(timer);
@@ -757,9 +867,8 @@ test('production status timeout remains occupied through composition and late cl
     now: () => '2026-11-02T00:00:00.000Z',
   };
   const originalInvoke = f.runtime.invoke.bind(f.runtime);
-  f.runtime.invoke = (invocation) => invocation.phase === 'status'
-    ? runWebCheckDriverProcess(invocation, processAdapter)
-    : originalInvoke(invocation);
+  f.runtime.invoke = (invocation) =>
+    invocation.phase === 'status' ? runWebCheckDriverProcess(invocation, processAdapter) : originalInvoke(invocation);
 
   const pending = runPreparedWebCheck(f.input, f.runtime);
   await spawned;
@@ -847,7 +956,12 @@ test('late output close updates durable helper closure without disposing until e
 });
 
 test('production helper lifetime waits separately for output after parent exit and records late closure', async () => {
-  const child = new EventEmitter() as EventEmitter & { pid: number; stdout: EventEmitter; stdio: unknown[]; kill: () => boolean };
+  const child = new EventEmitter() as EventEmitter & {
+    pid: number;
+    stdout: EventEmitter;
+    stdio: unknown[];
+    kill: () => boolean;
+  };
   const output = new EventEmitter();
   child.pid = 5678;
   child.stdout = output;
@@ -869,17 +983,24 @@ test('production helper lifetime waits separately for output after parent exit a
     signalGroup: () => false,
     now: () => '2026-11-02T00:00:00.000Z',
   };
-  const pending = runWebCheckDriverProcess({
-    phase: 'status',
-    command: ['bun', 'status'],
-    cwd: '/candidate',
-    env: {},
-    limits: WEB_CHECK_RECOVERY_LIMITS,
-    onLifetime: (lifetime) => lifetimes.push(lifetime),
-  }, processAdapter);
+  const pending = runWebCheckDriverProcess(
+    {
+      phase: 'status',
+      command: ['bun', 'status'],
+      cwd: '/candidate',
+      env: {},
+      limits: WEB_CHECK_RECOVERY_LIMITS,
+      onLifetime: (lifetime) => lifetimes.push(lifetime),
+    },
+    processAdapter,
+  );
   child.emit('exit', 0, null);
-  expect(timers.some((timer) => timer.delayMs === WEB_CHECK_RECOVERY_LIMITS.outputSettleMs && !timer.cleared)).toBe(true);
-  const outputDeadline = timers.find((timer) => timer.delayMs === WEB_CHECK_RECOVERY_LIMITS.outputSettleMs && !timer.cleared)!;
+  expect(timers.some((timer) => timer.delayMs === WEB_CHECK_RECOVERY_LIMITS.outputSettleMs && !timer.cleared)).toBe(
+    true,
+  );
+  const outputDeadline = timers.find(
+    (timer) => timer.delayMs === WEB_CHECK_RECOVERY_LIMITS.outputSettleMs && !timer.cleared,
+  )!;
   outputDeadline.callback();
   const result = await pending;
   expect(result).toMatchObject({
@@ -895,7 +1016,12 @@ test('production helper lifetime waits separately for output after parent exit a
 });
 
 test('production helper timeout bounds group termination and never rearms timers after unresolved return', async () => {
-  const child = new EventEmitter() as EventEmitter & { pid: number; stdout: EventEmitter; stdio: unknown[]; kill: () => boolean };
+  const child = new EventEmitter() as EventEmitter & {
+    pid: number;
+    stdout: EventEmitter;
+    stdio: unknown[];
+    kill: () => boolean;
+  };
   const output = new EventEmitter();
   child.pid = 6789;
   child.stdout = output;
@@ -915,25 +1041,35 @@ test('production helper timeout bounds group termination and never rearms timers
       (timer as { cleared: boolean }).cleared = true;
     },
     probeGroup: () => false,
-    signalGroup: (_pid, signal) => { signals.push(signal); return signal === 'SIGTERM'; },
+    signalGroup: (_pid, signal) => {
+      signals.push(signal);
+      return signal === 'SIGTERM';
+    },
     now: () => '2026-11-02T00:00:00.000Z',
   };
-  const pending = runWebCheckDriverProcess({
-    phase: 'reconcile',
-    command: ['bun', 'reconcile'],
-    cwd: '/candidate',
-    env: {},
-    limits: WEB_CHECK_RECOVERY_LIMITS,
-    onLifetime: (lifetime) => lifetimes.push(lifetime),
-  }, processAdapter);
+  const pending = runWebCheckDriverProcess(
+    {
+      phase: 'reconcile',
+      command: ['bun', 'reconcile'],
+      cwd: '/candidate',
+      env: {},
+      limits: WEB_CHECK_RECOVERY_LIMITS,
+      onLifetime: (lifetime) => lifetimes.push(lifetime),
+    },
+    processAdapter,
+  );
 
   const observation = timers.find((timer) => timer.delayMs === WEB_CHECK_RECOVERY_LIMITS.observationMs)!;
   observation.callback();
   expect(signals).toEqual(['SIGTERM']);
-  const grace = timers.find((timer) => timer.delayMs === WEB_CHECK_RECOVERY_LIMITS.terminationGraceMs && !timer.cleared)!;
+  const grace = timers.find(
+    (timer) => timer.delayMs === WEB_CHECK_RECOVERY_LIMITS.terminationGraceMs && !timer.cleared,
+  )!;
   grace.callback();
   expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
-  const settle = timers.find((timer) => timer.delayMs === WEB_CHECK_RECOVERY_LIMITS.terminationSettleMs && !timer.cleared)!;
+  const settle = timers.find(
+    (timer) => timer.delayMs === WEB_CHECK_RECOVERY_LIMITS.terminationSettleMs && !timer.cleared,
+  )!;
   settle.callback();
   const outputDeadline = timers.find((timer) => timer.delayMs === WEB_CHECK_RECOVERY_LIMITS.outputSettleMs)!;
   outputDeadline.callback();
@@ -957,7 +1093,9 @@ test('production helper timeout bounds group termination and never rearms timers
 test('closed output still gets final settlement, keeps one helper occupied, and journals late parent closure', async () => {
   const f = fixture();
   let markSpawned!: () => void;
-  const spawned = new Promise<void>((resolve) => { markSpawned = () => resolve(); });
+  const spawned = new Promise<void>((resolve) => {
+    markSpawned = () => resolve();
+  });
   const process = productionRecoveryFixture(() => false, markSpawned);
   const originalInvoke = f.runtime.invoke.bind(f.runtime);
   let statusCalls = 0;
@@ -1019,14 +1157,17 @@ test('closed output and exited parent do not settle a live process group after t
   let groupPresent = true;
   const process = productionRecoveryFixture(() => groupPresent);
   const lifetimes = process.lifetimes;
-  const pending = runWebCheckDriverProcess({
-    phase: 'status',
-    command: ['bun', 'status'],
-    cwd: '/candidate',
-    env: {},
-    limits: WEB_CHECK_RECOVERY_LIMITS,
-    onLifetime: (lifetime) => lifetimes.push(lifetime),
-  }, process.processAdapter);
+  const pending = runWebCheckDriverProcess(
+    {
+      phase: 'status',
+      command: ['bun', 'status'],
+      cwd: '/candidate',
+      env: {},
+      limits: WEB_CHECK_RECOVERY_LIMITS,
+      onLifetime: (lifetime) => lifetimes.push(lifetime),
+    },
+    process.processAdapter,
+  );
 
   process.output.emit('close');
   process.child.emit('exit', 0, null);
@@ -1055,14 +1196,17 @@ test('closed output and parent with unknown group return boundedly and preserve 
   let groupPresent: boolean | null = null;
   const process = productionRecoveryFixture(() => groupPresent);
   const lifetimes = process.lifetimes;
-  const pending = runWebCheckDriverProcess({
-    phase: 'reconcile',
-    command: ['bun', 'reconcile'],
-    cwd: '/candidate',
-    env: {},
-    limits: WEB_CHECK_RECOVERY_LIMITS,
-    onLifetime: (lifetime) => lifetimes.push(lifetime),
-  }, process.processAdapter);
+  const pending = runWebCheckDriverProcess(
+    {
+      phase: 'reconcile',
+      command: ['bun', 'reconcile'],
+      cwd: '/candidate',
+      env: {},
+      limits: WEB_CHECK_RECOVERY_LIMITS,
+      onLifetime: (lifetime) => lifetimes.push(lifetime),
+    },
+    process.processAdapter,
+  );
 
   process.output.emit('close');
   process.child.emit('exit', 0, null);
