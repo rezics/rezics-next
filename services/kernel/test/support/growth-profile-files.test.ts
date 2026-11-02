@@ -1,5 +1,14 @@
 import { afterAll, expect, test } from 'bun:test';
-import { closeSync, ftruncateSync, mkdirSync, mkdtempSync, openSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  ftruncateSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { readGrowthProfileFiles, readGrowthProfileHandle } from '../../scripts/growth-profile-files.ts';
