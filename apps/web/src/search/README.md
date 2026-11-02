@@ -49,6 +49,10 @@ qualifier; incompatible nonempty operands require confirmation before reset to a
 Refinement property lookup searches case-insensitive substrings of the current localized name or exact case-sensitive
 identifiers; options with colliding names include their property IDs.
 
+Facet More replaces the visible ten-value window while pending and failed reads retain the accepted window. Refinement
+keeps windows and cursor progress only for the eight shown properties, then offers a restart after 64 successful
+continuations for one property.
+
 Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only
 explicit sort value.
 

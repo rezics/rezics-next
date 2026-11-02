@@ -38,12 +38,18 @@ let props: Props;
 let update: (next: Props) => void;
 let root: ReturnType<typeof createRoot>;
 
-function ready(value: string, next: string | null) {
+function ready(value: string | string[], next: string | null, property = 'schema:genre') {
   return {
     status: 'ready' as const,
     page: {
       as_of: '2026-01-01T00:00:00.000Z',
-      facets: [{ property: 'schema:genre', values: [{ value, labels: { en: value } }], next }],
+      facets: [
+        {
+          property,
+          values: (Array.isArray(value) ? value : [value]).map((entry) => ({ value: entry, labels: { en: entry } })),
+          next,
+        },
+      ],
     },
   };
 }
@@ -82,6 +88,15 @@ function button(text: string) {
 async function replace(next: Props) {
   props = next;
   await act(async () => update(props));
+}
+
+async function selectProperty(property: string) {
+  const picker = host.querySelector('select');
+  expect(picker).toBeDefined();
+  await act(async () => {
+    picker!.value = property;
+    picker!.dispatchEvent(new window.Event('change', { bubbles: true }));
+  });
 }
 
 beforeEach(async () => {
@@ -165,4 +180,75 @@ test('a query change resets pagination and an older response cannot replace its 
   await act(async () => button(m.refinement_more_values()).click());
   expect(freshCursors).toEqual(['opaque-second']);
   expect(host.textContent).toContain('fresh page');
+});
+
+test('More keeps the accepted window through pending and failure, retries the exact cursor, and replaces it on success', async () => {
+  const firstValues = Array.from({ length: 10 }, (_, index) => `value-${index}`);
+  const nextValues = Array.from({ length: 10 }, (_, index) => `value-${index + 10}`);
+  const cursors: (string | undefined)[] = [];
+  let finishFailure!: (value: { status: 'unavailable'; code: string }) => void;
+  const failedRead = new Promise<{ status: 'unavailable'; code: string }>((resolve) => (finishFailure = resolve));
+  const next = makeProps('window', ready(firstValues, 'cursor-one'), async (facets) => {
+    cursors.push(facets[0]?.cursor);
+    return cursors.length === 1 ? failedRead : ready(nextValues, 'cursor-two');
+  });
+  next.conditions.facetValues = { 'schema:genre': [firstValues[0]!] };
+  await replace(next);
+
+  await act(async () => button(m.refinement_more_values()).click());
+  const checkboxes = () => [...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name="f.schema:genre"]')];
+  expect(checkboxes().map((input) => input.value)).toEqual(firstValues);
+  await act(async () => finishFailure({ status: 'unavailable', code: 'temporary' }));
+  expect(checkboxes().map((input) => input.value)).toEqual(firstValues);
+  await act(async () => button(m.search_facet_retry()).click());
+
+  expect(cursors).toEqual(['cursor-one', 'cursor-one']);
+  expect(checkboxes().map((input) => input.value)).toEqual(nextValues);
+  expect(host.querySelectorAll('input[type="hidden"][name="f.schema:genre"][value="value-0"]')).toHaveLength(1);
+});
+
+test('evicting a property frees its cache without dropping its selected predicate or reading it again', async () => {
+  const properties = Array.from({ length: 9 }, (_, index) => ({
+    property: `schema:p${index}`,
+    labels: { en: `Property ${index}` },
+    mode: 'values' as const,
+  }));
+  const reads: string[] = [];
+  const next = makeProps('properties', ready('retained', 'cursor-p0', 'schema:p0'), async (facets) => {
+    const property = facets[0]!.property;
+    reads.push(property);
+    return ready(`fresh ${property}`, null, property);
+  });
+  next.data.properties = properties;
+  next.conditions.facetValues = { 'schema:p0': ['retained'] };
+  await replace(next);
+
+  for (let index = 1; index <= 8; index++) await selectProperty(`schema:p${index}`);
+  expect(reads).toEqual(Array.from({ length: 8 }, (_, index) => `schema:p${index + 1}`));
+  expect(host.querySelectorAll('input[type="hidden"][name="f.schema:p0"][value="retained"]')).toHaveLength(1);
+
+  await selectProperty('schema:p0');
+  expect(reads.at(-1)).toBe('schema:p0');
+  expect(host.querySelectorAll('input[type="hidden"][name="f.schema:p0"][value="retained"]')).toHaveLength(1);
+});
+
+test('the finite continuation allowance keeps the last window and offers an explicit restart', async () => {
+  const cursors: (string | undefined)[] = [];
+  let page = 1;
+  await replace(
+    makeProps('finite', ready(Array.from({ length: 10 }, (_, index) => `window-0-${index}`), 'cursor-0'), async (facets) => {
+      cursors.push(facets[0]?.cursor);
+      const values = Array.from({ length: 10 }, (_, index) => `window-${page}-${index}`);
+      return ready(values, `cursor-${page++}`);
+    }),
+  );
+
+  for (let index = 0; index < 64; index++) await act(async () => button(m.refinement_more_values()).click());
+  expect(cursors).toEqual(Array.from({ length: 64 }, (_, index) => `cursor-${index}`));
+  expect(host.textContent).toContain('window-64-0');
+  expect(host.textContent).not.toContain('window-63-0');
+  expect(host.textContent).toContain(m.refinement_restart());
+  expect([...host.querySelectorAll('button')].some((node) => node.textContent?.trim() === m.refinement_more_values())).toBe(
+    false,
+  );
 });

@@ -10,7 +10,10 @@ import { XIcon } from 'lucide-react';
 import { m } from '../../paraglide/messages.js';
 import { localizedLabel } from '../results';
 import { useSearchRetryWait } from '../search-recovery-retry';
-import { FacetContinuationLedger } from './facet-continuation';
+import {
+  FacetContinuationLedger,
+  MAX_CACHED_FACET_PROPERTIES,
+} from './facet-continuation';
 import { refinementHref, type RefinementConditions, type RefinementProperty } from './model';
 import { PropertyPicker } from './property-picker';
 import { type FacetPage, type FacetState, type RequestedFacet } from './request';
@@ -82,9 +85,13 @@ function RefinementInstance({
     ((href: string) => {
       void router?.navigate({ href });
     });
-  const [shown, setShown] = useState(data.properties.slice(0, 8).map((entry) => entry.property));
+  const initialShown = data.properties.slice(0, MAX_CACHED_FACET_PROPERTIES).map((entry) => entry.property);
+  const [shown, setShown] = useState(initialShown);
+  const shownRef = useRef(initialShown);
   const [pages, setPages] = useState<FacetPage['facets']>(
-    data.initial?.status === 'ready' ? data.initial.page.facets : [],
+    data.initial?.status === 'ready'
+      ? data.initial.page.facets.filter((facet) => initialShown.includes(facet.property))
+      : [],
   );
   const [state, setState] = useState(data.initial);
   const draftKey = rangeDraftKey ?? queryIdentity;
@@ -97,6 +104,7 @@ function RefinementInstance({
   const [busy, setBusy] = useState(false);
   const active = useRef<AbortController | null>(null);
   const continuations = useRef(new FacetContinuationLedger(queryIdentity));
+  continuations.current.retain(initialShown);
   const lastRead = useRef<{ facets: RequestedFacet[]; more?: string | undefined } | undefined>(undefined);
   const waiting = useSearchRetryWait(state && state.status !== 'ready' ? state.retryAt : undefined);
   useEffect(() => () => active.current?.abort(), []);
@@ -128,10 +136,10 @@ function RefinementInstance({
     return readRequested(facets, more);
   }
 
-  function stopRepeatedContinuation(property: string) {
+  function stopContinuation(property: string, code = 'repeated_facet_continuation') {
     setPages((current) => current.map((page) => (page.property === property ? { ...page, next: null } : page)));
     lastRead.current = undefined;
-    setState({ status: 'restart', code: 'repeated_facet_continuation' });
+    setState({ status: 'restart', code });
   }
 
   async function readRequested(facets: RequestedFacet[], more?: string) {
@@ -140,7 +148,14 @@ function RefinementInstance({
       (facet) => facet.cursor !== undefined && continuations.current.has(facet.property, facet.cursor),
     );
     if (repeatedRequest) {
-      stopRepeatedContinuation(repeatedRequest.property);
+      stopContinuation(repeatedRequest.property);
+      return;
+    }
+    const exhaustedRequest = facets.find(
+      (facet) => facet.cursor !== undefined && continuations.current.exhausted(facet.property),
+    );
+    if (exhaustedRequest) {
+      stopContinuation(exhaustedRequest.property, 'facet_window_limit');
       return;
     }
     lastRead.current = { facets, more };
@@ -152,16 +167,17 @@ function RefinementInstance({
       const result = await load(facets, controller.signal);
       if (controller.signal.aborted || !isCurrent()) return;
       if (result.status === 'ready') {
-        const repeated = result.page.facets.find((facet) => {
+        const returned = result.page.facets.filter((facet) => shownRef.current.includes(facet.property));
+        const repeated = returned.find((facet) => {
           const request = facets.find((entry) => entry.property === facet.property);
           return continuations.current.repeats(facet.property, request?.cursor, facet.next);
         });
         if (repeated) {
-          stopRepeatedContinuation(repeated.property);
+          stopContinuation(repeated.property);
           return;
         }
-        const next = [...pages];
-        for (const facet of result.page.facets) {
+        const next = pages.filter((page) => shownRef.current.includes(page.property));
+        for (const facet of returned) {
           const index = next.findIndex((entry) => entry.property === facet.property);
           const previous = index >= 0 ? next[index] : undefined;
           if (
@@ -172,16 +188,21 @@ function RefinementInstance({
             setState({ status: 'unavailable', code: 'invalid_facet_response' });
             return;
           }
-          const combined = {
-            ...facet,
-            values: more === facet.property && previous ? [...previous.values, ...facet.values] : facet.values,
-          };
-          if (index >= 0) next[index] = combined;
-          else next.push(combined);
+          if (index >= 0) next[index] = facet;
+          else next.push(facet);
         }
-        for (const facet of result.page.facets) {
+        for (const facet of returned) {
           const request = facets.find((entry) => entry.property === facet.property);
           if (request?.cursor !== undefined) continuations.current.consume(facet.property, request.cursor);
+        }
+        const exhausted = returned.find(
+          (facet) => facet.next !== null && continuations.current.exhausted(facet.property),
+        );
+        if (exhausted) {
+          setPages(next.map((page) => (page.property === exhausted.property ? { ...page, next: null } : page)));
+          lastRead.current = undefined;
+          setState({ status: 'restart', code: 'facet_window_limit' });
+          return;
         }
         setPages(next);
         lastRead.current = undefined;
@@ -286,7 +307,14 @@ function RefinementInstance({
         properties={data.properties}
         locale={locale}
         onSelect={(property) => {
-          setShown((previous) => [property, ...previous.filter((entry) => entry !== property)].slice(0, 8));
+          const nextShown = [property, ...shownRef.current.filter((entry) => entry !== property)].slice(
+            0,
+            MAX_CACHED_FACET_PROPERTIES,
+          );
+          shownRef.current = nextShown;
+          setShown(nextShown);
+          setPages((current) => current.filter((page) => nextShown.includes(page.property)));
+          continuations.current.retain(nextShown);
           if (!pages.some((entry) => entry.property === property)) void read([property]);
         }}
       />
