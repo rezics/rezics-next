@@ -45,9 +45,10 @@ async function loadExample(): Promise<CommunityBoardPage> {
   return {
     ...loaded,
     now,
-    authors: author?.state === 'active'
-      ? { [source.authorId]: { ...author, displayName, handle: 'supplied_long_author_handle'.repeat(6) } }
-      : loaded.authors,
+    authors:
+      author?.state === 'active'
+        ? { [source.authorId]: { ...author, displayName, handle: 'supplied_long_author_handle'.repeat(6) } }
+        : loaded.authors,
     threads: { ...loaded.threads, threads: [supplied], next: continuationCursor, rankRefreshedAt },
   };
 }
@@ -78,7 +79,12 @@ function FeedExamples({
   };
   const page =
     variant === 'sparse' || variant === 'final'
-      ? { ...loaded.threads, threads: [], next: variant === 'sparse' ? continuationCursor : null, rankRefreshedAt: null }
+      ? {
+          ...loaded.threads,
+          threads: [],
+          next: variant === 'sparse' ? continuationCursor : null,
+          rankRefreshedAt: null,
+        }
       : variant === 'unavailable'
         ? { ...loaded.threads, threads: [opening, erased], next: null, rankRefreshedAt: null }
         : loaded.threads;
@@ -164,7 +170,9 @@ const meta = {
       const nav = region.getByRole('navigation', { name: m.board_sort_label() });
       const sorts = within(nav).getAllByRole('link');
       await expect(sorts.map((link) => link.textContent)).toEqual([
-        m.board_sort_active(), m.board_sort_hot(), m.board_sort_new(),
+        m.board_sort_active(),
+        m.board_sort_hot(),
+        m.board_sort_new(),
       ]);
       for (const [option, link] of sorts.entries()) {
         const url = new URL(link.getAttribute('href')!, window.location.origin);
@@ -211,7 +219,8 @@ const meta = {
         await expect(item.getByText(m.board_feed_reactions({ count: reactions }))).toBeVisible();
         await expect(item.getByText(m.board_feed_replies({ count: replies }))).toBeVisible();
         await expect(row.querySelector(`time[datetime="${lastActivityAt}"]`)).toHaveAttribute(
-          'title', fullDateTime(lastActivityAt, getLocale()),
+          'title',
+          fullDateTime(lastActivityAt, getLocale()),
         );
         const preview = item.getByText('Flight notes Watch the baobabs');
         await expect(getComputedStyle(preview).webkitLineClamp).toBe('2');
@@ -317,12 +326,18 @@ function localControls(failed: boolean) {
     const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
     const open = await screen.findByRole(sheet ? 'link' : 'menuitem', { name: m.board_feed_open_thread() });
     await expect(open).toHaveAttribute('href', threadLocation(getLocale(), { id: threadId, title }));
-    await expect(await screen.findByRole(sheet ? 'button' : 'menuitem', { name: m.thread_content_copy_link() })).toBeVisible();
+    await expect(
+      await screen.findByRole(sheet ? 'button' : 'menuitem', { name: m.thread_content_copy_link() }),
+    ).toBeVisible();
     await userEvent.keyboard('{Escape}');
     await expect(trigger).toHaveFocus();
     await userEvent.keyboard('{Enter}');
-    await userEvent.click(await screen.findByRole(sheet ? 'button' : 'menuitem', { name: m.thread_content_copy_link() }));
-    await expect(await within(feed).findByRole('status')).toHaveTextContent(failed ? m.board_feed_copy_failed() : m.board_feed_link_copied());
+    await userEvent.click(
+      await screen.findByRole(sheet ? 'button' : 'menuitem', { name: m.thread_content_copy_link() }),
+    );
+    await expect(await within(feed).findByRole('status')).toHaveTextContent(
+      failed ? m.board_feed_copy_failed() : m.board_feed_link_copied(),
+    );
     await expect(clipboardWrite).toHaveBeenCalledTimes(1);
     await expect(clipboardWrite).toHaveBeenCalledWith(
       new URL(threadLocation(getLocale(), { id: threadId, title }), window.location.origin).href,

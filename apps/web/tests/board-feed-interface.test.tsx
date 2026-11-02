@@ -5,7 +5,12 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { createKernelClient } from '@rezics/client';
 import { loadBoardPageWithAuthors } from '../src/identity/page-loaders';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
-import { continuationBoardId, continuationCursor, emptyBoardId, rankRefreshedAt } from '../src/kernel/fake/board-continuation';
+import {
+  continuationBoardId,
+  continuationCursor,
+  emptyBoardId,
+  rankRefreshedAt,
+} from '../src/kernel/fake/board-continuation';
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
 import { BoardFeed } from '../src/threads/board-feed';
@@ -20,14 +25,21 @@ type Feed = { page: CommunityBoardPage; sort: BoardSort };
 
 async function render(feeds: Feed[]) {
   const root = createRootRoute({
-    component: () => createElement(Fragment, null, feeds.map(({ page, sort }, index) => createElement(BoardFeed, {
-      key: index,
-      boardId: page.board.id,
-      sort,
-      page: page.threads,
-      authors: page.authors,
-      now,
-    }))),
+    component: () =>
+      createElement(
+        Fragment,
+        null,
+        feeds.map(({ page, sort }, index) =>
+          createElement(BoardFeed, {
+            key: index,
+            boardId: page.board.id,
+            sort,
+            page: page.threads,
+            authors: page.authors,
+            now,
+          }),
+        ),
+      ),
   });
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) });
   await router.load();
@@ -39,8 +51,8 @@ function sections(markup: string) {
 }
 
 function hrefs(markup: string) {
-  return [...markup.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>/gu)].map((match) =>
-    new URL(match[1]!.replaceAll('&amp;', '&'), 'https://site.test'),
+  return [...markup.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>/gu)].map(
+    (match) => new URL(match[1]!.replaceAll('&amp;', '&'), 'https://site.test'),
   );
 }
 
@@ -84,7 +96,8 @@ test('same-Board and distinct-Board instances label only their own localized h2,
         ids.push(feed[1]!);
       }
       expect(new Set(ids).size).toBe(3);
-      for (const id of ids) expect([...markup.matchAll(/\bid="([^"]+)"/gu)].filter((match) => match[1] === id)).toHaveLength(1);
+      for (const id of ids)
+        expect([...markup.matchAll(/\bid="([^"]+)"/gu)].filter((match) => match[1] === id)).toHaveLength(1);
       expect(markup).not.toContain('id="board-threads-heading"');
       expect(calls).toHaveLength(readCount);
     }
@@ -101,7 +114,14 @@ test('native order, exact large counts and exact date operands survive long supp
   const displayName = `Supplied author 共讀 ${'UnbrokenAuthor'.repeat(30)}`;
   const createdAt = '2026-01-02T03:04:05.678Z';
   const lastActivityAt = '2026-10-31T12:34:56.789Z';
-  const first = { ...original, title, createdAt, reactions: { like: 1234567890123, insightful: 2 }, replyCount: 987654321012, lastActivityAt };
+  const first = {
+    ...original,
+    title,
+    createdAt,
+    reactions: { like: 1234567890123, insightful: 2 },
+    replyCount: 987654321012,
+    lastActivityAt,
+  };
   const second = { ...original, id: '01a17a3b-09b4-77bf-a24b-1234ebeab5b3', title: 'Second native row' };
   const author = page.authors?.[original.authorId];
   if (!author || author.state !== 'active') throw new Error('The recorded page must supply its active author.');
@@ -135,7 +155,10 @@ test('plain sort anchors reset continuation and sparse pages preserve exact opaq
   setLocale('en', { reload: false });
   const { page, calls } = await fixture();
   const cursor = 'signed+board/next==?keep=%2F&opaque=雪';
-  const sparse: CommunityBoardPage = { ...page, threads: { ...page.threads, threads: [], next: cursor, rankRefreshedAt } };
+  const sparse: CommunityBoardPage = {
+    ...page,
+    threads: { ...page.threads, threads: [], next: cursor, rankRefreshedAt },
+  };
   const readCount = calls.length;
   for (const sort of ['active', 'hot', 'new'] as const) {
     const markup = await render([{ page: sparse, sort }]);
@@ -153,10 +176,14 @@ test('plain sort anchors reset continuation and sparse pages preserve exact opaq
     expect([...next!.searchParams.keys()]).toEqual(sort === 'active' ? ['cursor'] : ['cursor', 'sort']);
     expect([...markup.matchAll(/aria-current="page"/gu)]).toHaveLength(1);
     const current = markup.match(/<a\b[^>]*aria-current="page"[^>]*>([\s\S]*?)<\/a>/u)?.[1];
-    expect(current).toBe(sort === 'active' ? m.board_sort_active() : sort === 'hot' ? m.board_sort_hot() : m.board_sort_new());
+    expect(current).toBe(
+      sort === 'active' ? m.board_sort_active() : sort === 'hot' ? m.board_sort_hot() : m.board_sort_new(),
+    );
     expect(markup.includes('<details')).toBe(sort !== 'new');
     expect(markup.includes(`dateTime="${rankRefreshedAt}"`)).toBe(sort !== 'new');
-    const final = await render([{ page: { ...sparse, threads: { ...sparse.threads, next: null, rankRefreshedAt: null } }, sort }]);
+    const final = await render([
+      { page: { ...sparse, threads: { ...sparse.threads, next: null, rankRefreshedAt: null } }, sort },
+    ]);
     expect(final).toContain(m.board_threads_empty());
     expect(final).not.toContain(m.board_threads_page_empty());
     expect(final).not.toContain(m.threads_next_page());
@@ -176,7 +203,11 @@ test('unavailable openings, erased rows and unavailable/deleted authors retain t
     firstPost: { ...original.firstPost, availability: 'erased', body: null, sha256: null, removed: true },
   };
   const erased: BoardFeedThread = { ...opening, id: '01a17a3b-09b4-77bf-a24b-1234ebeab5b3', availability: 'erased' };
-  const missing: CommunityBoardPage = { ...page, authors: null, threads: { ...page.threads, threads: [opening, erased] } };
+  const missing: CommunityBoardPage = {
+    ...page,
+    authors: null,
+    threads: { ...page.threads, threads: [opening, erased] },
+  };
   const markup = await render([{ page: missing, sort: 'active' }]);
   expect(markup).toContain(m.board_feed_opening_unavailable());
   expect(markup).toContain(m.threads_untitled());
@@ -205,7 +236,9 @@ test('rank explanation requires a supplied valid ranked date, never a fabricated
   setLocale('en', { reload: false });
   const { page } = await fixture();
   for (const supplied of [null, 'not-a-date']) {
-    const markup = await render([{ page: { ...page, threads: { ...page.threads, rankRefreshedAt: supplied } }, sort: 'hot' }]);
+    const markup = await render([
+      { page: { ...page, threads: { ...page.threads, rankRefreshedAt: supplied } }, sort: 'hot' },
+    ]);
     expect(markup).not.toContain('<details');
     expect(markup).not.toContain(m.board_feed_order_help());
   }
