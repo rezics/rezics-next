@@ -9,12 +9,12 @@ real PostgreSQL mechanism that can remove a per-byte B-tree descent; it does not
 supply compatible linear canonicalization, all ordered-head mutations, or an
 independent restore-safe inventory. These are separate missing primitives.
 
-The smallest useful next architecture decision is between funding a PostgreSQL
-native producer with those explicit obligations and explicitly changing the
-cost contract to pay the actual SQL algorithms. An extension is a new deployment
-dependency, not an SQL mechanism already delivered here. Neither choice follows
-automatically from the earlier conditional acceptance of private immutable heaps.
-This report recommends retaining the target while requesting the concrete native
+The next deliverable should close those obligations in the current SQL deployment
+or explicitly select additional native deployment support. If neither producer
+can be supplied, changing the cost contract to pay the actual SQL algorithms is
+an explicit alternative. An extension is a new deployment dependency, not an SQL
+mechanism already delivered here, and its necessity has not been proved. This
+report recommends retaining the target while requesting the concrete connected
 producer proof described below. It does not authorize implementation or resume
 the stopped producer.
 
@@ -271,6 +271,13 @@ passes a specified TID and executor snapshot to
 The conditional 1584/1592-byte fixed-node model therefore remains useful local
 evidence. It is not a portable logical-address or inventory guarantee.
 
+Asymptotic local traversal is also not a successful whole-transaction capacity
+proof. PostgreSQL documents a limit of `2^32` modifying SQL commands per
+transaction through its command identifiers. A multi-command-per-byte SQL body
+must cover old/new paths and bulk callers within actual command/allocation/slot
+limits; it cannot infer that capacity from a single source TEXT datum fitting.
+No implicit smaller key cap or enormous admitted maximum closes this obligation.
+
 PostgreSQL documents that [`ctid` identifies a row version and can change](https://www.postgresql.org/docs/18/ddl-system-columns.html).
 For immutable private nodes, permitted ordinary MVCC reclamation can retain old
 versions while a registered old snapshot needs them. A saved root read in one
@@ -426,6 +433,7 @@ it does not establish an available extension.
 
 | Explicit choice | What changes | What still must be proved |
 | --- | --- | --- |
+| Retain target and SQL-only deployment | No contract change; keep immutable heaps provisional while supplying the missing connected algorithm | Compatible linear extraction, head updates without survivor-byte work, direct independent inventory and whole-transaction capacity; no such complete SQL body is established here |
 | Retain target; add a native producer deployment | Package/support a prefix-aware exact string/ordered directory and directly addressed storage/inventory, plus compatible linear extraction | WAL/recovery, old snapshots, uniqueness, head-handle updates, all copies, restore, full native transaction integration and inclusive prices |
 | Retain SQL-only deployment; change the bound | Admit actual conversion cost plus byte-node indexed work, e.g. `P_PG + O((d+q) log N)`, with separate survivor/restore costs unless eliminated | Exact semantics, actual full-ID representation, prepaid literals, original owner composition and every original child allowance; this is an explicit contract relaxation |
 | Narrow a deployment precondition only | Require demonstrated deterministic equality and controlled private-heap maintenance with completed restore reconstruction | This closes specific collation/relocation obligations only; canonicalization and ordered/inventory costs remain, so it is not a positive answer alone |
