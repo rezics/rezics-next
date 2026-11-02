@@ -15,7 +15,7 @@ function withSignal(client: KernelClient, signal: AbortSignal): KernelClient {
         const value = Reflect.get(target, key);
         // pages:read is a read transported as POST, never a command to replay.
         const optionsAt = key === 'get' ? 0 : key === 'post' && path.join('.') === 'pages.$read' ? 1 : -1;
-        if (optionsAt >= 0)
+        if (optionsAt >= 0 && typeof value === 'function')
           return (...args: unknown[]) => {
             signal.throwIfAborted();
             const options = args[optionsAt] as ReadOptions | undefined;
