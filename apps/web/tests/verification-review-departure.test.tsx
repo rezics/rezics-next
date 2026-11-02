@@ -24,6 +24,7 @@ test('verification departures preserve all reviewed drafts and original commands
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    matchMedia: window.matchMedia.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
