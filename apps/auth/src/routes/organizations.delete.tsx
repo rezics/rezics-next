@@ -410,7 +410,7 @@ export function OrganizationDeleteContent({
       setMessage(
         result.kind === 'ready'
           ? m.auth_organization_delete_still_readable()
-          : result.kind === 'denied' || result.kind === 'missing'
+          : result.kind === 'denied' || result.kind === 'hidden' || result.kind === 'missing'
             ? m.auth_organization_delete_read_denied()
             : m.auth_account_operation_unavailable(),
       );
@@ -479,7 +479,7 @@ export function OrganizationDeleteContent({
         ) : !target ? (
           <>
             <ErrorAlert>
-              {loaded.kind === 'denied' || loaded.kind === 'missing'
+              {loaded.kind === 'denied' || loaded.kind === 'hidden' || loaded.kind === 'missing'
                 ? m.auth_organization_delete_read_denied()
                 : m.auth_account_operation_unavailable()}
             </ErrorAlert>

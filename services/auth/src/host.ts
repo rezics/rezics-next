@@ -1,3 +1,7 @@
+import {
+  organizationDeletionReadTransport,
+  type OrganizationDeletionAccess,
+} from './organization-deletion-read-transport.ts';
 import { automatedOperatorTransport, type AutomatedOperatorAccess } from './automated-operator-transport.ts';
 import { accountProfileReadTransport, type AccountProfileAccess } from './account-profile-read-transport.ts';
 import {
@@ -296,12 +300,19 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
             service,
             automatedOperatorTransport(
               service,
-              accountProfileReadTransport(
+              organizationDeletionReadTransport(
                 service,
-                credentialEffectTransport(service, workflows.handler, options),
-                (options.trustedAccess as typeof options.trustedAccess & Partial<AccountProfileAccess>)
-                  .readRenameAccountProfile
-                  ? (options.trustedAccess as typeof options.trustedAccess & AccountProfileAccess)
+                accountProfileReadTransport(
+                  service,
+                  credentialEffectTransport(service, workflows.handler, options),
+                  (options.trustedAccess as typeof options.trustedAccess & Partial<AccountProfileAccess>)
+                    .readRenameAccountProfile
+                    ? (options.trustedAccess as typeof options.trustedAccess & AccountProfileAccess)
+                    : undefined,
+                ),
+                (options.trustedAccess as typeof options.trustedAccess & Partial<OrganizationDeletionAccess>)
+                  .readOrganizationForDeletion
+                  ? (options.trustedAccess as typeof options.trustedAccess & OrganizationDeletionAccess)
                   : undefined,
               ),
               (options.trustedAccess as typeof options.trustedAccess & Partial<AutomatedOperatorAccess>)

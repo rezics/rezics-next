@@ -235,7 +235,11 @@ Decision: protect nonblank typed confirmation and unresolved deletion in memory 
 ## Delete organization
 
 `/organizations/delete?organization_id=<UUID>` reviews only the selected organization through the private native
-management reader seam in `organization-deletion.ts`; the default unavailable binding offers Retry. Recovery keeps
+management reader in `organization-deletion.ts`. Its default same-origin POST to
+`/account-management/organizations/deletion-review` binds the cookie session server-side with exactly the fixed
+`account:delete` profile, returns only the selected organization's id, kind, handle and display name, and verifies
+the initiating human. The native management ENTRY deletion authority and the same Auth session are revalidated
+after I/O; failures retain the existing localized recovery in all eight locales. Recovery keeps
 the selected organization and first discovered initiating human, and clears typed confirmation before each fresh review.
 Submission revalidates the review and uses the installed approval, execution and step-up protocol. Accepted deletion
 is distinct from cleanup completion. Uncertain results retain the original command identity; unavailable, missing,

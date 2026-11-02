@@ -1,3 +1,4 @@
+import { authPost } from './api';
 import {
   loadAccountSession,
   runAccountOperation,
@@ -21,18 +22,54 @@ export type OrganizationDeletionRead =
       kind: 'ready';
       account: { id: string; kind: 'organization' | 'actor'; handle: string | null; displayName: string | null };
     }
-  | { kind: 'signed-out' | 'denied' | 'missing' | 'unavailable' };
+  | { kind: 'signed-out' | 'hidden' | 'denied' | 'missing' | 'unavailable' };
 export type OrganizationDeletionReader = (input: {
   humanAccountId: string;
   organizationId: string;
 }) => Promise<OrganizationDeletionRead>;
 
-// Access exposes GET /v1/accounts/{accountId}/management, but this issuer has no
-// cookie-authenticated native read binding. The fixed delete profile cannot be
-// expanded with account:read or replaced by the website client's bearer. Auth's
-// host composition must supply that real binding before this page can approve.
-export const missingOrganizationDeletionReadPort = 'Auth issuer → native GET /v1/accounts/{accountId}/management';
-export const readCurrentOrganizationForDeletion: OrganizationDeletionReader = async () => ({ kind: 'unavailable' });
+// The browser selects only the organization. Auth binds the initiating human
+// from its real cookie session and returns only this closed native projection.
+export const readCurrentOrganizationForDeletion: OrganizationDeletionReader = async ({
+  humanAccountId,
+  organizationId,
+}) => {
+  const result = await authPost('/account-management/organizations/deletion-review', { organizationId });
+  if (!result.ok)
+    return { kind: result.status === 401 ? 'signed-out' : result.status === 403 ? 'denied' : 'unavailable' };
+  const body = result.body;
+  if (!body || typeof body !== 'object' || !('kind' in body)) return { kind: 'unavailable' };
+  if (body.kind !== 'ready') {
+    return Object.keys(body).length === 1 && ['hidden', 'denied', 'missing', 'unavailable'].includes(String(body.kind))
+      ? { kind: body.kind as 'hidden' | 'denied' | 'missing' | 'unavailable' }
+      : { kind: 'unavailable' };
+  }
+  if (!('humanAccountId' in body) || body.humanAccountId !== humanAccountId) return { kind: 'denied' };
+  if (
+    Object.keys(body).sort().join(',') !== 'account,humanAccountId,kind' ||
+    !('account' in body) ||
+    !body.account ||
+    typeof body.account !== 'object'
+  )
+    return { kind: 'unavailable' };
+  const row = body.account;
+  if (
+    Object.keys(row).sort().join(',') !== 'displayName,handle,id,kind' ||
+    !('id' in row) ||
+    row.id !== organizationId ||
+    !('kind' in row) ||
+    row.kind !== 'organization' ||
+    !('handle' in row) ||
+    (row.handle !== null && typeof row.handle !== 'string') ||
+    !('displayName' in row) ||
+    (row.displayName !== null && typeof row.displayName !== 'string')
+  )
+    return { kind: 'unavailable' };
+  return {
+    kind: 'ready',
+    account: { id: organizationId, kind: 'organization', handle: row.handle, displayName: row.displayName },
+  };
+};
 
 export type OrganizationDeletionTarget = {
   humanAccountId: string;
@@ -43,7 +80,7 @@ export type OrganizationDeletionTarget = {
 };
 export type OrganizationDeletionLoad =
   | { kind: 'ready'; target: OrganizationDeletionTarget }
-  | { kind: 'signed-out' | 'denied' | 'missing' | 'unavailable' };
+  | { kind: 'signed-out' | 'hidden' | 'denied' | 'missing' | 'unavailable' };
 
 // The page owns browser liveness and pins the first discovered initiating human,
 // including when the following private read is unavailable.

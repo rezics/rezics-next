@@ -2909,3 +2909,22 @@ claim. Unknown old custody stays pending. Attribution never certifies consumer
 retirement; original release, activation, reservation and provisioning identities
 and deadlines remain authoritative. Phase-inventory upgrades and terminal-proof
 minimization are separate owner integrations.
+
+## Organization deletion review
+
+`POST /account-management/organizations/deletion-review` accepts exactly `{ organizationId }`, with the issuer
+Origin and existing JSON/CSRF bounds, no bearer or query. The default host consumes `readOrganizationForDeletion`
+from the native trusted bindings. Auth's live cookie proof retains exactly the account-operation client's
+`account:delete` profile; the same proof is revalidated after native I/O. Review permits an older authentication
+so approval can request its existing fresh step-up; review neither approves nor executes a command.
+
+The private producer reuses the native management account/role source and `readManagedAuthActions` deletion ENTRY
+formula, without the generic endpoint's `account:read` scope, public attribution, or member inventory. It compares
+native identity, lifecycle, human floor, role and home epochs after released permission preparation. Only the
+selected organization identity and the server-bound initiating human reach the browser. Approval and execution
+retain their independent current checks, original command/key and uncertainty recovery.
+
+Decision: unrelated organizations return hidden, missing/inactive sources return missing, current authority refusals
+return denied, and failed or changing native reads return unavailable; none discloses an organization identity.
+The page uses its existing localized denial text for hidden results. Cost is two bounded two-account snapshots,
+two role points, native management ENTRY preparation/checks, and constant Auth session checks; no inventory or polling.

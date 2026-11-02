@@ -1,3 +1,4 @@
+import { createOrganizationDeletionAccess, type OrganizationDeletionAccess } from './organization-deletion-source.ts';
 import { createAutomatedOperatorAccess, type AutomatedOperatorAccess } from './automated-operator-source.ts';
 import { createAccountProfileAccess, type AccountProfileAccess } from './account-profile-source.ts';
 import { readOriginalLifecycleResult } from './native-lifecycle-results.ts';
@@ -257,8 +258,14 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   const trustedAccess: TrustedAccessPorts &
     ManagementMembershipAccess &
     AutomatedOperatorAccess &
-    AccountProfileAccess = {
+    AccountProfileAccess &
+    OrganizationDeletionAccess = {
     ...createAccountProfileAccess({
+      pool,
+      access,
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+    }),
+    ...createOrganizationDeletionAccess({
       pool,
       access,
       accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
@@ -396,6 +403,11 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       throw new WorkflowApprovalUnavailableError();
     },
     actorAccountId: (context) => context.actor.accountId,
+    ...createOrganizationDeletionAccess({
+      pool,
+      access,
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+    }),
     readNativeCreationContext: creationContext,
     copyActors: (context) => readNativeCopyActors({ pool, access }, context),
     stableCommandKey: (context, phase) => `${required(workflowApprovalBinding(context)).commandKeyPrefix}:${phase}`,
