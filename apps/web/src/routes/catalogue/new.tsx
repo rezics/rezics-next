@@ -5,9 +5,9 @@ import { createFileRoute } from '@tanstack/react-router';
 import { CreateSubjectForm } from '../../features/catalogue/create-subject-form';
 import {
   createCatalogueSubject,
-  readCreateDefinitions,
   readCreatedCatalogueSubject,
 } from '../../features/catalogue/create-subject-actions';
+import { readCreateTypeDescriptor, readCreateTypePage } from '../../features/catalogue/type-directory';
 import { useSession } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -29,7 +29,10 @@ function NewSubjectPage() {
       session={state}
       onNavigate={(href) => window.location.assign(href)}
       transport={{
-        definitions: (refresh = false) => readCreateDefinitions({ data: refresh }),
+        typeDirectory: {
+          page: (input) => readCreateTypePage({ data: input }),
+          descriptor: (typeId) => readCreateTypeDescriptor({ data: typeId }),
+        },
         submit: (command) =>
           createCatalogueSubject({
             data: editorRequest(command, editorWork),

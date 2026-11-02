@@ -22,15 +22,27 @@ function CreateStory({
   const fixture = useMemo(() => catalogueCreateFixture(scenario, locale), [scenario, locale]);
   const transport = useMemo<CreateTransport>(() => {
     let failRefresh = refreshUnavailable;
+    let refreshPending = false;
     return {
       ...fixture.transport,
-      definitions: async (refresh) => {
-        if (refresh && failRefresh) {
-          failRefresh = false;
-          return { ok: false };
-        }
-        const result = await fixture.transport.definitions(refresh);
-        if (refresh && scenario === 'invalid') fixture.setScenario('ready');
+      typeDirectory: {
+        ...fixture.transport.typeDirectory!,
+        descriptor: async (typeId) => {
+          if (refreshPending && failRefresh) {
+            failRefresh = false;
+            return { ok: false, reason: 'unavailable' };
+          }
+          const result = await fixture.transport.typeDirectory!.descriptor(typeId);
+          if (refreshPending && scenario === 'invalid') {
+            fixture.setScenario('ready');
+            refreshPending = false;
+          }
+          return result;
+        },
+      },
+      submit: async (command) => {
+        const result = await fixture.transport.submit(command);
+        if (!result.ok && result.refreshDefinitions) refreshPending = true;
         return result;
       },
     };
@@ -78,9 +90,13 @@ type Story = StoryObj<typeof meta>;
 async function fill(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await userEvent.selectOptions(
-    await canvas.findByRole('combobox', { name: m.catalogue_create_type() }),
-    'schema:Movie',
+    await canvas.findByRole('combobox', { name: m.catalogue_create_type_search_mode() }),
+    'id',
   );
+  await userEvent.type(await canvas.findByRole('textbox', { name: m.catalogue_create_type_search() }), 'schema:Movie');
+  await userEvent.click(await canvas.findByRole('button', { name: m.catalogue_create_type_search_action() }));
+  await userEvent.click(await canvas.findByText(m.catalogue_create_type_select()));
+  await waitFor(() => expect(canvas.getByRole('button', { name: m.catalogue_create_submit() })).toBeEnabled());
   const language = canvas.getByRole('textbox', { name: m.catalogue_create_language() });
   await userEvent.clear(language);
   await userEvent.type(language, 'en');
@@ -113,8 +129,57 @@ export const CreateMultilingualSubject: Story = {
     expect(canvas.queryByRole('button', { name: m.catalogue_create_submit() })).toBeNull();
   },
 };
-export const Loading: Story = { args: { scenario: 'loading' } };
-export const NoReleasedTypes: Story = { args: { scenario: 'empty' } };
+export const PagedTypeSelectionRetainsDraft: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const language = await canvas.findByRole('textbox', { name: m.catalogue_create_language() });
+    await userEvent.clear(language);
+    await userEvent.type(language, 'en');
+    await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'A new film');
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_add_language() }));
+    await userEvent.type(canvas.getAllByRole('textbox', { name: m.catalogue_create_language() })[1]!, 'ja');
+    await userEvent.type(canvas.getAllByRole('textbox', { name: m.catalogue_create_label() })[1]!, '新しい映画');
+
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_type_search_action() }));
+    const movie = (await canvas.findByText('schema:Movie')).closest('li')!;
+    await userEvent.click(await canvas.findByRole('button', { name: m.catalogue_create_type_next() }));
+    await userEvent.click(within(movie).getByText(m.catalogue_create_type_select()));
+    await waitFor(() => expect(canvas.getByRole('button', { name: m.catalogue_create_submit() })).toBeEnabled());
+
+    await userEvent.type(
+      canvas.getByRole('textbox', { name: m.catalogue_create_type_search() }),
+      'no-such-type-prefix-93ff',
+    );
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_type_search_action() }));
+    expect(await canvas.findByText(m.catalogue_create_type_no_matches())).toBeVisible();
+    expect(
+      canvas.getAllByRole('textbox', { name: m.catalogue_create_label() }).map((field) => (field as HTMLInputElement).value),
+    ).toEqual(['A new film', '新しい映画']);
+    expect(canvas.getByRole('button', { name: m.catalogue_create_submit() })).toBeEnabled();
+
+    const technical = canvas.getByText(m.catalogue_creation_technical_details()).closest('details')!;
+    await userEvent.click(canvas.getByText(m.catalogue_creation_technical_details()));
+    expect(within(technical).getByText('schema:Movie')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
+    expect(await canvas.findByRole('link', { name: m.catalogue_create_open() })).toBeVisible();
+  },
+};
+export const Loading: Story = {
+  args: { scenario: 'loading' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.catalogue_create_type_search_action() }));
+    expect(await canvas.findByText(m.catalogue_create_type_searching())).toBeVisible();
+  },
+};
+export const NoMatches: Story = {
+  args: { scenario: 'empty' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.catalogue_create_type_search_action() }));
+    expect(await canvas.findByText(m.catalogue_create_type_no_matches())).toBeVisible();
+  },
+};
 export const SignedOut: Story = { args: { scenario: 'signed-out' } };
 export const Denied: Story = {
   args: { scenario: 'denied' },
@@ -127,7 +192,7 @@ export const Denied: Story = {
 export const InvalidFields: Story = {
   play: async ({ canvasElement, step }) => {
     const canvas = within(canvasElement);
-    const type = await canvas.findByRole('combobox', { name: m.catalogue_create_type() });
+    const type = await canvas.findByText(m.catalogue_create_type()).then((label) => label.closest('#create-type')!);
     const name = canvas.getByRole('textbox', { name: m.catalogue_create_label() });
     const language = canvas.getByRole('textbox', { name: m.catalogue_create_language() });
     const create = canvas.getByRole('button', { name: m.catalogue_create_submit() });
@@ -296,8 +361,22 @@ export const UnavailableRetry: Story = {
   args: { scenario: 'definitions-unavailable' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.catalogue_create_type_search_action() }));
+    expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_create_type_search_failed());
     await userEvent.click(await canvas.findByRole('button', { name: m.catalogue_create_retry() }));
-    expect(await canvas.findByRole('combobox', { name: m.catalogue_create_type() })).toBeVisible();
+    expect(await canvas.findByText(m.catalogue_create_type_select())).toBeVisible();
+  },
+};
+export const ChangedCatalogueCursor: Story = {
+  args: { scenario: 'cursor-changed' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.catalogue_create_type_search_action() }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.catalogue_create_type_next() }));
+    expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_create_type_search_changed());
+    expect(canvas.queryByRole('button', { name: m.catalogue_create_type_next() })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_type_search_action() }));
+    expect(await canvas.findByRole('button', { name: m.catalogue_create_type_next() })).toBeVisible();
   },
 };
 export const UncertainSubmitRetry: Story = {

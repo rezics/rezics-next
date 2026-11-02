@@ -95,6 +95,10 @@ blank language rows and a preset profile Type remain clean, while pending or unc
 loses local retry recovery without cancelling the request. Profile controls are compared with their initial values
 per Type without invoking validation callbacks, so returning to unchanged values clears that draft's warning.
 
+The generic creation route uses one search field with an explicit localized-label-prefix or exact-Type-ID mode;
+running a search keeps the selected Type and multilingual term drafts, while choosing a result requires its current
+exact descriptor.
+
 ## Browser flow: fictional character identity and credits
 
 The catalogue creation entry, a fictional character's header and a work's Characters view offer **Character identity

@@ -19,6 +19,7 @@ import type { Violation } from '@rezics/definitions/validate';
 import { RecipeEditorEntry } from './recipe-editor-entry';
 import { CharacterProfileEntry } from './character-profile-entry';
 import { ScreenProfileEntry } from './screen-profile-entry';
+import { TypeDirectoryPicker } from './type-directory-picker';
 import { MangaProfileEntry } from './manga-profile-entry';
 import { PeopleProfileEntry } from './people-profile-entry';
 import { AlbumProfileEntry } from './album-profile-entry';
@@ -161,22 +162,29 @@ function CreateSubjectFormLive({
   const lifetime = useEditorLifetime();
   const options = { locale: locale as never };
   const client = useQueryClient();
+  const directoryMode = !profile && !!transport.typeDirectory;
+  const usesDefinitions = !directoryMode && !!transport.definitions;
   const queryKey = ['catalogue-create', 'definitions', locale, String(lifetime.generation)];
   if (profile) queryKey.push(profile.scope);
   async function loadDefinitions(refresh = false) {
+    if (!transport.definitions) throw new Error('Creation definitions unavailable');
     const result = await transport.definitions(refresh);
     // A failed reload must not replace the last usable choices or unmount the draft's controls.
     if (!result.ok) throw new Error('Creation definitions unavailable');
     return result;
   }
   // Definitions and the route's session read start independently.
-  const definitions = useQuery({ queryKey, queryFn: () => loadDefinitions(), retry: false });
+  const definitions = useQuery({ queryKey, queryFn: () => loadDefinitions(), enabled: usesDefinitions, retry: false });
   async function reloadDefinitions() {
+    if (!usesDefinitions) return;
     await client
       .fetchQuery({ queryKey, queryFn: () => loadDefinitions(true), retry: false, staleTime: 0 })
       .catch(() => undefined);
   }
   const [type, setType] = useState(profile?.type ?? '');
+  const [directoryType, setDirectoryType] = useState<CreateType | null>(null);
+  const [directoryPending, setDirectoryPending] = useState(false);
+  const [directoryRefreshToken, setDirectoryRefreshToken] = useState(0);
   const [rows, setRows] = useState<TermDraft[]>([{ language: locale, label: '', description: '', aliases: '' }]);
   const [failure, setFailure] = useState<CreateFailure>();
   // Capture profile addresses at rejection, before row deletion or Type changes can shift native indices.
@@ -203,7 +211,7 @@ function CreateSubjectFormLive({
   const types = (profile?.metadata?.types ?? (definitions.data?.ok ? definitions.data.types : [])).filter(
     (entry) => !profile?.type || entry.id === profile.type,
   );
-  const selectedType = types.find((entry) => entry.id === type);
+  const selectedType = directoryMode ? directoryType : types.find((entry) => entry.id === type);
   const selectedTypeName = selectedType?.label.trim();
   const hasTypeName = !!selectedTypeName && selectedTypeName !== type;
   const uncertain = (failure?.reason === 'unavailable' && request.current !== null) || unresolvedDelivery.current;
@@ -213,8 +221,12 @@ function CreateSubjectFormLive({
   const readOnlyType = !!profile?.type && profile.readOnlyType;
   const hasDraft = !!type || rows.some((row) => !!(row.label || row.description || row.aliases));
   // Retrying an uncertain command needs its original identity, even while definitions are unavailable.
-  const definitionsFailed = profile?.metadata ? !profile.metadata.ready : definitions.isError;
-  const definitionsBlocked = !request.current && (definitionsFailed || definitions.isFetching || types.length === 0);
+  const definitionsFailed = directoryMode ? false : profile?.metadata ? !profile.metadata.ready : definitions.isError;
+  const hasCurrentType = directoryMode ? directoryType?.id === type : types.some((entry) => entry.id === type);
+  const definitionsBlocked = !request.current &&
+    (directoryMode
+      ? directoryPending || (!!type && !hasCurrentType)
+      : definitionsFailed || definitions.isFetching || types.length === 0);
   // Profile callbacks share this form's workspace and command lock, including before busy renders.
   const profileEditable = !disabled && !definitionsBlocked && !profile?.metadata?.pending && !!selectedType && !created;
   const currentEdit = useRef<object | null>(null);
@@ -238,7 +250,6 @@ function CreateSubjectFormLive({
       currentEdit.current = null;
     };
   }, [edit]);
-
   const termControl = createSubjectControls(rows);
   const control = (pointer: string) => targets.current.get(pointer)?.id || termControl(pointer);
   const corrections = new Map<string, { id: string | undefined; label: string | undefined; errors: Violation[] }>();
@@ -283,7 +294,7 @@ function CreateSubjectFormLive({
         draft.item = prepared.item;
         draft.errors.push(...prepared.errors);
       }
-      if (!types.some((entry) => entry.id === type)) draft.errors.push({ pointer: '/type', code: 'unsupported' });
+      if (!hasCurrentType) draft.errors.push({ pointer: '/type', code: 'unsupported' });
       if (draft.errors.length) {
         reject({ ok: false, reason: 'invalid', errors: draft.errors });
         return;
@@ -308,7 +319,10 @@ function CreateSubjectFormLive({
         if (!unresolvedDelivery.current && result.reason !== 'unavailable' && result.reason !== 'conflict')
           request.current = null;
         if (result.refreshDefinitions) {
-          await reloadDefinitions();
+          if (directoryMode && directoryType) {
+            setDirectoryPending(true);
+            setDirectoryRefreshToken((token) => token + 1);
+          } else await reloadDefinitions();
         }
       }
     } catch {
@@ -390,7 +404,7 @@ function CreateSubjectFormLive({
         </section>
       ) : (
         <>
-          {(session === 'unknown' || definitions.isPending) && (
+          {(session === 'unknown' || (usesDefinitions && definitions.isPending)) && (
             <p role="status">{m.catalogue_create_loading({}, options)}</p>
           )}
           {session === 'signed-out' && (
@@ -414,9 +428,9 @@ function CreateSubjectFormLive({
               <Button
                 type="button"
                 variant="outline"
-                disabled={definitions.isFetching || profile?.metadata?.pending}
+                disabled={(usesDefinitions && definitions.isFetching) || profile?.metadata?.pending}
                 onClick={() => {
-                  void reloadDefinitions();
+                  if (usesDefinitions) void reloadDefinitions();
                   void client.invalidateQueries({ queryKey: ['session'] });
                 }}
               >
@@ -424,8 +438,10 @@ function CreateSubjectFormLive({
               </Button>
             </div>
           )}
-          {definitions.data?.ok && types.length === 0 && <p role="status">{m.catalogue_create_empty({}, options)}</p>}
-          {definitions.data?.ok && (types.length > 0 || hasDraft) && (
+          {usesDefinitions && definitions.data?.ok && types.length === 0 && (
+            <p role="status">{m.catalogue_create_empty({}, options)}</p>
+          )}
+          {(directoryMode || (usesDefinitions && definitions.data?.ok && (types.length > 0 || hasDraft))) && (
             <form className="space-y-6" noValidate onSubmit={(event) => void submit(event)} aria-busy={busy}>
               {rows.map((row, index) => (
                 <fieldset
@@ -536,9 +552,37 @@ function CreateSubjectFormLive({
                     <p id="create-type-label" className="text-sm font-medium">
                       {m.catalogue_create_type({}, options)}
                     </p>
-                    <p lang={hasTypeName ? profile?.labelLanguage?.(type) : locale}>
+                    <p lang={hasTypeName ? profile?.labelLanguage?.(type) ?? selectedType?.labelLanguage : locale}>
                       {hasTypeName ? selectedTypeName : m.catalogue_creation_type_unlabelled({}, options)}
                     </p>
+                  </div>
+                ) : directoryMode ? (
+                  <div
+                    id="create-type"
+                    tabIndex={-1}
+                    aria-labelledby="create-type-label"
+                    aria-invalid={invalid('create-type')}
+                    aria-describedby={`create-grain create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
+                  >
+                    <p id="create-type-label" className="text-sm font-medium">
+                      {m.catalogue_create_type({}, options)}
+                    </p>
+                    <TypeDirectoryPicker
+                      locale={locale}
+                      transport={transport.typeDirectory!}
+                      selected={directoryType}
+                      disabled={disabled}
+                      invalid={invalid('create-type')}
+                      describedBy={`create-grain create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
+                      refreshToken={directoryRefreshToken}
+                      onSelectionChange={(nextType) => {
+                        setDirectoryType(nextType);
+                        setType(nextType?.id ?? '');
+                        if (nextType) setFailure(undefined);
+                      }}
+                      onPendingChange={setDirectoryPending}
+                    />
+                    <FieldDescription id="create-grain">{m.catalogue_create_grain({}, options)}</FieldDescription>
                   </div>
                 ) : (
                   <>
@@ -575,14 +619,14 @@ function CreateSubjectFormLive({
                         </NativeSelectOption>
                       ))}
                     </NativeSelect>
-                    <FieldDescription id="create-grain">{m.catalogue_create_grain({}, options)}</FieldDescription>
+                      <FieldDescription id="create-grain">{m.catalogue_create_grain({}, options)}</FieldDescription>
                   </>
                 )}
                 <FieldDescription id="create-type-help">
                   {type && (
                     <DefinitionMeaning
                       text={selectedType?.description}
-                      language={profile?.descriptionLanguage?.(type)}
+                      language={profile?.descriptionLanguage?.(type) ?? selectedType?.descriptionLanguage}
                       locale={locale}
                     />
                   )}

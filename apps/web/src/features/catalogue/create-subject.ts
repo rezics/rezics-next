@@ -8,8 +8,25 @@ export type InitialSubject = Pick<
   'type' | 'labels' | 'descriptions' | 'aliases'
 >;
 export type CreateSubjectCommand = { item: InitialSubject; key: string };
-export type CreateType = { id: string; label: string; description: string };
+export type CreateType = {
+  id: string;
+  label: string;
+  description: string;
+  labelLanguage?: string;
+  descriptionLanguage?: string;
+};
 export type CreateDefinitions = { ok: true; types: CreateType[] } | { ok: false };
+export type TypeDirectoryQuery = { query?: string; typeId?: string; cursor?: string };
+export type TypeDirectoryPage =
+  | { ok: true; types: CreateType[]; next: string | null }
+  | { ok: false; reason: 'stale' | 'unavailable' };
+export type TypeDescriptorRead =
+  | { ok: true; type: CreateType }
+  | { ok: false; reason: 'missing' | 'unavailable' };
+export type TypeDirectoryTransport = {
+  page: (input: TypeDirectoryQuery) => Promise<TypeDirectoryPage>;
+  descriptor: (typeId: string) => Promise<TypeDescriptorRead>;
+};
 export type CreateFailure = {
   ok: false;
   reason: 'signed-out' | 'denied' | 'invalid' | 'conflict' | 'unavailable';
@@ -19,7 +36,8 @@ export type CreateFailure = {
 export type CreatedReader = { state: 'ready'; href: string } | { state: 'concealed' | 'unavailable' };
 export type CreateResult = CreateFailure | { ok: true; id: string; reader: CreatedReader };
 export type CreateTransport = {
-  definitions: (refresh?: boolean) => Promise<CreateDefinitions>;
+  definitions?: (refresh?: boolean) => Promise<CreateDefinitions>;
+  typeDirectory?: TypeDirectoryTransport;
   submit: (command: CreateSubjectCommand) => Promise<CreateResult>;
   read: (id: string) => Promise<CreatedReader>;
 };

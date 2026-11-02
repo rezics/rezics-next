@@ -16,6 +16,7 @@ export type CreateScenario =
   | 'loading'
   | 'empty'
   | 'definitions-unavailable'
+  | 'cursor-changed'
   | 'signed-out'
   | 'denied'
   | 'invalid'
@@ -41,6 +42,7 @@ export function catalogueCreateFixture(scenario: CreateScenario = 'ready', local
   let item: InitialSubject | undefined;
   let activeScenario = scenario;
   let definitionReads = 0;
+  let directoryReads = 0;
   let refreshes = 0;
   let lost = false;
   const json = (body: unknown, status = 200) =>
@@ -112,6 +114,12 @@ export function catalogueCreateFixture(scenario: CreateScenario = 'ready', local
   }
   const request = () =>
     new Request('https://site.invalid/api', { method: 'POST', headers: { authorization: 'Bearer fixture' } });
+  const directoryTypes = () =>
+    (activeScenario === 'empty' ? [] : createTypes(definitions.release, locale)).map((type) => ({
+      ...type,
+      labelLanguage: locale,
+      ...(type.description ? { descriptionLanguage: locale } : {}),
+    }));
   const transport: CreateTransport = {
     definitions: async (refresh = false) => {
       definitionReads++;
@@ -119,6 +127,34 @@ export function catalogueCreateFixture(scenario: CreateScenario = 'ready', local
       if (activeScenario === 'loading') return new Promise(() => {});
       if (activeScenario === 'definitions-unavailable' && definitionReads === 1) return { ok: false };
       return { ok: true, types: activeScenario === 'empty' ? [] : createTypes(definitions.release, locale) };
+    },
+    typeDirectory: {
+      page: async (input) => {
+        directoryReads++;
+        if (activeScenario === 'loading') return new Promise(() => {});
+        if (activeScenario === 'definitions-unavailable' && directoryReads === 1)
+          return { ok: false, reason: 'unavailable' };
+        if (activeScenario === 'cursor-changed' && input.cursor !== undefined)
+          return { ok: false, reason: 'stale' };
+        const types = directoryTypes();
+        if (input.typeId !== undefined) {
+          return { ok: true, types: types.filter((type) => type.id === input.typeId), next: null };
+        }
+        const matching = types
+          .filter((type) => type.label.startsWith(input.query ?? ''))
+          .sort((a, b) => (a.id === 'schema:Movie' ? -1 : b.id === 'schema:Movie' ? 1 : a.label.localeCompare(b.label)));
+        const after = input.cursor ? Number(input.cursor) : 0;
+        return {
+          ok: true,
+          types: matching.slice(after, after + 1),
+          next: after + 1 < matching.length ? String(after + 1) : null,
+        };
+      },
+      descriptor: async (typeId) => {
+        if (activeScenario === 'loading') return new Promise(() => {});
+        const type = directoryTypes().find((entry) => entry.id === typeId);
+        return type ? { ok: true, type } : { ok: false, reason: 'missing' };
+      },
     },
     submit: (command: CreateSubjectCommand) =>
       createSubjectRecord(client, request(), {} as Partial<SessionEnv>, command, locale),
