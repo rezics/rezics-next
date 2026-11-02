@@ -19,6 +19,7 @@ export type AutomatedAttempt = Readonly<{
   operation: AutomatedOperation;
   operator: OperatorIdentity;
   reference?: string;
+  submitted?: true;
 }>;
 export type OperatorIdentity = Readonly<{
   id: string;
@@ -114,12 +115,14 @@ export function parseAutomatedAttempt(value: unknown): AutomatedAttempt | null {
       'operation',
       'operator',
       ...(Object.hasOwn(value, 'reference') ? ['reference'] : []),
+      ...(Object.hasOwn(value, 'submitted') ? ['submitted'] : []),
     ]) ||
     !automatedId(value.accountId) ||
     !text(value.operationKey) ||
     value.operationKey.length > 128 ||
     !identity(value.operator) ||
-    (value.reference !== undefined && !text(value.reference))
+    (value.reference !== undefined && !text(value.reference)) ||
+    (value.submitted !== undefined && value.submitted !== true)
   )
     return null;
   const op = value.operation;
@@ -146,6 +149,7 @@ export function parseAutomatedAttempt(value: unknown): AutomatedAttempt | null {
     }),
     operator: Object.freeze({ ...value.operator }),
     ...(value.reference === undefined ? {} : { reference: value.reference as string }),
+    ...(value.submitted === true ? { submitted: true as const } : {}),
   });
 }
 export function createAutomatedAttempt(
@@ -189,6 +193,24 @@ export function restoreAutomatedAttempt(): AutomatedAttempt | null | 'invalid' {
     return 'invalid';
   }
 }
+/** Discard only this page's unsent review; dispatched and older approved commands remain recoverable. */
+export function discardAutomatedReview(attempt: AutomatedAttempt | null): void {
+  const saved = restoreAutomatedAttempt();
+  if (
+    !attempt ||
+    !saved ||
+    saved === 'invalid' ||
+    saved.operationKey !== attempt.operationKey ||
+    saved.submitted ||
+    saved.reference
+  )
+    return;
+  try {
+    window.sessionStorage.removeItem(storageKey);
+  } catch {
+    // Failure to remove a review must never overwrite a different command.
+  }
+}
 export function automatedSessionMatches(session: ManagementSession, accountId: string): boolean {
   return (
     session.accountId === accountId &&
@@ -216,7 +238,7 @@ export async function submitAutomatedAttempt(
   input: AutomatedAttempt,
   isCurrent: () => boolean = () => true,
 ): Promise<AutomatedOutcome> {
-  let attempt = parseAutomatedAttempt(input);
+  let attempt = parseAutomatedAttempt({ ...input, submitted: true });
   if (!isCurrent() || !attempt || !saveAutomatedAttempt(attempt)) return { kind: 'refused' };
   const denied = await boundSession(attempt.accountId);
   if (!isCurrent()) return { kind: 'unavailable' };

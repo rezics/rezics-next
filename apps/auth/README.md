@@ -417,3 +417,5 @@ without preload. Static assets, unknown paths and Auth forwarding retain their o
 The policy costs one 16-byte random nonce and one header set per response, with no reads. Run
 `bun test apps/auth/tests/security-headers.test.ts` from the repository root to build and preview the production
 bundle and check Chromium hydration, policy violations and the real Turnstile script URL with an offline widget.
+
+Decision: automated creation asks Stay/Leave for meaningful input or unresolved review; Leave discards only unsent review, while a tab-local submitted marker preserves the original command for recovery. Caller replacement or permission loss revokes review without prompting.

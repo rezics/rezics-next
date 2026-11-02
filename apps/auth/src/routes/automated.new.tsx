@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -11,6 +11,7 @@ import { loadManagementSession, type ManagementSessionResult } from '../manageme
 import { normalizeSignupHandle } from '../signup';
 import {
   createAutomatedAttempt,
+  discardAutomatedReview,
   loadAutomatedOperator,
   reauthenticateAutomated,
   restoreAutomatedAttempt,
@@ -25,6 +26,70 @@ export const Route = createFileRoute('/automated/new')({
   component: AutomatedAccountCreatePage,
 });
 
+// This adapter belongs to this creation page; standalone page fixtures need no router.
+function DepartureDecision({
+  protectedWork,
+  validate,
+  retire,
+}: {
+  protectedWork: () => boolean;
+  validate: () => Promise<void>;
+  retire: () => void;
+}) {
+  const blocker = useBlocker({
+    shouldBlockFn: async () => {
+      await validate();
+      return protectedWork();
+    },
+    enableBeforeUnload: protectedWork,
+    withResolver: true,
+  });
+  const dialog = useRef<HTMLDialogElement>(null);
+  const stay = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    if (blocker.status !== 'blocked') return;
+    if (!protectedWork()) {
+      blocker.proceed();
+      return;
+    }
+    const previous = document.activeElement as HTMLElement | null;
+    const modal = dialog.current!;
+    modal.showModal();
+    stay.current?.focus();
+    return () => {
+      modal.close();
+      previous?.focus();
+    };
+  }, [blocker.status, protectedWork]);
+  return blocker.status === 'blocked' ? (
+    <dialog
+      ref={dialog}
+      aria-labelledby="automated-departure-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        blocker.reset();
+      }}
+    >
+      <h2 id="automated-departure-title">{m.auth_automated_departure()}</h2>
+      <p>{m.auth_account_operation_leave_notice()}</p>
+      <div className="flex gap-3">
+        <Button ref={stay} type="button" onClick={() => blocker.reset()}>
+          {m.auth_automated_stay()}
+        </Button>
+        <Button
+          type="button"
+          onClick={() => {
+            retire();
+            blocker.proceed();
+          }}
+        >
+          {m.auth_automated_leave()}
+        </Button>
+      </div>
+    </dialog>
+  ) : null;
+}
+
 function notice(kind: string): string {
   if (kind === 'step-up') return m.auth_automated_step_up();
   if (kind === 'refused') return m.auth_automated_refused();
@@ -33,6 +98,7 @@ function notice(kind: string): string {
   return m.auth_automated_unavailable();
 }
 export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSessionResult } = {}) {
+  const router = useRouter({ warn: false });
   const [accountId, setAccountId] = useState('');
   const [operatorId, setOperatorId] = useState('');
   const [handle, setHandle] = useState('');
@@ -51,6 +117,43 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
   const feedback = useRef<HTMLDivElement>(null);
   const confirmation = useRef<HTMLHeadingElement>(null);
 
+  const work = useRef({ accountId, attempt, ready, created, busy, operatorId, handle });
+  work.current = { accountId, attempt, ready, created, busy, operatorId, handle };
+  const protectedWork = () => {
+    const value = work.current;
+    return (
+      !!lifetime.current &&
+      value.ready &&
+      !value.created &&
+      !!(value.busy || value.attempt || value.operatorId.trim() || value.handle.trim())
+    );
+  };
+  function retire() {
+    lifetime.current = null;
+    discardAutomatedReview(work.current.attempt);
+    work.current.ready = false;
+    setReady(false);
+    setAttempt(null);
+    setConfirmed(false);
+    setOperatorId('');
+    setHandle('');
+    setEmail('');
+    setPassword('');
+  }
+  async function validateCaller() {
+    const current = lifetime.current;
+    const owner = work.current.accountId;
+    if (!current || !owner) return;
+    const session = await loadManagementSession();
+    if (lifetime.current !== current) return;
+    if (
+      session.kind === 'signed-out' ||
+      (session.kind === 'ready' && (session.accountId !== owner || !session.scopes.includes('account:manage')))
+    ) {
+      retire();
+      setStatus('refused');
+    }
+  }
   useLayoutEffect(() => {
     const current = {};
     lifetime.current = current;
@@ -62,14 +165,16 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     setReauth(false);
     setPassword('');
     setCreated('');
-    const retire = () => {
-      lifetime.current = null;
-      setPassword('');
-    };
+    setAccountId('');
+    setAttempt(null);
+    setOperatorId('');
+    setHandle('');
+    setEmail('');
     const restore = (event: PageTransitionEvent) => {
       if (event.persisted) setReload((value) => value + 1);
     };
     window.addEventListener('pagehide', retire);
+    window.addEventListener('focus', validateCaller);
     window.addEventListener('pageshow', restore);
     void (initial && reload === 0 ? Promise.resolve(initial) : loadManagementSession()).then((session) => {
       if (lifetime.current !== current) return;
@@ -89,6 +194,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     return () => {
       retire();
       window.removeEventListener('pagehide', retire);
+      window.removeEventListener('focus', validateCaller);
       window.removeEventListener('pageshow', restore);
     };
   }, [initial, reload]);
@@ -104,7 +210,9 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     const current = lifetime.current;
     const binding = () => {
       const saved = restoreAutomatedAttempt();
-      return saved && saved !== 'invalid' ? JSON.stringify({ ...saved, reference: undefined }) : saved;
+      return saved && saved !== 'invalid'
+        ? JSON.stringify({ ...saved, reference: undefined, submitted: undefined })
+        : saved;
     };
     const saved = binding();
     return () => current !== null && lifetime.current === current && binding() === saved;
@@ -125,6 +233,8 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     setStatus('');
     try {
       const target = await loadAutomatedOperator(accountId, operatorId);
+      if (!isCurrent()) return;
+      await validateCaller();
       if (!isCurrent()) return;
       if (target.kind !== 'ready') {
         setStatus('unavailable');
@@ -158,6 +268,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
       const session = await loadManagementSession();
       if (!isCurrent()) return;
       if (session.kind !== 'ready' || session.accountId !== accountId) {
+        if (session.kind !== 'unavailable') retire();
         setStatus(session.kind === 'unavailable' ? 'unavailable' : 'refused');
         return;
       }
@@ -165,6 +276,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
       if (saved && saved !== 'invalid') setAttempt(saved);
       if (result.kind === 'complete') setCreated(result.accountId);
       else {
+        if (result.kind === 'refused') retire();
         setStatus(result.kind);
         setReauth(result.kind === 'step-up');
       }
@@ -186,8 +298,10 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     try {
       const result = await reauthenticateAutomated(accountId, email, password, isCurrent);
       if (!isCurrent()) return;
-      if (result) setStatus(result.kind);
-      else {
+      if (result) {
+        if (result.kind === 'refused') retire();
+        setStatus(result.kind);
+      } else {
         setReauth(false);
         setStatus('step-up');
       }
@@ -201,6 +315,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
   }
   return (
     <AuthPage heading={m.auth_automated_heading()}>
+      {router ? <DepartureDecision protectedWork={protectedWork} validate={validateCaller} retire={retire} /> : null}
       <div className="space-y-5" aria-busy={busy}>
         <p>{m.auth_automated_intro()}</p>
         {status ? (
