@@ -8,7 +8,8 @@ test('Space-selected Following retains native membership, kind conjunction, spar
   try {
     for (const group of ['personal_library', 'reading_progress', 'search'])
       await world.command('POST', `/v1/platform/exposure/${group}:open`, undefined, {
-        bearer: world.governance.bearer, expectedStatus: 200,
+        bearer: world.governance.bearer,
+        expectedStatus: 200,
       });
     const selected = await world.createRealmTarget('Selected Space', 'public');
     const unrelated = await world.createRealmTarget('Unrelated Space', 'public');
@@ -22,21 +23,46 @@ test('Space-selected Following retains native membership, kind conjunction, spar
       const spaceId = realm.value!.realm.spaceId as string;
       spaces.push(spaceId);
       await world.command('PUT', `/v1/follows/${spaceId}`, undefined, { bearer: world.other.bearer });
-      const { rows: [event] } = await world.system.database.pool.query<{
-        partition_no: number; epoch: number; position: string; event_seq: number; data: { activityAt: string };
-      }>(`SELECT partition_no,epoch,position::text,event_seq,data FROM core.outbox
-          WHERE type='com.rezics.content.thread.created.v1' AND data->>'threadId'=$1`, [target.threadId]);
+      const {
+        rows: [event],
+      } = await world.system.database.pool.query<{
+        partition_no: number;
+        epoch: number;
+        position: string;
+        event_seq: number;
+        data: { activityAt: string };
+      }>(
+        `SELECT partition_no,epoch,position::text,event_seq,data FROM core.outbox
+          WHERE type='com.rezics.content.thread.created.v1' AND data->>'threadId'=$1`,
+        [target.threadId],
+      );
       if (!event) throw new Error('Native thread creation event missing');
       const reasonTarget = { type: 'space' as const, id: spaceId };
-      await store.applyFollowingActivity({
-        accountId: world.other.accountId, reasonTarget,
-        activity: {
-          id: `${event.partition_no}.${event.epoch}.${event.position}.${event.event_seq}:space:${spaceId}`,
-          source: { partition: event.partition_no, epoch: event.epoch, position: event.position, eventIndex: event.event_seq },
-          occurredAt: event.data.activityAt, target: reasonTarget,
-          object: { owner: 'content', kind: 'thread', route: feedRoute(target.threadId), id: target.threadId, threadId: target.threadId },
+      await store.applyFollowingActivity(
+        {
+          accountId: world.other.accountId,
+          reasonTarget,
+          activity: {
+            id: `${event.partition_no}.${event.epoch}.${event.position}.${event.event_seq}:space:${spaceId}`,
+            source: {
+              partition: event.partition_no,
+              epoch: event.epoch,
+              position: event.position,
+              eventIndex: event.event_seq,
+            },
+            occurredAt: event.data.activityAt,
+            target: reasonTarget,
+            object: {
+              owner: 'content',
+              kind: 'thread',
+              route: feedRoute(target.threadId),
+              id: target.threadId,
+              threadId: target.threadId,
+            },
+          },
         },
-      }, Date.now() + 30_000);
+        Date.now() + 30_000,
+      );
     }
     const query = new URLSearchParams({ stream: 'following', spaceId: spaces[0]!, kind: 'thread', limit: '1' });
     const page = async (parameters = query) => {
@@ -55,7 +81,9 @@ test('Space-selected Following retains native membership, kind conjunction, spar
     expect(next.feedItems[0]).toMatchObject({ source: 'following', key: { kind: 'thread' } });
     const rebound = new URLSearchParams(query);
     rebound.set('spaceId', spaces[1]!);
-    expect((await world.call('GET', `/v1/feedItems?${rebound}`, { bearer: world.other.bearer })).response.status).toBe(400);
+    expect((await world.call('GET', `/v1/feedItems?${rebound}`, { bearer: world.other.bearer })).response.status).toBe(
+      400,
+    );
     query.delete('cursor');
     query.set('limit', '20');
     query.set('kind', 'collection');
@@ -65,9 +93,15 @@ test('Space-selected Following retains native membership, kind conjunction, spar
     const home = await page();
     expect(home.feedItems.map((item) => item.key.id)).toEqual([selected.threadId]);
     expect(home.sources).toEqual({ following: 'ready', discovery: 'unavailable', continue: 'unavailable' });
-    await world.command('POST', `/v1/posts/${selected.postId}:takeDown`, { reason: 'Withdraw current opening' }, {
-      bearer: world.governance.bearer, expectedStatus: 200,
-    });
+    await world.command(
+      'POST',
+      `/v1/posts/${selected.postId}:takeDown`,
+      { reason: 'Withdraw current opening' },
+      {
+        bearer: world.governance.bearer,
+        expectedStatus: 200,
+      },
+    );
     expect((await page()).feedItems).toEqual([]);
   } finally {
     await world.system.close();
