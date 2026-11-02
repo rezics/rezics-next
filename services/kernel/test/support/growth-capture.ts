@@ -1169,8 +1169,8 @@ export function captureMeasuredRun<T>(operation: () => Promise<T>): Promise<{
 }
 
 export class GrowthSettleInfrastructureError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = 'GrowthSettleInfrastructureError';
   }
 }
@@ -1264,6 +1264,8 @@ export async function settle(
   const names = options.relations ?? (await tableNames(database)).map(({ schema, name }) => `${schema}.${name}`);
   if (names.length > 0) {
     const client = await database.admin.connect();
+    const physicalName = connectedDatabase(client) ?? poolDatabaseName(database.admin) ?? databaseName(database);
+    let failure: GrowthSettleInfrastructureError | undefined;
     try {
       for (const relation of names) {
         const sql = [
@@ -1275,17 +1277,38 @@ export async function settle(
         try {
           await client.query(sql);
         } catch (error) {
-          const current = await database.admin.query<{ name: string }>('SELECT current_database() AS name');
-          throw new GrowthSettleInfrastructureError(
-            `Could not settle database ${current.rows[0]!.name} relation ${relation}: ${error instanceof Error ? error.message : String(error)}`,
+          failure = new GrowthSettleInfrastructureError(
+            `Could not settle database ${physicalName} relation ${relation}: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error },
           );
+          break;
         }
       }
     } finally {
-      client.release();
+      try {
+        client.release(failure !== undefined && retireHeldClient(failure.cause) ? true : undefined);
+      } catch (cleanup) {
+        const cleanupMessage = asError(cleanup).message;
+        failure = failure
+          ? new GrowthSettleInfrastructureError(`${failure.message}; cleanup failed: ${cleanupMessage}`, {
+              cause: failure,
+            })
+          : new GrowthSettleInfrastructureError(`Could not release the settle admin client: ${cleanupMessage}`, {
+              cause: cleanup,
+            });
+      }
     }
+    if (failure) throw failure;
   }
   return performance.now() - started;
+}
+
+function retireHeldClient(cause: unknown): boolean {
+  const code = typeof cause === 'object' && cause !== null && 'code' in cause ? cause.code : undefined;
+  if (typeof code === 'string' && (code.startsWith('08') || code === '57P01' || code === '57P02' || code === '57P03'))
+    return true;
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return /connection (terminated|ended|closed)|not queryable/i.test(message);
 }
 
 export function settleAdmin(admin: pg.Pool, options: Parameters<typeof settle>[1] = {}): Promise<number> {

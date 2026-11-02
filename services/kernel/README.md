@@ -631,7 +631,9 @@ not all-visible, it repeats the horizon wait and vacuums up to two more times; l
 still fails, the infrastructure error includes those notices, prepared transactions, replication slot horizons,
 relation owners, and (when the admin role can create `pg_visibility`) non-visible block numbers and
 `pg_check_visible` results. The default horizon wait is 30 seconds. A direct call to `settle()` still throws
-`GrowthSettleInfrastructureError`. Settle also disables autovacuum on every table, including tables created since the
+`GrowthSettleInfrastructureError`. A failing VACUUM reports the physical database from the held connection or the
+admin URL and the target relation, without another admin checkout or a `current_database` query; the original error
+is the cause, and a later client release failure stays subordinate. Settle also disables autovacuum on every table, including tables created since the
 database opened. Before each measured repetition, the harness captures each warm-up, prepare hook, or preceding run's
 ModifyTable targets, including nested trigger and foreign-key statements, and settles those relations without ANALYZE
 in every database that run measured. It also settles `dbos.workflow_status` when present. The optional `prepare(db,
