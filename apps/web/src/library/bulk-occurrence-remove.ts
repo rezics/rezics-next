@@ -126,9 +126,9 @@ type CurrentAdmission = {
 /** Mounted memory only; result recovery never replaces the captured preview or confirmation command. */
 export class BulkOccurrenceRemoveJourney {
   state: BulkOccurrenceRemoveJourneyState = { phase: 'review' };
-  private captureValue?: BulkOccurrenceRemoveCapture;
-  private manifestValue?: BulkOccurrenceRemoveManifest;
-  private confirmCall?: BulkStatusConfirmCall;
+  private captureValue: BulkOccurrenceRemoveCapture | undefined;
+  private manifestValue: BulkOccurrenceRemoveManifest | undefined;
+  private confirmCall: BulkStatusConfirmCall | undefined;
   private retired = false;
   private reading = false;
 

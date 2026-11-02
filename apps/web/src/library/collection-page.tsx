@@ -1046,7 +1046,6 @@ function CollectionPageLifetime({
       async (address) => receiveUndoEvidence(await readBulkOperation({ data: address })),
       () => setBulkOccurrenceRemoveRevision((revision) => revision + 1),
     );
-    bulkOccurrenceRemoveRef.current?.retire();
     bulkOccurrenceRemoveRef.current = journey;
     setBulkOccurrenceRemove(journey);
     setFailure('');
