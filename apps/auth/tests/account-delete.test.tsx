@@ -21,11 +21,8 @@ const submit = (host: HTMLElement) =>
     confirm(host);
     send(host);
   });
-const restore = () => {
-  const event = new dom.Event('pageshow');
-  Object.defineProperty(event, 'persisted', { value: true });
-  window.dispatchEvent(event as unknown as Event);
-};
+const restore = () =>
+  window.dispatchEvent(Object.assign(new dom.Event('pageshow'), { persisted: true }) as unknown as Event);
 test('read recovery is single-flight, preserves the human and needs a new confirmation without deletion', async () => {
   const page = await open(
     <DeleteAccountContent {...props} initial={{ kind: 'failure', message: 'Unavailable' }} />,
