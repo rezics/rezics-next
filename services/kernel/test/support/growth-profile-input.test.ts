@@ -1,10 +1,13 @@
 import { expect, test } from 'bun:test';
+import { GROWTH_CALIBRATION_LIMITS } from './growth-calibration.ts';
 import {
   GROWTH_PROFILE_DIAGNOSTIC_EXPANSION,
+  GROWTH_PROFILE_METRICS,
   growthProfileCheckId,
   readGrowthProfiles,
 } from './growth-profile-read.ts';
 import {
+  GROWTH_PROFILE_EXPANSION,
   GROWTH_PROFILE_INPUT_LIMITS,
   growthProfileLines,
   type GrowthProfileInputSource,
@@ -90,5 +93,27 @@ test('Incomplete profile diagnostics admit a finite aggregate check-by-run expan
     ]),
   ).toThrow(
     `Growth profile ${growthProfileCheckId('t.ts', `check ${extraChecks - 1}`)} exceeds the ${GROWTH_PROFILE_DIAGNOSTIC_EXPANSION} check×run diagnostic expansion (${extraChecks * runs} check×run pairs)`,
+  );
+});
+
+test('unsupported repetition dimensions fail before mapping, including later-omitted entries', () => {
+  expect(GROWTH_PROFILE_EXPANSION.repetitions).toBe(GROWTH_CALIBRATION_LIMITS.repetitions);
+  expect(GROWTH_PROFILE_EXPANSION.values).toBe(
+    GROWTH_CALIBRATION_LIMITS.points * GROWTH_CALIBRATION_LIMITS.repetitions * GROWTH_PROFILE_METRICS.length,
+  );
+  const sample = { rows: 0, blocks: 0, statements: 0 };
+  const heavy = Array.from({ length: GROWTH_PROFILE_EXPANSION.repetitions + 1 }, () => sample);
+  const line = JSON.stringify({
+    file: 't.ts',
+    check: 'heavy',
+    scales: [1, 2, 3],
+    repetitions: [heavy, heavy, heavy],
+    relationSizes: [{}, {}, {}],
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    shadow: { rows: { outcome: 'compatible' }, blocks: { outcome: 'compatible' }, statements: { outcome: 'compatible' } },
+  });
+  reject(
+    { name: 'heavy-run', text: line },
+    `heavy-run:1.repetitions[0] exceeds the ${GROWTH_PROFILE_EXPANSION.repetitions} repetition capacity (${heavy.length} repetitions at scale 1)`,
   );
 });

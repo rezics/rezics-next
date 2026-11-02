@@ -249,6 +249,6 @@ test('profile calibration refuses over-capacity work after bounded admission', (
       { name: 'coverage', text: heavyProfile },
     ),
   ).toThrow(
-    `Calibration check ${JSON.stringify(['test/growth.test.ts', 'heavy-reps'])} exceeds the ${GROWTH_CALIBRATION_LIMITS.repetitions} repetition capacity (${heavy.length} repetitions at scale 1)`,
+    `run-1:1.repetitions[0] exceeds the ${GROWTH_CALIBRATION_LIMITS.repetitions} repetition capacity (${heavy.length} repetitions at scale 1)`,
   );
 });

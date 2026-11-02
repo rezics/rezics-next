@@ -6,7 +6,11 @@ import {
   relationIdentityKey,
   type RelationIdentity,
 } from './growth-relation-identity.ts';
-import { admitGrowthProfileInput, growthProfileLines } from './growth-profile-input.ts';
+import {
+  admitGrowthProfileInput,
+  GROWTH_PROFILE_EXPANSION,
+  growthProfileLines,
+} from './growth-profile-input.ts';
 
 /** Omitted-check × source-run pairs admitted before missing-run lists, matching calibration's 256×32 capacities. */
 export const GROWTH_PROFILE_DIAGNOSTIC_EXPANSION = 256 * 32;
@@ -150,6 +154,23 @@ function sameIdentifiedMeasurement(left: IdentifiedGrowthMeasurement, right: Ide
   return left.version === right.version && left.indexProbes === right.indexProbes && left.source === right.source;
 }
 
+type ProfileExpansion = { values: number };
+
+function admitExpandedValues(
+  expansion: ProfileExpansion,
+  count: number,
+  description: string,
+  scaleIndex: number,
+  scale: number,
+  field: 'repetitions' | 'relationSizes',
+): void {
+  expansion.values += count;
+  if (expansion.values > GROWTH_PROFILE_EXPANSION.values)
+    throw new TypeError(
+      `${description}.${field}[${scaleIndex}] exceeds the ${GROWTH_PROFILE_EXPANSION.values} expanded profile value limit (${expansion.values} scalar/footprint values at scale ${scale})`,
+    );
+}
+
 function parseMeasurement(value: unknown, description: string): GrowthMeasurementIdentity | null {
   if (value === undefined) return null;
   const source = record(value, description);
@@ -165,7 +186,13 @@ function parseMeasurement(value: unknown, description: string): GrowthMeasuremen
   return { version, indexProbes, source: source.source };
 }
 
-function parseProfile(value: unknown, run: string, occurrence: number, description: string): GrowthProfileEntry {
+function parseProfile(
+  value: unknown,
+  run: string,
+  occurrence: number,
+  description: string,
+  expansion: ProfileExpansion,
+): GrowthProfileEntry {
   const source = record(value, description);
   const file = stringField(source, 'file', description);
   const check = stringField(source, 'check', description);
@@ -186,10 +213,33 @@ function parseProfile(value: unknown, run: string, occurrence: number, descripti
   const repetitionsValue = source.repetitions;
   if (!Array.isArray(repetitionsValue) || repetitionsValue.length !== scales.length)
     throw new TypeError(`${description}.repetitions must have one group per scale`);
-  const repetitions = repetitionsValue.map((group, scaleIndex) => {
+  const relationSizesValue = source.relationSizes;
+  if (!Array.isArray(relationSizesValue) || relationSizesValue.length !== scales.length)
+    throw new TypeError(`${description}.relationSizes must have one group per scale`);
+
+  for (let scaleIndex = 0; scaleIndex < scales.length; scaleIndex++) {
+    const scale = scales[scaleIndex]!;
+    const group = repetitionsValue[scaleIndex];
     if (!Array.isArray(group) || group.length === 0)
       throw new TypeError(`${description}.repetitions[${scaleIndex}] must contain repetitions`);
-    return group.map((item, repetitionIndex) => {
+    if (group.length > GROWTH_PROFILE_EXPANSION.repetitions)
+      throw new TypeError(
+        `${description}.repetitions[${scaleIndex}] exceeds the ${GROWTH_PROFILE_EXPANSION.repetitions} repetition capacity (${group.length} repetitions at scale ${scale})`,
+      );
+    admitExpandedValues(
+      expansion,
+      group.length * GROWTH_PROFILE_METRICS.length,
+      description,
+      scaleIndex,
+      scale,
+      'repetitions',
+    );
+    const relations = record(relationSizesValue[scaleIndex], `${description}.relationSizes[${scaleIndex}]`);
+    admitExpandedValues(expansion, Object.keys(relations).length * 2, description, scaleIndex, scale, 'relationSizes');
+  }
+
+  const repetitions = repetitionsValue.map((group, scaleIndex) => {
+    return (group as unknown[]).map((item, repetitionIndex) => {
       const sample = record(item, `${description}.repetitions[${scaleIndex}][${repetitionIndex}]`);
       return Object.fromEntries(
         GROWTH_PROFILE_METRICS.map((metric) => [
@@ -200,9 +250,6 @@ function parseProfile(value: unknown, run: string, occurrence: number, descripti
     });
   });
 
-  const relationSizesValue = source.relationSizes;
-  if (!Array.isArray(relationSizesValue) || relationSizesValue.length !== scales.length)
-    throw new TypeError(`${description}.relationSizes must have one group per scale`);
   const relationSizes = relationSizesValue.map((group, scaleIndex) => {
     const relations = record(group, `${description}.relationSizes[${scaleIndex}]`);
     const identities = new Set<string>();
@@ -276,7 +323,7 @@ export function growthProfileCheckId(file: string, check: string, occurrence = 1
   return occurrence === 1 ? identity(file, check) : JSON.stringify([file, check, occurrence]);
 }
 
-function parseRun(source: GrowthProfileRunSource): GrowthProfileEntry[] {
+function parseRun(source: GrowthProfileRunSource, expansion: ProfileExpansion): GrowthProfileEntry[] {
   if (!source.name) throw new TypeError('Each profile run requires a name');
   const entries: GrowthProfileEntry[] = [];
   const occurrences = new Map<string, number>();
@@ -297,7 +344,7 @@ function parseRun(source: GrowthProfileRunSource): GrowthProfileEntry[] {
     const id = identity(file, check);
     const occurrence = (occurrences.get(id) ?? 0) + 1;
     occurrences.set(id, occurrence);
-    const entry = parseProfile(decoded, source.name, occurrence, description);
+    const entry = parseProfile(decoded, source.name, occurrence, description, expansion);
     entries.push(entry);
   }
   return entries;
@@ -347,7 +394,8 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
     if (runNames.has(source.name)) throw new TypeError(`Profile run names must be unique: ${source.name}`);
     runNames.add(source.name);
   }
-  const entries = sources.flatMap(parseRun);
+  const expansion = { values: 0 };
+  const entries = sources.flatMap((source) => parseRun(source, expansion));
   const entriesByCheck = new Map<string, GrowthProfileEntry[]>();
   for (const entry of entries) {
     const id = growthProfileCheckId(entry.file, entry.check, entry.occurrence);

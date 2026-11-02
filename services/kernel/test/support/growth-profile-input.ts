@@ -1,3 +1,6 @@
+import { GROWTH_CALIBRATION_LIMITS } from './growth-calibration.ts';
+import { GROWTH_REPETITION_CAPACITY } from './growth-numeric.ts';
+
 export type GrowthProfileInputSource = Readonly<{ name: string; text: string }>;
 
 export const GROWTH_PROFILE_INPUT_LIMITS = {
@@ -5,6 +8,15 @@ export const GROWTH_PROFILE_INPUT_LIMITS = {
   lineBytes: 2 * 1024 * 1024,
   lines: 250_000,
   records: 50_000,
+} as const;
+
+/** Rows, blocks and statements retained on mapped samples and copied into per-metric tensors. */
+const GROWTH_PROFILE_METRIC_COUNT = 3;
+
+/** Numerical repetition ceiling and calibration point×metric aggregate, applied before mapping. */
+export const GROWTH_PROFILE_EXPANSION = {
+  repetitions: GROWTH_REPETITION_CAPACITY,
+  values: GROWTH_CALIBRATION_LIMITS.points * GROWTH_CALIBRATION_LIMITS.repetitions * GROWTH_PROFILE_METRIC_COUNT,
 } as const;
 
 function utf8Width(codePoint: number): number {

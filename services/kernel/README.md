@@ -731,13 +731,18 @@ Incomplete-check missing-run diagnostics admit at most 8,192 check×run pairs (c
 those lists are allocated, counting empty sources as runs; excess expansion is refused with the check identity and that
 capacity. Ordinary complete groups and smaller omitted groups keep their identities, occurrence, ordering and missing
 runs.
+The importer then admits at most 256 repetitions per point and 3,145,728 expanded scalar/footprint values (calibration's
+4,096 points × 256 repetitions × 3 metrics) before mapping repetition groups, relation footprints or per-metric tensors.
+It counts every parsed entry, including later-omitted checks, against one budget rather than resetting per metric, and
+refuses excess work with the run, line and scale. Supported native sampling (at most 15 repetitions, three to five
+scales) and valid 256-repetition points within that aggregate remain admitted. Calibration retains model fitting.
 Calibration then admits at most 256 checks, 32 runs per check, 256 repetitions per point, 4,096 check×run×scale points
 and 2,048 leave-one-run-out folds, covering the documented five-run sample and the harness sampling maximum of 15
 repetitions with headroom. Classification uses the same per-point repetition capacity. It indexes per-run medians and
 spreads without spreading values into engine argument lists, and refits each omitted run from those statistics instead
 of rescanning repetitions. Excess work is refused with the check or series size and the supported capacity before
-traversing, copying or sorting oversized numeric evidence; it does not return a partial fit. Profile byte and line
-admission stays with the importer.
+traversing, copying or sorting oversized numeric evidence; it does not return a partial fit. Profile byte, line and
+importer expansion admission stay with the importer.
 Calibration CLI loading applies that same total-byte budget to observed file sizes before retaining contents, counts a
 file that grows after its size is observed against the budget, and closes every opened profile on failure; file-level
 budget and change errors use line 1 of the run basename because loading does not parse JSONL.

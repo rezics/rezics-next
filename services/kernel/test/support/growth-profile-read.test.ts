@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { growthCalibrationReport } from '../../scripts/growth-calibrate.ts';
 import { growthRunEligibility, type GrowthCheck, type ReportSample } from './growth.ts';
+import { GROWTH_PROFILE_EXPANSION } from './growth-profile-input.ts';
 import { keyedRelationEntries, type RelationIdentity } from './growth-relation-identity.ts';
 import {
   growthMeasurementIdentity,
@@ -21,6 +22,7 @@ type LineOptions = Readonly<{
   relationFirst?: number;
   relationLast?: number;
   relationSizes?: readonly Readonly<Record<string, GrowthProfileRelationSize>>[];
+  repeatCount?: number;
   measurement?: GrowthMeasurementIdentity | null;
   outcomes?: readonly [
     'compatible' | 'violation' | 'inconclusive',
@@ -37,6 +39,7 @@ function profileLine({
   relationFirst = 10,
   relationLast = 100,
   relationSizes,
+  repeatCount = 3,
   measurement = TEST_MEASUREMENT,
   outcomes = ['compatible', 'compatible', 'compatible'],
   eligibility,
@@ -55,7 +58,7 @@ function profileLine({
     seeding: scales.map(() => ({ statements: 0, rowsWritten: 0, growMs: 0, vacuumMs: 0 })),
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: scales.map((_, index) =>
-      [0, 1, 2].map((repeat) => ({
+      Array.from({ length: repeatCount }, (_, repeat) => ({
         rows: 10 + offset + index + repeat,
         blocks: 20 + offset + index * 2 + repeat,
         statements: 3 + repeat,
@@ -296,6 +299,21 @@ test('different declared bounds omit a check and identify each run declaration',
       { run: 'run-2', bounds: { rows: 'linear' } },
     ],
   });
+});
+
+test('valid 256-repetition points remain calibration series within the importer aggregate', () => {
+  const read = readGrowthProfiles([
+    { name: 'run-1', text: profileLine({ check: 'full reps', repeatCount: GROWTH_PROFILE_EXPANSION.repetitions }) },
+    {
+      name: 'run-2',
+      text: profileLine({ check: 'full reps', offset: 1, repeatCount: GROWTH_PROFILE_EXPANSION.repetitions }),
+    },
+  ]);
+  expect(read.omitted).toEqual([]);
+  expect(read.series.rows).toHaveLength(1);
+  expect(read.series.rows[0]!.runs[0]![0]!.repetitions).toHaveLength(GROWTH_PROFILE_EXPANSION.repetitions);
+  expect(read.series.blocks[0]!.runs[1]![2]!.repetitions).toHaveLength(GROWTH_PROFILE_EXPANSION.repetitions);
+  expect(read.series.statements[0]!.runs).toHaveLength(2);
 });
 
 test('invalid profile lines identify the run and line', () => {
