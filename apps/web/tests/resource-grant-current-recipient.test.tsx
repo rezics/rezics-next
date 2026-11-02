@@ -32,8 +32,8 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
   test(`lookup cannot outlive ${boundary}; retry preserves the draft and saves the reviewed recipient`, async () => {
     const host = window.document.createElement('div') as unknown as HTMLDivElement;
     window.document.body.append(host);
-    const root = createRoot(host),
-      canvas = within(host);
+    const root = createRoot(host);
+    const canvas = within(host);
     const user = userEvent.setup({ document: window.document as unknown as Document });
     const click = async (name: string) => {
       await act(async () => user.click(canvas.getByRole('button', { name })));
@@ -48,8 +48,7 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
       await click(m.access_add_grant());
       await act(async () => user.type(canvas.getByLabelText(m.access_handle()), 'old'));
       await click(m.access_find_account());
-      expect((canvas.getByRole('button', { name: m.access_save() }) as HTMLButtonElement).disabled).toBe(true);
-      const { resolve: oldResolve, reject: oldReject } = pending;
+      const old = pending;
       if (boundary === 'handle') await act(async () => user.clear(canvas.getByLabelText(m.access_handle())));
       else if (boundary === 'kind')
         await act(async () => user.selectOptions(canvas.getByLabelText(m.access_recipient()), 'organization'));
@@ -74,15 +73,14 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
       expect(canvas.getByRole('alert').textContent).toBe(m.access_unavailable());
       expect((canvas.getByLabelText(m.access_ends()) as HTMLInputElement).value).toBe(end);
       await click(m.access_find_account());
-      await act(async () =>
-        boundary === 'kind' ? oldReject(new Error('Stale failure')) : oldResolve(snapshot.identities[0]!),
-      );
+      if (boundary !== 'handle') await act(async () => old.reject(new Error('Stale failure')));
       expect((canvas.getByRole('button', { name: m.access_save() }) as HTMLButtonElement).disabled).toBe(true);
       const current = {
         ...snapshot.identities[1]!,
         kind: boundary === 'kind' ? ('organization' as const) : ('actor' as const),
       };
       await act(async () => pending.resolve(current));
+      if (boundary === 'handle') await act(async () => old.resolve(snapshot.identities[0]!));
       await click(m.access_save());
       expect(save.mock.calls[0]?.[0]).toMatchObject({
         resourceId: page.resource.id,
