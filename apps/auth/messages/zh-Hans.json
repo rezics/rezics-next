@@ -196,6 +196,8 @@
   "auth_permission_description_unknown": "未知权限",
   "auth_permission_description_unknown_detail": "此页面不了解这项权限的作用。请在决定前核对其完整标识符。",
   "auth_recovery_complete_submit": "更新密码",
+  "auth_recovery_departure_description": "离开后，这些恢复信息将被清除。已发送的请求仍可能完成。",
+  "auth_recovery_departure_heading": "离开账户恢复页面？",
   "auth_recovery_email": "电子邮箱",
   "auth_recovery_heading": "重置密码",
   "auth_recovery_input_invalid": "请输入有效的电子邮箱地址。",

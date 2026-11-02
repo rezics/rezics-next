@@ -1,8 +1,17 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { AuthButton as Button } from '../button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
+import { useCallback, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
@@ -30,6 +39,7 @@ function RecoveryPage() {
 }
 
 function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
+  const router = useRouter();
   const [hasFragment, setHasFragment] = useState<boolean | null>(null);
   const [credentials, setCredentials] = useState<{ accountId: string; token: string } | null>(null);
   const [email, setEmail] = useState('');
@@ -39,9 +49,65 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
   const [message, setMessage] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordFieldError, setPasswordFieldError] = useState('');
+  const unsent = useRef(false);
+  const unresolved = useRef(false);
+  const retiring = useRef(false);
   const initialized = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
+  const shouldWarn = useCallback(() => !retiring.current && (unsent.current || unresolved.current), []);
+  const clearSecrets = useCallback(() => {
+    retiring.current = true;
+    attempt.retire();
+    unsent.current = false;
+    unresolved.current = false;
+    setCredentials(null);
+    setEmail('');
+    setPassword('');
+    setEmailError('');
+    setPasswordFieldError('');
+    setMessage('');
+    setNotice('');
+    setPending(false);
+  }, [attempt]);
+
+  useLayoutEffect(() => {
+    const unload = (event: BeforeUnloadEvent) => {
+      if (!shouldWarn()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    const follow = (event: MouseEvent) => {
+      if (
+        !shouldWarn() ||
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return;
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+      if (
+        !(link instanceof HTMLElement) ||
+        link.hasAttribute('download') ||
+        (link.getAttribute('target') && link.getAttribute('target') !== '_self')
+      )
+        return;
+      const href = link.getAttribute('href')!;
+      const url = new URL(href, window.location.href);
+      if (url.origin !== window.location.origin || href.startsWith('#')) return;
+      event.preventDefault();
+      void router.navigate({ href: `${url.pathname}${url.search}${url.hash}` });
+    };
+    window.addEventListener('beforeunload', unload);
+    document.addEventListener('click', follow);
+    return () => {
+      window.removeEventListener('beforeunload', unload);
+      document.removeEventListener('click', follow);
+    };
+  }, [router, shouldWarn]);
 
   useLayoutEffect(() => {
     if (initialized.current) return;
@@ -80,11 +146,14 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     setEmailError('');
     const finish = attempt.begin();
     if (!finish) return;
+    unresolved.current = true;
     setPending(true);
     setNotice('');
     setMessage('');
     const result = await authPost('/recovery/start', { email: email.trim() });
     if (!finish()) return;
+    unresolved.current = false;
+    unsent.current = false;
     setPending(false);
     if (result.ok) {
       setNotice(m.auth_recovery_start_success());
@@ -110,6 +179,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     }
     const finish = attempt.begin();
     if (!finish) return;
+    unresolved.current = true;
     setPending(true);
     setMessage('');
     const result = await authPost('/recovery/complete', {
@@ -118,8 +188,14 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
       new_password: password,
     });
     if (!finish()) return;
+    unresolved.current = false;
+    unsent.current = false;
     setPending(false);
     if (result.ok) {
+      retiring.current = true;
+      attempt.retire();
+      setPassword('');
+      setCredentials(null);
       try {
         window.sessionStorage.setItem(RECOVERY_COMPLETE_NOTICE_KEY, '1');
       } catch {
@@ -164,7 +240,9 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
               id={passwordId}
               value={password}
               onChange={(event) => {
-                setPassword(event.target.value);
+                const value = event.target.value;
+                unsent.current = value.length > 0;
+                setPassword(value);
                 setPasswordFieldError('');
                 setMessage('');
               }}
@@ -189,6 +267,11 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
             {m.auth_recovery_complete_submit()}
           </Button>
         </form>
+        <RecoveryDeparture
+          shouldWarn={shouldWarn}
+          leave={clearSecrets}
+          focus={() => document.getElementById(passwordId)?.focus()}
+        />
       </AuthPage>
     );
   }
@@ -206,7 +289,9 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
             autoComplete="email"
             value={email}
             onChange={(event) => {
-              setEmail(event.target.value);
+              const value = event.target.value;
+              unsent.current = Boolean(value.trim());
+              setEmail(value);
               setEmailError('');
             }}
             aria-invalid={emailError ? true : undefined}
@@ -230,6 +315,56 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
           {m.auth_recovery_start_submit()}
         </Button>
       </form>
+      <RecoveryDeparture shouldWarn={shouldWarn} leave={clearSecrets} focus={() => emailInput.current?.focus()} />
     </AuthPage>
+  );
+}
+
+function RecoveryDeparture({
+  shouldWarn,
+  leave,
+  focus,
+}: {
+  shouldWarn: () => boolean;
+  leave: () => void;
+  focus: () => void;
+}) {
+  const blocker = useBlocker({
+    shouldBlockFn: ({ next }) => shouldWarn() && next.pathname !== '/recovery',
+    enableBeforeUnload: false,
+    withResolver: true,
+  });
+  const stay = () => {
+    if (blocker.status === 'blocked') blocker.reset();
+  };
+  return (
+    <AlertDialog
+      open={blocker.status === 'blocked'}
+      onOpenChange={(open) => {
+        if (!open) stay();
+      }}
+    >
+      <AlertDialogContent
+        finalFocus={() => {
+          focus();
+          return false;
+        }}
+      >
+        <AlertDialogTitle>{m.auth_recovery_departure_heading()}</AlertDialogTitle>
+        <AlertDialogDescription>{m.auth_recovery_departure_description()}</AlertDialogDescription>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={stay}>{m.auth_organization_departure_stay()}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (blocker.status !== 'blocked') return;
+              leave();
+              blocker.proceed();
+            }}
+          >
+            {m.auth_organization_departure_leave()}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

@@ -196,6 +196,8 @@
   "auth_permission_description_unknown": "Unrecognized permission",
   "auth_permission_description_unknown_detail": "This page does not know what this permission allows. Check its exact identifier before deciding.",
   "auth_recovery_complete_submit": "Update password",
+  "auth_recovery_departure_description": "Leaving clears this recovery information. A request already sent may still finish.",
+  "auth_recovery_departure_heading": "Leave account recovery?",
   "auth_recovery_email": "Email",
   "auth_recovery_heading": "Reset your password",
   "auth_recovery_input_invalid": "Enter a valid email address.",

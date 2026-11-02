@@ -196,6 +196,8 @@
   "auth_permission_description_unknown": "Permission inconnue",
   "auth_permission_description_unknown_detail": "Cette page ne connaît pas l’effet de cette permission. Vérifiez son identifiant exact avant de décider.",
   "auth_recovery_complete_submit": "Mettre à jour le mot de passe",
+  "auth_recovery_departure_description": "En quittant, ces informations de récupération seront effacées. Une demande déjà envoyée peut encore aboutir.",
+  "auth_recovery_departure_heading": "Quitter la récupération du compte ?",
   "auth_recovery_email": "Adresse e-mail",
   "auth_recovery_heading": "Réinitialiser le mot de passe",
   "auth_recovery_input_invalid": "Saisissez une adresse e-mail valide.",

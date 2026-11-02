@@ -196,6 +196,8 @@
   "auth_permission_description_unknown": "Unbekannte Berechtigung",
   "auth_permission_description_unknown_detail": "Diese Seite kennt die Wirkung dieser Berechtigung nicht. Prüfe vor deiner Entscheidung ihre genaue Kennung.",
   "auth_recovery_complete_submit": "Passwort aktualisieren",
+  "auth_recovery_departure_description": "Beim Verlassen werden diese Wiederherstellungsdaten gelöscht. Eine bereits gesendete Anfrage kann noch abgeschlossen werden.",
+  "auth_recovery_departure_heading": "Kontowiederherstellung verlassen?",
   "auth_recovery_email": "E-Mail-Adresse",
   "auth_recovery_heading": "Passwort zurücksetzen",
   "auth_recovery_input_invalid": "Bitte gib eine gültige E-Mail-Adresse ein.",

@@ -196,6 +196,8 @@
   "auth_permission_description_unknown": "未知權限",
   "auth_permission_description_unknown_detail": "此頁面不了解這項權限的作用。請在決定前核對其完整識別碼。",
   "auth_recovery_complete_submit": "更新密碼",
+  "auth_recovery_departure_description": "離開後，這些復原資訊將被清除。已送出的請求仍可能完成。",
+  "auth_recovery_departure_heading": "離開帳戶復原頁面？",
   "auth_recovery_email": "電子郵件",
   "auth_recovery_heading": "重設密碼",
   "auth_recovery_input_invalid": "請輸入有效的電子郵件地址。",

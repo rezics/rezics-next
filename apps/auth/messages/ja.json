@@ -196,6 +196,8 @@
   "auth_permission_description_unknown": "不明な権限",
   "auth_permission_description_unknown_detail": "このページでは、この権限で何ができるか分かりません。判断する前に正確な識別子を確認してください。",
   "auth_recovery_complete_submit": "パスワードを更新",
+  "auth_recovery_departure_description": "ページを離れると復旧情報は消去されます。送信済みのリクエストはその後も完了する場合があります。",
+  "auth_recovery_departure_heading": "アカウント復旧を終了しますか？",
   "auth_recovery_email": "メールアドレス",
   "auth_recovery_heading": "パスワードをリセット",
   "auth_recovery_input_invalid": "有効なメールアドレスを入力してください。",

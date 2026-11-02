@@ -196,6 +196,8 @@
   "auth_permission_description_unknown": "Permiso desconocido",
   "auth_permission_description_unknown_detail": "Esta página no conoce el efecto de este permiso. Comprueba su identificador exacto antes de decidir.",
   "auth_recovery_complete_submit": "Actualizar contraseña",
+  "auth_recovery_departure_description": "Al salir se borrará esta información de recuperación. Una solicitud ya enviada podría completarse.",
+  "auth_recovery_departure_heading": "¿Salir de la recuperación de la cuenta?",
   "auth_recovery_email": "Correo electrónico",
   "auth_recovery_heading": "Restablecer la contraseña",
   "auth_recovery_input_invalid": "Introduce una dirección de correo electrónico válida.",

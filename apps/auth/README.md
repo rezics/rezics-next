@@ -65,6 +65,7 @@ ask the person to try again later.
 
 Leaving or replacing the recovery journey discards its browser results and private inputs; returning from a cached
 document starts a fresh form without retrying a mutation. Departure cannot undo a completed native password change.
+Decision: an Auth response resolves departure protection while retaining displayed fields and results; a later edit starts a new protected draft.
 
 ## Sign-up
 
