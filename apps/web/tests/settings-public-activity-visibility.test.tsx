@@ -12,8 +12,13 @@ test('explicit activity save recovers refusal and uncertainty without losing lat
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://rezics.test/settings#profile' });
   const globals = {
-    window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
-    Element: window.Element, Node: window.Node, getComputedStyle: window.getComputedStyle.bind(window),
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    getComputedStyle: window.getComputedStyle.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -23,32 +28,53 @@ test('explicit activity save recovers refusal and uncertainty without losing lat
   const { ProfileCard } = await import('../src/settings/profile');
   const { PublicViewsCard } = await import('../src/settings/public-views');
   let current: ProfileValues = {
-    accountId: '019a0000-0000-7000-8000-000000000001', kind: 'organization',
-    displayName: 'Original', biography: null, avatar: null, links: [], speakersListed: true,
+    accountId: '019a0000-0000-7000-8000-000000000001',
+    kind: 'organization',
+    displayName: 'Original',
+    biography: null,
+    avatar: null,
+    links: [],
+    speakersListed: true,
     publicViews: { posts: true, reviews: true, collections: true, realms: true },
   };
   const sent: ProfileAttempt[] = [];
-  const editor = new ProfileEditor({
-    read: async () => current,
-    save: async (attempt) => {
-      sent.push(attempt);
-      if (sent.length === 1) return { ok: false, status: 409, message: '' };
-      if (sent.length === 2) throw new Error('Response lost');
-      current = { ...current, ...attempt.patch, publicViews: { ...current.publicViews, ...attempt.patch.publicViews },
-        avatar: current.avatar };
-      return { ok: true, profile: current };
+  const editor = new ProfileEditor(
+    {
+      read: async () => current,
+      save: async (attempt) => {
+        sent.push(attempt);
+        if (sent.length === 1) return { ok: false, status: 409, message: '' };
+        if (sent.length === 2) throw new Error('Response lost');
+        current = {
+          ...current,
+          ...attempt.patch,
+          publicViews: { ...current.publicViews, ...attempt.patch.publicViews },
+          avatar: current.avatar,
+        };
+        return { ok: true, profile: current };
+      },
     },
-  }, current);
+    current,
+  );
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host);
-  const button = (label: string) => [...host.querySelectorAll<HTMLButtonElement>('button')]
-    .find((element) => element.textContent === label)!;
-  const toggle = (label: string) => [...host.querySelectorAll('label')]
-    .find((element) => element.textContent === label)!.querySelector<HTMLButtonElement>('[role="switch"]')!;
+  const button = (label: string) =>
+    [...host.querySelectorAll<HTMLButtonElement>('button')].find((element) => element.textContent === label)!;
+  const toggle = (label: string) =>
+    [...host.querySelectorAll('label')]
+      .find((element) => element.textContent === label)!
+      .querySelector<HTMLButtonElement>('[role="switch"]')!;
   const click = (element: HTMLElement) => act(() => element.click());
   try {
-    await act(() => root.render(<><ProfileCard editor={editor} previewActive /><PublicViewsCard editor={editor} /></>));
+    await act(() =>
+      root.render(
+        <>
+          <ProfileCard editor={editor} previewActive />
+          <PublicViewsCard editor={editor} />
+        </>,
+      ),
+    );
     const posts = toggle(m.settings_public_posts());
     await click(posts);
     await click(toggle(m.settings_public_speakers()));
