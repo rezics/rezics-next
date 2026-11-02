@@ -11,7 +11,8 @@ import { recordedMoneyUnit, recordedTaxBehavior, type StripeMoneyUnit } from './
 import { UUID } from './price';
 
 export const CREATOR_SALES_PAGE_SIZE = 20;
-export type CreatorSalesSearch = { cursor?: string };
+export type CreatorSalesQuery = { cursor?: string };
+export type CreatorSalesSearch = CreatorSalesQuery | { kind: 'invalid-address'; cursor?: string };
 export type CreatorSale = {
   orderId: string;
   offerId: string;
@@ -106,15 +107,25 @@ const pageSchema = v.object({
 export function creatorSalesSearch(value: Record<string, unknown>): CreatorSalesSearch {
   if (value.cursor === undefined || value.cursor === '') return {};
   const cursor = v.safeParse(cursorSchema, value.cursor);
-  if (!cursor.success) throw notFound();
+  if (!cursor.success)
+    return { kind: 'invalid-address', ...(typeof value.cursor === 'string' ? { cursor: value.cursor } : {}) };
   // Extra search parameters never select an account or become native filters.
   return { cursor: cursor.output };
 }
 
-function input(value: unknown): CreatorSalesSearch {
+export function creatorSalesAddressLoad<T>(
+  address: CreatorSalesSearch,
+  read: (query: CreatorSalesQuery) => T,
+): T | null {
+  return 'kind' in address ? null : read(address);
+}
+
+function input(value: unknown): CreatorSalesQuery {
   const parsed = v.safeParse(v.object({ cursor: v.optional(v.unknown()) }), value);
   if (!parsed.success) throw notFound();
-  return creatorSalesSearch(parsed.output);
+  const search = creatorSalesSearch(parsed.output);
+  if ('kind' in search) throw notFound();
+  return search;
 }
 
 export function parseCreatorSalesPage(value: unknown): CreatorSalesPage | null {
@@ -138,7 +149,7 @@ export async function loadCreatorSales(
   caller: CreatorSalesCaller,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  search: CreatorSalesSearch,
+  search: CreatorSalesQuery,
 ): Promise<CreatorSalesData> {
   try {
     const query = creatorSalesSearch(search);
@@ -154,7 +165,7 @@ export async function loadCreatorSales(
 async function loadPreparedCreatorSales(
   caller: CreatorSalesCaller,
   authorization: string,
-  query: CreatorSalesSearch,
+  query: CreatorSalesQuery,
 ): Promise<CreatorSalesData> {
   try {
     const result = await caller.get({

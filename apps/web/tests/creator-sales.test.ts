@@ -11,7 +11,13 @@ mock.module('@tanstack/react-start/server', () => ({
   getRequest: () => new Request('https://site.test'),
   setResponseHeader: () => {},
 }));
-const { loadCreatorSales, creatorSalesSearch, parseCreatorSalesPage, unavailableCreatorSalesCaller } =
+const {
+  creatorSalesAddressLoad,
+  loadCreatorSales,
+  creatorSalesSearch,
+  parseCreatorSalesPage,
+  unavailableCreatorSalesCaller,
+} =
   await import('../src/checkout/creator-sales');
 const { CreatorSalesPage, creatorSalesHref } = await import('../src/checkout/creator-sales-page');
 const { isSignedInPath } = await import('../src/session/guard');
@@ -149,8 +155,18 @@ describe("Creator's real private sales history page and statement navigation", (
         {},
       ),
     ).toEqual({ kind: 'ready', ...page([]), projectionState: 'preparing' });
-    expect(() => creatorSalesSearch({ cursor: 3 })).toThrow();
-    expect(() => creatorSalesSearch({ cursor: 'x'.repeat(4097) })).toThrow();
+    const nonString = creatorSalesSearch({ cursor: 3 });
+    const longValue = 'x'.repeat(4097);
+    const overlong = creatorSalesSearch({ cursor: longValue });
+    const reads: unknown[] = [];
+    expect(nonString).toEqual({ kind: 'invalid-address' });
+    expect(overlong).toEqual({ kind: 'invalid-address', cursor: longValue });
+    expect(creatorSalesAddressLoad(nonString, (query) => (reads.push(query), query))).toBeNull();
+    expect(creatorSalesAddressLoad(overlong, (query) => (reads.push(query), query))).toBeNull();
+    expect(creatorSalesAddressLoad(creatorSalesSearch({ cursor: 'signed+current/=' }), (query) => query)).toEqual({
+      cursor: 'signed+current/=',
+    });
+    expect(reads).toEqual([]);
   });
 
   test('only the minimal accounting DTO crosses the BFF; malformed pages fail closed and historic units stay unknown', () => {

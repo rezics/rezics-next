@@ -3342,6 +3342,8 @@ including ABA before React commits. A healthy credential renewal may retain acce
 retiring its in-flight read. No caller-selected creator, token or CSRF value enters the returned page envelope.
 A completed refresh for a different viewer or cursor replaces the prior page with unavailable and clears its
 continuation. Initial loader data cannot become a fallback after that refresh or a healthy credential renewal.
+Malformed saved sales addresses preserve the URL until explicit correction or restart; string cursor values are
+safely prefilled, while non-string values are not echoed.
 
 The endpoint DTO owns the sanitized boundary: captured amounts and historic unknowns, separate currencies,
 preparing versus complete empty, and genuine denied/error/stale/unavailable states. There are no buyer details,
