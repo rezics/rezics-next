@@ -5,6 +5,36 @@ export type RelationIdentity = {
   readonly name: string;
 };
 
+export function parseRelationIdentity(value: unknown, description: string): RelationIdentity {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw new TypeError(`${description} must be an object`);
+  const source = value as Record<string, unknown>;
+  if (source.kind !== 'relation' && source.kind !== 'index')
+    throw new TypeError(`${description}.kind must be 'relation' or 'index'`);
+  if (typeof source.name !== 'string' || source.name.length === 0)
+    throw new TypeError(`${description}.name must be a non-empty string`);
+
+  const database = source.database;
+  if (database !== undefined && (typeof database !== 'string' || database.length === 0))
+    throw new TypeError(`${description}.database must be a non-empty string when present`);
+  const schema = source.schema;
+  if (schema !== undefined && (typeof schema !== 'string' || schema.length === 0))
+    throw new TypeError(`${description}.schema must be a non-empty string when present`);
+
+  return {
+    ...(database === undefined ? {} : { database }),
+    ...(schema === undefined ? {} : { schema }),
+    kind: source.kind,
+    name: source.name,
+  };
+}
+
+export function hasCompleteRelationIdentity(
+  identity: RelationIdentity | undefined,
+): identity is RelationIdentity & { readonly database: string; readonly schema: string } {
+  return identity?.database !== undefined && identity.schema !== undefined;
+}
+
 export const RELATION_CATALOG_LOOKUP_CHUNK_SIZE = 128;
 
 export type RelationCatalogLookupRequest = {

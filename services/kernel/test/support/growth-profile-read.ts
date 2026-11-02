@@ -1,5 +1,11 @@
 import type { CalibrationCheck, CalibrationRunPoint } from './growth-calibration.ts';
 import type { GrowthModelBound } from './growth-model.ts';
+import {
+  hasCompleteRelationIdentity,
+  parseRelationIdentity,
+  relationIdentityKey,
+  type RelationIdentity,
+} from './growth-relation-identity.ts';
 import { admitGrowthProfileInput, growthProfileLines } from './growth-profile-input.ts';
 
 /** Omitted-check × source-run pairs admitted before missing-run lists, matching calibration's 256×32 capacities. */
@@ -15,7 +21,11 @@ export type GrowthProfileEligibility =
 
 export type GrowthProfileRunSource = Readonly<{ name: string; text: string }>;
 export type GrowthProfileRepetition = Readonly<Record<GrowthProfileMetric, number>>;
-export type GrowthProfileRelationSize = Readonly<{ reltuples: number; relpages: number }>;
+export type GrowthProfileRelationSize = Readonly<{
+  reltuples: number;
+  relpages: number;
+  identity?: RelationIdentity;
+}>;
 export type GrowthProfileBounds = Readonly<Record<GrowthProfileMetric, GrowthModelBound>>;
 export type GrowthMeasurementIdentity = Readonly<{
   version: number;
@@ -195,6 +205,7 @@ function parseProfile(value: unknown, run: string, occurrence: number, descripti
     throw new TypeError(`${description}.relationSizes must have one group per scale`);
   const relationSizes = relationSizesValue.map((group, scaleIndex) => {
     const relations = record(group, `${description}.relationSizes[${scaleIndex}]`);
+    const identities = new Set<string>();
     return Object.fromEntries(
       Object.entries(relations).map(([name, value]) => {
         const size = record(value, `${description}.relationSizes[${scaleIndex}].${name}`);
@@ -203,7 +214,17 @@ function parseProfile(value: unknown, run: string, occurrence: number, descripti
           throw new TypeError(`${description}.relationSizes[${scaleIndex}].${name}.reltuples must be finite`);
         if (typeof relpages !== 'number' || !Number.isFinite(relpages))
           throw new TypeError(`${description}.relationSizes[${scaleIndex}].${name}.relpages must be finite`);
-        return [name, { reltuples, relpages }];
+        const identity =
+          size.identity === undefined
+            ? undefined
+            : parseRelationIdentity(size.identity, `${description}.relationSizes[${scaleIndex}].${name}.identity`);
+        if (identity !== undefined) {
+          const key = relationIdentityKey(identity);
+          if (identities.has(key))
+            throw new TypeError(`${description}.relationSizes[${scaleIndex}] contains a duplicate relation identity`);
+          identities.add(key);
+        }
+        return [name, { reltuples, relpages, ...(identity === undefined ? {} : { identity }) }];
       }),
     ) as Readonly<Record<string, GrowthProfileRelationSize>>;
   });
@@ -290,8 +311,18 @@ function nonGrowingRelations(entries: readonly GrowthProfileEntry[]): NonGrowing
   return entries.flatMap((entry) => {
     const first = entry.relationSizes[0]!;
     const last = entry.relationSizes.at(-1)!;
+    const lastByIdentity = new Map<string, GrowthProfileRelationSize>();
+    for (const size of Object.values(last))
+      if (hasCompleteRelationIdentity(size.identity)) lastByIdentity.set(relationIdentityKey(size.identity), size);
     return Object.entries(first).flatMap(([relation, firstSize]) => {
-      const lastSize = last[relation];
+      const lastSize =
+        firstSize.identity === undefined
+          ? last[relation]?.identity === undefined
+            ? last[relation]
+            : undefined
+          : hasCompleteRelationIdentity(firstSize.identity)
+            ? lastByIdentity.get(relationIdentityKey(firstSize.identity))
+            : undefined;
       if (!lastSize || lastSize.reltuples > firstSize.reltuples) return [];
       return [
         {

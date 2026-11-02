@@ -88,6 +88,17 @@ test('supported native values round-trip with JSON.stringify bytes', async () =>
     [undefined, null, 1, 'x'],
     { text: '"\\\n\t\u0001', cafe: 'café', grin: '😀', lone: '\uD800', pair: '\uD800\uDC00' },
     { n: [0, -0, 1.5, 1e21, Number.NaN, Infinity, -Infinity] },
+    {
+      relationSizes: [
+        {
+          'public.users': {
+            reltuples: 100,
+            relpages: 7,
+            identity: { database: 'main', schema: 'public', kind: 'relation', name: 'users' },
+          },
+        },
+      ],
+    },
     { toJSON: () => ({ ok: true, key: '' }) },
     new Date('2020-01-01T00:00:00.000Z'),
     { n: Object(5), s: Object('a'), b: Object(false) },

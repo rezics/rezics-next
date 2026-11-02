@@ -1,12 +1,14 @@
 import { expect, test } from 'bun:test';
 import { growthCalibrationReport } from '../../scripts/growth-calibrate.ts';
 import { growthRunEligibility, type GrowthCheck, type ReportSample } from './growth.ts';
+import { keyedRelationEntries, type RelationIdentity } from './growth-relation-identity.ts';
 import {
   growthMeasurementIdentity,
   growthProfileCheckId,
   readGrowthProfiles,
   type GrowthMeasurementIdentity,
   type GrowthProfileEligibility,
+  type GrowthProfileRelationSize,
 } from './growth-profile-read.ts';
 
 const TEST_SOURCE = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -18,6 +20,7 @@ type LineOptions = Readonly<{
   offset?: number;
   relationFirst?: number;
   relationLast?: number;
+  relationSizes?: readonly Readonly<Record<string, GrowthProfileRelationSize>>[];
   measurement?: GrowthMeasurementIdentity | null;
   outcomes?: readonly [
     'compatible' | 'violation' | 'inconclusive',
@@ -33,15 +36,18 @@ function profileLine({
   offset = 0,
   relationFirst = 10,
   relationLast = 100,
+  relationSizes,
   measurement = TEST_MEASUREMENT,
   outcomes = ['compatible', 'compatible', 'compatible'],
   eligibility,
 }: LineOptions): string {
   const relationSize = (reltuples: number) => ({ reltuples, relpages: reltuples > 0 ? Math.ceil(reltuples / 10) : 0 });
-  const relationSizes = scales.map((_, index) => ({
-    'public.stable': relationSize(index === scales.length - 1 ? relationLast : relationFirst),
-    'public.growing': relationSize(index === 0 ? 10 : 100),
-  }));
+  const footprints =
+    relationSizes ??
+    scales.map((_, index) => ({
+      'public.stable': relationSize(index === scales.length - 1 ? relationLast : relationFirst),
+      'public.growing': relationSize(index === 0 ? 10 : 100),
+    }));
   return JSON.stringify({
     file: 'test/search/growth-example.test.ts',
     check,
@@ -55,7 +61,7 @@ function profileLine({
         statements: 3 + repeat,
       })),
     ),
-    relationSizes,
+    relationSizes: footprints,
     ...(measurement === null ? {} : { measurement }),
     shadow: Object.fromEntries(
       (['rows', 'blocks', 'statements'] as const).map((metric, index) => [metric, { outcome: outcomes[index] }]),
@@ -180,6 +186,67 @@ test('profile lines become per-metric calibration series grouped by check, with 
     run: 'run-2',
     outcomes: { rows: 'violation', blocks: 'compatible', statements: 'inconclusive' },
   });
+});
+
+test('identified footprints follow relation identity when labels change and do not pair equal labels across databases', () => {
+  const identity = (database: string, name: string): RelationIdentity => ({
+    database,
+    schema: 'public',
+    kind: 'relation',
+    name,
+  });
+  const footprint = (relations: readonly { identity: RelationIdentity; reltuples: number }[]) =>
+    keyedRelationEntries(
+      relations.map(({ identity: relationIdentity, reltuples }) => ({
+        identity: relationIdentity,
+        value: { identity: relationIdentity, reltuples, relpages: Math.ceil(reltuples / 10) },
+      })),
+    );
+  const users = identity('main', 'users');
+  const lateUsers = identity('archive', 'users');
+  const oldClients = identity('archive', 'clients');
+  const newClients = identity('main', 'clients');
+  const relationSizes = [
+    footprint([{ identity: users, reltuples: 100 }, { identity: oldClients, reltuples: 80 }]),
+    footprint([{ identity: users, reltuples: 100 }, { identity: oldClients, reltuples: 80 }]),
+    footprint([
+      { identity: users, reltuples: 100 },
+      { identity: lateUsers, reltuples: 5 },
+      { identity: newClients, reltuples: 2 },
+    ]),
+  ];
+  const read = readGrowthProfiles([
+    { name: 'identity-run', text: profileLine({ check: 'identified', relationSizes }) },
+  ]);
+
+  expect(Object.keys(relationSizes[0]!)).toContain('public.users');
+  expect(Object.keys(relationSizes[2]!)).not.toContain('public.users');
+  expect(read.entries[0]!.relationSizes[2]).toEqual(relationSizes[2]);
+  expect(read.nonGrowingRelations).toEqual([
+    {
+      file: 'test/search/growth-example.test.ts',
+      check: 'identified',
+      occurrence: 1,
+      run: 'identity-run',
+      relation: 'public.users',
+      first: 100,
+      last: 100,
+    },
+  ]);
+});
+
+test('invalid profile relation identity is rejected', () => {
+  const broken = JSON.parse(profileLine({ check: 'bad identity' })) as {
+    relationSizes: Record<string, unknown>[];
+  };
+  broken.relationSizes[0]!['public.stable'] = {
+    reltuples: 10,
+    relpages: 1,
+    identity: { kind: 'table', name: 'stable' },
+  };
+  expect(() => readGrowthProfiles([{ name: 'bad-identity', text: JSON.stringify(broken) }])).toThrow(
+    "bad-identity:1.relationSizes[0].public.stable.identity.kind must be 'relation' or 'index'",
+  );
 });
 
 test('repeated same-named checks get separate calibration occurrences', () => {
