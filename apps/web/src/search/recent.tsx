@@ -18,6 +18,7 @@ import { useHistoryRemovalFocus } from './history-removal-focus';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { admitRecentCursor, admitRecentWrite } from './recent-request';
 export type RecentEntry = Parameters<KernelClient['recentSearches']['post']>[0]['entry'];
 export type RecentPage = NonNullable<Awaited<ReturnType<KernelClient['recentSearches']['get']>>['data']>;
 export type RecentItem = RecentPage['recentSearches'][number];
@@ -155,7 +156,7 @@ async function authenticatedRecent() {
   return { accountId, authorization, api: kernelClient() };
 }
 export const readRecent = createServerFn({ method: 'GET' })
-  .validator((cursor: string | undefined) => cursor)
+  .validator(admitRecentCursor)
   .handler(async ({ data: cursor }) => {
     const auth = await authenticatedRecent();
     if (!auth) return { accountId: null, page: null };
@@ -178,7 +179,7 @@ export const readRecent = createServerFn({ method: 'GET' })
     return { accountId: auth.accountId, page: result.data };
   });
 export const writeRecent = createServerFn({ method: 'POST' })
-  .validator((input: { accountId: string; expectedRevision: number; pending: Pending }) => input)
+  .validator(admitRecentWrite)
   .handler(async ({ data }) => {
     const auth = await authenticatedRecent();
     if (!auth || auth.accountId !== data.accountId) return { ok: false as const, code: 'forbidden' };

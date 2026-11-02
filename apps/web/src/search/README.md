@@ -84,6 +84,8 @@ local writes remain in the memory fallback until a write succeeds; observed dura
 native-hydrated. Keyboard removal focuses the next available row action, including one newly shown at the 5/32-row
 limit, then the previous action, and falls back to the labeled history region; explicit clear focuses that region and
 announces completion.
+Recent server functions admit only native command discriminants and fields before dispatch; unknown kinds and unresolved
+`pending:` remove ids fail validation with no native call. Extra adapter journal fields on a pending envelope are stripped.
 
 The [canonical stories](../stories/header-search/README.md) cover resting, focused discovery, suggestions,
 filter entry and phone interaction. `tests/header-search-composition.test.tsx` exercises the existing routed
