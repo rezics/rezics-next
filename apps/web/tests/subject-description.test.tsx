@@ -267,7 +267,10 @@ test('failed public text retries in place, blocks overlapping clicks, and render
     calls += 1;
     return calls === 1
       ? new Promise((resolve) => (rejectFirst = resolve))
-      : Promise.resolve({ ok: true, document: availableDocument(fixture.value, fixture.statement, 'Recovered prose.') });
+      : Promise.resolve({
+          ok: true,
+          document: availableDocument(fixture.value, fixture.statement, 'Recovered prose.'),
+        });
   });
   const mounted = await mountSummary(fixture.value);
   try {

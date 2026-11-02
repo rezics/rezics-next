@@ -123,7 +123,8 @@ export const readPublicSubjectDocument = createServerFn({ method: 'GET', strict:
       fetch: { cache: 'no-store', ...(authorization ? { headers: { authorization } } : {}) },
     });
     const document = response.data?.document;
-    if (response.status !== 200 || response.error || document?.availability !== 'available') return { ok: false as const };
+    if (response.status !== 200 || response.error || document?.availability !== 'available')
+      return { ok: false as const };
     return { ok: true as const, document };
   });
 
