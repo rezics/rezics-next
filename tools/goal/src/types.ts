@@ -114,6 +114,8 @@ export type Settings = {
   startGraceMs?: number;
   /** How long a running worker may go without run-log output; 40 minutes by default. */
   silenceMs?: number;
+  /** Tool-blocker retry delays by sightings of the same fingerprint; TOOL_RETRY_BACKOFF_MS by default. */
+  toolRetryBackoffMs?: readonly number[];
   codex: {
     serviceTier: string;
     compactTokens: { sol: number; luna: number };
@@ -266,6 +268,10 @@ export type RetryIntent = AttemptRef & {
     consultation?: string;
     excludePools?: string[];
     conflictFiles?: string[];
+    /** A backed-off retry starts no earlier than this ISO time. */
+    notBefore?: string;
+    /** A check-host transport failure retries only while no check host is in a probed outage. */
+    awaitCheckHosts?: boolean;
     profile?: Profile;
   };
   status: 'pending' | 'started';
@@ -411,6 +417,8 @@ export type AttemptRecord = AttemptRef & {
   changedFiles: string[] | null;
   /** Changed files outside the brief's declared paths; absent when there were none and on older records. */
   outsidePaths?: string[];
+  /** A dev product diff beyond its estimate's tolerance, recorded instead of a scope stop; absent within it. */
+  estimateOverrun?: { lines: number; files: number; estimate: { lines: number; files: number } };
   hostMs: number | null;
   classifierVersion: string;
   stepClasses: Record<StepClass, number>;

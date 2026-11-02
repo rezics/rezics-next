@@ -136,7 +136,7 @@ test('same-session wake forwards the newly persisted minimal source-result and c
     expect(prompt).toContain(`check ${id}: exit status 0; passed;`);
     expect(prompt).toContain('return normal status success, blocker:null, checks:[]');
     expect(prompt).toContain('deferred acceptance alone is neither blocked nor waiting');
-    expect(prompt).toContain('Unfinished own implementation or genuine absent authority must report status blocked');
+    expect(prompt).toContain('Unfinished work is not a blocker');
     expect(prompt).toContain('actual compiler database or check host is permitted');
     expect(prompt).toContain('await its EXISTING tool command/session result');
     expect(prompt).not.toContain('run your acceptance command once');
@@ -558,8 +558,10 @@ test('worker instructions start detached checks, keep working, and return waitin
     expect(prompt).toContain('A previous session may contain the superseded instruction');
     expect(prompt).toContain('do not follow it or invoke `--wait`');
     expect(prompt).toContain('or start a duplicate check');
-    expect(prompt).toContain('Do not run the root typecheck, affected checks or other regression checks yourself');
-    expect(prompt).toContain('landing batch runs the root typecheck, affected checks for every changed path');
+    expect(prompt).toContain('Do not run the root typecheck or other regression suites yourself');
+    expect(prompt).toContain(
+      'The landing runs the root typecheck and verification runs affected checks and sibling tests after integration',
+    );
     const pollingInstructions = prompt
       .split(/(?<=[.!?])\s+/)
       .filter(

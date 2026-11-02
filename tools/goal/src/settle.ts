@@ -12,6 +12,7 @@ import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import type { WorkerTasks } from './tasks.ts';
 import { git } from './tasks.ts';
 import { completeWorkerSourceBaseline } from './conflict-progress.ts';
+import { harvestContinuations } from './continuation.ts';
 
 /** Await the worker's exit notification. No model, interval, or sleep loop participates in settlement. */
 export async function settle(
@@ -73,6 +74,7 @@ export async function settle(
     }
     let queued = false;
     let finished = false;
+    let exited = false;
     store.write(ref, () => {
       if (
         store.events(ref.taskId).some((event) => event.attempt === ref.attempt && event.kind === 'landing-requested')
@@ -167,6 +169,7 @@ export async function settle(
         a.exitCode = code;
         a.after = pool ? tasks.reader(pool) : null;
       });
+      exited = true;
       const finalMeasurement = readMeasurement(attempt, {
         configDirectory: pool?.configDirectory,
         maxLogBytes: 256 * 1024,
@@ -264,6 +267,13 @@ export async function settle(
       tasks.commitFinishedWork(task, ref.attempt);
       finished = true;
     });
+    // Continuation briefs move to the Goal backlog when the attempt ends, whatever its result.
+    if (exited)
+      try {
+        harvestContinuations(store, tasks.settings, store.task(ref.taskId), ref);
+      } catch (error) {
+        console.error(`Continuation briefs of task ${ref.taskId} attempt ${ref.attempt} were not moved:`, error);
+      }
     if (finished) {
       const task = store.task(ref.taskId);
       const branchHead = git(task.worktree, ['rev-parse', `${task.branch}^{commit}`]);

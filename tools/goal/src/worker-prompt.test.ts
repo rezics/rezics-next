@@ -62,7 +62,7 @@ test('a dev product worker may merge or cherry-pick only what its contract names
     task({}, { module: 'apps/web', taskName: 'shared' }),
   ]) {
     const prompt = workerPrompt(fenced, undefined, undefined, [], '/repo/main');
-    expect(prompt).toContain('Do not rebase or merge. Write every acceptance test');
+    expect(prompt).toContain('Do not rebase or merge.');
     expect(prompt).not.toContain('git cherry-pick');
   }
 });
@@ -126,11 +126,15 @@ test('the worker prompt forbids touching resources the attempt did not start', (
   expect(prompt).toContain('This base has no scripts/worker-check.ts; do not add one.');
   expect(prompt).toContain('Run the acceptance command in the foreground from the worktree root and let it finish');
   expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
-  expect(prompt).toContain('Do not run the root typecheck, affected checks or other regression checks yourself');
+  expect(prompt).toContain('Do not run the root typecheck or other regression suites yourself');
   expect(prompt).toContain(
-    'The landing batch runs the root typecheck, affected checks for every changed path, and matching sibling tests',
+    'run the tests in the test files you created or changed, once, with the command the landing uses for them',
+  );
+  expect(prompt).toContain(
+    'The landing runs the root typecheck and verification runs affected checks and sibling tests after integration',
   );
   expect(prompt).toContain('a regression found there comes back as a retry with the failing log');
+  expect(prompt).toContain('a yield of at least 300 seconds');
   expect(prompt).not.toMatch(/plus the root typecheck|run the tests that cover every file/i);
 });
 
@@ -174,7 +178,11 @@ test('a worker writes acceptance tests the contract names and waits for queued c
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
   expect(prompt).toContain('Write every acceptance test the contract names that does not exist yet');
-  expect(prompt).toContain('never weaken or edit an existing acceptance test');
+  expect(prompt).toContain('Never edit a frozen file.');
+  expect(prompt).toContain(
+    'When the contract changes a behaviour that an existing test asserts, update that test to the new behaviour and list it in your summary; keep every assertion of behaviour the contract does not change.',
+  );
+  expect(prompt).toContain('as a rule fewer test lines than product lines');
   expect(prompt).toContain('queued, not stuck');
 });
 
@@ -191,9 +199,9 @@ test('a prompt without a runtime receipt keeps task readiness and installed depe
     },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('No current controller receipt was supplied');
-  expect(prompt).toContain('Current task, attempt, contract, dependency readiness and installed code are unknown');
-  expect(prompt).not.toContain('"sourcePresence": "present"');
+  expect(prompt).toContain('No controller launch context was supplied');
+  expect(prompt).toContain('Dependency status is unknown: build against each dependency contract.');
+  expect(prompt).not.toContain('integrated in your base');
 });
 
 test('a resumed prompt supersedes a saved legacy check wait and states the bare UUID handoff', async () => {
@@ -427,15 +435,18 @@ test('minimal product policy preserves supported compiler placement and foregrou
           'never return waiting with an empty checks array or manufacture UUIDs',
           'Do not use ps/pgrep/awk/help/status loops, start duplicate commands, or interrupt a live compiler',
           'Waiting on the actual already-open command/session handle is allowed',
-          'entire own current implementation contract and required permitted workspace typing are complete',
+          'When your contract and the required workspace typing are complete',
           'return normal status success, blocker:null, checks:[]',
           'This source result is NOT whole-feature/native/Goal completion',
-          'Unfinished own implementation or genuine absent authority must report status blocked with the exact blocker',
           'supersedes conflicting acceptance, report-only, saved-session and retry-manifest instructions',
-          'Use already-recorded failure evidence; do not start another check to recover it',
+          'If the retry manifest records a tool or host failure, rerun that command once',
+          'run the tests in the test files you created or changed, once',
+          '`yield_time_ms: 300000`',
         ])
           expect(policy).toContain(required);
         expect(policy).not.toContain('task-scoped exception');
+        expect(prompt).toContain('Unfinished work is not a blocker');
+        expect(policy).not.toContain('must report status blocked');
         expect(policy).not.toContain('run it in the foreground with remote placement off');
         expect(policy).not.toContain('REZICS_CHECK_LOCAL_ONLY');
       }
@@ -619,18 +630,15 @@ test('minimal source completion and incomplete product results use the current p
       const prompt = workerPrompt(task, undefined, undefined, [], directory.path, context, state);
       expect(prompt).toContain(task.brief.markdown);
       expect(prompt).toContain(`"boundary": "${boundary}"`);
-      expect(prompt).toContain(
-        'entire own current implementation contract and required permitted workspace typing are complete',
-      );
+      expect(prompt).toContain('When your contract and the required workspace typing are complete');
       expect(prompt).toContain('return normal status success, blocker:null, checks:[]');
       expect(prompt).toContain('naming the actual code completed and deferred original acceptance/native obligations');
       expect(prompt).toContain('This source result is NOT whole-feature/native/Goal completion');
-      expect(prompt).toContain('Typing alone cannot establish your own product completion');
-      expect(prompt).toContain(
-        'Unfinished own implementation or genuine absent authority must report status blocked with the exact blocker',
-      );
+      expect(prompt).not.toContain('Typing alone cannot establish your own product completion');
+      expect(prompt).not.toContain('must report status blocked');
+      expect(prompt).toContain('Unfinished work is not a blocker');
       expect(prompt).toContain('deferred acceptance alone is neither blocked nor waiting');
-      expect(prompt).toContain('genuinely still-running registered bare UUID check ids owned by this task/attempt');
+      expect(prompt).toContain('still-running registered bare UUID check ids owned by this task/attempt');
       expect(prompt).toContain(
         'Completed command prose, checks:[], a real product blocker, or deferred acceptance cannot justify waiting',
       );
@@ -681,7 +689,10 @@ test('the configured minimal policy permits compiler placement and awaits the ex
     expect(policy).toContain(
       'supersedes conflicting acceptance, report-only, saved-session and retry-manifest instructions',
     );
-    expect(policy).toContain('Use already-recorded failure evidence; do not start another check to recover it');
+    expect(policy).toContain(
+      'If the retry manifest records a tool or host failure, rerun that command once; report a `tool` blocker only if it fails again.',
+    );
+    expect(policy).not.toContain('Use already-recorded failure evidence');
     writeFileSync(join(state, 'verification-mode'), 'full\n');
     const normal = workerPrompt(task, undefined, undefined, [], directory.path, undefined, state);
     expect(normal).not.toContain('Verification is minimal');

@@ -24,8 +24,8 @@ bun tools/goal/src/cli.ts attempts --json
 ```
 
 Run dispatch from a checkout of this repository after configuring local pools and writing a brief. The main checkout
-must have main checked out. Workers commit on their assigned branches and do not rebase or change acceptance tests.
-They do not merge either, except that a product worker integrating into dev in its own worktree merges or
+must have main checked out. Workers commit on their assigned branches, do not rebase and never edit frozen acceptance
+files; when a contract changes a behaviour an existing test asserts, the worker updates that test. They do not merge either, except that a product worker integrating into dev in its own worktree merges or
 cherry-picks a branch or commit its contract names explicitly.
 The controller rebases detached candidates onto the integration branch (by default `dev`), checks scope and
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
@@ -42,8 +42,11 @@ for the same check ids; it uses the supplied records as evidence and runs a new 
 edits when the current contract requires it. A terminal success result has an empty `checks` array; only still-running
 checks appear in a waiting result. If `scripts/worker-check.ts` is absent from the worktree and the contract
 does not name another existing wrapper path, the worker runs the command in the foreground from the worktree root and
-does not add a wrapper. Workers do not run the root typecheck, affected checks or other
-regression checks. The task's acceptance command defines when its work is done.
+does not add a wrapper. Workers do not run the root typecheck or other regression suites. After their last edit they
+run the tests in the test files they created or changed once, with the command the landing's verification uses for
+them: `bun test <files>`, the kernel check for kernel tests and the focused Web runner for Web tests. The prompt names
+these commands for the files the branch already changes, including the sibling tests of changed sources. Waits use one
+call with a yield of at least 300 seconds. The task's acceptance command defines when its work is done.
 
 The dev landing train runs exactly one mandatory root typecheck on each final candidate: once for a combined batch or
 once for an individual landing. It does not run affected, sibling, acceptance, native, import or page-story checks
@@ -109,7 +112,8 @@ the lane lease and recheck the control-plane version while they wait. Every proc
 `main:tools/goal` when it starts; a stale train finishes its active landing, releases its lease and hands the remaining
 queue to current code before it can take another request. Pumps used by short commands still return quietly when
 another process holds the lane lease.
-Failures return to the same profile, trigger one consultation, or reach the owning manager's inbox as appropriate.
+Failures return to the same profile and session, trigger one consultation, or reach the owning manager's inbox as
+described under [integration](#integration-promotion-culprit-isolation-and-attempt-fencing).
 A stale manager host restarts after finishing its active request and recovers persisted sessions. Restarts are limited to
 one per ten minutes. Requests retry transient socket absence during handoff, and long recovery sweeps yield between
 small batches so manager requests continue to be serviced. Watchdog and settlement scans read at most the last 256 KiB
@@ -127,11 +131,11 @@ previous turn's `waiting` result. Attempt measurements still include the availab
 up to three resume launch attempts; if all fail before opening a session, Goal stops the attempt and sends one
 environment notice with the launch error line to the supermanager.
 
-Every fresh launch, retry, held-task release and check wake renders a bounded controller receipt from the current task
-generation under its lease. It records the current contract hash and path, task base and worktree identity, plus only the
-declared `after:` dependencies and their integrated commit and Git ancestry proof when available. Lifecycle completion
-does not prove that dependency code is in the task source. Missing, stale, cancelled, truncated or unverifiable facts
-stay unknown in the prompt. A new receipt supersedes future-tense instructions in an older prompt, retry manifest or
+Every fresh launch, retry, held-task release and check wake renders a bounded controller launch context from the current
+task generation under its lease. It records the current contract hash and path, task base and worktree identity, and one
+line for each declared `after:` dependency: integrated in the task's base at its commit, or not in the base, so the
+worker builds against its contract. Lifecycle completion alone never renders as integrated: the line requires the
+integrated commit to be an ancestor of the task source. A new context supersedes future-tense instructions in an older prompt, retry manifest or
 attempt result; recovery does not reuse an older attempt's context.
 
 When a waiting session wakes on a finished failed check, Goal includes the exact result identity, command, exit status
@@ -140,17 +144,20 @@ tail. Missing, unreadable, mismatched or truncated evidence is identified as unk
 attempt log are not used as substitutes.
 
 When the configured state directory's `verification-mode` file contains `minimal`, every launch and continuation
-receives the current source-completion policy alongside its canonical contract. Workers finish their own implementation
-and required changed-workspace typing, then commit and return `success`, `blocker:null`, `checks:[]`, naming the code
-completed and the original acceptance/native obligations deferred until after integration. This source result does not
-claim whole-feature, native or Goal completion. Typing alone does not establish product completion: unfinished own
-implementation or absent authority requires an exact blocker. Deferred acceptance alone is neither blocked nor waiting.
-Waiting requires genuinely running registered bare UUID checks owned by that task and attempt; an empty list, completed
-command or product blocker cannot justify it. Normal mode retains the wrapper continuation protocol above.
+receives the current source-completion policy alongside its canonical contract. Workers finish their contract and the
+typing of the workspaces they changed, run the tests of the test files they changed once, then commit and return
+`success`, `blocker:null`, `checks:[]`, naming the code completed and the original acceptance/native obligations
+deferred until after integration. This source result does not claim whole-feature, native or Goal completion.
+Unfinished work is not a blocker: a worker whose contract does not fit commits a coherent working part and returns
+success with the remainder listed as follow-up (for product work on dev, a continuation brief). Deferred acceptance
+alone is neither blocked nor waiting. Waiting requires running registered bare UUID checks owned by that task and
+attempt; an empty list, completed command or product blocker cannot justify it. A retry manifest that records a tool
+or host failure has that command rerun once before the worker reports a `tool` blocker. Normal mode retains the wrapper
+continuation protocol above.
 
-Minimal mode permits the existing Kernel/Auth compiler database or check-host placement only for typechecking, with
-its real leases, results and terminal status preserved. It grants no acceptance, native, browser, root or worker-check
-permission. A foreground compiler must finish through its already-open tool command/session handle; workers must not
+Minimal mode permits the existing Kernel/Auth compiler database or check-host placement only for typechecking and for
+the tests of the test files the worker changed, with its real leases, results and terminal status preserved. It grants
+no acceptance, native, browser, root or worker-check permission. A foreground compiler must finish through its already-open tool command/session handle; workers must not
 invent check ids, return `waiting` with no checks, run process/help/status polling loops, duplicate commands or interrupt
 live compilers. The controller forwards this policy through its existing prompt seam; it does not steer live sessions.
 
@@ -565,11 +572,12 @@ using `worker-result.schema.json`, including any concrete blocker and the approa
 ### Research
 
 Before deciding how a surface or mechanism should work, find out how established products, open-source projects and
-standards already solve it. A manager dispatches a `research` task whenever the answer is not already in the
-repository's documents: a product surface that mature apps have (shelves, readers, editors, forums, catalogues), an
-external standard (SEO, accessibility, a protocol), or a library's current recommended practice. A worker that finds
-it needs such an answer finishes with a `spec-conflict` blocker whose detail starts with `Research needed:`, and its
-manager dispatches the research and returns the findings to the worker's contract.
+standards already solve it. A worker does the research its work needs itself: it reads `.reference/`, the owner
+documents and primary sources, and lists what it read in its summary. A manager dispatches a `research` task for a
+question that needs a large survey: a product surface that mature apps have (shelves, readers, editors, forums,
+catalogues), an external standard (SEO, accessibility, a protocol), or a library's current recommended practice across
+many sources. A worker that meets such a question finishes with a `spec-conflict` blocker whose detail starts with
+`Research needed:`, and its manager dispatches the research and returns the findings to the worker's contract.
 
 A research brief names one question and one report: `kind: research`, `paths: [docs/research/<topic>.md]`, an
 acceptance command such as `[test, -s, docs/research/<topic>.md]` and `tests: [the report exists]`. When the report
@@ -618,6 +626,7 @@ When `<state>/remote-check-hosts.json` exists, each watchdog sweep probes every 
 five minutes with a twenty-second SSH timeout. Two consecutive failed probes report one host incident with the first
 line of SSH stderr. A successful probe clears that outage, so a later pair of failures can report a new incident. The
 watchdog does not probe when no hosts file is present and does not include the configured identity path in its alert.
+While a listed host is in outage, retries of check-host transport failures stay pending instead of relaunching.
 
 ## Integration, promotion, culprit isolation and attempt fencing
 
@@ -855,26 +864,55 @@ After rebasing a single or batched landing, the train checks every path changed 
 Specification conflicts, tool failures and exhausted quota are attempt facts, parsed from a structured worker exit or
 native CLI failure, and stored on the attempt. A usage-limit refusal with a fresh reading that shows allowance left
 is retried on the same pool; a spent window, a stale reading, or three refusals within an hour routes the retry to a
-different allowed pool. A CLI failure before a session or commit is rerun once; a second
-consecutive launch failure or repeated environment fingerprint is escalated as stalled to the owning manager. Integration
-does not run gates or classify assertion text. A specification conflict reaches the manager inbox directly. Quota
-exhaustion chooses another allowed pool. Repeating the same first assertion after a fix round triggers one read-only Sol `medium` consultation;
-the original profile receives its answer in a fresh session. Scope growth, stalls, failure after consultation and the
-two-fix-round limit reach the owning manager. An early success claim followed by a failed gate is recorded and continued.
+different allowed pool. A provider capacity refusal continues after a short pause, however often it repeats.
+
+Every other tool failure, including a CLI that fails before a session, a silent worker and a check-host transport
+failure, resumes the same session after a backoff by its fingerprint: the failure's first line with numbers, hashes and
+identifiers removed. The first sighting of a fingerprint across all tasks in the last hour waits two minutes, the second
+ten and later ones thirty; each sighting is a `tool-blocker-retry` event. The delay is persisted as the retry intent's
+`notBefore`, so a restarted host honours it. A check-host transport failure also waits while the watchdog's probes
+show a listed check host in outage (two failed probes in a row, cleared by a success; see [Watchdog](#watchdog)), and
+every relaunch waits for [host capacity](#host-capacity-admission); the manager host's recovery sweep tries the pending
+retry again every minute. The same tool blocker in two consecutive attempts parks the task and sends its manager one
+`environment` event, whether or not the worker reran the failing command; two silence stalls in a row are reported as
+`stalled`. Work other than product work on dev also stops as stalled when a tool failure follows another without a
+rerun of the failing command. A repeated environment fingerprint at landing is escalated as stalled to the owning
+manager.
+
+Integration does not run gates or classify assertion text. A specification conflict reaches the manager inbox directly.
+Quota exhaustion chooses another allowed pool. Outside product work on dev, repeating the same first assertion after a
+fix round triggers one read-only Sol `medium` consultation; the original profile receives its answer in a fresh session.
+Scope growth, stalls, failure after consultation and the two-fix-round limit reach the owning manager. An early success
+claim followed by a failed gate is recorded and continued.
 Generated files marked `linguist-generated=true` are excluded from estimate totals, while every changed file remains subject to declared-path checks.
 
 Product work integrating into dev (not control-plane, stabilize-target or verification work) has no retry limit and
-needs no approval to retry: the two-fix-round limit and a failure after consultation do not stop it, and each retry
-continues on the task's branch, in its session when the pool and model are unchanged. A changed file outside its
-declared paths does not stop it either: the attempt record lists such files in `outsidePaths`, and they do not count
-toward the file estimate. A scope-stage refusal for an undeclared risk area, a line estimate exceeded twice over, a
-specification conflict and a stall still reach the owning manager. Control-plane, stabilize-target and verification
-work keep every limit above.
+needs no approval to retry. A landing failure (a rebase conflict, or a type check or format failure at landing) or a
+tool blocker resumes the same session with the error, without a manager turn: the two-fix-round limit and consultation
+do not apply, each retry continues on the task's branch, in its session when the pool and model are unchanged, and
+environment failures do not count toward the three-failure model switch. The task stops and notifies its manager only
+when the attempts stop making progress: the same failure in two consecutive attempts (the same first assertion, rebase
+conflict or tool blocker), or two consecutive attempts that end without a new commit. At its classification each failed
+attempt records an `attempt-progress` event: whether its branch head moved from the head recorded at its first prompt,
+or work was left uncommitted. Unknown progress never stops a task. A changed file outside its declared paths and a diff
+beyond twice its estimate do not stop it either: the attempt record lists such files in `outsidePaths` and the size in
+`estimateOverrun`. A scope-stage refusal for an undeclared risk area, a frozen acceptance change, a specification
+conflict and a stall still reach the owning manager. Control-plane, stabilize-target and verification work keep every
+limit above.
+
+A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own
+outcome as a continuation brief at `.temp/continuation/<name>.md` in its worktree. When the attempt ends, settlement
+moves each brief to `<state>/backlog/<goal>/continuation-<task>-<attempt>-<name>.md`, where the backlog is dispatched
+like any other brief, and records a `continuation-queued` event. A brief moves only when it parses with the ordinary
+brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies;
+anything else is removed and its reason recorded in a `continuation-dropped` event. Workers in a shared module workspace
+list the remainder in their summary instead.
 
 Rebase-stage conflicts with the integration branch receive same-profile resolution attempts after the control plane
 starts that rebase in the task worktree. Controller-only rebase commits do not count as worker progress. The bounded
 guard sends one specification-conflict notice only after the same source worker commit, effective target commit and
-sorted conflict paths recur without progress; a newer target, changed paths or a new worker commit remains retryable.
+sorted conflict paths recur without progress: a second time in a row for product work on dev, a third time otherwise. A
+newer target, changed paths or a new worker commit remains retryable.
 
 Attempts persist the driver process identity alongside the worker identity. Orphan recovery waits for the worker group to exit, then settles its run log under the task lifecycle lease; unexpected driver exceptions are recorded as environment failures and delivered to the manager.
 
@@ -925,6 +963,24 @@ the train.
 
 The supermanager sets direction and the managers own the work. This applies to every supermanager and every Goal.
 
+- **Workers own the how; managers own the what.** A brief states the outcome in user terms, its owner links and what
+  done means. A product worker on dev verifies the brief's premises against its base, designs the change and writes
+  the acceptance tests the brief does not name; frozen files stay untouchable and only cross-Goal contracts are frozen
+  in advance. It decides ambiguities itself, including a product choice the brief does not make, by taking the
+  reversible option most consistent with the owner documents and decided references; it records each decision in its
+  summary and the owning document, tells its manager with
+  `bun tools/goal/src/cli.ts inbox send <manager> info "<decision>" --task <task>`, and continues. A blocker is only a
+  contradiction between existing specs or tests, or missing access; undelivered code from another Goal, absent
+  receipts and unfinished work are not blockers. The worker does its own research and stops only for a large survey.
+  It may change any file its outcome needs outside risk areas, merges or cherry-picks only branches its brief names,
+  lands committed, type-checking increments, and writes the rest of a larger outcome as a continuation brief. Workers
+  build on their brief and the owner READMEs and do not read other workers' tasks.
+- **Managers keep the outcomes and drop the ceremony.** A manager keeps the ordered list of outcomes for its Goal and
+  short outcome briefs in its backlog, cross-Goal contracts and their frozen acceptance, answers to escalations, and a
+  review of a sample of about two landings an hour whose defects become briefs. It synthesizes what its workers report,
+  including conflicts and duplicated or missing work across tasks, into decisions and the next briefs. It does not
+  dispatch, approve retries, preflight briefs, write per-task acceptance, receive results, track custody, review
+  evidence per task or send status messages and receipts.
 - **Managers talk to each other first.** Any manager may message any other with
   `bun tools/goal/src/cli.ts inbox send <manager> instruction "<message>"`. A question about another Goal's contract goes
   to that Goal's manager. The producer decides its interface and the consumer adapts; the two settle it within one

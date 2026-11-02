@@ -24,12 +24,20 @@ const cases: {
   /** Control-plane work keeps the lifecycle limits that product work on dev no longer has. */
   controlPlane?: boolean;
   outsidePaths?: string[];
+  estimateOverrun?: { lines: number; files: number; estimate: { lines: number; files: number } };
 }[] = [
   { name: 'setup failure', expected: 'environment', change: { stage: 'setup' } },
   { name: 'test also fails on main', expected: 'environment', change: { failsOnMain: true } },
   { name: 'timeout', expected: 'environment', change: { timedOut: true } },
   { name: 'new assertion', expected: 'new-failure' },
-  { name: 'same first assertion', expected: 'repeated-assertion', prepare: 'repeated' },
+  // Product work on dev stops when the same landing failure comes back; other work is consulted first.
+  { name: 'same first assertion on dev', expected: 'stalled', prepare: 'repeated', manager: true },
+  {
+    name: 'same control-plane first assertion',
+    expected: 'repeated-assertion',
+    prepare: 'repeated',
+    controlPlane: true,
+  },
   { name: 'specification conflict', expected: 'spec-conflict', fact: 'spec-conflict', manager: true },
   { name: 'scope stage', expected: 'scope-growth', change: { stage: 'scope' }, manager: true },
   {
@@ -52,7 +60,19 @@ const cases: {
     controlPlane: true,
     outsidePaths: ['outside.ts'],
   },
-  { name: 'estimate exceeded twice over', expected: 'scope-growth', change: { diffLines: 201 }, manager: true },
+  {
+    name: 'estimate exceeded twice over on dev is recorded and retried',
+    expected: 'new-failure',
+    change: { diffLines: 201 },
+    estimateOverrun: { lines: 201, files: 1, estimate: { lines: 100, files: 4 } },
+  },
+  {
+    name: 'control-plane estimate exceeded twice over',
+    expected: 'scope-growth',
+    change: { stage: 'merge', diffLines: 201 },
+    manager: true,
+    controlPlane: true,
+  },
   { name: 'estimate exceeded within tolerance', expected: 'new-failure', change: { diffLines: 200 } },
   { name: 'no commit before class limit', expected: 'stalled', prepare: 'stall', manager: true },
   { name: 'two fix rounds on dev continue', expected: 'new-failure', prepare: 'round' },
@@ -142,6 +162,7 @@ for (const item of cases)
       const record = h.store.record(ref)!;
       expect(record.escalation).toBe(item.expected);
       expect(record.outsidePaths).toEqual(item.outsidePaths);
+      expect(record.estimateOverrun).toEqual(item.estimateOverrun);
       expect(record.firstFailure).toBe(outcome.firstFailure!.fingerprint);
       expect(record.hostMs).toBe(25);
       const directory = h.store.attempt(ref).evidencePath;
@@ -171,16 +192,35 @@ for (const item of cases)
       h.dispose();
     }
   });
-const sessionWorker = `#!/usr/bin/env bun
+const sessionWorker = (commits: boolean) => `#!/usr/bin/env bun
 import { appendFileSync, mkdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 mkdirSync('.temp', { recursive: true });
 appendFileSync('.temp/worker-argv.jsonl', JSON.stringify(process.argv.slice(2)) + '\\n');
+if (${commits}) {
+  appendFileSync('result.txt', 'attempt ' + process.env.GOAL_ATTEMPT + '\\n');
+  spawnSync('git', ['add', 'result.txt']);
+  spawnSync('git', ['commit', '-qm', 'Fix attempt ' + process.env.GOAL_ATTEMPT]);
+}
 console.log(JSON.stringify({type:'thread.started',thread_id:'dev-session'}));
 console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'BLOCKER: fixing the declared assertion'}}));
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
 `;
-test('product retries on dev continue past the round limit and consultation in the same session and branch', async () => {
-  const h = harness(sessionWorker),
+function landingFailure(taskId: string, attempt: number, fingerprint: string): GateOutcome {
+  return {
+    taskId,
+    attempt,
+    passed: false,
+    stage: 'gate',
+    firstFailure: { fingerprint, assertion: `typecheck ${fingerprint}`, excerpt: 'actual differs' },
+    logPath: 'fixture',
+    hostMs: 1,
+    changedFiles: ['result.txt'],
+    diffLines: 1,
+  };
+}
+test('product landing failures on dev resume the same session while it commits, until the same failure comes back', async () => {
+  const h = harness(sessionWorker(true)),
     inbox: ManagerEvent[] = [];
   try {
     const task = h.tasks.dispatch(h.briefFile);
@@ -191,33 +231,27 @@ test('product retries on dev continue past the round limit and consultation in t
       async () => 'Use the minimal correction.',
     );
     await job.start(task.id);
-    const failure = (attempt: number, fingerprint: string): GateOutcome => ({
-      taskId: task.id,
-      attempt,
-      passed: false,
-      stage: 'gate',
-      firstFailure: { fingerprint, assertion: 'value equals expected', excerpt: 'actual differs' },
-      logPath: 'fixture',
-      hostMs: 1,
-      changedFiles: ['result.txt'],
-      diffLines: 1,
-    });
     h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => {
       attempt.fixRound = 2;
       attempt.consulted = true;
     });
-    // Past the round limit, then the same assertion again after a consultation: both retry without a manager.
-    for (const attempt of [1, 2]) {
-      job.onGateOutcome(failure(attempt, 'same'));
+    // Past the round limit and a consultation, a new failure resumes the session; the same failure again stops it.
+    for (const [attempt, fingerprint] of [
+      [1, 'first'],
+      [2, 'second'],
+      [3, 'second'],
+    ] as const) {
+      job.onGateOutcome(landingFailure(task.id, attempt, fingerprint));
       await job.drain();
     }
-    expect(inbox).toEqual([]);
-    expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 3, branch: task.branch });
-    expect(h.store.task(task.id).state).not.toBe('stopped');
-    expect(h.store.attempts(task.id).map((attempt) => attempt.fixRound)).toEqual([2, 3, 4]);
-    expect([1, 2].map((attempt) => h.store.record({ taskId: task.id, attempt })?.escalation)).toEqual([
+    expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 3, branch: task.branch, state: 'stopped' });
+    expect([1, 2, 3].map((attempt) => h.store.record({ taskId: task.id, attempt })?.escalation)).toEqual([
       'new-failure',
-      'repeated-assertion',
+      'new-failure',
+      'stalled',
+    ]);
+    expect(inbox.map((event) => [event.kind, event.summary])).toEqual([
+      ['stalled', 'Repeated landing failure: typecheck second'],
     ]);
     const launches = readFileSync(join(task.worktree, '.temp/worker-argv.jsonl'), 'utf8')
       .trim()
@@ -229,6 +263,30 @@ test('product retries on dev continue past the round limit and consultation in t
   } finally {
     const current = h.store.tasks()[0];
     if (current?.state === 'running') await h.tasks.stop(current.id);
+    h.dispose();
+  }
+}, 60_000);
+test('two consecutive product attempts on dev without a new commit stop the task and notify its manager', async () => {
+  const h = harness(sessionWorker(false)),
+    inbox: ManagerEvent[] = [];
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
+    await job.start(task.id);
+    job.onGateOutcome(landingFailure(task.id, 1, 'first'));
+    await job.drain();
+    expect(inbox).toEqual([]);
+    expect(h.store.task(task.id).currentAttempt).toBe(2);
+    job.onGateOutcome(landingFailure(task.id, 2, 'second'));
+    await job.drain();
+    expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 2, state: 'stopped' });
+    expect(h.store.record({ taskId: task.id, attempt: 2 })?.escalation).toBe('stalled');
+    expect(inbox.map((event) => [event.kind, event.summary])).toEqual([
+      ['stalled', 'No new commit in two consecutive attempts: typecheck second'],
+    ]);
+    const progress = h.store.events(task.id).filter((event) => event.kind === 'attempt-progress');
+    expect(progress.map((event) => JSON.parse(event.body).progress)).toEqual([false, false]);
+  } finally {
     h.dispose();
   }
 }, 60_000);
@@ -275,6 +333,13 @@ console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',tex
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
 `);
   try {
+    // Product work on dev stops on a repeated failure instead; control-plane work is still consulted.
+    writeFileSync(
+      h.briefFile,
+      markdown
+        .replace('goal: fixture', 'goal: control-plane')
+        .replace('paths: [result.txt]', `paths: [${controlPlanePath}]`),
+    );
     const task = h.tasks.dispatch(h.briefFile),
       job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
     await job.start(task.id);

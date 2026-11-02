@@ -1511,6 +1511,7 @@ export class WorkerStore implements AttemptFence {
           record.diffLines = previous.diffLines;
           record.changedFiles = previous.changedFiles;
           if (previous.outsidePaths) record.outsidePaths = previous.outsidePaths;
+          if (previous.estimateOverrun) record.estimateOverrun = previous.estimateOverrun;
           record.hostMs = previous.hostMs;
           record.earlyStop = previous.earlyStop;
         }

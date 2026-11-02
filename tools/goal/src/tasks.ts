@@ -237,6 +237,10 @@ export type RetryOptions = {
   consultation?: string;
   excludePools?: string[];
   conflictFiles?: string[];
+  /** A backed-off retry starts no earlier than this ISO time. */
+  notBefore?: string;
+  /** A check-host transport failure retries only while no check host is in a probed outage. */
+  awaitCheckHosts?: boolean;
   /** Start only while this is still the current attempt: a retry another process already started is not repeated. */
   expectedAttempt?: number;
 };
@@ -1471,7 +1475,10 @@ export class WorkerTasks {
         options.profile || pinned || nextBrief.kind === 'verification' ? [] : retryFallbacks(routing, nextTaskClass);
       const paced = nextTaskClass === 'mechanical' || routing.classes[nextTaskClass]?.paced !== false;
       // A retry keeps its engine, but three failed attempts in a row on one model say the model is the problem: the
-      // next attempt goes to the route's first other model. Failures no model change can fix do not count.
+      // next attempt goes to the route's first other model. Failures no model change can fix do not count; for product
+      // work on dev these include environment failures, whose retries resume the same session.
+      const unswitchable = ['pool-exhausted', 'rebase-conflict', 'scope-growth'];
+      if (devProductBrief(nextBrief)) unswitchable.push('environment');
       const recent = task.currentAttempt
         ? Array.from({ length: Math.min(3, task.currentAttempt) }, (_, index) =>
             this.store.attempt({ taskId, attempt: task.currentAttempt - index }),
@@ -1486,7 +1493,7 @@ export class WorkerTasks {
             attempt.profile.model === old?.profile.model &&
             attempt.profile.cli === old?.profile.cli &&
             this.store.record({ taskId, attempt: attempt.attempt })?.outcome !== 'passed' &&
-            !['pool-exhausted', 'rebase-conflict', 'scope-growth'].includes(attempt.escalation ?? ''),
+            !unswitchable.includes(attempt.escalation ?? ''),
         );
       const switched = sameModelFailures
         ? fallbacks.find((candidate) => candidate.model !== old!.profile.model || candidate.cli !== old!.profile.cli)

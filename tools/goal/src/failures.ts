@@ -6,6 +6,32 @@ import { devProductBrief, matchesPath } from './briefs.ts';
 /** An estimate is a rough size; only a diff beyond this multiple of it counts as scope growth. */
 export const ESTIMATE_TOLERANCE = 2;
 
+/** The diff size counted against the brief's estimate: declared paths only for product work on dev. */
+function estimatedSize(outcome: GateOutcome, task: Task): { lines: number; files: number } {
+  const devProduct = devProductBrief(task.brief);
+  return {
+    lines: outcome.nonGeneratedDiffLines ?? outcome.diffLines,
+    files: (outcome.nonGeneratedChangedFiles ?? outcome.changedFiles).filter(
+      (path) => !devProduct || matchesPath(path, task.brief.paths),
+    ).length,
+  };
+}
+
+/**
+ * How far a diff exceeds its brief's estimate beyond the tolerance; undefined within it. Product work on dev records
+ * this on its attempt instead of stopping: the estimate sizes the work, it does not fence it.
+ */
+export function estimateOverrun(
+  outcome: GateOutcome,
+  task: Task,
+): { lines: number; files: number; estimate: { lines: number; files: number } } | undefined {
+  const size = estimatedSize(outcome, task);
+  const { estimate } = task.brief;
+  if (size.lines <= ESTIMATE_TOLERANCE * estimate.lines && size.files <= ESTIMATE_TOLERANCE * estimate.files)
+    return undefined;
+  return { ...size, estimate: { lines: estimate.lines, files: estimate.files } };
+}
+
 /** Gate evidence stays separate from structured launch and worker-exit facts. */
 export function classifyFailure(
   outcome: GateOutcome,
@@ -24,18 +50,14 @@ export function classifyFailure(
   if (attempt.failureKind === 'tool' || outcome.stage === 'setup' || outcome.failsOnMain || outcome.timedOut)
     return 'environment';
   if (attempt.exitCode !== null && attempt.exitCode !== 0) return 'environment';
-  // Product work on the integration branch may change files outside its declared paths: the attempt record lists
-  // them, and they neither stop the task nor count toward its estimate. A scope-stage refusal (an undeclared risk
-  // area) still stops every task.
+  // Product work on the integration branch may change files outside its declared paths and grow past its estimate:
+  // the attempt record lists both, and neither stops the task. A scope-stage refusal (an undeclared risk area) still
+  // stops every task.
   const devProduct = devProductBrief(task.brief);
-  const estimatedFiles = (outcome.nonGeneratedChangedFiles ?? outcome.changedFiles).filter(
-    (path) => !devProduct || matchesPath(path, task.brief.paths),
-  );
   if (
     outcome.stage === 'scope' ||
-    (!devProduct && outcome.changedFiles.some((path) => !matchesPath(path, task.brief.paths))) ||
-    (outcome.nonGeneratedDiffLines ?? outcome.diffLines) > ESTIMATE_TOLERANCE * task.brief.estimate.lines ||
-    estimatedFiles.length > ESTIMATE_TOLERANCE * task.brief.estimate.files
+    (!devProduct &&
+      (outcome.changedFiles.some((path) => !matchesPath(path, task.brief.paths)) || estimateOverrun(outcome, task)))
   )
     return 'scope-growth';
   if (
