@@ -530,7 +530,7 @@ async function routeWithGitDriver(candidateRoot: string, driverRoot: string, ada
   );
 }
 
-test('canonical dev accepts an integrated snapshot while main lags and keeps candidate argv identity', async () => {
+test('canonical dev accepts an integrated snapshot despite unrelated untracked files', async () => {
   const gitFixture = createDriverGitFixture();
   try {
     expect(git(gitFixture.repository, ['rev-parse', 'main'])).toBe(gitFixture.mainRevision);
@@ -539,6 +539,8 @@ test('canonical dev accepts an integrated snapshot while main lags and keeps can
     expect(gitFixture.integratedRevision).not.toBe(gitFixture.devRevision);
 
     const f = gitFixtureAdapter(gitFixture.candidateRoot);
+    writeFileSync(join(gitFixture.integratedRoot, 'unrelated.txt'), 'unrelated checkout entry\n');
+    writeFileSync(join(gitFixture.integratedRoot, 'scripts/unrelated.ts'), 'export {}\n');
     const command = ['bun', 'test', 'tests/placement fixture.test.ts'];
     await routeWithGitDriver(gitFixture.candidateRoot, gitFixture.integratedRoot, f.adapter);
 
@@ -604,7 +606,7 @@ test('dirty helper source is refused before the trusted process starts', async (
     writeFileSync(gitFixture.helperPath, `${readFileSync(gitFixture.helperPath, 'utf8')}\n// dirty\n`);
     const f = gitFixtureAdapter(gitFixture.candidateRoot);
     await expect(routeWithGitDriver(gitFixture.candidateRoot, gitFixture.integratedRoot, f.adapter)).rejects.toThrow(
-      'checkout must be clean',
+      'driver sources must be clean',
     );
     expect(f.calls).toHaveLength(0);
   } finally {
@@ -1004,6 +1006,29 @@ test('absolute host-path settings are dropped while runtime option refusals stay
     expect(f.overlays).toHaveLength(0);
     expect(f.calls).toHaveLength(0);
   }
+});
+
+test('inherited host runtimes and paths are omitted while kernel affected selection survives', () => {
+  expect(
+    webCheckEnvironment(
+      {
+        KERNEL_CHECK_AFFECTED: revision,
+        NODE: '/usr/bin/node',
+        NVM_DIR: '/home/worker/.nvm',
+        NVM_INC: '/home/worker/.nvm/include/node',
+        npm_config_prefix: '/home/worker/.npm',
+        DISPLAY: ':0',
+        WAYLAND_DISPLAY: 'wayland-0',
+        XAUTHORITY: '/run/user/1000/Xauthority',
+        DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus',
+        DEBUGINFOD_IMA_CERT_PATH: 'none',
+        MOZ_GMP_PATH: '/usr/lib/mozilla/plugins',
+        UNKNOWN_HOST_PATH: '/opt/host/cert.pem',
+      },
+      root,
+      app,
+    ),
+  ).toEqual({ KERNEL_CHECK_AFFECTED: revision });
 });
 
 test('unsupported host dependencies and destinations fail before a driver or native process starts', async () => {

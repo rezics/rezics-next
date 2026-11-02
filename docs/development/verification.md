@@ -160,6 +160,10 @@ emission and records delivery afterward, so a failed or interrupted write leaves
 that rejects any contradictory final. This producer protocol does not claim that a consumer's
 `RemoteGateCustody` or verifier `NativeReceiptBridge` is installed.
 
+Check-run snapshot inventories allow 50,000 paths. Invocation records remain bounded to 8 MiB; their JSON parser
+allows arrays up to that inventory size and 400,000 values, rejects depth beyond 64 and duplicate object keys, and
+validates every path before custody transitions.
+
 For a separate prepare and execution process, `scripts/check-run.ts` exports
 `prepareCheckRunInvocation(args, descriptorFile, dependencies?, processEnvironment?)` and
 `runPreparedCheckRunInvocation(descriptorFile, dependencies?, signal?, processEnvironment?)`. CLI usage is

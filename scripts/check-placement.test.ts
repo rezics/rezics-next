@@ -6,12 +6,24 @@ import { join, resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
 import type { spawn } from 'node:child_process';
 import { onCheckHost, stackRun } from './stack-run.ts';
-import { classifyCheck, performanceHosts } from './check-placement.ts';
+import { classifyCheck, environmentPrefixIsSafe, performanceHosts } from './check-placement.ts';
 import { RemoteTransportError } from './remote-check.ts';
 import { runWorkerCheck, workerCheckNeedsStack } from './worker-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const temporary: string[] = [];
+
+test('explicit host-local and host-absolute environment overrides are refused', () => {
+  expect(environmentPrefixIsSafe(['env', 'KERNEL_CHECK_AFFECTED=abc123', 'bun', 'test'])).toBe(true);
+  for (const setting of [
+    'NODE=/usr/bin/node',
+    'NVM_INC=/usr/include/node',
+    'npm_config_prefix=/home/worker/.npm',
+    'DEBUGINFOD_IMA_CERT_PATH=none',
+    'UNKNOWN_PATH=/etc/host.conf',
+  ])
+    expect(environmentPrefixIsSafe(['env', setting, 'bun', 'test'])).toBe(false);
+});
 
 function fixture(): string {
   const parent = join(repository, '.temp');

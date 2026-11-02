@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { constants } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { hostsLocation, mainCheckout, onCheckHost, type StackRun } from '../../../scripts/stack-run.ts';
@@ -82,6 +82,13 @@ const hostEnvironment = new Set([
   'XDG_DATA_HOME',
   'SSH_AUTH_SOCK',
   'SSH_AGENT_PID',
+  'NODE',
+  'DISPLAY',
+  'WAYLAND_DISPLAY',
+  'XAUTHORITY',
+  'DBUS_SESSION_BUS_ADDRESS',
+  'DEBUGINFOD_IMA_CERT_PATH',
+  'MOZ_GMP_PATH',
   'BUN_INSTALL',
   'BUN_RUNTIME_TRANSPILER_CACHE_PATH',
   'BUN_INSTALL_CACHE_DIR',
@@ -117,6 +124,10 @@ const hostEnvironment = new Set([
 ]);
 const relocatedPaths = new Set(['STORYBOOK_OUTPUT_DIR', 'GROWTH_PROFILE', 'WEB_TEST_STATE_DIR', 'WEB_CHECK_EVENTS']);
 
+function isHostEnvironment(name: string): boolean {
+  return hostEnvironment.has(name) || name.startsWith('NVM_') || /^npm_/i.test(name);
+}
+
 export function webCheckEnvironment(env: NodeJS.ProcessEnv, workspace: string, cwd: string): Record<string, string> {
   const semantic: Record<string, string> = {};
   for (const [name, value] of Object.entries(env)) {
@@ -124,22 +135,15 @@ export function webCheckEnvironment(env: NodeJS.ProcessEnv, workspace: string, c
       value === undefined ||
       transportEnvironment.test(name) ||
       credentialEnvironment.test(name) ||
-      hostEnvironment.has(name)
+      isHostEnvironment(name)
     )
       continue;
     if (relocatedPaths.has(name) && value) {
       const path = workspacePath(workspace, resolve(cwd, value));
       semantic[name] = relative(cwd, resolve(workspace, path)) || '.';
     } else {
-      // Login profiles export host paths (Fedora's debuginfod and Mozilla plugin paths, nvm); they mean nothing on a
-      // check host, so drop them instead of refusing the check.
-      // Mirror the check runner: an absolute value outside the workspace, or one that is not a declared path, is a
-      // host setting and is dropped on both sides so their relocated environments agree.
-      if (isAbsolute(value)) {
-        const inside = relative(workspace, resolve(value));
-        const pathLike = /(?:_FILE|_DIR|_PATH|_ROOT)$/.test(name);
-        if (!pathLike || inside === '..' || inside.startsWith('../') || isAbsolute(inside)) continue;
-      }
+      // Absolute paths inherited from the login host, including unknown settings, have no meaning on the check host.
+      if (isAbsolute(value)) continue;
       if (['NODE_OPTIONS', 'BUN_OPTIONS'].includes(name) && value)
         throw new Error(`Web check unavailable: unsupported host-path environment setting ${name}`);
       semantic[name] = value;
@@ -240,10 +244,12 @@ export function trustedDriver(workspace: string, env: NodeJS.ProcessEnv): string
     throw new Error('Web check unavailable: the Performance driver must share the candidate common Git repository');
   const file = join(driverRoot, 'scripts/check-run.ts');
   if (!existsSync(file)) throw new Error('Web check unavailable: integrated scripts/check-run.ts is absent');
-  // Do not import a live producer edit, including edits to its helper imports.
-  if (git(driverRoot, ['status', '--porcelain', '--untracked-files=normal']))
-    throw new Error('Web check unavailable: the trusted Performance checkout must be clean');
-  git(driverRoot, ['ls-files', '--error-unmatch', 'scripts/check-run.ts']);
+  const sources = trustedDriverSourceFiles(driverRoot);
+  const sourcePaths = [...sources.keys()].sort();
+  const sourcePathspecs = sourcePaths.map((path) => `:(literal)${path}`);
+  // Protect the imported driver closure; unrelated checkout changes do not affect this trust decision.
+  if (git(driverRoot, ['status', '--porcelain', '--untracked-files=all', '--', ...sourcePathspecs]))
+    throw new Error('Web check unavailable: trusted Performance driver sources must be clean');
   const producerRevision = git(driverRoot, ['rev-parse', 'HEAD']);
   const ancestry = spawnSync('git', [
     '--git-dir',
@@ -256,10 +262,61 @@ export function trustedDriver(workspace: string, env: NodeJS.ProcessEnv): string
   if (ancestry.error) throw ancestry.error;
   if (ancestry.status !== 0)
     throw new Error('Web check unavailable: the selected Performance snapshot is not integrated into canonical dev');
-  const committed = spawnSync('git', ['-C', driverRoot, 'show', 'HEAD:scripts/check-run.ts']);
-  if (committed.status !== 0 || !committed.stdout.equals(readFileSync(file)))
-    throw new Error('Web check unavailable: Performance driver differs from its committed source');
+  for (const [path, bytes] of sources) {
+    git(driverRoot, ['ls-files', '--error-unmatch', path]);
+    const committed = spawnSync('git', ['-C', driverRoot, 'show', `HEAD:${path}`]);
+    if (committed.error) throw committed.error;
+    if (committed.status !== 0 || !committed.stdout.equals(bytes))
+      throw new Error(`Web check unavailable: Performance driver differs from its committed source: ${path}`);
+  }
   return driverRoot;
+}
+
+function trustedDriverSourceFiles(driverRoot: string): Map<string, Buffer> {
+  const pending = [join(driverRoot, 'scripts/check-run.ts')];
+  const sources = new Map<string, Buffer>();
+  const physicalRoot = realpathSync(driverRoot);
+  const importPattern = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\()(?:['"])([^'"\n]+)['"]/g;
+  while (pending.length) {
+    const absolute = resolve(pending.pop()!);
+    const path = relative(driverRoot, absolute);
+    if (path === '..' || path.startsWith(`..${sep}`) || isAbsolute(path))
+      throw new Error('Web check unavailable: trusted Performance driver closure escapes its checkout');
+    if (sources.has(path)) continue;
+    const stat = lstatSync(absolute);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 2 * 1024 * 1024)
+      throw new Error(`Web check unavailable: trusted Performance driver source is not a bounded file: ${path}`);
+    const physicalPath = relative(physicalRoot, realpathSync(absolute));
+    if (physicalPath === '..' || physicalPath.startsWith(`..${sep}`) || isAbsolute(physicalPath))
+      throw new Error('Web check unavailable: trusted Performance driver closure escapes its checkout');
+    if (sources.size >= 64)
+      throw new Error('Web check unavailable: trusted Performance driver closure exceeds its module bound');
+    const bytes = readFileSync(absolute);
+    sources.set(path, bytes);
+    for (const match of bytes.toString('utf8').matchAll(importPattern)) {
+      const specifier = match[1]!;
+      if (!specifier.startsWith('.')) continue;
+      const target = resolve(dirname(absolute), specifier);
+      const targetRelative = relative(driverRoot, target);
+      if (targetRelative === '..' || targetRelative.startsWith(`..${sep}`) || isAbsolute(targetRelative))
+        throw new Error('Web check unavailable: trusted Performance driver closure escapes its checkout');
+      const candidates = /\.[cm]?[jt]sx?$/.test(target)
+        ? [target]
+        : [target, ...['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'].map((extension) => `${target}${extension}`)];
+      const selected = candidates.find((candidate) => {
+        try {
+          const imported = lstatSync(candidate);
+          return imported.isFile() && !imported.isSymbolicLink();
+        } catch {
+          return false;
+        }
+      });
+      if (!selected)
+        throw new Error(`Web check unavailable: trusted Performance helper source is absent: ${specifier}`);
+      pending.push(selected);
+    }
+  }
+  return sources;
 }
 
 export type DriverExecution = {

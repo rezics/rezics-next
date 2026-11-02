@@ -32,6 +32,10 @@ export const CHECK_RUN_PREPARED_EXECUTION_MAX_BYTES = 16 * 1024 * 1024;
 export const CHECK_RUN_PREPARED_DESCRIPTOR_MAX_BYTES = 64 * 1024;
 export const CHECK_RUN_SETTLEMENT_MAX_ITEMS = 64;
 export const CHECK_RUN_SETTLEMENT_MAX_TEXT = 2048;
+// The frozen source inventory is the largest schema array; eight value nodes per path bound its envelope overhead.
+const CHECK_RUN_SNAPSHOT_MAX_INPUT_FILES = 50_000;
+const CHECK_RUN_JSON_MAX_ARRAY_ITEMS = CHECK_RUN_SNAPSHOT_MAX_INPUT_FILES;
+const CHECK_RUN_JSON_MAX_NODES = CHECK_RUN_SNAPSHOT_MAX_INPUT_FILES * 8;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HASH = /^[0-9a-f]{64}$/;
@@ -643,7 +647,7 @@ function validatePreparedInputs(value: unknown): CheckRunPreparedInputs {
   const sourceSha256 = item.sourceSha256 === null ? null : boundedHash(item.sourceSha256, 'prepared source hash');
   const manifestSha256 =
     item.manifestSha256 === null ? null : boundedHash(item.manifestSha256, 'prepared manifest hash');
-  const fileCount = boundedCount(item.fileCount, 'prepared input file count', 50_000);
+  const fileCount = boundedCount(item.fileCount, 'prepared input file count', CHECK_RUN_SNAPSHOT_MAX_INPUT_FILES);
   const totalBytes = boundedCount(item.totalBytes, 'prepared input byte count', 1024 * 1024 * 1024);
   if (item.status === 'verified' && (!sourceSha256 || !manifestSha256))
     throw new Error('check-run-settlement: verified prepared inputs need source and manifest hashes');
@@ -730,7 +734,8 @@ function parseUniqueJson(raw: string): unknown {
     throw new Error('check-run-settlement: incomplete JSON string');
   };
   const value = (depth: number): void => {
-    if (depth > 64 || ++nodes > 400_000) throw new Error('check-run-settlement: JSON structure exceeds its bound');
+    if (depth > 64 || ++nodes > CHECK_RUN_JSON_MAX_NODES)
+      throw new Error('check-run-settlement: JSON structure exceeds its bound');
     whitespace();
     const char = source[index];
     if (char === '{') {
@@ -764,7 +769,8 @@ function parseUniqueJson(raw: string): unknown {
       }
       let count = 0;
       while (true) {
-        if (++count > 65_536) throw new Error('check-run-settlement: JSON array exceeds its bound');
+        if (++count > CHECK_RUN_JSON_MAX_ARRAY_ITEMS)
+          throw new Error('check-run-settlement: JSON array exceeds its bound');
         value(depth + 1);
         whitespace();
         const separator = source[index++];
@@ -792,7 +798,7 @@ function parseUniqueJson(raw: string): unknown {
 }
 
 function validateInputFiles(value: unknown): string[] {
-  if (!Array.isArray(value) || value.length > 50_000)
+  if (!Array.isArray(value) || value.length > CHECK_RUN_SNAPSHOT_MAX_INPUT_FILES)
     throw new Error('check-run-settlement: invalid frozen input file list');
   const paths = value.map((path) => {
     const result = boundedText(path, 'frozen input path', 1024);

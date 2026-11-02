@@ -351,6 +351,17 @@ export function environmentPrefixIsSafe(prefix: readonly string[]): boolean {
     'LD_PRELOAD',
     'DYLD_INSERT_LIBRARIES',
   ]);
+  const hostLocalSettings = new Set([
+    'HOME',
+    'USERPROFILE',
+    'NODE',
+    'DISPLAY',
+    'WAYLAND_DISPLAY',
+    'XAUTHORITY',
+    'DBUS_SESSION_BUS_ADDRESS',
+    'DEBUGINFOD_IMA_CERT_PATH',
+    'MOZ_GMP_PATH',
+  ]);
   for (let index = 1; index < prefix.length; index += 1) {
     const argument = prefix[index]!;
     if (argument === '--') break;
@@ -365,7 +376,18 @@ export function environmentPrefixIsSafe(prefix: readonly string[]): boolean {
       continue;
     }
     const separator = argument.indexOf('=');
-    if (separator > 0 && executableControls.has(argument.slice(0, separator))) return false;
+    if (separator > 0) {
+      const name = argument.slice(0, separator);
+      const value = argument.slice(separator + 1);
+      if (
+        executableControls.has(name) ||
+        hostLocalSettings.has(name) ||
+        name.startsWith('NVM_') ||
+        /^npm_/i.test(name) ||
+        isAbsolute(value)
+      )
+        return false;
+    }
   }
   return true;
 }

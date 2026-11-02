@@ -3,6 +3,13 @@ import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { readEnvironmentFile } from '../../../scripts/check-run.ts';
+import {
+  getCheckRunStatus,
+  persistCheckRunPreparedInvocation,
+  reconcileCheckRunInvocation,
+  registerCheckRunInvocation,
+} from '../../../scripts/check-run-settlement.ts';
 import {
   reconcileWebCheckCustody,
   runPreparedWebCheck,
@@ -1227,4 +1234,76 @@ test('closed output and parent with unknown group return boundedly and preserve 
   process.child.emit('close', 0, null);
   expect(process.timers).toHaveLength(timerCount);
   expect(lifetimes.at(-1)).toMatchObject({ parentClosed: true, outputClosed: true, groupClosed: true });
+});
+
+test('the check overlay keeps affected selection and prepared custody round-trips maximum inventories', async () => {
+  const parent = mkdtempSync(join(root, '.temp', 'check-run-bounds-'));
+  fixtures.push(parent);
+  const candidateWorkspace = join(parent, 'candidate');
+  const stateDirectory = join(parent, 'state');
+  const descriptorDirectory = join(parent, 'private');
+  mkdirSync(candidateWorkspace);
+  mkdirSync(descriptorDirectory, { mode: 0o700 });
+  const environmentFile = join(parent, 'environment.json');
+  writeFileSync(
+    environmentFile,
+    JSON.stringify({
+      KERNEL_CHECK_AFFECTED: revision,
+      KERNEL_CHECK_REMOTE: '1',
+      NODE: '/usr/bin/node',
+      NVM_INC: '/home/worker/.nvm/include/node',
+      npm_config_prefix: '/home/worker/.npm',
+      DISPLAY: ':0',
+      WAYLAND_DISPLAY: 'wayland-0',
+      XAUTHORITY: '/run/user/1000/Xauthority',
+      DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus',
+      DEBUGINFOD_IMA_CERT_PATH: 'none',
+      MOZ_GMP_PATH: '/usr/lib/mozilla/plugins',
+    }),
+    { mode: 0o600 },
+  );
+  expect(readEnvironmentFile(environmentFile, candidateWorkspace)).toEqual({ KERNEL_CHECK_AFFECTED: revision });
+
+  const sourceSha256 = 'c'.repeat(64);
+  const binding = {
+    sourceRevision: revision,
+    indexTree: revision,
+    sourceSha256,
+    argvSha256: sha('argv'),
+    cwd: 'apps/web',
+    semanticEnvironmentSha256: sha('semantic'),
+    relocatedEnvironmentSha256: sha('relocated'),
+    producerClosureSha256: sha('producer'),
+    hostsSha256: sha('hosts'),
+    preparationCommandsSha256: sha('preparation'),
+    returnsSha256: sha('[]'),
+  };
+  const inventories = [
+    Array.from({ length: 50_000 }, (_, index) => `src/file-${index}.ts`),
+    Array.from({ length: 8_100 }, (_, index) => `src/${String(index).padStart(4, '0')}/${'a'.repeat(1_008)}`),
+  ];
+  expect(Buffer.byteLength(JSON.stringify(inventories[1])) + 64 * 1024).toBeLessThan(8 * 1024 * 1024);
+  for (const inputFiles of inventories) {
+    const registration = await registerCheckRunInvocation(binding, {
+      stateDirectory,
+      candidateWorkspace,
+      snapshot: { workspace: candidateWorkspace, scratch: parent, sourceSha256, inputFiles },
+      returns: [],
+    });
+    const descriptorFile = join(descriptorDirectory, `${registration.invocationId}.json`);
+    await persistCheckRunPreparedInvocation(registration, {
+      stateDirectory,
+      candidateWorkspace,
+      snapshot: { workspace: candidateWorkspace, scratch: parent, sourceSha256, inputFiles },
+      returns: [],
+      descriptorFile,
+      execution: {},
+    });
+    const expected = sha(JSON.stringify(inputFiles));
+    const prepared = await getCheckRunStatus(registration.invocationId, { stateDirectory });
+    expect(sha(JSON.stringify(prepared.snapshot?.inputFiles))).toBe(expected);
+    const reconciled = await reconcileCheckRunInvocation(registration.invocationId, { stateDirectory });
+    expect(reconciled.phase).toBe('unknown');
+    expect(sha(JSON.stringify(reconciled.snapshot?.inputFiles))).toBe(expected);
+  }
 });

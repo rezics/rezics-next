@@ -26,17 +26,21 @@ The default trusted root is the main checkout discovered through Git's common di
 separate snapshot with `WEB_CHECK_DRIVER_ROOT`. Selection captures `refs/heads/dev` once from the candidate's common
 Git directory. The chosen driver must be a separate physical checkout in that same common repository, and its full
 HEAD must be an ancestor of the captured dev commit. The main checkout may lag behind dev; its current HEAD is not
-the integration authority. A missing dev ref, foreign repository, unintegrated snapshot, dirty tree (including
-helper source), untracked producer or changed committed producer bytes is unavailable before spawning. The driver
-root must differ from the candidate root; a candidate cannot select its own newly committed driver. This is a
-source-integrity guard, not verifier admission or a release receipt.
+the integration authority. A missing dev ref, foreign repository, unintegrated snapshot, changed or untracked source
+in the driver's imported closure, or imported bytes differing from their committed versions is unavailable before
+spawning. Unrelated checkout entries do not affect this source-integrity check. The driver root must differ from the
+candidate root; a candidate cannot select its own newly committed driver. This is a source-integrity guard, not
+verifier admission or a release receipt.
 The candidate revision comes from the candidate's Git identity, independently of the driver root. Performance must
 freeze/verify exact candidate inputs, native Git identity and same-snapshot generated Web inputs, and use its pinned
 Bun/frozen dependency preparation. Absent or unsupported producer source is unavailable, never an installed receipt.
 
 A private per-invocation environment JSON lives outside candidate source and is removed after the driver settles.
-Semantic strings and newlines survive JSON; argv is never joined into shell text. Host runtime/cache settings,
-Goal/session credentials, publication credentials and placement bypass controls are excluded from the native overlay.
+Semantic strings and newlines survive JSON; argv is never joined into shell text. Inherited Node, npm, nvm,
+desktop/debug settings and host-absolute paths are omitted; explicitly requested unsupported host-local settings and
+host-absolute environment assignments are refused. `KERNEL_CHECK_AFFECTED` remains available for affected-test
+selection. Host runtime/cache settings, Goal/session credentials, publication credentials and placement bypass
+controls are excluded from the native overlay.
 `STORYBOOK_OUTPUT_DIR`, `GROWTH_PROFILE`, `WEB_TEST_STATE_DIR` and `WEB_CHECK_EVENTS` are explicitly relocated from
 contained workspace paths relative to the native cwd. Growth profiles, named test state and event outputs are also
 declared returns. Treat only the ambient `NIX_SSL_CERT_FILE` as a host-only Nix toolchain setting: omit it from the

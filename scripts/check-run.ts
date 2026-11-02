@@ -153,6 +153,10 @@ const FORBIDDEN_REMOTE_ENVIRONMENT = new Set([
   'SSH_AUTH_SOCK',
   'DISPLAY',
   'XAUTHORITY',
+  'WAYLAND_DISPLAY',
+  'DBUS_SESSION_BUS_ADDRESS',
+  'DEBUGINFOD_IMA_CERT_PATH',
+  'MOZ_GMP_PATH',
   'XDG_CACHE_HOME',
   'BUN_INSTALL_CACHE_DIR',
   'BUN_RUNTIME_TRANSPILER_CACHE_PATH',
@@ -193,6 +197,7 @@ const FORBIDDEN_REMOTE_ENVIRONMENT = new Set([
   'REZICS_STACK_LEASE',
   'LD_PRELOAD',
   'DYLD_INSERT_LIBRARIES',
+  'NODE',
   'NODE_OPTIONS',
   'NODE_PATH',
   'GOAL_TASK_ID',
@@ -590,7 +595,9 @@ export function readEnvironmentFile(file: string, workspace: string): Record<str
     // inherited login environment cannot make a check unavailable.
     if (
       FORBIDDEN_REMOTE_ENVIRONMENT.has(name) ||
-      name.startsWith('KERNEL_CHECK_') ||
+      (name.startsWith('KERNEL_CHECK_') && name !== 'KERNEL_CHECK_AFFECTED') ||
+      name.startsWith('NVM_') ||
+      /^npm_/i.test(name) ||
       name.startsWith('REMOTE_CHECK_') ||
       name.startsWith('REZICS_CHECK_') ||
       name.startsWith('REZICS_STACK_') ||
