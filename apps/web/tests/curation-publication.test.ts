@@ -146,7 +146,7 @@ test('the actual immutable profile publish-and-activate flow resolves unknown ou
     const draft = profile();
     expect(await publication.start(draft, 7)).toBeNull();
     const pending = publication.getSnapshot().intent!;
-    expect(publication.getSnapshot().result).toEqual({ ok: false, reason: 'stale' });
+    expect(publication.getSnapshot().result).toEqual({ ok: false, reason: 'stale', phase: 'activate' });
     expect(publication.getSnapshot().active?.head).toBe(9);
     expect(draft).toEqual(profile());
     expect(publication.getSnapshot().intent?.profile).toEqual(draft);
@@ -168,7 +168,7 @@ test('revocation after an ambiguous activation is checked on replay before any r
   const original = publication.getSnapshot().intent;
   native.revoke();
   expect(await publication.retry()).toBeNull();
-  expect(publication.getSnapshot().result).toEqual({ ok: false, reason: 'forbidden' });
+  expect(publication.getSnapshot().result).toEqual({ ok: false, reason: 'forbidden', phase: 'publish' });
   expect(publication.getSnapshot().intent).toBe(original);
   expect(native.seen.at(-1)?.path).toBe('/v1/presentation/profiles');
   expect(native.seen.at(-1)?.key).toBe(original?.keys.publish);
@@ -190,9 +190,14 @@ test('an active read, even matching an uncertain activation, never invents confi
   expect(await publication.start(changed(profile()), 8)).toBeNull();
 });
 
-test('typed validation, rate limits and unavailability retain the original intent and exact draft', async () => {
+test('activation validation, rate limits and unavailability retain the original intent and exact draft', async () => {
   const failures: CurationFailure[] = [
-    { ok: false, reason: 'invalid', errors: [{ pointer: '/types/0/views/overview/content', code: 'out_of_range' }] },
+    {
+      ok: false,
+      reason: 'invalid',
+      errors: [{ pointer: '/types/0/views/overview/content', code: 'out_of_range' }],
+      phase: 'activate',
+    },
     { ok: false, reason: 'rate-limited', retryAfter: 30 },
     { ok: false, reason: 'unavailable' },
   ];

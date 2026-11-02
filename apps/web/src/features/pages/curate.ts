@@ -11,12 +11,14 @@ import {
 } from '@rezics/composition';
 
 export type Template = { scope: 'generic'; key: null } | { scope: 'base' | 'type' | 'route'; key: string };
-export type CurationFailure =
-  | { ok: false; reason: 'stale' }
-  | { ok: false; reason: 'forbidden'; admissionChanged?: boolean }
-  | { ok: false; reason: 'unavailable'; outcome?: 'unknown'; phase?: 'publish' | 'activate' }
-  | { ok: false; reason: 'invalid'; errors: { pointer: string; code: string }[] }
-  | { ok: false; reason: 'rate-limited'; retryAfter?: number };
+/** The failed stage remains visible even when the server returned a typed rejection. */
+export type CurationFailure = { ok: false; phase?: 'publish' | 'activate' } & (
+  | { reason: 'stale' }
+  | { reason: 'forbidden'; admissionChanged?: boolean }
+  | { reason: 'unavailable'; outcome?: 'unknown' }
+  | { reason: 'invalid'; errors: { pointer: string; code: string }[] }
+  | { reason: 'rate-limited'; retryAfter?: number }
+);
 export type PublishInput = {
   profile: PresentationProfile;
   expectedHead: number;
@@ -193,7 +195,8 @@ export async function publishProfile(
       { profile },
       { headers: { authorization, 'idempotency-key': keys.publish } as { 'idempotency-key': string } },
     );
-    if (published.status >= 400) return curationFailure(published.status, published.error?.value, published.headers);
+    if (published.status >= 400)
+      return { ...curationFailure(published.status, published.error?.value, published.headers), phase };
     if (!published.data) return { ok: false, reason: 'unavailable', outcome: 'unknown', phase };
     phase = 'activate';
     const activated = await client.presentation
@@ -202,7 +205,8 @@ export async function publishProfile(
         { expected_head: expectedHead },
         { headers: { authorization, 'idempotency-key': keys.activate } as { 'idempotency-key': string } },
       );
-    if (activated.status >= 400) return curationFailure(activated.status, activated.error?.value, activated.headers);
+    if (activated.status >= 400)
+      return { ...curationFailure(activated.status, activated.error?.value, activated.headers), phase };
     return activated.data
       ? { ok: true, ...activated.data }
       : { ok: false, reason: 'unavailable', outcome: 'unknown', phase };

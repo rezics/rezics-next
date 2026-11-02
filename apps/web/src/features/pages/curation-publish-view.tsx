@@ -33,8 +33,9 @@ export function CurationFailureNotice({
 }) {
   return (
     <div role="alert" className="space-y-2 rounded-lg border border-destructive/40 bg-card p-4">
-      <p>
-        {failure.reason === 'invalid'
+      {failure.reason === 'invalid' && failure.phase === 'activate' ? null : (
+        <p>
+          {failure.reason === 'invalid'
           ? m.curation_invalid()
           : failure.reason === 'stale'
             ? m.curation_stale()
@@ -47,12 +48,13 @@ export function CurationFailureNotice({
                   : failure.reason === 'unavailable' && failure.outcome === 'unknown'
                     ? m.curation_unknown()
                     : m.curation_unavailable()}
-      </p>
-      {failure.reason === 'unavailable' && failure.phase === 'activate' ? <p>{m.curation_partial()}</p> : null}
+        </p>
+      )}
+      {failure.phase === 'activate' ? <p>{m.curation_partial()}</p> : null}
       {failure.reason === 'rate-limited' && failure.retryAfter !== undefined ? (
         <p>{m.curation_retry_after({ seconds: failure.retryAfter })}</p>
       ) : null}
-      {failure.reason === 'invalid' ? (
+      {failure.reason === 'invalid' && failure.phase !== 'activate' ? (
         <ul className="space-y-3">
           {failure.errors.map(({ pointer, code }, index) => (
             <li key={index}>
@@ -388,7 +390,7 @@ export function CurationPublicationRecovery({
   );
   if (!intent && !result) return null;
   const stale = result?.ok === false && result.reason === 'stale';
-  const invalid = result?.ok === false && result.reason === 'invalid';
+  const invalid = result?.ok === false && result.reason === 'invalid' && result.phase !== 'activate';
   function reconcile(choice: 'keep' | 'discard') {
     if (!mounted.current || (visit && !visit.isCurrent())) return;
     const reviewed = visit ? visit.reconcile(profile, choice) : publication.reconcile(profile, choice);

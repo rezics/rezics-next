@@ -173,7 +173,9 @@ export class CurationPublication {
       !intent ||
       intent.reader !== this.reader ||
       busy ||
-      (this.state.result?.ok === false && this.state.result.reason === 'invalid')
+      (this.state.result?.ok === false &&
+        this.state.result.reason === 'invalid' &&
+        this.state.result.phase !== 'activate')
     )
       return null;
     const incarnation = expectedIncarnation;
@@ -257,7 +259,8 @@ export class CurationPublication {
       !this.isCurrent(expectedIncarnation) ||
       this.state.busy ||
       this.state.result?.ok !== false ||
-      this.state.result.reason !== 'invalid'
+      this.state.result.reason !== 'invalid' ||
+      this.state.result.phase === 'activate'
     )
       return null;
     // Keep the original refusal and its profile until the revised draft is locally valid.
