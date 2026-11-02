@@ -178,7 +178,11 @@ function StatementConsentPageLive({
     setBusy(true);
     setFailure(undefined);
     page.current = input;
-    orient(event, () => recoveryFocusTarget.current ?? readFocusTarget.current, () => page.current === input);
+    orient(
+      event,
+      () => recoveryFocusTarget.current ?? readFocusTarget.current,
+      () => page.current === input,
+    );
     confirmationOrigin.current = null;
     setRead(undefined);
     setResult(undefined);
@@ -491,7 +495,12 @@ function StatementConsentPageLive({
                                   orient(
                                     event,
                                     () => origin && actionButtons.current[origin.operation],
-                                    () => !!origin && origin.read === read && !reload && !!attempt && !!assertion?.identified,
+                                    () =>
+                                      !!origin &&
+                                      origin.read === read &&
+                                      !reload &&
+                                      !!attempt &&
+                                      !!assertion?.identified,
                                   );
                                   confirmationOrigin.current = null;
                                   setConfirmation(undefined);

@@ -375,7 +375,9 @@ test('Statement consent composes the complete family with isolated confirmation,
       await act(async () => delayed.resolve());
       await settle();
       if (intent === 'current')
-        expect(window.document.activeElement).toBe(host.querySelector('[data-consent-part="assertion"]')?.parentElement);
+        expect(window.document.activeElement).toBe(
+          host.querySelector('[data-consent-part="assertion"]')?.parentElement,
+        );
       else expect(window.document.activeElement).toBe(before);
     }
     const pointerConfirmation = consentFixture();
