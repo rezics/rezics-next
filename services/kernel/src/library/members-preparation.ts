@@ -33,6 +33,37 @@ export type PreparationDefinition = Readonly<{
   sort: 'id' | 'ordinal';
   release: Readonly<{ digest: string; value: FilterRelease }>;
 }>;
+export type PreparationDefinitionBasis = Readonly<{
+  definition: PreparationDefinition;
+  canonicalBasis: string;
+  basisDigest: Uint8Array;
+}>;
+
+/** Normalize accepted definitions to their exact shared expansion before native deduplication. */
+export function preparationDefinitionBases(
+  ownerAccountId: string,
+  collectionId: string,
+  definitions: readonly PreparationDefinition[],
+): readonly PreparationDefinitionBasis[] {
+  const unique = new Map<string, PreparationDefinitionBasis>();
+  for (const input of definitions) {
+    const filter = admitFilter(parseFilter(input.filter), input.release.value);
+    const canonicalBasis = canonicalize([1, ownerAccountId, collectionId, filter, input.sort, input.release.digest]);
+    if (canonicalBasis === undefined) throw new ProblemError('unsupported_query');
+    const basisDigest = createHash('sha256').update(canonicalBasis).digest();
+    const digestKey = basisDigest.toString('hex');
+    const existing = unique.get(digestKey);
+    if (existing && existing.canonicalBasis !== canonicalBasis) throw new ProblemError('unsupported_query');
+    if (!existing)
+      unique.set(digestKey, {
+        definition: { ...input, filter },
+        canonicalBasis,
+        basisDigest,
+      });
+  }
+  return [...unique.values()];
+}
+
 export type PreparationLocator = Readonly<{
   route: number;
   ownerAccountId: string;
