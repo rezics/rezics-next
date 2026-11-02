@@ -331,6 +331,35 @@ command check cannot race a purpose change. Thread insert and update triggers ne
 listings and the subject thread index receive reviews through the same projections as discussion threads whose
 boards live in other partitions.
 
+## Review-backed question witnesses
+
+`review-context-eligibility.ts` resolves an exact native rating question under current Global
+`definitions:read`. `resolveRatingQuestionSelection` returns immutable metadata bound to the dependencies
+and read context that resolved it. `assertCurrentRatingQuestionSelection` repeats authority and metadata
+reads; a lost or revised question refuses with `invalid_cursor`.
+
+`qualifyReviewContextWitnesses` accepts at most 160 positional pairs of primary and review witness:
+`{kind:'subject'|'thread',subjectId,threadId}` or `{kind:'post',subjectId,threadId,postId}`.
+The exact Subject must be readable. Its review must be live and currently readable, with exactly that
+target and a readable current opening revision citing the selected question. A post additionally passes
+its own native thread/parent disclosure. Ordinary discussions cannot qualify. Native thread disclosure
+checks the independently anchored board, Realm, bans, author and document. Initial and final observations
+must retain the opening revision and security anchors. Private votes and aggregates never enter this read.
+
+Decision: witness inputs are positional exact primary/review pairs; deduplicated native reads preserve
+duplicate positions, and a refused pair establishes no existential negative or population coverage.
+
+The reader uses only full-key native reads, never a subject-to-review scan or a history walk. The static
+`REVIEW_CONTEXT_BOUNDS` composes two question reads, at most 320 thread disclosure candidates, 320 Subject
+checks and 320 post reads: at most 962 native read invocations per witness batch. Each post read retains
+the existing selected-post plus 32-parent bound, hence at most 10,560 chain rows across both observations,
+in addition to its native board/Realm/Access closure. These are additive producer bounds, not a runtime
+quote protocol or a claim that the feed's 160 raw candidate slots pay for disclosure.
+
+The Search request bridge retains the complete frozen Boolean tree and canonical question/revision keys.
+These native point witnesses do not supply a review locator, baseline, retained Source population,
+privacy-reduction routing or a feed selector. No incomplete witness page certifies nonmembership.
+
 ## Subject threads
 
 `GET /v1/subjects/{subjectId}/threads?place={id}&kind=discussion|review&limit=&cursor=` returns a subject's threads

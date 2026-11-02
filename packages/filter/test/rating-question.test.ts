@@ -30,12 +30,25 @@ describe('request-only exact rating question grammar', () => {
 
   test('rejects extra operands, non UUID identities, absent and accessor fields without invoking them', () => {
     let invoked = false;
-    const accessor = Object.defineProperty({}, 'id', { get() { invoked = true; return id; } });
+    const accessor = Object.defineProperty({}, 'id', {
+      get() {
+        invoked = true;
+        return id;
+      },
+    });
     for (const ratingQuestion of [
-      {}, { id: null }, { id: [id] }, { id: '' }, { id: `${id}\n` },
-      { id, revision: '1' }, { id, allow: true }, { id, questionId: id }, accessor,
+      {},
+      { id: null },
+      { id: [id] },
+      { id: '' },
+      { id: `${id}\n` },
+      { id, revision: '1' },
+      { id, allow: true },
+      { id, questionId: id },
+      accessor,
       Object.create({ id }),
-    ]) expect(() => parseDiscoveryFilter({ ratingQuestion })).toThrow(FilterError);
+    ])
+      expect(() => parseDiscoveryFilter({ ratingQuestion })).toThrow(FilterError);
     expect(invoked).toBe(false);
   });
 
@@ -46,8 +59,9 @@ describe('request-only exact rating question grammar', () => {
     }
     for (const tree of [leaf, { not: leaf }, { or: [{ type: { in: ['core:Work'] } }, leaf] }]) {
       const savedRelease = { ...release, filters: { 'home/question': { filter: tree } } };
-      expect(() => admitDiscoveryFilter(parseDiscoveryFilter({ saved: 'home/question' }), savedRelease, kinds))
-        .toThrow(FilterError);
+      expect(() => admitDiscoveryFilter(parseDiscoveryFilter({ saved: 'home/question' }), savedRelease, kinds)).toThrow(
+        FilterError,
+      );
     }
   });
 

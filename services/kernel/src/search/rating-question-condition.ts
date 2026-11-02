@@ -8,8 +8,10 @@ import {
   type ReviewContextDependencies,
 } from '../content/review-context-eligibility.ts';
 import type { ReadContext } from '../content/model.ts';
-import { publicFilterReviewQuestionKey } from '../semantic/public-filter-review-question.ts';
-import type { PublicFilterReviewQuestionKey } from '../semantic/public-filter-source-contract.ts';
+import {
+  publicFilterReviewQuestionKey,
+  type PublicFilterReviewQuestionKey,
+} from '../semantic/public-filter-review-question.ts';
 
 declare const bound: unique symbol;
 export type RatingQuestionConditions = Readonly<{
@@ -19,15 +21,17 @@ export type RatingQuestionConditions = Readonly<{
   keys: readonly PublicFilterReviewQuestionKey[];
   [bound]: true;
 }>;
-const bindings = new WeakMap<RatingQuestionConditions, Readonly<{
-  deps: ReviewContextDependencies;
-  context: ReadContext;
-  selections: ReadonlyMap<string, RatingQuestionSelection>;
-}>>();
+const bindings = new WeakMap<
+  RatingQuestionConditions,
+  Readonly<{
+    deps: ReviewContextDependencies;
+    context: ReadContext;
+    selections: ReadonlyMap<string, RatingQuestionSelection>;
+  }>
+>();
 
 function freezeTree(value: object): void {
-  for (const child of Object.values(value))
-    if (child !== null && typeof child === 'object') freezeTree(child);
+  for (const child of Object.values(value)) if (child !== null && typeof child === 'object') freezeTree(child);
   Object.freeze(value);
 }
 
@@ -62,11 +66,7 @@ export async function resolveRatingQuestionConditions(
   return result;
 }
 
-function bindingFor(
-  deps: ReviewContextDependencies,
-  conditions: RatingQuestionConditions,
-  context: ReadContext,
-) {
+function bindingFor(deps: ReviewContextDependencies, conditions: RatingQuestionConditions, context: ReadContext) {
   const binding = bindings.get(conditions);
   if (!binding || binding.deps !== deps || binding.context !== context)
     throw new TypeError('Question conditions belong to another request');

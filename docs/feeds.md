@@ -181,7 +181,7 @@ The default-composition regression is `services/kernel/test/content/feed.test.ts
 real server/worker, discovery, canonical owner work, native follow changes and disclosure.
 Module schema dumps are derived by the controller through the normal supported path.
 
-## Remaining dimensions
+## Home dimensions
 
 Native kind selection is delivered. Space selection depends on Search's actual retained
 Source and scoped journey; a declared task or point read alone does not establish candidate
@@ -191,24 +191,9 @@ primary candidate in the existing mixed stream.
 Home Space choice reads retain the resolved Space identity on point-read failure so a failed
 revalidation disables that selection; platform closure remains distinct from access denial.
 
-Rating-question Context has an adopted meaning and native witness/eligibility readers, while its public
-request surface and complete all-lane Source integration remain undelivered. It selects one exact native rating-question
-identity. A Subject qualifies when at least one live currently readable review of that
-exact Subject has a currently readable opening revision whose immutable citation names
-the selected question. A review thread requires its own current opening citation and a
-readable reviewed Subject; a reply/post requires that qualifying review thread and its
-own current disclosure. Catalogue Agents follow Subject membership. Native Accounts,
-Collections and ordinary discussions have no membership in this version. A Subject's
-Space witness and question-review witness may be different threads; membership does not
-claim that the cited review was posted in the selected Space.
+## Native review question witnesses
 
-Private votes, aggregates, question applicability/grain, editorial Contexts and Realm
-populations are not membership witnesses. The chosen future request-only ratingQuestion.id
-shape is not an installed API, stored-reference predicate, permission or rating threshold.
-Before exposing a Context selector, finish current native witnesses and lifecycle/Source
-coverage, definitions:read before enumeration, bounded real question choices with signed
-keysets and current metadata, signed selection/revision binding and the default feed
-composition. Preserve native candidate/frontier bounds and unavailable responses; no
-browser filter, downloaded-first-page directory or selectable placeholder supplies these
-dependencies. Kind and actual Space delivery need not wait for Context. The full dimensions
-outcome remains incomplete.
+Content's [native witness reader](../services/kernel/src/content/README.md#review-backed-question-witnesses)
+checks exact primary/review pairs against current question authority, opening citations and disclosure.
+Private vote changes preserve published citations. Opening edits and retirement affect the next witness
+read. These point reads supply no population coverage and do not activate a feed selection parameter.

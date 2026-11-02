@@ -32,10 +32,11 @@ positional primary/witness pairs. A refused witness is not complete nonmembershi
 
 Resolution adds at most 32 native question authority/metadata reads; final assertion repeats those reads.
 Qualification retains Content's native disclosure cost in addition to Source work. No execution budget is
-inferred from the number of leaves or raw feed candidates. These operations must run within the authentic
-original prepared quote. Default Source population, local baseline enrollment, foreign reduction routing,
-retained lifecycle receiving, all-lane feed binding and complete question pricing remain necessary before
-public activation. No substitute Source, observation or unavailable-success lane is introduced.
+inferred from the number of leaves or raw feed candidates. Compose the documented finite native producer
+bounds as constants with the retained Source bounds; no runtime price or prepaid funding protocol is needed.
+The question key is currently a standalone native bridge type, not a covered Source dependency. Default
+Source population, local baseline enrollment, reduction routing and all-lane feed binding remain necessary
+before public activation. No substitute Source or observation is introduced.
 
 The approved [public facet discovery contract](../../../../docs/search-facets.md) is the single owner of the
 count-free continuation wire, with types in `facet-discovery-contract.ts`. The public service consumes
