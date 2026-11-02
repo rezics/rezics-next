@@ -102,7 +102,15 @@ test('Launch a worker truthfully when host memory discovery is unavailable.', ()
     },
   );
   const launch = () =>
-    worker.launch('task', 1, 'true', [], { env: {} }, () => false, (message) => reports.push(message));
+    worker.launch(
+      'task',
+      1,
+      'true',
+      [],
+      { env: {} },
+      () => false,
+      (message) => reports.push(message),
+    );
   expect(launch().status).toBe(0);
   expect(launch().status).toBe(0);
   expect(reads).toBe(1);
@@ -396,7 +404,15 @@ describe('worker systemd slice', () => {
       },
       () => 'MemTotal:       65011712 kB\n',
       bound,
-    ).launch('task', 2, 'worker', [], { env: {}, timeout: 60_000 }, () => true, (line) => startedReports.push(line));
+    ).launch(
+      'task',
+      2,
+      'worker',
+      [],
+      { env: {}, timeout: 60_000 },
+      () => true,
+      (line) => startedReports.push(line),
+    );
     expect(started.status).toBe(1);
     expect(startedReports).toEqual([]);
     expect(calls).toEqual([
