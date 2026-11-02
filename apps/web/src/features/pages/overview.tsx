@@ -933,11 +933,14 @@ export function chosenSummary(subject: Subject, locale: string, filled?: unknown
 
 /** A bounded plain excerpt has no clipped links or spoiler text. The complete rich document stays intact. */
 function summaryExcerpt(document: DocumentSnapshot): { text: string; complete: boolean } {
+  const limit = 420;
+  // One complete code point past the limit lets segmentation see a joining mark, even across text nodes.
+  const probeLimit = limit + 2;
   let text = '';
   let complete = true;
   let paragraphs = 0;
   function visit(node: DocumentNode): void {
-    if (text.length >= 420 || paragraphs > 2) {
+    if (text.length >= probeLimit || paragraphs > 2) {
       complete = false;
       return;
     }
@@ -947,8 +950,8 @@ function summaryExcerpt(document: DocumentSnapshot): { text: string; complete: b
     }
     if (node.type === 'text') {
       const content = node.text ?? '';
-      const remaining = 420 - text.length;
-      text += content.slice(0, remaining).replace(/[\uD800-\uDBFF]$/, '');
+      const remaining = probeLimit - text.length;
+      text += content.slice(0, remaining);
       if (content.length > remaining) complete = false;
       return;
     }
@@ -967,14 +970,21 @@ function summaryExcerpt(document: DocumentSnapshot): { text: string; complete: b
     const children = node.content ?? [];
     for (const [index, child] of children.entries()) {
       visit(child);
-      if (text.length >= 420 || paragraphs > 2) {
+      if (text.length >= probeLimit || paragraphs > 2) {
         if (index < children.length - 1) complete = false;
         break;
       }
     }
   }
   visit(document.doc);
-  return { text: text.trim(), complete };
+  // A sliced supplementary mark must not look like a separate, unpaired surrogate to the segmenter.
+  text = text.replace(/[\uD800-\uDBFF]$/, '');
+  let end = 0;
+  for (const { segment, index } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) {
+    if (index + segment.length > limit) break;
+    end = index + segment.length;
+  }
+  return { text: text.slice(0, end).trim(), complete: complete && end === text.length };
 }
 
 /** Native disclosure keeps the complete document readable without JavaScript. */
