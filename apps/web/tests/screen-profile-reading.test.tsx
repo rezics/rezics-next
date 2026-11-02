@@ -102,12 +102,12 @@ test('Screen refresh keeps corrections and exact uncertain requests; recovery re
       await user.type(year, '2027');
     });
     await click(m.facts_submit());
-    expect(year.disabled).toBe(true);
+    expect(year.closest('fieldset[disabled]')).not.toBeNull();
     next = { ok: false, reason: 'unavailable' };
     await click(m.candidate_reload());
     expect(host.textContent).toContain(m.screen_refresh_failed());
     expect(reading().getAttribute('aria-label')).toBe(m.screen_previous_reading());
-    expect(year.isConnected && year.disabled).toBe(true);
+    expect(year.isConnected && !!year.closest('fieldset[disabled]')).toBe(true);
     expect(year.value).toBe('2027');
     next = 'throw';
     await click(m.correction_retry());
@@ -120,7 +120,7 @@ test('Screen refresh keeps corrections and exact uncertain requests; recovery re
     expect(host.textContent).toContain('Recovered observatory');
     expect(host.textContent).not.toContain(m.screen_refresh_failed());
     expect(reading().textContent).not.toContain('Supplied assertion');
-    expect(year.isConnected && year.disabled).toBe(true);
+    expect(year.isConnected && !!year.closest('fieldset[disabled]')).toBe(true);
     await click(m.facts_submit());
     const writes = fixture.facts.date.calls.filter((call) => call.method === 'POST');
     expect(writes).toHaveLength(2);
