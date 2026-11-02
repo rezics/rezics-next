@@ -49,7 +49,7 @@ export function FollowCountContextRecovery() {
             className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
           />
           <p id="follow-count-context-id-help" className="text-sm text-muted-foreground">
-            {m.library_follow_count_context_id_format()}
+            {m.library_follow_count_context_id_help()}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
