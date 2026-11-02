@@ -1,6 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
-import { isPlatformClosedError } from '../../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../../kernel/platform-closed';
 
 type NativeSpace = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['spaces']>['get']>>['data']>['space'];
 export type HomeSpace = Pick<NativeSpace, 'spaceId' | 'title' | 'address' | 'headRevisionId' | 'realmId'>;
@@ -39,14 +39,24 @@ export async function readHomeSpace(
   authorization?: string,
   signal?: AbortSignal,
 ): Promise<HomeSpaceResult> {
+  let spaceId = input.spaceId;
+  if (spaceId !== undefined) {
+    try {
+      homeFeedId(spaceId);
+    } catch {
+      return { status: 'invalid' };
+    }
+  }
+  if (signal?.aborted) return { status: 'unavailable', ...(spaceId ? { spaceId } : {}) };
   const options = {
     ...(authorization ? { headers: { authorization } } : {}),
     fetch: { cache: 'no-store' as const, redirect: 'manual' as const, ...(signal ? { signal } : {}) },
   };
-  const failure = (status: number, spaceId?: string): HomeSpaceResult => ({
+  const failure = (status: number, body: unknown): HomeSpaceResult => ({
     ...(spaceId ? { spaceId } : {}),
-    status:
-      status === 401
+    status: isPlatformClosedProblem(status, body)
+      ? 'closed'
+      : status === 401
         ? 'auth'
         : status === 403
           ? 'denied'
@@ -55,16 +65,17 @@ export async function readHomeSpace(
             : 'unavailable',
   });
   try {
-    let spaceId = input.spaceId;
     if (spaceId === undefined) {
       if (typeof input.address !== 'string') return { status: 'invalid' };
       const resolved = await client.spaceAddresses({ address: input.address }).get(options);
-      if (resolved.status !== 200 || resolved.error || !resolved.data) return failure(resolved.status);
-      spaceId = homeFeedId(resolved.data.spaceId)!;
+      if (resolved.status !== 200 || resolved.error || !resolved.data)
+        return failure(resolved.status, resolved.error?.value);
+      spaceId = homeFeedId(resolved.data.spaceId);
+      if (!spaceId) return { status: 'unavailable' };
     }
-    if (signal?.aborted) return { status: 'unavailable' };
+    if (signal?.aborted) return { status: 'unavailable', ...(spaceId ? { spaceId } : {}) };
     const result = await client.spaces({ spaceId }).get(options);
-    if (result.status !== 200 || result.error || !result.data) return failure(result.status, spaceId);
+    if (result.status !== 200 || result.error || !result.data) return failure(result.status, result.error?.value);
     const space = result.data.space;
     if (
       space.spaceId !== spaceId ||
@@ -88,7 +99,8 @@ export async function readHomeSpace(
       },
     };
   } catch (error) {
-    return { status: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
+    // A failed point read still invalidates a selection identified by address resolution.
+    return { status: isPlatformClosedError(error) ? 'closed' : 'unavailable', ...(spaceId ? { spaceId } : {}) };
   }
 }
 

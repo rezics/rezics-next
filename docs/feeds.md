@@ -181,6 +181,9 @@ Source and scoped journey; a declared task or point read alone does not establis
 membership. Kind, Space and question selection apply as a literal conjunction to the same
 primary candidate in the existing mixed stream.
 
+Home Space choice reads retain the resolved Space identity on point-read failure so a failed
+revalidation disables that selection; platform closure remains distinct from access denial.
+
 Rating-question Context has an adopted meaning, while its native request surface and
 eligibility readers remain undelivered. It selects one exact native rating-question
 identity. A Subject qualifies when at least one live currently readable review of that
