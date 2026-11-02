@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { DefinitionGuide } from '../features/catalogue/definition-guide-view';
+import { DefinitionGuide, DefinitionGuideContent } from '../features/catalogue/definition-guide-view';
 import { definitionGuideFixture, type GuideScenario } from '../kernel/fake/definition-guide';
-import { definitionText } from '../features/catalogue/definition-guide';
+import { definitionText, type GuideRelease } from '../features/catalogue/definition-guide';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
@@ -146,5 +146,169 @@ export const UnavailableRetry: Story = {
       `/${getLocale()}/catalogue/new`,
     );
     await phoneGeometry();
+  },
+};
+
+function IndependentGuideStory() {
+  const locale = getLocale();
+  const fixture = useMemo(() => definitionGuideFixture(), [locale]);
+  return (
+    <PatternStory path="/catalogue/definitions" visitor="Signed Out">
+      <AppShell>
+        <div className="flex min-w-0 flex-col gap-12">
+          <DefinitionGuide locale={locale} address={fixture.address} transport={fixture.transport} />
+          <DefinitionGuide locale={locale} address={fixture.address} transport={fixture.transport} />
+        </div>
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+export const IndependentGuides: Story = {
+  render: () => <IndependentGuideStory />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: two actual same-address guides share the ordinary read query while retaining independent native selection and label associations. Uses the recorded active release through the existing fixture transport.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const pickers = await canvas.findAllByRole('combobox', { name: m.catalogue_create_type() });
+    await expect(pickers).toHaveLength(2);
+    await expect(pickers[0]!.id).not.toBe(pickers[1]!.id);
+    const labels = canvas.getAllByText(m.catalogue_create_type(), { selector: 'label' });
+    for (const [index, label] of labels.entries()) {
+      await expect((label as HTMLLabelElement).control).toBe(pickers[index]);
+      await userEvent.click(label);
+      await expect(pickers[index]).toHaveFocus();
+    }
+    await userEvent.selectOptions(pickers[1]!, 'schema:Recipe');
+    await expect(pickers[0]).toHaveValue('schema:Book');
+    await expect(pickers[1]).toHaveValue('schema:Recipe');
+    const guides = canvas.getAllByRole('article');
+    const locale = getLocale();
+    const book = definitionText(definitions.release.types['schema:Book'].labels, locale).text!;
+    const recipe = definitionText(definitions.release.types['schema:Recipe'].labels, locale).text!;
+    await expect(within(guides[0]!).getByRole('heading', { level: 2, name: book })).toBeVisible();
+    await expect(within(guides[1]!).getByRole('heading', { level: 2, name: recipe })).toBeVisible();
+  },
+};
+
+function LongGuideStory() {
+  const locale = getLocale();
+  // Constructed long-label presentation inputs, retaining recorded constraint/reference values. Not a new release.
+  const release = useMemo(() => {
+    const copy = { ...structuredClone(definitions.release), digest: definitions.digest } as GuideRelease;
+    for (const labels of [
+      copy.types['schema:Book']!.labels,
+      copy.properties['schema:author']!.labels,
+      copy.properties['schema:position']!.labels,
+    ]) {
+      labels[locale] = Array(12).fill(definitionText(labels, locale).text).join(' · ');
+    }
+    return copy;
+  }, [locale]);
+  return (
+    <PatternStory path="/catalogue/definitions" visitor="Signed Out">
+      <AppShell>
+        <div className="flex min-w-0 flex-col gap-12">
+          <DefinitionGuideContent
+            locale={locale}
+            address={{ type: 'schema:Book' }}
+            read={{ ok: true, pin: 'active', release }}
+            retry={() => {}}
+          />
+          <DefinitionGuideContent
+            locale={locale}
+            address={{ type: 'schema:Book', property: 'schema:author' }}
+            read={{ ok: true, pin: 'active', release }}
+            retry={() => {}}
+          />
+        </div>
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+export const LongNamesAndPhoneKeyboard: Story = {
+  render: () => <LongGuideStory />,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: constructed long localized names on the actual list and selected-field components at 390px. The recorded active digest, regex and qualifier constraints remain exact. Keyboard disclosure, target geometry, focus and full text ranges are authored browser witnesses, not measured results.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const document = canvasElement.ownerDocument;
+    const guides = canvas.getAllByRole('article');
+    await expect(document.documentElement.clientWidth).toBe(390);
+    const geometry = async () => {
+      for (const guide of guides) {
+        const bounds = guide.getBoundingClientRect();
+        await expect(bounds.left).toBeGreaterThanOrEqual(0);
+        await expect(bounds.right).toBeLessThanOrEqual(390);
+        await expect(guide.scrollWidth).toBeLessThanOrEqual(guide.clientWidth + 1);
+        // Closed native details have no visible target or text geometry until expanded.
+        for (const target of guide.querySelectorAll<HTMLElement>('a, select, summary')) {
+          if (target.getClientRects().length === 0) continue;
+          const rect = target.getBoundingClientRect();
+          await expect(rect.width).toBeGreaterThanOrEqual(44);
+          await expect(rect.height).toBeGreaterThanOrEqual(44);
+          await expect(rect.left).toBeGreaterThanOrEqual(bounds.left - 1);
+          await expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+        }
+        for (const text of guide.querySelectorAll<HTMLElement>('h1, h2, h3, p, label, a, summary, dt, dd, code')) {
+          if (text.getClientRects().length === 0) continue;
+          const box = text.getBoundingClientRect();
+          const walker = document.createTreeWalker(text, 4 /* SHOW_TEXT */);
+          while (walker.nextNode()) {
+            if (!walker.currentNode.textContent?.trim()) continue;
+            const range = document.createRange();
+            range.selectNodeContents(walker.currentNode);
+            for (const line of range.getClientRects()) {
+              await expect(line.left).toBeGreaterThanOrEqual(Math.max(bounds.left, box.left) - 1);
+              await expect(line.right).toBeLessThanOrEqual(Math.min(bounds.right, box.right) + 1);
+            }
+          }
+        }
+      }
+      await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+    };
+    await geometry();
+    const fieldGuide = within(guides[1]!);
+    const release = fieldGuide.getByText(m.guide_active()).closest('summary')!;
+    release.focus();
+    await expect(release).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(release.parentElement).toHaveAttribute('open');
+    await expect(fieldGuide.getByText(definitions.digest)).toBeVisible();
+    await geometry();
+    const qualifierHeading = fieldGuide.getByRole('heading', { level: 3, name: m.guide_qualifiers() });
+    const qualifiers = qualifierHeading.closest('section')!.querySelectorAll('summary');
+    for (const summary of qualifiers) {
+      summary.focus();
+      await expect(summary).toHaveFocus();
+      await expect(getComputedStyle(summary).display).toBe('list-item');
+      await expect(getComputedStyle(summary).listStyleType).not.toBe('none');
+      await userEvent.keyboard(' ');
+      await expect(summary.parentElement).toHaveAttribute('open');
+      await geometry();
+    }
+    const identifier = fieldGuide.getAllByText(m.guide_identifier()).at(-1)!.closest('summary')!;
+    identifier.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(identifier.parentElement).toHaveAttribute('open');
+    await expect(fieldGuide.getByText('schema:author', { selector: 'code' })).toBeVisible();
+    await expect(fieldGuide.getByText('^[1-9][0-9]{0,3}$', { selector: 'code' })).toBeVisible();
+    await geometry();
+    await userEvent.tab();
+    await expect(fieldGuide.getByRole('link', { name: m.guide_fields() })).toHaveFocus();
   },
 };

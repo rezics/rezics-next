@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import type { PropertyDefinition } from '@rezics/definitions';
+import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { useState, type ReactNode } from 'react';
+import { cn } from '@rezics/ui/utils';
+import { useId, useState, type ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { unitSymbols } from './statement-editor';
@@ -21,8 +23,11 @@ import {
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+const linkClassName =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 // Keep native summary display and its disclosure marker, including keyboard activation.
-const summaryClassName = 'min-h-11 min-w-11 cursor-pointer py-3 md:pointer-fine:min-h-0 md:pointer-fine:py-0';
+const summaryClassName =
+  'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal rounded-sm py-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-0 md:pointer-fine:py-0';
 
 function Kind({ datatype, locale }: { datatype: string; locale: string }) {
   const o = { locale: locale as never };
@@ -44,7 +49,7 @@ function Constraint({ label, children }: { label: string; children: ReactNode })
   return (
     <div className="min-w-0 space-y-1">
       <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd>{children}</dd>
+      <dd className="min-w-0 max-w-full [overflow-wrap:anywhere]">{children}</dd>
     </div>
   );
 }
@@ -158,25 +163,29 @@ function Constraints({
         )}
       </dl>
       {qualifiers && (
-        <section className="space-y-3">
-          <h3 className="font-medium">{m.guide_qualifiers({}, o)}</h3>
+        <section className="flex min-w-0 flex-col gap-3">
+          <ContentItemHeading level={3} className="font-medium">
+            {m.guide_qualifiers({}, o)}
+          </ContentItemHeading>
           {definition.qualifiers.length === 0 ? (
             <p className="text-muted-foreground">{m.guide_no_qualifiers({}, o)}</p>
           ) : (
             definition.qualifiers.map((id) => {
               const qualifier = release.properties[id];
               return (
-                <details key={id} className="rounded-lg border border-border p-3">
-                  <summary className={summaryClassName}>
-                    <Meaning values={qualifier?.labels} locale={locale} />
-                  </summary>
-                  {qualifier && (
-                    <div className="mt-3 space-y-3">
-                      <Meaning values={qualifier.descriptions} locale={locale} />
-                      <Constraints definition={qualifier} release={release} locale={locale} qualifiers={false} />
-                    </div>
-                  )}
-                </details>
+                <ContentItemFrame key={id} as="div" className="min-w-0 p-3">
+                  <details className="min-w-0">
+                    <summary className={summaryClassName}>
+                      <Meaning values={qualifier?.labels} locale={locale} />
+                    </summary>
+                    {qualifier && (
+                      <div className="mt-3 space-y-3">
+                        <Meaning values={qualifier.descriptions} locale={locale} />
+                        <Constraints definition={qualifier} release={release} locale={locale} qualifiers={false} />
+                      </div>
+                    )}
+                  </details>
+                </ContentItemFrame>
               );
             })
           )}
@@ -225,6 +234,7 @@ export function DefinitionGuideContent({
   retry: () => void;
 }) {
   const o = { locale: locale as never };
+  const typeId = useId();
   const [selected, setSelected] = useState(address.type ?? '');
   const back = guideReturnTo(address.returnTo, locale) ?? `/${locale}/catalogue/new`;
   const release = read?.ok ? read.release : undefined;
@@ -272,7 +282,7 @@ export function DefinitionGuideContent({
           </details>
           {read.pin === 'pinned' && (
             <a
-              className="inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal text-sm underline"
+              className={cn(linkClassName, 'text-sm')}
               href={definitionGuideHref(locale, { ...address, release: undefined })}
             >
               {m.guide_active({}, o)}
@@ -282,12 +292,13 @@ export function DefinitionGuideContent({
             <p role="status">{m.guide_empty({}, o)}</p>
           ) : (
             <Field>
-              <FieldLabel className="min-w-0 max-w-full flex-wrap" htmlFor="guide-type">
+              <FieldLabel className="min-w-0 max-w-full flex-wrap" htmlFor={typeId}>
                 {m.catalogue_create_type({}, o)}
               </FieldLabel>
               <NativeSelect
                 className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11 md:pointer-fine:[&_select]:min-h-8"
-                id="guide-type"
+                id={typeId}
+                aria-describedby={type ? `${typeId}-meaning` : undefined}
                 value={selected}
                 onChange={(event) => setSelected(event.target.value)}
               >
@@ -303,57 +314,63 @@ export function DefinitionGuideContent({
           {type && (
             <section className="space-y-5">
               <header className="space-y-2">
-                <h2 className="text-xl font-semibold">
+                <ContentItemHeading level={2} id={`${typeId}-meaning`} className="text-xl font-semibold">
                   <Meaning values={type.labels} locale={locale} />
-                </h2>
+                </ContentItemHeading>
                 <p>
                   <Meaning values={type.descriptions} locale={locale} />
                 </p>
               </header>
               {field && property ? (
-                <section className="space-y-5 rounded-xl border border-border bg-card p-4 sm:p-6">
-                  <header className="space-y-2">
-                    <h3 className="text-lg font-semibold">
-                      <Meaning values={field.labels} locale={locale} />
-                    </h3>
-                    <p>
-                      <Meaning values={field.descriptions} locale={locale} />
+                <section>
+                  <ContentItemFrame as="div" className="flex min-w-0 flex-col gap-5 p-4 sm:p-6">
+                    <header className="space-y-2">
+                      <ContentItemHeading level={3} className="text-lg font-semibold">
+                        <Meaning values={field.labels} locale={locale} />
+                      </ContentItemHeading>
+                      <p>
+                        <Meaning values={field.descriptions} locale={locale} />
+                      </p>
+                    </header>
+                    <Constraints definition={field} release={release} locale={locale} />
+                    <p className="text-sm">
+                      {field.disclosure === 'sourceOrConsent' ? m.guide_consent({}, o) : m.guide_references({}, o)}
                     </p>
-                  </header>
-                  <Constraints definition={field} release={release} locale={locale} />
-                  <p className="text-sm">
-                    {field.disclosure === 'sourceOrConsent' ? m.guide_consent({}, o) : m.guide_references({}, o)}
-                  </p>
-                  <details className="text-sm text-muted-foreground">
-                    <summary className={summaryClassName}>{m.guide_identifier({}, o)}</summary>
-                    <code className="break-all">{property}</code>
-                  </details>
-                  <a
-                    className="inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline"
-                    href={definitionGuideHref(locale, { ...address, type: selected, property: undefined })}
-                  >
-                    {m.guide_fields({}, o)}
-                  </a>
+                    <details className="text-sm text-muted-foreground">
+                      <summary className={summaryClassName}>{m.guide_identifier({}, o)}</summary>
+                      <code className="break-all">{property}</code>
+                    </details>
+                    <a
+                      className={linkClassName}
+                      href={definitionGuideHref(locale, { ...address, type: selected, property: undefined })}
+                    >
+                      {m.guide_fields({}, o)}
+                    </a>
+                  </ContentItemFrame>
                 </section>
               ) : (
                 <>
-                  <h3 className="font-semibold">{m.guide_fields({}, o)}</h3>
+                  <ContentItemHeading level={3} className="font-semibold">
+                    {m.guide_fields({}, o)}
+                  </ContentItemHeading>
                   {type.properties.length === 0 ? (
                     <p>{m.guide_no_fields({}, o)}</p>
                   ) : (
                     <ul className="space-y-3">
                       {type.properties.map((id) => (
-                        <li key={id}>
-                          {release.properties[id] ? (
-                            <a
-                              className="inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4"
-                              href={definitionGuideHref(locale, { ...address, type: selected, property: id })}
-                            >
-                              <Meaning values={release.properties[id]?.labels} locale={locale} />
-                            </a>
-                          ) : (
-                            <p>{m.guide_missing({}, o)}</p>
-                          )}
+                        <li key={id} className="min-w-0">
+                          <ContentItemFrame as="div" className="min-w-0 px-3 py-2">
+                            {release.properties[id] ? (
+                              <ContentItemTitleLink
+                                className={cn(linkClassName, 'w-full')}
+                                href={definitionGuideHref(locale, { ...address, type: selected, property: id })}
+                              >
+                                <Meaning values={release.properties[id]?.labels} locale={locale} />
+                              </ContentItemTitleLink>
+                            ) : (
+                              <p>{m.guide_missing({}, o)}</p>
+                            )}
+                          </ContentItemFrame>
                         </li>
                       ))}
                     </ul>
