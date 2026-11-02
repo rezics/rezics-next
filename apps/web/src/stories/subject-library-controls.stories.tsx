@@ -111,12 +111,13 @@ export const LoadedCollectionChoices: Story = {
     await userEvent.click(within(slot).getByRole('button', { name: m.library_subject_add_collection() }));
     const body = within(document.body);
     const load = await body.findByRole('button', { name: m.library_subject_load_collections() });
+    const chooser = within(load.closest('form')!.parentElement!);
     await targetsFit([load]);
     await keyboardReach(load);
     await userEvent.keyboard('{Enter}');
     const choices = await Promise.all(
       collections.collections.map(async (row) => {
-        const title = await body.findByText(row.title, { exact: true });
+        const title = await chooser.findByText(row.title, { exact: true });
         const button = title.closest('button');
         if (!button) throw new Error('Collection selection must remain an actual button');
         return button;
