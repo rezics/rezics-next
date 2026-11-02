@@ -14,7 +14,9 @@ import { m } from '../src/paraglide/messages.js';
 mock.module('@tanstack/react-start', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { SubjectFrame, SubjectViewPage, subjectFrame } = await import('../src/features/pages/subject-frame');
-const { ViewHeading } = await import('../src/features/pages/view-heading');
+const { StreamHeading, StreamHeadingLevelContext, ViewHeading } = await import('../src/features/pages/view-heading');
+const { SubjectPage } = await import('../src/features/pages/subject');
+const { SubjectCommunityRegion } = await import('../src/features/pages/subject-community-view');
 const { SubjectLibraryLeaf } = await import('../src/features/pages/subject-library-leaf');
 const { subjectPageMessages, viewTabLabels } = await import('../src/features/pages/route-support');
 const { subjectTabs } = await import('../src/features/pages/views');
@@ -51,13 +53,21 @@ async function mount({
   realm,
   missing = false,
   session = 'signed-out',
+  embedded = false,
+  streamTitle,
 }: {
   streams?: 'none' | 'one' | 'many';
   realm?: string;
   missing?: boolean;
   session?: 'signed-out' | 'unavailable';
+  embedded?: boolean;
+  streamTitle?: string;
 } = {}) {
   const input = supplied(streams, realm);
+  if (streamTitle)
+    input.page.document.content = input.page.document.content.map((node) =>
+      node.type === 'Credits' ? { ...node, props: { ...node.props, title: { de: streamTitle } } } : node,
+    );
   if (missing) {
     const { original: _original, ...frame } = input.frame;
     input.frame = { ...frame, title: { text: '' }, summary: null };
@@ -65,7 +75,17 @@ async function mount({
   const base = subjectHref({ id: input.frame.id, label: input.frame.title.text }, 'en').href;
   const client = new QueryClient();
   client.setQueryData(['exposure', 'anonymous'], ['personal_library']);
-  const content = (
+  const content = embedded ? (
+    <SubjectPage
+      page={input.page}
+      subjectLabel={input.frame.title.text}
+      locale="en"
+      messages={subjectPageMessages()}
+      view="credits"
+      renderJsonLd={false}
+      framed
+    />
+  ) : (
     <SubjectViewPage
       page={input.page}
       subjectLabel={input.frame.title.text}
@@ -169,8 +189,7 @@ describe('Companion Subject views retain the complete supplied title, original t
 
   test('one real stream owns its heading and continuation; the wrapper adds neither', async () => {
     const { html } = await mount({ streams: 'one', realm: qualifiedRealm });
-    // The required h1 must come from the stream; adding a wrapper would duplicate its heading.
-    // The current read-only stream emits h2, so this acceptance remains unresolved.
+    // The h1 comes from the stream rather than a duplicate wrapper heading.
     expect(html.match(/<h1\b/g)).toHaveLength(1);
     expect(html.match(/<h1[^>]*>Cast<\/h1>/g)).toHaveLength(1);
     expect(html.match(/<h[12][^>]*>Cast<\/h[12]>/g)).toHaveLength(1);
@@ -187,6 +206,55 @@ describe('Companion Subject views retain the complete supplied title, original t
     });
     expect(target.searchParams.has('context')).toBe(false);
     expect(html).toContain('Cast community');
+  });
+
+  test('an embedded real stream retains h2 and a full-page stream preserves its complete supplied heading and language', async () => {
+    const embedded = await mount({ streams: 'one', embedded: true });
+    expect(embedded.html).not.toContain('<h1');
+    expect(embedded.html.match(/<h2[^>]*>Cast<\/h2>/g)).toHaveLength(1);
+    const page = await mount({ streams: 'one', streamTitle: heading });
+    expect(page.html.match(/<h1\b/g)).toHaveLength(1);
+    expect(page.html).toContain(`${escaped(heading)}</h1>`);
+    expect(page.html).toMatch(/<h1[^>]*id="cast-title"[^>]*lang="de"/);
+    expect(hrefs(page.html).filter((href) => href.includes('cursor=cast-next'))).toEqual(
+      hrefs(embedded.html).filter((href) => href.includes('cursor=cast-next')),
+    );
+  });
+
+  test('the shared rank option preserves embedded community headings and a direct host can override the inherited rank', () => {
+    for (const kind of ['review', 'discussion'] as const) {
+      const label = kind === 'review' ? m.subject_reviews() : m.subject_discussion();
+      const region = (
+        <SubjectCommunityRegion
+          id={kind}
+          kind={kind}
+          region={{ state: 'closed' }}
+          authors={{}}
+          now="2026-11-02T00:00:00.000Z"
+          subject={qualifiedSubject}
+          locale="en"
+          href={`${subjectHref(qualifiedSubject, 'en').href}/${kind === 'review' ? 'reviews' : 'discussion'}`}
+          paged
+        />
+      );
+      const embedded = renderToStaticMarkup(region);
+      expect(embedded).not.toContain('<h1');
+      expect(embedded).toContain(`${escaped(label)}</h2>`);
+      const fullPage = renderToStaticMarkup(<StreamHeadingLevelContext value={1}>{region}</StreamHeadingLevelContext>);
+      expect(fullPage.match(/<h1\b/g)).toHaveLength(1);
+      expect(fullPage).toContain(`${escaped(label)}</h1>`);
+      expect(fullPage).toContain(`aria-labelledby="${kind}-title"`);
+    }
+    const explicit = renderToStaticMarkup(
+      <StreamHeadingLevelContext value={1}>
+        <StreamHeading level={2} lang="de">
+          {heading}
+        </StreamHeading>
+      </StreamHeadingLevelContext>,
+    );
+    expect(explicit).toMatch(/<h2[^>]*lang="de"/);
+    expect(explicit).toContain(`${escaped(heading)}</h2>`);
+    expect(explicit).not.toContain('<h1');
   });
 
   test('multiple stream groups retain their own cursor targets and exactly one page heading', async () => {

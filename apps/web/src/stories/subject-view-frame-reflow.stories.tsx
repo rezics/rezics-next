@@ -28,10 +28,11 @@ type ExampleProps = {
   largeText: boolean;
   rtl: boolean;
   actionSession: 'signed-out' | 'unavailable';
+  longStreamTitle: boolean;
 };
 
 /** Only the existing supplied fixture bodies are used; these samples establish no native access or read outcome. */
-function CompanionPage({ streams, realm, missing, largeText, rtl, actionSession }: ExampleProps) {
+function CompanionPage({ streams, realm, missing, largeText, rtl, actionSession, longStreamTitle }: ExampleProps) {
   const locale = getLocale();
   useEffect(() => {
     if (!largeText) return;
@@ -48,6 +49,10 @@ function CompanionPage({ streams, realm, missing, largeText, rtl, actionSession 
     page.document.content = page.document.content.filter((node) => ['SubjectHeader', 'Credits'].includes(node.type));
   if (streams === 'none')
     page.document.content = page.document.content.map((node) => ({ ...node, props: { ...node.props, paged: false } }));
+  if (longStreamTitle)
+    page.document.content = page.document.content.map((node) =>
+      node.type === 'Credits' ? { ...node, props: { ...node.props, title: { de: headingSuffix } } } : node,
+    );
   const identity = subjectFrame(page, locale)!;
   const date = subjectFrame(recording as unknown as SubjectPageData, locale)?.date;
   const frame = {
@@ -119,11 +124,19 @@ const meta = {
     docs: {
       description: {
         component:
-          'Whole 320px companion compositions mount SubjectFrame, SubjectViewPage, real tabs, the shared signed-out Library leaf and WriteReviewAction. Existing qualified-relations fixture bodies supply rows and cursors; changing only paged presentation flags exercises the fallback. Long identity/heading values are supplied display stress inputs. LargeText doubles the document root text size. Plays cover layout, keyboard focus and exact destinations without invoking readers or continuation callbacks. Authored UNRUN under MINIMAL; native access, browser acceptance and visual review remain deferred.',
+          'Whole 320px companion compositions mount SubjectFrame, SubjectViewPage, real tabs, the shared signed-out Library leaf and WriteReviewAction. Existing qualified-relations fixture bodies supply rows and cursors; changing only paged presentation flags exercises the fallback. Long identity/heading values are supplied display stress inputs. LargeText doubles the document root text size. A single stream owns h1; groups remain h2 beneath the page heading. Plays cover layout, keyboard focus and exact destinations without invoking readers or continuation callbacks. Browser, native and visual acceptance remain deferred.',
       },
     },
   },
-  args: { streams: 'none', realm: true, missing: false, largeText: false, rtl: false, actionSession: 'signed-out' },
+  args: {
+    streams: 'none',
+    realm: true,
+    missing: false,
+    largeText: false,
+    rtl: false,
+    actionSession: 'signed-out',
+    longStreamTitle: false,
+  },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     const main = canvasElement.querySelector<HTMLElement>('[data-slot="companion-page-sample"]')!;
@@ -181,13 +194,13 @@ const meta = {
           `${base}/${view}?node=${node}&cursor=${node}-next${args.realm ? `&realm=${qualifiedRealm}` : ''}`,
         );
       }
-      // Single-stream h1 acceptance is unresolved: its read-only renderer currently emits h2.
       await expect(canvas.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-      await expect(canvas.getAllByRole('heading', { name: 'Cast' })).toHaveLength(1);
-      await expect(canvas.getByRole('heading', { name: 'Cast' })).toHaveProperty(
-        'tagName',
-        args.streams === 'one' ? 'H1' : 'H2',
-      );
+      const streamTitle = args.longStreamTitle ? headingSuffix : 'Cast';
+      await expect(canvas.getAllByRole('heading', { name: streamTitle })).toHaveLength(1);
+      const streamHeading = canvas.getByRole('heading', { name: streamTitle });
+      await expect(streamHeading).toHaveProperty('tagName', args.streams === 'one' ? 'H1' : 'H2');
+      await expect(streamHeading.scrollWidth).toBeLessThanOrEqual(streamHeading.clientWidth + 1);
+      if (args.longStreamTitle) await expect(streamHeading).toHaveAttribute('lang', 'de');
     }
     const action = canvas.queryByRole('link', { name: m.thread_review_sign_in() });
     if (args.actionSession === 'signed-out') {
@@ -231,3 +244,4 @@ export const MissingLabelAndCover: Story = { args: { missing: true, actionSessio
 export const GlobalActions: Story = { args: { realm: false } };
 export const StreamOwned: Story = { args: { streams: 'one' } };
 export const MultipleStreamGroups: Story = { args: { streams: 'many' } };
+export const StreamOwnedLargeText: Story = { args: { streams: 'one', largeText: true, longStreamTitle: true } };

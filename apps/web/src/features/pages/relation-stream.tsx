@@ -17,6 +17,7 @@ import {
   type Section,
 } from './overview';
 import { loadRelationGroup, relationGroupKey, type RelationGroupRequest } from './relation-stream-query';
+import { StreamHeading, type StreamHeadingLevel } from './view-heading';
 
 let nextRelationIncarnation = 0;
 let nextSectionIncarnation = 0;
@@ -171,6 +172,8 @@ export function RelationStream(props: {
   view: string;
   title: string;
   titleLang?: string | undefined;
+  /** Direct full-page hosts may select h1; composed hosts supply the shared heading context. */
+  headingLevel?: StreamHeadingLevel | undefined;
 }) {
   const { value, node, view } = props;
   const queryClient = useQueryClient();
@@ -217,6 +220,7 @@ function StreamState({
   view,
   title,
   titleLang,
+  headingLevel,
   identity,
   registerOwner,
 }: {
@@ -226,6 +230,7 @@ function StreamState({
   view: string;
   title: string;
   titleLang?: string | undefined;
+  headingLevel?: StreamHeadingLevel | undefined;
   identity: string;
   registerOwner: (identity: string, retire: (updateState?: boolean) => void) => () => void;
 }) {
@@ -518,9 +523,14 @@ function StreamState({
       aria-busy={visiblePending}
       className="min-w-0 space-y-4"
     >
-      <h2 id={`${node}-title`} lang={titleLang} className="text-2xl font-semibold tracking-tight">
+      <StreamHeading
+        level={headingLevel}
+        id={`${node}-title`}
+        lang={titleLang}
+        className="text-2xl font-semibold tracking-tight"
+      >
         {title}
-      </h2>
+      </StreamHeading>
       {readerUnavailable ? (
         <p role="alert">{m.subject_relation_unavailable({}, options)}</p>
       ) : unique.size ? (

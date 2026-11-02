@@ -1,5 +1,20 @@
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ComponentProps, type ReactNode } from 'react';
 import { cn } from '@rezics/ui/utils';
+
+export type StreamHeadingLevel = 1 | 2;
+
+/** A full-page host can promote its sole stream; embedded streams retain h2 by default. */
+export const StreamHeadingLevelContext = createContext<StreamHeadingLevel>(2);
+
+export function StreamHeading({
+  level,
+  className,
+  ...props
+}: ComponentProps<'h2'> & { level?: StreamHeadingLevel | undefined }) {
+  const inheritedLevel = useContext(StreamHeadingLevelContext);
+  const Heading = (level ?? inheritedLevel) === 1 ? 'h1' : 'h2';
+  return <Heading {...props} className={cn('min-w-0 max-w-full wrap-anywhere', className)} />;
+}
 
 /** The view's own heading, which follows the subject frame. */
 export function ViewHeading({

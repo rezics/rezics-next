@@ -8,6 +8,7 @@ import { reviewThreadHref } from '../../threads/review-policy';
 import { boardContribution, boardDirectoryHref, boardDirectoryRequest } from '../../threads/board-directory';
 import type { CommunityKind, CommunityRegion, SubjectCommunity } from './subject-community';
 import { linkClass, linkColor } from './shared';
+import { StreamHeading } from './view-heading';
 
 export const SubjectCommunityContext = createContext<SubjectCommunity | undefined>(undefined);
 const headingClass =
@@ -69,9 +70,9 @@ export function SubjectCommunityRegion({
       className="min-w-0 space-y-4"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 id={`${id}-title`} className={headingClass}>
+        <StreamHeading id={`${id}-title`} className={headingClass}>
           {title}
-        </h2>
+        </StreamHeading>
         {!paged && region.state === 'ready' && (
           <a data-slot="see-all" className={actionClass} href={href}>
             {m.home_see_all({}, options)}

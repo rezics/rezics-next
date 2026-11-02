@@ -47,7 +47,7 @@ import { ViewTabs, type ViewTabLabels } from './view-tabs';
 import type { ViewTab } from './views';
 import { assertSamePageContext } from './context-subject';
 import { contextHref } from './context-navigation';
-import { ViewHeadingActions } from './view-heading';
+import { StreamHeadingLevelContext, ViewHeadingActions } from './view-heading';
 export { ViewHeading, ViewHeadingActions } from './view-heading';
 
 const DATE_PROPERTIES = ['schema:datePublished', 'schema:startDate', 'schema:dateCreated'];
@@ -422,7 +422,9 @@ export function SubjectViewPage({ frame, label, actions, nextHref, ...page }: Su
       ) : (
         <ViewHeadingActions label={label} actions={actions} />
       )}
-      <SubjectPage {...page} framed />
+      <StreamHeadingLevelContext value={ownHeading ? 1 : 2}>
+        <SubjectPage {...page} framed />
+      </StreamHeadingLevelContext>
       {nextHref && !ownContinuation ? (
         <a
           data-slot="next-page"
