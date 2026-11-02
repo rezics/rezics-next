@@ -50,6 +50,7 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
     db,
     tasks: () => all,
     task: () => held,
+    attempt: () => ({}),
     dependency(id: string) {
       if (id === 'missing') return undefined;
       if (id === 'malformed') throw new Error('malformed dependency');
