@@ -110,3 +110,40 @@ test('unreadable or invalid settings preserve start-time pools and report the er
     h.dispose();
   }
 });
+
+test('fractional hourly reserves preserve numeric boundaries without relaxing other policy fields', () => {
+  const localFile = `${import.meta.dir}/local.json`;
+  const pool = {
+    name: 'fractional',
+    cli: 'codex',
+    classes: ['codex'],
+    configDirectory: '.',
+    command: 'codex',
+    allowanceKey: 'fractional',
+    policy: { weight: 1, reservePercent: 12, allowUnknown: false, maxAgeMs: 60000, maxBurnPerHour: 0.3 },
+  };
+  for (const reservePerHour of [Number.MIN_VALUE, Number.EPSILON, 1 - Number.EPSILON, 1, Number.MAX_VALUE]) {
+    const policy = { ...pool.policy, reservePerHour };
+    expect(readPoolPolicies([{ ...pool, policy }], localFile)[0]!.policy).toEqual(policy);
+  }
+  for (const reservePerHour of [-0, false, [], 0n]) {
+    expect(() => readPoolPolicies([{ ...pool, policy: { ...pool.policy, reservePerHour } }], localFile)).toThrow(
+      /^invalid reservePerHour$/,
+    );
+  }
+  const invalidFields = [
+    ['weight', 0.6, 'invalid weight'],
+    ['maxAgeMs', 0.6, 'invalid maxAgeMs'],
+    ['reservePercent', -0.1, 'invalid reservePercent'],
+    ['reservePercent', 100, 'reservePercent must be less than 100'],
+    ['allowUnknown', 'false', 'allowUnknown must be explicit'],
+    ['maxBurnPerHour', 0, 'invalid maxBurnPerHour'],
+    ['maxBurnPerHour', Number.NaN, 'invalid maxBurnPerHour'],
+    ['extra', 1, 'unknown pool policy field: extra'],
+  ] as const;
+  for (const [field, value, error] of invalidFields) {
+    expect(() =>
+      readPoolPolicies([{ ...pool, policy: { ...pool.policy, reservePerHour: 0.6, [field]: value } }], localFile),
+    ).toThrow(error);
+  }
+});
