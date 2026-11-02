@@ -21,10 +21,22 @@ test('no-script validation returns the bounded raw draft and captured rename bas
     const name = `  ${'📚'.repeat(101)}  `;
     const request = new Request('https://site.test/en/library/labels', {
       method: 'POST',
-      body: new URLSearchParams({ operation, name, id: 'label', library_label_revision: '7', idempotencyKey: '0192f3a0-6c1e-7b2a-9d4e-000000000832' }),
+      body: new URLSearchParams({
+        operation,
+        name,
+        id: 'label',
+        library_label_revision: '7',
+        idempotencyKey: '0192f3a0-6c1e-7b2a-9d4e-000000000832',
+      }),
     });
     const response = await handleLabelForm(client, request, {});
     const flash = response.headers.get('set-cookie')!.split(';')[0]!.split('=')[1]!;
-    expect(JSON.parse(decodeURIComponent(flash)).feedback).toMatchObject({ operation, name, ok: false, reason: 'invalid_request', retry: { revision: 7 } });
+    expect(JSON.parse(decodeURIComponent(flash)).feedback).toMatchObject({
+      operation,
+      name,
+      ok: false,
+      reason: 'invalid_request',
+      retry: { revision: 7 },
+    });
   }
 });

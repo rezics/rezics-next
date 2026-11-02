@@ -158,7 +158,9 @@ test('Labels protects local drafts, preserves focus and original retries, and by
         expect(field(id).value).toBe(name!);
         expect(field(id).getAttribute('aria-invalid')).toBe('true');
         const descriptions = field(id).getAttribute('aria-describedby')!.split(' ');
-        const error = descriptions.map((key) => window.document.getElementById(key)).find((node) => node?.getAttribute('role') === 'alert');
+        const error = descriptions
+          .map((key) => window.document.getElementById(key))
+          .find((node) => node?.getAttribute('role') === 'alert');
         expect(error?.textContent).toBe(message!);
         expect(window.document.activeElement).toBe(field(id));
       }

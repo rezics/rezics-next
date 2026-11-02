@@ -476,7 +476,14 @@ export function LabelsPageView({
     const errorId = `${operation}-error-${label.id}`;
     const helpId = `rename-help-${label.id}`;
     return (
-      <form method="post" action={mutationPath} onSubmit={onSubmit} noValidate className="min-w-0 space-y-4" aria-busy={busy}>
+      <form
+        method="post"
+        action={mutationPath}
+        onSubmit={onSubmit}
+        noValidate
+        className="min-w-0 space-y-4"
+        aria-busy={busy}
+      >
         {hidden(operation, operation === 'rename' ? label.renameKey : label.deleteKey, label.id, label.revision)}
         {operation === 'rename' ? (
           <Field>
@@ -507,7 +514,9 @@ export function LabelsPageView({
               aria-invalid={invalid || undefined}
               aria-describedby={`${helpId}${invalid ? ` ${errorId}` : ''}`}
             />
-            <p id={helpId} className="text-sm text-muted-foreground">{m.library_label_name_input_help()}</p>
+            <p id={helpId} className="text-sm text-muted-foreground">
+              {m.library_label_name_input_help()}
+            </p>
           </Field>
         ) : (
           <input type="hidden" name="name" value={label.name} />
@@ -663,7 +672,14 @@ export function LabelsPageView({
         ) : null}
       </form>
       <LabelExposure current={hydrated ? originating?.isCurrent : undefined} page={page} operation="create">
-        <form key={page.createKey} method="post" action={mutationPath} onSubmit={onSubmit} noValidate className="space-y-2">
+        <form
+          key={page.createKey}
+          method="post"
+          action={mutationPath}
+          onSubmit={onSubmit}
+          noValidate
+          className="space-y-2"
+        >
           {hidden('create', page.createKey)}
           <Field>
             <FieldLabel htmlFor="new-label">{m.library_label_name()}</FieldLabel>
@@ -689,7 +705,9 @@ export function LabelsPageView({
                 {m.library_label_create()}
               </Button>
             </div>
-            <p id="create-name-help" className="text-sm text-muted-foreground">{m.library_label_name_input_help()}</p>
+            <p id="create-name-help" className="text-sm text-muted-foreground">
+              {m.library_label_name_input_help()}
+            </p>
             {fieldError('create') ? error('create-error', fieldIssue('create')) : null}
           </Field>
         </form>
