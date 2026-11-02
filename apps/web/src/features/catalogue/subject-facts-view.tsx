@@ -637,7 +637,7 @@ function SubjectFactsLive({
         type="button"
         variant="outline"
         className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-        disabled={busy}
+        disabled={busy && !onReload}
         onClick={() => (onReload ? onReload() : void reload())}
       >
         {m.correction_reload({}, o)}

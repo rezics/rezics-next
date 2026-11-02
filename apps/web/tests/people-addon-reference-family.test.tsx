@@ -396,6 +396,9 @@ test('People credit and Addon base references share installed parts without chan
       for (const failure of failures) {
         personNext = failure;
         await click(m.correction_retry());
+        await waitFor(() =>
+          expect(within(host).getByRole('button', { name: m.correction_retry() }).hasAttribute('disabled')).toBe(false),
+        );
         retired();
       }
       const recovered = structuredClone(currentRead);
