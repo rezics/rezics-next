@@ -38,7 +38,15 @@ function erased(index: number, restorableUntil?: string): ThreadPost {
   };
 }
 
-const withheld = { ...source, availability: 'withheld', body: null, sha256: null, decisionId } as ThreadPost;
+const withheld: ThreadPost = {
+  ...source,
+  visibility: 'published',
+  availability: 'withheld',
+  removed: true,
+  body: null,
+  sha256: null,
+  decisionId,
+};
 
 /** Only the supplied callbacks are simulated; this example makes no reads or writes. */
 function RecoveryInterface() {
@@ -176,7 +184,7 @@ export const Canonical: Story = {
       .toHaveAttribute('href', `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`);
 
     await userEvent.keyboard('{Tab}');
-    for (const control of [restore, secondRestore, refresh, more, ...canvas.getByTestId('recovery-prompts').querySelectorAll('a'), ...withheldOwner.querySelectorAll('a[href^="/moderation/"]')]) {
+    for (const control of [restore, secondRestore, refresh, more, ...canvas.getByTestId('recovery-prompts').querySelectorAll<HTMLAnchorElement>('a'), ...withheldOwner.querySelectorAll<HTMLAnchorElement>('a[href^="/moderation/"]')]) {
       const rect = control.getBoundingClientRect();
       await expect(rect.width).toBeGreaterThanOrEqual(44);
       await expect(rect.height).toBeGreaterThanOrEqual(44);

@@ -63,7 +63,16 @@ test('Complete usable removed post recovery and write prompts: native admission 
   const previousLocale = getLocale();
   setLocale('en', { reload: false });
   const root = window.document.createElement('div');
-  const withheld = { ...source, availability: 'withheld', body: null, sha256: null, decisionId } as ThreadPost;
+  const withheld: ThreadPost = {
+    ...source,
+    visibility: 'published',
+    availability: 'withheld',
+    removed: true,
+    body: null,
+    sha256: null,
+    decisionId,
+  };
+  const { decisionId: _decision, ...withoutDecision } = withheld;
   const cases: { label: string; value: Props; restore: boolean; decision: boolean; identity: boolean; time?: string }[] = [
     { label: 'author with supplied deadline', value: props(erased(0, deadline), { onRestore: () => {} }), restore: true, decision: false, identity: false, time: deadline },
     { label: 'another reader without native eligibility', value: props(erased(0), { viewerId: 'another-reader' }), restore: false, decision: false, identity: false },
@@ -75,7 +84,7 @@ test('Complete usable removed post recovery and write prompts: native admission 
     { label: 'unknown clock without command authority', value: props(erased(0), { deadlineUnknown: true }), restore: false, decision: false, identity: false },
     { label: 'withheld author', value: props(withheld, { onRestore: () => {} }), restore: false, decision: true, identity: true, time: source.createdAt },
     { label: 'withheld other reader', value: props(withheld, { viewerId: 'another-reader', onRestore: () => {} }), restore: false, decision: false, identity: true, time: source.createdAt },
-    { label: 'withheld without admitted decision', value: props({ ...withheld, decisionId: undefined } as ThreadPost), restore: false, decision: false, identity: true, time: source.createdAt },
+    { label: 'withheld without admitted decision', value: props(withoutDecision), restore: false, decision: false, identity: true, time: source.createdAt },
     { label: 'restored command awaiting readable content', value: props(erased(0, deadline), { restored: true, onRestore: () => {} }), restore: false, decision: false, identity: false },
   ];
   try {
