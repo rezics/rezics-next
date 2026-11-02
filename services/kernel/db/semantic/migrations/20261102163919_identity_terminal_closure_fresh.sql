@@ -1,28 +1,13 @@
 -- migrate:up
--- Drain any preceding-version pricing writer before counting and dropping its
+-- Drain any preceding-version pricing writer before retiring its
 -- rows. The migration transaction keeps this lock through physical retirement.
 LOCK TABLE semantic.identity_terminal_closure_original,
  semantic.identity_terminal_closure_ticket IN ACCESS EXCLUSIVE MODE;
 
--- Pricing has no runtime producer. Retire its physical rows, not the native
--- source, directory, export or generation records that share their reservations.
--- Count only actual deleted rows: an unused provisional copy is not evidence
--- that another native operation has disposed of its retained physical state.
-WITH retired AS (
- SELECT partition_no,reservation,count(*) AS copies
- FROM (
-   SELECT partition_no,reservation FROM semantic.identity_terminal_closure_original
-   UNION ALL
-   SELECT partition_no,reservation FROM semantic.identity_terminal_closure_ticket
- ) physical
- GROUP BY partition_no,reservation
-)
-UPDATE semantic.identity_epoch_mapping_generation g
- SET closure_copies=g.closure_copies-retired.copies
- FROM retired
- WHERE g.partition_no=retired.partition_no AND g.generation=retired.reservation
-   AND g.job_id=g.generation;
-
+-- Pricing has no runtime producer. Retire metadata without updating the shared
+-- generation counters: their erasure hooks require a native command, and the
+-- counters may include provisional copies or retained source/directory work.
+-- Only native disposal and empty indexed reference ranges can reclaim them.
 DROP TABLE semantic.identity_terminal_closure_ticket;
 DROP TABLE semantic.identity_terminal_closure_original;
 DROP FUNCTION semantic.guard_identity_terminal_ticket();

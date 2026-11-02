@@ -35,9 +35,9 @@ The historical execution-original and spent-ticket tables have no runtime produc
 migration, together with their bootstrap-page grant/cleanup columns. The directory group's native cleanup flag
 remains recovery state. Owner changes still refuse retained native source, export, directory and admission work.
 
-Decision: subtract only deleted pricing rows from shared physical counters; preserve unmatched provisional copies
-and native reservation keys until native disposal and empty indexed ranges permit reclamation. The migration never
-zeros or deletes a generation reservation, and an inconsistent physical count fails its existing constraint.
+Decision: retire pricing metadata without changing shared generation counters or native reservation keys; only
+native disposal and empty indexed reference ranges can reclaim actual or uncertain reservations. Generation counter
+writes require the native command and erasure hooks, so schema retirement cannot authorize a counter refund.
 
 Existing structural bounds remain: source export and directory keyset pages contain at most 100
 originals; a group contains at most 4,096 originals; its native keyset drain therefore has at most
