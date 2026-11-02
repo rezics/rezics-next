@@ -34,7 +34,7 @@ async function advanceHome(canvasElement: HTMLElement) {
     await expect(
       [...canvasElement.querySelectorAll('[data-feed-id]')].map((row) => row.getAttribute('data-feed-id')),
     ).toEqual(previous);
-    const query = new URL(held.requests[0]!.url).searchParams;
+    const query = held.requests[0]!.searchParams;
     await expect(Object.fromEntries(query)).toEqual({
       stream: 'home',
       limit: '20',

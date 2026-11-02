@@ -29,7 +29,7 @@ export type HomeFeedStory =
 let selected: HomeFeedStory = 'mixed';
 let homeActive = false;
 let spaceReads = 0;
-let continuation: { requests: Request[]; wait: Promise<void>; release: () => void } | undefined;
+let continuation: { requests: URL[]; wait: Promise<void>; release: () => void } | undefined;
 
 /** Hold the real fake-route request so the existing Home stories can exercise pending Next. */
 export function holdHomeFeedContinuation() {
@@ -39,7 +39,7 @@ export function holdHomeFeedContinuation() {
     resume = resolve;
   });
   const held = {
-    requests: [] as Request[],
+    requests: [] as URL[],
     wait,
     release: () => {
       resume();
@@ -308,7 +308,7 @@ export const routes: FakeRoute[] = [
       const url = new URL(request.url);
       const held = continuation;
       if (held && url.searchParams.has('cursor')) {
-        held.requests.push(request.clone());
+        held.requests.push(url);
         await held.wait;
       }
       if (selected === 'expired-page' && url.searchParams.has('cursor')) return { status: 409, code: 'invalid_cursor' };
