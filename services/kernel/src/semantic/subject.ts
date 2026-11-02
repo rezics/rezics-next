@@ -984,8 +984,7 @@ function loadRelatedInEpisode(
   episode: RelatedEpisode,
 ): Promise<Map<string, RelatedState>> {
   assertBatch(ids, 'A related read accepts at most 256 ids');
-  const known =
-    episode.pending === undefined ? null : { ids: episode.ids, pending: episode.pending };
+  const known = episode.pending === undefined ? null : { ids: episode.ids, pending: episode.pending };
   if (known && ids.every((id) => known.ids.includes(id))) return known.pending;
   const pending = queryRelated(client as Queryable, ids).then(async (fetched) => {
     const prior = known ? await known.pending : new Map<string, RelatedState>();

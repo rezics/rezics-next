@@ -63,7 +63,10 @@ test('a failed related-read episode does not poison the next read', async () => 
 });
 
 test('related reads reject batches above 256 ids', async () => {
-  await expect(readRelated(db.pool, Array.from({ length: 257 }, () => newId(0x6e10)))).rejects.toThrow(
-    'A related read accepts at most 256 ids',
-  );
+  await expect(
+    readRelated(
+      db.pool,
+      Array.from({ length: 257 }, () => newId(0x6e10)),
+    ),
+  ).rejects.toThrow('A related read accepts at most 256 ids');
 });
