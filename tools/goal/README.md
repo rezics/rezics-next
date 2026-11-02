@@ -633,7 +633,10 @@ experiments measure it.
 The watchdog runs with reminder delivery and reports running tasks, or ready tasks with a pending retry intent, that
 have had no worker for ten minutes after an attempt ended and its recorded driver identity is no longer live. A reused
 PID does not count as the same driver. A live driver may still be settling the attempt, including running affected tests
-or waiting for a check-host slot. It also reports a `stabilize` branch that has stayed out of the integration branch for
+or waiting for a check-host slot. A pending retry that waits by design is not reported: one whose `after` dependencies
+are not yet integrated, whose backoff time has not come, or that waits out a check-host outage. `goal status` shows
+such a retry's `pendingRetry` reason (`dependencies`, `backoff`, `check-hosts`, or `start` when it waits only for a
+starter or capacity). It also reports a `stabilize` branch that has stayed out of the integration branch for
 thirty minutes. Failure signatures from attempts ended in the previous thirty minutes are grouped: three matching
 failures across at least two tasks produce one incident with the attempt and task counts, affected Goal names and one
 example. The incident repeats after two hours while the signature remains present.
@@ -1364,7 +1367,7 @@ the supermanager receives one alert with links to the earlier and fresh logs.
 
 ```sh
 bun tools/goal/src/cli.ts status [task]
-bun tools/goal/src/cli.ts retry <task> [--brief <file>]
+bun tools/goal/src/cli.ts retry <task> [--brief <file>] [--fresh-session]
 bun tools/goal/src/cli.ts stop <task>
 bun tools/goal/src/cli.ts cancel <task>
 bun tools/goal/src/cli.ts consult <task>
@@ -1385,6 +1388,11 @@ bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] 
 ```
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
+
+A retry resumes the previous attempt's provider session while the pool, CLI and model stay the same. `--fresh-session`
+starts the next attempt in a new session instead, keeping the branch, worktree, commits and uncommitted work; the
+choice is kept on the task through capacity waits, dependency holds and restarts, and the attempt it creates consumes
+it, so later retries resume again. It combines with `--brief` but not with the proof options.
 Explicit retries are recorded with their amended brief as pending host start intents and return without waiting for capacity. The host consumes pending intents on recovery ticks in their saved order, starting each once as capacity becomes available.
 Product work integrating into dev can be retried at any generation: `retry <task>`, with or without
 `--expected-attempt 0`, also starts a never-started task, and `--brief` also amends a retry that is still waiting to
