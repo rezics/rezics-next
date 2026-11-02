@@ -8,9 +8,15 @@ import type { ContextResolution, SetupContextPicker } from './setup-context-pick
 
 function Resolution({ value, saved = false }: { value: ContextResolution; saved?: boolean }) {
   return (
-    <div className="min-w-0 space-y-1">
-      {value.phase === 'ready' ? <p className="break-words font-medium">{value.choice?.label}</p> : null}
-      <p className="break-all font-mono text-xs text-muted-foreground">{value.id}</p>
+    <div className="flex min-w-0 flex-col gap-1">
+      {value.phase === 'ready' ? (
+        <p className="min-w-0 font-medium leading-relaxed">
+          <bdi>{value.choice?.label}</bdi>
+        </p>
+      ) : null}
+      <p className="break-all font-mono text-xs leading-relaxed text-muted-foreground">
+        <bdi dir="ltr">{value.id}</bdi>
+      </p>
       {value.phase !== 'ready' ? (
         <p role={saved || value.phase === 'loading' ? 'status' : 'alert'} className="text-sm text-muted-foreground">
           {value.phase === 'loading'
@@ -34,50 +40,59 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
   const selectionVersion = picker.selectionVersion();
   const referenceVersion = picker.referenceVersion();
   return (
-    <Field className="min-w-0">
-      <div className="space-y-1">
-        <FieldLabel htmlFor={`${id}-query`}>{m.space_setup_context_label()}</FieldLabel>
-        <FieldDescription id={`${id}-hint`}>{m.setup_context_hint()}</FieldDescription>
+    <Field className="min-w-0 max-w-full [overflow-wrap:anywhere]">
+      <div className="flex min-w-0 flex-col gap-1">
+        <FieldLabel className="min-w-0 max-w-full" htmlFor={`${id}-query`}>
+          {m.space_setup_context_label()}
+        </FieldLabel>
+        <FieldDescription className="text-start" id={`${id}-hint`}>
+          {m.setup_context_hint()}
+        </FieldDescription>
       </div>
       {current ? (
-        <div className="space-y-3 rounded-xl border border-border p-4">
+        <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-border p-4">
           <p className="text-xs font-medium text-muted-foreground">{m.setup_context_current()}</p>
           <Resolution value={current} saved />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled || current.phase === 'loading'}
-            onClick={() => void picker.retryCurrent(current.id, currentVersion)}
-          >
-            {m.setup_context_check_current()}
-          </Button>
-          {current.phase === 'ready' ? (
+          <div className="flex min-w-0 flex-wrap gap-2">
             <Button
               type="button"
-              variant="ghost"
-              disabled={disabled}
-              onClick={() => void picker.chooseCurrent(current.id, currentVersion)}
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              disabled={disabled || current.phase === 'loading'}
+              onClick={() => void picker.retryCurrent(current.id, currentVersion)}
             >
-              {m.setup_context_use_current()}
+              {m.setup_context_check_current()}
             </Button>
-          ) : null}
+            {current.phase === 'ready' ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                disabled={disabled}
+                onClick={() => void picker.chooseCurrent(current.id, currentVersion)}
+              >
+                {m.setup_context_use_current()}
+              </Button>
+            ) : null}
+          </div>
         </div>
       ) : null}
       {selected ? (
-        <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <p className="flex items-center gap-2 text-sm font-medium">
-            {selected.phase === 'ready' ? <Check className="size-4 text-primary" aria-hidden="true" /> : null}
+        <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <p className="flex min-w-0 items-start gap-2 text-sm font-medium">
+            {selected.phase === 'ready' ? <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /> : null}
             {m.setup_context_selected()}
           </p>
           <Resolution value={selected} />
           {current && current.id !== selected.id ? (
             <p className="text-sm text-muted-foreground">{m.setup_context_changed()}</p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
             {selected.phase === 'denied' || selected.phase === 'unavailable' ? (
               <Button
                 type="button"
                 variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                 disabled={disabled}
                 onClick={() => void picker.retrySelected(selected.id, selected.phase, selectionVersion)}
               >
@@ -87,6 +102,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
             <Button
               type="button"
               variant="ghost"
+              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
               disabled={disabled}
               onClick={() => picker.clear(selected.id, selectionVersion)}
             >
@@ -95,9 +111,9 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           </div>
         </div>
       ) : null}
-      <div className="relative">
+      <div className="relative min-w-0">
         <Search
-          className="pointer-events-none absolute start-3 top-3 size-4 text-muted-foreground"
+          className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
           aria-hidden="true"
         />
         <Input
@@ -105,7 +121,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           type="search"
           value={state.query}
           maxLength={256}
-          className="ps-9"
+          className="h-auto min-h-11 ps-9 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
           placeholder={m.setup_context_placeholder()}
           aria-describedby={`${id}-hint`}
           disabled={disabled}
@@ -121,7 +137,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
         </p>
       ) : null}
       {page.phase === 'ready' ? (
-        <div className="space-y-3" aria-live="polite">
+        <div className="flex min-w-0 flex-col items-start gap-3" aria-live="polite">
           <p className="text-sm text-muted-foreground">
             {state.query.trim()
               ? m.setup_context_results({ query: state.query.trim() })
@@ -130,10 +146,10 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           {page.contexts.length ? (
             <ul
               aria-label={m.setup_context_results_label()}
-              className="divide-y divide-border overflow-hidden rounded-xl border border-border"
+              className="w-full min-w-0 divide-y divide-border rounded-xl border border-border"
             >
               {page.contexts.map((choice) => (
-                <li key={choice.id}>
+                <li key={choice.id} className="min-w-0">
                   <button
                     type="button"
                     disabled={disabled}
@@ -144,10 +160,14 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                         version: searchVersion,
                       })
                     }
-                    className="flex min-h-14 w-full flex-col gap-1 px-4 py-3 text-start hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+                    className="flex h-auto min-h-14 min-w-0 w-full max-w-full flex-col gap-1 rounded-lg px-4 py-3 text-start whitespace-normal hover:bg-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
                   >
-                    <span className="break-words text-sm font-medium">{choice.label}</span>
-                    <span className="break-all font-mono text-xs text-muted-foreground">{choice.id}</span>
+                    <span className="min-w-0 max-w-full text-sm font-medium leading-relaxed">
+                      <bdi>{choice.label}</bdi>
+                    </span>
+                    <span className="min-w-0 max-w-full break-all font-mono text-xs leading-relaxed text-muted-foreground">
+                      <bdi dir="ltr">{choice.id}</bdi>
+                    </span>
                   </button>
                 </li>
               ))}
@@ -159,6 +179,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
             <Button
               type="button"
               variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
               disabled={disabled}
               onClick={() =>
                 picker.next({
@@ -175,13 +196,14 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
         </div>
       ) : null}
       {page.phase === 'unavailable' || page.phase === 'denied' ? (
-        <div className="space-y-3 rounded-xl bg-muted p-4">
+        <div className="flex min-w-0 flex-col items-start gap-3 rounded-xl bg-muted p-4">
           <p role="alert" className="text-sm">
             {page.phase === 'denied' ? m.setup_context_denied() : m.setup_context_unavailable()}
           </p>
           <Button
             type="button"
             variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
             disabled={disabled}
             onClick={() =>
               picker.retrySearch({
@@ -195,26 +217,31 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           </Button>
         </div>
       ) : null}
-      <details className="rounded-xl border border-border p-3" open={selected?.phase !== 'ready'}>
-        <summary className="cursor-pointer text-sm font-medium">{m.space_setup_load_existing()}</summary>
-        <div className="mt-3 space-y-3">
-          <FieldDescription id={`${id}-reference-hint`}>{m.space_setup_reference_hint()}</FieldDescription>
+      <details className="min-w-0 max-w-full rounded-xl border border-border p-3" open={selected?.phase !== 'ready'}>
+        <summary className="min-h-11 min-w-11 max-w-full cursor-pointer content-center rounded-md py-2 text-start text-sm font-medium whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {m.space_setup_load_existing()}
+        </summary>
+        <div className="mt-3 flex min-w-0 flex-col gap-3">
+          <FieldDescription className="text-start" id={`${id}-reference-hint`}>
+            {m.space_setup_reference_hint()}
+          </FieldDescription>
           <label htmlFor={`${id}-reference`} className="text-sm">
             {m.space_setup_reference()}
           </label>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
             <Input
               id={`${id}-reference`}
               value={reference}
               maxLength={36}
               disabled={disabled || selected?.phase === 'loading'}
               aria-describedby={`${id}-reference-hint`}
-              className="min-w-0 flex-1 basis-48"
+              className="h-auto min-h-11 min-w-0 flex-1 basis-64 font-mono text-sm focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
               onChange={(event) => picker.reference(event.target.value, reference, referenceVersion)}
             />
             <Button
               type="button"
               variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
               disabled={
                 disabled ||
                 selected?.phase === 'loading' ||
@@ -227,7 +254,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           </div>
         </div>
       </details>
-      <FieldDescription>{m.setup_context_keep_draft()}</FieldDescription>
+      <FieldDescription className="text-start">{m.setup_context_keep_draft()}</FieldDescription>
     </Field>
   );
 }
