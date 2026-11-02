@@ -4,7 +4,13 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { watchOrPoll } from './watch-or-poll.ts';
 import { join } from 'node:path';
 import type { ManagerEvent, ManagerEventKind, ManagerInbox } from './contracts.ts';
-import { migrateSharedInbox, sharedInboxFields } from './inbox-shared.ts';
+import {
+  migrateSharedInbox,
+  sharedInboxFields,
+  SHARED_INBOX_DEFAULT_PAGE_SIZE,
+  SHARED_INBOX_MAX_PAGE_SIZE,
+  type InboxPage,
+} from './inbox-shared.ts';
 
 const wakingKinds = new Set<ManagerEventKind>([
   'width',
@@ -32,6 +38,31 @@ export type InboxEntry = {
   /** Present when identical deliveries within an hour were folded into this row. */
   deliveries?: number;
 };
+export type InboxReadOptions = { limit?: number; cursor?: number; unread?: boolean };
+type InboxRow = {
+  id: number;
+  event: string;
+  read_at: number | null;
+  acknowledged_at: number | null;
+  delivery_count: number;
+};
+
+function inboxEntry(row: InboxRow): InboxEntry {
+  return {
+    id: row.id,
+    event: JSON.parse(row.event) as ManagerEvent,
+    readAt: row.read_at,
+    acknowledgedAt: row.acknowledged_at,
+    ...(row.delivery_count > 1 ? { deliveries: row.delivery_count } : {}),
+  };
+}
+
+function inboxReadLimit(limit: number | undefined): number {
+  const selected = limit ?? SHARED_INBOX_DEFAULT_PAGE_SIZE;
+  if (!Number.isSafeInteger(selected) || selected < 1 || selected > SHARED_INBOX_MAX_PAGE_SIZE)
+    throw new Error(`inbox page limit must be between 1 and ${SHARED_INBOX_MAX_PAGE_SIZE}`);
+  return selected;
+}
 /** Identical deliveries to one recipient within this window are stored once, with a count. */
 export const INBOX_DEDUPE_WINDOW_MS = 60 * 60_000;
 /** A completion result answers the manager's own request, so a repeated result still wakes it. */
@@ -263,33 +294,50 @@ export class SqliteManagerInbox implements ManagerInbox {
         .query(
           `SELECT id, event, read_at, acknowledged_at, delivery_count FROM manager_inbox WHERE manager = ? AND ${condition} ORDER BY id`,
         )
-        .all(manager) as {
-        id: number;
-        event: string;
-        read_at: number | null;
-        acknowledged_at: number | null;
-        delivery_count: number;
-      }[]
-    ).map((row) => ({
-      id: row.id,
-      event: JSON.parse(row.event),
-      readAt: row.read_at,
-      acknowledgedAt: row.acknowledged_at,
-      ...(row.delivery_count > 1 ? { deliveries: row.delivery_count } : {}),
-    }));
+        .all(manager) as InboxRow[]
+    ).map(inboxEntry);
   }
-  read(manager: string): InboxEntry[] {
+  /**
+   * One oldest-first page of unacknowledged wakeable events. Only the returned rows become read; later pages and
+   * concurrent deliveries stay unread until selected. Continue with `cursor` set to `nextCursor`.
+   */
+  readPage(manager: string, options: InboxReadOptions = {}): InboxPage<InboxEntry> {
+    const limit = inboxReadLimit(options.limit);
+    if (options.cursor !== undefined && (!Number.isSafeInteger(options.cursor) || options.cursor < 1))
+      throw new Error('inbox cursor must be a positive integer');
     return this.db
       .transaction(() => {
-        const entries = this.rows(manager, 'wakeable = 1 AND acknowledged_at IS NULL');
-        this.db
+        const cursorClause = options.cursor !== undefined ? 'AND id > ?' : '';
+        const stateClause = options.unread ? 'AND read_at IS NULL' : 'AND acknowledged_at IS NULL';
+        const params = options.cursor !== undefined ? [manager, options.cursor, limit + 1] : [manager, limit + 1];
+        const rows = this.db
           .query(
-            'UPDATE manager_inbox SET read_at = COALESCE(read_at, ?) WHERE manager = ? AND wakeable = 1 AND acknowledged_at IS NULL',
+            `SELECT id, event, read_at, acknowledged_at, delivery_count FROM manager_inbox
+             WHERE manager = ? AND wakeable = 1 ${stateClause} ${cursorClause}
+             ORDER BY id LIMIT ?`,
           )
-          .run(Date.now(), manager);
-        return entries;
+          .all(...params) as InboxRow[];
+        const hasMore = rows.length > limit;
+        const entries = (hasMore ? rows.slice(0, limit) : rows).map(inboxEntry);
+        if (entries.length) {
+          const placeholders = entries.map(() => '?').join(',');
+          this.db
+            .query(
+              `UPDATE manager_inbox SET read_at = COALESCE(read_at, ?) WHERE manager = ? AND id IN (${placeholders})`,
+            )
+            .run(Date.now(), manager, ...entries.map((entry) => entry.id));
+        }
+        return {
+          entries,
+          limit,
+          hasMore,
+          nextCursor: hasMore && entries.length ? entries[entries.length - 1]!.id : null,
+        };
       })
       .immediate();
+  }
+  read(manager: string, options?: InboxReadOptions): InboxEntry[] {
+    return this.readPage(manager, options).entries;
   }
   acknowledge(manager: string, ids?: readonly number[]): void {
     this.db
@@ -330,7 +378,7 @@ export class SqliteManagerInbox implements ManagerInbox {
       };
       const finish = () => {
         try {
-          const events = this.read(manager);
+          const events = this.read(manager, { unread: true });
           close();
           resolve(events);
         } catch (error) {

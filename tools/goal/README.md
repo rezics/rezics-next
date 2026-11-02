@@ -1117,7 +1117,10 @@ Any authenticated manager, including the registered supermanager, can inspect ev
 queries use the persisted provider session identity (`CODEX_THREAD_ID` or `CLAUDE_CODE_SESSION_ID`); `GOAL_MANAGER`
 alone and worker task identity do not authorize them. Log, thread and digest queries are read-only: they do not mark a
 recipient's message read or acknowledged, set notification state, wake a manager, or deliver a message. Existing
-`inbox wait`, `inbox read` and `inbox ack` retain their per-recipient behavior.
+`inbox wait` and `inbox ack` retain their per-recipient behavior. `inbox read` returns one bounded page of that
+recipient's unacknowledged wakeable events, oldest id first, and marks only those rows read. Pages use the same size as
+shared queries (default 50, maximum 100) and include `hasMore` and `nextCursor`. Remaining unread events stay pending.
+`inbox wait` returns one unread page, so a later wait continues from the remaining work.
 
 ```sh
 bun tools/goal/src/cli.ts inbox log [--from <manager>] [--to <manager>] [--goal <goal>] [--task <task>] \
@@ -1507,8 +1510,8 @@ bun tools/goal/src/cli.ts manager renew <manager>
 bun tools/goal/src/cli.ts manager stop <manager>
 bun tools/goal/src/cli.ts manager complete <manager>
 bun tools/goal/src/cli.ts inbox wait <manager>
-bun tools/goal/src/cli.ts inbox read <manager>
-bun tools/goal/src/cli.ts inbox ack <manager>
+bun tools/goal/src/cli.ts inbox read <manager> [--limit <1..100>] [--cursor <id>]
+bun tools/goal/src/cli.ts inbox ack <manager> [id ...]
 bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] [--evidence <path>]
 ```
 
@@ -1544,6 +1547,12 @@ An unstarted held task can use `retry --brief` on the same task id to replace th
 An amended held contract starts a fresh provider session after its old worker settles. A check waiter with saved checks
 and no terminal attempt record can continue its original session with the current contract; retained check IDs on a
 terminal attempt do not make it a check continuation. An unchanged held retry retains its supported session resume.
+
+`inbox read` prints a JSON page (`entries`, `limit`, `hasMore`, `nextCursor`) in existing oldest-first event order.
+Continue from `nextCursor`. Only returned events become read. `inbox ack <manager>` acknowledges every already-read
+event for that recipient; passing ids acknowledges only those rows. Unread later-page events stay pending. `inbox wait`
+returns one unread page so a later wait continues from remaining work. Decision: reuse the shared-inbox page size rather
+than a second wake scheduler.
 
 `inbox send` delivers a one-line decision event to another manager and records the sending manager as its source.
 

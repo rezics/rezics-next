@@ -981,7 +981,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         const settle = at < 0 ? 0 : Number(flags[at + 1]);
         if (!Number.isFinite(settle) || settle < 0) throw new Error('usage: inbox wait <manager> [--settle <seconds>]');
         console.log(JSON.stringify(await inbox.wait(id, undefined, settle * 1000)));
-      } else if (subcommand === 'read') console.log(JSON.stringify(inbox.read(id)));
+      } else if (subcommand === 'read') console.log(JSON.stringify(inbox.readPage(id, parseInboxReadOptions(flags))));
       else if (subcommand === 'ack') inbox.acknowledge(id, flags.length ? flags.map(Number) : undefined);
       else throw new Error(`unknown inbox command: ${subcommand ?? '(missing)'}`);
     }
@@ -1060,6 +1060,26 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     return 0;
   }
   throw new Error(`invalid command arguments: ${argv.join(' ')}`);
+}
+
+function parseInboxReadOptions(args: string[]): { limit?: number; cursor?: number } {
+  const options: { limit?: number; cursor?: number } = {};
+  for (let index = 0; index < args.length; index++) {
+    const option = args[index]!;
+    const value = args[++index];
+    if ((option !== '--limit' && option !== '--cursor') || !value || value.startsWith('--'))
+      throw new Error('usage: inbox read <manager> [--limit <n>] [--cursor <id>]');
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error(`inbox ${option} must be a positive integer`);
+    if (option === '--limit') {
+      if (options.limit !== undefined) throw new Error('duplicate inbox option: --limit');
+      options.limit = parsed;
+    } else {
+      if (options.cursor !== undefined) throw new Error('duplicate inbox option: --cursor');
+      options.cursor = parsed;
+    }
+  }
+  return options;
 }
 
 /** Public control-plane command modules use this to attribute a manager's command to its turn. */

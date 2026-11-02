@@ -242,6 +242,55 @@ test('a worker info message is read at the next wake but never wakes the manager
   }
 });
 
+test('inbox read pages unacknowledged events, marks only the page read, and continues without dropping later work', () => {
+  const s = setup();
+  try {
+    for (let n = 1; n <= 5; n++)
+      s.inbox.deliver({ managerId: 'manager', kind: 'instruction', summary: `Event ${n}` });
+    expect(() => s.inbox.readPage('manager', { limit: 0 })).toThrow(/between 1 and 100/);
+    expect(() => s.inbox.readPage('manager', { limit: 101 })).toThrow(/between 1 and 100/);
+    const first = s.inbox.readPage('manager', { limit: 2 });
+    expect(first.entries.map((entry) => entry.event.summary)).toEqual(['Event 1', 'Event 2']);
+    expect(first).toMatchObject({ limit: 2, hasMore: true });
+    expect(first.nextCursor).toBe(first.entries[1]!.id);
+    expect(s.inbox.pending('manager').map((entry) => entry.event.summary)).toEqual(['Event 3', 'Event 4', 'Event 5']);
+    expect(s.inbox.readPage('manager', { limit: 2 }).entries.map((entry) => entry.event.summary)).toEqual([
+      'Event 1',
+      'Event 2',
+    ]);
+    s.inbox.deliver({ managerId: 'manager', kind: 'decision', summary: 'Late' });
+    const second = s.inbox.readPage('manager', { limit: 2, cursor: first.nextCursor! });
+    expect(second.entries.map((entry) => entry.event.summary)).toEqual(['Event 3', 'Event 4']);
+    s.inbox.acknowledge('manager', first.entries.map((entry) => entry.id));
+    expect(s.inbox.read('manager', { limit: 2 }).map((entry) => entry.event.summary)).toEqual(['Event 3', 'Event 4']);
+    s.inbox.acknowledge('manager');
+    const rest = s.inbox.readPage('manager');
+    expect(rest.entries.map((entry) => entry.event.summary)).toEqual(['Event 5', 'Late']);
+    expect(rest).toMatchObject({ limit: 50, hasMore: false, nextCursor: null });
+    expect(s.inbox.pending('manager')).toHaveLength(0);
+  } finally {
+    s.close();
+  }
+});
+
+test('wait returns one bounded page and a later wait still exposes remaining unread events', async () => {
+  const s = setup();
+  try {
+    for (let n = 1; n <= 51; n++)
+      s.inbox.deliver({ managerId: 'manager', kind: 'instruction', summary: `Event ${n}` });
+    const first = await s.inbox.wait('manager');
+    expect(first.map((entry) => entry.event.summary)).toEqual(
+      Array.from({ length: 50 }, (_, index) => `Event ${index + 1}`),
+    );
+    expect(s.inbox.pending('manager').map((entry) => entry.event.summary)).toEqual(['Event 51']);
+    const second = await s.inbox.wait('manager');
+    expect(second.map((entry) => entry.event.summary)).toEqual(['Event 51']);
+    expect(s.inbox.pending('manager')).toHaveLength(0);
+  } finally {
+    s.close();
+  }
+});
+
 test('a multi-line summary is delivered folded onto one line', () => {
   const s = setup();
   try {
