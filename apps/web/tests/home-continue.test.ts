@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import { chromium, type Browser, type BrowserContext } from 'playwright';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 import { waitForPersonalRead } from './session-token';
 
 const app = join(import.meta.dir, '..');
@@ -339,16 +340,41 @@ function freePort(): Promise<number> {
 }
 
 let child: ChildProcess | undefined;
+let serverCustody: ProcessCustody | undefined;
 let started: Promise<string> | undefined;
+const browsers = new Set<Browser>();
+const contexts = new Set<BrowserContext>();
+const browserClosures = new WeakMap<Browser, Promise<void>>();
+const contextClosures = new WeakMap<BrowserContext, Promise<void>>();
+
+function closeBrowser(browser: Browser): Promise<void> {
+  const existing = browserClosures.get(browser);
+  if (existing) return existing;
+  const closing = cleanupAll([{ label: 'Home Continue browser', run: () => browser.close(), timeoutMs: 5000 }]).then(
+    () => {
+      browsers.delete(browser);
+    },
+  );
+  browserClosures.set(browser, closing);
+  return closing;
+}
+
+function closeContext(context: BrowserContext): Promise<void> {
+  const existing = contextClosures.get(context);
+  if (existing) return existing;
+  const closing = cleanupAll([
+    { label: 'Home Continue browser context', run: () => context.close(), timeoutMs: 5000 },
+  ]).then(() => {
+    contexts.delete(context);
+  });
+  contextClosures.set(context, closing);
+  return closing;
+}
 
 // The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
       detached: true,
@@ -363,23 +389,43 @@ function site(): Promise<string> {
         WEBSITE_SCOPES: scopes.join(' '),
       },
     });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
+    const custody = (serverCustody = ownNodeProcess(child, {
+      label: 'Home Continue Vite server',
+      outputLimit: 8000,
+    }));
+    let spawnError: Error | undefined;
+    child.once('error', (error) => {
+      spawnError = error;
+    });
     const origin = `http://127.0.0.1:${port}`;
     const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, {
-          redirect: 'manual',
-          signal: AbortSignal.timeout(60_000),
-        });
-        if (response.status < 500) return origin;
-      } catch {
-        // The dev server is still starting.
+    try {
+      for (;;) {
+        if (spawnError)
+          throw new Error(
+            `dev server failed to spawn: ${spawnError.message}\nCaptured output:\n${custody.diagnostics()}`,
+            {
+              cause: spawnError,
+            },
+          );
+        const exit = child.exitCode ?? child.signalCode;
+        if (exit !== null) throw new Error(`dev server exited with ${exit}:\n${custody.diagnostics()}`);
+        try {
+          const response = await fetch(`${origin}/en`, {
+            redirect: 'manual',
+            signal: AbortSignal.timeout(60_000),
+          });
+          if (response.status < 500) return origin;
+        } catch {
+          // The dev server is still starting.
+        }
+        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
+        await Bun.sleep(500);
       }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
+    } catch (error) {
+      return await withCleanup(async () => {
+        throw error;
+      }, [{ label: 'Home Continue Vite startup', run: () => custody.close(), timeoutMs: 7000 }]);
     }
   })();
   return started;
@@ -426,10 +472,14 @@ const alice = async () => {
 };
 
 async function readPage(path: string, cookie?: string) {
-  const origin = await site();
-  const browser = await chromium.launch();
-  try {
-    const context = await browser.newContext();
+  let browser: Browser | undefined;
+  let context: BrowserContext | undefined;
+  return await withCleanup(async () => {
+    const origin = await site();
+    browser = await chromium.launch();
+    browsers.add(browser);
+    context = await browser.newContext();
+    contexts.add(context);
     if (cookie)
       await context.addCookies([
         { name: session, value: cookie, domain: new URL(origin).hostname, path: '/', secure: true, httpOnly: true },
@@ -440,16 +490,21 @@ async function readPage(path: string, cookie?: string) {
     if (cookie) await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
     await page.waitForLoadState('networkidle');
     return { status: response!.status(), html: await page.content() };
-  } finally {
-    await browser.close();
-  }
+  }, [
+    { label: 'Home Continue page context', run: () => (context ? closeContext(context) : undefined), timeoutMs: 6000 },
+    { label: 'Home Continue page browser', run: () => (browser ? closeBrowser(browser) : undefined), timeoutMs: 6000 },
+  ]);
 }
 
 async function inspectHome(path: string, cookie: string, width: number, openMenu = false) {
-  const origin = await site();
-  const browser = await chromium.launch();
-  try {
-    const context = await browser.newContext({ viewport: { width, height: 844 }, hasTouch: false });
+  let browser: Browser | undefined;
+  let context: BrowserContext | undefined;
+  return await withCleanup(async () => {
+    const origin = await site();
+    browser = await chromium.launch();
+    browsers.add(browser);
+    context = await browser.newContext({ viewport: { width, height: 844 }, hasTouch: false });
+    contexts.add(context);
     await context.addCookies([
       { name: session, value: cookie, domain: new URL(origin).hostname, path: '/', secure: true, httpOnly: true },
     ]);
@@ -505,9 +560,18 @@ async function inspectHome(path: string, cookie: string, width: number, openMenu
         scrollWidth: document.documentElement.scrollWidth,
       };
     });
-  } finally {
-    await browser.close();
-  }
+  }, [
+    {
+      label: 'Home Continue inspection context',
+      run: () => (context ? closeContext(context) : undefined),
+      timeoutMs: 6000,
+    },
+    {
+      label: 'Home Continue inspection browser',
+      run: () => (browser ? closeBrowser(browser) : undefined),
+      timeoutMs: 6000,
+    },
+  ]);
 }
 function main(html: string) {
   return /<main\b[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? html;
@@ -536,13 +600,20 @@ function readsTo(path: string) {
 }
 
 afterAll(async () => {
-  fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
+  await cleanupAll([
+    ...[...contexts].map((context) => ({
+      label: 'Home Continue browser context',
+      run: () => closeContext(context),
+      timeoutMs: 6000,
+    })),
+    ...[...browsers].map((browser) => ({
+      label: 'Home Continue browser',
+      run: () => closeBrowser(browser),
+      timeoutMs: 6000,
+    })),
+    { label: 'Home Continue fake API and OIDC listener', run: () => fake.stop(true), timeoutMs: 5000 },
+    { label: 'Home Continue Vite process group', run: () => serverCustody?.close(), timeoutMs: 7000 },
+  ]);
 });
 
 test(

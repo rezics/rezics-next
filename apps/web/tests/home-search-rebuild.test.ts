@@ -5,11 +5,12 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { requestLanguages } from '../src/kernel/languages.ts';
 import platform from '@rezics/composition/profiles/platform.json' with { type: 'json' };
-import { chromium, type Browser, type Page } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import { waitForPersonalRead } from './session-token';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -494,16 +495,13 @@ function freePort(): Promise<number> {
 }
 
 let child: ChildProcess | undefined;
+let serverCustody: ProcessCustody | undefined;
 let started: Promise<string> | undefined;
 
 // The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
       detached: true,
@@ -518,23 +516,43 @@ function site(): Promise<string> {
         WEBSITE_SCOPES: scopes.join(' '),
       },
     });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
+    const custody = (serverCustody = ownNodeProcess(child, {
+      label: 'Home search rebuild Vite server',
+      outputLimit: 8000,
+    }));
+    let spawnError: Error | undefined;
+    child.once('error', (error) => {
+      spawnError = error;
+    });
     const origin = `http://127.0.0.1:${port}`;
     const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, {
-          redirect: 'manual',
-          signal: AbortSignal.timeout(60_000),
-        });
-        if (response.status < 500) return origin;
-      } catch {
-        // The dev server is still starting.
+    try {
+      for (;;) {
+        if (spawnError)
+          throw new Error(
+            `dev server failed to spawn: ${spawnError.message}\nCaptured output:\n${custody.diagnostics()}`,
+            {
+              cause: spawnError,
+            },
+          );
+        const exit = child.exitCode ?? child.signalCode;
+        if (exit !== null) throw new Error(`dev server exited with ${exit}:\n${custody.diagnostics()}`);
+        try {
+          const response = await fetch(`${origin}/en`, {
+            redirect: 'manual',
+            signal: AbortSignal.timeout(60_000),
+          });
+          if (response.status < 500) return origin;
+        } catch {
+          // The dev server is still starting.
+        }
+        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
+        await Bun.sleep(500);
       }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
+    } catch (error) {
+      return await withCleanup(async () => {
+        throw error;
+      }, [{ label: 'Home search rebuild Vite startup', run: () => custody.close(), timeoutMs: 7000 }]);
     }
   })();
   return started;
@@ -587,50 +605,82 @@ async function render(path: string, cookie?: string): Promise<Page> {
   });
   expect(response.status).toBe(200);
   browser ??= await chromium.launch();
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 860 },
-    javaScriptEnabled: Boolean(cookie),
-  });
-  if (cookie)
-    await context.addCookies([
-      { name: session, value: cookie, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
-    ]);
-  // This fixture supplies cover metadata; live browser rendering also needs a successful image response.
-  await context.route(
-    (url) => url.pathname.startsWith('/media/'),
-    (route) =>
-      route.fulfill({
-        contentType: 'image/png',
-        body: Buffer.from(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
-          'base64',
-        ),
-      }),
-  );
-  const page = await context.newPage();
-  if (cookie) {
-    await page.goto(`${await site()}${path}`, { waitUntil: 'networkidle' });
-    await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
-    await page.locator('[data-slot="personal"] article').first().waitFor({ state: 'attached' });
-    // Keep this markup proof unstyled, as the script-free snapshots below are.
-    await page.evaluate(() => {
-      for (const stylesheet of document.querySelectorAll('style, link[rel="stylesheet"]')) stylesheet.remove();
+  let context: BrowserContext | undefined;
+  try {
+    context = await browser.newContext({
+      viewport: { width: 1280, height: 860 },
+      javaScriptEnabled: Boolean(cookie),
     });
-  } else await page.setContent(await response.text());
-  return page;
+    contexts.add(context);
+    if (cookie)
+      await context.addCookies([
+        { name: session, value: cookie, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
+      ]);
+    // This fixture supplies cover metadata; live browser rendering also needs a successful image response.
+    await context.route(
+      (url) => url.pathname.startsWith('/media/'),
+      (route) =>
+        route.fulfill({
+          contentType: 'image/png',
+          body: Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
+            'base64',
+          ),
+        }),
+    );
+    const page = await context.newPage();
+    if (cookie) {
+      await page.goto(`${await site()}${path}`, { waitUntil: 'networkidle' });
+      await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
+      await page.locator('[data-slot="personal"] article').first().waitFor({ state: 'attached' });
+      // Keep this markup proof unstyled, as the script-free snapshots below are.
+      await page.evaluate(() => {
+        for (const stylesheet of document.querySelectorAll('style, link[rel="stylesheet"]')) stylesheet.remove();
+      });
+    } else await page.setContent(await response.text());
+    return page;
+  } catch (error) {
+    if (!context) throw error;
+    return await withCleanup(async () => {
+      throw error;
+    }, [{ label: 'Home search rebuild partial render context', run: () => closeContext(context!), timeoutMs: 6000 }]);
+  }
 }
 
 async function openLive(path: string): Promise<Page> {
   const origin = await site();
   browser ??= await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce' });
-  const page = await context.newPage();
-  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
-  return page;
+  let context: BrowserContext | undefined;
+  try {
+    context = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce' });
+    contexts.add(context);
+    const page = await context.newPage();
+    await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    return page;
+  } catch (error) {
+    if (!context) throw error;
+    return await withCleanup(async () => {
+      throw error;
+    }, [{ label: 'Home search rebuild partial live context', run: () => closeContext(context!), timeoutMs: 6000 }]);
+  }
 }
 
 let browser: Browser | undefined;
+const contexts = new Set<BrowserContext>();
+const contextClosures = new WeakMap<BrowserContext, Promise<void>>();
+
+function closeContext(context: BrowserContext): Promise<void> {
+  const existing = contextClosures.get(context);
+  if (existing) return existing;
+  const closing = cleanupAll([
+    { label: 'Home search rebuild browser context', run: () => context.close(), timeoutMs: 5000 },
+  ]).then(() => {
+    contexts.delete(context);
+  });
+  contextClosures.set(context, closing);
+  return closing;
+}
 
 async function messageOf(locale: string, key: string, values: Record<string, string> = {}): Promise<string> {
   const file = new URL(`../messages/${locale}.json`, import.meta.url);
@@ -641,14 +691,16 @@ const calledPaths = (path: string) => calls.filter((call) => call.path === path)
 const squash = (text: string) => text.replace(/\s+/g, ' ').trim();
 
 afterAll(async () => {
-  await browser?.close();
-  fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
+  await cleanupAll([
+    ...[...contexts].map((context) => ({
+      label: 'Home search rebuild browser context',
+      run: () => closeContext(context),
+      timeoutMs: 6000,
+    })),
+    { label: 'Home search rebuild browser', run: () => browser?.close(), timeoutMs: 5000 },
+    { label: 'Home search rebuild fake API and OIDC listener', run: () => fake.stop(true), timeoutMs: 5000 },
+    { label: 'Home search rebuild Vite process group', run: () => serverCustody?.close(), timeoutMs: 7000 },
+  ]);
 });
 
 test(
@@ -708,7 +760,7 @@ test(
         );
         expect(calledPaths('/v1/progressSessions')).toHaveLength(3);
       } finally {
-        await page.context().close();
+        await closeContext(page.context());
       }
     }
   },
@@ -770,7 +822,7 @@ test(
           expect(squash(await seeAll.innerText())).toBe(await messageOf(locale, 'home_see_all'));
         }
       } finally {
-        await page.context().close();
+        await closeContext(page.context());
       }
     }
   },
@@ -803,7 +855,7 @@ test(
         for (const title of titles) expect(headings.filter((heading) => squash(heading) === title)).toHaveLength(1);
         expect(await body.locator('[role="search"] input[name="q"]').count()).toBe(1);
       } finally {
-        await page.context().close();
+        await closeContext(page.context());
       }
     }
   },
@@ -860,7 +912,7 @@ test(
           'schema:Book',
         ]);
       } finally {
-        await page.context().close();
+        await closeContext(page.context());
       }
       // Typeahead suggestions: the same frame, title, type and year in a smaller cover, in the shell on any other page.
       const origin = await site();
@@ -888,7 +940,7 @@ test(
         const suggest = calledPaths('/v1/subjects:suggest').at(-1)!;
         expect(suggest.search.getAll('languages')).toEqual(languages);
       } finally {
-        await other.context().close();
+        await closeContext(other.context());
       }
     }
     // An empty search and a failed one each say so in a sentence.
@@ -896,13 +948,13 @@ test(
     try {
       expect(await empty.getByRole('main').innerText()).toContain(await messageOf('en', 'search_no_results'));
     } finally {
-      await empty.context().close();
+      await closeContext(empty.context());
     }
     const failed = await openLive('/en/search?q=boom');
     try {
       expect(await failed.getByRole('main').innerText()).toContain(await messageOf('en', 'search_failed'));
     } finally {
-      await failed.context().close();
+      await closeContext(failed.context());
     }
   },
   timeout,

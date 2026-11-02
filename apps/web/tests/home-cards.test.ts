@@ -4,10 +4,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { chromium, type Browser } from 'playwright';
+import { chromium, type Browser, type BrowserContext } from 'playwright';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { pickText } from '@rezics/composition';
 import type { LibraryProgressMode, LibraryUnitCountForms } from '@rezics/definitions';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 import { createFakeKernelFetch, createStoryRecordedKernelFetch, setFakeAdmitted } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import definitionsActive from '../src/kernel/recorded/definitions-active.json';
@@ -376,6 +377,7 @@ function freePort(): Promise<number> {
 }
 
 let child: ChildProcess | undefined;
+let serverCustody: ProcessCustody | undefined;
 let started: Promise<string> | undefined;
 let siteOutput = '';
 
@@ -383,7 +385,6 @@ let siteOutput = '';
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
-    const keep = (chunk: Buffer) => (siteOutput = (siteOutput + chunk.toString()).slice(-8000));
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
       detached: true,
@@ -399,23 +400,46 @@ function site(): Promise<string> {
         WEBSITE_SCOPES: scopes.join(' '),
       },
     });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
+    const custody = (serverCustody = ownNodeProcess(child, {
+      label: 'Home cards Vite server',
+      outputLimit: 8000,
+      onOutput: (chunk) => {
+        siteOutput = (siteOutput + Buffer.from(chunk).toString()).slice(-8000);
+      },
+    }));
+    let spawnError: Error | undefined;
+    child.once('error', (error) => {
+      spawnError = error;
+    });
     const origin = `http://127.0.0.1:${port}`;
     const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${siteOutput}`);
-      try {
-        const response = await fetch(`${origin}/en`, {
-          redirect: 'manual',
-          signal: AbortSignal.timeout(60_000),
-        });
-        if (response.status < 500) return origin;
-      } catch {
-        // The dev server is still starting.
+    try {
+      for (;;) {
+        if (spawnError)
+          throw new Error(
+            `dev server failed to spawn: ${spawnError.message}\nCaptured output:\n${custody.diagnostics()}`,
+            {
+              cause: spawnError,
+            },
+          );
+        const exit = child.exitCode ?? child.signalCode;
+        if (exit !== null) throw new Error(`dev server exited with ${exit}:\n${custody.diagnostics()}`);
+        try {
+          const response = await fetch(`${origin}/en`, {
+            redirect: 'manual',
+            signal: AbortSignal.timeout(60_000),
+          });
+          if (response.status < 500) return origin;
+        } catch {
+          // The dev server is still starting.
+        }
+        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
+        await Bun.sleep(500);
       }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${siteOutput}`);
-      await Bun.sleep(500);
+    } catch (error) {
+      return await withCleanup(async () => {
+        throw error;
+      }, [{ label: 'Home cards Vite startup', run: () => custody.close(), timeoutMs: 7000 }]);
     }
   })();
   return started;
@@ -481,18 +505,33 @@ const alice = async () => {
   return aliceCookie;
 };
 
-afterAll(async () => {
-  await browser?.close();
-  fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
-});
-
 let browser: Browser | undefined;
+const contexts = new Set<BrowserContext>();
+const contextClosures = new WeakMap<BrowserContext, Promise<void>>();
+function closeContext(context: BrowserContext): Promise<void> {
+  const existing = contextClosures.get(context);
+  if (existing) return existing;
+  const closing = cleanupAll([
+    { label: 'Home cards browser context', run: () => context.close(), timeoutMs: 5000 },
+  ]).then(() => {
+    contexts.delete(context);
+  });
+  contextClosures.set(context, closing);
+  return closing;
+}
+
+afterAll(async () => {
+  await cleanupAll([
+    ...[...contexts].map((context) => ({
+      label: 'Home cards browser context',
+      run: () => closeContext(context),
+      timeoutMs: 6000,
+    })),
+    { label: 'Home cards browser', run: () => browser?.close(), timeoutMs: 5000 },
+    { label: 'Home cards fake API and OIDC listener', run: () => fake.stop(true), timeoutMs: 5000 },
+    { label: 'Home cards Vite process group', run: () => serverCustody?.close(), timeoutMs: 7000 },
+  ]);
+});
 type Viewport = { width: number; height: number };
 
 // A live page in a real browser: the layout tests need the stylesheet and the script that hydrates the page.
@@ -509,73 +548,80 @@ async function open(
     viewport,
     reducedMotion: 'reduce',
   });
-  const cookies = [
-    ...(cookie
-      ? [
-          {
-            name: session,
-            value: cookie,
-            domain: '127.0.0.1',
-            path: '/',
-            httpOnly: true,
-            secure: true,
-            sameSite: 'Lax' as const,
-          },
-        ]
-      : []),
-    ...(theme
-      ? [
-          {
-            name: 'rezics_theme',
-            value: theme,
-            domain: '127.0.0.1',
-            path: '/',
-            sameSite: 'Lax' as const,
-          },
-        ]
-      : []),
-  ];
-  if (cookies.length) await context.addCookies(cookies);
-  const page = await context.newPage();
-  const pageErrors: string[] = [];
-  const recordPageError = (error: string) => {
-    pageErrors.push(error);
-    browserErrors?.push(error);
-  };
-  page.on('pageerror', (error) => recordPageError(error.message));
-  page.on('console', (message) => {
-    if (message.type() === 'error') {
-      const location = message.location().url;
-      recordPageError(location ? `${message.text()} (${location})` : message.text());
-    }
-  });
-  await context.route(
-    (url) => url.pathname.startsWith('/media/'),
-    (route) =>
-      route.fulfill({
-        contentType: 'image/png',
-        body: Buffer.from(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
-          'base64',
-        ),
-      }),
-  );
-  setFakeAdmitted(cookie ? viewerAdmissions : []);
-  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+  contexts.add(context);
   try {
-    await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
-  } catch (error) {
-    const body = await page
-      .locator('body')
-      .innerText({ timeout: 1_000 })
-      .catch(() => '');
-    throw new Error(
-      `Page did not hydrate at ${page.url()}: ${error instanceof Error ? error.message : String(error)}\n` +
-        `Browser errors: ${pageErrors.join('\n') || '(none)'}\n` +
-        `Rendered page: ${squash(body).slice(0, 1200) || '(empty)'}`,
+    const cookies = [
+      ...(cookie
+        ? [
+            {
+              name: session,
+              value: cookie,
+              domain: '127.0.0.1',
+              path: '/',
+              httpOnly: true,
+              secure: true,
+              sameSite: 'Lax' as const,
+            },
+          ]
+        : []),
+      ...(theme
+        ? [
+            {
+              name: 'rezics_theme',
+              value: theme,
+              domain: '127.0.0.1',
+              path: '/',
+              sameSite: 'Lax' as const,
+            },
+          ]
+        : []),
+    ];
+    if (cookies.length) await context.addCookies(cookies);
+    const page = await context.newPage();
+    const pageErrors: string[] = [];
+    const recordPageError = (error: string) => {
+      pageErrors.push(error);
+      browserErrors?.push(error);
+    };
+    page.on('pageerror', (error) => recordPageError(error.message));
+    page.on('console', (message) => {
+      if (message.type() === 'error') {
+        const location = message.location().url;
+        recordPageError(location ? `${message.text()} (${location})` : message.text());
+      }
+    });
+    await context.route(
+      (url) => url.pathname.startsWith('/media/'),
+      (route) =>
+        route.fulfill({
+          contentType: 'image/png',
+          body: Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
+            'base64',
+          ),
+        }),
     );
+    setFakeAdmitted(cookie ? viewerAdmissions : []);
+    await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    try {
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    } catch (error) {
+      const body = await page
+        .locator('body')
+        .innerText({ timeout: 1_000 })
+        .catch(() => '');
+      throw new Error(
+        `Page did not hydrate at ${page.url()}: ${error instanceof Error ? error.message : String(error)}\n` +
+          `Browser errors: ${pageErrors.join('\n') || '(none)'}\n` +
+          `Rendered page: ${squash(body).slice(0, 1200) || '(empty)'}`,
+      );
+    }
+    return page;
+  } catch (error) {
+    return await withCleanup(async () => {
+      throw error;
+    }, [{ label: 'Home cards partial browser setup', run: () => closeContext(context), timeoutMs: 6000 }]);
   }
-  return page;
 }
 
 async function messageOf(locale: string, key: string, values: Record<string, string> = {}): Promise<string> {
@@ -641,7 +687,7 @@ test(
         const expected = await releasedProgressText('en', 'scalar_amount', current.unit, current.amount, current.total);
         expect(squash(await card.innerText())).toContain(expected);
       } finally {
-        await page.context().close();
+        await closeContext(page.context());
       }
     }
   },
@@ -690,7 +736,7 @@ test(
               animations: 'disabled',
             });
           } finally {
-            await page.context().close();
+            await closeContext(page.context());
           }
         }
     expect(errors).toEqual([]);
@@ -760,7 +806,7 @@ test(
             }
           }
         } finally {
-          await page.context().close();
+          await closeContext(page.context());
         }
       }
   },
@@ -817,7 +863,7 @@ test(
         expect(await text(3), `${locale} position`).toContain(await messageOf(locale, 'home_continue_in_progress'));
         expect(await bar(3).count()).toBe(0);
       } finally {
-        await page.context().close();
+        await closeContext(page.context());
       }
       // A subject whose session cannot be read shows its state label instead of an empty bar.
       reset();
@@ -829,7 +875,7 @@ test(
         expect(await card.getByRole('progressbar').count()).toBe(0);
         expect(await card.locator('a').getAttribute('href')).toBe(`/${locale}/library/progress?subjectId=${id(32)}`);
       } finally {
-        await unread.context().close();
+        await closeContext(unread.context());
       }
     }
   },
@@ -866,7 +912,7 @@ test(
         await page.keyboard.press('Escape');
         await item.waitFor({ state: 'detached' });
       } finally {
-        await page.context().close();
+        await closeContext(page.context());
       }
     }
     await expectRecordedContinueTitle(cookie);
@@ -930,7 +976,7 @@ async function expectRecordedContinueTitle(cookie: string) {
           `/${locale}/library/progress/${recordedSession.id}`,
         );
       } finally {
-        await page.context().close();
+        await closeContext(page.context());
       }
     }
   } finally {
@@ -975,7 +1021,7 @@ test(
         }
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
       } finally {
-        await page.context().close();
+        await closeContext(page.context());
       }
     }
   },
@@ -1021,7 +1067,7 @@ test(
         expect(calls.filter((call) => call.path === '/v1/libraryEntries')).toHaveLength(1);
         expect(progressReads).toBe(6);
       } finally {
-        await page.context().close();
+        await closeContext(page.context());
       }
     }
   },
