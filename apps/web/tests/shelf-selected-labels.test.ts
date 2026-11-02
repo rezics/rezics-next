@@ -41,7 +41,15 @@ test('selected loaded entries use ordinary paged label search and serialized ass
   const originalFetch = globalThis.fetch;
   const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
   const csrfToken = 'a'.repeat(22);
-  const admitted = ['personal_library', 'library_label.list', 'library_label.assign'];
+  const admitted = [
+    'personal_library',
+    'library_label.list',
+    'library_label.assign',
+    'library_operation.preview',
+    'library_operation.confirm',
+    'library_operation.get',
+    'library_operation.outcomes',
+  ];
   let owner = id(700);
   const credential = async () => ({ status: 'active', subject: owner, accessToken: owner, csrfToken });
   const sessionEnv = {
@@ -113,6 +121,41 @@ test('selected loaded entries use ordinary paged label search and serialized ass
   const reads: URL[] = [];
   const calls: { request: Request; body: unknown }[] = [];
   const stateCalls: { request: Request; body: unknown }[] = [];
+  const bulkCalls: { request: Request; body: unknown }[] = [];
+  const operation = (phase: string) => ({
+    id: 'bulk-1',
+    route: 1,
+    action: 'set_status',
+    selectionKind: 'explicit',
+    state: options[1]!.id,
+    collectionId: null,
+    phase,
+    selectionComplete: true,
+    occurrencesComplete: true,
+    cancelRequested: false,
+    counts: {
+      scannedCandidates: 1,
+      selectedSubjects: 1,
+      scannedOccurrences: 0,
+      capturedOccurrences: 0,
+      targets: 1,
+      pending: 0,
+      reconciling: 0,
+      applied: 0,
+      no_effect: 0,
+      conflict: 0,
+      denied: 0,
+      failed: 0,
+      cancelled: 0,
+    },
+    summary: null,
+    admittedAt: stamp,
+    targetBoundAt: stamp,
+    expiresAt: stamp,
+    resultsExpireAt: stamp,
+    finishedAt: null,
+    reason: null,
+  });
   let mode: 'partial' | 'success' | 'held' | 'unknown' = 'partial';
   let releaseWrite: (() => void) | undefined;
   let releaseSearch: (() => void) | undefined;
@@ -127,6 +170,10 @@ test('selected loaded entries use ordinary paged label search and serialized ass
     if (req.method === 'GET') {
       reads.push(url);
       if (url.pathname === '/v1/libraryEntries') return Response.json({ libraryEntries: source, next: 'entry-next' });
+      if (url.pathname === '/v1/libraryOperations/bulk-1')
+        return Response.json({ operation: operation('preview') });
+      if (url.pathname === '/v1/libraryOperations/bulk-1/outcomes')
+        return Response.json({ outcomes: [], next: null });
       if (url.pathname === '/v1/libraryLabels') {
         expect(req.headers.get('authorization')).toBe(`Bearer ${owner}`);
         expect(url.searchParams.get('limit')).toBe('20');
@@ -155,6 +202,14 @@ test('selected loaded entries use ordinary paged label search and serialized ass
       } finally {
         active--;
       }
+    }
+    if (req.method === 'POST' && url.pathname === '/v1/libraryOperations') {
+      bulkCalls.push({ request: req.clone(), body: await req.clone().json() });
+      return Response.json({ operation: operation('preview') }, { status: 201 });
+    }
+    if (req.method === 'POST' && url.pathname === '/v1/libraryOperations/bulk-1:confirm') {
+      bulkCalls.push({ request: req.clone(), body: await req.clone().json() });
+      return Response.json({ operation: operation('queued') });
     }
     expect(req.method).toBe('POST');
     expect(url.pathname).toBe(`/v1/libraryLabels/${label.id}:assign`);
@@ -314,10 +369,16 @@ test('selected loaded entries use ordinary paged label search and serialized ass
     expect(calls.some((call) => (call.body as { subjectId: string }).subjectId === id(3))).toBe(false);
     await click(host.querySelector<HTMLButtonElement>('[aria-label="Work 2"][aria-pressed]')!);
     await click(host.querySelector<HTMLButtonElement>('[aria-label="Work 3"][aria-pressed]')!);
-    await click(button(m.library_selection_apply()));
-    expect(stateCalls).toHaveLength(1);
-    expect(stateCalls[0]!.body).toEqual({ state: options[1]!.id, revision: 2, incarnationId: id(901) });
-    expect(stateCalls[0]!.request.headers.get('idempotency-key')).toBe(initial[0]!.changeKey);
+    await click(button(m.library_bulk_status_review()));
+    expect(bulkCalls).toHaveLength(1);
+    expect(bulkCalls[0]!.body).toEqual({
+      action: 'set_status',
+      state: options[1]!.id,
+      selection: { kind: 'explicit', targets: [{ subjectId: id(1) }] },
+    });
+    expect(stateCalls).toHaveLength(0);
+    expect(button(m.library_bulk_status_confirm())).toBeDefined();
+    expect(bulkCalls[0]!.request.headers.get('authorization')).toBe(`Bearer ${owner}`);
     await click(button(m.library_selection_page()));
     mode = 'held';
     await open();

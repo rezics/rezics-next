@@ -6,7 +6,7 @@ import type { PersonalLibraryEntry } from '../src/library/entries-read';
 import type { Release } from '../src/subject/definitions';
 
 // Source regression inputs at HTTP, not a native positive recording or a replacement mutation adapter.
-test('the actual selected shelf uses the default authorized per-entry action, reports partial outcomes and recovers unknown writes with the same intent', async () => {
+test('the selected shelf reviews a persisted native status operation, confirms it deliberately, and recovers authoritative outcomes', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -27,7 +27,14 @@ test('the actual selected shelf uses the default authorized per-entry action, re
   const originalFetch = globalThis.fetch;
   const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
   const csrfToken = 'a'.repeat(22);
-  const admitted = ['personal_library', 'reading_progress'];
+  const admitted = [
+    'personal_library',
+    'reading_progress',
+    'library_operation.preview',
+    'library_operation.confirm',
+    'library_operation.get',
+    'library_operation.outcomes',
+  ];
   let signedIn = true;
   let sessionReads = 0;
   const credential = async () => {
@@ -100,21 +107,59 @@ test('the actual selected shelf uses the default authorized per-entry action, re
     },
   });
   const source = [raw(1), raw(2), raw(3), raw(4, chosen), raw(5), { ...raw(6), subject: null }];
-  type Mode = 'mixed' | 'closed' | 'denied' | 'malformed' | 'success';
-  let mode: Mode = 'mixed';
-  const calls: { request: Request; body: Record<string, unknown> }[] = [];
-  let releaseFirst: (() => void) | undefined;
-  let firstStarted: (() => void) | undefined;
-  const started = new Promise<void>((resolve) => {
-    firstStarted = resolve;
-  });
-  const first = new Promise<void>((resolve) => {
-    releaseFirst = resolve;
-  });
-  let active = 0;
-  let maximumActive = 0;
-  let unknownCalls = 0;
+  const stateCalls: { request: Request; body: Record<string, unknown> }[] = [];
+  const nativeCalls: { request: Request; body: Record<string, unknown> }[] = [];
+  let confirmationAttempts = 0;
   const reads: string[] = [];
+  const operationReads: string[] = [];
+  const operation = (phase: string) => ({
+    id: 'operation-1',
+    route: 1,
+    action: 'set_status',
+    selectionKind: 'explicit',
+    state: chosen,
+    collectionId: null,
+    phase,
+    selectionComplete: true,
+    occurrencesComplete: true,
+    cancelRequested: false,
+    counts: {
+      scannedCandidates: 5,
+      selectedSubjects: 5,
+      scannedOccurrences: 0,
+      capturedOccurrences: 0,
+      targets: 5,
+      pending: 0,
+      reconciling: 0,
+      applied: 1,
+      no_effect: 1,
+      conflict: 1,
+      denied: 1,
+      failed: 1,
+      cancelled: 0,
+    },
+    summary: null,
+    admittedAt: stamp,
+    targetBoundAt: stamp,
+    expiresAt: stamp,
+    resultsExpireAt: stamp,
+    finishedAt: phase === 'completed' ? stamp : null,
+    reason: null,
+  });
+  const targetOutcomes = [
+    ['applied', null],
+    ['conflict', 'revision_mismatch'],
+    ['denied', 'target_denied'],
+    ['no_effect', null],
+    ['failed', 'dependency_unavailable'],
+  ].map(([state, reason], index) => ({
+    ordinal: String(index),
+    subjectId: id(index + 1),
+    memberId: null,
+    state,
+    reason,
+    resultingMemberId: null,
+  }));
   globalThis.fetch = (async (input, init) => {
     const req = new Request(input, init);
     const url = new URL(req.url);
@@ -129,40 +174,50 @@ test('the actual selected shelf uses the default authorized per-entry action, re
       reads.push(url.pathname);
       return Response.json({ libraryEntry: { ...raw(2), state: options[2]!.id, revision: 9, incarnationId: id(999) } });
     }
-    if (req.method !== 'PUT' || !url.pathname.startsWith('/v1/libraryEntries/'))
-      return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
-    active++;
-    maximumActive = Math.max(active, maximumActive);
-    const body = (await req.clone().json()) as Record<string, unknown>;
-    calls.push({ request: req.clone(), body });
-    try {
-      if (calls.length === 1) {
-        firstStarted!();
-        await first;
-      }
-      if (mode === 'closed') return Response.json({ code: 'platform_closed' }, { status: 403 });
-      if (mode === 'denied') return Response.json({ code: 'insufficient_scope' }, { status: 403 });
-      if (mode === 'malformed') return Response.json({});
-      if (mode === 'mixed' && url.pathname.endsWith(id(2))) return Response.json({ code: 'conflict' }, { status: 409 });
-      if (mode === 'mixed' && url.pathname.endsWith(id(3)) && ++unknownCalls === 1)
-        throw new TypeError('response lost after commit');
-      if (mode === 'mixed' && url.pathname.endsWith(id(5)))
-        return Response.json({ code: 'not_found' }, { status: 404 });
-      return Response.json({
-        libraryEntry: {
-          subjectId: url.pathname.split('/').at(-1),
-          state: body.state,
-          revision: Number(body.revision) + 1,
-          incarnationId: body.incarnationId,
-          updatedAt: '2026-02-01T00:00:00.000Z',
-        },
-      });
-    } finally {
-      active--;
+    if (req.method === 'POST' && url.pathname === '/v1/libraryOperations') {
+      const body = (await req.clone().json()) as Record<string, unknown>;
+      nativeCalls.push({ request: req.clone(), body });
+      return Response.json({ operation: operation('preview') }, { status: 201 });
     }
+    if (req.method === 'POST' && url.pathname === '/v1/libraryOperations/operation-1:confirm') {
+      const body = (await req.clone().json()) as Record<string, unknown>;
+      nativeCalls.push({ request: req.clone(), body });
+      if (++confirmationAttempts === 1) throw new TypeError('confirmation response lost');
+      return Response.json({ operation: operation('queued') });
+    }
+    if (req.method === 'GET' && url.pathname === '/v1/libraryOperations/operation-1') {
+      operationReads.push(url.pathname);
+      return Response.json({ operation: operation('completed') });
+    }
+    if (req.method === 'GET' && url.pathname === '/v1/libraryOperations/operation-1/outcomes') {
+      operationReads.push(url.pathname);
+      return Response.json({ outcomes: targetOutcomes, next: null });
+    }
+    if (req.method === 'PUT' && url.pathname.startsWith('/v1/libraryEntries/')) {
+      const body = (await req.clone().json()) as Record<string, unknown>;
+      stateCalls.push({ request: req.clone(), body });
+      return Response.json({ code: 'unexpected_per_entry_write' }, { status: 500 });
+    }
+    return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
   }) as typeof fetch;
   const { readPersonalLibrary } = await import('../src/library/entries-actions');
   const { ShelfEntries } = await import('../src/library/shelf-view');
+  const { PersonalShelfOrigin } = await import('../src/library/personal-shelf-origin');
+  const originListeners = new Set<() => void>();
+  let authorityCurrent = true;
+  const shelfOrigin = {
+    current: () => authorityCurrent,
+    viewer: () => (authorityCurrent ? id(700) : null),
+    capture: () => () => authorityCurrent,
+    version: () => '0',
+    watch: (listener: () => void) => {
+      originListeners.add(listener);
+      return () => originListeners.delete(listener);
+    },
+    headers: () => new Headers({ 'x-csrf-token': csrfToken }),
+    epoch: () => '0',
+    retains: () => authorityCurrent,
+  };
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
   const { sessionQuery, exposureQuery } = await import('../src/session/query');
@@ -182,7 +237,11 @@ test('the actual selected shelf uses the default authorized per-entry action, re
     component: () => {
       const [, refresh] = useReducer((value: number) => value + 1, 0);
       refreshView = refresh;
-      return createElement(ShelfEntries, { entries, locale: 'en', layout, size: 'm', key: remount });
+      return createElement(
+        PersonalShelfOrigin.Provider,
+        { value: shelfOrigin },
+        createElement(ShelfEntries, { entries, locale: 'en', layout, size: 'm', key: remount }),
+      );
     },
   });
   const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/en/library'] }) });
@@ -209,15 +268,7 @@ test('the actual selected shelf uses the default authorized per-entry action, re
   };
   const apply = async () => {
     await act(async () => {
-      button(m.library_selection_apply()).click();
-    });
-  };
-  const outcome = (status: string) => host.querySelectorAll(`[data-selection-outcome="${status}"]`);
-  const retry = async (title: string) => {
-    await act(async () => {
-      host
-        .querySelector<HTMLButtonElement>(`button[aria-label="${m.library_selection_retry_title({ title })}"]`)!
-        .click();
+      button(m.library_bulk_status_review()).click();
     });
   };
   try {
@@ -237,7 +288,7 @@ test('the actual selected shelf uses the default authorized per-entry action, re
     expect(matchesShelfIntent({ ...initial[0]!, incarnationId: id(777) }, captured)).toBe(false);
     await router.load();
     await render();
-    expect(calls).toHaveLength(0);
+    expect(nativeCalls).toHaveLength(0);
     expect(host.querySelector('[aria-label="' + m.library_selection_heading() + '"]')).toBeNull();
     expect(host.querySelectorAll('[role="checkbox"][aria-label^="Work "]')).toHaveLength(5);
     expect(host.querySelectorAll('a[data-slot="cover-card-title"]')).toHaveLength(6);
@@ -246,61 +297,89 @@ test('the actual selected shelf uses the default authorized per-entry action, re
     });
     expect(host.textContent).toContain(m.library_selection_count({ count: 5 }));
     await choose();
-    // Hold the first command while a duplicate Apply and row selections are attempted.
-    await act(async () => {
-      button(m.library_selection_apply()).click();
-      await started;
+    await apply();
+    expect(nativeCalls).toHaveLength(1);
+    expect(nativeCalls[0]!.body).toEqual({
+      action: 'set_status',
+      state: chosen,
+      selection: {
+        kind: 'explicit',
+        targets: Array.from({ length: 5 }, (_, index) => ({ subjectId: id(index + 1) })),
+      },
     });
-    expect(calls).toHaveLength(1);
-    expect(host.querySelectorAll('[data-selection-outcome]')).toHaveLength(5);
-    await act(async () => {
-      button(m.library_selection_applying()).click();
-      host.querySelector<HTMLButtonElement>('[aria-label="Work 2"][aria-pressed]')!.click();
-    });
-    expect(calls).toHaveLength(1);
-    await act(async () => {
-      releaseFirst!();
-      await first;
-    });
-    expect(maximumActive).toBe(1);
-    expect(calls).toHaveLength(4);
-    expect(outcome('changed')).toHaveLength(1);
-    expect(outcome('conflicted')).toHaveLength(1);
-    expect(outcome('unknown')).toHaveLength(1);
-    expect(outcome('unchanged')).toHaveLength(1);
-    expect(outcome('failed')).toHaveLength(1);
-    expect(outcome('not-attempted')).toHaveLength(0);
-    expect(host.textContent).toContain(m.library_conflict());
-    expect(host.textContent).toContain(m.library_selection_count({ count: 2 }));
-    const unknown = calls.find((call) => call.request.url.endsWith(id(3)))!;
-    expect(unknown.body).toEqual({ state: chosen, revision: 2, incarnationId: id(903) });
-    expect(calls.every((call) => call.request.headers.get('authorization') === 'Bearer owner-token')).toBe(true);
-    expect(new Set(calls.map((call) => call.request.headers.get('idempotency-key'))).size).toBe(4);
-    // A refused replay leaves the original uncertain command recoverable, with its exact identity.
-    mode = 'denied';
-    await retry('Work 3');
-    expect(outcome('unknown')).toHaveLength(1);
-    expect(calls.at(-1)!.request.headers.get('idempotency-key')).toBe(unknown.request.headers.get('idempotency-key'));
-    mode = 'mixed';
-    await retry('Work 3');
-    expect(outcome('changed')).toHaveLength(2);
-    expect(outcome('unknown')).toHaveLength(0);
-    const recovered = calls.at(-1)!;
-    expect(recovered.body).toEqual(unknown.body);
-    expect(recovered.request.headers.get('idempotency-key')).toBe(unknown.request.headers.get('idempotency-key'));
-    expect(sessionReads).toBeGreaterThanOrEqual(6);
-    expect(reads).toEqual(['/v1/libraryEntries', `/v1/libraryEntries/${id(2)}`]);
-    // A deliberate later command on the conflicted row uses the actual reload's revision/incarnation.
-    mode = 'success';
+    expect(nativeCalls[0]!.request.headers.get('authorization')).toBe('Bearer owner-token');
+    expect(nativeCalls[0]!.request.headers.get('x-csrf-token')).toBe(csrfToken);
+    expect(nativeCalls[0]!.request.headers.get('idempotency-key')).toBeTruthy();
+    expect(stateCalls).toHaveLength(0);
+    expect(host.textContent).toContain(
+      m.library_bulk_status_review_summary({ count: 5, status: options[1]!.label.text }),
+    );
+    expect(button(m.library_bulk_status_confirm())).toBeDefined();
+
+    // A requested status change retires the current review before confirmation.
+    await choose(options[2]!.id);
+    expect(button(m.library_bulk_status_confirm())).toBeUndefined();
+    expect(host.textContent).toContain(m.library_bulk_status_review_required());
     await choose();
     await apply();
-    expect(calls.at(-1)!.body).toEqual({ state: chosen, revision: 9, incarnationId: id(999) });
-    expect(calls.at(-1)!.request.headers.get('idempotency-key')).not.toBe(initial[1]!.changeKey);
-    // The mounted unknown intent is discarded on replacement page data; no automatic effect retries it.
+    expect(nativeCalls).toHaveLength(2);
+
+    // A selection change also retires the review and requires another native preview.
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[aria-label="Work 2"][aria-pressed]')!.click();
+    });
+    expect(button(m.library_bulk_status_confirm())).toBeUndefined();
+    expect(host.textContent).toContain(m.library_bulk_status_review_required());
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[aria-label="Work 2"][aria-pressed]')!.click();
+    });
+    await apply();
+    expect(nativeCalls).toHaveLength(3);
+    expect(button(m.library_bulk_status_confirm())).toBeDefined();
+
+    // Confirmation is the only operation that starts native work, and an uncertain retry reuses its key/body.
+    await act(async () => {
+      button(m.library_bulk_status_confirm()).click();
+    });
+    expect(nativeCalls.filter(({ request }) => request.url.includes(':confirm'))).toHaveLength(1);
+    expect(host.textContent).toContain(m.library_bulk_status_confirmation_uncertain());
+    await act(async () => {
+      button(m.library_bulk_status_retry_confirmation()).click();
+    });
+    const confirms = nativeCalls.filter(({ request }) => request.url.includes(':confirm'));
+    expect(confirms).toHaveLength(2);
+    expect(confirms[0]!.body).toEqual({});
+    expect(confirms[1]!.body).toEqual(confirms[0]!.body);
+    expect(confirms[1]!.request.headers.get('idempotency-key')).toBe(
+      confirms[0]!.request.headers.get('idempotency-key'),
+    );
+    expect(confirms[1]!.request.headers.get('authorization')).toBe(confirms[0]!.request.headers.get('authorization'));
+    expect(host.textContent).toContain(m.library_bulk_status_operation_id({ id: 'operation-1' }));
+    expect(host.querySelectorAll('[data-bulk-status-outcome="applied"]')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-bulk-status-outcome="conflict"]')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-bulk-status-outcome="denied"]')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-bulk-status-outcome="no_effect"]')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-bulk-status-outcome="failed"]')).toHaveLength(1);
+    expect(host.textContent).toContain(m.library_bulk_status_result_count({ status: m.library_bulk_status_applied(), count: 1 }));
+    expect(host.textContent).toContain(m.library_bulk_status_result_count({ status: m.library_bulk_status_conflict(), count: 1 }));
+    expect(host.textContent).toContain(m.library_bulk_status_result_count({ status: m.library_bulk_status_skipped(), count: 1 }));
+    expect(stateCalls).toHaveLength(0);
+    expect(initial.map(({ state }) => state)).toEqual([before, before, before, chosen, before, before]);
+
+    // Recovery is read-only and does not submit another confirmation.
+    const confirmCount = confirms.length;
+    const recoveryReadCount = operationReads.length;
+    await act(async () => {
+      button(m.library_bulk_status_recover()).click();
+    });
+    expect(nativeCalls.filter(({ request }) => request.url.includes(':confirm'))).toHaveLength(confirmCount);
+    expect(operationReads.length).toBeGreaterThan(recoveryReadCount);
+
+    // Replacing the loaded page retires its prior selection and completion.
     entries = initial.map((entry) => ({ ...entry, incarnationId: id(800) }));
     remount++;
     await render();
-    expect(host.querySelectorAll('[data-selection-outcome]')).toHaveLength(0);
+    expect(host.querySelectorAll('[data-bulk-status-outcome]')).toHaveLength(0);
     expect(host.querySelector('select')).toBeNull();
     // All layouts use the same bounded selection, including the table's phone list fallback.
     for (const nextLayout of ['list', 'table'] as const) {
@@ -313,100 +392,26 @@ test('the actual selected shelf uses the default authorized per-entry action, re
       expect(host.querySelector('[role="checkbox"][aria-label="Work 1"]')).not.toBeNull();
       expect(host.textContent).toContain(m.library_selection_count({ count: 5 }));
     }
-    // Current native authority loss stops unsent targets; successful earlier commands are never rolled back.
-    for (const refusal of ['closed', 'denied'] as const) {
-      mode = refusal;
-      layout = 'grid';
-      remount++;
-      await render();
-      await act(async () => {
-        button(m.library_selection_page()).click();
-      });
-      await choose();
-      const count = calls.length;
-      await apply();
-      expect(calls).toHaveLength(count + 1);
-      expect(outcome('failed')).toHaveLength(1);
-      expect(outcome('not-attempted')).toHaveLength(4);
-      if (refusal === 'closed') {
-        // Recovery uses the captured second target, even after selecting only another entry.
-        await act(async () => {
-          button(m.library_selection_clear()).click();
-        });
-        await act(async () => {
-          host.querySelector<HTMLButtonElement>('[aria-label="Work 5"][aria-pressed]')!.click();
-        });
-        mode = 'success';
-        await retry('Work 2');
-        expect(calls).toHaveLength(count + 2);
-        expect(calls.at(-1)!.request.url).toEndWith(id(2));
-        expect(calls.at(-1)!.body).toEqual({
-          state: chosen,
-          revision: initial[1]!.revision,
-          incarnationId: initial[1]!.incarnationId,
-        });
-        expect(calls.at(-1)!.request.headers.get('idempotency-key')).toBe(initial[1]!.changeKey);
-        expect(outcome('changed')).toHaveLength(1);
-        expect(outcome('not-attempted')).toHaveLength(3);
-        expect(host.textContent).toContain(m.library_selection_count({ count: 1 }));
-      }
-    }
-    signedIn = false;
-    mode = 'success';
+    // A viewer that has left this shelf cannot read or apply its mounted completion.
+    layout = 'grid';
     remount++;
     await render();
-    await act(async () => {
-      button(m.library_selection_page()).click();
-    });
-    await choose();
-    const count = calls.length;
-    await apply();
-    expect(calls).toHaveLength(count);
-    expect(outcome('failed')).toHaveLength(1);
-    expect(outcome('not-attempted')).toHaveLength(4);
-    signedIn = true;
-    // A resolved response without a saved entry is unknown and keeps its original key.
-    mode = 'malformed';
-    entries = [initial[0]!];
-    remount++;
-    await render();
-    await act(async () => {
-      button(m.library_selection_page()).click();
-    });
+    await act(async () => button(m.library_selection_page()).click());
     await choose();
     await apply();
-    expect(outcome('unknown')).toHaveLength(1);
-    const malformed = calls.at(-1)!;
-    mode = 'success';
+    const staleConfirm = button(m.library_bulk_status_confirm());
+    expect(staleConfirm).toBeDefined();
+    const confirmationCount = nativeCalls.filter(({ request }) => request.url.includes(':confirm')).length;
+    authorityCurrent = false;
     await act(async () => {
-      button(m.library_selection_retry()).click();
+      originListeners.forEach((listener) => listener());
+      refreshView?.();
     });
-    expect(calls.at(-1)!.request.headers.get('idempotency-key')).toBe(malformed.request.headers.get('idempotency-key'));
-    expect(outcome('changed')).toHaveLength(1);
-    // An unresolved command must never be retried against replacement incarnation data.
-    mode = 'malformed';
-    remount++;
+    expect(host.textContent).not.toContain(m.library_bulk_status_operation_id({ id: 'operation-1' }));
+    await act(async () => staleConfirm.click());
+    expect(nativeCalls.filter(({ request }) => request.url.includes(':confirm'))).toHaveLength(confirmationCount);
+    authorityCurrent = true;
     await render();
-    await act(async () => {
-      button(m.library_selection_page()).click();
-    });
-    await choose();
-    await apply();
-    expect(outcome('unknown')).toHaveLength(1);
-    const unknownCount = calls.length;
-    entries = [{ ...initial[0]!, incarnationId: id(888), changeKey: crypto.randomUUID() }];
-    await render();
-    expect(calls).toHaveLength(unknownCount);
-    expect(host.querySelectorAll('[data-selection-outcome]')).toHaveLength(0);
-    expect(button(m.library_selection_retry())).toBeUndefined();
-    // A replacement loader array clears selection without relying on the caller's React key.
-    await act(async () => {
-      button(m.library_selection_page()).click();
-    });
-    entries = [{ ...initial[0]!, incarnationId: id(888) }];
-    await render();
-    expect(host.querySelector('select')).toBeNull();
-    expect(host.querySelectorAll('[data-selection-outcome]')).toHaveLength(0);
     // Selection is capped independently of the loaded input size and never discovers another page.
     entries = Array.from({ length: 101 }, (_, index) => ({
       ...initial[0]!,
@@ -426,7 +431,7 @@ test('the actual selected shelf uses the default authorized per-entry action, re
       host.querySelector<HTMLButtonElement>('[aria-label="Bounded work 100"][aria-pressed]')!.click();
     });
     expect(host.textContent).toContain(m.library_selection_count({ count: 100 }));
-    expect(reads).toEqual(['/v1/libraryEntries', `/v1/libraryEntries/${id(2)}`]);
+    expect(reads).toEqual(['/v1/libraryEntries']);
   } finally {
     await act(async () => root.unmount());
     client.clear();

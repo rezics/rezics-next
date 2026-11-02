@@ -47,8 +47,9 @@ import {
   type ShelfMutationLease,
 } from './shelf-rows';
 import { ShelfLabelAction, ShelfLabelOutcomes } from './shelf-labels';
+import { groupBulkStatusOutcomes } from './bulk-status';
 import { useSession } from '../session/query';
-import { selectableEntry, type ShelfOutcome } from './shelf-selection';
+import { selectableEntry } from './shelf-selection';
 import type { LibrarySubject } from './reads';
 import type { LabelShelfEntry } from './label-shelf-read';
 
@@ -246,7 +247,12 @@ function selectionProps(entry: PersonalLibraryEntry, controls: Controls) {
 function SelectionBar({ controls }: { controls: Controls }) {
   const [chosen, setChosen] = useState('');
   const selectedState = controls.commonStates.some((option) => option.id === chosen) ? chosen : '';
-  if (!controls.writeAdmitted && !controls.labelWriteAdmitted && !controls.labelRemoveAdmitted) return null;
+  if (
+    !controls.bulkStatusWriteAdmitted &&
+    !controls.labelWriteAdmitted &&
+    !controls.labelRemoveAdmitted
+  )
+    return null;
   const eligible = controls.rows.some((row) => controls.selectable(row.entry));
   if (!controls.selected.length)
     return eligible ? (
@@ -273,7 +279,7 @@ function SelectionBar({ controls }: { controls: Controls }) {
       <Button variant="ghost" disabled={controls.selectionPending} onClick={controls.clearSelection}>
         {m.library_selection_clear()}
       </Button>
-      {controls.writeAdmitted && controls.commonStates.length ? (
+      {controls.bulkStatusWriteAdmitted && controls.commonStates.length ? (
         <>
           <label className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
             {m.library_menu_status()}
@@ -282,7 +288,10 @@ function SelectionBar({ controls }: { controls: Controls }) {
               className="h-11 max-w-full rounded-md border bg-background px-2"
               value={selectedState}
               disabled={controls.pending || controls.selectionBlocked}
-              onChange={(event) => setChosen(event.target.value)}
+              onChange={(event) => {
+                if (event.target.value !== selectedState) controls.invalidateBulkStatusReview();
+                setChosen(event.target.value);
+              }}
             >
               <option value="">{m.library_selection_choose()}</option>
               {controls.commonStates.map((option) => (
@@ -293,13 +302,13 @@ function SelectionBar({ controls }: { controls: Controls }) {
             </select>
           </label>
           <Button
-            disabled={controls.pending || controls.selectionBlocked || !selectedState}
-            onClick={() => void controls.changeSelectedState(selectedState)}
+            disabled={controls.pending || controls.selectionBlocked || !selectedState || !controls.bulkStatusWriteAdmitted}
+            onClick={() => void controls.previewSelectedState(selectedState)}
           >
-            {controls.pending ? m.library_selection_applying() : m.library_selection_apply()}
+            {controls.pending ? m.library_bulk_status_previewing() : m.library_bulk_status_review()}
           </Button>
         </>
-      ) : controls.writeAdmitted ? (
+      ) : controls.bulkStatusWriteAdmitted ? (
         <p className="text-sm">{m.library_selection_no_common()}</p>
       ) : null}
       <ShelfLabelAction controls={controls} />
@@ -309,52 +318,94 @@ function SelectionBar({ controls }: { controls: Controls }) {
   );
 }
 
-const outcomeLabels: Record<ShelfOutcome['status'], () => string> = {
-  changed: () => m.library_selection_changed(),
-  unchanged: () => m.library_selection_unchanged(),
-  conflicted: () => m.library_selection_conflicted(),
-  failed: () => m.library_selection_failed(),
-  unknown: () => m.library_selection_unknown_label(),
-  'not-attempted': () => m.library_selection_not_attempted(),
-};
-function SelectionOutcomes({ controls }: { controls: Controls }) {
-  if (!controls.outcomes.length) return null;
+function BulkStatusReview({ controls }: { controls: Controls }) {
+  const review = controls.bulkStatusReview;
+  if (!review) return null;
+  const label = (state: string) => {
+    if (state === 'applied') return m.library_bulk_status_applied();
+    if (state === 'no_effect') return m.library_bulk_status_no_change();
+    if (state === 'conflict') return m.library_bulk_status_conflict();
+    if (state === 'denied' || state === 'cancelled') return m.library_bulk_status_skipped();
+    if (state === 'pending' || state === 'reconciling') return m.library_bulk_status_pending();
+    return m.library_bulk_status_failed();
+  };
+  const groups = Object.entries(groupBulkStatusOutcomes(review.outcomes));
+  const targetTitle = (subjectId: string) =>
+    review.targets.find((target) => target.subjectId === subjectId)?.title ?? subjectId;
   return (
-    <section aria-label={m.library_selection_results()} className="space-y-2 rounded-lg border p-3 text-sm">
-      <p>{m.library_selection_partial()}</p>
-      <dl role="status" className="flex flex-wrap gap-x-4 gap-y-1">
-        {Object.entries(outcomeLabels).map(([status, label]) => (
-          <div key={status} className="flex gap-1">
-            <dt>{label()}</dt>
-            <dd>{controls.outcomes.filter((outcome) => outcome.status === status).length}</dd>
-          </div>
-        ))}
-      </dl>
-      <ul className="max-h-64 space-y-1 overflow-y-auto">
-        {controls.outcomes.map((outcome) => (
-          <li
-            key={outcome.subjectId}
-            className="flex flex-wrap items-center gap-2"
-            data-selection-outcome={outcome.status}
-          >
-            <span>
-              {outcome.title}: {outcomeLabels[outcome.status]()}
-            </span>
-            {(outcome.status === 'unknown' || outcome.status === 'not-attempted') &&
-            controls.canRetryState(outcome.subjectId) ? (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={controls.pending || !controls.writeAdmitted}
-                onClick={() => void controls.retryState(outcome.subjectId)}
-                aria-label={m.library_selection_retry_title({ title: outcome.title })}
-              >
-                {m.library_selection_retry()}
-              </Button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+    <section
+      aria-label={m.library_bulk_status_journey()}
+      className="space-y-2 rounded-lg border p-3 text-sm"
+      data-bulk-status-phase={review.phase}
+    >
+      {review.operationId ? <p>{m.library_bulk_status_operation_id({ id: review.operationId })}</p> : null}
+      {review.phase === 'ready' ? (
+        <p>{m.library_bulk_status_review_summary({ count: review.targets.length, status: review.stateLabel })}</p>
+      ) : null}
+      {review.phase === 'preview-uncertain' ? (
+        <Button
+          variant="outline"
+          disabled={controls.pending || !controls.bulkStatusWriteAdmitted}
+          onClick={() => void controls.retryBulkStatusPreview()}
+        >
+          {m.library_bulk_status_retry_preview()}
+        </Button>
+      ) : null}
+      {review.operationId && (review.phase === 'ready' || review.phase === 'uncertain') ? (
+        <Button
+          disabled={controls.pending || !controls.bulkStatusWriteAdmitted}
+          onClick={() => void controls.confirmSelectedState(review.state)}
+        >
+          {review.phase === 'uncertain' ? m.library_bulk_status_retry_confirmation() : m.library_bulk_status_confirm()}
+        </Button>
+      ) : null}
+      {review.phase === 'confirming' ? <p role="status">{m.library_bulk_status_confirming()}</p> : null}
+      {review.phase === 'recovering' ? <p role="status">{m.library_bulk_status_recovering()}</p> : null}
+      {review.phase === 'uncertain' ? <p role="alert">{m.library_bulk_status_confirmation_uncertain()}</p> : null}
+      {review.readError ? <p role="alert">{m.library_bulk_status_read_error()}</p> : null}
+      {review.operationId ? (
+        <Button
+          variant="outline"
+          disabled={controls.pending || !controls.bulkStatusReadAdmitted}
+          onClick={() => void controls.recoverBulkStatus()}
+        >
+          {m.library_bulk_status_recover()}
+        </Button>
+      ) : null}
+      {review.outcomes.length ? (
+        <div className="space-y-3" aria-label={m.library_bulk_status_results()}>
+          {groups.map(([group, outcomes]) =>
+            outcomes.length ? (
+              <section key={group}>
+                <h3 className="font-medium">
+                  {m.library_bulk_status_result_count({
+                    status: label(
+                      group === 'noChange'
+                        ? 'no_effect'
+                        : group === 'conflicts'
+                          ? 'conflict'
+                          : group === 'skipped'
+                            ? 'denied'
+                            : group,
+                    ),
+                    count: outcomes.length,
+                  })}
+                </h3>
+                <ul className="max-h-48 space-y-1 overflow-y-auto">
+                  {outcomes.map((outcome) => (
+                    <li
+                      key={`${outcome.ordinal}:${outcome.subjectId}`}
+                      data-bulk-status-outcome={outcome.state}
+                    >
+                      {targetTitle(outcome.subjectId)}: {label(outcome.state)}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null,
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -634,13 +685,24 @@ function ShelfEntriesPage({
     !shelfRows.rows.length &&
     !shelfRows.restoreMessage &&
     !shelfRows.outcomes.length &&
-    !shelfRows.labelOutcomes.length
+    !shelfRows.labelOutcomes.length &&
+    !shelfRows.bulkStatusReview
   )
     return empty ?? null;
   return (
     <>
+      {shelfRows.bulkStatusReviewChanged ? (
+        <p role="status" className="text-sm">
+          {m.library_bulk_status_review_required()}
+        </p>
+      ) : null}
+      {shelfRows.bulkStatusError === 'preview' ? (
+        <p role="alert" className="text-sm">
+          {m.library_bulk_status_preview_error()}
+        </p>
+      ) : null}
       <SelectionBar controls={controls} />
-      <SelectionOutcomes controls={controls} />
+      <BulkStatusReview controls={controls} />
       <ShelfLabelOutcomes controls={controls} />
       {shelfRows.restoreMessage ? (
         <p role="status" className="text-sm">
