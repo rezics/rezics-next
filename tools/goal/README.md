@@ -1040,9 +1040,9 @@ The supermanager sets direction and the managers own the work. This applies to e
 - **Efficiency is measured by scripts.** An hourly report, stall alarms and the supermanager watchdog run without model
   tokens ([delivery ownership](../../docs/development/delivery.md#delivery-ownership)). The supermanager acts on
   alarms; Performance owns check-host health and its own Goal.
-- **Visual review belongs to the design-authority Goal.** The Goal that owns the shell and design system reviews every
-  visible slice by screenshot against the maintainer's references and reopens defects with the owning Goal; each
-  product Goal owns its user journeys end to end, pages included.
+- **Interface changes are reported as links.** The Goal that owns the shell and design system reports to the project's
+  Telegram group what changed on which pages, with a Storybook link per changed story, and no screenshots; the
+  maintainer reviews the pages himself. Each product Goal owns its user journeys end to end, pages included.
 - **The supermanager keeps direction.** [Resident supervision and recovery](../../docs/development/supermanager.md).
   Direction, priorities and scope with the maintainer, the allowance runway,
   critical-priority grants, deadlocks between owners, efficiency strategy, and a sampled review of the product, not
