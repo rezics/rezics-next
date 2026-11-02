@@ -119,7 +119,12 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
     const button = (name: string, scope: ParentNode = host) =>
       [...scope.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === name)!;
     let mount = 0;
-    const show = (fixture: ReturnType<typeof workPartsFixture>, initial = fixture.snapshot(), locale = 'en') =>
+    const show = (
+      fixture: ReturnType<typeof workPartsFixture>,
+      initial = fixture.snapshot(),
+      locale = 'en',
+      transport = fixture.transport,
+    ) =>
       render(
         h(WorkPartsPage, {
           key: ++mount,
@@ -127,7 +132,7 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
           locale,
           initial,
           search: fixture.search,
-          transport: fixture.transport,
+          transport,
         }),
       );
 
@@ -195,8 +200,12 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
     const position = panels[0]!.querySelector<HTMLInputElement>('input[id$="qualifier-0"]')!;
     await input(position, '3');
     const beforeMore = left.calls.length;
+    const sliceStatus = panels[0]!.querySelector<HTMLElement>('p[role="status"]')!;
+    button(m.work_parts_more(), panels[0]).focus();
     await click(m.work_parts_more(), panels[0]);
     await until(() => panels[0]!.textContent!.includes('Volume Ten'));
+    expect(host.ownerDocument.activeElement).toBe(sliceStatus);
+    expect(button(m.work_parts_more(), panels[0])).toBeUndefined();
     expect(position.value).toBe('3');
     expect(host.contains(position)).toBe(true);
     expect(left.calls).toHaveLength(beforeMore + 2);
@@ -215,11 +224,42 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
     await until(() => panels[0]!.getAttribute('aria-busy') === 'false');
     expect(panels[0]!.querySelector<HTMLAnchorElement>('li a')!.href).toBe(continued);
     expect(left.calls.at(-1)!.query.cursor).toBe('native-next');
+    button(m.work_parts_restart(), panels[0]).focus();
     await click(m.work_parts_restart(), panels[0]);
     await until(() => panels[0]!.querySelector('li h2')?.textContent === 'Volume Two');
+    expect(host.ownerDocument.activeElement).toBe(sliceStatus);
     expect(left.calls.at(-1)!.query).not.toHaveProperty('cursor');
     expect(position.value).toBe('3');
     expect(right.calls).toHaveLength(0);
+
+    const recovery = workPartsFixture('partial');
+    const seed = ready(recovery.snapshot());
+    let failMore = true;
+    const attempted: Array<[string | undefined, string | undefined, string | undefined]> = [];
+    await show(recovery, seed, 'en', {
+      ...recovery.transport,
+      read: async (key, cursor, session): Promise<WorkPartsRead> => {
+        attempted.push([key, cursor, session]);
+        if (failMore && cursor === seed.next) {
+          failMore = false;
+          return { ok: false, reason: 'unavailable' };
+        }
+        return recovery.transport.read(key, cursor, session);
+      },
+    });
+    const retryStatus = host.querySelector<HTMLElement>('p[role="status"]')!;
+    button(m.work_parts_more()).focus();
+    await click(m.work_parts_more());
+    await until(() => !!host.querySelector('[role="alert"]'));
+    expect(host.ownerDocument.activeElement).toBe(host.querySelector('[role="alert"]'));
+    button(m.candidate_reload()).focus();
+    await click(m.candidate_reload());
+    await until(() => host.querySelector('article')!.getAttribute('aria-busy') === 'false');
+    expect(host.ownerDocument.activeElement).toBe(retryStatus);
+    expect(attempted).toEqual([
+      [seed.stream!.key, seed.next, seed.session],
+      [seed.stream!.key, undefined, seed.session],
+    ]);
 
     // Full reading data is supplied, including content not admitted for editing by current definitions.
     const rich = workPartsFixture();
@@ -400,6 +440,12 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
 
     // Retain a queued control across reader A-B-A and unmount: no late action/read or focus theft.
     const retired = workPartsFixture();
+    const retiredInitial = ready(retired.snapshot());
+    let finishRetiredRead!: (value: WorkPartsRead) => void;
+    const retiredTransport = {
+      ...retired.transport,
+      read: () => new Promise<WorkPartsRead>((resolve) => (finishRetiredRead = resolve)),
+    };
     const observed = (subject: string) => ({
       state: 'signed-in' as const,
       subject,
@@ -412,13 +458,15 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
         h(WorkPartsPage, {
           id: retired.id,
           locale: 'en',
-          initial: retired.snapshot(),
+          initial: retiredInitial,
           search: retired.search,
-          transport: retired.transport,
+          transport: retiredTransport,
         }),
       );
     await render(boundary('reader-a'));
     const old = queuedClick(button(m.work_parts_correct()));
+    button(m.work_parts_more()).focus();
+    await click(m.work_parts_more());
     await render(boundary('reader-b'));
     await render(boundary('reader-a'));
     const reads = retired.calls.length;
@@ -427,6 +475,9 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
     outside.focus();
     await act(async () => {
       old();
+    });
+    await act(async () => {
+      finishRetiredRead(retiredInitial);
     });
     expect(retired.calls).toHaveLength(reads);
     expect(button(m.relation_open())).toBeUndefined();

@@ -75,9 +75,13 @@ function WorkPartsPageLive({
   const [page, setPage] = useState<Extract<WorkPartsRead, { ok: true }>>();
   const [failure, setFailure] = useState<Extract<WorkPartsRead, { ok: false }>>();
   const [busy, setBusy] = useState(false);
+  const [focusRevision, setFocusRevision] = useState(0);
   const [drafts, setDrafts] = useState<OpenDraft[]>([]);
   const nextDraftInstance = useRef(0);
   const focusAfterClose = useRef<HTMLElement | undefined>(undefined);
+  const focusAfterRead = useRef<'slice' | 'failure' | undefined>(undefined);
+  const sliceStatus = useRef<HTMLParagraphElement>(null);
+  const readFailure = useRef<HTMLParagraphElement>(null);
   const [part, setPart] = useState<EntityPickerSubject[]>([]);
   const running = useRef(false);
   const session = useRef<string | undefined>(undefined);
@@ -95,8 +99,19 @@ function WorkPartsPageLive({
   const sliceRevision = useRef(0);
   // Slice controls retire separately from independently opened corrections.
   const slice = useCatalogueLifetime(JSON.stringify([stream?.key, cursor.current, sliceRevision.current]), lifetime);
+  useLayoutEffect(() => {
+    const target = focusAfterRead.current;
+    focusAfterRead.current = undefined;
+    if (!target || !lifetime.active() || !slice.active()) return;
+    const element = target === 'slice' ? sliceStatus.current : readFailure.current;
+    if (element?.isConnected && !element.closest('[hidden]')) element.focus();
+  }, [focusRevision]);
   const title = pickText(read?.public.subject.labels ?? {}, locale);
-  async function load(key = stream?.key, next?: string) {
+  function focusRead(target: 'slice' | 'failure') {
+    focusAfterRead.current = target;
+    setFocusRevision((revision) => revision + 1);
+  }
+  async function load(key = stream?.key, next?: string, moveFocus = false) {
     if (!slice.active()) return;
     if (running.current) return;
     if (key !== stream?.key || next !== cursor.current) {
@@ -114,6 +129,7 @@ function WorkPartsPageLive({
       if (!lifetime.active()) return;
       if (!value.ok) {
         setFailure(value);
+        if (moveFocus) focusRead('failure');
         return;
       }
       setPage(value);
@@ -121,9 +137,11 @@ function WorkPartsPageLive({
       cursor.current = next;
       setFailure(undefined);
       setPart([]);
+      if (moveFocus) focusRead('slice');
     } catch {
       if (!lifetime.active()) return;
       setFailure({ ok: false, reason: 'unavailable' });
+      if (moveFocus) focusRead('failure');
     } finally {
       if (!lifetime.active()) return;
       running.current = false;
@@ -196,7 +214,11 @@ function WorkPartsPageLive({
       <ViewHeading label={m.work_parts_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.work_parts_intro({}, o)}</p>
       {query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
-      {concealed && <p role="alert">{failed}</p>}
+      {concealed && (
+        <p ref={readFailure} role="alert" tabIndex={-1}>
+          {failed}
+        </p>
+      )}
       <div hidden={concealed} className="space-y-6">
         {read && (
           <>
@@ -226,7 +248,7 @@ function WorkPartsPageLive({
                     ))}
                   </NativeSelect>
                 </Field>
-                <p role="status">
+                <p ref={sliceStatus} role="status" tabIndex={-1}>
                   {m.work_parts_slice({}, o)}{' '}
                   {read.count &&
                     m.work_parts_count(
@@ -368,7 +390,7 @@ function WorkPartsPageLive({
                       className={actionClassName}
                       variant="outline"
                       disabled={busy}
-                      onClick={() => void load(stream.key, read.next ?? undefined)}
+                      onClick={() => void load(stream.key, read.next ?? undefined, true)}
                     >
                       {m.work_parts_more({}, o)}
                     </Button>
@@ -377,7 +399,7 @@ function WorkPartsPageLive({
                     className={actionClassName}
                     variant="outline"
                     disabled={busy}
-                    onClick={() => void load(stream.key)}
+                    onClick={() => void load(stream.key, undefined, true)}
                   >
                     {m.work_parts_restart({}, o)}
                   </Button>
@@ -449,7 +471,7 @@ function WorkPartsPageLive({
           className={actionClassName}
           variant="outline"
           disabled={busy}
-          onClick={() => void load(stream?.key, cursor.current)}
+          onClick={() => void load(stream?.key, cursor.current, true)}
         >
           {m.candidate_reload({}, o)}
         </Button>
