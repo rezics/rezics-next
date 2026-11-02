@@ -245,10 +245,12 @@ test('The default My Collections route immediately retires private collections a
   let initial = response('A');
   let search: MineCollectionsSearch = { layout: 'previews' };
   const loader = spyOn(Route, 'useLoaderData').mockImplementation(() => initial);
-  const address = spyOn(Route, 'useSearch').mockImplementation(() => search);
   const Page = Route.options.component!;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory() });
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: ['/library/collections?layout=previews'] }),
+  });
   const invalidate = spyOn(router, 'invalidate').mockResolvedValue(undefined);
   const host = document.createElement('div');
   document.body.append(host);
@@ -266,7 +268,11 @@ test('The default My Collections route immediately retires private collections a
   const session = (subject: string, csrfToken = `csrf-${subject}`) => ({ state: 'signed-in', subject, csrfToken });
   const show = async (viewer: { state: string; subject?: string; csrfToken: string | null }, admitted = true) => {
     menus.length = 0;
+    const query = new URLSearchParams({ layout: search.layout });
+    if (search.addressError) query.set('cursor', 'x'.repeat(4097));
+    else if (search.cursor !== undefined) query.set('cursor', search.cursor);
     await act(async () => {
+      await router.navigate({ href: `/library/collections?${query}` });
       client.setQueryData(['session'], viewer);
       client.setQueryData(['exposure', 'viewer'], admitted ? ['collections', 'personal_library'] : []);
       client.setQueryData(['exposure', 'anonymous'], []);
@@ -390,7 +396,7 @@ test('The default My Collections route immediately retires private collections a
     if (root) await act(async () => root!.unmount());
     client.clear();
     host.remove();
-    for (const restore of [menuRead, transport, write, loader, address, invalidate]) restore.mockRestore();
+    for (const restore of [menuRead, transport, write, loader, invalidate]) restore.mockRestore();
     await window.happyDOM.close();
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);

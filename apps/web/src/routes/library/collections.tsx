@@ -1,7 +1,7 @@
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { readMineCollectionsViewerPage } from '../../library/mine-collections-route';
 import { MineCollectionsCurrentViewer } from '../../library/mine-collections-page';
 import { admitMineCollectionsAddress } from '../../library/mine-collections-address';
@@ -16,7 +16,10 @@ export const Route = createFileRoute('/library/collections')({
     pageHead({ title: m.library_collections_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: () => {
     const initial = Route.useLoaderData();
-    const search = Route.useSearch();
+    // The current location changes before the active match's search while a loader is pending.
+    const location = useLocation();
+    if (location.pathname.replace(/\/$/, '') !== '/library/collections') return null;
+    const search = admitMineCollectionsAddress(location.search);
     return (
       <MineCollectionsCurrentViewer
         initial={initial}
