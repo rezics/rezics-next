@@ -164,8 +164,11 @@ export function CreatorOfferEditor({
 }) {
   return (
     <CreatorOfferDraftNavigation>
-      {guard ? <CreatorOfferForm data={data} locale={locale} createKey={data.createKey} guard={guard} />
-        : <StandaloneCreatorOfferEditor data={data} locale={locale} />}
+      {guard ? (
+        <CreatorOfferForm data={data} locale={locale} createKey={data.createKey} guard={guard} />
+      ) : (
+        <StandaloneCreatorOfferEditor data={data} locale={locale} />
+      )}
     </CreatorOfferDraftNavigation>
   );
 }
@@ -383,8 +386,11 @@ function CreatorOfferForm({
               mayCommit={busy || uncertain}
               discard={() => {
                 delete memory.value;
-                setTitle(''); setTaxCode(''); setIntent({ currency: '', text: '' });
-                setDraftEditor(undefined); setResult(null);
+                setTitle('');
+                setTaxCode('');
+                setIntent({ currency: '', text: '' });
+                setDraftEditor(undefined);
+                setResult(null);
               }}
             />
             <Field>

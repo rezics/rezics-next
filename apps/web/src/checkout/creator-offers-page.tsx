@@ -234,7 +234,9 @@ function OfferCommands({
         mayCommit={busy || uncertain}
         discard={() => {
           delete memory.value;
-          setDraft(undefined); setText(''); setResult(null);
+          setDraft(undefined);
+          setText('');
+          setResult(null);
           release(observed.id);
         }}
       />
@@ -395,127 +397,131 @@ export function CreatorOffersPage({
   const restart = page.kind === 'stale' || page.kind === 'error';
   return (
     <CreatorOfferDraftNavigation>
-    <section className="max-w-4xl min-w-0 space-y-6 text-foreground" aria-labelledby="creator-offers-heading">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageHeading id="creator-offers-heading">{m.creator_offers_heading()}</PageHeading>
-        {page.kind !== 'preparing' &&
-          (onRefresh ? (
-            <Button variant="outline" className="min-h-11" onClick={onRefresh} disabled={refreshing}>
-              {m.creator_offers_refresh()}
-            </Button>
-          ) : (
-            <a href={href} className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}>
-              {m.creator_offers_refresh()}
-            </a>
-          ))}
-      </div>
-      {data && (
-        <a
-          href={`/${locale}/creator/offers/new`}
-          className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
-        >
-          {m.creator_new_offer()}
-        </a>
-      )}
-      <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.creator_offers_intro()}</p>
-      {page.kind !== 'ready' ? (
-        <div
-          className="space-y-3 rounded-xl border bg-card p-5 text-card-foreground"
-          role={page.kind === 'preparing' ? 'status' : 'alert'}
-        >
-          <p>{notice}</p>
-          {page.kind !== 'preparing' && (
-            <a
-              href={restart ? creatorOffersHref(locale) : href}
-              className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
-            >
-              {restart ? m.creator_offers_restart() : m.creator_offers_retry()}
-            </a>
-          )}
+      <section className="max-w-4xl min-w-0 space-y-6 text-foreground" aria-labelledby="creator-offers-heading">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <PageHeading id="creator-offers-heading">{m.creator_offers_heading()}</PageHeading>
+          {page.kind !== 'preparing' &&
+            (onRefresh ? (
+              <Button variant="outline" className="min-h-11" onClick={onRefresh} disabled={refreshing}>
+                {m.creator_offers_refresh()}
+              </Button>
+            ) : (
+              <a href={href} className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}>
+                {m.creator_offers_refresh()}
+              </a>
+            ))}
         </div>
-      ) : (
-        <>
-          {offers.length === 0 ? (
-            <div role="status" className="space-y-2 rounded-xl border bg-card p-5 text-card-foreground">
-              <p className="font-medium">{cursor ? m.creator_offers_page_empty() : m.creator_offers_empty()}</p>
-              <p className="text-sm text-muted-foreground">{m.creator_offers_empty_hint()}</p>
-            </div>
-          ) : (
-            <OfferJourney.Provider value={{ retain, release, confirmOffer: onConfirm }}>
-              <ul className="space-y-3 rounded-xl border bg-card p-3 text-card-foreground sm:p-5">
-                {offers.map((offer) => (
-                  <ContentItem
-                    key={offer.id}
-                    data-offer-state={offer.state}
-                    title={offer.title}
-                    headingLevel={2}
-                    {...(offer.state === 'active' && offerPageAvailable
-                      ? { href: `/${locale}/offers/${offer.id}` }
-                      : {})}
-                    className="p-3 sm:[&>div]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] [&_h2]:break-words [&_h2]:[overflow-wrap:anywhere]"
-                    metadata={
-                      <div className="min-w-0 space-y-2">
-                        <p className="font-serif text-lg tabular-nums">
-                          {formatMinorAmount(locale, offer.currency, offer.unitAmountMinor, recordedMoneyUnit(offer)) ??
-                            m.creator_offers_amount_unavailable()}{' '}
-                          <span className="text-sm">{offer.currency.toUpperCase()}</span>
-                        </p>
-                        <p>
-                          {recordedTaxBehavior(offer) === 'exclusive'
-                            ? m.commerce_before_tax()
-                            : m.commerce_tax_unknown()}
-                        </p>
-                        <p className="leading-relaxed">
-                          {offer.contentEdition === null ? m.creator_offers_unknown() : m.creator_offers_captured()}
-                        </p>
-                      </div>
-                    }
-                    state={
-                      <p className="text-sm font-medium">
-                        {offer.state === 'active' ? m.creator_offers_active() : m.creator_offers_delisted()}
-                      </p>
-                    }
-                    actions={
-                      <details className="min-w-0 max-w-sm">
-                        <summary className="min-h-11 cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                          {m.commerce_full_title()}
-                        </summary>
-                        <p className="break-words py-2 text-sm [overflow-wrap:anywhere]">{offer.title}</p>
-                      </details>
-                    }
-                    trailing={
-                      data && (
-                        <div className="w-full min-w-0 max-w-sm">
-                          <OwnedOfferControls offer={offer} data={data} locale={locale} guard={guard} />
+        {data && (
+          <a
+            href={`/${locale}/creator/offers/new`}
+            className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+          >
+            {m.creator_new_offer()}
+          </a>
+        )}
+        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.creator_offers_intro()}</p>
+        {page.kind !== 'ready' ? (
+          <div
+            className="space-y-3 rounded-xl border bg-card p-5 text-card-foreground"
+            role={page.kind === 'preparing' ? 'status' : 'alert'}
+          >
+            <p>{notice}</p>
+            {page.kind !== 'preparing' && (
+              <a
+                href={restart ? creatorOffersHref(locale) : href}
+                className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+              >
+                {restart ? m.creator_offers_restart() : m.creator_offers_retry()}
+              </a>
+            )}
+          </div>
+        ) : (
+          <>
+            {offers.length === 0 ? (
+              <div role="status" className="space-y-2 rounded-xl border bg-card p-5 text-card-foreground">
+                <p className="font-medium">{cursor ? m.creator_offers_page_empty() : m.creator_offers_empty()}</p>
+                <p className="text-sm text-muted-foreground">{m.creator_offers_empty_hint()}</p>
+              </div>
+            ) : (
+              <OfferJourney.Provider value={{ retain, release, confirmOffer: onConfirm }}>
+                <ul className="space-y-3 rounded-xl border bg-card p-3 text-card-foreground sm:p-5">
+                  {offers.map((offer) => (
+                    <ContentItem
+                      key={offer.id}
+                      data-offer-state={offer.state}
+                      title={offer.title}
+                      headingLevel={2}
+                      {...(offer.state === 'active' && offerPageAvailable
+                        ? { href: `/${locale}/offers/${offer.id}` }
+                        : {})}
+                      className="p-3 sm:[&>div]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] [&_h2]:break-words [&_h2]:[overflow-wrap:anywhere]"
+                      metadata={
+                        <div className="min-w-0 space-y-2">
+                          <p className="font-serif text-lg tabular-nums">
+                            {formatMinorAmount(
+                              locale,
+                              offer.currency,
+                              offer.unitAmountMinor,
+                              recordedMoneyUnit(offer),
+                            ) ?? m.creator_offers_amount_unavailable()}{' '}
+                            <span className="text-sm">{offer.currency.toUpperCase()}</span>
+                          </p>
+                          <p>
+                            {recordedTaxBehavior(offer) === 'exclusive'
+                              ? m.commerce_before_tax()
+                              : m.commerce_tax_unknown()}
+                          </p>
+                          <p className="leading-relaxed">
+                            {offer.contentEdition === null ? m.creator_offers_unknown() : m.creator_offers_captured()}
+                          </p>
                         </div>
-                      )
-                    }
-                  />
-                ))}
-              </ul>
-            </OfferJourney.Provider>
-          )}
-          <nav aria-label={m.creator_offers_pagination()} className="flex flex-wrap gap-3">
-            {cursor && (
-              <a
-                href={creatorOffersHref(locale)}
-                className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
-              >
-                {m.creator_offers_restart()}
-              </a>
+                      }
+                      state={
+                        <p className="text-sm font-medium">
+                          {offer.state === 'active' ? m.creator_offers_active() : m.creator_offers_delisted()}
+                        </p>
+                      }
+                      actions={
+                        <details className="min-w-0 max-w-sm">
+                          <summary className="min-h-11 cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                            {m.commerce_full_title()}
+                          </summary>
+                          <p className="break-words py-2 text-sm [overflow-wrap:anywhere]">{offer.title}</p>
+                        </details>
+                      }
+                      trailing={
+                        data && (
+                          <div className="w-full min-w-0 max-w-sm">
+                            <OwnedOfferControls offer={offer} data={data} locale={locale} guard={guard} />
+                          </div>
+                        )
+                      }
+                    />
+                  ))}
+                </ul>
+              </OfferJourney.Provider>
             )}
-            {page.next && (
-              <a
-                href={creatorOffersHref(locale, page.next)}
-                className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
-              >
-                {m.creator_offers_next()}
-              </a>
-            )}
-          </nav>
-        </>
-      )}
-    </section>
+            <nav aria-label={m.creator_offers_pagination()} className="flex flex-wrap gap-3">
+              {cursor && (
+                <a
+                  href={creatorOffersHref(locale)}
+                  className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+                >
+                  {m.creator_offers_restart()}
+                </a>
+              )}
+              {page.next && (
+                <a
+                  href={creatorOffersHref(locale, page.next)}
+                  className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+                >
+                  {m.creator_offers_next()}
+                </a>
+              )}
+            </nav>
+          </>
+        )}
+      </section>
     </CreatorOfferDraftNavigation>
   );
 }

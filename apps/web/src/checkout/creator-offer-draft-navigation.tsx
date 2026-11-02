@@ -1,8 +1,24 @@
 import { useBlocker, useRouter } from '@tanstack/react-router';
-import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../paraglide/messages.js';
 import type { CreatorOfferGuard } from './creator-offers';
@@ -19,7 +35,8 @@ type Registry = {
 };
 const Drafts = createContext<Registry | null>(null);
 const protectedDrafts = (registry: Registry) =>
-  [...registry.drafts.values()].map((ref) => ref.current)
+  [...registry.drafts.values()]
+    .map((ref) => ref.current)
     .filter((draft) => draft.guard.isCurrent() && (draft.dirty || draft.mayCommit));
 
 /** One departure decision covers every edited offer on this mounted page. */
@@ -53,10 +70,13 @@ export function CreatorOfferDraftNavigation({ children }: { children: ReactNode 
   useEffect(() => {
     if (!drafts.length && resolver.current) settle(true);
   });
-  useEffect(() => () => {
-    resolver.current?.(true);
-    resolver.current = null;
-  }, []);
+  useEffect(
+    () => () => {
+      resolver.current?.(true);
+      resolver.current = null;
+    },
+    [],
+  );
   useEffect(() => {
     const unload = (event: BeforeUnloadEvent) => {
       if (nativeLeaving.current || !protectedDrafts(registry).length) return;
@@ -65,12 +85,25 @@ export function CreatorOfferDraftNavigation({ children }: { children: ReactNode 
     };
     // Existing native anchors still get the same explicit choice as router links.
     const anchor = async (event: MouseEvent) => {
-      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.shiftKey
+      )
+        return;
       const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
-      if (!(link instanceof HTMLAnchorElement) || link.hasAttribute('download') || (link.target && link.target !== '_self')) return;
+      if (
+        !(link instanceof HTMLAnchorElement) ||
+        link.hasAttribute('download') ||
+        (link.target && link.target !== '_self')
+      )
+        return;
       const next = new URL(link.href, window.location.href);
       if (next.origin !== window.location.origin || !/^https?:$/.test(next.protocol)) return;
-      if (next.pathname === window.location.pathname && next.search === window.location.search && next.hash) return;
+      if (next.pathname === window.location.pathname && next.search === window.location.search) return;
       if (!protectedDrafts(registry).length) return;
       event.preventDefault();
       if (!(await request())) {
@@ -78,7 +111,9 @@ export function CreatorOfferDraftNavigation({ children }: { children: ReactNode 
         window.location.assign(next.href);
       }
     };
-    const restore = () => { nativeLeaving.current = false; };
+    const restore = () => {
+      nativeLeaving.current = false;
+    };
     window.addEventListener('beforeunload', unload);
     window.addEventListener('pageshow', restore);
     document.addEventListener('click', anchor);
@@ -99,16 +134,24 @@ export function CreatorOfferDraftNavigation({ children }: { children: ReactNode 
   }
   return (
     <Drafts.Provider value={registry}>
-      <div onFocusCapture={(event) => {
-        if (event.target.matches('input, select, textarea')) field.current = event.target;
-      }}>
+      <div
+        onFocusCapture={(event) => {
+          if (event.target.matches('input, select, textarea')) field.current = event.target;
+        }}
+      >
         {children}
       </div>
       {router && <RouterDraftNavigation request={request} />}
-      <AlertDialog open={prompt && drafts.length > 0} onOpenChange={(open) => { if (!open) settle(true); }}>
-        <AlertDialogContent initialFocus={stayButton} finalFocus={() =>
-          !leaving.current && field.current?.isConnected ? field.current : false
-        }>
+      <AlertDialog
+        open={prompt && drafts.length > 0}
+        onOpenChange={(open) => {
+          if (!open) settle(true);
+        }}
+      >
+        <AlertDialogContent
+          initialFocus={stayButton}
+          finalFocus={() => (!leaving.current && field.current?.isConnected ? field.current : false)}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>{m.creator_offer_draft_navigation_title()}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -116,8 +159,12 @@ export function CreatorOfferDraftNavigation({ children }: { children: ReactNode 
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel ref={stayButton} onClick={() => settle(true)}>{m.creator_offer_draft_navigation_stay()}</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={leave}>{m.creator_offer_draft_navigation_leave()}</AlertDialogAction>
+            <AlertDialogCancel ref={stayButton} onClick={() => settle(true)}>
+              {m.creator_offer_draft_navigation_stay()}
+            </AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={leave}>
+              {m.creator_offer_draft_navigation_leave()}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -126,7 +173,14 @@ export function CreatorOfferDraftNavigation({ children }: { children: ReactNode 
 }
 
 function RouterDraftNavigation({ request }: { request(): boolean | Promise<boolean> }) {
-  useBlocker({ shouldBlockFn: request, withResolver: false, enableBeforeUnload: false });
+  useBlocker({
+    shouldBlockFn: ({ current, next }) =>
+      current.pathname === next.pathname && JSON.stringify(current.search) === JSON.stringify(next.search)
+        ? false
+        : request(),
+    withResolver: false,
+    enableBeforeUnload: false,
+  });
   return null;
 }
 
@@ -140,14 +194,22 @@ export function CreatorOfferDraftState(props: Draft) {
     if (!registry) return;
     registry.drafts.set(id, latest);
     registry.update();
-    return () => { registry.drafts.delete(id); registry.update(); };
+    return () => {
+      registry.drafts.delete(id);
+      registry.update();
+    };
   }, [registry, id]);
-  useLayoutEffect(() => { registry?.update(); }, [registry, props.dirty, props.mayCommit, props.guard]);
+  useLayoutEffect(() => {
+    registry?.update();
+  }, [registry, props.dirty, props.mayCommit, props.guard]);
   return (
     <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
-      {props.guard.isCurrent() && (props.mayCommit
-        ? m.creator_offer_draft_navigation_uncertain()
-        : props.dirty ? m.creator_offer_draft_navigation_unsaved() : '')}
+      {props.guard.isCurrent() &&
+        (props.mayCommit
+          ? m.creator_offer_draft_navigation_uncertain()
+          : props.dirty
+            ? m.creator_offer_draft_navigation_unsaved()
+            : '')}
     </p>
   );
 }
