@@ -1,12 +1,31 @@
 import { m } from './paraglide/messages.js';
 
 export const RECOVERY_COMPLETE_NOTICE_KEY = 'auth.recovery.complete';
+// Match Auth's existing five-second issuer transport bound, including JSON consumption.
+export const AUTH_POST_TIMEOUT_MS = 5000;
 
 export type AuthPostResult<Body = unknown> =
   | { ok: true; body: Body }
   | { ok: false; status: number; code: string; retryAfter: string | null };
 
 export async function authPost<Body = unknown>(path: string, body: unknown): Promise<AuthPostResult<Body>> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<AuthPostResult<Body>>((resolve) => {
+    timer = setTimeout(() => {
+      // Settle waiting even if the transport does not honour abort. Native work may still finish.
+      resolve({ ok: false, status: 503, code: 'timeout', retryAfter: null });
+      controller.abort();
+    }, AUTH_POST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([post<Body>(path, body, controller.signal), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function post<Body>(path: string, body: unknown, signal: AbortSignal): Promise<AuthPostResult<Body>> {
   try {
     const response = await fetch(path, {
       method: 'POST',
@@ -15,6 +34,7 @@ export async function authPost<Body = unknown>(path: string, body: unknown): Pro
       cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     });
     if (response.status === 200) return { ok: true, body: (await response.json()) as Body };
 

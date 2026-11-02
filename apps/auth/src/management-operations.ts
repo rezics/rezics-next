@@ -155,7 +155,7 @@ export async function approveManagementOperation(
 }
 
 /** Invoke only from the page's explicit submit, including after a fresh return.
- * The immutable snapshot survives every await and the immediate uncertain retry.
+ * The immutable snapshot survives every await and the existing unavailable retry.
  * Completion reports the native operation result, never a later readback claim. */
 export async function executeManagementOperation(input: ManagementOperationInput): Promise<ManagementOperationResult> {
   const approval = await approveManagementOperation(input);
@@ -176,6 +176,7 @@ export async function executeManagementOperation(input: ManagementOperationInput
   const body = { ...snapshot, reference: approval.reference };
   let executed = await authPost('/account-operations/execute', body);
   const uncertain = !executed.ok && executed.status === 503;
+  // A deadline is uncertain native work, never permission to repeat execution.
   if (!executed.ok && executed.status === 503 && executed.code === 'unavailable')
     executed = await authPost('/account-operations/execute', body);
   if (!executed.ok) {

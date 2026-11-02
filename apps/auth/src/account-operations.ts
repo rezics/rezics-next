@@ -99,15 +99,15 @@ export async function runAccountOperation(
     operation,
     reference: approved.body.reference,
   };
-  // Keep the same reference/body/key for the immediate retry. A fresh approval
-  // cannot establish whether an earlier execution reached the deletion barrier.
+  // Keep the same reference/body/key for the existing unavailable retry. A timeout
+  // ends waiting with an unknown outcome; recovery must remain explicit.
   let executed = await authPost<{ accountId?: unknown; expired?: unknown; error?: unknown }>(
     '/account-operations/execute',
     executionBody,
   );
   const uncertain = !executed.ok && executed.status === 503;
-  // Deletion retains its bounded same-body recovery only while its review owns
-  // the command. Creation requires explicit review after uncertain execution.
+  // Deletion retains its bounded same-body recovery for unavailable responses only
+  // while its review owns the command. Creation requires explicit review.
   if (
     (!browser || (browser.retryUncertain && browser.isCurrent())) &&
     uncertain &&

@@ -306,6 +306,12 @@ to `.temp/screenshots/auth/` at the repository root. Pass `--out <directory>` to
 
 ## Development
 
+Shared `authPost` submissions have a five-second deadline (`AUTH_POST_TIMEOUT_MS`), matching existing Auth issuer
+transport conventions and covering both connection waiting and JSON consumption. A timeout uses the existing localized
+outage state; native writes remain uncertain where their protocol requires readback or exact-command recovery.
+Decision: a deadline ends browser waiting only; its distinct `timeout` result prevents automatic approval or execution
+retries, retaining the original account, operation key and command for explicit recovery.
+
 From this directory, run:
 
     bun run dev --host 127.0.0.1 --port 4200 --strictPort
