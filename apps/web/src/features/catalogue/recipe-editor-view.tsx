@@ -490,13 +490,15 @@ function RecipeEditorLive({
                     {index > 0 && (
                       <CreateSubjectLanguageRemove
                         locale={locale}
+                        populated={!!(term.language || term.label || term.description || term.aliases)}
                         rowId={`${termsId}-${term.id}`}
                         focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add`}
                         disabled={locked || session !== 'signed-in'}
                         onRemove={() => {
-                          if (locked || running.current || pending.current || session !== 'signed-in') return;
+                          if (locked || running.current || pending.current || session !== 'signed-in') return false;
                           setTerms((previous) => previous.filter((value) => value.id !== term.id));
                           clearCorrections((error) => error.owner === `term-${term.id}`);
+                          return true;
                         }}
                       />
                     )}

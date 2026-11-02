@@ -406,13 +406,15 @@ function MangaCreate({
               {index > 0 && (
                 <CreateSubjectLanguageRemove
                   locale={locale}
+                  populated={!!(term.language || term.label || term.description || term.aliases)}
                   rowId={`${termsId}-row-${term.id}`}
                   focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add-language`}
                   disabled={locked}
                   onRemove={() => {
-                    if (locked || running.current || request.current) return;
+                    if (locked || running.current || request.current) return false;
                     setTerms((previous) => previous.filter((row) => row.id !== term.id));
                     setFailure(undefined);
+                    return true;
                   }}
                 />
               )}
