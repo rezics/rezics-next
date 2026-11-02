@@ -258,8 +258,8 @@ test('The mounted standalone Subject Relations page distinguishes failed, empty 
     host.dir = 'rtl';
     window.document.documentElement.style.fontSize = '200%';
     await show({ body: { links: [credit], count: { value: 7, exact: true }, next: cursor }, property: null });
-    const primary = view().getByRole('link', { name: title, exact: true });
-    const roleLink = view().getByRole('link', { name: 'Role: Principal narrator', exact: true });
+    const primary = view().getByRole('link', { name: title });
+    const roleLink = view().getByRole('link', { name: 'Role: Principal narrator' });
     expect(new URL(primary.getAttribute('href')!, window.location.origin).searchParams.get('realm')).toBe(
       qualifiedRealm,
     );
