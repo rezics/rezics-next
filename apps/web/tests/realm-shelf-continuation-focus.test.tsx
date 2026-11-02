@@ -63,10 +63,7 @@ const page: SpacePageData = {
   },
 };
 const deferred = () => Promise.withResolvers<ShelfPage<ReturnType<typeof added>>>();
-const reads = {
-  boards: [] as ReturnType<typeof deferred>[],
-  publications: [] as ReturnType<typeof deferred>[],
-};
+const reads: Record<'boards' | 'publications', ReturnType<typeof deferred>[]> = { boards: [], publications: [] };
 const cursors: (string | undefined)[] = [];
 function read(kind: 'boards' | 'publications', input: { cursor?: string }) {
   const response = deferred();
@@ -85,7 +82,6 @@ let root: ReturnType<typeof createRoot>;
 let client: InstanceType<typeof QueryClient>;
 let loaded: Awaited<ReturnType<InstanceType<typeof QueryClient>['fetchQuery']>>;
 let frame: React.ReactNode;
-let router: ReturnType<typeof createRouter>;
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 async function load() {
   const target = { kind: 'space' as const, address: 'shelf' };
@@ -105,7 +101,7 @@ async function settle(action: () => void) {
   });
 }
 async function paint() {
-  router = createRouter({
+  const router = createRouter({
     routeTree: createRootRoute({ component: () => frame }),
     history: createMemoryHistory({ initialEntries: ['/'] }),
   });
@@ -186,16 +182,7 @@ test('each keyboard shelf continues, recovers at its cursor, and focuses named n
     expect(section(kind).querySelector('button')).toBeNull();
     expect(reads[kind]).toHaveLength(4);
   }
-  expect(cursors).toEqual([
-    'boards-next',
-    'boards-next',
-    'sparse-next',
-    'sparse-next',
-    'publications-next',
-    'publications-next',
-    'sparse-next',
-    'sparse-next',
-  ]);
+  expect(cursors).toEqual(kinds.flatMap((kind) => [`${kind}-next`, `${kind}-next`, 'sparse-next', 'sparse-next']));
 });
 
 test('pointer continuation and moving focus elsewhere suppress handoff and announcement in either shelf', async () => {
