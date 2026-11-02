@@ -498,6 +498,7 @@
   "library_collections_empty": "아직 만든 컬렉션이 없습니다.",
   "library_collections_heading": "내 컬렉션",
   "library_column_status": "상태",
+  "library_label_table_status_progress": "상태 및 진행 상황",
   "library_columns": "표시 열",
   "library_columns_reset": "열 초기화",
   "library_columns_title_required": "제목은 항상 표시됩니다.",

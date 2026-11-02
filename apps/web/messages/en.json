@@ -510,6 +510,7 @@
   "library_collections_empty": "You haven't created any collections yet.",
   "library_collections_heading": "My collections",
   "library_column_status": "Status",
+  "library_label_table_status_progress": "Status and progress",
   "library_columns": "Columns",
   "library_columns_reset": "Reset columns",
   "library_columns_title_required": "Title is always shown.",

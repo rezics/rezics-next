@@ -498,6 +498,7 @@
   "library_collections_empty": "你尚未建立任何收藏集。",
   "library_collections_heading": "我的收藏集",
   "library_column_status": "狀態",
+  "library_label_table_status_progress": "狀態與進度",
   "library_columns": "顯示欄位",
   "library_columns_reset": "重設顯示欄位",
   "library_columns_title_required": "標題一律顯示。",

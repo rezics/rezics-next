@@ -498,6 +498,7 @@
   "library_collections_empty": "コレクションはまだありません。",
   "library_collections_heading": "自分のコレクション",
   "library_column_status": "状態",
+  "library_label_table_status_progress": "状態と進捗",
   "library_columns": "表示列",
   "library_columns_reset": "表示列をリセット",
   "library_columns_title_required": "タイトルは常に表示されます。",

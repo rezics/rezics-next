@@ -498,6 +498,7 @@
   "library_collections_empty": "Du hast noch keine Sammlungen erstellt.",
   "library_collections_heading": "Meine Sammlungen",
   "library_column_status": "Status",
+  "library_label_table_status_progress": "Status und Fortschritt",
   "library_columns": "Spalten",
   "library_columns_reset": "Spalten zurücksetzen",
   "library_columns_title_required": "Der Titel wird immer angezeigt.",

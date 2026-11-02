@@ -1,7 +1,6 @@
 import { Exposure, useOperation } from '../kernel/exposure';
 import { EntryRemoveForm } from './entry-undo';
 import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
-import { Cover, coverRatio } from '@rezics/ui/cover';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { Tombstone } from '@rezics/ui/tombstone';
 import { ItemMenu, ItemMenuTriggerSlot, type ItemMenuEntry } from '@rezics/ui/item-menu';
@@ -52,7 +51,6 @@ import { useSession } from '../session/query';
 import { selectableEntry, type ShelfOutcome } from './shelf-selection';
 import type { LibrarySubject } from './reads';
 import type { LabelShelfEntry } from './label-shelf-read';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@rezics/ui/shadcn/table';
 
 export function stateLabel(state: LibraryEntryStateRead, label?: string): string | undefined {
   return state ? (label ?? m.library_other()) : undefined;
@@ -905,53 +903,64 @@ export function LabelShelfEntries({
         })}
       </ShelfList>
     );
-  return (
-    <Table>
-      <TableHeader className="sticky top-0 z-10 bg-background">
-        <TableRow>
-          <TableHead />
-          <TableHead>{m.library_column_title()}</TableHead>
-          <TableHead>{m.library_column_type()}</TableHead>
-          <TableHead>{m.library_column_status()}</TableHead>
-          <TableHead>{m.library_progress_heading()}</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {entries.map((entry) => {
-          if (!entry.subject)
-            return (
-              <TableRow key={entry.id}>
-                <TableCell colSpan={5}>
-                  <div className="space-y-2">
-                    <Tombstone shape="row" />
-                    <LabelAssignmentRemoveForm
-                      display={display}
-                      {...(isCurrent ? { isCurrent } : {})}
-                      entry={entry}
-                      labelName={label.name}
-                      locale={locale}
-                      csrfToken={csrfToken}
-                    />
-                  </div>
-                </TableCell>
-              </TableRow>
-            );
-          const cover = shelfCover(entry.subject);
-          const progress = labelEntryProgress(entry, locale);
-          return (
-            <TableRow key={entry.id}>
-              <TableCell>
-                <div
-                  className="w-10 overflow-hidden rounded"
-                  style={{ aspectRatio: coverRatio(cover.subject.types).replace(':', ' / ') }}
+  const chosen = (shelfColumns(columns) ?? shelfColumnIds.join(',')).split(',');
+  const statusVisible = chosen.includes('status');
+  // The endpoint supplies no dates or sort authority. Its display grammar has no progress column,
+  // so keep real progress in the status cell, alongside the family's existing action placement.
+  // The shared title cell requires a link. Its content-capable creator cell carries this table's
+  // title instead, preserving unlinkable tombstones without claiming a creator or a destination.
+  const tableColumns: ShelfColumn[] = [
+    { id: 'cover', label: m.library_column_cover(), visible: chosen.includes('cover') },
+    { id: 'creator', label: m.library_column_title(), visible: true },
+    { id: 'type', label: m.library_column_type(), visible: chosen.includes('type') },
+    {
+      id: 'status',
+      label: statusVisible ? m.library_label_table_status_progress() : m.library_column_actions(),
+      visible: statusVisible || removeAdmitted,
+    },
+  ];
+  const tableRows: ShelfTableRow[] = entries.map((entry) => {
+    const entryTitle = entry.subject
+      ? displayLibraryTitle(entry.subject.label, locale)
+      : { text: m.library_subject_unavailable(), lang: undefined };
+    const progress = labelEntryProgress(entry, locale);
+    return {
+      id: entry.id,
+      title: entryTitle.text,
+      href: entry.subject ? href(entry) : '',
+      cover: shelfCover(entry.subject),
+      creator: entry.subject ? (
+        <a className="font-medium break-words hover:underline" href={href(entry)} lang={entryTitle.lang}>
+          {entryTitle.text}
+        </a>
+      ) : (
+        <Tombstone shape="row" labels={{ unavailable: m.library_subject_unavailable() }} />
+      ),
+      type: entry.subject?.typeLabel,
+      status: (
+        <div className="flex flex-wrap items-center gap-2">
+          {statusVisible ? (
+            <div className="min-w-0 space-y-1">
+              {entry.state ? <span>{entry.stateLabel ?? m.library_other()}</span> : null}
+              {progress ? <ProgressRow {...progress} /> : null}
+            </div>
+          ) : null}
+          {removeAdmitted ? (
+            <ItemMenu
+              title={m.library_entry_actions({ title: entryTitle.text })}
+              backLabel={m.library_menu_back()}
+              trigger={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0 pointer-coarse:size-11"
+                  aria-label={m.library_entry_actions({ title: entryTitle.text })}
                 >
-                  <Cover {...cover} size="fill" ratio={coverRatio(cover.subject.types)} decorative />
-                </div>
-              </TableCell>
-              <TableCell>
-                <a className="font-medium hover:underline" href={href(entry)}>
-                  {title(entry)}
-                </a>
+                  <EllipsisIcon aria-hidden="true" />
+                </Button>
+              }
+              content={
                 <LabelAssignmentRemoveForm
                   display={display}
                   {...(isCurrent ? { isCurrent } : {})}
@@ -960,14 +969,12 @@ export function LabelShelfEntries({
                   locale={locale}
                   csrfToken={csrfToken}
                 />
-              </TableCell>
-              <TableCell>{entry.subject.typeLabel}</TableCell>
-              <TableCell>{entry.state ? (entry.stateLabel ?? m.library_other()) : null}</TableCell>
-              <TableCell>{progress ? <ProgressRow {...progress} /> : null}</TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
-  );
+              }
+            />
+          ) : null}
+        </div>
+      ),
+    };
+  });
+  return <ShelfTable rows={tableRows} columns={tableColumns} onSort={() => {}} />;
 }

@@ -498,6 +498,7 @@
   "library_collections_empty": "Vous n’avez pas encore créé de collection.",
   "library_collections_heading": "Mes collections",
   "library_column_status": "État",
+  "library_label_table_status_progress": "Statut et progression",
   "library_columns": "Colonnes",
   "library_columns_reset": "Réinitialiser les colonnes",
   "library_columns_title_required": "Le titre reste toujours affiché.",
