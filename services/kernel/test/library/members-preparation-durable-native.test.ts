@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { runOperationalTransaction } from '../../src/command/operational.ts';
+import type { PreparationLocator } from '../../src/library/members-preparation.ts';
+import { partitionOf } from '../../src/route/route.ts';
 import {
   fundOperationalWorkOriginal,
   OPERATIONAL_WORK_LOCAL_DECLARATION,
@@ -80,4 +83,28 @@ test('one funded History child registers the real native reservation and transfe
   expect(duplicate.intent).toBeNull();
   expect(duplicate.history).toBeUndefined();
   expect(duplicate.episodes).toEqual(result.episodes);
+
+});
+
+test('a reconstructed service recovers the exact committed definition only during its live episode', async () => {
+  const fixture = await native.fixture();
+  const selected = definition();
+  const reserved = await fixture.store.reserve(fixture.actor, fixture.collectionId, [selected]);
+  const locator = reserved.episodes[0]!.locator;
+  expect(await native.step(locator)).toBe(true);
+  const read = (address: PreparationLocator, clock?: () => Date) => runOperationalTransaction(
+    native.db.pool,
+    {
+      mode: 'work-step', partition: partitionOf(address.route), kind: 'library.membersPreparation.step',
+      accounts: [address.ownerAccountId], workClient: native.workClient, ...(clock ? { clock } : {}),
+    },
+    (tx) => native.store().readRetainedDefinition(tx, address),
+  );
+  expect(await read(locator)).toEqual(selected);
+  expect((await native.store().reserve(fixture.actor, fixture.collectionId, [selected])).intent).toBeNull();
+  expect(await read({ ...locator, episodeId: native.locator(fixture.owner, fixture.collectionId).episodeId })).toBeNull();
+  const [header] = await native.rows(fixture.owner);
+  const expiry = new Date(header.last_read_at).getTime() + 24 * 60 * 60 * 1000;
+  expect(await read(locator, () => new Date(expiry))).toBeNull();
+  expect((await native.rows(fixture.owner))[0]).toMatchObject({ state: 'live', episode_id: locator.episodeId });
 });

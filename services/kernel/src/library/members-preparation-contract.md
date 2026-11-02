@@ -9,8 +9,13 @@ partition and owner fences.
 
 This slice does not establish Source currentness, result readiness, or disclosure authority. `source_identity` and
 `source_observation` remain unbound until the complete funded Source child and current physical authority are
-available. `readWorkDefinition` therefore returns `null` for these reservations, and the registered producer
-continues to fail with a typed unavailable outcome. This is not native result acceptance or a successful empty page.
+available. `readRetainedDefinition` recovers the exact canonical definition on the same live, fenced client,
+checking its digest, namespace, shared expansion and immutable release bytes. Obsolete episodes return `null`.
+`readWorkDefinition` still fails with typed unavailable for a live reservation until current Source authority is
+bound; the registered producer also remains unavailable. This is not native result acceptance or an empty page.
+
+Decision: recover retained immutable meaning independently of Source admission; definition recovery never grants
+execution, readiness or disclosure authority.
 
 # Members preparation
 

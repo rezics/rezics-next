@@ -2362,10 +2362,12 @@ one reservation per list, rotating through the current page in each reader insta
 logical/dynamic sources receive no retained authority. The unfiltered definition uses the shared FilterDocument
 Type tautology at the current immutable release; unknown evidence remains unknown under NOT.
 
-The exact producer declarations include `id | ordinal`. Native reservation now deduplicates current owner episodes,
-maintains quota/LRU and commits locator-only intents under current Core/Access fences. Default
-`library.membersPreparation` work still returns typed unavailable: reservation supplies no current Source binding,
-ready result or custody acknowledgement. The bounded producer and cleanup worker remain required. `MembersPreparation` declares no retained ordered-result reader
+The exact producer declarations include `id | ordinal`. Native reservation, touch and step admission persist
+private episodes and locator-only intents. `readRetainedDefinition` recovers their exact canonical meaning and
+immutable accepted release only on the same live, fenced client; it does not establish current Source authority.
+Default `library.membersPreparation` work remains explicitly unavailable and produces no ready result or custody
+acknowledgment. The authoritative bounded producer and cleanup must still be integrated.
+`MembersPreparation` declares no retained ordered-result reader
 on this base; prepared result consumption and finite native sparse-source completion remain deferred with the
 actual ordered/scoped source binding. Successful direct previews never establish those wider capabilities.
 

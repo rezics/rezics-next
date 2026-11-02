@@ -127,6 +127,8 @@ export interface MembersPreparation {
   touch(actor: Actor, locator: PreparationLocator, options?: { deadline?: number }): Promise<boolean>;
   /** Called inside the registered step's fenced operational transaction; locks survive to its commit. */
   admitStep(tx: OperationalTransaction, locator: PreparationLocator): Promise<boolean>;
+  /** Exact retained meaning on the admitted client; never Source or result authority. */
+  readRetainedDefinition(tx: OperationalTransaction, locator: PreparationLocator): Promise<PreparationDefinition | null>;
   /** Read-only on the SAME live admitted Core client; null for an obsolete or unbound episode. */
   readWorkDefinition(
     tx: OperationalTransaction,
@@ -194,6 +196,59 @@ function prepareBasis(ownerAccountId: string, collectionId: string, input: Prepa
     if (error instanceof ProblemError) throw error;
     throw unsupported();
   }
+}
+
+/** Recover only the exact admitted definition, using the immutable release owned by Semantic.
+ * The lookup digest is checked before release I/O; neither it nor the retained bytes grants Source authority.
+ */
+export async function restorePreparationDefinition(
+  ownerAccountId: string,
+  collectionId: string,
+  retained: Readonly<{ canonicalBasis: string; basisDigest: Uint8Array }>,
+  loadRelease: (digest: string) => Promise<FilterRelease | null>,
+): Promise<PreparationDefinition> {
+  const canonicalBasis = retained.canonicalBasis;
+  let parts: unknown;
+  try {
+    if (
+      typeof canonicalBasis !== 'string' ||
+      Buffer.byteLength(canonicalBasis) > 196_608 ||
+      retained.basisDigest.byteLength !== 32 ||
+      !createHash('sha256').update(canonicalBasis).digest().equals(Buffer.from(retained.basisDigest))
+    )
+      throw unsupported();
+    parts = JSON.parse(canonicalBasis);
+    if (
+      !Array.isArray(parts) ||
+      parts.length !== 6 ||
+      parts[0] !== BASIS_VERSION ||
+      parts[1] !== ownerAccountId ||
+      parts[2] !== collectionId ||
+      (parts[4] !== 'id' && parts[4] !== 'ordinal') ||
+      typeof parts[5] !== 'string' ||
+      !/^sha256:[0-9a-f]{64}$/.test(parts[5]) ||
+      canonicalize(parts) !== canonicalBasis
+    )
+      throw unsupported();
+  } catch {
+    throw unsupported();
+  }
+  const tuple = parts as [number, string, string, FilterDocument, PreparationDefinition['sort'], string];
+  const release = await loadRelease(tuple[5]);
+  if (!release) throw new ProblemError('dependency_unavailable');
+  // Reapply shared admission and recompute the whole key. This also checks the actual release bytes
+  // against their digest and refuses a stored filter that is no longer its own accepted expansion.
+  const basis = prepareBasis(ownerAccountId, collectionId, {
+    filter: tuple[3],
+    sort: tuple[4],
+    release: { digest: tuple[5], value: release },
+  });
+  if (basis.basis !== canonicalBasis) throw unsupported();
+  return {
+    filter: basis.filter,
+    sort: basis.sort,
+    release: { digest: basis.releaseDigest, value: basis.release },
+  };
 }
 
 function validLocator(locator: PreparationLocator): boolean {
@@ -664,7 +719,7 @@ export function createMembersPreparation(config: {
       return !!header;
     },
 
-    async readWorkDefinition(tx, locator) {
+    async readRetainedDefinition(tx, locator) {
       if (!hasLiveOperationalTransaction(tx)) return null;
       const resources = currentOperationalResources(tx);
       if (
@@ -674,6 +729,22 @@ export function createMembersPreparation(config: {
       )
         return null;
       if ((await service.admitStep(tx, locator)) !== true) return null;
+      const [retained] = (
+        await tx.query<{ canonicalBasis: string; basisDigest: Buffer }>(
+          `SELECT canonical_basis AS "canonicalBasis",basis_digest AS "basisDigest"
+           FROM library.members_preparation
+           WHERE route=$1 AND owner_account_id=$2 AND collection_id=$3 AND episode_id=$4 AND state='live'`,
+          [locator.route, locator.ownerAccountId, locator.collectionId, locator.episodeId],
+        )
+      ).rows;
+      if (!retained) return null;
+      return restorePreparationDefinition(locator.ownerAccountId, locator.collectionId, retained, (digest) =>
+        readRelease(tx, digest),
+      );
+    },
+
+    async readWorkDefinition(tx, locator) {
+      if (!(await service.readRetainedDefinition(tx, locator))) return null;
       // Source owns the complete native declaration and physical execution authority. Until its producer is
       // connected here, a retained reservation never becomes a fabricated ready definition.
       throw new ProblemError('dependency_unavailable');
