@@ -77,18 +77,16 @@ export function useCollectionCurrentAdmission(address: string, evidence = '', qu
         !pageState ||
         (pageState.status === 'success' &&
           JSON.stringify([page?.visibility !== null, page?.viewerActions]) === nativeEvidence);
-      const csrfToken =
+      const readable =
         sameSource &&
         session?.status === 'success' &&
         data?.state === 'signed-in' &&
         data.subject === subject &&
-        data.csrfToken?.trim() &&
         observation?.subject === subject &&
         exposure?.status === 'success' &&
-        exposure.data?.subject === subject
-          ? data.csrfToken
-          : '';
-      const admitted = csrfToken ? exposure!.data!.admitted : [];
+        exposure.data?.subject === subject;
+      const csrfToken = readable && data?.csrfToken?.trim() ? data.csrfToken : '';
+      const admitted = readable ? exposure!.data!.admitted : [];
       const next = JSON.stringify([
         owner,
         mount,
@@ -188,14 +186,18 @@ export function useCollectionCurrentAdmission(address: string, evidence = '', qu
       operation === 'collection_member.transfer'
         ? 'collection.get'
         : operation;
-    return observed() && !!actual.csrfToken && operationIsAdmitted(exposedOperation, actual.admitted);
+    return (
+      observed() &&
+      (operation === 'collection.get' || !!actual.csrfToken) &&
+      operationIsAdmitted(exposedOperation, actual.admitted)
+    );
   };
   return {
     owner: value.owner,
     retained,
     observed,
     current,
-    csrf: (operation: CollectionOperation) => (current(operation) ? store.read().csrfToken : null),
+    csrf: (operation: CollectionOperation) => (current(operation) ? store.read().csrfToken || null : null),
   };
 }
 

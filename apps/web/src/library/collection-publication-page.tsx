@@ -51,12 +51,13 @@ type PublicationViewProps = {
   isCurrent?: () => boolean;
   isOwnerCurrent?: () => boolean;
   canPublish?: () => boolean;
+  captureSubmit?: () => PublicationSubmit | null;
 };
 
-/** Credentials authorize a fresh source read; their strings do not identify the originating intent. */
+/** Authenticated read identity owns selection; mutation credentials never identify the originating intent. */
 export function CollectionPublicationPageView(props: PublicationViewProps) {
   const { page } = props;
-  const credential = !!page.viewer?.subject && !!page.viewer.csrfToken;
+  const credential = !!page.viewer?.subject;
   return (
     <PublicationIntentView
       key={JSON.stringify([page.viewer?.subject, page.address.id, page.address.cursor, credential])}
@@ -74,7 +75,13 @@ type IntentState = {
   sourceKey: string | null;
   selected: string[];
   confirmed: boolean;
-  attempt: { input: PublicationInput; sourceKey: string | null; review: PublicationReview; uncertain: boolean } | null;
+  attempt: {
+    input: PublicationInput;
+    send: PublicationSubmit;
+    sourceKey: string | null;
+    review: PublicationReview;
+    uncertain: boolean;
+  } | null;
   result: PublicationResult | null;
   complete: PublicationComplete | null;
   busy: boolean;
@@ -86,7 +93,8 @@ function PublicationIntentView({
   submit,
   onReload,
   isCurrent = () => true,
-  canPublish = () => true,
+  canPublish = () => !!page.viewer?.csrfToken,
+  captureSubmit,
   isOwnerCurrent = isCurrent,
 }: PublicationViewProps) {
   const source = page.source;
@@ -139,7 +147,9 @@ function PublicationIntentView({
   const refused = result?.ok === false && !unknown;
   const locked = busy || unknown || refused;
   const base = `/${getLocale()}/collections/${encodeURIComponent(page.address.id)}`;
-  const review = state.attempt?.review ?? (ready ? publicationReview(source.page, source.revision, selected) : null);
+  const review = isCurrent()
+    ? state.attempt?.review ?? (ready ? publicationReview(source.page, source.revision, selected) : null)
+    : null;
 
   async function publish() {
     const origin = current.current;
@@ -164,11 +174,14 @@ function PublicationIntentView({
             subjectIds: [...origin.selected],
             idempotencyKey: crypto.randomUUID(),
           };
+    const send = origin.attempt?.send ?? (captureSubmit ? captureSubmit() : submit);
+    if (!send) return;
     update((previous) => ({
       ...previous,
       busy: true,
       attempt: previous.attempt ?? {
         input,
+        send,
         sourceKey: origin.sourceKey,
         review: publicationReview(source.page, input.revision, origin.selected),
         uncertain: false,
@@ -177,7 +190,7 @@ function PublicationIntentView({
     let outcome: PublicationResult;
     try {
       if (!active.current || !isCurrent()) return;
-      outcome = await submit(input);
+      outcome = await send(input);
     } catch {
       outcome = { ok: false, reason: 'unknown' };
     }
@@ -288,7 +301,7 @@ function PublicationIntentView({
                           })}
                           disabled={locked || (!checked && selected.length >= 100)}
                           onChange={() => {
-                            if (!canPublish()) return;
+                            if (!isCurrent()) return;
                             update((previous) => {
                               if (previous.busy || previous.attempt) return previous;
                               const selected = previous.selected.includes(id)
@@ -332,7 +345,7 @@ function PublicationIntentView({
                   disabled={locked}
                   aria-describedby="publication-bounds publication-replacement publication-privacy"
                   onChange={(event) => {
-                    if (!canPublish()) return;
+                    if (!isCurrent()) return;
                     const confirmed = event.target.checked;
                     update((previous) => (previous.busy || previous.attempt ? previous : { ...previous, confirmed }));
                   }}
@@ -453,7 +466,7 @@ function CurrentPublicationPage({
     // A returning viewer/address cannot join a still-pending read or reuse its old cached result.
     queryKey: [...options.queryKey, owner.lifetime],
     // Admission churn may suspend a read, but never automatically replays a failed read.
-    enabled: owner.isCurrent() && !!csrfToken && !started.current.has(readIdentity),
+    enabled: owner.isCurrent() && !started.current.has(readIdentity),
     staleTime: 0,
     refetchOnMount: 'always',
   });
@@ -471,7 +484,6 @@ function CurrentPublicationPage({
       state.fetchStatus === 'idle' &&
       current === query.data &&
       current?.viewer?.subject === subject &&
-      current.viewer.csrfToken === csrf &&
       current.address.id === address.id &&
       current.address.cursor === address.cursor &&
       current.source.state === 'ready' &&
@@ -484,7 +496,6 @@ function CurrentPublicationPage({
   const matches =
     owner.isCurrent() &&
     data?.viewer?.subject === subject &&
-    data.viewer.csrfToken === csrfToken &&
     data.address.id === address.id &&
     data.address.cursor === address.cursor &&
     (data.source.state !== 'ready' ||
@@ -513,6 +524,12 @@ function CurrentPublicationPage({
         isCurrent={owner.isCurrent}
         isOwnerCurrent={owner.isOwnerCurrent}
         canPublish={canPublish}
+        captureSubmit={() => {
+          const csrf = owner.credential();
+          if (!csrf || !canPublish()) return null;
+          const send = publishSelectedCollection;
+          return (input) => send({ data: input, headers: { 'X-CSRF-Token': csrf } });
+        }}
         submit={async (input) => {
           const csrf = owner.credential();
           if (!csrf || !canPublish()) return { ok: false, reason: 'denied' };

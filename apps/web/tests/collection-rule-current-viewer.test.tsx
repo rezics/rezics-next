@@ -247,7 +247,7 @@ describe('Private rule editor data and asynchronous work stay with the originati
   });
 
   test('authority loss retires work and the page; old failures and unmounted success cannot paint, unlock or navigate', async () => {
-    for (const loss of [{ csrfToken: '' }, { viewerId: null }, { admitted: ['collection_rule.get'] }]) {
+    for (const loss of [{ viewerId: null }, { admitted: ['collection_rule.get'] }]) {
       const old = deferred<CollectionWriteResult>();
       const replacement = deferred<CollectionWriteResult>();
       const navigation: string[] = [];
@@ -306,7 +306,7 @@ describe('Private rule editor data and asynchronous work stay with the originati
       expect(calls).toHaveLength(1); // No automatic resubmission.
       await ui.submit();
       expect(calls[1]!.value).toEqual(calls[0]!.value);
-      expect(calls[1]!.csrf).toBe('rotated-csrf');
+      expect(calls[1]!.csrf).toBe('csrf-alice');
       expect(calls[0]!.value.filter).toEqual({ owner: { label: { id: 'changed' } } });
       await ui.submit();
       expect(calls).toHaveLength(2); // A conflict requires the user's refresh/revision choice.

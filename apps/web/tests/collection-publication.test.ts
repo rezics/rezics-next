@@ -12,6 +12,7 @@ import {
   publishSelectedRecord,
   selectedPublicationAdapter,
   collectionPublicationQuery,
+  loadCollectionPublication,
   type PublicationInput,
   type PublicationPage,
   type PublicationResult,
@@ -100,20 +101,22 @@ test('the current dynamic reader preserves header revision and original IDs; sel
         credential: async () => ({
           status: 'active',
           subject: 'owner',
-          csrfToken: 'A'.repeat(22),
+          csrfToken: null,
           accessToken: 'owner-token',
         }),
       }),
     } as unknown as DurableObjectNamespace<SessionStore>,
   };
-  const page = await loadEditableCollectionPage(
-    client,
-    new Request('https://site.test', {
+  const request = new Request('https://site.test', {
       headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
-    }),
+    });
+  const page = await loadEditableCollectionPage(client, request,
     sessionEnv,
-    { id: input.collectionId, editor: true },
-  );
+    { id: input.collectionId, editor: true,
+  });
+  const preview = await loadCollectionPublication(request, { id: input.collectionId }, async () => page);
+  expect(preview.viewer).toEqual({ subject: 'owner', csrfToken: null });
+  expect(preview.source.state).toBe('ready');
   const source = publicationSource(page, 'owner');
   expect(source.state).toBe('ready');
   if (source.state !== 'ready') throw new Error('Expected consumer source context');

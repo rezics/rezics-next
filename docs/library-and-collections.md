@@ -182,6 +182,8 @@ read until explicit GET correction or restart. Cursor correction/restart keeps a
 always starts page one because rows and previews have different page bounds. Native stale-cursor restart retains
 its separate notice, and current viewer/address retirement applies through malformed-address recovery.
 
+Decision: Collection owner pages, saved rules and publication preview/review refresh use authenticated read identity without CSRF; writes require a current token, uncertain retries retain their original sender, credential, key and operands, and publication previews exclude occurrence notes.
+
 Decision: The embedded Subject Library slot, Copies, Labels, Following and private follow counts admit authorized
 current-subject reads, detail, cursor navigation and read-only retry
 without a CSRF token; commands require the actual current token, while uncertain retries retain their original

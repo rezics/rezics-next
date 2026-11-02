@@ -260,6 +260,7 @@ type EditorProps = {
   collectionId: string | null;
   admitted: readonly string[] | undefined;
   save(input: RuleWrite, csrfToken: string): Promise<CollectionWriteResult>;
+  captureSave?: () => EditorProps['save'] | null;
   reload(): Promise<RulePage>;
   labels?: ((q: string, cursor?: string) => Promise<RuleChoicePage | null>) | undefined;
   csrfToken: string;
@@ -276,10 +277,9 @@ const pageIdentity = (page: RulePage) =>
 
 /** Scope changes retire private state synchronously; a cached page needs a fresh private read to return. */
 export function CollectionRuleEditor(props: EditorProps) {
-  const { page, viewerId, collectionId, csrfToken, admitted } = props;
+  const { page, viewerId, collectionId, admitted } = props;
   const canRead =
     !!viewerId &&
-    !!csrfToken &&
     !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.get');
   const canSave = !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.update');
   const canLabel = !!admitted?.includes('library_label.list');
@@ -440,6 +440,7 @@ function RuleForm({
   page,
   sourceAvailable,
   save,
+  captureSave,
   reload,
   labels,
   csrfToken,
@@ -544,9 +545,14 @@ function RuleForm({
       ...draft,
       idempotencyKey: attempted.current ? crypto.randomUUID() : base.intent,
     };
+    const send = request.current?.send ?? (captureSave ? captureSave() : save);
+    if (!send) {
+      operation.finish();
+      return;
+    }
     attempted.current = true;
     captured.current = input;
-    request.current ??= { csrf, send: save };
+    request.current ??= { csrf, send };
     const original = request.current;
     setIntent(input);
     setFeedback('');
@@ -786,7 +792,7 @@ function RuleForm({
           creating={base.state === 'new'}
           pending={pending}
           conflict={conflict}
-          hasFilter={!!filter}
+          hasFilter={!!filter && !!(currentCsrf ? currentCsrf() : csrfToken)}
           savedId={savedId}
           collectionId={base.state === 'ready' ? base.id : null}
           refresh={() => void refresh()}

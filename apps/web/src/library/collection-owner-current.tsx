@@ -62,12 +62,15 @@ function ownerStore(client: QueryClient) {
       actual?.state === 'signed-in' &&
       actual.subject === subject &&
       typeof actual.csrfToken === 'string' &&
-      actual.csrfToken.length > 0
+      actual.csrfToken.trim().length > 0
         ? actual.csrfToken
         : null;
     const enrolled = exposure.getSnapshot();
     const observation =
-      mounted && csrf && enrolled.state === 'signed-in' && enrolled.observation.subject === subject
+      mounted &&
+      actual?.state === 'signed-in' &&
+      enrolled.state === 'signed-in' &&
+      enrolled.observation.subject === subject
         ? enrolled.observation
         : undefined;
     const key = viewerExposureQuery(observation).queryKey;
@@ -94,7 +97,7 @@ function ownerStore(client: QueryClient) {
       snapshot = {
         identity: snapshot.identity,
         observation,
-        csrfToken: csrf || snapshot.csrfToken,
+        csrfToken: csrf ?? '',
         admitted: !!subject && operationIsAdmitted('collection.get', groups),
         canLabel: !!subject && operationIsAdmitted('library_label.list', groups),
       };
@@ -160,7 +163,7 @@ export function useCollectionOwnerCurrent(address: string, _withLabels = false) 
     isCurrent,
     isOwnerCurrent: () => store.owns(snapshot) && getLocale() === locale,
     canLabelCurrent: () => isCurrent() && snapshot.canLabel,
-    credential: () => (isCurrent() ? snapshot.csrfToken : null),
+    credential: () => (isCurrent() ? snapshot.csrfToken || null : null),
     csrfToken: snapshot.csrfToken,
     generation: snapshot.identity.generation,
     lifetime: snapshot.identity.lifetime,

@@ -339,6 +339,36 @@ describe('Complete saved rule and selected Publication owner authority preserves
     }
   });
 
+  test('a healthy owner without CSRF can inspect rules, refresh and read choices; token arrival submits nothing', async () => {
+    const h = await mounted();
+    try {
+      await h.perform(() => h.client.setQueryData(sessionQuery.queryKey, { ...session(), csrfToken: null }));
+      await h.render(<CollectionRuleCurrent page={rule()} collectionId="alpha" />);
+      await h.authorize();
+      expect(h.host.textContent).toContain('alice-private-release');
+      expect(h.button(m.library_collection_save()).disabled).toBe(true);
+      await h.submit();
+      await h.perform(() => h.button(m.search_apply()).click());
+      expect(choices).toHaveLength(1);
+      await settle(choices[0]!, {
+        viewerId: 'alice',
+        address: { q: '', cursor: null },
+        choices: unavailableRuleChoices(),
+      });
+      await h.perform(() => h.button(m.library_collection_reload()).click());
+      await settle(ruleReads[0]!, rule('alice', 'alpha', 12));
+      expect(h.host.textContent).toContain('12');
+      expect(ruleWrites).toHaveLength(0);
+      await h.perform(() => h.client.setQueryData(sessionQuery.queryKey, session()));
+      await h.authorize();
+      expect(ruleWrites).toHaveLength(0);
+      await h.submit();
+      expect(ruleWrites[0]!.input.revision).toBe(12);
+    } finally {
+      await h.close();
+    }
+  });
+
   test('new and edited uncertain rule intents survive healthy rotation, equivalent refresh, authority errors and independent admission churn exactly', async () => {
     for (const collectionId of [null, 'alpha']) {
       const h = await mounted();
@@ -383,7 +413,7 @@ describe('Complete saved rule and selected Publication owner authority preserves
         await h.submit();
         expect(ruleWrites).toHaveLength(2);
         expect(ruleWrites[1]!.input).toEqual(original);
-        expect(ruleWrites[1]!.csrf).toBe('rotated-csrf');
+        expect(ruleWrites[1]!.csrf).toBe('csrf-one');
         await settle(ruleWrites[1]!, { ok: true, id: 'alpha' });
         expect(h.host.querySelector('a[href$="/alpha"]')).not.toBeNull();
       } finally {
@@ -496,12 +526,14 @@ describe('Complete saved rule and selected Publication owner authority preserves
       await settle(publicationReads[3]!, publication('alice', address, 'rotated-csrf', 99));
       await h.expose('alice', []);
       expect(checkboxes(h.host)).toHaveLength(0);
+      expect(h.host.querySelector('[data-publication-review]')).toBeNull();
       await h.expose();
+      expect(h.host.querySelector('[data-publication-review]')).not.toBeNull();
       expect(publicationReads).toHaveLength(4); // No replay/read is added by admission churn.
       await h.perform(() => h.button(m.library_publication_retry()).click());
       expect(publicationWrites).toHaveLength(2);
       expect(publicationWrites[1]!.input).toEqual(original);
-      expect(publicationWrites[1]!.csrf).toBe('rotated-csrf');
+      expect(publicationWrites[1]!.csrf).toBe('csrf-one');
       await settle(publicationWrites[1]!, complete(original));
       expect(h.host.textContent).toContain(m.library_publication_complete({ count: '2' }));
     } finally {

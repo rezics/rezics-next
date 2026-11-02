@@ -271,6 +271,30 @@ async function selectOccurrence(ui: UI) {
 }
 
 describe('Actual scoped Collection authority enables owning editor and occurrence workflows while retaining exact uncertain operations across healthy renewal and retiring replaced callbacks', () => {
+  test('a null-token owner can inspect duplicate occurrences and refresh the editor while every save remains gated', async () => {
+    const ui = await mounted();
+    const update = spyOn(edits, 'updateCollection');
+    try {
+      await settle(() => ui.client.setQueryData(sessionQuery.queryKey, { ...session(), csrfToken: null }));
+      await ui.expose();
+      await begin(ui);
+      expect(memberList!.members.map((member) => member.id)).toEqual(['occurrence-one', 'occurrence-two']);
+      await submit(ui);
+      expect(update).toHaveBeenCalledTimes(0);
+      const reload = [...ui.host.querySelectorAll('button')].find((button) =>
+        button.textContent?.trim() === m.library_collection_reload())!;
+      expect(reload.disabled).toBe(false);
+      await settle(() => reload.click());
+      expect(ui.refresh).toHaveBeenCalledTimes(1);
+      await ui.renew();
+      await ui.expose();
+      expect(update).toHaveBeenCalledTimes(0);
+    } finally {
+      update.mockRestore();
+      await ui.close();
+    }
+  });
+
   for (const refusal of ['invalid', 'conflict', null] as const)
     test(`selected duplicate occurrences require confirmation and one loaded-CAS command: ${refusal ?? 'Undo'}`, async () => {
       const ui = await mounted();
@@ -487,7 +511,7 @@ describe('Actual scoped Collection authority enables owning editor and occurrenc
       await submit(ui);
       expect(update).toHaveBeenCalledTimes(2);
       expect(update.mock.calls[1]![0]!.data).toEqual(exact);
-      expect(new Headers(update.mock.calls[1]![0]!.headers).get('X-CSRF-Token')).toBe('csrf-three');
+      expect(new Headers(update.mock.calls[1]![0]!.headers).get('X-CSRF-Token')).toBe('csrf-one');
       expect(note).toHaveBeenCalledTimes(1);
       expect(note.mock.calls[0]![0]!.data).toMatchObject({ memberId: 'occurrence-two', note: 'Exact retained draft' });
     } finally {

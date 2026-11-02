@@ -329,6 +329,7 @@ function CollectionPageLifetime({
   const [savedNoteIds, setSavedNoteIds] = useState<ReadonlySet<string>>(new Set());
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const writeKeys = useRef(new Map<string, string>());
+  const commandCredentials = useRef(new Map<string, string>());
   const [editing, setEditing] = useState(false);
   const [saveConfirmed, setSaveConfirmed] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -357,6 +358,15 @@ function CollectionPageLifetime({
   const [writing, setPending] = useState(false);
   const [boundary, setBoundary] = useState<BoundaryMove | null>(null);
   const captureSave = () => ({
+    credential: admission.csrf('collection.update'),
+    send: {
+      updateCollection,
+      batchRemoveCollectionMembers,
+      transferCollectionMembers,
+      removeCollectionMember,
+      moveCollectionMember,
+      updateMemberNote,
+    },
     page: draftPage,
     members,
     editorMembers,
@@ -376,9 +386,15 @@ function CollectionPageLifetime({
   function isCurrent(operation: CollectionOperation = 'collection.get') {
     return mounted.current && current(operation);
   }
-  function headers(operation: CollectionOperation) {
+  function headers(operation: CollectionOperation, credential = admission.csrf(operation)) {
     if (!isCurrent(operation)) throw new Error('Collection authority retired');
-    return { 'X-CSRF-Token': admission.csrf(operation)! };
+    if (!credential) throw new Error('Collection mutation credential unavailable');
+    return { 'X-CSRF-Token': credential };
+  }
+  function commandHeaders(operation: CollectionOperation, key: string) {
+    const current = headers(operation);
+    if (!commandCredentials.current.has(key)) commandCredentials.current.set(key, current['X-CSRF-Token']);
+    return headers(operation, commandCredentials.current.get(key)!);
   }
   const inFlight = useRef<object | null>(null);
   const deleteInFlight = useRef<object | null>(null);
@@ -424,7 +440,6 @@ function CollectionPageLifetime({
     page.viewerActions,
     session.state,
     session.subject,
-    Boolean(session.csrfToken),
   ]);
   const currentBoundaryContext = useRef(boundaryContext);
   currentBoundaryContext.current = boundaryContext;
@@ -560,7 +575,10 @@ function CollectionPageLifetime({
     recordBoundary({ ...value, phase: 'pending' });
     let result: CollectionWriteResult;
     try {
-      result = await moveCollectionMember({ data: value.intent.data, headers: headers('collection_member.move') });
+      result = await moveCollectionMember({
+        data: value.intent.data,
+        headers: commandHeaders('collection_member.move', value.intent.data.idempotencyKey),
+      });
     } catch {
       result = { ok: false, reason: 'unavailable' };
     }
@@ -626,7 +644,7 @@ function CollectionPageLifetime({
   }
 
   async function beginEditing() {
-    if (!isCurrent('collection.update') || pending || editing || !owner) return;
+    if (!isCurrent() || pending || editing || !owner) return;
     const request = startRequest();
     if (!request) return;
     setFailure('');
@@ -710,6 +728,8 @@ function CollectionPageLifetime({
     setFailure('');
     setConflict(false);
     const {
+      credential,
+      send,
       page,
       members,
       editorMembers,
@@ -758,9 +778,9 @@ function CollectionPageLifetime({
           revision: currentRevision,
           memberIds: removals.map((operation) => operation.memberId),
         };
-        const result = await batchRemoveCollectionMembers({
+        const result = await send.batchRemoveCollectionMembers({
           data: { ...data, idempotencyKey: keyFor(data) },
-          headers: headers('collection_member.batch_remove'),
+          headers: headers('collection_member.batch_remove', credential),
         });
         if (!isCurrent('collection_member.batch_remove')) return;
         if (!result.ok) {
@@ -789,7 +809,7 @@ function CollectionPageLifetime({
         coverMediaId !== (page.coverMediaId ?? null)
       ) {
         if (!isCurrent()) return;
-        const result = await updateCollection({
+        const result = await send.updateCollection({
           data: {
             collectionId: page.id,
             revision: currentRevision!,
@@ -800,7 +820,7 @@ function CollectionPageLifetime({
             ...(coverMediaId !== (page.coverMediaId ?? null) ? { coverMediaId } : {}),
             idempotencyKey: keyFor([page.id, currentRevision, title, description, visibility, kind, coverMediaId]),
           },
-          headers: headers('collection.update'),
+          headers: headers('collection.update', credential),
         });
         if (!isCurrent()) return;
         if (!result.ok) {
@@ -827,9 +847,9 @@ function CollectionPageLifetime({
           destinationRevision: transfer.destination.revision,
           after: null,
         };
-        const result = await transferCollectionMembers({
+        const result = await send.transferCollectionMembers({
           data: { ...data, idempotencyKey: keyFor(data) },
-          headers: headers('collection_member.transfer'),
+          headers: headers('collection_member.transfer', credential),
         });
         if (!isCurrent('collection_member.transfer')) return;
         if (!result.ok) {
@@ -846,9 +866,9 @@ function CollectionPageLifetime({
           const common = { collectionId: page.id, idempotencyKey: keyFor([page.id, operation, currentRevision]) };
           if (operation.kind === 'remove') {
             if (currentRevision === undefined) return { ok: false, reason: 'unavailable' };
-            const result = await removeCollectionMember({
+            const result = await send.removeCollectionMember({
               data: { ...common, memberId: operation.memberId, revision: currentRevision },
-              headers: headers('collection_member.delete'),
+              headers: headers('collection_member.delete', credential),
             });
             if (!isCurrent('collection_member.delete')) return { ok: false, reason: 'unavailable' };
             if (result.ok) {
@@ -865,13 +885,13 @@ function CollectionPageLifetime({
           }
           const result =
             operation.kind === 'move'
-              ? await moveCollectionMember({
+              ? await send.moveCollectionMember({
                   data: { ...common, memberId: operation.memberId, after: operation.after },
-                  headers: headers('collection_member.move'),
+                  headers: headers('collection_member.move', credential),
                 })
-              : await updateMemberNote({
+              : await send.updateMemberNote({
                   data: { ...common, memberId: operation.memberId, note: operation.note },
-                  headers: headers('collection_member.update'),
+                  headers: headers('collection_member.update', credential),
                 });
           if (!isCurrent(operation.kind === 'move' ? 'collection_member.move' : 'collection_member.update'))
             return { ok: false, reason: 'unavailable' };
@@ -916,7 +936,7 @@ function CollectionPageLifetime({
       const { key, ...deletion } = episode;
       const result = await restoreCollectionMember({
         data: { ...deletion, idempotencyKey: key },
-        headers: headers('collection_member.restore'),
+        headers: commandHeaders('collection_member.restore', key),
       });
       if (!isCurrent()) return;
       if (result.ok || (!result.ok && result.reason === 'expired'))
@@ -945,7 +965,10 @@ function CollectionPageLifetime({
     setDeleting(true);
     setDeleteFailure('');
     try {
-      const result = await deleteCollection({ data: deletion, headers: headers('collection.delete') });
+      const result = await deleteCollection({
+        data: deletion,
+        headers: commandHeaders('collection.delete', deletion.idempotencyKey),
+      });
       if (!isCurrent()) return;
       if (!result.ok) {
         setDeleteFailure(result.reason === 'conflict' ? m.library_collection_conflict() : writeMessage(result));
@@ -1253,7 +1276,7 @@ function CollectionPageLifetime({
           <CollectionMetadataEditor
             title={title}
             description={description}
-            disabled={pending || draftFrozen}
+            disabled={pending || draftFrozen || !isCurrent('collection.update')}
             onSubmit={(event) => void save(event)}
             onTitleChange={(value) => {
               if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null) setTitle(value);
@@ -1275,7 +1298,7 @@ function CollectionPageLifetime({
                   setCoverMediaId(value);
               }}
               members={page.members}
-              disabled={pending || draftFrozen}
+              disabled={pending || draftFrozen || !isCurrent('collection.update')}
             />
             <VisibilityField
               onChange={(value) => {
@@ -1283,7 +1306,7 @@ function CollectionPageLifetime({
                   setVisibility(value);
               }}
               value={visibility}
-              disabled={pending || draftFrozen}
+              disabled={pending || draftFrozen || !isCurrent('collection.update')}
             />
             <p className="text-sm text-muted-foreground">{m.library_collection_independent_writes()}</p>
           </CollectionMetadataEditor>

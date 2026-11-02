@@ -11,7 +11,7 @@ import { collectionResultMatches, type CollectionPageResult } from './collection
 import type { DynamicCollectionPage } from './dynamic-collection';
 import { asSession, isRecord, writeSession } from './collection-records';
 
-export type PublicationViewer = { subject: string; csrfToken: string };
+export type PublicationViewer = { subject: string; csrfToken: string | null };
 export type PublicationAddress = { id: string; cursor?: string };
 export type PublicationInput = {
   collectionId: string;
@@ -85,7 +85,11 @@ export function publicationSource(page: CollectionPageResult, owner: string): Pu
   if (page.curatorAccountId !== owner) return { state: 'denied' };
   if (page.unavailable || page.filterStatus || !revision(page.revision)) return { state: 'unavailable' };
   if (page.preparing) return { state: 'preparing' };
-  return { state: 'ready', page, revision: page.revision };
+  return {
+    state: 'ready',
+    page: { ...page, members: page.members.map((member) => ({ ...member, note: null })) },
+    revision: page.revision,
+  };
 }
 
 /** Exact declared native wire; replace with the generated client method when that module is generated. */
@@ -189,7 +193,7 @@ export async function loadCollectionPublication(
     const page = await read();
     const subject = sessionSubject(request);
     const csrfToken = requestCsrfToken(request);
-    if (!subject || !csrfToken || !collectionResultMatches(page, { ...address, editor: true }, 'session', subject))
+    if (!subject || !collectionResultMatches(page, { ...address, editor: true }, 'session', subject))
       return { viewer: null, address, source: { state: 'denied' } };
     return { viewer: { subject, csrfToken }, address, source: publicationSource(page, subject) };
   } catch (error) {
@@ -213,7 +217,6 @@ export function collectionPublicationQuery(
       signal.throwIfAborted();
       if (
         page.viewer?.subject !== viewer.subject ||
-        page.viewer.csrfToken !== viewer.csrfToken ||
         page.address.id !== address.id ||
         page.address.cursor !== address.cursor
       )

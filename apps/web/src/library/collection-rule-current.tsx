@@ -58,10 +58,15 @@ export function CollectionRuleCurrent({
       currentCsrf={owner.credential}
       requireProvenance
       save={(data, csrf) =>
-        owner.isCurrent()
+        owner.isCurrent() && owner.credential()
           ? saveCollectionRule({ data, headers: { 'X-CSRF-Token': csrf } })
           : Promise.resolve({ ok: false, reason: 'unauthorized' })
       }
+      captureSave={() => {
+        if (!owner.isCurrent() || !owner.credential()) return null;
+        const send = saveCollectionRule;
+        return (data, csrf) => send({ data, headers: { 'X-CSRF-Token': csrf } });
+      }}
       reload={async () => {
         if (!owner.isCurrent()) return { state: 'denied' };
         const value = await readCollectionRule({ data: collectionId ?? undefined });

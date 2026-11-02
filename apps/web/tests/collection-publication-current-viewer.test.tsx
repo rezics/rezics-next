@@ -26,7 +26,7 @@ const writes: { input: PublicationInput; csrf: string | null; work: ReturnType<t
   [];
 
 // Intercept only the two server functions at the existing validator boundary. Keep the production
-// collectionPublicationQuery queryFn, including its actual viewer/token/address validation, installed.
+// collectionPublicationQuery queryFn, including its actual viewer/address validation, installed.
 mock.module('@tanstack/react-start', () => ({
   ...start,
   createServerFn() {
@@ -41,6 +41,11 @@ mock.module('@tanstack/react-start', () => ({
       handler<T extends (...args: never[]) => unknown>(handler: T): T {
         const original = delegate.handler(handler);
         return ((input?: { data: unknown; headers?: HeadersInit }) => {
+          if (validate?.name === 'expectedSubject')
+            return Promise.resolve({
+              subject: validate(input?.data),
+              admitted: ['collections'],
+            });
           if (validate?.name === 'publicationAddress') {
             const call = { address: validate(input?.data) as PublicationAddress, work: deferred<PublicationPage>() };
             reads.push(call);
@@ -183,7 +188,6 @@ async function mount() {
     flush(() => {
       void client.refetchQueries({
         queryKey: collectionPublicationQuery(session as PublicationViewer, currentAddress).queryKey,
-        exact: true,
       });
     });
   return {
@@ -217,7 +221,11 @@ async function mount() {
       ),
     seed: (page: PublicationPage, credential: PublicationViewer) =>
       flush(() => {
-        client.setQueryData(collectionPublicationQuery(credential, currentAddress).queryKey, page);
+        const query = client.getQueryCache().find({
+          queryKey: collectionPublicationQuery(credential, currentAddress).queryKey,
+        });
+        expect(query).toBeDefined();
+        client.setQueryData(query!.queryKey, page);
       }),
     async dispose() {
       await act(async () => root.unmount());
@@ -240,6 +248,29 @@ async function mounted(run: (page: Awaited<ReturnType<typeof mount>>) => Promise
     await page.dispose();
   }
 }
+
+test('a null-token owner can select and refresh an exact publication review without revealing private notes or sending writes', async () => {
+  await mounted(async (page) => {
+    await page.show({ ...viewer(), csrfToken: null });
+    expect(reads).toHaveLength(1);
+    await page.settle(reads[0]!.work,
+      page.ready(7, page.members.map((member) => ({ ...member, note: 'Private occurrence note' }))));
+    await page.choose();
+    expect(page.host.textContent).not.toContain('Private occurrence note');
+    expect(page.host.querySelector('[data-source-revision="7"]')).not.toBeNull();
+    expect(page.button(page.m.library_publication_publish()).disabled).toBe(true);
+    await page.click(page.m.library_publication_publish());
+    await page.click(page.m.library_collection_reload());
+    await page.settle(reads[1]!.work, page.ready(8));
+    expect(page.host.querySelector('[data-source-revision="8"]')).not.toBeNull();
+    await page.show(viewer());
+    await page.settle(reads[2]!.work, page.ready(8));
+    expect(writes).toHaveLength(0);
+    await page.choose([]);
+    await page.click(page.m.library_publication_publish());
+    expect(writes[0]!.input.revision).toBe(8);
+  });
+});
 
 test('Uncertain selected publication retains its exact native intent across current-viewer credential refresh', async () => {
   await mounted(async (page) => {
@@ -285,7 +316,7 @@ test('Uncertain selected publication retains its exact native intent across curr
     await page.click(page.m.library_publication_retry(), true);
     expect(writes).toHaveLength(2);
     expect(writes[1]!.input).toEqual(original);
-    expect(writes[1]!.csrf).toBe('csrf-two');
+    expect(writes[1]!.csrf).toBe('csrf-one');
     await page.settle(writes[1]!.work, { ok: false, reason: 'unknown' });
 
     await page.show(viewer('story-viewer', 'csrf-three'));
@@ -295,7 +326,7 @@ test('Uncertain selected publication retains its exact native intent across curr
     await page.click(page.m.library_publication_retry(), true);
     expect(writes).toHaveLength(3);
     expect(writes[2]!.input).toEqual(original);
-    expect(writes[2]!.csrf).toBe('csrf-three');
+    expect(writes[2]!.csrf).toBe('csrf-one');
     await page.settle(writes[2]!.work, complete(original));
     expect(page.host.textContent).toContain(page.m.library_publication_complete_one({ count: '1' }));
     expect(page.checkboxes().at(-1)!.checked).toBe(false);
@@ -324,7 +355,7 @@ for (const boundary of ['viewer', 'collection', 'cursor', 'authority', 'unmount'
         const old = writes[0]!;
         if (boundary === 'unmount') await page.hide();
         if (boundary === 'authority') {
-          await page.view({ ...original, viewer: { subject: 'story-viewer', csrfToken: '' } });
+          await page.view({ ...original, viewer: null });
           expect(page.checkboxes()).toHaveLength(0);
         }
         const replacementAddress =
@@ -403,20 +434,17 @@ test('Missing current authority and mismatched current source refuse starts; a f
       { state: 'unknown', subject: null, csrfToken: null },
       { state: 'signed-out', subject: null, csrfToken: null },
       { state: 'signed-in', subject: null, csrfToken: 'csrf' },
-      { ...viewer(), csrfToken: null },
     ] satisfies Session[]) {
       await page.show(session);
       expect(page.checkboxes()).toHaveLength(0);
     }
     expect(reads).toHaveLength(0);
     await page.show(viewer());
-    for (const mismatch of ['subject', 'csrf', 'collection', 'cursor', 'source', 'unavailable'] as const) {
+    for (const mismatch of ['subject', 'collection', 'cursor', 'source', 'unavailable'] as const) {
       const valid = page.ready();
       const invalid: PublicationPage =
         mismatch === 'subject'
           ? { ...valid, viewer: { ...valid.viewer!, subject: 'foreign-viewer' } }
-          : mismatch === 'csrf'
-            ? { ...valid, viewer: { ...valid.viewer!, csrfToken: 'old-csrf' } }
             : mismatch === 'collection'
               ? { ...valid, address: { id: 'foreign-collection' } }
               : mismatch === 'cursor'
