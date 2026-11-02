@@ -49,8 +49,7 @@ test('Canonical pending and empty appeal Page stories use the existing shell and
   expect(pending).toContain("view.getByRole('blockquote').textContent).toBe(m.moderation_target_unavailable())");
 });
 
-// Authored UNRUN: controller integration owns execution of this default page/session/read regression.
-test('The integrated private Appeals page retires its old statements and pending reads when the browser session is replaced for the same account and cannot resurrect them', async () => {
+test('Appeals Next preserves forms on Reports metadata and Stay, focuses admitted continuations only, and retires private rows and reads on session replacement', async () => {
   const { createElement, act } = await import('react');
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
@@ -105,10 +104,18 @@ test('The integrated private Appeals page retires its old statements and pending
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    HTMLFormElement: window.HTMLFormElement,
+    HTMLInputElement: window.HTMLInputElement,
+    HTMLTextAreaElement: window.HTMLTextAreaElement,
+    DocumentFragment: window.DocumentFragment,
+    ShadowRoot: window.ShadowRoot,
     Element: window.Element,
     Node: window.Node,
     MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -130,6 +137,9 @@ test('The integrated private Appeals page retires its old statements and pending
     canResolve: true,
   };
   const calls: Request[] = [];
+  let queueRows = [row];
+  let queueNext: string | null = null;
+  let expectedCursor: string | undefined;
   let mode: 'ready' | 'unavailable' | 'pending-success' | 'pending-failure' = 'ready';
   let release: (() => void) | undefined;
   let gate: Promise<void> | undefined;
@@ -145,13 +155,16 @@ test('The integrated private Appeals page retires its old statements and pending
       if (path === `/v1/posts/${targetId}`)
         return Response.json({ code: 'not_found', detail: 'NEVER DISCLOSE TARGET' }, { status: 404 });
       expect(path).toBe(`/v1/boards/${input.boardId}/appeals`);
-      expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({ limit: '20' });
+      expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({
+        limit: '20',
+        ...(expectedCursor ? { cursor: expectedCursor } : {}),
+      });
       if (mode === 'unavailable')
         return Response.json({ code: 'dependency_unavailable', detail: 'NEVER DISCLOSE' }, { status: 503 });
       const settlement = mode;
       if (gate) await gate;
       if (settlement === 'pending-failure') throw new TypeError('Read response lost');
-      return Response.json({ appeals: [row], next: null });
+      return Response.json({ appeals: queueRows, next: queueNext });
     },
     { preconnect() {} },
   ) as typeof fetch;
@@ -176,6 +189,92 @@ test('The integrated private Appeals page retires its old statements and pending
     mode = 'unavailable';
     const unavailable = await loadModerationAppeals({ data: input });
     expect(unavailable.state).toBe('unavailable');
+    const { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } =
+      await import('@tanstack/react-router');
+    const { Route } = await import('../src/routes/boards/$id_.moderation');
+    const { default: userEvent } = await import(
+      Bun.resolveSync('@testing-library/user-event', dirname(Bun.resolveSync('storybook/test', import.meta.dir)))
+    );
+    const user = userEvent.setup({ document: window.document });
+    const parent = createRootRoute({ component: Outlet });
+    const route = Route.update({ getParentRoute: () => parent, path: '/boards/$id/moderation' } as never);
+    const router = createRouter({
+      routeTree: parent.addChildren([route]),
+      context: { queryClient: cache },
+      history: createMemoryHistory({ initialEntries: [`/boards/${input.boardId}/moderation?tab=appeals`] }),
+    });
+    host.tabIndex = -1;
+    const stopShellFocus = router.subscribe('onResolved', () => host.focus());
+    const button = (text: string) =>
+      [...document.querySelectorAll('button')].find((node) => node.textContent === text)!;
+    const keyboardNext = async () => {
+      button(m.threads_next_page()).focus();
+      await act(async () => user.keyboard('{Enter}'));
+      await flush();
+    };
+    mode = 'ready';
+    queueNext = 'next';
+    cache.setQueryData(sessionQuery.queryKey, browserSession);
+    await router.load();
+    await act(async () =>
+      root.render(createElement(QueryClientProvider, { client: cache }, createElement(RouterProvider, { router }))),
+    );
+    await flush();
+    const statement = host.querySelector('textarea')!;
+    const draft = 'Independent review';
+    await act(async () => user.type(statement, draft));
+    statement.setSelectionRange(2, 7);
+    const readsBeforeMetadata = calls.length;
+    await act(async () =>
+      router.navigate({
+        to: '/boards/$id/moderation',
+        params: { id: input.boardId },
+        search: { tab: 'appeals', order: 'oldest', status: 'resolved', targetKind: 'thread' },
+      }),
+    );
+    expect(calls).toHaveLength(readsBeforeMetadata);
+    expect(host.querySelector('textarea')).toBe(statement);
+    expect([statement.value, statement.selectionStart, statement.selectionEnd]).toEqual([draft, 2, 7]);
+    await keyboardNext();
+    await act(async () => user.click(button(m.thread_authoring_stay())));
+    expect(host.querySelector('textarea')).toBe(statement);
+    expect(statement.value).toBe(draft);
+    expect(calls).toHaveLength(readsBeforeMetadata);
+    await keyboardNext();
+    queueRows = [];
+    queueNext = 'empty';
+    expectedCursor = 'next';
+    await act(async () => user.click(button(m.thread_authoring_leave())));
+    await flush();
+    expect(host.textContent).toContain(m.moderation_appeals_read_sparse());
+    expect(document.activeElement).toBe(host.querySelector('article'));
+    await act(async () => user.tab());
+    expect(document.activeElement).toBe(host.querySelector('a'));
+    queueNext = null;
+    expectedCursor = 'empty';
+    await keyboardNext();
+    expect(host.textContent).toContain(m.moderation_appeals_empty());
+    expect(document.activeElement).toBe(host.querySelector('article'));
+    queueNext = 'failure';
+    expectedCursor = undefined;
+    await act(async () =>
+      router.navigate({ to: '/boards/$id/moderation', params: { id: input.boardId }, search: { tab: 'appeals' } }),
+    );
+    expect(document.activeElement).toBe(host);
+    mode = 'unavailable';
+    expectedCursor = 'failure';
+    await keyboardNext();
+    const retry = button(m.moderation_appeals_read_retry());
+    mode = 'ready';
+    queueNext = null;
+    retry.focus();
+    await act(async () => user.keyboard('{Enter}'));
+    await flush();
+    expect(host.textContent).toContain(m.moderation_appeals_empty());
+    expect(document.activeElement).not.toBe(host.querySelector('article'));
+    stopShellFocus();
+    queueRows = [row];
+    expectedCursor = undefined;
     // Exercise visible private rows and both settlements of a pending default-reader retry.
     for (const scenario of ['ready', 'pending-success', 'pending-failure'] as const) {
       cache.setQueryData(sessionQuery.queryKey, browserSession);

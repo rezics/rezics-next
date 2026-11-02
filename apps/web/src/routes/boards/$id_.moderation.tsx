@@ -21,9 +21,15 @@ import {
 } from '../../moderation/reports-read';
 import { ModerationReportsPage, ModerationReportsView } from '../../moderation/reports-page';
 import { loadModerationAppeals } from '../../moderation/appeals-read';
-import { ModerationAppealsPage, ModerationAppealsView } from '../../moderation/appeals-tab';
+import { privateReaderSessionSource } from '../../moderation/private-reader-lifetime';
+import {
+  ModerationAppealsPage,
+  ModerationAppealsView,
+  type AppealsContinuationFocus,
+} from '../../moderation/appeals-tab';
 import {
   appealNavigationContext,
+  appealReadKey,
   moderationAppealInput,
   prepareModerationAppealRead,
 } from '../../moderation/appeals-read-model';
@@ -81,6 +87,7 @@ export const Route = createFileRoute('/boards/$id_/moderation')({
 function ModerationReportsRoute() {
   const navigate = useNavigate();
   const router = useRouter();
+  const continuationFocus = useRef<AppealsContinuationFocus | null>(null);
   const page = Route.useLoaderData();
   const { id } = Route.useParams();
   const search = Route.useSearch();
@@ -115,18 +122,38 @@ function ModerationReportsRoute() {
       },
     };
   }, [router, reportPage.generation, reportPage.navigationKey, tab]);
-  const onNext = (nextCursor: string) =>
-    void navigate({
-      to: '/boards/$id/moderation',
-      params: { id },
-      search: {
-        ...selection,
-        ...(thread ? { thread } : {}),
-        ...(post ? { post } : {}),
-        ...(tab ? { tab } : {}),
-        cursor: nextCursor,
+  const onNext = (nextCursor: string) => {
+    const search = {
+      ...selection,
+      ...(thread ? { thread } : {}),
+      ...(post ? { post } : {}),
+      ...(tab ? { tab } : {}),
+      cursor: nextCursor,
+    };
+    const intent = {
+      context: appealNavigationContext({ pathname: latestLocation.pathname, search }),
+      readKey: appealReadKey(moderationAppealInput(id, search)),
+      generation: appealPage.generation,
+      isSessionCurrent: () => true,
+    };
+    if (tab === 'appeals') {
+      const session = privateReaderSessionSource(router.options.context.queryClient);
+      const revision = session.snapshot();
+      intent.isSessionCurrent = () => session.snapshot() === revision;
+      continuationFocus.current = intent;
+    }
+    // The existing router departure decision admits the continuation. Stay and
+    // rejected navigation discard only this focus request, preserving every form.
+    void navigate({ to: '/boards/$id/moderation', params: { id }, search }).then(
+      () => {
+        if (continuationFocus.current === intent && appealNavigationContext(router.state.location) !== intent.context)
+          continuationFocus.current = null;
       },
-    });
+      () => {
+        if (continuationFocus.current === intent) continuationFocus.current = null;
+      },
+    );
+  };
   return tab === 'appeals' ? (
     <ModerationAppealsPage
       key={`${appealPage.generation}:${appealPage.navigationKey}`}
@@ -136,6 +163,7 @@ function ModerationReportsRoute() {
       active={latestSearch.tab === 'appeals' && appealPage.navigationKey === appealNavigationKey}
       reportsSearch={`?${new URLSearchParams({ ...selection, ...(thread ? { thread } : {}), ...(post ? { post } : {}) })}`}
       onNext={onNext}
+      continuationFocus={continuationFocus}
       onRestart={() =>
         void navigate({
           to: '/boards/$id/moderation',

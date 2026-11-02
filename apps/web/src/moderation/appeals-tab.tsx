@@ -1,4 +1,13 @@
-import { useContext, useId, useRef, useState, useSyncExternalStore, type ComponentProps } from 'react';
+import {
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ComponentProps,
+  type RefObject,
+} from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { AuthoringDepartureBoundary, AuthoringDepartureProvider } from '../threads/authoring-departure';
@@ -27,6 +36,13 @@ const date = (value: string) =>
   new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
 const readAppeals = (input: AppealReadInput) => loadModerationAppeals({ data: input });
+/** One explicit Next intent survives the route's keyed native-page replacement. */
+export type AppealsContinuationFocus = {
+  context: string;
+  readKey: string;
+  generation: string;
+  isSessionCurrent: () => boolean;
+};
 type AppealsPageProps = {
   page: PrivateAppealPage;
   input: AppealReadInput;
@@ -35,6 +51,7 @@ type AppealsPageProps = {
   onNext?: (cursor: string) => void;
   onRestart?: () => void;
   reportsSearch?: string;
+  continuationFocus?: RefObject<AppealsContinuationFocus | null>;
   read?: (input: AppealReadInput) => Promise<PrivateAppealPage>;
 };
 
@@ -44,7 +61,9 @@ export function ModerationAppealsPage(props: AppealsPageProps) {
 }
 
 function AppealsVisit(props: AppealsPageProps) {
+  const router = useRouter({ warn: false });
   const client = useContext(QueryClientContext);
+  const queueBoundary = useRef<HTMLElement>(null);
   const [original] = useState(() => ({ ...props, input: Object.freeze({ ...props.input }) }));
   const [owner] = useState(() =>
     client && typeof window !== 'undefined'
@@ -113,6 +132,39 @@ function AppealsVisit(props: AppealsPageProps) {
       : owner && !owner.available() && data.state === 'ready'
         ? 'unavailable'
         : data.state;
+  useEffect(() => {
+    const intent = props.continuationFocus?.current;
+    if (!intent) return;
+    if (!intent.isSessionCurrent()) {
+      props.continuationFocus!.current = null;
+      return;
+    }
+    if (intent.generation === original.page.generation) return;
+    const matches =
+      intent.readKey === appealReadKey(original.input) &&
+      !!router &&
+      intent.context === appealNavigationContext(router.state.location);
+    // Hydrated private admission can finish after the replacement commits. An actual
+    // failed page consumes the intent now, so a later retry cannot take focus.
+    if (matches && data.state === 'ready' && owner?.healthy() && !owner.available()) return;
+    const focus = () => {
+      if (props.continuationFocus!.current !== intent) return;
+      props.continuationFocus!.current = null;
+      if (
+        matches &&
+        state === 'ready' &&
+        data.generation === original.page.generation &&
+        intent.isSessionCurrent() &&
+        current() &&
+        (!owner || owner.available())
+      )
+        queueBoundary.current?.focus();
+    };
+    // The shell also focuses on route resolution. Transfer after that convention,
+    // or immediately when the admitted page commits after the route has resolved.
+    if (!matches || state !== 'ready' || router?.state.status === 'idle') focus();
+    else return router?.subscribe('onResolved', focus);
+  });
   return (
     <AuthoringDepartureProvider
       sessionBound={false}
@@ -131,6 +183,7 @@ function AppealsVisit(props: AppealsPageProps) {
           next={data.next}
           {...(data.viewerId !== null ? { viewerId: data.viewerId } : {})}
           state={state}
+          queueBoundary={queueBoundary}
           {...(original.input.threadId ? { threadId: original.input.threadId } : {})}
           {...(original.input.postId ? { postId: original.input.postId } : {})}
           {...(props.reportsSearch !== undefined ? { reportsSearch: props.reportsSearch } : {})}
@@ -204,7 +257,9 @@ function AppealsView({
   onRestart,
   reportsSearch,
   isCurrent,
+  queueBoundary,
 }: {
+  queueBoundary?: RefObject<HTMLElement | null>;
   isCurrent?: () => boolean;
   state?: AppealReadState;
   onRetry?: () => void;
@@ -222,6 +277,7 @@ function AppealsView({
   viewerId?: string;
   canResolve?: (appeal: Appeal) => boolean;
 }) {
+  const headingId = useId();
   const router = useRouter({ warn: false });
   const session = useSession();
   const evidence = targets.map((target) => moderationEvidence(target.value));
@@ -239,10 +295,15 @@ function AppealsView({
     .join('&');
   const reportsHref = reportsSearch ?? (filters ? `?${filters}` : '?');
   return (
-    <article className="max-w-4xl space-y-8 text-foreground">
+    <article
+      ref={queueBoundary}
+      tabIndex={-1}
+      aria-labelledby={headingId}
+      className="max-w-4xl space-y-8 text-foreground"
+    >
       <header className="space-y-3">
         <p className="text-sm text-muted-foreground">{m.moderation_appeals_tab()}</p>
-        <PageHeading>{m.moderation_appeals_heading()}</PageHeading>
+        <PageHeading id={headingId}>{m.moderation_appeals_heading()}</PageHeading>
       </header>
       <nav aria-label={m.moderation_tabs_label()} className="flex gap-4 border-b pb-2">
         <a
