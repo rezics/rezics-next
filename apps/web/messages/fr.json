@@ -1847,6 +1847,8 @@
   "statements_accounting_note": "Ces répartitions de redevances ne constituent ni un historique complet des paiements ni une preuve de reversement des taxes. Les taxes peuvent inclure des réserves ; les frais de litige sont indiqués à titre informatif et exclus de la base des redevances.",
   "statements_lines": "Lignes sources et ajustements",
   "statements_lines_note": "Les ajustements tardifs figurent dans le mois où ils sont enregistrés (UTC) et ne modifient pas l’historique des paiements antérieurs.",
+  "statement_line_page_reader_first_empty": "Aucune ligne source pour le moment",
+  "statement_line_page_reader_page_empty": "Aucune ligne source sur la page demandée",
   "statements_lines_empty": "Aucune ligne source sur cette page. Cela ne prouve pas des revenus nuls.",
   "statements_charge": "Encaissement",
   "statements_refund": "Ajustement de remboursement",

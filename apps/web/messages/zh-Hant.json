@@ -1847,6 +1847,8 @@
   "statements_accounting_note": "這些版稅分配並非完整的付款紀錄，也不能證明稅款已繳納。稅額可能包含準備金；爭議費用僅供參考，不計入版稅計算基礎。",
   "statements_lines": "來源明細及調整",
   "statements_lines_note": "延遲調整會計入其記錄月份（UTC），不會更改先前已付款的歷史。",
+  "statement_line_page_reader_first_empty": "尚無來源明細",
+  "statement_line_page_reader_page_empty": "請求的頁面沒有來源明細",
   "statements_lines_empty": "此頁沒有來源明細，並不代表收益為零。",
   "statements_charge": "收款",
   "statements_refund": "退款調整",

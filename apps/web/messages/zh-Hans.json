@@ -1848,6 +1848,8 @@
   "statements_accounting_note": "这些版税分配并非完整的付款记录，也不能证明税款已缴纳。税额可能包含准备金；争议费用仅供参考，不计入版税计算基础。",
   "statements_lines": "来源明细及调整",
   "statements_lines_note": "延迟调整会计入其记录月份（UTC），不会更改此前已付款的历史。",
+  "statement_line_page_reader_first_empty": "暂无来源明细",
+  "statement_line_page_reader_page_empty": "请求的页面没有来源明细",
   "statements_lines_empty": "本页没有来源明细，并不代表收益为零。",
   "statements_charge": "收款",
   "statements_refund": "退款调整",

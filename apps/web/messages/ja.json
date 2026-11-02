@@ -1847,6 +1847,8 @@
   "statements_accounting_note": "このロイヤリティ配分は、すべての支払いの記録や納税の証明ではありません。税額には引当金が含まれる場合があります。異議申し立て手数料は参考情報であり、ロイヤリティの計算基礎には含まれません。",
   "statements_lines": "元明細行と調整",
   "statements_lines_note": "後日の調整は記録された月（UTC）に計上され、過去の支払い済みの履歴は変更されません。",
+  "statement_line_page_reader_first_empty": "元明細行はまだありません",
+  "statement_line_page_reader_page_empty": "指定されたページに元明細行はありません",
   "statements_lines_empty": "このページに元明細行はありません。収益ゼロを意味しません。",
   "statements_charge": "売上",
   "statements_refund": "返金調整",

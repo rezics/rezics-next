@@ -1847,6 +1847,8 @@
   "statements_accounting_note": "Estas asignaciones de regalías no son un registro completo de pagos ni prueban que se hayan remitido los impuestos. Los impuestos pueden incluir reservas; las comisiones por disputas se muestran como referencia y se excluyen de la base de regalías.",
   "statements_lines": "Líneas de origen y ajustes",
   "statements_lines_note": "Los ajustes tardíos aparecen en el mes en que se registran (UTC) y no cambian el historial de pagos anteriores.",
+  "statement_line_page_reader_first_empty": "Aún no hay líneas de origen",
+  "statement_line_page_reader_page_empty": "No hay líneas de origen en la página solicitada",
   "statements_lines_empty": "No hay líneas de origen en esta página. Esto no acredita ingresos cero.",
   "statements_charge": "Cobro",
   "statements_refund": "Ajuste de reembolso",

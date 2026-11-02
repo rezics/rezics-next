@@ -1847,6 +1847,8 @@
   "statements_accounting_note": "Diese Lizenzzuordnungen sind weder ein vollständiger Zahlungsnachweis noch ein Beleg für abgeführte Steuern. Steuern können Rückstellungen enthalten; Streitfallgebühren dienen nur der Information und sind von der Lizenzberechnungsgrundlage ausgeschlossen.",
   "statements_lines": "Quellpositionen und Anpassungen",
   "statements_lines_note": "Späte Anpassungen erscheinen im Monat ihrer Buchung (UTC) und ändern keine bereits bezahlte Historie.",
+  "statement_line_page_reader_first_empty": "Noch keine Quellpositionen",
+  "statement_line_page_reader_page_empty": "Keine Quellpositionen auf der angeforderten Seite",
   "statements_lines_empty": "Keine Quellpositionen auf dieser Seite. Dies belegt keine Einnahmen von null.",
   "statements_charge": "Belastung",
   "statements_refund": "Erstattungsanpassung",

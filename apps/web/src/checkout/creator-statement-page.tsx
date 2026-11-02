@@ -136,9 +136,16 @@ export function CreatorStatementPage({
             ) : (
               <>
                 {page.lines.lines.length === 0 ? (
-                  <p className="rounded-xl border bg-card p-5 text-card-foreground" role="status">
-                    {m.statements_lines_empty()}
-                  </p>
+                  <div className="min-w-0 space-y-2 rounded-xl border bg-card p-5 text-card-foreground">
+                    <h3 className="break-words font-medium">
+                      {cursor || page.lines.next
+                        ? m.statement_line_page_reader_page_empty()
+                        : m.statement_line_page_reader_first_empty()}
+                    </h3>
+                    <p className="text-sm leading-relaxed text-muted-foreground" role="status">
+                      {m.statements_lines_empty()}
+                    </p>
+                  </div>
                 ) : (
                   <ul className="min-w-0 space-y-2">
                     {page.lines.lines.map((line) => (
@@ -235,11 +242,11 @@ export function CreatorStatementPage({
                     ))}
                   </ul>
                 )}
-                <nav aria-label={m.statements_line_pagination()} className="flex flex-wrap gap-3">
+                <nav aria-label={m.statements_line_pagination()} className="flex min-w-0 flex-wrap gap-3">
                   {cursor && (
                     <Button
                       variant="outline"
-                      className="min-h-11"
+                      className="h-auto min-h-11 max-w-full py-2 whitespace-normal break-words"
                       nativeButton={false}
                       render={
                         <Link
@@ -256,7 +263,7 @@ export function CreatorStatementPage({
                   {page.lines.next && (
                     <Button
                       variant="outline"
-                      className="min-h-11"
+                      className="h-auto min-h-11 max-w-full py-2 whitespace-normal break-words"
                       nativeButton={false}
                       render={
                         <Link

@@ -1872,6 +1872,8 @@
   "statements_accounting_note": "These royalty allocations are not a complete payment record or proof of tax remittance. Tax may include reserves; dispute fees are shown for reference and excluded from the royalty basis.",
   "statements_lines": "Source lines and adjustments",
   "statements_lines_note": "Late adjustments appear in the month they’re recorded (UTC) and don’t change earlier paid history.",
+  "statement_line_page_reader_first_empty": "No source lines yet",
+  "statement_line_page_reader_page_empty": "No source lines on the requested page",
   "statements_lines_empty": "No source lines on this page. This does not establish zero earnings.",
   "statements_charge": "Charge",
   "statements_refund": "Refund adjustment",
