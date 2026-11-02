@@ -46,9 +46,11 @@ const pending: AgentVerificationRequest = {
 function Example({
   scenario = 'request',
   onRequest,
+  withDraft = false,
 }: {
   scenario?: Scenario;
   onRequest?: (input: VerificationInput) => void;
+  withDraft?: boolean;
 }) {
   const withdrawing = scenario === 'withdraw' || scenario === 'withdraw-delay';
   const [client] = useState(() => {
@@ -117,7 +119,7 @@ function Example({
           controller={controller}
           csrfToken="story-csrf"
           initialDraft={
-            withdrawing
+            withdrawing && !withDraft
               ? undefined
               : {
                   selected: { id: 'subject-1', title: 'Avery', type: m.settings_verification_person() },
@@ -196,7 +198,16 @@ export const RequestLostResponse: Story = {
     await expect(url).toHaveValue('https://example.test/later');
     await expect(view.getAllByRole('textbox', { name: m.settings_verification_link_url() })).toHaveLength(5);
     await expect(view.getByText(`Avery · ${m.settings_verification_person()}`)).toBeVisible();
-    await userEvent.click(view.getByRole('button', { name: m.settings_verification_withdraw() }));
+    await expect(view.queryByText(m.settings_verification_verified())).toBeNull();
+    await expect(view.queryByText(m.settings_verification_sent())).toBeNull();
+  },
+};
+
+export const WithdrawalLostResponse: Story = {
+  args: { scenario: 'withdraw', withDraft: true },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await userEvent.click(await view.findByRole('button', { name: m.settings_verification_withdraw() }));
     await view.findByText(m.settings_verification_confirm_title());
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_read_current() }));
     await waitFor(() => expect(view.queryByText(m.settings_verification_confirm_title())).toBeNull());
@@ -205,18 +216,8 @@ export const RequestLostResponse: Story = {
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_change_subject() }));
     await expect(view.queryByText(m.settings_verification_confirm_title())).toBeNull();
     await expect(view.getByRole('combobox')).toHaveValue('');
-    await expect(statement).toHaveValue('Later draft');
-    await expect(view.queryByText(m.settings_verification_verified())).toBeNull();
-    await expect(view.queryByText(m.settings_verification_sent())).toBeNull();
-  },
-};
-
-export const WithdrawalLostResponse: Story = {
-  args: { scenario: 'withdraw' },
-  play: async ({ canvasElement }) => {
-    const view = within(canvasElement);
-    await userEvent.click(await view.findByRole('button', { name: m.settings_verification_withdraw() }));
-    await view.findByText(m.settings_verification_confirm_title());
+    await expect(view.getByRole('textbox', { name: m.settings_verification_statement() })).toHaveValue(pending.statement);
+    await userEvent.click(view.getByRole('button', { name: m.settings_verification_withdraw() }));
     await expect(view.queryByText(m.settings_verification_withdrawn())).toBeNull();
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_confirm_withdraw() }));
     await view.findByText(m.settings_verification_uncertain_withdraw());
