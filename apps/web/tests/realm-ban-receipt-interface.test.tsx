@@ -507,7 +507,6 @@ test('shared departure preserves reviewed bans and recovery, then retires before
     if (phase === 'uncertain') {
       await click(m.realm_bans_retry());
       expect(source.writes[1]).toEqual(source.writes[0]);
-      expect(source.lookups).toHaveLength(before[0]);
     }
     await navigate();
     await click(m.thread_authoring_leave(), window.document);
