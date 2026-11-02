@@ -69,6 +69,13 @@ incarnation before enrollment resumes. Generic admission and publication add an
 open-group check adjacent to existing hooks. Rating hooks and consumers are
 unchanged; these observations grant no rating transaction authority.
 
+Cancellation retains an outgoing-successor disposition in the existing source
+locator. The original's own bootstrap home releases that exact successor ticket
+before replacing its enrollment. The cancellation records its real native
+producer commit, including for ordinary commands that otherwise emit no
+bootstrap receipt. Incoming-ticket and cancelled-source recovery have separate
+advancing keysets; an unresolved first page cannot hide later recovery work.
+
 ## Physical allocation and remaining implementation work
 
 `reserveIdentityTerminalClosure` delegates to the existing private
@@ -93,6 +100,67 @@ foreign permission or another research question.
 
 Native, growth, default-worker, legacy, RLS and full acceptance execution remains
 deferred. The new cases are authored obligations, not passing evidence.
+
+## Source inventory and verification disposition
+
+The production entry points are:
+
+| File | Implemented callables and integration |
+| --- | --- |
+| `identity-terminal-closure.ts` | `stepIdentityTerminalClosure`, `advanceIdentityTerminalClosures`, `drainIdentityTerminalClosure`, `bindIdentityTerminalMutation`, `cancelUnregisteredIdentityTerminalCapture`, `releaseIdentityTerminalClaim`, `recoverIdentityTerminalClosure`, `cleanIdentityTerminalClosure`, `retireIdentityTerminalPage`, `assertIdentityTerminalGroupsOpen` |
+| `identity-terminal-closure-command.ts` | `runIdentityTerminalCommand`, `admitIdentityTerminalCapture`; released discovery/drain/mutation sequencing, without authentic funding |
+| `identity-epoch-bootstrap.ts` | Existing bootstrap signatures call native recovery and pending-source progression, then export, receiving and separate source ACK; physical page reservation precedes allocation |
+| `identity-epoch-mapping.ts` | `reserveIdentityTerminalClosure` uses the existing private `reserveGeneration`; it does not supply execution funding |
+| `identity-epoch-read.ts`, `identity-terminal-closure-current.sql` | Existing ordered mapping read joins each requested original's exact current terminal directory entry |
+| `identity-epoch-admission.ts`, `identity-epoch-admission-hold-source.sql`, `identity-epoch-store.ts` | Immediate-source compatibility and additive closure-open admission/publication checks, adjacent to unchanged rating hooks |
+| `subject.ts`, `bulk.ts`, `account-agents.ts`, `merges.ts`, `merge-moves.ts` | Actual command invocations use the single-attempt wrapper; subject write, birth, ordinary merge and merge-member mutations call native capture admission |
+| `../access/agent-verification-identity.ts` | Four actual identity admission/binding commands use the wrapper; delivery and account-agent birth original funding remains incomplete |
+
+Both forward migrations, `20261102000100_identity_terminal_closure_fresh.sql`
+and `20261102000200_identity_terminal_closure_fresh.sql`, and the Semantic schema
+snapshot contain the new constant-size locator, directory states, native phase
+references, recovery cursors, indexes, capture interlock and owner guard. The
+existing Core partition trigger and historical migrations are unchanged.
+
+The implementation makes the following literal structural bounds. These are
+**not** inclusive execution prices or evidence of authentic admission:
+
+| Operation or inventory | Literal bound |
+| --- | --- |
+| Source page, pending-source page, each recovery keyset | 100 originals per page |
+| Requested mapping/control page | 100 originals |
+| Directory membership | 4096 originals per group |
+| Drain keyset and cleanup deletion | 100 originals per page |
+| Synchronous drain of one admitted group | 41 advancing pages |
+| Successor discovery | One immediate successor per source enrollment |
+| Shared extra-generation inventory | Four slots, at most 4096 charged copies per slot |
+
+No complete literal table exists for `candidateKeys`, `nativeRows`,
+`identityMetadataRows`, `emptySeeks`, `nativePoints`, `witnessKeys`, `statements`
+and `bytes`. Native command framework, authorization, arbitrary callbacks,
+failure/rollback, retained continuations and cleanup have not been composed into
+a prepaid original. The new funding test file covers physical reservations; it
+does not yet test an installed original frame or durable no-refill semantics.
+No genuinely missing external operand has been identified. The missing funding
+and complete accounting are this implementation's own obligations.
+
+The sole permitted compiler invocation was
+`bun run --cwd services/kernel typecheck --emit-schema=semantic`. The configured
+placement ran on host `b` and terminated with exit status 2:
+
+```text
+src/semantic/identity-terminal-closure.ts(604,11): error TS18047: 'current' is possibly 'null'.
+src/semantic/identity-terminal-closure.ts(604,71): error TS18047: 'current' is possibly 'null'.
+```
+
+The source now explicitly rejects a null `current` before using the ticket
+reservation. The one-invocation policy prohibits a second compiler run. Later
+cancellation-recovery and schema edits are also unverified. Schema emission did
+not occur after the failed compiler; the snapshot was updated from the two
+forward migrations. This is a failed typing receipt with a committed fix, not a
+passing receipt. All native/unit/growth/full acceptance remains UNRUN. The frozen
+contract test and existing acceptance assertions were not edited. No file
+outside the declared paths was changed.
 
 ## Reference sources
 
