@@ -53,11 +53,11 @@ root-only inventory. They do not establish installed exhaustive hooks or new pri
 The three requested reports exist locally. Their Git blob IDs at this base are
 identical to their blobs at the requested references:
 
-| Report | Requested revision | Blob |
-| --- | --- | --- |
-| [Primary exact-key analysis](work-client-exact-reservation-key-primary.md) | `d7666822d6fa00edd90120d013e4beecbc8cebdc` | `0c6b439f18884d3948716e4e6945b35f7da5be15` |
+| Report                                                                             | Requested revision                         | Blob                                       |
+| ---------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------ |
+| [Primary exact-key analysis](work-client-exact-reservation-key-primary.md)         | `d7666822d6fa00edd90120d013e4beecbc8cebdc` | `0c6b439f18884d3948716e4e6945b35f7da5be15` |
 | [Independent exact-key analysis](work-client-exact-reservation-key-independent.md) | `e1b230d1397418ea9c538e3c840644ca1f02972b` | `5b7b21793e5e28a5e03720b6f49073e872bbd226` |
-| [Complete private-heap review](work-client-private-heap-complete-design.md) | `0470a6f0e75bfe4472a087f7f0f692babb435c98` | `484a79dfee9234fbc6a981f416e8478a8d64e7af` |
+| [Complete private-heap review](work-client-private-heap-complete-design.md)        | `0470a6f0e75bfe4472a087f7f0f692babb435c98` | `484a79dfee9234fbc6a981f416e8478a8d64e7af` |
 
 Their indexed-byte, JSONB comparison-sort, restored-link and transaction-lock
 counterexamples remain accepted premises. This report does not repeat their general
@@ -74,10 +74,10 @@ Reference paths in this table are relative to
 `/home/edge/projects/rezics/rezics-next/.reference/`. Both clones were reused read-only;
 neither was installed, built or executed. Their reuse is recorded in `INDEX.md`.
 
-| Project | Reference path and pin | Licence | Inspected implementation |
-| --- | --- | --- | --- |
-| [PostgreSQL](https://github.com/postgres/postgres) | `library-shelf-maintenance/postgres`, `700b422af7e26cf310caf3fb76d78f4c8ca39c1f` | [PostgreSQL License, COPYRIGHT](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/COPYRIGHT) | JSON input/build/extraction, decimal numeric I/O, text equality, TID executor, heap fetch, large-object writes and B-tree insertion |
-| [Rax](https://github.com/antirez/rax) | `work-client-exact-reservation-key/rax`, `1927550cb218ec3c3dda8b39d82d1d019bf0476d` | [BSD-2-Clause, COPYING](https://github.com/antirez/rax/blob/1927550cb218ec3c3dda8b39d82d1d019bf0476d/COPYING) | Exact byte walk and upward deletion/recompression in `rax.c` |
+| Project                                            | Reference path and pin                                                              | Licence                                                                                                                       | Inspected implementation                                                                                                            |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| [PostgreSQL](https://github.com/postgres/postgres) | `library-shelf-maintenance/postgres`, `700b422af7e26cf310caf3fb76d78f4c8ca39c1f`    | [PostgreSQL License, COPYRIGHT](https://github.com/postgres/postgres/blob/700b422af7e26cf310caf3fb76d78f4c8ca39c1f/COPYRIGHT) | JSON input/build/extraction, decimal numeric I/O, text equality, TID executor, heap fetch, large-object writes and B-tree insertion |
+| [Rax](https://github.com/antirez/rax)              | `work-client-exact-reservation-key/rax`, `1927550cb218ec3c3dda8b39d82d1d019bf0476d` | [BSD-2-Clause, COPYING](https://github.com/antirez/rax/blob/1927550cb218ec3c3dda8b39d82d1d019bf0476d/COPYING)                 | Exact byte walk and upward deletion/recompression in `rax.c`                                                                        |
 
 Current official PostgreSQL documentation was consulted on 2026-11-02; its current
 stable documentation resolves to version 18. Implementation claims below are pinned
@@ -235,11 +235,11 @@ Charge the encoded bytes and component boundaries.
 
 Maintain three connected layers:
 
-| Layer | Stored ordered/equality key and payload |
-| --- | --- |
-| Exact dictionary | Extracted equality bytes → logical terminal/refcount |
-| Reservation group | Parent tree by exact descending time/null encoding then full C-ordered actual ID; child tree by full C-ordered actual ID; cached minimum terminal of each |
-| Realm/member eligibility | Only groups with both heads; ordered tree by parent head time, full parent ID and full child ID → group/head references |
+| Layer                    | Stored ordered/equality key and payload                                                                                                                   |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exact dictionary         | Extracted equality bytes → logical terminal/refcount                                                                                                      |
+| Reservation group        | Parent tree by exact descending time/null encoding then full C-ordered actual ID; child tree by full C-ordered actual ID; cached minimum terminal of each |
+| Realm/member eligibility | Only groups with both heads; ordered tree by parent head time, full parent ID and full child ID → group/head references                                   |
 
 For a confirmed signed fixed-width timestamp representation, descending order uses
 the complemented, sign-bit-adjusted big-endian integer; a leading tag puts NULL
@@ -445,17 +445,17 @@ certify the conditional trie as a positive result.
 The following copy families must each be covered; normal-path reachability and
 restored-copy discovery have different requirements:
 
-| Retained family | Normal mutation/removal and lifetime | Independent inventory obligation |
-| --- | --- | --- |
-| Native status/input and surviving half | Original owner operations/fences; either-half liveness | Existing native custody; retain orphan association |
-| Decoded/canonical extraction and error metadata | Produce once; version on input change; release on last reference | Actual bytes/error excerpts and owner links, including irrelevant/orphan states |
-| Equality nodes, terminals, refcounts | Copy/release only old/new paths; preserve shared live references | Find relocated/unreachable live nodes; no zero-reference cache |
-| Parent/child ordered nodes and head summaries | Charge all full-ID encoded paths and replacement summaries | Same requirement as equality nodes; references are retained relationships |
-| Eligible nodes and realm/member/group roots | Remove old heads before publishing new eligibility | Roots, memberships and old epochs are copies, not receipts |
-| Source/candidate/half/orphan associations | Atomic with native change; delete empty account state | Select by actual owner/native identity independently of live trie |
-| Allocator/free metadata and scratch | Abort/reuse/cleanup priced; no identity-bearing abandoned scratch | Inventory any retained identity/byte relationship and interrupted allocation |
-| Installer/progress/pending/rebuild state | Bounded convergent pages; remove replaced epochs | Covers interrupted builds and restored invalid generations |
-| Inventory's own nodes, chunks, owner records | Create/change/delete in the same price model | Inventory cannot recursively exempt its own retained copies |
+| Retained family                                 | Normal mutation/removal and lifetime                              | Independent inventory obligation                                                |
+| ----------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Native status/input and surviving half          | Original owner operations/fences; either-half liveness            | Existing native custody; retain orphan association                              |
+| Decoded/canonical extraction and error metadata | Produce once; version on input change; release on last reference  | Actual bytes/error excerpts and owner links, including irrelevant/orphan states |
+| Equality nodes, terminals, refcounts            | Copy/release only old/new paths; preserve shared live references  | Find relocated/unreachable live nodes; no zero-reference cache                  |
+| Parent/child ordered nodes and head summaries   | Charge all full-ID encoded paths and replacement summaries        | Same requirement as equality nodes; references are retained relationships       |
+| Eligible nodes and realm/member/group roots     | Remove old heads before publishing new eligibility                | Roots, memberships and old epochs are copies, not receipts                      |
+| Source/candidate/half/orphan associations       | Atomic with native change; delete empty account state             | Select by actual owner/native identity independently of live trie               |
+| Allocator/free metadata and scratch             | Abort/reuse/cleanup priced; no identity-bearing abandoned scratch | Inventory any retained identity/byte relationship and interrupted allocation    |
+| Installer/progress/pending/rebuild state        | Bounded convergent pages; remove replaced epochs                  | Covers interrupted builds and restored invalid generations                      |
+| Inventory's own nodes, chunks, owner records    | Create/change/delete in the same price model                      | Inventory cannot recursively exempt its own retained copies                     |
 
 Every selected relationship must be removed in the original owner-authorized native
 deletion transaction; sharing justifies retaining only what a surviving live
@@ -484,15 +484,15 @@ charges. Neither a new frame nor unused foreign allowance funds this work.
 
 At this base, distinguish **missing** foreign bodies from **unreconciled** prices:
 
-| Callable/price | Source finding at this base |
-| --- | --- |
-| Library `readLibraryScopeEffectsPage` | Successful sealed-page body now exists in [identity-scope-effects.ts](../../services/kernel/src/library/identity-scope-effects.ts). It locks a plan, checks currentness, reads native seal provenance, then reads a keyset page. No longer an unconditional unavailable stub. |
-| Library `verifyLibraryScopeEffectsSeal` | Successful same-command plan/seal/currentness checks exist; `currentLibraryIdentityWork` requires the original live Library ledger. No longer an unconditional false stub. |
-| Library leaf SQL prices | [identity-native-planner-work.ts](../../services/kernel/src/library/identity-native-planner-work.ts) supplies footprints for locked/unlocked plan, current, job and seal reads and controls. [identity-native-planner-statements.ts](../../services/kernel/src/library/identity-native-planner-statements.ts) prices `effectPage`, including its EOF slot. These named leaf prices are present. |
-| Original Source Library composition | [identity-source-consumer-custody.ts](../../services/kernel/src/semantic/identity-source-consumer-custody.ts), around lines 760–855, calls the real page through `budget.compose`, then receiving reconciliation, same-seal verification and scope fence retention. Its complete successful path, including the active-explicit-output basis branch and original receiving/fence footprint, was not rederived by this exact-key research. No complete price is certified or assumed zero here. |
-| New Work successful callables | Compatible extraction, inventory/select/remove/probe, quote/apply, exhaustive hooks, backfill and coverage publication still have no delivered connected bodies/prices. Their absence alone prevents a new whole-Source parent price. |
+| Callable/price                          | Source finding at this base                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Library `readLibraryScopeEffectsPage`   | Successful sealed-page body now exists in [identity-scope-effects.ts](../../services/kernel/src/library/identity-scope-effects.ts). It locks a plan, checks currentness, reads native seal provenance, then reads a keyset page. No longer an unconditional unavailable stub.                                                                                                                                                                                                                  |
+| Library `verifyLibraryScopeEffectsSeal` | Successful same-command plan/seal/currentness checks exist; `currentLibraryIdentityWork` requires the original live Library ledger. No longer an unconditional false stub.                                                                                                                                                                                                                                                                                                                     |
+| Library leaf SQL prices                 | [identity-native-planner-work.ts](../../services/kernel/src/library/identity-native-planner-work.ts) supplies footprints for locked/unlocked plan, current, job and seal reads and controls. [identity-native-planner-statements.ts](../../services/kernel/src/library/identity-native-planner-statements.ts) prices `effectPage`, including its EOF slot. These named leaf prices are present.                                                                                                |
+| Original Source Library composition     | [identity-source-consumer-custody.ts](../../services/kernel/src/semantic/identity-source-consumer-custody.ts), around lines 760–855, calls the real page through `budget.compose`, then receiving reconciliation, same-seal verification and scope fence retention. Its complete successful path, including the active-explicit-output basis branch and original receiving/fence footprint, was not rederived by this exact-key research. No complete price is certified or assumed zero here. |
+| New Work successful callables           | Compatible extraction, inventory/select/remove/probe, quote/apply, exhaustive hooks, backfill and coverage publication still have no delivered connected bodies/prices. Their absence alone prevents a new whole-Source parent price.                                                                                                                                                                                                                                                          |
 
-Accordingly, the earlier claim that the *named Library page/verifier leaf bodies*
+Accordingly, the earlier claim that the _named Library page/verifier leaf bodies_
 are missing is obsolete. No missing leaf price is established for those named reads
 in the inspected base. The foreign successful-callable price still **unestablished
 here** is the complete Source-consumed Library/receiving/fence path, not a supposed
