@@ -2826,7 +2826,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -2878,6 +2879,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -2891,7 +2893,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -2900,7 +2903,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -2918,7 +2922,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -30141,7 +30145,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -30193,6 +30198,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -30206,7 +30212,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -30215,7 +30222,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -30233,7 +30241,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -32218,7 +32226,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -32270,6 +32279,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -32283,7 +32293,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -32292,7 +32303,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -32310,7 +32322,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -33636,7 +33648,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -33688,6 +33701,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -33701,7 +33715,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -33710,7 +33725,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -33728,7 +33744,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -34392,7 +34408,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -34444,6 +34461,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -34457,7 +34475,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -34466,7 +34485,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -34484,7 +34504,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -35800,7 +35820,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -35852,6 +35873,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -35865,7 +35887,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -35874,7 +35897,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -35892,7 +35916,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -37167,7 +37191,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -37219,6 +37244,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -37232,7 +37258,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -37241,7 +37268,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -37259,7 +37287,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -38630,7 +38658,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -38682,6 +38711,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -38695,7 +38725,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -38704,7 +38735,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -38722,7 +38754,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -39407,7 +39439,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -39459,6 +39492,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -39472,7 +39506,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -39481,7 +39516,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -39499,7 +39535,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -40148,7 +40184,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -40200,6 +40237,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -40213,7 +40251,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -40222,7 +40261,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -40240,7 +40280,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -40939,7 +40979,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -40991,6 +41032,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -41004,7 +41046,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -41013,7 +41056,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -41031,7 +41075,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -41730,7 +41774,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -41782,6 +41827,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -41795,7 +41841,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -41804,7 +41851,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -41822,7 +41870,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -43551,7 +43599,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -43603,6 +43652,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -43616,7 +43666,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -43625,7 +43676,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -43643,7 +43695,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -44823,7 +44875,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -44875,6 +44928,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -44888,7 +44942,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -44897,7 +44952,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -44915,7 +44971,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -45583,7 +45639,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -45635,6 +45692,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -45648,7 +45706,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -45657,7 +45716,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -45675,7 +45735,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -46928,7 +46988,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -46980,6 +47041,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -46993,7 +47055,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -47002,7 +47065,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -47020,7 +47084,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -47859,7 +47923,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -47911,6 +47976,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -47924,7 +47990,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -47933,7 +48000,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -47951,7 +48019,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -48862,7 +48930,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -48914,6 +48983,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -48927,7 +48997,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -48936,7 +49007,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -48954,7 +49026,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -200009,7 +200081,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -200061,6 +200134,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -200074,7 +200148,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -200083,7 +200158,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -200101,7 +200177,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {
@@ -223679,7 +223755,8 @@
                         "conflict",
                         "collection_full",
                         "stale_cursor",
-                        "dynamic_membership_immutable"
+                        "dynamic_membership_immutable",
+                        "collection_move_unsupported"
                       ],
                       "type": "string"
                     },
@@ -223731,6 +223808,7 @@
                         false,
                         false,
                         false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -223744,7 +223822,8 @@
                         "Conflict",
                         "Collection Full",
                         "Stale Cursor",
-                        "Dynamic Membership Immutable"
+                        "Dynamic Membership Immutable",
+                        "Moving Between Different Curators Is Unsupported"
                       ],
                       "type": "string"
                     },
@@ -223753,7 +223832,8 @@
                         "https://rezics.com/problems/conflict",
                         "https://rezics.com/problems/collection_full",
                         "https://rezics.com/problems/stale_cursor",
-                        "https://rezics.com/problems/dynamic_membership_immutable"
+                        "https://rezics.com/problems/dynamic_membership_immutable",
+                        "https://rezics.com/problems/collection_move_unsupported"
                       ],
                       "type": "string"
                     }
@@ -223771,7 +223851,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable"
+            "description": "Conflict; Collection full; Stale cursor; Dynamic membership immutable; Collection move unsupported"
           },
           "422": {
             "content": {

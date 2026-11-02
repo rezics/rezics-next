@@ -190,6 +190,11 @@ export declare const PROBLEMS: {
         readonly title: 'Collection Full';
         readonly retryable: false;
     };
+    readonly collection_move_unsupported: {
+        readonly status: 409;
+        readonly title: 'Moving Between Different Curators Is Unsupported';
+        readonly retryable: false;
+    };
     readonly member_restore_stale: {
         readonly status: 409;
         readonly title: 'Collection Member Restore Stale';
