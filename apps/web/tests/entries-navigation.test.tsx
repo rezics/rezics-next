@@ -1,4 +1,4 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -34,7 +34,6 @@ const initial = {
 function fixture() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-in', subject: 'owner', csrfToken: 'csrf' });
-  client.setQueryData(['exposure', 'viewer'], ['personal_library', 'reading_progress']);
   client.setQueryData(['exposure', 'anonymous'], ['personal_library', 'reading_progress']);
   let response: Partial<Extract<PersonalLibraryView, { signedIn: true }>> = {};
   const root = createRootRoute();
@@ -162,6 +161,10 @@ test('sort and display navigate complete queries; history restores the controls 
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
+  const exposure = spyOn(await import('../src/kernel/viewer-exposure'), 'readViewerExposure').mockResolvedValue({
+    subject: 'owner',
+    admitted: ['personal_library', 'reading_progress'],
+  });
   const f = fixture();
   await f.router.load();
   const host = document.createElement('div');
@@ -205,6 +208,7 @@ test('sort and display navigate complete queries; history restores the controls 
     expect(search().type).toBe(initial.type);
   } finally {
     await act(async () => root.unmount());
+    exposure.mockRestore();
     f.client.clear();
     host.remove();
     for (const [key, descriptor] of previous) {
