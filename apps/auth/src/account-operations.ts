@@ -76,7 +76,7 @@ function failure(result: Exclude<AuthPostResult, { ok: true }>): AccountOperatio
 export async function runAccountOperation(
   operationKey: string,
   operation: AccountOperation,
-  browser?: { isCurrent: () => boolean },
+  browser?: { isCurrent: () => boolean; retryUncertain?: boolean },
 ): Promise<AccountOperationResult> {
   if (browser && !browser.isCurrent()) return { ok: false, reason: 'failure' };
   const approved = await post<{ reference?: unknown; expiresAt?: unknown }>('/account-operations/approve', {
@@ -106,9 +106,14 @@ export async function runAccountOperation(
     executionBody,
   );
   const uncertain = !executed.ok && executed.status === 503;
-  // Page-owned commands require explicit review after any uncertain execution.
-  // Other callers retain the existing immediate same-body recovery.
-  if (!browser && uncertain && !executed.ok && executed.code === 'unavailable')
+  // Deletion retains its bounded same-body recovery only while its review owns
+  // the command. Creation requires explicit review after uncertain execution.
+  if (
+    (!browser || (browser.retryUncertain && browser.isCurrent())) &&
+    uncertain &&
+    !executed.ok &&
+    executed.code === 'unavailable'
+  )
     executed = await authPost('/account-operations/execute', executionBody);
   if (!executed.ok) return uncertain ? { ok: false, reason: 'unknown' } : failure(executed);
   if (

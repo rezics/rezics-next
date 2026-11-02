@@ -209,6 +209,9 @@ denied and readable readback never establish success or permit a fresh deletion.
 Departure and selection changes retire private reviews, pending browser stages, completions and operation locks;
 already dispatched native work continues. Decision: cached-page recovery is explicit Retry with fresh confirmation,
 retaining the initiating human and any original uncertainty identity.
+Unavailable session reads offer Retry for the intended account, without submitting deletion; recovery and cached-page
+restoration require fresh typed confirmation, and departure retires callbacks while preserving the original command
+for explicit reconciliation. An accepted deletion remains a confirmation of acceptance with cleanup still pending.
 
 ## Create organization
 

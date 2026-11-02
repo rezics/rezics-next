@@ -79,6 +79,10 @@ export function DeleteAccountContent({
   const confirmationInput = useRef<HTMLInputElement>(null);
   const authorityGeneration = useRef(0);
   const activeAccount = useRef('');
+  const intendedAccount = useRef('');
+  const accepted = useRef(false);
+  const [reload, setReload] = useState(0);
+  const renderedGeneration = authorityGeneration.current;
   const identity = useAccountIdentity(
     identityVisible ? accountId : '',
     authorityGeneration.current,
@@ -106,48 +110,66 @@ export function DeleteAccountContent({
   useLayoutEffect(() => {
     let active = true;
     clearAuthority('denied');
-    setDeleted(false);
-    setLoadState('loading');
+    setDeleted(accepted.current);
+    setLoadState(accepted.current ? 'ready' : 'loading');
     const generation = authorityGeneration.current;
-    void (initial ? Promise.resolve(initial) : loadAccountSession()).then((result) => {
-      if (!active || authorityGeneration.current !== generation) return;
-      if (result.kind === 'ready') {
-        const pendingState = pendingAccountOperationStepUpState();
-        const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
-        if (
-          pendingState.kind === 'invalid' ||
-          (pendingOperation &&
-            (pendingOperation.kind !== 'delete' ||
-              pendingOperation.returnTo !== '/account/delete' ||
-              !accountOperationSessionMatches(result, pendingOperation)))
-        ) {
-          setLoadMessage(m.auth_account_operation_failure());
-          setLoadState('failure');
-          return;
-        }
-        activeAccount.current = result.accountId;
-        setAccountId(result.accountId);
-        setReturned(Boolean(pendingOperation));
-        const expected = accountOperationProfile('delete');
-        setNeedsProfile(
-          result.clientId !== expected.client_id ||
-            result.scopes?.length !== 1 ||
-            result.scopes[0] !== expected.scope[0],
-        );
-        setLoadState('ready');
-      } else if (result.kind === 'signed-out') {
-        setLoadState('signed-out');
-      } else {
-        setLoadMessage(result.message);
-        setLoadState('failure');
+    const retire = () => {
+      active = false;
+      clearAuthority('denied');
+      if (accepted.current) setLoadState('ready');
+    };
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        retire();
+        setReload((value) => value + 1);
       }
-    });
+    };
+    window.addEventListener('pagehide', retire);
+    window.addEventListener('pageshow', restore);
+    if (!accepted.current)
+      void (initial && reload === 0 ? Promise.resolve(initial) : loadAccountSession()).then((result) => {
+        if (!active || authorityGeneration.current !== generation) return;
+        if (result.kind === 'ready') {
+          const pendingState = pendingAccountOperationStepUpState();
+          const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
+          if (
+            (intendedAccount.current && intendedAccount.current !== result.accountId) ||
+            pendingState.kind === 'invalid' ||
+            (pendingOperation &&
+              (pendingOperation.kind !== 'delete' ||
+                pendingOperation.returnTo !== '/account/delete' ||
+                !accountOperationSessionMatches(result, pendingOperation)))
+          ) {
+            setLoadMessage(m.auth_account_operation_failure());
+            setLoadState('failure');
+            return;
+          }
+          intendedAccount.current = result.accountId;
+          activeAccount.current = result.accountId;
+          setAccountId(result.accountId);
+          setReturned(Boolean(pendingOperation));
+          const expected = accountOperationProfile('delete');
+          setNeedsProfile(
+            result.clientId !== expected.client_id ||
+              result.scopes?.length !== 1 ||
+              result.scopes[0] !== expected.scope[0],
+          );
+          setLoadState('ready');
+        } else if (result.kind === 'signed-out') {
+          setLoadState('signed-out');
+        } else {
+          setLoadMessage(result.message);
+          setLoadState('failure');
+        }
+      });
     return () => {
       active = false;
       authorityGeneration.current++;
       activeAccount.current = '';
+      window.removeEventListener('pagehide', retire);
+      window.removeEventListener('pageshow', restore);
     };
-  }, [initial]);
+  }, [initial, reload]);
 
   useLayoutEffect(() => {
     if (confirmationError) confirmationInput.current?.focus();
@@ -157,6 +179,7 @@ export function DeleteAccountContent({
   async function deleteAccount() {
     if (
       !privacyContact ||
+      authorityGeneration.current !== renderedGeneration ||
       submitting.current ||
       pending ||
       loadState !== 'ready' ||
@@ -175,9 +198,9 @@ export function DeleteAccountContent({
     setShowRetry(false);
     const generation = authorityGeneration.current;
     const operation: AccountOperation = { kind: 'delete', accountId };
-    const operationKey = operationKeyFor(operation, accountId);
     const pendingState = pendingAccountOperationStepUpState();
     const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
+    const operationKey = pendingOperation?.operationKey ?? operationKeyFor(operation, accountId);
     if (
       pendingState.kind === 'invalid' ||
       (pendingOperation && !pendingAccountOperationMatches(pendingOperation, accountId, operationKey, operation))
@@ -187,10 +210,24 @@ export function DeleteAccountContent({
       setPending(false);
       return;
     }
-    let result = await runAccountOperation(operationKey, operation);
-    if (authorityGeneration.current !== generation || activeAccount.current !== accountId) return;
+    let continuation = JSON.stringify(pendingState);
+    const isCurrent = () =>
+      authorityGeneration.current === generation &&
+      activeAccount.current === accountId &&
+      JSON.stringify(pendingAccountOperationStepUpState()) === continuation;
+    // Save reconciliation identity before dispatch; departure never cancels committed deletion.
+    if (!storePendingAccountOperationStepUp({ kind: 'delete', accountId, operationKey, operation })) {
+      setMessage(m.auth_account_operation_failure());
+      submitting.current = false;
+      setPending(false);
+      return;
+    }
+    continuation = JSON.stringify(pendingAccountOperationStepUpState());
+    let result = await runAccountOperation(operationKey, operation, { isCurrent, retryUncertain: true });
+    if (!isCurrent()) return;
     if (!result.ok && result.reason === 'denied' && needsProfile) result = { ok: false, reason: 'step-up' };
     if (result.ok) {
+      accepted.current = true;
       forgetOperationKey(operation, accountId);
       clearPendingAccountOperationStepUp();
       clearAuthority('signed-out');
@@ -253,6 +290,9 @@ export function DeleteAccountContent({
       <AuthPage returnToSecurity heading={m.auth_account_delete_heading()}>
         <div className="auth-login-form">
           <ErrorAlert>{loadMessage}</ErrorAlert>
+          <Button type="button" onClick={() => setReload((value) => value + 1)}>
+            {m.auth_account_delete_retry()}
+          </Button>
           <a href="/login">{m.auth_security_sign_in()}</a>
         </div>
       </AuthPage>
