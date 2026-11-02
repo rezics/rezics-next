@@ -611,7 +611,12 @@ export function StatementFields({
     trigger: HTMLButtonElement;
   } | null>(null);
   const pendingRemovalRef = useRef<typeof pendingRemoval>(null);
-  useLayoutEffect(() => () => (pendingRemovalRef.current = null), []);
+  useLayoutEffect(
+    () => () => {
+      pendingRemovalRef.current = null;
+    },
+    [],
+  );
   useLayoutEffect(() => {
     const target = removalFocus.current;
     removalFocus.current = null;
