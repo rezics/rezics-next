@@ -1,6 +1,6 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import type { PropertyDefinition } from '@rezics/definitions';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -29,6 +29,7 @@ import { subjectHref } from '../../subject/subject-href';
 import { ContributionLifecycle } from './contribution-lifecycle-view';
 import type { ContributionAddress, ContributionTransport } from './contribution-lifecycle';
 import {
+  correctionProperty,
   editableScalar,
   statementInput,
   validateStatement,
@@ -835,6 +836,34 @@ function StatementEditorLive({
   const running = useRef(false);
   const draftRevision = useRef(0);
   const form = useRef<HTMLFormElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const recovery = useRef<HTMLDivElement>(null);
+  const address = useRef(initial.ok ? initial : undefined);
+  const reloadIntent = useRef<{ opener: HTMLButtonElement; completed: boolean } | undefined>(undefined);
+  useLayoutEffect(() => {
+    const cancel = (event: Event) => {
+      const intent = reloadIntent.current;
+      if (intent && (event.type === 'pointerdown' ||
+        (event.target !== intent.opener && event.target !== document.body && event.target !== document.documentElement)))
+        reloadIntent.current = undefined;
+    };
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('focusin', cancel, true);
+    return () => {
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('focusin', cancel, true);
+    };
+  }, []);
+  useLayoutEffect(() => {
+    const intent = reloadIntent.current;
+    if (!intent?.completed || busy) return;
+    reloadIntent.current = undefined;
+    if (!mount.active()) return;
+    const active = document.activeElement;
+    if (intent.opener.isConnected && active === intent.opener) return;
+    if (active && active !== document.body && active !== document.documentElement) return;
+    (read.ok ? heading.current : recovery.current)?.focus();
+  }, [busy, read, mount]);
   const lifetime = useCatalogueLifetime(JSON.stringify([draftRevision.current, draft?.property.id]), mount);
   const current = read.ok ? read : undefined;
   const subject = current?.public.subject;
@@ -854,7 +883,7 @@ function StatementEditorLive({
       ? `${href}/edit?${new URLSearchParams({ property: draft.property.id, ...(current?.source ? { statement: current.source.id } : {}) })}`
       : undefined;
   const change = (next: StatementInput) => {
-    if (!lifetime.active()) return;
+    if (!lifetime.active() || !current) return;
     if (!pending.current) {
       lifetime.retire();
       draftRevision.current++;
@@ -864,28 +893,54 @@ function StatementEditorLive({
       setFailure(null);
     }
   };
-  async function reload() {
-    if (!lifetime.active()) return;
-    if (running.current) return;
+  function matching(next: EditorRead): EditorRead {
+    if (!next.ok) return next;
+    const original = address.current;
+    const subject = next.public?.subject;
+    if (!subject || !subject.labels || !subject.statements || !next.public.related ||
+      !next.release?.types || !next.release.properties || !next.release.types[subject.type])
+      return { ok: false, reason: 'unavailable' };
+    if (original && (subject.id !== original.public.subject.id || subject.type !== original.public.subject.type ||
+      next.source?.id !== original.source?.id || next.source?.property.id !== original.source?.property.id))
+      return { ok: false, reason: 'stale' };
+    if (next.source) {
+      if (!correctionProperty(next.release, subject.type, next.source.property.id))
+        return { ok: false, reason: 'invalid' };
+      if (validateStatement(statementInput(next.source)).length)
+        return { ok: false, reason: 'unavailable' };
+    }
+    return next;
+  }
+  async function reload(event: MouseEvent<HTMLButtonElement>) {
+    if (!lifetime.active() || running.current || pending.current || result) return;
+    reloadIntent.current = event.detail === 0 && event.currentTarget === document.activeElement && event.currentTarget.isConnected
+      ? { opener: event.currentTarget, completed: false } : undefined;
+    // Retire callbacks synchronously; the holder and its native command remain independent of this read.
+    lifetime.retire();
+    const revision = ++draftRevision.current;
     running.current = true;
+    setRead({ ok: false, reason: 'unavailable' });
+    setFailure(null);
     setBusy(true);
+    const active = () => mount.active() && draftRevision.current === revision;
     try {
-      const next = await transport.read();
-      if (!lifetime.active()) return;
+      const next = matching(await transport.read());
+      if (!active()) return;
+      setRead(next);
       if (next.ok) {
-        setRead(next);
+        address.current ??= next;
         if (!draft && next.source) {
           const nextDraft = statementInput(next.source);
           setBaseline(nextDraft);
           setDraft(nextDraft);
         }
-        setFailure(null);
-      } else setFailure(next);
+      }
     } catch {
-      if (!lifetime.active()) return;
-      setFailure({ ok: false, reason: 'unavailable' });
+      if (!active()) return;
+      setRead({ ok: false, reason: 'unavailable' });
     } finally {
-      if (!lifetime.active()) return;
+      if (!active()) return;
+      if (reloadIntent.current) reloadIntent.current.completed = true;
       running.current = false;
       setBusy(false);
     }
@@ -939,7 +994,7 @@ function StatementEditorLive({
     >
       <StatementEditorNavigation dirty={dirty} pending={pending.current !== null} />
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">{m.correction_title({}, o)}</h1>
+        <h1 ref={heading} tabIndex={-1} className="text-2xl font-semibold">{m.correction_title({}, o)}</h1>
         {subject && (
           <p>
             <a className={linkClassName} href={href}>
@@ -954,7 +1009,9 @@ function StatementEditorLive({
         <p className="text-sm text-muted-foreground">{m.correction_global({}, o)}</p>
         {subject && <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: guideReturn }} />}
       </header>
-      {!read.ok && !result && <EditorFailure reason={read.reason} locale={locale} />}
+      {!read.ok && !result && !busy && (
+        <div ref={recovery} tabIndex={-1}><EditorFailure reason={read.reason} locale={locale} /></div>
+      )}
       {failure && (
         <div className="space-y-3 rounded-lg border border-destructive/50 p-4">
           <EditorFailure reason={failure.reason} locale={locale} />
@@ -1098,7 +1155,7 @@ function StatementEditorLive({
                 type="button"
                 variant="outline"
                 disabled={busy}
-                onClick={() => void reload()}
+                onClick={(event) => void reload(event)}
               >
                 {m.correction_reload({}, o)}
               </Button>
@@ -1112,7 +1169,14 @@ function StatementEditorLive({
         </form>
       ) : (
         <div className="space-y-3">
-          <p>{m.correction_empty({}, o)}</p>
+          {draft ? (
+            <section className="min-w-0 space-y-3 rounded-xl bg-card p-4">
+              <h2 className={headingClassName}>{m.facts_private({}, o)}</h2>
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-sm">
+                {JSON.stringify(draft, null, 2)}
+              </pre>
+            </section>
+          ) : <p>{m.correction_empty({}, o)}</p>}
           {href && (
             <a className={linkClassName} href={`${href}/details`}>
               {m.correction_back({}, o)}
@@ -1123,7 +1187,7 @@ function StatementEditorLive({
             type="button"
             variant="outline"
             disabled={busy}
-            onClick={() => void reload()}
+            onClick={(event) => void reload(event)}
           >
             {m.correction_reload({}, o)}
           </Button>

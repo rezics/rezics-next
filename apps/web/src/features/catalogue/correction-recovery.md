@@ -11,3 +11,7 @@ possibly applied commands cannot be discarded. A new reading retires pending cal
 
 The shared `ExcludedFact` and captured-instance discard controls own private inspection and removal. The Manga
 correction workspace owns admission and the batch guard; existing reading and departure boundaries retain custody.
+
+Single-statement explicit reload retires public source and definition controls immediately; an unsent draft remains
+inspectable as a private statement snapshot until a fresh read matches its original subject, type, source and property
+and the current release readmits that property. Authored values survive readmission unchanged.

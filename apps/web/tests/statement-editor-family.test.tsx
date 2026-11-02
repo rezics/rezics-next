@@ -15,6 +15,7 @@ import type { StatementFieldsRead } from '../src/features/catalogue/statement-ed
 import {
   statementInput,
   validateStatement,
+  type EditorRead,
   type ProposalResult,
   type StatementInput,
   type SnakInput,
@@ -594,6 +595,74 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     expect(host.textContent).toContain(m.correction_empty());
     expect(buttons(host, m.correction_reload())).toHaveLength(1);
     expect(host.querySelector('form')).toBeNull();
+
+    // Explicit single-statement reload retires public authority before I/O settles.
+    await render(null);
+    const refreshing = statementFixture();
+    const fresh = await currentRead(refreshing);
+    let deliver!: (next: EditorRead) => void;
+    let rejectRead!: (error: Error) => void;
+    let refreshes = 0;
+    await render(
+      <StatementEditor initial={fresh} locale="en" review={() => refreshing.review} transport={{
+        ...refreshing.editor,
+        read: () => { refreshes++; return new Promise((resolve, reject) => { deliver = resolve; rejectRead = reject; }); },
+      }} />,
+    );
+    await input(control(host, m.correction_year()), '1947');
+    const oldSubmit = queued(host.querySelector('form')!, 'onSubmit');
+    const publicLabel = host.querySelector('header a')!.textContent;
+    const keyboardReload = async () => {
+      const opener = button(host, m.correction_reload());
+      await act(async () => { opener.focus(); opener.click(); });
+    };
+    const privateDraft = () => {
+      expect(host.querySelector('form')).toBeNull();
+      expect(host.querySelector('header a')).toBeNull();
+      expect(host.textContent).toContain(m.facts_private());
+      expect(host.querySelector('pre')!.textContent).toContain('+1947-');
+      expect(buttons(host, m.correction_submit())).toHaveLength(0);
+    };
+    await keyboardReload();
+    privateDraft();
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    await act(async () => oldSubmit());
+    expect(writes(refreshing)).toHaveLength(0);
+    await act(async () => deliver({ ok: false, reason: 'denied' }));
+    privateDraft();
+    expect(host.textContent).toContain(m.correction_denied());
+    expect(window.document.activeElement).toBe(host.querySelector('[role="alert"]')!.parentElement);
+    await keyboardReload();
+    await act(async () => rejectRead(new Error('Read unavailable')));
+    privateDraft();
+    expect(host.textContent).toContain(m.correction_unavailable());
+    for (const next of [
+      { ok: true },
+      { ...fresh, public: { ...fresh.public, subject: { ...fresh.public.subject, id: 'different-subject' } } },
+      { ...fresh, source: { ...fresh.source, id: 'different-source' } },
+      { ...fresh, release: { ...fresh.release, properties: {} } },
+    ] as EditorRead[]) {
+      await keyboardReload();
+      await act(async () => deliver(next));
+      privateDraft();
+    }
+    await keyboardReload();
+    // A newer focus choice cancels the keyboard return, even when focus later becomes idle.
+    outside.focus();
+    outside.blur();
+    await act(async () => deliver(fresh));
+    expect(control(host, m.correction_year()).value).toBe('1947');
+    expect(host.querySelector('header a')!.textContent).toBe(publicLabel);
+    expect(window.document.activeElement).not.toBe(host.querySelector('h1'));
+    await keyboardReload();
+    await act(async () => deliver(fresh));
+    expect(window.document.activeElement).toBe(host.querySelector('h1'));
+    expect(control(host, m.correction_year()).value).toBe('1947');
+    expect(refreshes).toBe(8);
+    expect(writes(refreshing)).toHaveLength(0);
+    await submit();
+    await until(() => host.textContent!.includes(m.correction_proposed()));
+    expect(JSON.stringify(writes(refreshing)[0]!.body)).toContain('+1947-');
 
     // Actual editor retirement: late proposal delivery and queued form callbacks cannot
     // change the next reader's draft, trigger a review read or steal independent focus.
