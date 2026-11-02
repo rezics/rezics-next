@@ -40,6 +40,23 @@ Search owns composition and presentation templates; agree named slots and sequen
 Accounts owns Auth behavior; content owns media and communities; commerce owns library and checkout semantics;
 semantic owns definitions and Zones. Correct shared visual defects as a class across consuming surfaces.
 
+### Catalogue recovery
+
+Adopt the [catalogue family quality follow-up](../research/catalogue-family-quality-followup.md): retire refused
+StoryArc current readings first, then complete Game creation recovery. Deliver precise Album, Manga and Screen
+creation-error recovery as three separate pages. These five outcomes retain the source-present family composition,
+existing Semantic ownership of Character current-reading and reference renderers, and the original Done when.
+
+StoryArc public identity, facts and links require a successful current read. A refused or unavailable reload removes
+that public markup, including hidden descendants and attributes, and permanently retires its callbacks and pending
+results. Recovery renders only the newly admitted reading. Private editor holders may stay mounted while rendering
+nothing, retaining drafts and exact sealed retry credentials, keys and operands; a resumed work editor rereads its
+original address before using current authority. Creation and selected-reader recovery remain independent. Keep
+Global editing and native Realm refusal unchanged; viewer or CSRF-session epoch changes release the whole mount.
+
+The research demonstrates source transitions and error-address mismatches. It supplies no passing browser, native,
+visual, accessibility or publication proof; those remain separate integration obligations for each outcome.
+
 ### Adopted quality round three requirements
 
 The [quality round three findings](../research/quality-round3-backlog.md) are adopted here and in the

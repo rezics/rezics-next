@@ -1,4 +1,4 @@
-import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { catalogueEditor, useEditorLifetime, useCurrentReadingVisible } from './editor-lifetime';
 import { useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -382,6 +382,7 @@ function SubjectFactsLive({
   embedded?: boolean;
 }) {
   const lifetime = useEditorLifetime();
+  const visible = useCurrentReadingVisible();
   const o = { locale: locale as never };
   const [read, setRead] = useState(initial);
   const [previousInitial, setPreviousInitial] = useState(initial);
@@ -394,6 +395,18 @@ function SubjectFactsLive({
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState(initialReview);
   const running = useRef(false);
+  const wasVisible = useRef(visible);
+  if (wasVisible.current !== visible) {
+    wasVisible.current = visible;
+    running.current = false;
+    setBusy(false);
+    if (!visible)
+      setDrafts((previous) =>
+        previous.map((draft) =>
+          draft.command && !draft.result ? { ...draft, result: { ok: false, reason: 'uncertain' } } : draft,
+        ),
+      );
+  }
   const current = read.ok ? read : null;
   const subject = current?.public.subject;
   const label = pageText(subject?.labels, locale).text || m.subject_value_unlabelled({}, o);
@@ -410,6 +423,7 @@ function SubjectFactsLive({
   const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
   const success = drafts.filter((draft) => draft.result?.ok).length;
   function change(next: FactDraft) {
+    if (!lifetime.active()) return;
     setDrafts((previous) => previous.map((item) => (item.property === next.property ? next : item)));
   }
   async function submit() {
@@ -459,6 +473,7 @@ function SubjectFactsLive({
     }
   }
   const groupLabels = { text: m.facts_text({}, o), time: m.facts_dates({}, o), quantity: m.facts_quantities({}, o) };
+  if (!visible) return null;
   return (
     <article
       className="mx-auto w-full min-w-0 max-w-4xl space-y-6 p-4 sm:p-6 [overflow-wrap:anywhere]"
@@ -560,7 +575,9 @@ function SubjectFactsLive({
                         canStage={drafts.length < factLimit}
                         draft={drafts.find((draft) => draft.property === property)}
                         onChange={change}
-                        onReview={setReviewing}
+                        onReview={(address) => {
+                          if (lifetime.active()) setReviewing(address);
+                        }}
                         onStage={(source) => {
                           if (!lifetime.active()) return;
                           const draft = stageFact(current, property, source);

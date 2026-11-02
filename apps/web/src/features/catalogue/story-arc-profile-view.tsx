@@ -1,4 +1,4 @@
-import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
@@ -82,16 +82,27 @@ function StoryArcProfileLive({
       }
     | undefined
   >(undefined);
-  // A refresh retains mounted drafts; a different address never inherits its targets.
+  // Retained data supplies private holders only; public markup uses the current read.
   if (retained.current?.selection !== selection) retained.current = undefined;
   if (query.data?.ok) retained.current = { selection, read: query.data };
-  const current = retained.current?.read;
   const readable = !query.isError && query.data?.ok === true;
+  const current = readable && query.data?.ok ? query.data : undefined;
+  const privateRead = retained.current?.read;
   const arc = current?.arc;
   const label = pageText(arc?.subject.labels, locale);
   const href = arc ? subjectHref({ id: arc.subject.id, label: label.text }, locale).href : undefined;
-  const address = storyArcEntry({ id, work, label: label.text, locale }).href;
+  const address = storyArcEntry({
+    id: readable ? id : undefined,
+    work: readable ? work : undefined,
+    label: label.text,
+    locale,
+  }).href;
   const editable = session === 'signed-in' && readable;
+  const observation = useRef({ readable, selection, token: {} });
+  if (observation.current.readable !== readable || observation.current.selection !== selection)
+    observation.current = { readable, selection, token: {} };
+  const token = observation.current.token;
+  const canEdit = () => lifetime.active() && editable && observation.current.token === token;
   return (
     <article className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8 sm:px-6">
       <ViewHeadingActions
@@ -157,7 +168,7 @@ function StoryArcProfileLive({
           )}
         </p>
       )}
-      <div hidden={!readable} className="space-y-8">
+      <div className="space-y-8">
         <section className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
           {current && arc ? (
             <>
@@ -187,6 +198,7 @@ function StoryArcProfileLive({
                   variant="outline"
                   className={callerActionClass}
                   onClick={() => {
+                    if (!canEdit()) return;
                     setCreated(undefined);
                     setId(undefined);
                   }}
@@ -195,9 +207,11 @@ function StoryArcProfileLive({
                 </Button>
               )}
             </>
-          ) : !id ? (
-            <div hidden={!editable} className="space-y-6">
+          ) : null}
+          {!id && privateRead && (
+            <div className="space-y-6">
               <EntityPicker
+                disabled={!editable}
                 label={m.story_arc_choose_existing({}, o)}
                 className={callerPickerClass}
                 value={[]}
@@ -206,7 +220,7 @@ function StoryArcProfileLive({
                   (await search(text, signal)).filter((entry) => entry.types.includes(storyArcType))
                 }
                 onValueChange={(items) => {
-                  if (items[0]) setId(items[0].id);
+                  if (canEdit() && items[0]) setId(items[0].id);
                 }}
               />
               <CreateSubjectForm
@@ -229,7 +243,7 @@ function StoryArcProfileLive({
               />
               {created?.reader.state === 'ready' && (
                 <a
-                  href={`${created.reader.href}/story-arc${work ? `?work=${encodeURIComponent(work)}` : ''}`}
+                  href={`${created.reader.href}/story-arc${current?.work ? `?work=${encodeURIComponent(current.work.subject.id)}` : ''}`}
                   onClick={(event) => {
                     // Keep ordinary authored href navigation for new tabs and modified clicks.
                     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -242,41 +256,45 @@ function StoryArcProfileLive({
                 </a>
               )}
             </div>
-          ) : null}
+          )}
         </section>
-        {current && arc && (
-          <div hidden={!editable}>
-            <SubjectFacts
-              key={arc.subject.id}
-              initial={storyArcFacts(current)}
-              locale={locale}
-              transport={facts(arc.subject.id)}
-              review={(property, token) => review(arc.subject.id, property, token)}
-            />
-            {current.release.types[storyArcType]!.properties.filter(
-              (property) => current.release.properties[property]?.relation?.group === 'classification',
-            ).map((property) => (
-              <CharacterClassification
-                key={`${arc.subject.id}:${property}`}
-                property={property}
-                read={{ ok: true, release: current.release, public: arc, source: null }}
+        {privateRead?.arc && (
+          <CatalogueCurrentReading visible={editable} ready={editable} revision={selection}>
+            <div>
+              <SubjectFacts
+                key={privateRead.arc.subject.id}
+                initial={storyArcFacts(privateRead)}
                 locale={locale}
-                search={search}
-                transport={facts(arc.subject.id)}
-                review={(field, token) => review(arc.subject.id, field, token)}
+                transport={facts(privateRead.arc.subject.id)}
+                review={(property, token) => review(privateRead.arc!.subject.id, property, token)}
               />
-            ))}
-            <section className="space-y-4">
-              <h2 className="text-xl font-semibold">{m.story_arc_relations({}, o)}</h2>
-              <p className="text-sm text-muted-foreground">{m.story_arc_relations_help({}, o)}</p>
-              <a
-                href={`${href}/relation-edit`}
-                className={buttonVariants({ variant: 'outline', className: callerActionClass })}
-              >
-                {m.relation_title({}, o)}
-              </a>
-            </section>
-          </div>
+              {privateRead.release.types[storyArcType]!.properties.filter(
+                (property) => privateRead.release.properties[property]?.relation?.group === 'classification',
+              ).map((property) => (
+                <CharacterClassification
+                  key={`${privateRead.arc!.subject.id}:${property}`}
+                  property={property}
+                  read={{ ok: true, release: privateRead.release, public: privateRead.arc!, source: null }}
+                  locale={locale}
+                  search={search}
+                  transport={facts(privateRead.arc!.subject.id)}
+                  review={(field, token) => review(privateRead.arc!.subject.id, field, token)}
+                />
+              ))}
+              {editable && (
+                <section className="space-y-4">
+                  <h2 className="text-xl font-semibold">{m.story_arc_relations({}, o)}</h2>
+                  <p className="text-sm text-muted-foreground">{m.story_arc_relations_help({}, o)}</p>
+                  <a
+                    href={`${href}/relation-edit`}
+                    className={buttonVariants({ variant: 'outline', className: callerActionClass })}
+                  >
+                    {m.relation_title({}, o)}
+                  </a>
+                </section>
+              )}
+            </div>
+          </CatalogueCurrentReading>
         )}
         <section
           aria-label={m.story_arc_work({}, o)}
@@ -284,30 +302,39 @@ function StoryArcProfileLive({
         >
           <h2 className="text-xl font-semibold">{m.story_arc_work({}, o)}</h2>
           <p>{m.story_arc_work_help({}, o)}</p>
-          {current?.work ? (
-            <>
-              {readable && (
-                <FictionalWorkReference
-                  subject={current.work.subject}
-                  locale={locale}
-                  onChooseAnother={editable ? () => setWork(undefined) : undefined}
-                />
-              )}
-              <div hidden={!editable}>
-                <RelationEditor
-                  key={`work:${current.work.subject.id}`}
-                  id={current.work.subject.id}
-                  locale={locale}
-                  search={search}
-                  transport={{
-                    ...relations(current.work.subject.id),
-                    read: async (...args) =>
-                      storyArcRelations(await relations(current.work!.subject.id).read(...args), current.release, true),
-                  }}
-                />
-              </div>
-            </>
-          ) : (
+          {current?.work && (
+            <FictionalWorkReference
+              subject={current.work.subject}
+              locale={locale}
+              onChooseAnother={
+                editable
+                  ? () => {
+                      if (canEdit()) setWork(undefined);
+                    }
+                  : undefined
+              }
+            />
+          )}
+          {privateRead?.work && (
+            <CatalogueCurrentReading visible={editable} ready={editable} revision={selection}>
+              <RelationEditor
+                key={`work:${privateRead.work.subject.id}`}
+                id={privateRead.work.subject.id}
+                locale={locale}
+                search={search}
+                transport={{
+                  ...relations(privateRead.work.subject.id),
+                  read: async (...args) =>
+                    storyArcRelations(
+                      await relations(privateRead.work!.subject.id).read(...args),
+                      privateRead.release,
+                      true,
+                    ),
+                }}
+              />
+            </CatalogueCurrentReading>
+          )}
+          {!current?.work && (
             <EntityPicker
               label={m.story_arc_choose_work({}, o)}
               className={callerPickerClass}
@@ -320,7 +347,7 @@ function StoryArcProfileLive({
                 )
               }
               onValueChange={(items) => {
-                if (items[0]) setWork(items[0].id);
+                if (canEdit() && items[0]) setWork(items[0].id);
               }}
             />
           )}

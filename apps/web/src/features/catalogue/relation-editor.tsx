@@ -1,6 +1,6 @@
-import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { catalogueEditor, useEditorLifetime, useCurrentReadingVisible } from './editor-lifetime';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useId } from 'react';
 import type { SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
@@ -85,6 +85,7 @@ function RelationEditorLive({
   };
 }) {
   const mount = useEditorLifetime();
+  const visible = useCurrentReadingVisible();
   const draftRevision = useRef(0);
   const options = { locale: locale as never };
   const formId = useId();
@@ -114,6 +115,28 @@ function RelationEditorLive({
   const running = useRef(false);
   const proposedCandidate = useRef<string | undefined>(undefined);
   const picked = useRef<Record<string, EntityPickerSubject>>({});
+  const wasVisible = useRef(visible);
+  const resumeRead = useRef(false);
+  if (wasVisible.current !== visible) {
+    wasVisible.current = visible;
+    if (!visible) {
+      resumeRead.current = !!(read?.ok || reading.current);
+      readGeneration.current++;
+      running.current = false;
+      setBusy(false);
+      setRead(undefined);
+      setCandidate(undefined);
+      setResult(undefined);
+      setConsentEntry(undefined);
+      setFailure(request.current ? { ok: false, reason: 'unavailable' } : undefined);
+    }
+  }
+  useEffect(() => {
+    if (!visible || !resumeRead.current) return;
+    resumeRead.current = false;
+    const destination = reading.current;
+    void readPage(destination?.slot ?? slot, destination?.cursor, destination?.session);
+  }, [visible]);
   const lifetime = useCatalogueLifetime(
     JSON.stringify([
       draftRevision.current,
@@ -270,7 +293,7 @@ function RelationEditorLive({
     if (!lifetime.active()) return;
     if (running.current || !confirmation || !field) return;
     const address = confirmation === 'propose' ? draftSlot() : slot;
-    if (!address || (!candidate && confirmation !== 'propose')) return;
+    if (!address || (!request.current && !candidate && confirmation !== 'propose')) return;
     request.current ??=
       confirmation === 'propose'
         ? { id, slot: address, statement: structuredClone(draft), key: crypto.randomUUID() }
@@ -353,6 +376,7 @@ function RelationEditorLive({
         : confirmation === 'reject'
           ? m.relation_reject({}, options)
           : m.candidate_adopt({}, options);
+  if (!visible) return null;
   return (
     <section aria-label={m.relation_title({}, options)} className={relationSurface} aria-busy={busy}>
       <header className="space-y-2">

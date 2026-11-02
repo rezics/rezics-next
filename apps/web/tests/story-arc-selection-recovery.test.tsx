@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
+import type { FactsTransport, FactResult } from '../src/features/catalogue/subject-facts';
 import type { StoryArcRead } from '../src/features/catalogue/story-arc-profile';
 
 test('selection refresh retains drafts, switches retire targets, and created readback opens the created arc', async () => {
@@ -34,7 +35,21 @@ test('selection refresh retains drafts, switches retire targets, and created rea
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host);
-  let failure = false;
+  let failure: false | 'unavailable' | 'denied' = false;
+  let recovered = false;
+  let lateFact: ((value: FactResult) => void) | undefined;
+  const commands: Parameters<FactsTransport['propose']>[0][] = [];
+  const facts = (id: string) => ({
+    ...fixture.props.facts(id),
+    propose: async (command: Parameters<FactsTransport['propose']>[0]) => {
+      commands.push(command);
+      if (commands.length === 1)
+        return new Promise<FactResult>((resolve) => {
+          lateFact = resolve;
+        });
+      return { ok: false as const, reason: 'uncertain' as const };
+    },
+  });
   let held: Promise<StoryArcRead> | undefined;
   const loads: { id?: string | undefined; work?: string | undefined }[] = [];
   const transport = {
@@ -42,7 +57,7 @@ test('selection refresh retains drafts, switches retire targets, and created rea
     load: async (address: (typeof loads)[number]) => {
       loads.push(address);
       if (held) return held;
-      if (failure) throw new Error('refresh unavailable');
+      if (failure) return { ok: false as const, reason: failure };
       const read = await fixture.transport.load(
         address.id === storyArcCreatedId ? { ...address, id: storyArcProfileId } : address,
       );
@@ -54,6 +69,8 @@ test('selection refresh retains drafts, switches retire targets, and created rea
             subject: { ...read.arc.subject, id: storyArcCreatedId, labels: { en: 'A real arc' }, statements: {} },
           },
         };
+      if (recovered && read.ok && read.arc)
+        return { ...read, arc: { ...read.arc, subject: { ...read.arc.subject, labels: { en: 'Recovered arc' } } } };
       return read;
     },
   };
@@ -76,6 +93,7 @@ test('selection refresh retains drafts, switches retire targets, and created rea
             id={storyArcProfileId}
             work={fixture.work.id}
             transport={transport}
+            facts={facts}
           />
         </QueryClientProvider>,
       ),
@@ -90,12 +108,53 @@ test('selection refresh retains drafts, switches retire targets, and created rea
     const valueLabel = [...host.querySelectorAll('label')].find((node) => node.textContent === m.correction_url())!;
     const draft = window.document.getElementById(valueLabel.htmlFor);
     expect(draft).not.toBeNull();
-    failure = true;
+    await settle(() => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(
+        draft,
+        'https://draft.test',
+      );
+      draft!.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    const form = draft!.closest('form')!;
+    const propsKey = Object.keys(form).find((key) => key.startsWith('__reactProps'))!;
+    const savedSubmit = Reflect.get(form, propsKey).onSubmit;
+    const oldIdentity = [storyArcProfileId, fixture.work.id, 'The journey arc', 'The actual parent series'];
+    failure = 'unavailable';
     await settle(() => button(m.correction_reload()).click());
     expect(visible('input').includes(draft!)).toBe(false);
+    for (const identity of oldIdentity) expect(host.innerHTML).not.toContain(identity);
+    await settle(() => savedSubmit({ preventDefault() {} }));
+    expect(commands).toHaveLength(0);
     failure = false;
     await settle(() => button(m.correction_reload()).click());
-    expect(visible('input').includes(draft!)).toBe(true);
+    const restoredDraft = host.querySelector<HTMLInputElement>('input[type="url"]')!;
+    expect(restoredDraft.value).toBe('https://draft.test');
+    await settle(() => form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+    // The old detached form cannot submit into the restored reading.
+    expect(commands).toHaveLength(0);
+    await settle(() =>
+      restoredDraft.closest('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
+    );
+    expect(commands).toHaveLength(1);
+    failure = 'denied';
+    await settle(() => button(m.correction_reload()).click());
+    for (const identity of oldIdentity) expect(host.innerHTML).not.toContain(identity);
+    await settle(() => lateFact!({ ok: false, reason: 'denied' }));
+    expect(host.innerHTML).not.toContain('late-refused-candidate');
+    await settle(() => savedSubmit({ preventDefault() {} }));
+    expect(commands).toHaveLength(1);
+    failure = false;
+    recovered = true;
+    await settle(() => button(m.correction_reload()).click());
+    expect(host.textContent).toContain('Recovered arc');
+    expect(host.innerHTML).not.toContain('The journey arc');
+    const retryDraft = host.querySelector<HTMLInputElement>('input[type="url"]')!;
+    expect(retryDraft.value).toBe('https://draft.test');
+    await settle(() =>
+      retryDraft.closest('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
+    );
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toBe(commands[0]);
     held = new Promise(() => {});
     await settle(() => button(m.fictional_work_choose_another()).click());
     expect(visible('[data-slot="fictional-work-reference"]')).toHaveLength(0);

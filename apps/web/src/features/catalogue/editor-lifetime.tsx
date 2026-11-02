@@ -1,7 +1,62 @@
-import { createContext, isValidElement, useContext, useMemo, type ComponentType } from 'react';
+import {
+  createContext,
+  isValidElement,
+  useContext,
+  useMemo,
+  useRef,
+  useLayoutEffect,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 
 const Work = createContext<ReturnType<typeof useCatalogueLifetime> | null>(null);
+const CurrentReading = createContext<{ visible: boolean; active: () => boolean } | null>(null);
+
+/** Retain private editor state without rendering a retired public reading. Each observation
+ * permanently fences callbacks and requests from the previous reading, including after recovery.
+ */
+export function CatalogueCurrentReading({
+  visible,
+  ready,
+  revision,
+  children,
+}: {
+  visible: boolean;
+  ready: boolean;
+  revision: string;
+  children: ReactNode;
+}) {
+  const latest = useRef<object | null>(null);
+  const admission = useMemo(() => {
+    const token = {};
+    return { token, visible, active: () => ready && latest.current === token };
+  }, [visible, ready, revision]);
+  latest.current = admission.token;
+  useLayoutEffect(() => {
+    latest.current = admission.token;
+    return () => {
+      latest.current = null;
+    };
+  }, [admission]);
+  return <CurrentReading.Provider value={admission}>{children}</CurrentReading.Provider>;
+}
+
+export function useCurrentReadingActive() {
+  return useContext(CurrentReading)?.active ?? (() => true);
+}
+
+export function useCurrentReadingVisible() {
+  return useContext(CurrentReading)?.visible ?? true;
+}
+
+function useReadingLifetime(work: ReturnType<typeof useCatalogueLifetime>) {
+  const admission = useContext(CurrentReading);
+  return useMemo(
+    () => (admission ? { ...work, active: () => work.active() && admission.active() } : work),
+    [work, admission],
+  );
+}
 
 /** Each independent editor owns its address and command; callback identities are not addresses. */
 export function catalogueEditor<Props extends object>(Component: ComponentType<Props>) {
@@ -36,9 +91,10 @@ export function catalogueEditor<Props extends object>(Component: ComponentType<P
       ]),
       ancestor,
     );
-    // Preserve stable transport identities (notably effect dependencies) on a healthy rerender.
-    const cache = useMemo(() => new WeakMap<object, unknown>(), [work]);
-    const callbacks = useMemo(() => new WeakMap<object, unknown>(), [work]);
+    const reading = useReadingLifetime(work);
+    // Preserve the mount's drafts while binding I/O to this current reading only.
+    const cache = useMemo(() => new WeakMap<object, unknown>(), [reading]);
+    const callbacks = useMemo(() => new WeakMap<object, unknown>(), [reading]);
     const bound = { ...props };
     for (const key of Object.keys(bound)) {
       if (
@@ -55,12 +111,12 @@ export function catalogueEditor<Props extends object>(Component: ComponentType<P
           'refresh',
         ].includes(key)
       )
-        Reflect.set(bound, key, fence(value(key), work, cache));
+        Reflect.set(bound, key, fence(value(key), reading, cache));
       else if (key.startsWith('on') && typeof value(key) === 'function') {
         const callback = value(key) as (...args: unknown[]) => unknown;
         let guarded = callbacks.get(callback);
         if (!guarded) {
-          guarded = (...args: unknown[]) => (work.active() ? callback(...args) : undefined);
+          guarded = (...args: unknown[]) => (reading.active() ? callback(...args) : undefined);
           callbacks.set(callback, guarded);
         }
         Reflect.set(bound, key, guarded);
@@ -76,8 +132,9 @@ export function catalogueEditor<Props extends object>(Component: ComponentType<P
 
 export function useEditorLifetime() {
   const work = useContext(Work);
+  const reading = useReadingLifetime(work!);
   if (!work) throw new Error('Missing catalogue editor lifetime');
-  return work;
+  return reading;
 }
 
 /** The transport belongs to this mount, including factories for an independent embedded holder.

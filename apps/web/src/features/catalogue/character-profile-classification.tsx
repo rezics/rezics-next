@@ -19,6 +19,7 @@ import {
 } from './subject-facts';
 import { statementInput, type StatementInput } from './statement-editor';
 import { EditorFailure, StatementFields } from './statement-editor-view';
+import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1';
@@ -39,6 +40,8 @@ export function CharacterClassification({
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
 }) {
+  const active = useCurrentReadingActive();
+  const visible = useCurrentReadingVisible();
   const selectedValueId = useId();
   const o = { locale: locale as never };
   const definition = read.release.properties[property]!;
@@ -49,6 +52,16 @@ export function CharacterClassification({
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const running = useRef(false);
+  const wasVisible = useRef(visible);
+  if (wasVisible.current !== visible) {
+    wasVisible.current = visible;
+    running.current = false;
+    setBusy(false);
+    if (!visible)
+      setDraft((previous) =>
+        previous?.command && !previous.result ? { ...previous, result: { ok: false, reason: 'uncertain' } } : previous,
+      );
+  }
   const chooser = useRef<HTMLDivElement>(null);
   const returnFocus = useRef(false);
   useEffect(() => {
@@ -66,6 +79,7 @@ export function CharacterClassification({
   const label = pageText(definition.labels, locale);
   const current = selected.find((statement) => statement.id === draft?.source);
   const stage = (id: string | null) => {
+    if (!active()) return;
     if (running.current || (draft && factLocked(draft))) return;
     const source = selected.find((statement) => statement.id === id);
     if (id && !source) return;
@@ -89,6 +103,7 @@ export function CharacterClassification({
     });
   };
   const discard = () => {
+    if (!active()) return;
     if (!draft || running.current || factLocked(draft)) return;
     returnFocus.current = true;
     setDraft(undefined);
@@ -97,10 +112,12 @@ export function CharacterClassification({
     setSource(selected.length === 1 ? selected[0]!.id : '');
   };
   const change = (statement: StatementInput) => {
+    if (!active()) return;
     if (!draft || running.current || factLocked(draft)) return;
     setDraft({ ...draft, statement, command: undefined, result: undefined });
   };
   async function submit() {
+    if (!active()) return;
     if (!draft || running.current) return;
     const [sealed] = sealFacts(read.public.subject.id, read.release, [draft]);
     if (!sealed) return;
@@ -108,14 +125,18 @@ export function CharacterClassification({
     running.current = true;
     setBusy(true);
     try {
-      await sendFacts([sealed], transport.propose, (_property, result) => setDraft({ ...sealed, result }));
+      await sendFacts([sealed], transport.propose, (_property, result) => {
+        if (active()) setDraft({ ...sealed, result });
+      });
     } finally {
+      if (!active()) return;
       setBusy(false);
       running.current = false;
     }
   }
   const value = draft?.statement.value;
   const target = value?.type === 'value' && typeof value.content === 'string' ? value.content : '';
+  if (!visible) return null;
   return (
     <section className="min-w-0">
       <ContentItemFrame as="div" className="min-w-0 space-y-4 rounded-xl bg-card p-4 [overflow-wrap:anywhere] sm:p-6">
