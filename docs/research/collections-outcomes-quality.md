@@ -8,8 +8,8 @@ measurement, not an infrastructure failure, a passing check, or a reason to star
 
 ## Bound source and evidence limits
 
-- Clean retained worker source: `cd29239f653033662b56e8b7e553f753b7db878d`.
-- Captured read-only `dev`: `9c22ac533be07f70aa231b0f00895d969a7b3ad7`, dated
+- Initial clean retained worker source: `cd29239f653033662b56e8b7e553f753b7db878d`.
+- Initial captured read-only `dev`: `9c22ac533be07f70aa231b0f00895d969a7b3ad7`, dated
   `2026-11-03T07:34:52+08:00`. No merge, cherry-pick, rebase or promotion was performed.
 - `git diff --name-status cd29239f653033662b56e8b7e553f753b7db878d
   9c22ac533be07f70aa231b0f00895d969a7b3ad7 -- <selected paths>` exited **0 with no differences**.
@@ -32,6 +32,27 @@ measurement, not an infrastructure failure, a passing check, or a reason to star
 Decision: deliver the source-bound review now, keep all unrun native outcomes non-green, and leave execution to
 the existing integration verifier and repairs to their existing owners. This decision was sent to Commerce through
 `bun tools/goal/src/cli.ts inbox send commerce info '<decision>'` (exit **0**).
+
+### Retry source and landing observation
+
+The retry retained this report on clean source `51dd6f009499589b0034db288a03789a911b8c36`, based on current
+captured `dev` `1237cd46c4bea1ba795e153a57ff8031dc9b3558` (`2026-11-03T07:39:41+08:00`). A path-limited
+`git diff --name-status` from the initial worker base to that dev commit exited **0 with no differences** across
+the same Library source/tests, cited behavior documents, original outcome specifications/driver declarations,
+Content Liked read files and Zone tests listed above. The existing static findings therefore remain applicable;
+no whole-dependency equality or current native pass is inferred.
+
+The controller's existing `.temp/goal/landing-6732.log` records the report formatter finishing, followed by
+`Error: The following paths are ignored by one of your .gitignore files:` and `.temp`. It records neither the
+failing Git argv nor an acceptance invocation/exit. A bounded worker reproduction, `git add -A -- .temp`, exited
+**1** with `The following paths are ignored by one of your .gitignore files:` and `.temp`; subsequent index/status
+inspection exited **0** with no staged or dirty files. This reproduces the ignore refusal, not the unknown exact
+controller command. No ignored file was forced into Git, and no controller/train worktree was modified.
+
+This is a controller staging failure before product acceptance, not a Collection assertion failure or flake.
+Decision: retain the report, hand staging recovery to its existing controller owner through Commerce, and leave
+native acceptance deferred/non-green. The Commerce info handoff exited **0**. No product or check-infrastructure
+repair, new continuation, promotion proof or acceptance process was started.
 
 ## Authorities and test inventory
 
@@ -122,7 +143,8 @@ hypothetical valid-suspended-token 403 prose. Do not invent a suspended token or
 ## Clause gaps and bounded repair proposals
 
 Every item below is **missing/unmeasured current native evidence**, with static source limitations where stated.
-There is no observed assertion failure, flaky rerun or pre-assertion infrastructure failure in this attempt.
+There is no observed product assertion failure, flaky rerun or runner infrastructure failure; the controller
+staging failure is recorded separately above.
 The proposals describe outcomes for existing owners; none is dispatched or installed as another continuation.
 
 | Exact owner-clause text | Reproduction or missing observation | User-visible repair outcome, likely paths and bounded next brief |
