@@ -244,7 +244,11 @@ export function RatingsView({
       {status(
         'question',
         question ? (
-          <p className="text-sm font-medium wrap-anywhere" data-slot="rating-question" data-revision={question.revision}>
+          <p
+            className="text-sm font-medium wrap-anywhere"
+            data-slot="rating-question"
+            data-revision={question.revision}
+          >
             {question.label}
           </p>
         ) : undefined,

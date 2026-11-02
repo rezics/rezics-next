@@ -126,7 +126,11 @@ function Board({ owner, question, figure }: { owner: RatingRetryOwner; question:
   ]);
 }
 
-async function show(owner: Omit<RatingRetryOwner, 'locale' | 'source'>, question: Kind = failed, figure: Kind = failed) {
+async function show(
+  owner: Omit<RatingRetryOwner, 'locale' | 'source'>,
+  question: Kind = failed,
+  figure: Kind = failed,
+) {
   root ??= createRoot(host);
   votes.count = 0;
   recoveries.length = 0;
