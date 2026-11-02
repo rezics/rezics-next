@@ -32,9 +32,7 @@ export function ExactRevisionView({
     page = { state: 'unavailable', status: 404 };
   }
   const returnHref =
-    page.state === 'ready'
-      ? threadLocation(locale, page.thread, undefined, page.revision.id)
-      : undefined;
+    page.state === 'ready' ? threadLocation(locale, page.thread, undefined, page.revision.id) : undefined;
   return (
     <ContentItemFrame
       as="article"
