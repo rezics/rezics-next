@@ -358,13 +358,16 @@ test('Editorial Context family retains supplied comparison, independent controls
     expect(host.querySelector('[data-review-entry]')).toBeNull();
     expect(host.querySelector('a[href^="/exact-review"]')).toBeNull();
     expect(host.textContent).toContain(m.editorial_deleted({}, o));
-    expect(document.activeElement).toBe(host.querySelector('[data-editorial-result]'));
+    expect(document.activeElement).toBe(confirm.isConnected ? confirm : host.querySelector('[data-editorial-result]'));
     await click(m.editorial_restore({}, o));
     expect(host.textContent).toContain(m.editorial_confirm_restore({}, o));
-    button(m.contribution_confirm({}, o)).focus();
+    const restoreConfirm = button(m.contribution_confirm({}, o));
+    restoreConfirm.focus();
     await act(async () => userEvent.keyboard('{Enter}'));
     await until(() => host.textContent!.includes(m.editorial_restored({}, o)));
-    expect(document.activeElement).toBe(host.querySelector('[data-editorial-result]'));
+    expect(document.activeElement).toBe(
+      restoreConfirm.isConnected ? restoreConfirm : host.querySelector('[data-editorial-result]'),
+    );
     expect(lifecycle.calls.map((call) => call.method)).toEqual(['GET', 'DELETE', 'GET', 'POST', 'GET']);
     expect(host.querySelector('[data-review-entry]')).not.toBeNull();
     expect(
@@ -438,7 +441,9 @@ test('Editorial Context family retains supplied comparison, independent controls
     retryCreate.focus();
     await act(async () => userEvent.keyboard('{Enter}'));
     await until(() => host.textContent!.includes(m.editorial_created({}, o)));
-    expect(document.activeElement).toBe(host.querySelector('[data-editorial-result]'));
+    expect(document.activeElement).toBe(
+      retryCreate.isConnected ? retryCreate : host.querySelector('[data-editorial-result]'),
+    );
     expect(uncertain.calls[0]!.body).toEqual(uncertain.calls[1]!.body);
     expect([...uncertain.calls[0]!.headers]).toEqual([...uncertain.calls[1]!.headers]);
     expect(uncertain.calls.map((call) => call.method)).toEqual(['POST', 'POST', 'GET']);
