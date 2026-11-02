@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
 import type { AuthoringLocation } from '../threads/authoring-departure';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -49,14 +49,86 @@ export function ReportsBulkControls({
   onAction: ReportQueueAction;
   onRefresh?: () => Promise<void>;
 }) {
+  type FocusTarget = 'review' | 'results' | 'trigger';
+  type FocusIntent = {
+    controller: ReportsBulkAction;
+    source: HTMLButtonElement;
+    target: FocusTarget;
+    accepted: boolean;
+  };
   const id = useId();
   const review = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const results = useRef<HTMLDivElement>(null);
+  const focusIntent = useRef<FocusIntent | null>(null);
+  const currentController = useRef(controller);
+  const mounted = useRef(false);
+  currentController.current = controller;
+
+  function rememberKeyboardIntent(event: KeyboardEvent<HTMLButtonElement>, target: FocusTarget) {
+    if (event.repeat || (event.key !== 'Enter' && event.key !== ' ')) return;
+    focusIntent.current = controller.isCurrent()
+      ? { controller, source: event.currentTarget, target, accepted: false }
+      : null;
+  }
+  function acceptKeyboardIntent(source: HTMLButtonElement, target: FocusTarget) {
+    const intent = focusIntent.current;
+    if (
+      intent?.controller === controller &&
+      intent.source === source &&
+      intent.target === target &&
+      currentController.current === controller &&
+      controller.isCurrent() &&
+      source.ownerDocument.activeElement === source
+    ) {
+      intent.accepted = true;
+      return true;
+    }
+    focusIntent.current = null;
+    return false;
+  }
   useEffect(() => {
-    if (snapshot.phase === 'review') review.current?.focus();
-    if (snapshot.phase === 'complete') results.current?.focus();
-  }, [snapshot.phase]);
+    mounted.current = true;
+    const ownerDocument = trigger.current?.ownerDocument;
+    const invalidate = () => {
+      focusIntent.current = null;
+    };
+    const invalidateOnFocus = (event: FocusEvent) => {
+      const intent = focusIntent.current;
+      const target =
+        intent?.target === 'review' ? review.current : intent?.target === 'results' ? results.current : trigger.current;
+      if (intent && event.target !== intent.source && event.target !== target && event.target !== ownerDocument?.body)
+        invalidate();
+    };
+    ownerDocument?.addEventListener('pointerdown', invalidate, true);
+    ownerDocument?.addEventListener('focusin', invalidateOnFocus, true);
+    return () => {
+      mounted.current = false;
+      invalidate();
+      ownerDocument?.removeEventListener('pointerdown', invalidate, true);
+      ownerDocument?.removeEventListener('focusin', invalidateOnFocus, true);
+    };
+  }, []);
+  useEffect(() => {
+    const intent = focusIntent.current;
+    if (!intent?.accepted || intent.controller !== controller) return;
+    if (currentController.current !== controller || !mounted.current || !controller.isCurrent()) {
+      focusIntent.current = null;
+      return;
+    }
+    const target =
+      intent.target === 'review' && snapshot.phase === 'review'
+        ? review.current
+        : intent.target === 'results' && snapshot.phase === 'complete'
+          ? results.current
+          : intent.target === 'trigger' && snapshot.phase === 'selecting'
+            ? trigger.current
+            : null;
+    if (target) {
+      target.focus();
+      focusIntent.current = null;
+    }
+  }, [controller, snapshot.phase]);
   return (
     <ContentItemFrame
       as="article"
@@ -96,7 +168,11 @@ export function ReportsBulkControls({
                 type="button"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
                 disabled={!snapshot.selected.length}
-                onClick={controller.review}
+                onKeyDown={(event) => rememberKeyboardIntent(event, 'review')}
+                onClick={(event) => {
+                  acceptKeyboardIntent(event.currentTarget, 'review');
+                  controller.review();
+                }}
               >
                 {m.moderation_bulk_review()}
               </Button>
@@ -117,7 +193,11 @@ export function ReportsBulkControls({
               <Button
                 type="button"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
-                onClick={() => void controller.confirm(onAction, onRefresh)}
+                onKeyDown={(event) => rememberKeyboardIntent(event, 'results')}
+                onClick={(event) => {
+                  acceptKeyboardIntent(event.currentTarget, 'results');
+                  void controller.confirm(onAction, onRefresh);
+                }}
               >
                 {m.moderation_bulk_confirm({ count: snapshot.selected.length })}
               </Button>
@@ -125,9 +205,10 @@ export function ReportsBulkControls({
                 type="button"
                 variant="outline"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
-                onClick={() => {
+                onKeyDown={(event) => rememberKeyboardIntent(event, 'trigger')}
+                onClick={(event) => {
+                  acceptKeyboardIntent(event.currentTarget, 'trigger');
                   controller.cancel();
-                  queueMicrotask(() => trigger.current?.focus());
                 }}
               >
                 {m.moderation_bulk_cancel()}
@@ -156,7 +237,11 @@ export function ReportsBulkControls({
                       variant="outline"
                       className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
                       disabled={snapshot.phase === 'running'}
-                      onClick={() => void controller.retry(item.reportId, onAction, onRefresh)}
+                      onKeyDown={(event) => rememberKeyboardIntent(event, 'results')}
+                      onClick={(event) => {
+                        acceptKeyboardIntent(event.currentTarget, 'results');
+                        void controller.retry(item.reportId, onAction, onRefresh);
+                      }}
                     >
                       {m.moderation_bulk_retry()}
                     </Button>

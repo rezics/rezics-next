@@ -186,6 +186,73 @@ test('Complete usable bulk moderation controls', async () => {
   });
 });
 
+test('Bulk focus handoffs require keyboard intent and a surviving queue', async () => {
+  await withView(async ({ host, render, user, flush }) => {
+    const seed = createReportsBulkAction(reports);
+    await render(
+      <ReportsBulkControls
+        controller={seed}
+        snapshot={{ ...seed.getSnapshot(), phase: 'complete' }}
+        onAction={async () => ({ ok: true })}
+      />,
+    );
+    expect(host.querySelector('[tabindex="-1"]')).not.toBe(host.ownerDocument.activeElement);
+
+    const outside = host.ownerDocument.createElement('button');
+    host.ownerDocument.body.append(outside);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const props = {
+      ...moderationQueueFixture,
+      reports,
+      queueIdentity: 'keyboard-focus',
+      onAction: async () => {
+        await gate;
+        return { ok: true };
+      },
+    };
+    await render(<BoardReportQueue {...props} />);
+    button(host, m.moderation_bulk_select_loaded()).focus();
+    await act(async () => user.keyboard('{Enter}'));
+    button(host, m.moderation_bulk_review()).focus();
+    await act(async () => user.keyboard('{Enter}'));
+    expect(host.querySelector('[role="group"]')).toBe(host.ownerDocument.activeElement);
+    await act(async () => {
+      await user.tab();
+      await user.keyboard('{Enter}');
+    });
+    outside.focus();
+    await act(async () => release());
+    await flush();
+    expect(host.ownerDocument.activeElement).toBe(outside);
+
+    let releaseRetired!: () => void;
+    const retiredGate = new Promise<void>((resolve) => {
+      releaseRetired = resolve;
+    });
+    const pending = { ...props, queueIdentity: 'replace-me', onAction: async () => {
+      await retiredGate;
+      return { ok: true };
+    } };
+    await render(<BoardReportQueue {...pending} />);
+    button(host, m.moderation_bulk_select_loaded()).focus();
+    await act(async () => user.keyboard('{Enter}'));
+    button(host, m.moderation_bulk_review()).focus();
+    await act(async () => user.keyboard('{Enter}'));
+    await act(async () => {
+      await user.tab();
+      await user.keyboard('{Enter}');
+    });
+    await render(<BoardReportQueue {...pending} queueIdentity="replacement" />);
+    outside.focus();
+    await act(async () => releaseRetired());
+    await flush();
+    expect(host.ownerDocument.activeElement).toBe(outside);
+  });
+});
+
 test('Partial and uncertain receipts stay visible; explicit retry preserves the same command and never resumes later rows', async () => {
   await withView(async ({ host, render, user, flush }) => {
     const controller = createReportsBulkAction(reports);
@@ -208,6 +275,7 @@ test('Partial and uncertain receipts stay visible; explicit retry preserves the 
     await render(<Controls controller={controller} onAction={onAction} onRefresh={onRefresh} />);
     await act(async () => user.click(button(host, m.moderation_bulk_select_loaded())));
     await act(async () => user.click(button(host, m.moderation_bulk_review())));
+    expect(host.querySelector('[role="group"]')).not.toBe(host.ownerDocument.activeElement);
     await act(async () => user.click(button(host, m.moderation_bulk_confirm({ count: 3 }))));
     expect(host.textContent).toContain(m.moderation_bulk_running());
     expect(host.textContent).toContain(m.moderation_bulk_pending());
@@ -220,7 +288,7 @@ test('Partial and uncertain receipts stay visible; explicit retry preserves the 
     expect(host.textContent).toContain(m.moderation_bulk_uncertain());
     expect(host.textContent).toContain(m.moderation_bulk_unattempted());
     expect(host.querySelector('ol')?.getAttribute('aria-live')).toBe('polite');
-    expect(host.querySelector('[tabindex="-1"]')).toBe(host.ownerDocument.activeElement);
+    expect(host.querySelector('[tabindex="-1"]')).not.toBe(host.ownerDocument.activeElement);
     const article = host.querySelector('article')!;
     publicOnly(
       article,
@@ -235,6 +303,7 @@ test('Partial and uncertain receipts stay visible; explicit retry preserves the 
     await flush();
     expect(calls).toHaveLength(3);
     expect(calls[2]).toBe(calls[1]);
+    expect(host.querySelector('[tabindex="-1"]')).toBe(host.ownerDocument.activeElement);
     expect(calls.some((call) => call.reportId === reports[2]!.id)).toBe(false);
     expect(refreshes).toBe(1);
     expect(host.querySelector('[role="alert"]')?.textContent).toBe(m.moderation_bulk_stale());
