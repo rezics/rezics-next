@@ -539,9 +539,8 @@ test('all eight catalogs supply the same additive reader messages with neutral n
 });
 
 test('personal Context departure keeps creation and delete recovery on Stay and retires it on Leave', async () => {
-  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } = await import(
-    '@tanstack/react-router'
-  );
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
+    await import('@tanstack/react-router');
   const commands: Command[] = [];
   const completions: ((result: MutationResult) => void)[] = [];
   const submit = (command: Command) => {
@@ -560,7 +559,12 @@ test('personal Context departure keeps creation and delete recovery on Stay and 
     getParentRoute: () => parent,
     path: '/my/contexts/new',
     component: () => (
-      <ContextCreateView locale="en" actions={contextFixture().initialCreation()} submit={submit} reload={async () => {}} />
+      <ContextCreateView
+        locale="en"
+        actions={contextFixture().initialCreation()}
+        submit={submit}
+        reload={async () => {}}
+      />
     ),
   });
   const detail = createRoute({
@@ -606,8 +610,7 @@ test('personal Context departure keeps creation and delete recovery on Stay and 
     window.dispatchEvent(event);
     return event.defaultPrevented;
   };
-  const complete = async (index: number, result: MutationResult) =>
-    act(async () => completions[index]!(result));
+  const complete = async (index: number, result: MutationResult) => act(async () => completions[index]!(result));
   try {
     let label = panel.host.querySelector('input') as HTMLInputElement;
     let language = panel.host.querySelector('select') as HTMLSelectElement;
