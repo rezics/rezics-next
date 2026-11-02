@@ -1,6 +1,7 @@
 import { pickText } from '@rezics/composition';
 import { m } from '../../paraglide/messages.js';
 import type { CreateFailure, TermDraft } from './create-subject';
+import { createSubjectControls, createSubjectGuidance } from './create-subject-guidance';
 import type { MangaRow } from './manga-profile-field';
 import type { MangaReady } from './manga-profile-view';
 import { presentStatementViolations, type PresentedViolation } from './statement-validation-presentation';
@@ -21,6 +22,7 @@ export function mangaCreateFeedback(
     aliases: m.catalogue_create_aliases({}, o),
     description: m.catalogue_create_description({}, o),
   };
+  const termControl = createSubjectControls(terms);
   return errors.map((error, index) => {
     const id = `${termsId}-error-${index}`;
     const path = error.pointer
@@ -47,23 +49,16 @@ export function mangaCreateFeedback(
         label: m.manga_grain({}, o),
         instruction: m.correction_error_value({}, o),
       };
-    if (['labels', 'aliases', 'descriptions'].includes(path[0]!) && path.length >= 2) {
-      const matching = terms.filter((term) => term.language.trim() === path[1]);
-      const duplicate = path[0] === 'labels' && error.code === 'invalid_format' && matching.length > 1;
-      const term = duplicate ? matching[1] : matching[0];
-      if (!term) return fallback;
-      const field = duplicate
-        ? 'language'
-        : path[0] === 'labels'
-          ? 'label'
-          : path[0] === 'aliases'
-            ? 'aliases'
-            : 'description';
+    const termAddress = /^create-(language|label|description|aliases)-(\d+)$/.exec(termControl(error.pointer) ?? '');
+    if (termAddress) {
+      const at = Number(termAddress[2]);
+      const term = terms[at]!;
+      const field = termAddress[1] as keyof TermDraft;
       return {
         id,
         target: `${termsId}-${field}-${term.id}`,
-        label: `${termLabels[field]} · ${terms.indexOf(term) + 1}`,
-        instruction: duplicate ? m.catalogue_create_validation_language_unique({}, o) : m.correction_error_value({}, o),
+        label: `${termLabels[field]} · ${at + 1}`,
+        instruction: createSubjectGuidance(error, field, { type: '', rows: terms, index: at }, locale),
       };
     }
     if (path[0] !== 'statements' || !read) return fallback;
@@ -106,7 +101,7 @@ export function mangaCreateFeedback(
     ) {
       target = `citation-${row.id}`;
       label = m.relation_citation({}, o);
-      instruction = `${m.correction_error_invalid_format({}, o)} ${m.correction_error_url({}, o)}`;
+      instruction = presented.instruction.replace(m.correction_error_uneditable({}, o), m.correction_error_url({}, o));
     } else if (suffix[0] === 'original') {
       target = `original-${row.id}`;
       label = m.authored_original({}, o);

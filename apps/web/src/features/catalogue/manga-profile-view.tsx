@@ -542,10 +542,9 @@ function MangaCreate({
                         const target = event.currentTarget
                           .closest('form')
                           ?.querySelector<HTMLElement>(`[id="${CSS.escape(error.target)}"]`);
-                        const control = target?.matches('input, textarea, select, button, [role="combobox"]')
-                          ? target
-                          : (target?.querySelector<HTMLElement>('input, textarea, select, button, [role="combobox"]') ??
-                            target);
+                        const control = target?.hasAttribute('data-manga-picker')
+                          ? (target.querySelector<HTMLElement>('[role="combobox"]') ?? target)
+                          : target;
                         control?.focus();
                       }}
                     >
