@@ -66,3 +66,44 @@ test('an existing worktree is named and left untouched', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('retained preparation artifacts are named when Git cleanup fails', () => {
+  const root = mkdtempSync(join(tmpdir(), 'goal-dispatch-preparation-'));
+  const worktree = join(root, 'worktree');
+  const briefPath = join(root, 'state', 'briefs', 'task.md');
+  const calls: string[] = [];
+  let failure: unknown;
+  try {
+    mkdirSync(join(root, 'state', 'briefs'), { recursive: true });
+    try {
+      prepareInitialDispatch({
+        briefPath,
+        briefText: 'acceptance bytes',
+        branch: 'goal/task',
+        worktree,
+        createWorktree: () => calls.push('add'),
+        installDependencies: () => {
+          calls.push('install');
+          throw new Error('dependency install failed');
+        },
+        freezeFiles: () => undefined,
+        removeWorktree: () => {
+          calls.push('remove');
+          throw new Error('worktree is busy');
+        },
+        deleteBranch: () => calls.push('delete-branch'),
+      });
+    } catch (error) {
+      failure = error;
+    }
+    const message = failure instanceof Error ? failure.message : '';
+    expect(message).toContain('Initial dispatch preparation failed: dependency install failed');
+    expect(message).toContain(`worktree ${worktree} and branch goal/task`);
+    expect(message).toContain(`dispatch brief ${briefPath}`);
+    expect((failure as Error & { cause?: Error }).cause?.message).toBe('dependency install failed');
+    expect(calls).toEqual(['add', 'install', 'remove']);
+    expect(existsSync(briefPath)).toBe(true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

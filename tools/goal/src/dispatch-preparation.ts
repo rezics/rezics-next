@@ -33,7 +33,12 @@ function pathExists(path: string): boolean {
   }
 }
 
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function prepareInitialDispatch<T>(options: DispatchPreparationOptions<T>): T {
+  let briefCreated = false;
   let briefIdentity: { dev: number; ino: number } | undefined;
   let worktreeCreated = false;
   let worktreeCreationStarted = false;
@@ -42,6 +47,7 @@ export function prepareInitialDispatch<T>(options: DispatchPreparationOptions<T>
     if (pathExists(options.worktree)) throw new Error(`task worktree path already exists: ${options.worktree}`);
 
     const briefFile = openSync(options.briefPath, 'wx');
+    briefCreated = true;
     const identity = fstatSync(briefFile);
     briefIdentity = { dev: identity.dev, ino: identity.ino };
     try {
@@ -62,16 +68,16 @@ export function prepareInitialDispatch<T>(options: DispatchPreparationOptions<T>
     if (worktreeCreated) {
       try {
         options.removeWorktree();
-      } catch {
+      } catch (error) {
         gitArtifactsRemain = true;
-        retained.push(`worktree ${options.worktree} (branch ${options.branch})`);
+        retained.push(`worktree ${options.worktree} and branch ${options.branch} (cleanup failed: ${errorText(error)})`);
       }
       if (!gitArtifactsRemain) {
         try {
           options.deleteBranch();
-        } catch {
+        } catch (error) {
           gitArtifactsRemain = true;
-          retained.push(`branch ${options.branch}`);
+          retained.push(`branch ${options.branch} (cleanup failed: ${errorText(error)})`);
         }
       }
     } else if (worktreeCreationStarted) {
@@ -81,16 +87,19 @@ export function prepareInitialDispatch<T>(options: DispatchPreparationOptions<T>
       );
     }
 
-    if (briefIdentity) {
+    if (briefCreated) {
       if (gitArtifactsRemain) {
         retained.push(`dispatch brief ${options.briefPath}`);
+      } else if (!briefIdentity) {
+        retained.push(`dispatch brief ${options.briefPath} (file identity unavailable; inspect before removal)`);
       } else {
         try {
           const current = lstatSync(options.briefPath);
           if (current.dev === briefIdentity.dev && current.ino === briefIdentity.ino) unlinkSync(options.briefPath);
           else retained.push(`dispatch brief ${options.briefPath} (changed after creation)`);
         } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') retained.push(`dispatch brief ${options.briefPath}`);
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
+            retained.push(`dispatch brief ${options.briefPath} (cleanup failed: ${errorText(error)})`);
         }
       }
     }
