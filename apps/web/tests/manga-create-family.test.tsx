@@ -963,9 +963,11 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     expect(authors[0]!.id).toBe(firstAuthorId);
     const oldAddButton = within(authorGroup).getByRole('button', { name: m.correction_add() });
     const oldPropsKey = Object.keys(oldAddButton).find((key) => key.startsWith('__reactProps$'))!;
-    const oldAdd = (Reflect.get(oldAddButton, oldPropsKey) as {
-      onClick: (event: { detail: number; currentTarget: HTMLButtonElement }) => void;
-    }).onClick;
+    const oldAdd = (
+      Reflect.get(oldAddButton, oldPropsKey) as {
+        onClick: (event: { detail: number; currentTarget: HTMLButtonElement }) => void;
+      }
+    ).onClick;
     await select(host, m.manga_grain(), 'schema:PublicationVolume');
     await select(host, m.manga_grain(), 'schema:ComicSeries');
     outside.focus();
