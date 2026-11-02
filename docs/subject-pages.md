@@ -358,6 +358,7 @@ Album correction hides current markup as soon as a reload starts, retains privat
 Game correction retains private scalar, classification and relation drafts across refused or thrown reads; only a fresh matching subject read restores public markup and deliberate exact-command retries.
 Screen correction also retains only private editor holders across refusal, including concealment; only a fresh matching read restores identity, selected evidence, nested editors and explicit sealed retries.
 Literary creation retains metadata only for its drafts; a refused or unavailable page or scalar current subject read removes identity, facts and editor markup, permanently retires old callbacks/results, and retains private drafts and exact sealed retries until a fresh matching read restores editing; relation and authored holders reread their original addresses before resuming.
+Creation metadata refresh errors, including query errors with retained data, block new commands until an explicit successful refresh revalidates all retained terms and facts; exact uncertain retries keep their original command independently of metadata recovery.
 
 A successful field offers its exact returned candidate at
 `/edit?reviewProperty={property}&candidate={candidate}` and an in-place comparison using the existing candidate

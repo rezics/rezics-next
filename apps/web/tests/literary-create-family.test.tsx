@@ -207,8 +207,9 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     const load = rich.transport.load;
     const label = '完全な書誌情報 — ' + 'BibliographieSansCoupure'.repeat(20);
     const description = 'La description bibliographique complète est conservée. '.repeat(24);
-    let metadataFailed = false;
+    let metadataFailed: boolean | 'throw' = false;
     rich.transport.load = async () => {
+      if (metadataFailed === 'throw') throw new Error('Metadata refresh failed');
       if (metadataFailed) return { ok: false, reason: 'unavailable' };
       const read = await load();
       if (!read.ok) return read;
@@ -288,7 +289,7 @@ test('mounted Literary creation keeps the complete initial bibliography family a
         .disabled,
     ).toBe(true);
     const original = structuredClone(posts()[0]!);
-    for (const failed of [true, false]) {
+    for (const failed of [true, false, 'throw'] as const) {
       metadataFailed = failed;
       await act(async () => {
         await client.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'literary-profile' });
@@ -364,9 +365,26 @@ test('mounted Literary creation keeps the complete initial bibliography family a
 
     // Exact error routing still links the native row ID and focuses its first actual scalar control.
     const invalid = literaryFixture('invalid');
+    const invalidLoad = invalid.transport.load;
+    let recovery: 'initial' | 'throw' | 'refused' | 'current' = 'initial';
+    invalid.transport.load = async () => {
+      if (recovery === 'throw') throw new Error('Metadata refresh failed');
+      if (recovery === 'refused') return { ok: false, reason: 'unavailable' };
+      const result = await invalidLoad();
+      if (recovery !== 'current' || !result.ok) return result;
+      const release = structuredClone(result.release);
+      release.types['schema:Book']!.properties = release.types['schema:Book']!.properties.filter(
+        (property) => property !== 'schema:wordCount',
+      );
+      return { ...result, release };
+    };
     await show(invalid);
     await enter();
+    await click(m.catalogue_create_add_language());
+    await input(host.querySelector<HTMLInputElement>('#create-language-1')!, 'en');
+    await input(host.querySelector<HTMLInputElement>('#create-label-1')!, 'Private English title');
     const invalidRow = row();
+    recovery = 'throw';
     await click(m.catalogue_create_submit());
     await until(() => !!host.querySelector('[role="alert"] a[href^="#literary-fact-"]'));
     const correction = host.querySelector<HTMLAnchorElement>('[role="alert"] a[href^="#literary-fact-"]')!;
@@ -375,6 +393,23 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     await act(async () => correction.click());
     expect(host.ownerDocument.activeElement).toBe(invalidRow.querySelector('select'));
     expect(labelledInput(invalidRow, m.correction_amount()).value).toBe('+12000');
+    const invalidPosts = () => invalid.calls.filter((call) => call.method === 'POST');
+    await until(() => host.textContent!.includes(m.catalogue_create_unavailable()));
+    expect(client.getQueriesData({ queryKey: ['literary-profile'] }).some(([, data]) => (data as LiteraryRead)?.ok)).toBe(true);
+    for (const result of ['refused', 'throw', 'current'] as const) {
+      expect(button(host, m.catalogue_create_submit()).disabled).toBe(true);
+      recovery = result;
+      await click(m.catalogue_create_retry());
+      await until(() => !button(host, result === 'current' ? m.catalogue_create_submit() : m.catalogue_create_retry()).disabled);
+      expect(invalidPosts()).toHaveLength(1); // A definitions retry is read-only.
+      expect(row()).toBe(invalidRow);
+      expect(host.querySelector<HTMLInputElement>('#create-label-0')!.value).toBe('原語の作品名');
+      expect(host.querySelector<HTMLInputElement>('#create-label-1')!.value).toBe('Private English title');
+      expect(labelledInput(invalidRow, m.correction_amount()).value).toBe('+12000');
+    }
+    await until(() => !host.textContent!.includes(m.catalogue_create_unavailable()));
+    await click(m.catalogue_create_submit());
+    expect(invalidPosts()).toHaveLength(1); // The retained fact is rejected against the newly successful release.
 
     // A failed refresh retains the original row; successful removal of its definition shows stale/remove.
     const staleDefinition = literaryFixture();

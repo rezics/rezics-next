@@ -293,15 +293,31 @@ function LiteraryProfileLive({
           transport={{
             ...transport,
             definitions: async (refresh) => {
-              const metadata = refresh || query.data?.ok === false ? (await query.refetch()).data : read;
+              // Query errors can retain successful data. Only the result of this read can admit new intent.
+              let metadata = query.isError ? undefined : query.data;
+              if (refresh || query.data?.ok === false) {
+                const result = await query.refetch();
+                metadata = result.isError ? undefined : result.data;
+              }
               if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
-              return metadata?.ok
-                ? { ok: true, types: createTypes(metadata.release, locale).filter((type) => isLiteraryType(type.id)) }
-                : { ok: false };
+              if (!metadata?.ok) return { ok: false };
+              // Keep preparation in sync with this successful release before the form can submit again.
+              creationMetadata.current = { id, locale, value: metadata };
+              return {
+                ok: true,
+                types: createTypes(metadata.release, locale).filter((type) => isLiteraryType(type.id)),
+              };
             },
           }}
           profile={{
             scope: 'literary',
+            metadata: {
+              ready: !query.isError && query.data?.ok === true && !query.isFetching,
+              pending: query.isFetching,
+              failure: <p>{m.catalogue_create_unavailable({}, o)}</p>,
+              // Retained choices support private drafts, including a Type that was subsequently retired.
+              types: createTypes(read.release, locale).filter((type) => isLiteraryType(type.id)),
+            },
             title: m.literary_title({}, o),
             hideHeading: true,
             href: `/${locale}/catalogue/literary`,
@@ -338,7 +354,7 @@ function LiteraryProfileLive({
             prepare: (item: InitialSubject) => {
               submittingType.current = item.type;
               return literaryInitialItem(
-                read.release,
+                creationMetadata.current!.value.release,
                 item,
                 (latest.current[item.type] ?? []).map((row) => row.statement),
                 locale,
