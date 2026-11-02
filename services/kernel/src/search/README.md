@@ -1295,9 +1295,11 @@ Source isolates lifecycle behavior; this is not Semantic Source, permission or p
 
 Native metadata admission requires HTTP 200 and complete object/collection shapes. Resolve accepts at most three
 unique exact `subjects-g<positive safe integer>` physical names, at most one exact `subjects` alias with one target
-in that observed set, and no data streams. Physical attributes must describe an open index, optionally hidden;
+in that observed set, at most one allocator-created `{physical}-writer-{32 lowercase hex}` alias bound to each
+observed generation, and no data streams. Physical attributes must describe an open index, optionally hidden;
 closed, frozen and data-stream indices are unavailable. Native omission of an empty per-index `aliases` field is
-valid. A present alias must agree in both the physical index's aliases and the alias receipt. Foreign names,
+valid, including legacy generations without writer aliases; inventory never mints a missing writer alias. A present
+public or writer alias must agree in both the physical index's aliases and the alias receipt. Foreign names,
 duplicate records (even identical ones), contradictory memberships, malformed or missing fields and oversized sets
 raise `SearchUnavailableError` before admitting a query or rebuild. Empty namespaces and bounded initial,
 rebuilding and retained older sets without an active alias remain valid discovery observations. Read helpers issue

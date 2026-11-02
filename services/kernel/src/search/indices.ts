@@ -192,16 +192,18 @@ export async function subjectGenerations(
   const { indices, aliases, data_streams: streams } = response.body;
   // Check cardinality before visiting records. The generation limit also bounds
   // duplicate/foreign receipts; deduplication must never hide an oversized set.
+  // One public alias plus one allocator writer alias per observed generation.
   if (
     !Array.isArray(indices) ||
     indices.length > MAX_SUBJECT_GENERATIONS ||
     !Array.isArray(aliases) ||
-    aliases.length > 1 ||
+    aliases.length > MAX_SUBJECT_GENERATIONS + 1 ||
     !Array.isArray(streams) ||
     streams.length !== 0
   )
     throw unavailable();
   const generationPattern = new RegExp(`^${prefix}subjects-g([1-9][0-9]*)$`);
+  const writerPattern = new RegExp(`^${prefix}subjects-g([1-9][0-9]*)-writer-([a-f0-9]{32})$`);
   function generationOf(name: unknown): number {
     if (typeof name !== 'string' || name.length > alias.length + 2 + 16) throw unavailable();
     const match = generationPattern.exec(name);
@@ -211,8 +213,17 @@ export async function subjectGenerations(
     if (!Number.isSafeInteger(generation) || generation <= 0) throw unavailable();
     return generation;
   }
+  function writerIndex(name: unknown): string | null {
+    if (typeof name !== 'string' || name.length > alias.length + 2 + 16 + 8 + 32) return null;
+    const match = writerPattern.exec(name);
+    if (!match?.[1] || match[0] !== name) return null;
+    const generation = Number(match[1]);
+    if (!Number.isSafeInteger(generation) || generation <= 0) return null;
+    return `${alias}-g${generation}`;
+  }
   const generations = new Map<string, number>();
-  const aliased = new Set<string>();
+  const publicMembers = new Set<string>();
+  const writerMembers = new Map<string, string>();
   for (const index of indices) {
     if (!record(index)) throw unavailable();
     const generation = generationOf(index.name);
@@ -233,26 +244,53 @@ export async function subjectGenerations(
     )
       throw unavailable();
     if (Object.hasOwn(index, 'aliases')) {
-      if (!Array.isArray(index.aliases) || index.aliases.length > 1) throw unavailable();
-      if (index.aliases.length === 1) {
-        if (index.aliases[0] !== alias) throw unavailable();
-        aliased.add(name);
+      if (!Array.isArray(index.aliases) || index.aliases.length > 2) throw unavailable();
+      const seen = new Set<string>();
+      for (const entry of index.aliases) {
+        if (typeof entry !== 'string' || seen.has(entry)) throw unavailable();
+        seen.add(entry);
+        if (entry === alias) {
+          publicMembers.add(name);
+          continue;
+        }
+        if (writerIndex(entry) === name && !writerMembers.has(name)) {
+          writerMembers.set(name, entry);
+          continue;
+        }
+        throw unavailable();
       }
     }
   }
 
   let active: number | null = null;
-  if (aliases.length === 1) {
-    const entry: unknown = aliases[0];
-    if (!record(entry) || entry.name !== alias || !Array.isArray(entry.indices) || entry.indices.length !== 1)
-      throw unavailable();
+  const publicReceipts = new Set<string>();
+  const writerReceipts = new Map<string, string>();
+  const seenAliasNames = new Set<string>();
+  for (const entry of aliases) {
+    if (!record(entry) || typeof entry.name !== 'string' || seenAliasNames.has(entry.name)) throw unavailable();
+    if (!Array.isArray(entry.indices) || entry.indices.length !== 1) throw unavailable();
+    seenAliasNames.add(entry.name);
     const target: unknown = entry.indices[0];
-    const generation = generationOf(target);
-    if (typeof target !== 'string' || !generations.has(target) || aliased.size !== 1 || !aliased.has(target))
-      throw unavailable();
-    active = generation;
-  } else if (aliased.size !== 0) {
+    if (typeof target !== 'string' || !generations.has(target)) throw unavailable();
+    if (entry.name === alias) {
+      publicReceipts.add(target);
+      continue;
+    }
+    if (writerIndex(entry.name) === target && writerMembers.get(target) === entry.name && !writerReceipts.has(target)) {
+      writerReceipts.set(target, entry.name);
+      continue;
+    }
     throw unavailable();
+  }
+  if (publicReceipts.size !== publicMembers.size) throw unavailable();
+  if (publicReceipts.size === 1) {
+    const [target] = publicReceipts;
+    if (!target || !publicMembers.has(target)) throw unavailable();
+    active = generations.get(target)!;
+  }
+  if (writerReceipts.size !== writerMembers.size) throw unavailable();
+  for (const [name, writer] of writerMembers) {
+    if (writerReceipts.get(name) !== writer) throw unavailable();
   }
 
   return { generations: [...generations.values()].sort((a, b) => a - b), active };
