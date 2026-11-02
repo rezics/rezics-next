@@ -1,12 +1,5 @@
-# Keep the contract-required concept-board growth continuation stageable.
-.temp/*
-!.temp/goal/
-.temp/goal/*
-!.temp/goal/backlog/
-.temp/goal/backlog/*
-!.temp/goal/backlog/content/
-.temp/goal/backlog/content/*
-!.temp/goal/backlog/content/concept-board-creation-growth.md
+# Temporary files at any depth, including workspace-local .temp directories.
+.temp/
 node_modules/
 /apps/web/.cache/
 .DS_Store
