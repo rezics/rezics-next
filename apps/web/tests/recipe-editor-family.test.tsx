@@ -134,6 +134,31 @@ test('Recipe creation and current correction share complete frames with independ
     const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;
     return (Reflect.get(element, key) as { onClick: () => void }).onClick;
   };
+  const cancelRemoval = async (scope: HTMLElement) => {
+    const trigger = within(scope).getByRole('button', { name: m.recipe_remove_field() });
+    const controls = () => [
+      ...scope.querySelectorAll<HTMLInputElement>('input, textarea, [contenteditable], [role="checkbox"]'),
+    ];
+    const content = () =>
+      controls().map((node) => [
+        node.value,
+        node.textContent,
+        node.getAttribute('aria-checked'),
+        node.getAttribute('aria-describedby'),
+      ]);
+    const nodes = controls(),
+      before = content();
+    for (const escape of [false, true]) {
+      await click(scope, m.recipe_remove_field());
+      expect(window.document.activeElement).toBe(within(scope).getByRole('button', { name: m.candidate_cancel() }));
+      if (escape) await act(async () => user.keyboard('{Escape}'));
+      else await click(scope, m.candidate_cancel());
+      expect(controls()).toEqual(nodes);
+      expect(content()).toEqual(before);
+      expect(window.document.activeElement).toBe(within(scope).getByRole('button', { name: m.recipe_remove_field() }));
+    }
+    expect(trigger.textContent).toBe(m.recipe_remove_field());
+  };
   const deferred = <T,>() => {
     let resolve!: (value: T) => void;
     const promise = new Promise<T>((done) => {
@@ -289,9 +314,16 @@ test('Recipe creation and current correction share complete frames with independ
     const cookTimeLabel = correction.release.properties[cookTime]!.labels.en!;
     await click(section(b, cookTimeLabel), m.recipe_correct());
     const independentDraft = section(b, cookTimeLabel, true);
+    await click(independentDraft, m.recipe_remove_field());
+    const uncertainRemove = queued(within(independentDraft).getByRole('button', { name: m.recipe_remove_field() }));
     correction.setScenario('uncertain');
     await click(independentDraft, m.correction_submit());
     await until(() => independentDraft.textContent!.includes(m.correction_unavailable()));
+    await act(async () => uncertainRemove());
+    expect(host.contains(independentDraft)).toBe(true);
+    expect(within(independentDraft).getByRole('button', { name: m.recipe_remove_field() }).matches(':disabled')).toBe(
+      true,
+    );
     const independentFirst = posts(correction, '/candidates').find(
       (call) => (call.body as { statement: { property: { id: string } } }).statement.property.id === cookTime,
     )!;
@@ -408,6 +440,7 @@ test('Recipe creation and current correction share complete frames with independ
     ).toContain(m.recipe_original());
     await act(async () => user.click(within(methodA).getByRole('checkbox', { name: m.recipe_original() })));
     await replace(input(methodA, m.relation_citation()), longCitation);
+    await cancelRemoval(methodA);
     await click(a, m.recipe_title());
     await until(() => !!within(a).queryByRole('button', { name: m.catalogue_create_review_new() }));
     expect(posts(creation, '/subjects')).toHaveLength(0);
@@ -471,6 +504,8 @@ test('Recipe creation and current correction share complete frames with independ
       licence: 'CC-BY-4.0',
     });
     await click(methodB, m.recipe_remove_field());
+    expect(host.contains(methodB)).toBe(true);
+    await click(methodB, m.recipe_remove_field());
     expect(host.contains(methodB)).toBe(false);
     expect(rereadDraft.textContent).toContain(m.correction_proposed());
 
@@ -503,6 +538,16 @@ test('Recipe creation and current correction share complete frames with independ
     );
     await until(() => !!host.querySelector('select'));
     await replace(input(host, m.catalogue_create_label()), 'Soup');
+    const empty = await add(host, ingredient);
+    await click(empty, m.recipe_remove_field());
+    expect(host.contains(empty)).toBe(false);
+    expect(window.document.activeElement).toBe(within(host).getByRole('combobox', { name: m.character_add_fact() }));
+    const citationOnly = await add(host, ingredient);
+    await replace(input(citationOnly, m.relation_citation()), longCitation);
+    await cancelRemoval(citationOnly);
+    await click(citationOnly, m.recipe_remove_field());
+    await click(citationOnly, m.recipe_remove_field());
+    expect(host.contains(citationOnly)).toBe(false);
     await replace(input(host, m.catalogue_create_description()), 'Keep the description');
     await replace(input(host, m.catalogue_create_aliases()), 'Soup\nSoup');
     await click(host, m.catalogue_create_add_language());
@@ -522,6 +567,7 @@ test('Recipe creation and current correction share complete frames with independ
     await click(instructions, m.recipe_replace_method());
     await replace(input(instructions, m.catalogue_create_language()), '??');
     await replace(input(instructions, m.subject_source_licence()), 'Not-an-SPDX-licence');
+    await cancelRemoval(instructions);
     await click(host, m.recipe_title());
     expect(commands).toHaveLength(0);
     const duplicateLanguage = input(termRows()[1]!, m.catalogue_create_language());
@@ -574,7 +620,18 @@ test('Recipe creation and current correction share complete frames with independ
     expect(input(first, m.correction_value()).hasAttribute('aria-invalid')).toBe(false);
     await go(input(second, m.correction_value()));
     // Removing an earlier grouped row must never retarget the rejected second ingredient.
+    const rejectedControl = input(second, m.correction_value());
+    const feedback = rejectedControl.getAttribute('aria-describedby');
+    await cancelRemoval(first);
+    await cancelRemoval(instructions);
+    expect(input(second, m.correction_value())).toBe(rejectedControl);
+    expect(rejectedControl.getAttribute('aria-describedby')).toBe(feedback);
     await click(first, m.recipe_remove_field());
+    await click(first, m.recipe_remove_field());
+    expect(host.contains(first)).toBe(false);
+    expect(second.contains(window.document.activeElement as unknown as Node)).toBe(true);
+    expect(input(second, m.correction_value())).toBe(rejectedControl);
+    expect(rejectedControl.getAttribute('aria-describedby')).toBe(feedback);
     await go(input(second, m.correction_value()));
     await replace(input(second, m.correction_value()), '450 ml water');
     expect(host.querySelector('[aria-invalid="true"]')).toBeNull();
@@ -757,9 +814,14 @@ test('Recipe creation and current correction share complete frames with independ
       const reading = section(host, fixture.release.properties['schema:cookTime']!.labels.en!);
       await click(reading, m.recipe_correct());
       const pending = section(host, fixture.release.properties['schema:cookTime']!.labels.en!, true);
+      await click(pending, m.recipe_remove_field());
+      const oldRemove = queued(within(pending).getByRole('button', { name: m.recipe_remove_field() }));
       const oldSubmit = queued(within(pending).getByRole('button', { name: m.correction_submit() }));
       await click(pending, m.correction_submit());
       await entered.promise;
+      await act(async () => oldRemove());
+      expect(host.contains(pending)).toBe(true);
+      expect(within(pending).getByRole('button', { name: m.recipe_remove_field() }).matches(':disabled')).toBe(true);
       expect(posts(fixture, '/candidates')).toHaveLength(1);
       await show(boundary('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11'));
       await until(() => !!host.querySelector('select'));
@@ -767,6 +829,7 @@ test('Recipe creation and current correction share complete frames with independ
       outside.focus();
       await act(async () => {
         oldSubmit();
+        oldRemove();
         gate.resolve(delivery);
       });
       await settle();
@@ -781,6 +844,7 @@ test('Recipe creation and current correction share complete frames with independ
       await until(() => posts(fixture, '/candidates').length === 2);
       expect(posts(fixture, '/candidates')[1]!.key).not.toBe(posts(fixture, '/candidates')[0]!.key);
       await until(() => fresh.textContent!.includes(m.correction_proposed()));
+      expect(within(fresh).getByRole('button', { name: m.recipe_remove_field() }).matches(':disabled')).toBe(true);
     }
     // A retired recipe query cannot deposit its old reading after a new reader loads.
     for (const delivery of ['success', 'failure', 'throw'] as const) {

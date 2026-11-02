@@ -94,6 +94,7 @@ Recipe creation rejection focuses the first known correction; editing clears onl
 and unknown server addresses stay unlinked until validation runs again. Errors retain stable language and fact
 row identities when another row is removed. Corrections preserve all other terms, facts, instructions and original
 declarations; document and subject-picker errors describe their field groups and lead into the editable control.
+Removing a populated unsent recipe field confirms locally, including authored text, language, licence, original-work declaration or citations; Cancel or Escape preserves the row and sibling feedback, and confirmation focuses the next usable control or a preceding survivor while sealed commands stay locked.
 
 ## Correct names and descriptions
 

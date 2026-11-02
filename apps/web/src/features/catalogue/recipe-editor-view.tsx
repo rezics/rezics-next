@@ -575,6 +575,7 @@ function RecipeEditorLive({
                 locale={locale}
                 search={search}
                 disabled={locked || session !== 'signed-in'}
+                removalAllowed={() => !running.current && !pending.current && !locked && !created}
                 transport={transport}
                 refreshDefinitions={refreshCurrentDefinitions}
                 onState={(patch) =>
@@ -594,7 +595,8 @@ function RecipeEditorLive({
                   setRows((previous) => previous.map((entry) => (entry.id === row.id ? { ...entry, original } : entry)))
                 }
                 onRemove={() => {
-                  setRows(rows.filter((entry) => entry.id !== row.id));
+                  if (!lifetime.active() || running.current || pending.current || locked || created) return;
+                  setRows((previous) => previous.filter((entry) => entry.id !== row.id));
                   clearCorrections((error) => error.owner === recipeRowId(termsId, row.id));
                 }}
               />
@@ -738,6 +740,7 @@ function RecipeFieldLive({
   locale,
   search,
   disabled,
+  removalAllowed,
   transport,
   refreshDefinitions,
   review,
@@ -754,6 +757,7 @@ function RecipeFieldLive({
   locale: string;
   search: EntityPickerSearch;
   disabled: boolean;
+  removalAllowed: () => boolean;
   transport: RecipeTransport;
   refreshDefinitions: () => Promise<boolean>;
   review?: (property: string, slot: CandidateSlot | undefined, session?: string) => CandidateTransport;
@@ -791,6 +795,71 @@ function RecipeFieldLive({
   const command = row.command;
   const wasUncertain = !!command && row.uncertain === true;
   const frozen = disabled || busy || !!command || result?.ok === true || reviewRequired;
+  const removalLocked = disabled || busy || !!command || result?.ok === true || row.uncertain === true;
+  const section = useRef<HTMLElement>(null);
+  const removeTrigger = useRef<HTMLButtonElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const restoreRemovalFocus = useRef(false);
+  const [removingId, setRemovingId] = useState<string>();
+  const confirmingRemoval = removingId === row.id;
+  // A queued confirmation must use the current lock and stable row, even after a submit or retirement.
+  const removal = useRef({ locked: removalLocked, id: row.id, onRemove, removalAllowed });
+  removal.current = { locked: removalLocked, id: row.id, onRemove, removalAllowed };
+  const canRemove = () =>
+    lifetime.active() &&
+    !running.current &&
+    !removal.current.locked &&
+    removal.current.id === row.id &&
+    removal.current.removalAllowed();
+  useLayoutEffect(() => {
+    if (removalLocked || !lifetime.active()) return;
+    if (confirmingRemoval) cancelButton.current?.focus();
+    else if (restoreRemovalFocus.current) {
+      removeTrigger.current?.focus();
+      restoreRemovalFocus.current = false;
+    }
+  }, [confirmingRemoval, removalLocked, lifetime]);
+  const cancelRemoval = () => {
+    if (!canRemove()) return;
+    restoreRemovalFocus.current = true;
+    setRemovingId(undefined);
+  };
+  const remove = () => {
+    const root = section.current;
+    if (!canRemove() || !root?.isConnected) return;
+    const controls = [
+      ...(root.parentElement?.querySelectorAll<HTMLElement>(
+        'button, input, select, textarea, [tabindex="0"], [contenteditable="true"]',
+      ) ?? []),
+    ];
+    const first = controls.findIndex((control) => root.contains(control));
+    const last = controls.findLastIndex((control) => root.contains(control));
+    [...controls.slice(last + 1), ...controls.slice(0, first).reverse()]
+      .find(
+        (control) =>
+          !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
+          !control.closest('[hidden], [inert]'),
+      )
+      ?.focus();
+    removal.current.onRemove();
+  };
+  const hasValue = (value: unknown): boolean => {
+    if (typeof value === 'string') return !!value.trim();
+    if (value == null) return false;
+    if (typeof value === 'object') return Object.values(value).some(hasValue);
+    return true;
+  };
+  const populatedPart = (part: StatementInput | StatementInput['references'][number]['parts'][number]) =>
+    part.value.type !== 'value' || hasValue(part.value.content);
+  const populated =
+    (authored
+      ? hasDocumentContent(authored.document) || !!authored.language.trim() || !!authored.licence.trim()
+      : populatedPart(row.statement)) ||
+    !!row.original ||
+    !!picked.length ||
+    !!citation.trim() ||
+    row.statement.qualifiers?.some(populatedPart) ||
+    row.statement.references.some((reference) => reference.parts.some(populatedPart));
   const updateAuthored = (next: AuthoredField) => {
     clearCorrection(`${fieldId}-replace`);
     setAuthored(next);
@@ -852,7 +921,7 @@ function RecipeFieldLive({
     }
   }
   return (
-    <section className="min-w-0">
+    <section ref={section} className="min-w-0">
       <ContentItemFrame as="div" className={recipePanelClassName}>
         <ContentItemHeading id={`${fieldId}-heading`} className="font-semibold">
           {label}
@@ -1032,15 +1101,55 @@ function RecipeFieldLive({
         </fieldset>
         {reviewRequired && <p role="alert">{m.catalogue_create_invalid_field({}, o)}</p>}
         <div data-content-item-slot="actions" className="flex min-w-0 flex-wrap gap-3">
-          <Button
-            className={recipeActionClassName}
-            type="button"
-            variant="ghost"
-            disabled={disabled || busy || !!command || result?.ok === true}
-            onClick={onRemove}
-          >
-            {m.recipe_remove_field({}, o)}
-          </Button>
+          {confirmingRemoval ? (
+            <div
+              role="group"
+              aria-label={m.candidate_confirm_title({ action: m.recipe_remove_field({}, o) }, o)}
+              className="space-y-2"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  cancelRemoval();
+                }
+              }}
+            >
+              <p>{m.candidate_confirm_title({ action: m.recipe_remove_field({}, o) }, o)}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  ref={cancelButton}
+                  className={recipeActionClassName}
+                  type="button"
+                  variant="outline"
+                  disabled={removalLocked}
+                  onClick={cancelRemoval}
+                >
+                  {m.candidate_cancel({}, o)}
+                </Button>
+                <Button
+                  className={recipeActionClassName}
+                  type="button"
+                  variant="destructive"
+                  disabled={removalLocked}
+                  onClick={remove}
+                >
+                  {m.recipe_remove_field({}, o)}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              ref={removeTrigger}
+              className={recipeActionClassName}
+              type="button"
+              variant="ghost"
+              disabled={removalLocked}
+              onClick={() => {
+                if (canRemove()) populated ? setRemovingId(row.id) : remove();
+              }}
+            >
+              {m.recipe_remove_field({}, o)}
+            </Button>
+          )}
         </div>
         {row.uncertain && (!result || !result.ok) ? (
           <EditorFailure reason="unavailable" locale={locale} />
