@@ -53,16 +53,28 @@ export function bindIdentityRatingPage(
     after: page.after,
     next: page.next,
     terminal: page.terminal,
-    items: Object.freeze(page.items.map((item) => Object.freeze({
-      id: item.id,
-      revision: item.revision,
-      targetId: item.targetId,
-      units: item.units,
-    }))),
+    items: Object.freeze(
+      page.items.map((item) =>
+        Object.freeze({
+          id: item.id,
+          revision: item.revision,
+          targetId: item.targetId,
+          units: item.units,
+        }),
+      ),
+    ),
   });
   const selection = JSON.stringify({
     scope: [scope.subjectId, scope.visibility, scope.securityRevision],
-    page: [snapshot.pageId, snapshot.ownerId, snapshot.ownerRevision, snapshot.identityEpoch, snapshot.after, snapshot.next, snapshot.terminal],
+    page: [
+      snapshot.pageId,
+      snapshot.ownerId,
+      snapshot.ownerRevision,
+      snapshot.identityEpoch,
+      snapshot.after,
+      snapshot.next,
+      snapshot.terminal,
+    ],
     items: snapshot.items.map((item) => [item.id, item.revision, item.targetId, item.units]),
   });
   const digest = createHash('sha256').update(selection).digest('hex');
