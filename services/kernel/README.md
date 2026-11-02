@@ -439,7 +439,8 @@ Growth checks support `step` and `series` rules. `series` is the default; `check
 configuration error. The only checks that use step by default are in `test/support/growth-baseline.ts`; each entry must
 match a name declared directly on a `checkGrowth` call in its repository-relative test file. Finite generated names
 from literal loop axes and literal conditional choices are recognized without running the fixture. Each entry records
-the check and triage reason. The list may only shrink, and new checks are never added. A listed check may not set `rule`
+the check and triage reason. When a baselined check is renamed, update its existing entry to its new declared name.
+The list may only shrink, and new checks are never added. A listed check may not set `rule`
 explicitly. When rows, blocks and statements all pass the series rule, the
 harness fails with instructions to delete the entry. Owners remove an entry in the same change that fixes the fixture or
 bound so series establishes the derivation; declare `indexProbes` for index-level block steps where needed. A growth
