@@ -23,7 +23,12 @@ import type { SuggestionResult } from '../suggestions';
 import { headerSearchAction, removesHeaderScope } from './authority';
 import { useHeaderSearchFilterRegion, type HeaderSearchFilterRegion } from './filter-region';
 import { ScopeChip } from './scope-chip';
-import { initialHeaderSearchState, reduceHeaderSearchState, type HeaderSearchState } from './state';
+import {
+  headerSearchScopeKey,
+  initialHeaderSearchState,
+  reduceHeaderSearchState,
+  type HeaderSearchState,
+} from './state';
 import { loadGlobalHeaderSuggestions, type HeaderSuggestionLoader } from './suggestions';
 import { RezicsMark } from '../../shell/mobile-mark';
 import { RecentPanel, type SearchDiscovery } from '../recent-panel';
@@ -40,6 +45,25 @@ import { useSearchRetryWait } from '../search-recovery-retry';
 const controlFocus =
   'focus-visible:ring-0 focus-visible:border-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-2';
 const compactSearch = '(max-width: 1023px)';
+
+type HeaderSuggestionOwner = {
+  sessionKey: string | null;
+  locale: string;
+  query: string;
+  scopeKey: string;
+  loader: HeaderSuggestionLoader | undefined;
+};
+
+function sameHeaderSuggestionOwner(a: HeaderSuggestionOwner | null, b: HeaderSuggestionOwner): boolean {
+  return Boolean(
+    a &&
+      a.sessionKey === b.sessionKey &&
+      a.locale === b.locale &&
+      a.query === b.query &&
+      a.scopeKey === b.scopeKey &&
+      a.loader === b.loader,
+  );
+}
 
 export type HeaderSearchProps = {
   locale: string;
@@ -470,6 +494,13 @@ function HeaderSearchController({
   const [state, dispatch] = useReducer(reduceHeaderSearchState, undefined, () =>
     initialHeaderSearchState(scope, initialQuery),
   );
+  const suppliedScopeKey = headerSearchScopeKey(scope);
+  const appliedScopeKey = useRef(suppliedScopeKey);
+  const scopeChanged = suppliedScopeKey !== appliedScopeKey.current;
+  // A new supplied scope takes ownership during render; the reducer sync follows in layout.
+  const requestScope = scopeChanged ? scope : state.scope;
+  const requestScopeKey = headerSearchScopeKey(requestScope);
+  const requestState = requestScope === state.scope ? state : { ...state, scope: requestScope };
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -484,15 +515,43 @@ function HeaderSearchController({
   const resultsRetired = useRef(false);
   currentSession.current = sessionKey;
   const sessionMatches = sessionKey !== null && sessionKey === observedSession;
+  const loader = requestScope ? loadScopedSuggestions : loadSuggestions;
+  const owner: HeaderSuggestionOwner = {
+    sessionKey,
+    locale,
+    query: requestState.query,
+    scopeKey: requestScopeKey,
+    loader,
+  };
+  const renderedOwner = useRef(owner);
+  renderedOwner.current = owner;
+  const committedOwner = useRef(owner);
+  const suggestionsOwner = useRef<HeaderSuggestionOwner | null>(null);
+  const resultOwner = useRef<HeaderSuggestionOwner | null>(null);
+  const requestGeneration = useRef(0);
   const sessionIsCurrent = () =>
     sessionMatches &&
     currentSession.current === sessionKey &&
     (!readSession || headerSearchSessionKey(readSession()) === sessionKey);
   // Mask during render as well as clearing stored state before input can select an old option.
-  const canSelectSuggestion = () => sessionIsCurrent() && !resultsRetired.current;
-  const visibleState: HeaderSearchState = sessionMatches
-    ? state
-    : { ...state, suggestions: 'idle', result: undefined, retryAt: undefined, activeIndex: -1 };
+  const canSelectSuggestion = () =>
+    sessionIsCurrent() &&
+    sameHeaderSuggestionOwner(renderedOwner.current, owner) &&
+    sameHeaderSuggestionOwner(resultOwner.current, owner) &&
+    !resultsRetired.current &&
+    requestState.suggestions === 'ready' &&
+    Boolean(requestState.result);
+  const suggestionsCurrent = sameHeaderSuggestionOwner(suggestionsOwner.current, owner);
+  const resultCurrent =
+    sameHeaderSuggestionOwner(resultOwner.current, owner) && !resultsRetired.current;
+  const visibleState: HeaderSearchState =
+    sessionMatches && suggestionsCurrent
+      ? {
+          ...requestState,
+          result: resultCurrent ? requestState.result : undefined,
+          activeIndex: resultCurrent ? requestState.activeIndex : -1,
+        }
+      : { ...requestState, suggestions: 'idle', result: undefined, retryAt: undefined, activeIndex: -1 };
   const [attempt, retry] = useReducer((value: number) => value + 1, 0);
   const [composing, setComposing] = useState(false);
   const [queryLimitError, setQueryLimitError] = useState(false);
@@ -500,64 +559,104 @@ function HeaderSearchController({
   useLayoutEffect(
     () =>
       subscribeSession?.(() => {
+        requestGeneration.current += 1;
         resultsRetired.current = true;
+        suggestionsOwner.current = null;
+        resultOwner.current = null;
         request.current?.();
+        request.current = null;
         dispatch({ type: 'invalidate' });
         retry();
       }),
     [subscribeSession],
   );
   useLayoutEffect(() => {
+    if (appliedScopeKey.current === suppliedScopeKey) return;
+    appliedScopeKey.current = suppliedScopeKey;
+    dispatch({ type: 'sync-scope', scope });
+  }, [suppliedScopeKey]);
+  useLayoutEffect(() => {
+    if (sameHeaderSuggestionOwner(committedOwner.current, owner)) return;
+    committedOwner.current = owner;
+    requestGeneration.current += 1;
+    resultsRetired.current = true;
+    suggestionsOwner.current = null;
+    resultOwner.current = null;
+    request.current?.();
+    request.current = null;
+    dispatch({ type: 'invalidate' });
+  }, [owner.sessionKey, owner.locale, owner.query, owner.scopeKey, owner.loader]);
+  useLayoutEffect(() => {
+    requestGeneration.current += 1;
+    resultsRetired.current = true;
+    suggestionsOwner.current = null;
+    resultOwner.current = null;
     request.current?.();
     request.current = null;
     dispatch({ type: 'invalidate' });
     observeSession(sessionKey);
   }, [sessionKey]);
   useEffect(() => {
-    dispatch({ type: 'sync-scope', scope });
-  }, [scope]);
-  useEffect(() => {
     dispatch({ type: 'sync-query', query: initialQuery });
   }, [initialQuery]);
   useEffect(() => {
     if (!sessionIsCurrent()) return;
-    if (!state.expanded || !state.query.trim() || composing) return;
-    if (!validSuggestionText(state.query)) {
+    if (!requestState.expanded || !requestState.query.trim() || composing) return;
+    if (!validSuggestionText(requestState.query)) {
+      suggestionsOwner.current = owner;
+      resultOwner.current = null;
+      resultsRetired.current = false;
       dispatch({ type: 'suggestions', state: 'invalid' });
       return;
     }
-    const loader = state.scope ? loadScopedSuggestions : loadSuggestions;
-    if (!loader || !headerSearchAction(locale, state.scope)) {
+    if (!loader || !headerSearchAction(locale, requestScope)) {
+      suggestionsOwner.current = owner;
+      resultOwner.current = null;
+      resultsRetired.current = false;
       dispatch({ type: 'suggestions', state: 'unavailable' });
       return;
     }
+    suggestionsOwner.current = owner;
+    resultOwner.current = null;
+    resultsRetired.current = true;
     dispatch({ type: 'suggestions', state: 'loading' });
+    const generation = ++requestGeneration.current;
+    const requestIsCurrent = () =>
+      generation === requestGeneration.current &&
+      sameHeaderSuggestionOwner(renderedOwner.current, owner) &&
+      sessionIsCurrent();
     const cancel = startTypeahead(
       loader,
-      state.query,
+      requestState.query,
       locale,
-      state.scope,
+      requestScope,
       (result) => {
-        if (sessionIsCurrent()) {
+        if (requestIsCurrent()) {
+          suggestionsOwner.current = owner;
+          resultOwner.current = owner;
           resultsRetired.current = false;
           dispatch({ type: 'suggestions', state: result.subjects.length ? 'ready' : 'empty', result });
         }
       },
       (failure, retryAt) => {
-        if (sessionIsCurrent()) dispatch({ type: 'suggestions', state: failure, retryAt });
+        if (requestIsCurrent()) {
+          suggestionsOwner.current = owner;
+          resultOwner.current = null;
+          resultsRetired.current = false;
+          dispatch({ type: 'suggestions', state: failure, retryAt });
+        }
       },
     );
     request.current = cancel;
     return cancel;
   }, [
-    state.query,
-    state.scope,
-    state.expanded,
+    requestState.query,
+    requestScopeKey,
+    requestState.expanded,
     locale,
     composing,
     attempt,
-    loadSuggestions,
-    loadScopedSuggestions,
+    loader,
     sessionKey,
     sessionMatches,
     readSession,
@@ -720,7 +819,7 @@ function HeaderSearchController({
       locale={locale}
       queryLimitError={queryLimitError}
       fields={fields}
-      region={state.scope ? null : region}
+      region={requestState.scope ? null : region}
       inputRef={input}
       formRef={form}
       triggerRef={trigger}
@@ -734,8 +833,8 @@ function HeaderSearchController({
       }}
       onSuggestion={(href) => {
         if (!canSelectSuggestion()) return;
-        if (state.scope || isWithinGlobalSearchQueryLimit(state.query))
-          history?.remember(state.query, state.scope, searchLanguages(state.scope));
+        if (requestState.scope || isWithinGlobalSearchQueryLimit(requestState.query))
+          history?.remember(requestState.query, requestState.scope, searchLanguages(requestState.scope));
         visit(href);
       }}
       onActive={(index) => {
@@ -758,7 +857,7 @@ function HeaderSearchController({
           if (!state.expanded) open();
           const query = event.currentTarget.value;
           dispatch({ type: 'query', query });
-          if (state.scope || isWithinGlobalSearchQueryLimit(query)) setQueryLimitError(false);
+          if (requestState.scope || isWithinGlobalSearchQueryLimit(query)) setQueryLimitError(false);
         },
         onCompositionStart: () => {
           request.current?.();
@@ -768,7 +867,7 @@ function HeaderSearchController({
         onCompositionEnd: (event) => {
           const query = event.currentTarget.value;
           dispatch({ type: 'query', query });
-          if (state.scope || isWithinGlobalSearchQueryLimit(query)) setQueryLimitError(false);
+          if (requestState.scope || isWithinGlobalSearchQueryLimit(query)) setQueryLimitError(false);
           setComposing(false);
         },
         onKeyDown: (event) => {
@@ -779,7 +878,7 @@ function HeaderSearchController({
             open();
             return;
           }
-          if (removesHeaderScope(event.key, state.query, state.scope)) {
+          if (removesHeaderScope(event.key, requestState.query, requestState.scope)) {
             request.current?.();
             event.preventDefault();
             dispatch({ type: 'remove-scope' });
@@ -799,31 +898,31 @@ function HeaderSearchController({
           ) {
             event.preventDefault();
             const hit = subjects[visibleState.activeIndex]!;
-            if (state.scope || isWithinGlobalSearchQueryLimit(state.query))
-              history?.remember(state.query, state.scope, searchLanguages(state.scope));
+            if (requestState.scope || isWithinGlobalSearchQueryLimit(requestState.query))
+              history?.remember(requestState.query, requestState.scope, searchLanguages(requestState.scope));
             visit(subjectHref({ id: hit.id, label: localizedLabel(hit.labels, locale).text }, locale).href);
           }
         },
       }}
       formProps={{
         onSubmit: (event) => {
-          const action = headerSearchAction(locale, state.scope);
-          if (composing || !action || !state.query.trim()) {
+          const action = headerSearchAction(locale, requestState.scope);
+          if (composing || !action || !requestState.query.trim()) {
             event.preventDefault();
             return;
           }
-          if (!state.scope && !isWithinGlobalSearchQueryLimit(state.query)) {
+          if (!requestState.scope && !isWithinGlobalSearchQueryLimit(requestState.query)) {
             event.preventDefault();
             setQueryLimitError(true);
             return;
           }
           setQueryLimitError(false);
-          history?.remember(state.query, state.scope, searchLanguages(state.scope));
+          history?.remember(requestState.query, requestState.scope, searchLanguages(requestState.scope));
           if (!onNavigate) return;
           event.preventDefault();
           const url = new URL(action, window.location.origin);
           url.search = new URLSearchParams(new FormData(event.currentTarget) as never).toString();
-          url.searchParams.set('q', state.query);
+          url.searchParams.set('q', requestState.query);
           visit(`${url.pathname}${url.search}`);
         },
         onBlur: (event) => {

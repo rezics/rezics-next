@@ -21,12 +21,13 @@ messages, and recovery actions) uses the region's supplied locale; DiscoveryKind
 without one. Global search accepts drafts up to 512 UTF-8 bytes; scoped inputs keep their existing
 256 UTF-16-unit cap, and typeahead keeps its independent 64-code-point prefix bound.
 
-Header suggestions retire on an unsettled session or a change to its state, subject or CSRF observation; a settled
-session reloads the retained draft, while isolated presenters without a session observation use anonymous identity.
-Trending and header-suggestion retries stay manual: native Retry-After disables retry until its minimum delay, without
-polling; session observations (including CSRF changes) and locale changes retire prior suggestions and pending requests.
-Trending retries stay manual: native Retry-After disables retry until its minimum delay, without polling; session
-observations (including CSRF changes) and locale changes retire prior suggestions and pending requests.
+Header suggestion ownership follows query, locale, the full value of the supplied SearchScope, the active loader and
+session observation; equivalent scope objects retain ownership. Locale, scope or loader changes hide old results
+during render and retire their requests before selection. An unsettled session or a change to its state, subject or
+CSRF observation also retires results; a settled session reloads the retained draft, while isolated presenters without
+a session observation use anonymous identity. Trending and header-suggestion retries stay manual: native Retry-After
+disables retry until its minimum delay, without polling; session observations (including CSRF changes) and locale
+changes retire prior suggestions and pending requests.
 Native Trending may repeat a query when distinct sources share a public label; `literalQuery` is the quoted display,
 so a repeated query repeats that display, and each delivered `{query, display}` occurrence keeps its own row identity.
 A successful manual retry keeps keyboard focus on Retry when that control remains, otherwise the first term or the named

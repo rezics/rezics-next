@@ -39,6 +39,13 @@ function retireRetryAt(state: HeaderSearchState): HeaderSearchState {
   return current;
 }
 
+/** SearchScope is both presentation and an input to the installed scoped suggestion loader. */
+export function headerSearchScopeKey(scope?: SearchScope): string {
+  return JSON.stringify(
+    scope ? [scope.kind, scope.id, scope.name, scope.image ?? null, scope.searchAction ?? null] : null,
+  );
+}
+
 export function initialHeaderSearchState(scope?: SearchScope, query = ''): HeaderSearchState {
   return { expanded: false, phoneSheet: false, scope, query, suggestions: 'idle', activeIndex: -1 };
 }
