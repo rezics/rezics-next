@@ -13,6 +13,9 @@ import { validateCountedConfig, type CountedCheck } from './growth-counters.ts';
 const METRICS = ['rows', 'blocks', 'statements'] as const;
 const BYTE_METRICS = ['requestBytes', 'responseBytes'] as const;
 
+export const COLD_BACKEND_DISCARD_LIMIT = 4;
+const MAX_GROWTH_SAMPLING_WORK = 64;
+
 type GrowthScales =
   | readonly [number, number, number]
   | readonly [number, number, number, number]
@@ -108,6 +111,11 @@ export function admitGrowthCheck(check: GrowthCheckConfiguration): AdmittedGrowt
   if (!Number.isSafeInteger(warmups) || warmups < 1)
     throw new RangeError(
       `${check.name}: warmups: Growth warmups must be a positive safe integer; use the warmup hook for consumable state`,
+    );
+  const samplingWork = scales.length * (1 + warmups + repetitions + COLD_BACKEND_DISCARD_LIMIT);
+  if (samplingWork > MAX_GROWTH_SAMPLING_WORK)
+    throw new RangeError(
+      `${check.name}: sampling work (${samplingWork}) exceeds the aggregate limit of ${MAX_GROWTH_SAMPLING_WORK} units (scales × (1 grow + warmups + repetitions + ${COLD_BACKEND_DISCARD_LIMIT} cold-backend discards))`,
     );
 
   const bounds = {} as Record<Metric, Bound>;

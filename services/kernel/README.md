@@ -631,7 +631,13 @@ Keep the default `warmups`. When the operation uses up the state it measures, pa
 `warmup`, which runs the same code path on spare state (another probe, a fresh key) so the measured run is not the
 backend's first. `checkGrowth` refuses fewer than one warm-up per scale. Every periodic job step needs its own growth
 check on rows, blocks and statements. After each scale's `grow`, it settles the whole database
-with ANALYZE, so planner statistics do not depend on autovacuum; seed in `grow`, not `operation`. A `GrowthDatabase`
+with ANALYZE, so planner statistics do not depend on autovacuum; seed in `grow`, not `operation`. Admission snapshots
+the configuration and caps aggregate sampling work at 64 units before any hook:
+`scales.length * (1 grow + warmups + repetitions + 4 possible cold-backend discards)`. A scale's `grow`, each
+warm-up, each requested measured run and each possible cold-backend discard count once; `prepare` accompanies each
+measured attempt. Existing callers peak at 45 units (three scales, five warm-ups, five measured runs and four
+possible discards per scale, including one `grow` per scale). Defaults remain admitted even at five scales (55 units).
+Excess requests fail as a `RangeError`; the harness never truncates requested samples. A `GrowthDatabase`
 has one active capture: measured captures reject same-database nesting before the child callback runs. Explicit
 `captureWarmup` captures record warm-up writes and permit nested captures within that warm-up, but cannot replace an
 active measured capture. Captures on different databases can still nest. `checkGrowth` holds ownership of its database

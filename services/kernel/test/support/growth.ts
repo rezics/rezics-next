@@ -44,7 +44,7 @@ import {
   type StatementOccurrences,
 } from './growth-report.ts';
 import { appendGrowthProfile, growthProfileExportMode, type GrowthProfileExportMode } from './growth-profile-output.ts';
-import { admitGrowthCheck, type AdmittedGrowthCheck } from './growth-config.ts';
+import { admitGrowthCheck, COLD_BACKEND_DISCARD_LIMIT, type AdmittedGrowthCheck } from './growth-config.ts';
 import {
   countedSample,
   countedViolations,
@@ -772,8 +772,6 @@ export function withoutCatalogStatements(name: string, captureResult: Capture): 
 
 /** Resolves with the report, or rejects with GrowthBoundError (message prefixed by the check name). */
 type OperationBackends = Set<number> & { readonly transactions: Map<GrowthDatabase, Map<number, number>> };
-
-const COLD_BACKEND_DISCARD_LIMIT = 4;
 
 function warmedEvidenceSamples(samples: readonly ReportSample[]): ReportSample[] | undefined {
   const warmed: ReportSample[] = [];
