@@ -1,8 +1,26 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { candidateSession, useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { useSession } from '../../session/query';
+import { sessionQuery, useSession } from '../../session/query';
+import { normalizeSessionObservation } from '../../session/browser-state';
 import { loadSubjectChange, loadSubjectChanges } from './subject-changes-actions';
 import { SubjectChanges, SubjectChangesPage } from './subject-changes-page';
+
+// useSession deliberately reports unknown for query errors. History also observes the
+// installed query's transport state so those errors offer the same explicit recovery.
+function useHistorySessionRead() {
+  const client = useQueryClient();
+  const subscribe = useCallback(
+    (changed: () => void) =>
+      client.getQueryCache().subscribe(({ query }) => {
+        if (query.queryKey.length === 1 && query.queryKey[0] === sessionQuery.queryKey[0]) changed();
+      }),
+    [client],
+  );
+  const snapshot = useCallback(() => client.getQueryState(sessionQuery.queryKey), [client]);
+  const read = useSyncExternalStore(subscribe, snapshot, () => undefined);
+  return { client, read };
+}
 
 /** One admitted visit owns both its observed reader and its submitted CSRF header. */
 export const SubjectChangesSession = candidateSession(function SubjectChangesSession({
@@ -15,11 +33,21 @@ export const SubjectChangesSession = candidateSession(function SubjectChangesSes
   currentHref: string;
 }) {
   const observed = useSession();
+  const { client, read } = useHistorySessionRead();
   const work = useCatalogueLifetime('subject-history');
   const transport = useMemo(() => {
     const headers = observed.csrfToken ? { 'X-CSRF-Token': observed.csrfToken } : {};
     const address = () => {
-      if (!work.active()) throw new Error('Retired subject history');
+      const query = client.getQueryState(sessionQuery.queryKey);
+      const current = query?.status === 'success' ? normalizeSessionObservation(query.data) : null;
+      if (
+        !work.active() ||
+        !current ||
+        current.state !== observed.state ||
+        current.subject !== observed.subject ||
+        current.csrfToken !== observed.csrfToken
+      )
+        throw new Error('Retired subject history');
       return { id, locale, expectedReader: work.reader || null };
     };
     return {
@@ -28,17 +56,21 @@ export const SubjectChangesSession = candidateSession(function SubjectChangesSes
       detail: (revision: number, session?: string) =>
         loadSubjectChange({ data: { ...address(), revision, session }, headers }),
     };
-  }, [id, locale, work, observed.csrfToken]);
-  if (observed.state === 'unknown')
-    return <SubjectChangesPage state={{ loading: 'list' }} locale={locale} currentHref={currentHref} />;
-  if (observed.state === 'unavailable')
+  }, [client, id, locale, work, observed.state, observed.subject, observed.csrfToken]);
+  const unavailable = observed.state === 'unavailable' || read?.status === 'error';
+  if (observed.state === 'unknown' || unavailable)
     return (
       <SubjectChangesPage
-        state={{ failure: { kind: 'unavailable' } }}
+        state={
+          read?.fetchStatus === 'fetching' || !unavailable ? { loading: 'list' } : { failure: { kind: 'unavailable' } }
+        }
         locale={locale}
         currentHref={currentHref}
         onRetry={() => {
-          if (work.active()) window.location.reload();
+          if (!work.active() || client.getQueryState(sessionQuery.queryKey)?.fetchStatus === 'fetching') return;
+          // fetchQuery replaces the installed observation; candidateSession then grants
+          // a new lifetime only to its actual normalized reader and CSRF token.
+          void client.fetchQuery({ ...sessionQuery, staleTime: 0 }).catch(() => {});
         }}
       />
     );

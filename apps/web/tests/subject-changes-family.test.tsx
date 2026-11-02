@@ -1,13 +1,28 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type {
   ChangeDetail,
   ChangesState,
+  ChangesRead,
   ChangesTransport,
   DetailRead,
 } from '../src/features/catalogue/subject-changes';
+import * as start from '../.storybook/react-start';
+import type { BrowserSession } from '../src/session/browser-state';
+
+const unavailable = { state: 'unavailable', subject: null, csrfToken: null } as const;
+let sessionRead: () => Promise<BrowserSession> = async () => unavailable;
+let historyRead: (input: unknown) => Promise<ChangesRead> = async () => ({ kind: 'unavailable' });
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('../src/session/state', () => ({ readSessionState: () => sessionRead() }));
+mock.module('../src/features/catalogue/subject-changes-actions', () => ({
+  loadSubjectChanges: (input: unknown) => historyRead(input),
+  loadSubjectChange: async () => ({ kind: 'unavailable' }),
+}));
 
 // Authored UNRUN: actual mounted presentation and generated-client seams. Happy DOM
 // proves neither geometry nor native authorization; original native/lifetime tests remain owed.
@@ -161,7 +176,7 @@ test('the complete Subject history family keeps independent headings, bounded su
   let listFailure = false;
   let detailFailure = false;
   let pending: { promise: Promise<DetailRead> } | undefined;
-  const transport: ChangesTransport = {
+  let transport: ChangesTransport = {
     list: async (cursor, session) => {
       calls.push({ operation: 'list', operand: cursor, session });
       if (listFailure) return { kind: 'unavailable' };
@@ -295,6 +310,11 @@ test('the complete Subject history family keeps independent headings, bounded su
     expect(a.getAttribute('aria-busy')).toBe('true');
     expect(a.textContent).toContain(m.changes_detail_loading());
     expect([...a.querySelectorAll<HTMLButtonElement>('section button')].every((node) => node.disabled)).toBe(true);
+    const beforeRefresh = calls.length;
+    transport = { ...transport };
+    await showReaders();
+    expect(calls).toHaveLength(beforeRefresh);
+    expect(a.getAttribute('aria-busy')).toBe('true');
     observed = { ...observed, csrfToken: 'replacement-csrf' };
     await showReaders();
     await until(() => !!histories()[0]?.querySelector('ol button'));
@@ -568,6 +588,62 @@ test('the complete Subject history family keeps independent headings, bounded su
     oldDetailRetry();
     await settle();
     expect(calls).toHaveLength(afterUnmount);
+
+    // Recovery uses the installed query, preserving the address and retiring private work.
+    const { SubjectChangesSession } = await import('../src/features/catalogue/subject-changes-session');
+    const reload = mock(() => {});
+    Object.defineProperty(window.location, 'reload', { value: reload });
+    const address = { id: first.id, locale: 'en', currentHref: `/en/subjects/${first.id}` };
+    const requests: unknown[] = [];
+    historyRead = async (input) => {
+      requests.push(input);
+      return first.transport.list();
+    };
+    client.setQueryData(['session'], unavailable);
+    await render(<SubjectChangesSession {...address} />);
+    expect(host.textContent).toContain(m.changes_unavailable());
+    await click(host, m.changes_retry());
+    await until(() => host.textContent!.includes(m.changes_unavailable()));
+    sessionRead = async () => {
+      throw new Error('session temporarily failed');
+    };
+    await click(host, m.changes_retry());
+    await until(() => host.textContent!.includes(m.changes_unavailable()));
+    expect(button(host, m.changes_retry()).disabled).toBe(false);
+    expect(requests).toHaveLength(0);
+    const recovery = Promise.withResolvers<BrowserSession>();
+    sessionRead = () => recovery.promise;
+    await click(host, m.changes_retry());
+    expect(host.textContent).toContain(m.changes_loading());
+    await act(async () => recovery.resolve({ state: 'signed-in', subject: first.id, csrfToken: 'fresh-csrf' }));
+    await until(() => !!host.querySelector('ol button'));
+    expect(requests).toEqual([
+      {
+        data: { id: first.id, locale: 'en', expectedReader: first.id, cursor: undefined, session: undefined },
+        headers: { 'X-CSRF-Token': 'fresh-csrf' },
+      },
+    ]);
+    expect(host.querySelector('nav a')?.getAttribute('href')).toBe(address.currentHref);
+    let pendingList = Promise.withResolvers<ChangesRead>();
+    historyRead = async (input) => {
+      requests.push(input);
+      return pendingList.promise;
+    };
+    await click(host, m.changes_more());
+    const heldList = pendingList;
+    await act(async () => client.removeQueries({ queryKey: ['session'] }));
+    expect(host.querySelector('ol')).toBeNull();
+    pendingList = Promise.withResolvers<ChangesRead>();
+    await act(async () => client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null }));
+    expect(host.querySelector('ol')).toBeNull();
+    expect(requests.at(-1)).toMatchObject({ data: { expectedReader: null, session: undefined }, headers: {} });
+    await act(async () => heldList.resolve(await first.transport.list(changesCursor)));
+    expect(host.querySelector('ol')).toBeNull();
+    expect(host.querySelector('article')?.getAttribute('aria-busy')).toBe('true');
+    await act(async () => pendingList.resolve(await first.transport.list()));
+    await until(() => !!host.querySelector('ol button'));
+    expect(window.location.href).toBe('https://site.test/en');
+    expect(reload).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
     client.clear();

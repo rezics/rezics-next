@@ -311,66 +311,67 @@ function SubjectChangesReader({
 }) {
   const [state, dispatch] = useReducer(changesState, { loading: 'list' });
   const session = useRef<string | undefined>(undefined);
-  const running = useRef(false);
+  const running = useRef<number | null>(null);
+  const sequence = useRef(0);
   const mounted = useRef(false);
+  // A callback refresh is not a new admitted Subject/locale address.
+  const currentTransport = useRef(transport);
+  currentTransport.current = transport;
   const retryCursor = useRef<string | undefined>(undefined);
   const latest = useRef(state);
   latest.current = state;
   const active = () => mounted.current && work.active();
+  function begin() {
+    if (!active() || running.current !== null) return;
+    const operation = ++sequence.current;
+    running.current = operation;
+    return {
+      current: () => active() && running.current === operation,
+      finish: () => {
+        if (running.current === operation) running.current = null;
+      },
+    };
+  }
   useEffect(() => {
     mounted.current = true;
-    let cancelled = false;
-    const current = () => !cancelled && active();
-    if (current()) {
-      running.current = true;
-      void (async () => {
-        try {
-          const result = await transport.list();
-          if (!current()) return;
-          if (result.kind === 'ready') session.current = result.session;
-          dispatch({ type: 'list', result, more: false });
-        } catch {
-          if (current()) dispatch({ type: 'list', result: { kind: 'unavailable' }, more: false });
-        } finally {
-          if (current()) running.current = false;
-        }
-      })();
-    }
+    void load();
     return () => {
-      cancelled = true;
       mounted.current = false;
+      running.current = null;
     };
-  }, [transport, work]);
+  }, [work]);
   async function load(cursor?: string) {
-    if (!active() || running.current) return;
-    running.current = true;
+    // A continuation belongs only to the page that supplied it, including retries.
+    if (cursor !== undefined && cursor !== latest.current.page?.next) return;
+    const operation = begin();
+    if (!operation) return;
     retryCursor.current = cursor;
     dispatch({ type: 'list-start', more: cursor !== undefined });
     try {
-      const result = await transport.list(cursor, session.current);
-      if (!active()) return;
+      const result = await currentTransport.current.list(cursor, session.current);
+      if (!operation.current()) return;
       if (result.kind === 'ready') session.current = result.session ?? session.current;
       dispatch({ type: 'list', result, more: cursor !== undefined });
     } catch {
-      if (active()) dispatch({ type: 'list', result: { kind: 'unavailable' }, more: cursor !== undefined });
+      if (operation.current()) dispatch({ type: 'list', result: { kind: 'unavailable' }, more: cursor !== undefined });
     } finally {
-      if (active()) running.current = false;
+      operation.finish();
     }
   }
   async function select(revision: number) {
-    if (!active() || running.current || !latest.current.page?.revisions.some((row) => row.revision === revision))
-      return;
-    running.current = true;
+    if (!latest.current.page?.revisions.some((row) => row.revision === revision)) return;
+    const operation = begin();
+    if (!operation) return;
     dispatch({ type: 'detail-start', revision });
     try {
-      const result = await transport.detail(revision, session.current);
-      if (!active()) return;
+      const result = await currentTransport.current.detail(revision, session.current);
+      if (!operation.current()) return;
       if (result.kind === 'ready') session.current = result.session ?? session.current;
       dispatch({ type: 'detail', result });
     } catch {
-      if (active()) dispatch({ type: 'detail', result: { kind: 'unavailable' } });
+      if (operation.current()) dispatch({ type: 'detail', result: { kind: 'unavailable' } });
     } finally {
-      if (active()) running.current = false;
+      operation.finish();
     }
   }
   return (
@@ -383,7 +384,9 @@ function SubjectChangesReader({
         if (cursor !== null && cursor !== undefined && cursor === latest.current.page?.next) void load(cursor);
       }}
       onRetry={() => {
-        if (state === latest.current) void load(retryCursor.current);
+        if (state !== latest.current) return;
+        const cursor = retryCursor.current;
+        void load(cursor !== undefined && cursor === state.page?.next ? cursor : undefined);
       }}
       onSelect={(revision) => {
         void select(revision);
