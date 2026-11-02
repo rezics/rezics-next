@@ -7,14 +7,19 @@ import { getLocale } from '../src/paraglide/runtime.js';
 test('confirmed creation links to the saved rule instead of reloading a fresh create form', () => {
   const html = renderToStaticMarkup(
     <CollectionRuleControls
-      creating pending={false} conflict={false} hasFilter savedId="saved/id"
-      collectionId={null} refresh={() => {}}
+      creating
+      pending={false}
+      conflict={false}
+      hasFilter
+      savedId="saved/id"
+      collectionId={null}
+      refresh={() => {}}
     />,
   );
   expect(html).toContain(`href="/${getLocale()}/collections/saved%2Fid/rule"`);
   expect(html).toContain(m.library_rule_edit());
   expect(html).toContain(`href="/${getLocale()}/collections/saved%2Fid"`);
-  expect(html).toContain('type="submit" disabled=""');
+  expect(html).toMatch(/<button\b[^>]*type="submit"[^>]*\sdisabled=""/);
   expect(html).not.toContain(m.library_collection_reload());
 });
 
@@ -22,12 +27,17 @@ test('a refused draft or saved revision still offers explicit recovery without e
   for (const creating of [true, false]) {
     const html = renderToStaticMarkup(
       <CollectionRuleControls
-        creating={creating} pending={false} conflict hasFilter savedId={null}
-        collectionId={creating ? null : 'existing'} refresh={() => {}}
+        creating={creating}
+        pending={false}
+        conflict
+        hasFilter
+        savedId={null}
+        collectionId={creating ? null : 'existing'}
+        refresh={() => {}}
       />,
     );
     expect(html).toContain(m.library_collection_reload());
-    expect(html).toContain('type="submit" disabled=""');
+    expect(html).toMatch(/<button\b[^>]*type="submit"[^>]*\sdisabled=""/);
     expect(html).not.toContain(m.library_rule_edit());
   }
 });
