@@ -133,6 +133,9 @@ test('Album departure preserves all private siblings and exact retries, then per
     await act(async () => user.click(include));
     const year = input(property, m.correction_year()),
       citation = input(property, m.correction_url());
+    await act(async () =>
+      user.selectOptions(within(host).getByRole('combobox', { name: m.relation_property() }), 'schema:contributor'),
+    );
     const relationCitation = within(host).getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement;
     await act(async () => user.type(relationCitation, 'https://example.test/credit'));
     expect(unload()).toBe(true);
