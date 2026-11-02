@@ -86,7 +86,7 @@ test('retry evidence is a bounded manifest that names recoverable full evidence'
     expect(prompt).toContain('First failing command: bun test src/failing.test.ts');
     expect(prompt).not.toContain(`Continue from this retry manifest:\n${directory}`);
     expect(prompt).toContain(
-      'The fields are status, summary, blocker and approaches; a non-null blocker has kind and detail.',
+      'Finish with one JSON object: status, summary, blocker (null or kind and detail), checks, approaches.',
     );
     expect(prompt).not.toContain('"additionalProperties"');
   } finally {

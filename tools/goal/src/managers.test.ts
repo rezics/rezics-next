@@ -502,12 +502,14 @@ test('a Codex manager opening ends idle turns instead of sleeping and names its 
     await s.managers.start(s.spec);
     const opening = s.requests().find((r) => r.method === 'turn/start')?.params.input[0]?.text as string;
     expect(opening).not.toContain('use clock.sleep inside the active turn');
-    expect(opening).toContain('When no decision is pending, end the turn; do not use clock.sleep or poll.');
-    expect(opening).toContain('resumes this thread with a new turn when an inbox event arrives');
+    expect(opening).toContain('When no decision is pending, end the turn; do not use clock.sleep or poll');
+    expect(opening).toContain('the controller resumes this thread when an inbox event arrives');
     expect(opening).toContain(`ready briefs in ${join(s.path, 'state', 'backlog', 'refactor')}`);
+    expect(opening).toContain("Synthesize your workers' reports");
     expect(opening).toContain('at most 60 words each');
     expect(opening).toContain('Do not write receipts, status snapshots or lists of actions not taken.');
-    expect(opening).toContain('Read your brief and continuation once per session.');
+    expect(opening).toContain('Read your brief and continuation once per session');
+    expect(opening).toContain('CONTINUATION.md under 8,000 characters, replaced, not appended');
     expect(opening).toContain('Act on each stopped task within an hour');
   } finally {
     await s.close();
@@ -561,7 +563,7 @@ test('more than ten clock.sleep calls in an hour raise one alarm and one correct
     expect(alarms[0]!.event).toMatchObject({ kind: 'environment' });
     expect(alarms[0]!.event.summary).toContain('Manager manager called clock.sleep 11 times');
     expect(s.inbox.pending(manager.id).map((entry) => entry.event.summary)).toContain(
-      'Do not call clock.sleep. When no decision is pending, end the turn; the controller starts a new turn on this thread when an inbox event arrives.',
+      'Do not call clock.sleep: when no decision is pending, end the turn; the next inbox event starts a new one.',
     );
     // Other tool items are not sleeps, and a new hour starts a new count.
     await s.notify({

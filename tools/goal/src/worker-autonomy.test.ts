@@ -29,36 +29,33 @@ function promptTask(goal: string, extra: Partial<Task> = {}): Task {
 
 test('a dev product worker verifies premises, decides and informs its manager, and continues a larger outcome', () => {
   const prompt = workerPrompt(promptTask('web'), undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain("Verify the contract's premises");
+  expect(prompt).toContain("Check the contract's premises against your base first.");
+  expect(prompt).toContain('Write missing acceptance tests the contract names or implies');
+  expect(prompt).toContain('take the reversible option most consistent with the owner documents');
   expect(prompt).toContain(
-    'when the contract states an outcome without a test command for it, write its acceptance tests',
+    'record it in one line in your summary and the owning document, send it with `bun tools/goal/src/cli.ts inbox send web info "<decision>"`, and continue.',
   );
-  expect(prompt).toContain(
-    'take the reversible option most consistent with the owner documents and decided references',
-  );
-  expect(prompt).toContain(
-    '`bun tools/goal/src/cli.ts inbox send web info "<the decision in one line>" --task task-1`, and continue.',
-  );
-  expect(prompt).toContain('absent receipts or authority, are not blockers');
-  expect(prompt).toContain(
-    'Report a blocker only for two requirements in existing specs or tests that cannot both hold',
-  );
+  expect(prompt).toContain('Code another Goal has not delivered is not a blocker');
+  expect(prompt).toContain('A blocker is only two requirements in existing specs or tests that cannot both hold');
+  expect(prompt).not.toContain('receipt');
   expect(prompt).not.toContain('when the work needs a product decision the contract does not make');
-  expect(prompt).toContain('Research what the work needs yourself');
-  expect(prompt).toContain('Only for a question that needs a large survey');
+  expect(prompt).toContain('research the rest yourself');
+  expect(prompt).toContain('A question needing a large survey of products or sources is a `spec-conflict` blocker');
   expect(prompt).toContain('continuation brief at `.temp/continuation/<short-name>.md`');
-  expect(prompt).toContain('goal web and manager web');
-  expect(prompt).toContain('do not read the workflow skill, docs/development, architecture or scope');
-  expect(prompt).toContain('Keep the summary to at most 120 words');
-  expect(prompt).toContain('Keep blocker detail to at most 80 words');
+  expect(prompt).toContain('goal web, manager web');
+  expect(prompt).toContain(
+    'open the workflow skill, docs/development, architecture or scope only for a section it links',
+  );
+  expect(prompt).toContain('Summary at most 120 words');
+  expect(prompt).toContain('Blocker detail at most 80 words');
   expect(prompt).not.toContain('goal status');
   // Control-plane work keeps manager preflight and no continuation, but shares the conduct rules.
   const controlPlane = workerPrompt(promptTask('control-plane'), undefined, undefined, [], '/repo/main');
-  expect(controlPlane).not.toContain("Verify the contract's premises");
+  expect(controlPlane).not.toContain("Check the contract's premises");
   expect(controlPlane).not.toContain('.temp/continuation');
   expect(controlPlane).not.toContain('inbox send');
   expect(controlPlane).toContain('Unfinished work is not a blocker');
-  expect(controlPlane).toContain('Keep the summary to at most 120 words');
+  expect(controlPlane).toContain('Summary at most 120 words');
   expect(continuesItself(promptTask('web', { workspace: { module: 'apps/web', taskName: 'shared' } }))).toBe(false);
   expect(continuesItself(promptTask('web', { brief: { ...promptTask('web').brief, target: 'stabilize' } }))).toBe(
     false,
@@ -165,7 +162,7 @@ test('dependencies render as one factual line each, without receipt rules', () =
   expect(rendered).toContain('- `client`: not in your base; build against its contract.');
   expect(rendered).not.toContain('sourcePresence');
   expect(rendered).not.toContain('Treat code as installed');
-  expect(rendered).toContain('"boundary": "retry"');
+  expect(rendered).toContain('"boundary":"retry"');
 });
 
 const continuingWorker = (rest: string, other: string) => `#!/usr/bin/env bun

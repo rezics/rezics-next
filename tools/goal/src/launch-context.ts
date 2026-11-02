@@ -337,18 +337,19 @@ export function renderLaunchContext(context: LaunchContext | undefined): string 
       'No controller launch context was supplied. Dependency status is unknown: build against each dependency contract.',
     ].join('\n');
 
-  const json = JSON.stringify(
-    { version: context.version, boundary: context.boundary, origin: context.origin, task: context.task },
-    null,
-    2,
-  );
+  const json = JSON.stringify({
+    version: context.version,
+    boundary: context.boundary,
+    origin: context.origin,
+    task: context.task,
+  });
   const lines = context.dependencies.receipts.map(dependencyLine);
   while (lines.length && Buffer.byteLength(lines.join('\n')) + Buffer.byteLength(json) > MAX_RENDERED_BYTES)
     lines.pop();
   const omitted = (context.dependencies.required ?? context.dependencies.receipts.length) - lines.length;
   return [
     '## Current controller launch context',
-    `This is a fresh bounded snapshot for the current ${context.boundary} boundary. It supersedes future-tense or stale instructions in saved prompts, old retry manifests and earlier attempt results.`,
+    'This prompt and these facts supersede saved sessions, retry manifests and earlier results.',
     ...(lines.length || omitted > 0 ? ['Dependencies:', ...lines] : []),
     ...(omitted > 0 ? [`- ${omitted} more: not listed; build against their contracts.`] : []),
     '```json',

@@ -107,7 +107,7 @@ test('a different tool blocker resumes the same session and the retry prompt say
       expect(h.store.attempt({ taskId, attempt: 3 }).session).toBe('fixture-session');
       const prompt = readFileSync(join(h.store.task(taskId).worktree, '.temp/goal-test-prompts', '3'), 'utf8');
       expect(prompt).toContain('The retry manifest records a failure from an earlier attempt');
-      expect(prompt).toContain('Rerun the failing command before reporting any blocker');
+      expect(prompt).toContain('Rerun the failing command once before reporting any blocker');
     },
     { commit: true },
   );

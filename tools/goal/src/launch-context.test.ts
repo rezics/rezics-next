@@ -31,7 +31,7 @@ const resumed = args.includes('resume');
 mkdirSync('.temp/goal', { recursive: true });
 writeFileSync(join('.temp/goal', 'launch-' + attempt + '-' + (resumed ? 'resume' : 'start') + '.json'), JSON.stringify({ args, prompt }));
 console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session-' + process.env.GOAL_TASK_ID}));
-if (!resumed && !prompt.includes('"boundary": "wake"') && prompt.includes('BEGIN_WAITING_SESSION')) {
+if (!resumed && !prompt.includes('"boundary":"wake"') && prompt.includes('BEGIN_WAITING_SESSION')) {
   const id = randomUUID();
   const runPath = join('.temp/goal/checks/runs', id + '.json');
   const resultPath = join('.temp/goal/checks/results', id + '.json');
@@ -500,7 +500,7 @@ test.each([false, true])(
       expect(prompts).toHaveLength(1);
       expect(prompts[0]).toContain(revisedText);
       expect(prompts[0]).not.toContain('Write the requested result and commit it.');
-      expect(prompts[0]).toContain('checks:[]');
+      expect(prompts[0]).toContain('return success (blocker null, `"checks":[]`)');
       expect(contextFromPrompt(prompts[0]!).task).toMatchObject({
         attempt: 1,
         contractSha256: hash(revisedText),
@@ -744,7 +744,7 @@ test('fresh and normal retry argv carry current contract identity and supersede 
     expect(third.prompt).toContain(`- \`${dependency.id}\`: integrated in your base at \`${dependency.commit}\`.`);
     expect(JSON.stringify(latest)).not.toContain(staleResult);
     expect(third.prompt.indexOf('Historical future-tense retry manifest')).toBeLessThan(
-      third.prompt.indexOf('This is a fresh bounded snapshot for the current retry boundary'),
+      third.prompt.indexOf('This prompt and these facts supersede saved sessions'),
     );
   } finally {
     h.dispose();
@@ -825,7 +825,9 @@ test('held release resumes old sessions once with actual dependency source recei
         contractProof: 'verified',
       });
       expect(resumed.prompt).toContain(`- \`${dependency.id}\`: integrated in your base at \`${dependencyCommit}\`.`);
-      expect(resumed.prompt).toContain('supersedes future-tense or stale instructions');
+      expect(resumed.prompt).toContain(
+        'This prompt and these facts supersede saved sessions, retry manifests and earlier results.',
+      );
       expect(resumed.prompt).not.toContain('Historical future-tense instruction: wait for cleanup to merge');
       expect(h.store.attempts(task.id).filter((attempt) => attempt.attempt === 2)).toHaveLength(1);
     }
@@ -950,8 +952,9 @@ test('a same-session wake replaces stale remote policy with the complete amended
     expect(h.store.attempt(ref).checks).toEqual(waiting.checks);
     expect(resumed.prompt).toContain(currentText);
     expect(resumed.prompt).not.toContain(initialText);
-    expect(resumed.prompt).toContain('The full canonical contract below');
-    expect(resumed.prompt).toContain('supersedes conflicting saved-session instructions');
+    expect(resumed.prompt).toContain(
+      'This prompt and these facts supersede saved sessions, retry manifests and earlier results.',
+    );
     expect(resumed.prompt).toContain(
       'Native marker timestamp unit correction: marker timestamps are epoch microseconds',
     );

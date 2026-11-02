@@ -189,7 +189,7 @@ test('a budget-limited Codex manager renews with its continuation and tells the 
       .find((request) => request.method === 'turn/start' && request.params.threadId === renewed.threadId)?.params
       .input[0]?.text;
     expect(opening).toContain(path);
-    expect(opening).toContain('Read the continuation file');
+    expect(opening).toContain(`Read your brief and the continuation ${path} once per session`);
     const notices = s.inbox.pending('supervisor').filter((entry) => entry.event.kind === 'environment');
     expect(notices).toHaveLength(1);
     expect(notices[0]!.event.summary).toContain('Manager manager');
