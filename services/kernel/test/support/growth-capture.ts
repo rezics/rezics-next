@@ -4,6 +4,7 @@ import pg, { type Pool, type PoolClient } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import type { Capture } from './growth-cost.ts';
 import { drainCaptureWork } from './growth-capture-drain.ts';
+import { collectModifyTargets } from './growth-plan-walk.ts';
 
 export type GrowthDatabase = {
   readonly url: string;
@@ -970,15 +971,15 @@ async function captureInternal<T>(
     }
     const run = measuredRun.getStore();
     if (run) {
-      for (const [plans, databaseNames] of [
-        [active.plans, active.planDatabases],
-        [active.backgroundPlans, active.backgroundPlanDatabases],
+      for (const [plans, databaseNames, collection] of [
+        [active.plans, active.planDatabases, 'plans'],
+        [active.backgroundPlans, active.backgroundPlanDatabases, 'backgroundPlans'],
       ] as const) {
         for (let index = 0; index < plans.length; index++) {
           const target = databaseForName(database, databaseNames[index] || databaseName(database));
           const relations = run.get(target) ?? new Set<string>();
           run.databases.add(target);
-          collectModifyTargets(plans[index], relations);
+          collectModifyTargets(plans[index], relations, `${collection}[${index}]`);
           if (relations.size > 0) run.set(target, relations);
         }
       }
@@ -1066,20 +1067,6 @@ function databaseForName(database: GrowthDatabase, name: string): GrowthDatabase
   states.set(related, state);
   databasesByAdmin.set(admin, related);
   return related;
-}
-
-function collectModifyTargets(document: unknown, output: Set<string>): void {
-  const visit = (value: unknown): void => {
-    if (Array.isArray(value)) return value.forEach(visit);
-    if (typeof value !== 'object' || value === null) return;
-    const record = value as Record<string, unknown>;
-    if (record['Node Type'] === 'ModifyTable' && typeof record['Relation Name'] === 'string') {
-      const schema = typeof record['Schema'] === 'string' ? record['Schema'] : 'public';
-      output.add(`${schema}.${record['Relation Name']}`);
-    }
-    for (const child of Object.values(record)) visit(child);
-  };
-  visit(document);
 }
 
 export function captureMeasuredRun<T>(operation: () => Promise<T>): Promise<{

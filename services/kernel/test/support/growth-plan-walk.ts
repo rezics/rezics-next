@@ -9,6 +9,12 @@ export type PlanWalkEntry = {
   readonly depth: number;
 };
 
+export type ExplainPlanEntry = {
+  readonly queryText: string | undefined;
+  readonly plan: PlanNode;
+  readonly location: string;
+};
+
 type Frame = {
   readonly node: unknown;
   readonly path: string;
@@ -69,5 +75,39 @@ export function* walkPlanTree(
           depth: frame.depth + 1,
           exit: false,
         });
+  }
+}
+
+/** Admit one auto_explain JSON document: a Plan object, or a nonempty array of them. */
+export function explainPlanEntries(document: unknown, location = 'plan'): ExplainPlanEntry[] {
+  if (Array.isArray(document)) {
+    if (document.length === 0) throw new TypeError(`${location}: EXPLAIN plan document is empty`);
+    return document.map((entry, index) => {
+      const path = `${location}[${index}]`;
+      if (!isPlanNode(entry) || !isPlanNode(entry.Plan))
+        throw new TypeError(`${path}: EXPLAIN plan document has no Plan`);
+      return {
+        queryText: typeof entry['Query Text'] === 'string' ? entry['Query Text'] : undefined,
+        plan: entry.Plan,
+        location: `${path}.Plan`,
+      };
+    });
+  }
+  if (isPlanNode(document) && typeof document['Query Text'] === 'string' && isPlanNode(document.Plan))
+    return [{ queryText: document['Query Text'], plan: document.Plan, location: `${location}.Plan` }];
+  throw new TypeError(`${location}: Unrecognized plan document`);
+}
+
+/** Schema-qualified ModifyTable relations from an admitted EXPLAIN document. */
+export function collectModifyTargets(document: unknown, output: Set<string>, location = 'plan'): void {
+  for (const { plan, location: planLocation } of explainPlanEntries(document, location)) {
+    for (const { node, path } of walkPlanTree(plan, planLocation)) {
+      if (node['Node Type'] !== 'ModifyTable') continue;
+      const name = node['Relation Name'];
+      if (typeof name !== 'string' || name.length === 0)
+        throw new TypeError(`${path}: ModifyTable is missing Relation Name`);
+      const schema = typeof node.Schema === 'string' && node.Schema.length > 0 ? node.Schema : 'public';
+      output.add(`${schema}.${name}`);
+    }
   }
 }

@@ -562,6 +562,9 @@ time for that scale (`settleMs`); when `GROWTH_PROFILE` names a file, `checkGrow
 with the test file, check name, scales and each scale's `seeding`.
 Native plan trees are bounded to 10,000 nodes and depth 256 (root depth 0); cycles, sparse children and invalid child
 collections fail with their plan location. These are evidence input limits, not growth verdicts.
+Measured-run write discovery uses those same admitted EXPLAIN document envelopes and the native plan walk; a
+ModifyTable without Relation Name fails at that node path, a missing Schema defaults to public, and malformed
+documents fail at their location instead of omitting writes.
 The line also carries every repetition, relation sizes, the selected-rule `verdicts`, a shadow whole-series verdict and
 any `settleFailures` recorded on samples. For a step check, the shadow verdicts are diagnostic; for a baseline check,
 all three passing requires deleting its entry.

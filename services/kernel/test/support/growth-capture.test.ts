@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient, QueryConfig } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
-import { capture, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
+import { capture, captureMeasuredRun, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
 import type { Capture } from './growth-cost.ts';
 import { statementOccurrences } from './growth-report.ts';
 import { checkGrowth } from './growth.ts';
@@ -824,6 +824,18 @@ test('fails at open when the database cannot report plans', async () => {
   } finally {
     await database.admin.query(`DROP ROLE "${role}"`);
   }
+});
+
+test('measured-run write discovery records schema-qualified ModifyTable targets', async () => {
+  const database = db!;
+  const measured = await captureMeasuredRun(() =>
+    capture(database, () =>
+      withConnection(database.pool, (client) =>
+        client.query('INSERT INTO growth_capture_test.trigger_input (id) VALUES (2)'),
+      ),
+    ),
+  );
+  expect(measured.writes.get(database)).toEqual(new Set(['growth_capture_test.trigger_input']));
 });
 
 test('captures and closes an extra library pool with the production pool', async () => {

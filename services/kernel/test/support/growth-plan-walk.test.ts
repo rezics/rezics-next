@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { costOf } from './growth-cost.ts';
-import { MAX_PLAN_DEPTH, MAX_PLAN_NODES } from './growth-plan-walk.ts';
+import { collectModifyTargets, MAX_PLAN_DEPTH, MAX_PLAN_NODES } from './growth-plan-walk.ts';
 import { statementAttributions, statementOccurrences } from './growth-report.ts';
 
 function node(fields: Record<string, unknown> = {}, children?: unknown[]) {
@@ -71,4 +71,44 @@ test('valid plan costs and statement diagnostics retain their measured descendan
   expect(costOf(sample)).toMatchObject({ rows: 3, blocks: 3, relations: { 'app.items': { rows: 3 } } });
   expect(statementOccurrences(sample).statements[0]).toMatchObject({ rows: 3, blocks: 3 });
   expect(statementAttributions(sample)[0]).toMatchObject({ rows: 3, blocks: 3, node: 'Seq Scan app.items' });
+});
+
+function modify(schema?: string, children?: unknown[]) {
+  return node(
+    {
+      'Node Type': 'ModifyTable',
+      ...(schema === undefined ? {} : { Schema: schema }),
+      'Relation Name': 'items',
+    },
+    children,
+  );
+}
+
+function document(plan: unknown, queryText = 'insert') {
+  return { 'Query Text': queryText, Plan: plan };
+}
+
+test('write-target discovery keeps schema-qualified ModifyTable targets from admitted envelopes', () => {
+  const output = new Set<string>();
+  const decoy = modify('decoy');
+  collectModifyTargets(document(modify('sales')), output);
+  collectModifyTargets([{ Plan: node({}, [modify('app')]) }], output);
+  collectModifyTargets(document(modify()), output);
+  collectModifyTargets({ ...document(node({ Extra: decoy })), Extra: decoy }, output);
+  expect([...output].sort()).toEqual(['app.items', 'public.items', 'sales.items']);
+});
+
+test('write-target discovery fails malformed documents and bounded native trees at their location', () => {
+  const output = new Set<string>();
+  expect(() => collectModifyTargets({}, output)).toThrow(/plan: Unrecognized plan document/);
+  expect(() => collectModifyTargets([], output)).toThrow(/plan: EXPLAIN plan document is empty/);
+  expect(() => collectModifyTargets([{ Plans: [] }], output)).toThrow(/plan\[0\]: EXPLAIN plan document has no Plan/);
+  expect(() => collectModifyTargets(document({ 'Node Type': 'ModifyTable' }), output)).toThrow(
+    /plan\.Plan: ModifyTable is missing Relation Name/,
+  );
+  expect(() => collectModifyTargets(document(chain(MAX_PLAN_DEPTH + 1)), output)).toThrow(/maximum depth 256/);
+  expect(() =>
+    collectModifyTargets(document(node({}, Array.from({ length: MAX_PLAN_NODES }, () => node()))), output),
+  ).toThrow(/maximum node count 10000/);
+  expect(output.size).toBe(0);
 });
