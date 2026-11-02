@@ -96,9 +96,15 @@ test('classification admits only current draft callbacks before private values o
   const picker = (): ((items: EntityPickerSubject[]) => void) => {
     const node = host.querySelector('[role="combobox"]')!;
     const key = Object.keys(node).find((name) => name.startsWith('__reactFiber'))!;
-    for (let fiber = Reflect.get(node, key); fiber; fiber = fiber.return) {
+    let root = Reflect.get(node, key);
+    while (root.return) root = root.return;
+    const pending = [root.stateNode.current];
+    while (pending.length) {
+      const fiber = pending.pop();
       const props = fiber.memoizedProps;
       if (typeof props?.search === 'function' && typeof props?.onValueChange === 'function') return props.onValueChange;
+      if (fiber.child) pending.push(fiber.child);
+      if (fiber.sibling) pending.push(fiber.sibling);
     }
     throw new Error('Missing mounted EntityPicker callback');
   };
