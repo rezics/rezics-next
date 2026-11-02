@@ -2,13 +2,7 @@ import { viewerCredential } from '../session/request.ts';
 import { authorizeDownload, mediaClient, notFound, problem, problemResponse } from './kernel.ts';
 import type { MediaEnv } from './index.ts';
 
-export function validVariant(variant: string): boolean {
-  if (variant === 'original') return true;
-  const match = /^(webp|avif)-([1-9][0-9]{0,3})$/.exec(variant);
-  if (!match || match[0] !== variant) return false;
-  const width = Number(match[2]);
-  return width < 320 || [320, 640, 960, 1280, 1920, 2560].includes(width);
-}
+export { validVariant } from './cover-src.ts';
 
 function matchesValidator(header: string | null, etag: string): boolean {
   // Entity tags are quoted strings; commas inside a tag do not separate validators.

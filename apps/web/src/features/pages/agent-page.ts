@@ -1,6 +1,7 @@
 import { isView, planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { CoverSummary } from '@rezics/ui/cover';
-import { coverSrc } from '../../media/cover-src';
+import { validVariant } from '../../media/cover-src';
+import { publicCardImage, type PublicCardImage } from '../../media/public-card';
 import { locales, type Locale } from '../../paraglide/runtime.js';
 import { originalLanguage } from '../../subject/language';
 import type { Subject } from '../../subject/types';
@@ -48,42 +49,41 @@ function displayName(page: AgentPage, profile: AccountProfile | undefined): stri
   return profile?.displayName || profile?.handle || page.account.handle;
 }
 
-type CardImage = { url: string; width: number; height: number; alt: string };
+type CardImage = PublicCardImage;
 
 function coverImage(summary: unknown, alt: string): CardImage | undefined {
-  if (!isRecord(summary) || summary.withheld || typeof summary.media !== 'string') return;
+  if (
+    !isRecord(summary) ||
+    summary.withheld ||
+    typeof summary.media !== 'string' ||
+    !/^[A-Za-z0-9_-]+$/.test(summary.media) ||
+    typeof summary.width !== 'number' ||
+    !Number.isFinite(summary.width) ||
+    summary.width <= 0 ||
+    typeof summary.height !== 'number' ||
+    !Number.isFinite(summary.height) ||
+    summary.height <= 0
+  )
+    return;
   const variants = Array.isArray(summary.variants)
     ? summary.variants.filter(
         (variant): variant is { format: 'avif' | 'webp'; width: number } =>
           isRecord(variant) &&
           (variant.format === 'avif' || variant.format === 'webp') &&
           typeof variant.width === 'number' &&
-          Number.isFinite(variant.width) &&
-          variant.width > 0,
+          validVariant(`${variant.format}-${variant.width}`),
       )
     : [];
-  const widths = [...new Set(variants.map((variant) => variant.width))].sort(
-    (left, right) => Math.abs(left - 1200) - Math.abs(right - 1200) || right - left,
-  );
-  const width = widths[0];
-  if (width === undefined) return;
-  const variant =
-    variants.find((item) => item.width === width && item.format === 'webp') ??
-    variants.find((item) => item.width === width);
-  if (!variant) return;
-  const sourceWidth = typeof summary.width === 'number' && summary.width > 0 ? summary.width : width;
-  const sourceHeight = typeof summary.height === 'number' && summary.height > 0 ? summary.height : sourceWidth;
-  return {
-    url: coverSrc(summary.media, variant.format, width),
-    width,
-    height: Math.max(1, Math.round((sourceHeight * width) / sourceWidth)),
-    alt,
-  };
+  const image = publicCardImage({ ...summary, variants } as CoverSummary, alt);
+  if (!image) return;
+  // Divide before scaling so large finite source dimensions can still describe a usable ratio.
+  const height = Math.max(1, Math.round((summary.height / summary.width) * image.width));
+  return Number.isFinite(height) ? { ...image, height } : undefined;
 }
 
 function cardImageFor(page: AgentPage, profile: AccountProfile | undefined, name: string): CardImage | undefined {
   if (profile?.avatar) {
-    const avatar = coverImage(profile.avatar as CoverSummary, name);
+    const avatar = coverImage(profile.avatar, name);
     if (avatar) return avatar;
   }
   const subject = subjectRead(page);
@@ -91,8 +91,26 @@ function cardImageFor(page: AgentPage, profile: AccountProfile | undefined, name
   return isRecord(summary) ? coverImage(summary.cover, name) : undefined;
 }
 
-function absoluteImage(image: CardImage | undefined, origin: string): string {
-  return new URL(image?.url ?? '/cards/default.png', `${origin}/`).href;
+function absoluteImage(image: CardImage | undefined, origin: string): string | undefined {
+  if (
+    !image ||
+    !Number.isFinite(image.width) ||
+    image.width <= 0 ||
+    !Number.isFinite(image.height) ||
+    image.height <= 0
+  )
+    return;
+  try {
+    const url = new URL(image.url, `${origin}/`);
+    if (url.origin !== origin) return;
+    if (url.pathname.startsWith('/media/')) {
+      const path = /^\/media\/[A-Za-z0-9_-]+\/([^/]+)$/.exec(url.pathname);
+      if (!path || !validVariant(path[1]!)) return;
+    }
+    return url.href;
+  } catch {
+    return;
+  }
 }
 
 function sameAs(profile: AccountProfile | undefined): string[] | undefined {
@@ -141,7 +159,8 @@ export function agentPageHead(
     ? pageText(selected.subject.descriptions, locale, originalLanguage(selected.subject)).text
     : '';
   const image = cardImageFor(page, profile, name);
-  const entityImage = image ? absoluteImage(image, origin) : undefined;
+  const entityImage = absoluteImage(image, origin);
+  const nextImage = image ?? shareCardImage(shareCard);
   const publishedLinks = sameAs(profile);
   const entity = {
     '@type': profile?.kind === 'organization' ? 'Organization' : profile?.automated ? 'SoftwareApplication' : 'Person',
@@ -157,7 +176,7 @@ export function agentPageHead(
       title,
       ...(description ? { description } : {}),
       type: 'profile',
-      image: image ?? shareCardImage(shareCard),
+      image: absoluteImage(nextImage, origin) ? nextImage : shareCardImage(),
       ...(cursor ? { robots: 'noindex, follow' } : {}),
       jsonLd: {
         '@context': 'https://schema.org',
