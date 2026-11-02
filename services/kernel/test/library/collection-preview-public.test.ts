@@ -77,6 +77,34 @@ test('anonymous exhausted raw allowance is pending without a partial preview or 
   expect(JSON.stringify(row)).not.toContain(beyond);
 }, 120_000);
 
+test('same-owner pending list preview remains read-only and does not reserve Members preparation', async () => {
+  const collection = await f.collection();
+  const visible = await f.createSubject('game', 'First repeated owner preview member');
+  const beyond = await f.createSubject('game', 'Beyond owner preview allowance');
+  await f.populate(collection.id, [...Array<string>(100).fill(visible), beyond]);
+  const statements: string[] = [];
+  let reading = false;
+  await observeRetentionQueries(f.pool, ({ sql }) => {
+    if (reading) statements.push(sql);
+  });
+  reading = true;
+  let page: Awaited<ReturnType<typeof f.page>>;
+  try {
+    page = await f.page();
+  } finally {
+    reading = false;
+  }
+  const row = page.collections.find((candidate) => candidate.id === collection.id)!;
+  expect(row.previewStatus).toBe('pending');
+  expect(row.previewMembers).toEqual([]);
+  expect(JSON.stringify(row)).not.toContain(beyond);
+  expect(statements.some((sql) => /\b(?:INSERT\s+INTO|UPDATE\s+(?:ONLY\s+)?\w+\.|DELETE\s+FROM)\b/i.test(sql))).toBe(
+    false,
+  );
+  expect(statements.some((sql) => /\bcore\.(?:receipt|operational)|\bdbos\./i.test(sql))).toBe(false);
+  expect(statements.some((sql) => /library\.members_preparation/i.test(sql))).toBe(false);
+}, 120_000);
+
 test('a changed native source during summary projection returns typed unavailable', async () => {
   const collection = await f.collection('public');
   const subject = await f.createSubject('game', 'Preview source changes during projection');
