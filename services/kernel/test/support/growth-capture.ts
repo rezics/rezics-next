@@ -1012,8 +1012,9 @@ function databaseForName(database: GrowthDatabase, name: string): GrowthDatabase
   if (related) return related;
   const url = new URL(database.url);
   url.pathname = `/${name}`;
-  const admin = state.lifecycle.acquire(`related database ${name} admin pool`, () =>
-    new pg.Pool({ connectionString: url.toString(), max: 2 }),
+  const admin = state.lifecycle.acquire(
+    `related database ${name} admin pool`,
+    () => new pg.Pool({ connectionString: url.toString(), max: 2 }),
   );
   admin.on('connect', (client) => intercept(client, state, false));
   related = {

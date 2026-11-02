@@ -10,7 +10,12 @@ test('setup failure closes every acquired pool and reports cleanup failures with
   await expect(
     lifecycle.setup(async () => {
       lifecycle.acquire('instrumented pool', () => ({ end: async () => void closed.push('instrumented') }));
-      lifecycle.acquire('admin pool', () => ({ end: async () => { closed.push('admin'); throw cleanupError; } }));
+      lifecycle.acquire('admin pool', () => ({
+        end: async () => {
+          closed.push('admin');
+          throw cleanupError;
+        },
+      }));
       throw setupError;
     }),
   ).rejects.toMatchObject({
@@ -24,15 +29,22 @@ test('close is repeatable, drains every pool after a failure, and rejects new ac
   const lifecycle = createGrowthDatabaseLifecycle();
   const closed: string[] = [];
   let acquiredAfterClose = false;
-  lifecycle.acquire('library pool', () => ({ end: async () => { closed.push('library'); throw new Error('close failed'); } }));
+  lifecycle.acquire('library pool', () => ({
+    end: async () => {
+      closed.push('library');
+      throw new Error('close failed');
+    },
+  }));
   lifecycle.acquire('admin pool', () => ({ end: async () => void closed.push('admin') }));
 
   const closing = lifecycle.close();
   expect(lifecycle.close()).toBe(closing);
-  expect(() => lifecycle.acquire('late pool', () => {
-    acquiredAfterClose = true;
-    return { end: async () => {} };
-  })).toThrow('Growth database is closed');
+  expect(() =>
+    lifecycle.acquire('late pool', () => {
+      acquiredAfterClose = true;
+      return { end: async () => {} };
+    }),
+  ).toThrow('Growth database is closed');
   await expect(closing).rejects.toMatchObject({
     message: expect.stringContaining('library pool failed to close: close failed'),
   });
