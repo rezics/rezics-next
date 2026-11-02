@@ -165,7 +165,8 @@ function WorkPartsPageLive({
     document.addEventListener('focusin', cancel);
     focusAfterOpen.current = {
       instance,
-      active: () => !moved && slice.active() && lifetime.active() && opener.isConnected && document.activeElement === opener,
+      active: () =>
+        !moved && slice.active() && lifetime.active() && opener.isConnected && document.activeElement === opener,
       cancel,
     };
   }

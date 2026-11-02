@@ -99,12 +99,16 @@ test('Work Parts orients only current keyboard openings, closes independent draf
     const source = [...rows[0]!.querySelectorAll('button')].find(
       (item) => item.textContent?.trim() === m.work_parts_correct(),
     )!;
-    const sources = rows.map((row) => [...row.querySelectorAll<HTMLButtonElement>('button')]
-      .find((item) => item.textContent?.trim() === m.work_parts_correct())!);
-    const activate = (opener: HTMLButtonElement, detail = 0) => act(async () => {
-      opener.focus();
-      opener.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail }));
-    });
+    const sources = rows.map((row) =>
+      [...row.querySelectorAll<HTMLButtonElement>('button')].find(
+        (item) => item.textContent?.trim() === m.work_parts_correct(),
+      )!,
+    );
+    const activate = (opener: HTMLButtonElement, detail = 0) =>
+      act(async () => {
+        opener.focus();
+        opener.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail }));
+      });
     await activate(source, 1);
     expect(host.ownerDocument.activeElement).toBe(source);
     await activate(sources[1]!);
@@ -189,11 +193,13 @@ test('Work Parts orients only current keyboard openings, closes independent draf
       const picker = host.querySelector<HTMLInputElement>(`input[aria-label="${m.work_parts_pick()}"]`)!;
       await input(picker, title);
       await until(() => !!window.document.querySelector('[role="option"]'));
-      const option = [...window.document.querySelectorAll<HTMLElement>('[role="option"]')]
-        .find((item) => item.textContent?.includes(title))!;
+      const option = [...window.document.querySelectorAll<HTMLElement>('[role="option"]')].find((item) =>
+        item.textContent?.includes(title),
+      )!;
       await act(async () => option.click());
-      const add = [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((item) => item.textContent?.trim() === m.work_parts_draft())!;
+      const add = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (item) => item.textContent?.trim() === m.work_parts_draft(),
+      )!;
       await activate(add);
       const addition = editors().at(-1)!;
       expect(host.ownerDocument.activeElement).toBe(addition.querySelector('h2'));
@@ -205,22 +211,35 @@ test('Work Parts orients only current keyboard openings, closes independent draf
     }
     expect(editors()).toHaveLength(4);
     const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
-    const renderReading = (revision: string, locale = 'en', id = fixture.id) => root.render(
-      h(QueryClientProvider, { client }, h(CatalogueCurrentReading,
-        { visible: true, ready: true, revision, children: h(WorkPartsPage,
-          { id, locale, initial, search: fixture.search, transport: fixture.transport }) })),
-    );
+    const renderReading = (revision: string, locale = 'en', id = fixture.id) =>
+      root.render(
+        h(
+          QueryClientProvider,
+          { client },
+          h(CatalogueCurrentReading, {
+            visible: true,
+            ready: true,
+            revision,
+            children: h(WorkPartsPage, { id, locale, initial, search: fixture.search, transport: fixture.transport }),
+          }),
+        ),
+      );
     for (const retirement of ['reading', 'locale', 'route']) {
       await act(async () => renderReading('current'));
-      const opener = [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((item) => item.textContent?.trim() === m.work_parts_correct())!;
+      const opener = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (item) => item.textContent?.trim() === m.work_parts_correct(),
+      )!;
       const key = Object.keys(opener).find((item) => item.startsWith('__reactProps$'))!;
       const retiredOpen = Reflect.get(opener, key).onClick;
       source.focus();
       await act(async () => {
         opener.focus();
         retiredOpen({ currentTarget: opener, detail: 0 });
-        renderReading('replacement', retirement === 'locale' ? 'fr' : 'en', retirement === 'route' ? 'replacement' : fixture.id);
+        renderReading(
+          'replacement',
+          retirement === 'locale' ? 'fr' : 'en',
+          retirement === 'route' ? 'replacement' : fixture.id,
+        );
       });
       expect(host.ownerDocument.activeElement?.tagName).not.toBe('H2');
       const count = fixture.calls.length;
