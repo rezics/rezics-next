@@ -87,7 +87,10 @@ function AlbumProfileLive({
   const initialRetryRunning = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const failureBoundary = useRef<HTMLDivElement>(null);
-  const origin = useMemo(() => ({}), [query.data, query.error, query.dataUpdatedAt, query.errorUpdatedAt]);
+  const origin = useMemo(
+    () => ({}),
+    [query.data, query.error, query.dataUpdatedAt, query.errorUpdatedAt, initialRetry],
+  );
   const currentOrigin = useRef<object | undefined>(undefined);
   const initialRecoverable =
     !retainedRelease.current && (query.isError || (query.data && !query.data.ok) || (!id && read && !admitted));
