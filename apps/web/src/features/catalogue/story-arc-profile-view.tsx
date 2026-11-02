@@ -1,4 +1,10 @@
-import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import {
+  CatalogueCurrentReading,
+  catalogueEditor,
+  useEditorLifetime,
+  useEditorWorkspaceLifetime,
+} from './editor-lifetime';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
@@ -47,7 +53,28 @@ export type StoryArcProfileProps = StoryArcAddress & {
 };
 
 /** Composition of the ordinary creation, scalar and exact-slot relationship workspaces. */
-export const StoryArcProfile = catalogueEditor(StoryArcProfileLive);
+export const StoryArcProfile = catalogueEditor(StoryArcProfileWorkspace);
+
+function StoryArcProfileWorkspace(props: StoryArcProfileProps) {
+  return (
+    <AuthoringDepartureBoundary sessionBound={false}>
+      <StoryArcProfileLive {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
+
+/** Child state supplies the decision even when its current public reading is hidden. */
+function StoryArcDraftDeparture({ dirty, pending }: { dirty: boolean; pending: boolean }) {
+  const holder = useEditorWorkspaceLifetime();
+  useAuthoringDeparture(
+    () => holder.active() && (dirty || pending),
+    pending,
+    String(holder.generation),
+    undefined,
+    holder.retire,
+  );
+  return null;
+}
 
 function StoryArcProfileLive({
   id: initialId,
@@ -105,6 +132,20 @@ function StoryArcProfileLive({
   if (observation.current.readable !== readable || observation.current.selection !== selection)
     observation.current = { readable, selection, token: {} };
   const token = observation.current.token;
+  const { requestNavigation } = useAuthoringDeparture(false, false, selection);
+  const choose = (destination: { id?: string | undefined } | { work?: string | undefined }) => {
+    if (!lifetime.active() || observation.current.token !== token) return;
+    if ('id' in destination ? destination.id === id : destination.work === work) return;
+    requestNavigation(() => {
+      if (!lifetime.active() || observation.current.token !== token) return;
+      // Retire selection callbacks synchronously, before React commits the replacement holders.
+      observation.current = { readable: false, selection, token: {} };
+      if ('id' in destination) {
+        setCreated(undefined);
+        setId(destination.id);
+      } else setWork(destination.work);
+    });
+  };
   const canEdit = () => lifetime.active() && editable && observation.current.token === token;
   const reload = () => {
     if (query.isFetching) return;
@@ -116,7 +157,7 @@ function StoryArcProfileLive({
     });
   };
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8 sm:px-6">
+    <article key={selection} className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8 sm:px-6">
       <ViewHeadingActions
         label={id ? m.story_arc_title({}, o) : m.story_arc_create({}, o)}
         headingClassName="font-sans"
@@ -144,15 +185,14 @@ function StoryArcProfileLive({
               variant="outline"
               className={callerActionClass}
               onClick={() => {
-                setCreated(undefined);
-                setId(undefined);
+                choose({ id: undefined });
               }}
             >
               {m.story_arc_choose_existing({}, o)}
             </Button>
           )}
           {!readable && work && (
-            <Button variant="outline" className={callerActionClass} onClick={() => setWork(undefined)}>
+            <Button variant="outline" className={callerActionClass} onClick={() => choose({ work: undefined })}>
               {m.story_arc_choose_work({}, o)}
             </Button>
           )}
@@ -206,8 +246,7 @@ function StoryArcProfileLive({
                   className={callerActionClass}
                   onClick={() => {
                     if (!canEdit()) return;
-                    setCreated(undefined);
-                    setId(undefined);
+                    choose({ id: undefined });
                   }}
                 >
                   {m.story_arc_choose_existing({}, o)}
@@ -227,7 +266,7 @@ function StoryArcProfileLive({
                   (await search(text, signal)).filter((entry) => entry.types.includes(storyArcType))
                 }
                 onValueChange={(items) => {
-                  if (canEdit() && items[0]) setId(items[0].id);
+                  if (canEdit() && items[0]) choose({ id: items[0].id });
                 }}
               />
               <CreateSubjectForm
@@ -236,6 +275,9 @@ function StoryArcProfileLive({
                 transport={transport.creation}
                 onNavigate={() => {}}
                 onCreated={setCreated}
+                navigation={({ dirty, pending, confirmed }) => (
+                  <StoryArcDraftDeparture dirty={!confirmed && dirty} pending={!confirmed && pending} />
+                )}
                 profile={{
                   scope: 'story-arc',
                   hideHeading: true,
@@ -255,7 +297,7 @@ function StoryArcProfileLive({
                     // Keep ordinary authored href navigation for new tabs and modified clicks.
                     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
                     event.preventDefault();
-                    setId(created.id);
+                    choose({ id: created.id });
                   }}
                   className={buttonVariants({ className: callerActionClass })}
                 >
@@ -316,7 +358,7 @@ function StoryArcProfileLive({
               onChooseAnother={
                 editable
                   ? () => {
-                      if (canEdit()) setWork(undefined);
+                      if (canEdit()) choose({ work: undefined });
                     }
                   : undefined
               }
@@ -327,6 +369,7 @@ function StoryArcProfileLive({
               <RelationEditor
                 key={`work:${privateRead.work.subject.id}`}
                 id={privateRead.work.subject.id}
+                navigation={(state) => <StoryArcDraftDeparture {...state} />}
                 locale={locale}
                 search={search}
                 transport={{
@@ -354,7 +397,7 @@ function StoryArcProfileLive({
                 )
               }
               onValueChange={(items) => {
-                if (canEdit() && items[0]) setWork(items[0].id);
+                if (canEdit() && items[0]) choose({ work: items[0].id });
               }}
             />
           )}

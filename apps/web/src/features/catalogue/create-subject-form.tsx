@@ -131,6 +131,7 @@ function CreateSubjectFormLive({
   onNavigate,
   profile,
   onCreated,
+  navigation,
 }: {
   profile?: {
     title: string;
@@ -154,6 +155,8 @@ function CreateSubjectFormLive({
   transport: CreateTransport;
   onNavigate: (href: string) => void;
   onCreated?: (result: Created) => void;
+  /** A containing workspace composes creation state into its shared departure decision. */
+  navigation?: (state: Parameters<typeof CreateSubjectLifetime>[0]) => ReactNode;
 }) {
   const lifetime = useEditorLifetime();
   const options = { locale: locale as never };
@@ -317,15 +320,16 @@ function CreateSubjectFormLive({
     }
   }
 
+  const departure = {
+    locale,
+    dirty: profileDirty || hasInitialDraft(type, profile?.type ?? '', rows),
+    pending: !created && request.current !== null,
+    confirmed: !!created,
+    isActive: () => lifetime.active() && !confirmed.current,
+  };
   return (
     <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
-      <CreateSubjectLifetime
-        locale={locale}
-        dirty={profileDirty || hasInitialDraft(type, profile?.type ?? '', rows)}
-        pending={!created && request.current !== null}
-        confirmed={!!created}
-        isActive={() => lifetime.active() && !confirmed.current}
-      />
+      {navigation ? navigation(departure) : <CreateSubjectLifetime {...departure} />}
       {!profile?.hideHeading && (
         <header className="space-y-3">
           {profile ? (
