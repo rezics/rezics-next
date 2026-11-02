@@ -78,7 +78,7 @@ export function MangaInitialField({
     if (editable()) onChange(next);
   };
   useLayoutEffect(() => {
-    if (!editable()) return;
+    if (disabled) return;
     if (confirming) cancel.current?.focus();
     else if (restoreFocus.current) {
       trigger.current?.focus();
