@@ -6793,6 +6793,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         };
                         query: unknown;
                         headers: {
+                            authorization: string;
                             "idempotency-key": string;
                         };
                         response: {
