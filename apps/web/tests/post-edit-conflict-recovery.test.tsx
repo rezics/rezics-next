@@ -60,13 +60,8 @@ test('stale editing reviews before replacement, keeps the full correction, and s
   const commands: Parameters<React.ComponentProps<typeof InlinePostEditor>['onSubmit']>[0][] = [];
   let outcome: EditFailure = { ok: false, reason: 'stale', currentPost: current };
   let cancelled = false;
-  const button = (label: string, scope: ParentNode = document) => {
-    const result = [...scope.querySelectorAll<HTMLButtonElement>('button')].find(
-      (node) => node.textContent?.trim() === label,
-    );
-    expect(result).toBeDefined();
-    return result!;
-  };
+  const button = (label: string, scope: ParentNode = document) =>
+    [...scope.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === label)!;
   const click = async (label: string, scope?: ParentNode) => act(async () => button(label, scope).click());
   const editor = () => host.querySelector<HTMLElement>('.ProseMirror[contenteditable="true"]');
   const popup = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
