@@ -131,10 +131,12 @@ function amount(scope: ParentNode, name: string) {
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((yes) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
     resolve = yes;
+    reject = no;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 test('Complete Manga correction groups and deliberate submission family retains whole mounted evidence, actions, bounds and retirement', async () => {
@@ -811,3 +813,103 @@ test('Manga refusal retires nested readings, retains exact commands and drafts, 
     }
   });
 }, 20_000);
+
+test('initial Manga recovery is single-flight, focuses its matching result, and retires old origins', async () => {
+  await mounted(async (ui) => {
+    const { MangaProfileEditor } = await import('../src/features/catalogue/manga-profile-view');
+    const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+    const { mangaFixture, mangaVolumeId, mangaSeriesId } = await import('../src/kernel/fake/catalogue-manga-profile');
+    const { readMangaProfile } = await import('../src/features/catalogue/manga-profile');
+    const { m } = await import('../src/paraglide/messages.js');
+    const require = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
+    const { default: userEvent } = await import(require.resolve('@testing-library/user-event'));
+    const user = userEvent.setup({ document });
+    const fixture = mangaFixture();
+    const ready = await readMangaProfile(fixture.client, mangaVolumeId);
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    const callback = (node: Element) =>
+      Reflect.get(
+        node,
+        Object.keys(node).find((key) => key.startsWith('__reactProps$'))!,
+      ).onClick;
+    for (const outcome of ['ready', 'concealed', 'wrong-subject', 'address', 'reader'] as const) {
+      let held = deferred<typeof ready>();
+      let session = 'unavailable';
+      const load = mock(() => held.promise);
+      const page = (id = mangaVolumeId, csrfToken = 'original') => (
+        <>
+          <MangaProfileEditor locale="en" session="signed-in" transport={fixture.transport} search={async () => []} />
+          <CandidateReaderBoundary address="manga" observed={{ state: 'signed-in', subject: 'viewer', csrfToken }}>
+            <MangaProfileEditor
+              id={id}
+              locale="en"
+              session={session}
+              retrySession={async () => {}}
+              transport={{ ...fixture.transport, load }}
+              search={async () => []}
+            />
+          </CandidateReaderBoundary>
+        </>
+      );
+      outside.focus();
+      await ui.render(page());
+      await ui.until(() => load.mock.calls.length === 1 && !!ui.host.querySelector('form'));
+      const sibling = ui.host.querySelector('form')!;
+      const draft = sibling.querySelector<HTMLInputElement>('input')!;
+      await ui.input(draft, 'Private sibling draft');
+      expect(document.activeElement).toBe(outside);
+      await act(async () => {
+        if (outcome === 'ready') held.reject(new Error('Initial Manga read failed'));
+        else held.resolve({ ok: false, reason: 'unavailable' });
+      });
+      await ui.until(() => !!ui.host.querySelectorAll('article')[1]!.querySelector('[role="alert"]'));
+      const target = ui.host.querySelectorAll('article')[1]!;
+      const reload = button(target, m.correction_reload());
+      const oldReload = callback(reload);
+      await ui.click(button(target, m.erasure_retry_session()));
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(outside);
+      session = 'signed-in';
+      await ui.update(page());
+      held = deferred<typeof ready>();
+      const retry = button(target, m.correction_reload());
+      const queued = callback(retry);
+      retry.focus();
+      await act(async () => user.keyboard('{Enter}'));
+      await act(async () => {
+        queued();
+        queued();
+      });
+      expect(load).toHaveBeenCalledTimes(2);
+      expect(retry.disabled).toBe(true);
+      expect(target.querySelector('[aria-busy="true"]')).not.toBeNull();
+      expect(target.querySelector('[role="status"]')!.textContent).toContain(m.candidate_loading());
+      expect(document.activeElement).not.toBe(target.querySelector('[tabindex="-1"]'));
+      const retired = outcome === 'address' || outcome === 'reader';
+      if (retired) {
+        await ui.update(page(outcome === 'address' ? mangaSeriesId : mangaVolumeId, 'replacement'));
+        await ui.until(() => load.mock.calls.length === 3);
+      }
+      outside.focus();
+      const result = structuredClone(ready);
+      if (outcome === 'wrong-subject' && result.ok && result.public) result.public.subject.id = mangaSeriesId;
+      await act(async () => held.resolve(outcome === 'concealed' ? { ok: false, reason: 'concealed' } : result));
+      await ui.until(() => retired || !target.querySelector('[aria-busy="true"]'));
+      if (retired) expect(document.activeElement).toBe(outside);
+      else {
+        expect(document.activeElement).toBe(target.querySelector('[tabindex="-1"]'));
+        expect(!!target.querySelector('header')).toBe(outcome === 'ready');
+        expect(!!target.querySelector('[role="alert"]')).toBe(outcome !== 'ready');
+      }
+      await act(async () => {
+        oldReload();
+        queued();
+      });
+      expect(load).toHaveBeenCalledTimes(retired ? 3 : 2);
+      expect(ui.host.querySelector('form')).toBe(sibling);
+      expect(draft.value).toBe('Private sibling draft');
+    }
+    outside.remove();
+  });
+});

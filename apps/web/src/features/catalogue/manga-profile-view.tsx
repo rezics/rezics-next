@@ -1,7 +1,7 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouter } from '@tanstack/react-router';
-import { useId, useRef, useState, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -84,6 +84,42 @@ function MangaProfileEditorLive({
   if (id && subject?.id === id && isMangaType(subject.type)) originalType.current ??= subject.type;
   const matches = !id || (subject?.id === id && subject?.type === originalType.current);
   const read = !query.isError && (!id || !query.isFetching) && matches ? candidate : undefined;
+  const failed = !!(query.isError || (query.data && !query.data.ok) || (candidate && !matches));
+  const boundary = useRef<HTMLDivElement>(null);
+  const running = useRef(false);
+  const [retrying, setRetrying] = useState(false);
+  const [completion, setCompletion] = useState<Awaited<ReturnType<typeof query.refetch>>>();
+  // An observed read transition retires callbacks from its previous failure shell.
+  const origin = useMemo(() => ({}), [query.dataUpdatedAt, query.errorUpdatedAt, query.fetchStatus]);
+  const currentOrigin = useRef(origin);
+  currentOrigin.current = origin;
+  async function retryRead() {
+    if (!lifetime.active() || currentOrigin.current !== origin || !failed || query.isFetching || running.current)
+      return;
+    running.current = true;
+    setRetrying(true);
+    setCompletion(undefined);
+    const result = await query.refetch({ cancelRefetch: false });
+    if (!lifetime.active()) return;
+    running.current = false;
+    setRetrying(false);
+    setCompletion(result);
+  }
+  useLayoutEffect(() => {
+    if (
+      !completion ||
+      query.isFetching ||
+      completion.data !== query.data ||
+      completion.error !== query.error ||
+      completion.dataUpdatedAt !== query.dataUpdatedAt ||
+      completion.errorUpdatedAt !== query.errorUpdatedAt
+    )
+      return;
+    setCompletion(undefined);
+    if (lifetime.active() && (failed || (read && (!id || (session === 'signed-in' && read.public)))))
+      boundary.current?.focus();
+  }, [completion, query, lifetime, failed, read, id, session]);
+  const pending = retrying || (failed && query.isFetching);
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
       <ViewHeadingActions headingClassName="font-sans" label={id ? m.manga_edit({}, o) : m.manga_title({}, o)} />
@@ -101,41 +137,54 @@ function MangaProfileEditorLive({
             {session === 'signed-out' ? m.catalogue_create_signed_out({}, o) : m.candidate_loading({}, o)}
           </p>
         ))}
-      {query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
-      {read && !mangaTypes.some((type) => read.release.types[type]) && (
-        <p role="status">{m.catalogue_create_empty({}, o)}</p>
-      )}
-      {(query.isError || (query.data && !query.data.ok) || (candidate && !matches)) && (
-        <div className="space-y-3">
-          {query.data && !query.data.ok && query.data.reason === 'concealed' ? (
-            <p role="alert">{m.catalogue_create_concealed({}, o)}</p>
-          ) : (
-            <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
-          )}
-          <Button onClick={() => void query.refetch()}>{m.correction_reload({}, o)}</Button>
-        </div>
-      )}
-      {id ? (
-        <MangaCorrections
-          read={read}
-          revision={String(query.dataUpdatedAt)}
-          locale={locale}
-          disabled={session !== 'signed-in'}
-          ports={correction}
-          reload={() => query.refetch()}
-        />
-      ) : (
-        <AuthoringDepartureBoundary>
-          <MangaCreate
+      <div
+        ref={boundary}
+        tabIndex={-1}
+        aria-label={id ? m.manga_edit({}, o) : m.manga_title({}, o)}
+        aria-busy={pending}
+        className="space-y-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        {(query.isPending || pending) && <p role="status">{m.candidate_loading({}, o)}</p>}
+        {read && !mangaTypes.some((type) => read.release.types[type]) && (
+          <p role="status">{m.catalogue_create_empty({}, o)}</p>
+        )}
+        {failed && (
+          <div className="space-y-3">
+            {query.data && !query.data.ok && query.data.reason === 'concealed' ? (
+              <p role="alert">{m.catalogue_create_concealed({}, o)}</p>
+            ) : (
+              <EditorFailure
+                locale={locale}
+                reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'}
+              />
+            )}
+            <Button onClick={() => void retryRead()} disabled={pending}>
+              {pending ? m.candidate_loading({}, o) : m.correction_reload({}, o)}
+            </Button>
+          </div>
+        )}
+        {id ? (
+          <MangaCorrections
             read={read}
+            revision={String(query.dataUpdatedAt)}
             locale={locale}
             disabled={session !== 'signed-in'}
-            transport={transport}
-            search={search}
-            refresh={() => query.refetch()}
+            ports={correction}
+            reload={() => query.refetch()}
           />
-        </AuthoringDepartureBoundary>
-      )}
+        ) : (
+          <AuthoringDepartureBoundary>
+            <MangaCreate
+              read={read}
+              locale={locale}
+              disabled={session !== 'signed-in'}
+              transport={transport}
+              search={search}
+              refresh={() => query.refetch()}
+            />
+          </AuthoringDepartureBoundary>
+        )}
+      </div>
     </article>
   );
 }
