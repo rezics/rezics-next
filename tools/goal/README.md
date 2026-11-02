@@ -1384,9 +1384,9 @@ host's socket. The host skips the minute while the previous child is still runni
     expectedAttempt: 3
   ```
 
-  The controller
-  authenticates the current owner session, checks the exact Goal, manager and attempt, then records a normal pending
-  retry under the task lease. It keeps the task's branch, worktree and provider session; the host starts the retry
+  Decision: require the exact expected attempt and make interruption replay reuse only that owner's pending retry.
+  The controller authenticates the current owner session, checks the exact Goal, manager and attempt, then records a
+  normal pending retry under the task lease. It keeps the task's branch, worktree and provider session; the host starts the retry
   through its existing recovery path. The consumed brief moves to `continued/<task-id>-<attempt>-<name>.md`. A valid
   claimed continuation returns to the ready backlog after a controller interruption so the pending retry can be
   recognized idempotently. Stale, foreign, cancelled, live or otherwise ineligible tasks move to `failed/` with a
