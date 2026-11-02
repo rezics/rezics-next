@@ -2,6 +2,7 @@ import { admitFilter, FilterError, walkFilter, type FilterDocument, type FilterR
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
 import type { FacetDiscoveryRequest } from './facet-discovery-contract.ts';
+import { RequestSourceLifetime } from './request-source-lifetime.ts';
 import { REQUEST_SOURCE_KEYS, validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { subjectPartition, type IndexedSubject, type SubjectSource } from './source.ts';
 
@@ -144,20 +145,30 @@ export async function discloseFacetValues(source: SubjectSource, values: readonl
   }
   const visible = new Map<string, IndexedSubject>();
   const partitions = [...groups].map(([partition, ids]) => ({ partition, ids: [...ids] }));
+  const lifetime = new RequestSourceLifetime();
   let next = 0;
   async function worker() {
-    while (next < partitions.length) {
-      const home = partitions[next++];
-      if (!home) return;
-      for (let offset = 0; offset < home.ids.length; offset += REQUEST_SOURCE_KEYS) {
-        const chunk = home.ids.slice(offset, offset + REQUEST_SOURCE_KEYS);
-        const snapshot = await source.read(home.partition, chunk);
-        for (const subject of validateRequestSourceSnapshot(snapshot, home.partition, chunk).values()) {
-          if (subject.visibility === 'visible' && subject.redirect === null) visible.set(subject.id, subject);
+    try {
+      while (!lifetime.stopped) {
+        const home = partitions[next++];
+        if (!home) return;
+        for (let offset = 0; offset < home.ids.length; offset += REQUEST_SOURCE_KEYS) {
+          if (lifetime.stopped) return;
+          const chunk = home.ids.slice(offset, offset + REQUEST_SOURCE_KEYS);
+          const read = await lifetime.start(async () =>
+            validateRequestSourceSnapshot(await source.read(home.partition, chunk), home.partition, chunk),
+          );
+          if (!read.ok) return;
+          for (const subject of read.value.values()) {
+            if (subject.visibility === 'visible' && subject.redirect === null) visible.set(subject.id, subject);
+          }
         }
       }
+    } catch (error) {
+      lifetime.fail(error);
     }
   }
   await Promise.all(Array.from({ length: Math.min(8, partitions.length) }, () => worker()));
+  lifetime.throwIfFailed();
   return new Map([...new Set(values)].filter((id) => visible.has(id)).map((id) => [id, visible.get(id)!]));
 }
