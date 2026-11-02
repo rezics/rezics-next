@@ -202,7 +202,6 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
   const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
     await import('@tanstack/react-router');
   const { AuthoringDepartureProvider } = await import('../src/threads/authoring-departure');
-  const { appealNavigationContext } = await import('../src/moderation/appeals-read-model');
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { sessionQuery } = await import('../src/session/query');
@@ -317,7 +316,6 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
           createElement(Presentation.Provider, {
             value: createElement(AuthoringDepartureProvider, {
               sessionBound: false,
-              navigationContext: appealNavigationContext,
               children: [
                 createElement(AppealResolution, {
                   ...props,

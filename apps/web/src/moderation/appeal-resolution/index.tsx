@@ -6,6 +6,7 @@ import { csrfHeaders } from '../../threads/composer';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 import { useSession } from '../../session/query';
 import { actionOnAppeal, type AppealResolutionResult } from '../actions';
+import { appealNavigationContext } from '../appeals-read-model';
 import { createAppealResolutionIntent, type ResolutionCommand } from './intent';
 
 export type { ResolutionCommand } from './intent';
@@ -96,6 +97,7 @@ function ResolutionForm({
       unsaved: m.moderation_resolution_leave_unsaved(),
       pending: m.moderation_resolution_leave_pending(),
     },
+    appealNavigationContext,
   );
   const message = uncertain
     ? m.moderation_appeal_intent_uncertain()
