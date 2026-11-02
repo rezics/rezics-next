@@ -8,6 +8,7 @@ const root = resolve(import.meta.dir, '../../../..');
 const definitionsPath = 'packages/definitions/src/index.ts';
 const filterPath = 'packages/filter/src/filter.ts';
 const publicationPath = 'services/kernel/src/semantic/definitions.ts';
+const historicalDependencyAliases = { recheck: 'recheck-historical' };
 
 /** Exact Git source bytes, not a reconstruction of old behavior. Unchanged
  * relative dependencies are checked against the same pin before any import.
@@ -28,8 +29,9 @@ export function historicalConstructionSources(publication = false) {
     if ('snapshot' in file) result.set(resolve(root, file.path), source);
   }
   for (const [name, version] of Object.entries(manifest.dependencies)) {
+    const installedName = historicalDependencyAliases[name as keyof typeof historicalDependencyAliases] ?? name;
     const pkg = JSON.parse(
-      readFileSync(resolve(root, `packages/definitions/node_modules/${name}/package.json`), 'utf8'),
+      readFileSync(resolve(root, `packages/definitions/node_modules/${installedName}/package.json`), 'utf8'),
     );
     if (pkg.version !== version) throw new Error(`Historical dependency mismatch: ${name}@${pkg.version}`);
   }
@@ -58,7 +60,12 @@ export function materializeHistoricalConstruction(directory: string) {
                 ? resolve(root, filterPath)
                 : specifier.startsWith('.')
                   ? resolve(dirname(origin), specifier)
-                  : Bun.resolveSync(specifier, dirname(origin));
+                  : Bun.resolveSync(
+                      specifier === 'recheck' || specifier.startsWith('recheck/')
+                        ? `${historicalDependencyAliases.recheck}${specifier.slice('recheck'.length)}`
+                        : specifier,
+                      dirname(origin),
+                    );
             return `from ${quote}${targets.get(dependency) ?? dependency}${quote}`;
           }),
     );

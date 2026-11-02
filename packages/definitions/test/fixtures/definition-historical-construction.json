@@ -22,7 +22,8 @@
     {
       "path": "packages/definitions/src/pattern-safety.ts",
       "gitBlob": "40afdcf1281f6ca01c496c9c96f41aea1bf0dfea",
-      "sha256": "89d1491ccb6c79f3e30fa35ad3e0a2df278be197cc2665081d86b360b4e1390b"
+      "sha256": "89d1491ccb6c79f3e30fa35ad3e0a2df278be197cc2665081d86b360b4e1390b",
+      "snapshot": "packages/definitions/test/fixtures/pattern-safety-historical-construction.source"
     },
     {
       "path": "packages/definitions/src/library-profile.ts",
