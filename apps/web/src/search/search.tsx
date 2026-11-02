@@ -997,6 +997,7 @@ function renderResults(
           retryHref={discoverySearchHref(locale, retryState ?? data.queryState)}
           restartHref={discoverySearchHref(locale, { ...data.queryState, cursor: undefined })}
           onRetry={onRetry}
+          locale={locale}
         />
       ) : data?.discovery ? (
         <DiscoveryResults

@@ -3,6 +3,7 @@ import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Label } from '@rezics/ui/shadcn/label';
 import { m } from '../paraglide/messages.js';
+import { locales } from '../paraglide/runtime.js';
 import { localizedLabel } from './results';
 import { discoveryMessage } from './discovery-results';
 import type { DiscoveryKinds as Kinds, DiscoveryKindsState } from './discovery';
@@ -195,10 +196,14 @@ export function DiscoveryKinds({
       </details>
       {status && (
         <p role={status === 'loading' ? 'status' : 'alert'} className="text-sm text-muted-foreground">
-          {recovery ? searchRecoveryMessage(recovery) : discoveryMessage(status)}
+          {recovery ? searchRecoveryMessage(recovery, locale) : discoveryMessage(status)}
         </p>
       )}
-      {waiting && <p className="text-sm text-muted-foreground">{m.search_recovery_wait()}</p>}
+      {waiting && (
+        <p className="text-sm text-muted-foreground">
+          {m.search_recovery_wait({}, { locale: locales.find((value) => value === locale) ?? 'en' })}
+        </p>
+      )}
       {restartable && (
         <>
           <p role="status" className="text-sm text-muted-foreground">
