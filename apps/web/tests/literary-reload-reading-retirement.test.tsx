@@ -6,13 +6,40 @@ import type { LiteraryRead } from '../src/features/catalogue/literary-profile';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-async function mounted(run: (ui: { host: HTMLElement; render: (node: ReactNode) => Promise<void>; until: (check: () => boolean) => Promise<void>; click: (name: string, scope?: ParentNode) => Promise<void>; enter: (input: HTMLInputElement, value: string) => Promise<void> }) => Promise<void>) {
+async function mounted(
+  run: (ui: {
+    host: HTMLElement;
+    render: (node: ReactNode) => Promise<void>;
+    until: (check: () => boolean) => Promise<void>;
+    click: (name: string, scope?: ParentNode) => Promise<void>;
+    enter: (input: HTMLInputElement, value: string) => Promise<void>;
+  }) => Promise<void>,
+) {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en/subjects/book/title' });
-  const keys = ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'DocumentFragment', 'MutationObserver', 'ResizeObserver', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame', 'IS_REACT_ACT_ENVIRONMENT'];
+  const keys = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'Element',
+    'Node',
+    'DocumentFragment',
+    'MutationObserver',
+    'ResizeObserver',
+    'getComputedStyle',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ];
   const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const key of keys) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key] });
+  for (const key of keys)
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key],
+    });
   const { createRoot } = await import('react-dom/client');
   const { setLocale } = await import('../src/paraglide/runtime.js');
   setLocale('en', { reload: false });
@@ -20,18 +47,21 @@ async function mounted(run: (ui: { host: HTMLElement; render: (node: ReactNode) 
   window.document.body.append(host);
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const button = (scope: ParentNode, name: string) => [...scope.querySelectorAll<HTMLButtonElement>('button')].findLast((node) => node.textContent?.trim() === name)!;
+  const button = (scope: ParentNode, name: string) =>
+    [...scope.querySelectorAll<HTMLButtonElement>('button')].findLast((node) => node.textContent?.trim() === name)!;
   try {
     await run({
       host,
       render: async (node) => act(async () => root.render(h(QueryClientProvider, { client }, node))),
       click: async (name, scope = host) => act(async () => button(scope, name).click()),
-      enter: async (input, value) => act(async () => {
-        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
-        input.dispatchEvent(new window.Event('input', { bubbles: true }));
-      }),
+      enter: async (input, value) =>
+        act(async () => {
+          Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+          input.dispatchEvent(new window.Event('input', { bubbles: true }));
+        }),
       until: async (check) => {
-        for (let n = 0; n < 100 && !check(); n++) await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+        for (let n = 0; n < 100 && !check(); n++)
+          await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
         expect(check()).toBe(true);
       },
     });
@@ -39,7 +69,9 @@ async function mounted(run: (ui: { host: HTMLElement; render: (node: ReactNode) 
     await act(async () => root.unmount());
     client.clear();
     await window.happyDOM.abort();
-    for (const [key, descriptor] of saved) if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key);
+    for (const [key, descriptor] of saved)
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
   }
 }
 
@@ -60,7 +92,8 @@ function prop(node: Element, name: string) {
 test('Literary reload retires the current observation through failures and equal-identity recovery', async () => {
   await mounted(async ({ host, render, until, click, enter }) => {
     const { LiteraryProfile } = await import('../src/features/catalogue/literary-profile-view');
-    const { literaryFixture, literaryWorkId, literaryRelease } = await import('../src/kernel/fake/catalogue-literary-profile');
+    const { literaryFixture, literaryWorkId, literaryRelease } =
+      await import('../src/kernel/fake/catalogue-literary-profile');
     const { m } = await import('../src/paraglide/messages.js');
     const fixture = literaryFixture('ready', 'en', 'schema:Book', true);
     const initial = await fixture.transport.load();
@@ -69,38 +102,49 @@ test('Literary reload retires the current observation through failures and equal
     let loads = 0;
     let rejectPending!: (error: Error) => void;
     const startsRetired: boolean[] = [];
-    const retired = () => !host.textContent?.includes('An original literary work') && !host.querySelector('a[href*="/subjects/"]') && !host.querySelector('section[aria-label="word count"]');
+    const retired = () =>
+      !host.textContent?.includes('An original literary work') &&
+      !host.querySelector('a[href*="/subjects/"]') &&
+      !host.querySelector('section[aria-label="word count"]');
     const recovered: LiteraryRead = structuredClone(initial);
     if (recovered.ok && recovered.current) recovered.current.public.subject.labels = { en: 'Fresh Literary title' };
     const commands: Parameters<typeof fixture.facts.propose>[0][] = [];
     let relationMounts = 0;
-    function RelationProbe() { relationMounts++; return h('p', { 'data-relation-probe': true }, 'Private relation editor'); }
-    await render(h(LiteraryProfile, {
-      id: literaryWorkId,
-      locale: 'en',
-      session: 'signed-in',
-      transport: {
-        ...fixture.transport,
-        load: () => {
-          loads++;
-          if (loads === 1) return Promise.resolve(initial);
-          startsRetired.push(retired());
-          if (mode === 'pending') return new Promise<LiteraryRead>((_resolve, reject) => { rejectPending = reject; });
-          if (mode === 'returned') return Promise.resolve({ ok: false, reason: 'denied' });
-          return Promise.resolve(recovered);
+    function RelationProbe() {
+      relationMounts++;
+      return h('p', { 'data-relation-probe': true }, 'Private relation editor');
+    }
+    await render(
+      h(LiteraryProfile, {
+        id: literaryWorkId,
+        locale: 'en',
+        session: 'signed-in',
+        transport: {
+          ...fixture.transport,
+          load: () => {
+            loads++;
+            if (loads === 1) return Promise.resolve(initial);
+            startsRetired.push(retired());
+            if (mode === 'pending')
+              return new Promise<LiteraryRead>((_resolve, reject) => {
+                rejectPending = reject;
+              });
+            if (mode === 'returned') return Promise.resolve({ ok: false, reason: 'denied' });
+            return Promise.resolve(recovered);
+          },
         },
-      },
-      facts: {
-        ...fixture.facts,
-        propose: async (command: Parameters<typeof fixture.facts.propose>[0]) => {
-          commands.push(command);
-          return { ok: false, reason: 'uncertain' };
+        facts: {
+          ...fixture.facts,
+          propose: async (command: Parameters<typeof fixture.facts.propose>[0]) => {
+            commands.push(command);
+            return { ok: false, reason: 'uncertain' };
+          },
         },
-      },
-      review: fixture.review,
-      relations: h(RelationProbe),
-      authored: h(RelationProbe),
-    }));
+        review: fixture.review,
+        relations: h(RelationProbe),
+        authored: h(RelationProbe),
+      }),
+    );
     await until(() => host.textContent!.includes('An original literary work'));
     const field = () => host.querySelector<HTMLElement>('section[aria-label="word count"]')!;
     await click(m.facts_edit_field(), field());
@@ -144,7 +188,10 @@ test('Literary reload retires the current observation through failures and equal
     const nameLabel = literaryRelease.properties['schema:name']!.labels.en;
     const nameField = host.querySelector<HTMLElement>(`section[aria-label="${nameLabel}"]`)!;
     await click(m.facts_edit_field(), nameField);
-    await enter(nameField.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, 'A new name');
+    await enter(
+      nameField.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!,
+      'A new name',
+    );
     await click(m.facts_submit());
     await until(() => commands.length === 3);
     expect(commands[1]).toBe(commands[0]);

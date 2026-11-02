@@ -471,10 +471,7 @@ function LiteraryProfileLive({
     );
   // A previous successful subject read is never authority for the current public page.
   const admitted =
-    !readingRefresh.pending &&
-    !query.isError &&
-    query.data?.ok &&
-    query.data.current?.public.subject.id === id
+    !readingRefresh.pending && !query.isError && query.data?.ok && query.data.current?.public.subject.id === id
       ? query.data
       : undefined;
   const reload = () => {
