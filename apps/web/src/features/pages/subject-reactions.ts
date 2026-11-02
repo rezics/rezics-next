@@ -20,7 +20,7 @@ export async function readReactionCounts(client: KernelClient, id: string): Prom
     .subjects({ id })
     .reactions.get()
     .catch(() => null);
-  if (counts?.status !== 200 || !counts.data) return null;
+  if (counts?.status !== 200 || !isNativeReactionCountPage(counts.data)) return null;
   const shown: SubjectReactions['counts'] = {};
   for (const { kind, count } of counts.data.counts) if (admitted.has(kind)) shown[kind as SubjectReactionKind] = count;
   return { counts: shown, value: null };
@@ -72,6 +72,52 @@ function isOwnReactionResponse(value: unknown): value is { kind: string | null }
 }
 
 const admitted = new Set<string>(subjectReactionKinds);
+const nativeReactionKinds = new Set<string>([...subjectReactionKinds, 'upvote', 'downvote']);
+
+type NativeReactionCountPage = {
+  counts: { kind: string; count: number }[];
+  watermark: { epoch: number; position: string } | null;
+};
+
+function hasExactKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === expected.length &&
+    expected.every((key) => Object.hasOwn(value, key))
+  );
+}
+
+function isNativeReactionCountPage(value: unknown): value is NativeReactionCountPage {
+  if (!hasExactKeys(value, ['counts', 'watermark']) || !Array.isArray(value.counts)) return false;
+  if (
+    value.watermark !== null &&
+    (!hasExactKeys(value.watermark, ['epoch', 'position']) ||
+      typeof value.watermark.epoch !== 'number' ||
+      !Number.isSafeInteger(value.watermark.epoch) ||
+      value.watermark.epoch < 1 ||
+      typeof value.watermark.position !== 'string' ||
+      !/^[1-9][0-9]*$/.test(value.watermark.position))
+  )
+    return false;
+
+  const seen = new Set<string>();
+  for (const row of value.counts) {
+    if (
+      !hasExactKeys(row, ['kind', 'count']) ||
+      typeof row.kind !== 'string' ||
+      !nativeReactionKinds.has(row.kind) ||
+      seen.has(row.kind) ||
+      typeof row.count !== 'number' ||
+      !Number.isSafeInteger(row.count) ||
+      row.count < 1
+    )
+      return false;
+    seen.add(row.kind);
+  }
+  return true;
+}
 
 /**
  * The subject's reaction counts, and the reader's own reaction when they are signed in: one read each, so the cost
