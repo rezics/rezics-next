@@ -44,14 +44,14 @@ export function CreatorSalesCurrent(props: Props) {
   const admitted = current.hydrated ? current.origin.isCurrent() : initial.selling;
   if (!subject || !admitted) {
     if (!current.hydrated && initial.page.kind !== 'ready')
-      return <CreatorSalesPage page={initial.page} locale={locale} cursor={cursor} />;
+      return <CreatorSalesPage page={initial.page} locale={locale} {...(cursor === undefined ? {} : { cursor })} />;
     const kind =
       current.state === 'unavailable' || current.admission === 'unavailable'
         ? 'unavailable'
         : current.state === 'signed-out' || current.admission === 'closed'
           ? 'denied'
           : 'loading';
-    return <CreatorSalesPage page={{ kind }} locale={locale} cursor={cursor} />;
+    return <CreatorSalesPage page={{ kind }} locale={locale} {...(cursor === undefined ? {} : { cursor })} />;
   }
   return (
     <CurrentSalesRead
@@ -113,8 +113,10 @@ function CurrentSalesRead({
   });
   const value = query.data ?? initialData;
   if (hydrated && !origin.isCurrent())
-    return <CreatorSalesPage page={{ kind: 'loading' }} locale={locale} cursor={cursor} />;
+    return (
+      <CreatorSalesPage page={{ kind: 'loading' }} locale={locale} {...(cursor === undefined ? {} : { cursor })} />
+    );
   if (value && origin.isCurrent()) origin.workspace.read = value;
   const page: CreatorSalesData = value?.page ?? { kind: 'loading' };
-  return <CreatorSalesPage page={page} locale={locale} cursor={cursor} />;
+  return <CreatorSalesPage page={page} locale={locale} {...(cursor === undefined ? {} : { cursor })} />;
 }

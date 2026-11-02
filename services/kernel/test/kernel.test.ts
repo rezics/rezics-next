@@ -38,6 +38,7 @@ type Routes = TypedRoutes<Kernel['~Routes']>;
 const typed = [
   'GET /health',
   'GET /v1/commerceMoney',
+  'GET /v1/commerceSales',
   'POST /v1/viewerActions',
   'POST /v1/webhooks/stripe',
   'GET /v1/subjects/:id/offers',
