@@ -60,7 +60,11 @@ export function useOperationAttempt(
   } | null>(null);
   useEffect(() => {
     const lifetime = {
-      scope, active: true, ready: false, locked: false, pending: null as Operation | null,
+      scope,
+      active: true,
+      ready: false,
+      locked: false,
+      pending: null as Operation | null,
       controller: new AbortController(),
     };
     current.current = lifetime;

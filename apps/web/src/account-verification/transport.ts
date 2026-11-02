@@ -106,7 +106,14 @@ export async function readPending(
     const requests = result.data.verificationRequests;
     // Resolve only this bounded, authorized page. Failed summaries are references, never fabricated identities.
     const [accounts, subjects] = await Promise.all([
-      requests.length ? readIdentities(client, authorization, requests.map((r) => r.accountId), caller) : [],
+      requests.length
+        ? readIdentities(
+            client,
+            authorization,
+            requests.map((r) => r.accountId),
+            caller,
+          )
+        : [],
       Promise.all(requests.map((request) => readSubject(client, authorization, request.catalogueSubjectId, caller))),
     ]);
     return {
@@ -224,9 +231,12 @@ export async function readAccount(
     if (discovery.state === 'ready' && discovery.value.includes('account.revoke_verification')) {
       try {
         const result = await withVerificationDeadline(
-          (signal) => client['verification-requests'].get({
-            headers: { authorization }, fetch: { signal }, query: { state: 'pending', limit: 1 },
-          }),
+          (signal) =>
+            client['verification-requests'].get({
+              headers: { authorization },
+              fetch: { signal },
+              query: { state: 'pending', limit: 1 },
+            }),
           caller,
         );
         return !result.error && !!result.data;
@@ -270,21 +280,18 @@ export async function performOperation(
     const account = client.accounts({ accountId: targetId });
     const request = client['verification-requests']({ requestId: targetId });
     const body = reason ? { reason } : {};
-    const result = await withVerificationDeadline(
-      async (signal) => {
-        const options = { headers: { authorization, 'idempotency-key': key }, fetch: { signal } };
-        return action === 'approve'
-          ? request.$approve.post(body, options)
-          : action === 'reject'
-            ? request.$reject.post(body, options)
-            : action === 'withdraw'
-              ? account.$withdrawVerification.post({}, options)
-              : action === 'revoke'
-                ? account.$revokeVerification.post(body, options)
-                : account.$releaseVerification.post({}, options);
-      },
-      caller,
-    );
+    const result = await withVerificationDeadline(async (signal) => {
+      const options = { headers: { authorization, 'idempotency-key': key }, fetch: { signal } };
+      return action === 'approve'
+        ? request.$approve.post(body, options)
+        : action === 'reject'
+          ? request.$reject.post(body, options)
+          : action === 'withdraw'
+            ? account.$withdrawVerification.post({}, options)
+            : action === 'revoke'
+              ? account.$revokeVerification.post(body, options)
+              : account.$releaseVerification.post({}, options);
+    }, caller);
     if (!result.error && result.status === 200 && result.data) {
       if ('verificationRequest' in result.data) return { state: 'accepted', request: result.data.verificationRequest };
       if ('reversal' in result.data) return { state: 'accepted', reversal: result.data.reversal.kind };

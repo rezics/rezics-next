@@ -100,7 +100,9 @@ test('management review keeps evidence, failed drafts and delayed decisions atta
       schedule(fn, ms === 25_000 ? 1 : ms, ...args)) as typeof setTimeout);
     try {
       await decide();
-      await act(async () => { await new Promise((resolve) => schedule(resolve, 15)); });
+      await act(async () => {
+        await new Promise((resolve) => schedule(resolve, 15));
+      });
     } finally {
       timer.mockRestore();
     }
