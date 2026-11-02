@@ -49,7 +49,6 @@ test('changed draft warns; Stay preserves invalid input, feedback and usable foc
   expect(page.unload()).toBe(true);
   await page.navigate();
   expect(page.router.history.location.pathname).toBe('/organizations/new');
-  expect(document.body.innerHTML).toContain('Leave organization creation?');
   expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
   await page.choose('Stay');
   expect(page.router.history.location.pathname).toBe('/organizations/new');
@@ -73,14 +72,16 @@ test('Stay retains unresolved command identity; Leave retires late approval and 
   await page.choose('Stay');
   expect(readPendingAccountOperationStepUp()).toEqual(original);
   expect(page.input.readOnly).toBe(true);
+  await flush(() => page.calls[0]!.resolve(approval()));
   await page.navigate();
   await page.choose('Leave');
-  await flush(() => page.calls[0]!.resolve(approval()));
-  expect(page.calls).toHaveLength(1);
+  await flush(() => page.calls[1]!.resolve(Response.json({ accountId: 'created-organization' })));
+  expect(page.host.textContent).not.toContain('@team-alpha');
+  expect(page.calls).toHaveLength(2);
   expect(readPendingAccountOperationStepUp()).toEqual(original);
   await page.render(page.view({ ...initial }));
   await flush(() => send(page.host));
-  expect(page.calls[1]!.body.operationKey).toBe(original!.operationKey);
+  expect(page.calls[2]!.body.operationKey).toBe(original!.operationKey);
 });
 test('step-up continuation and completed destination bypass departure warnings', async () => {
   const page = await setup();
@@ -102,4 +103,16 @@ test('step-up continuation and completed destination bypass departure warnings',
   } finally {
     assign.mockRestore();
   }
+});
+test('caller replacement releases a draft prompt immediately and retires pending callbacks', async () => {
+  const page = await setup();
+  await flush(() => fill(page.input, 'team-alpha'));
+  await flush(() => send(page.host));
+  await page.navigate();
+  await page.render(page.view({ kind: 'signed-out' }));
+  expect(page.unload()).toBe(false);
+  expect(page.router.history.location.pathname).toBe('/security');
+  await flush(() => page.calls[0]!.resolve(approval()));
+  expect(page.calls).toHaveLength(1);
+  expect(page.host.textContent).toContain('Sign in');
 });

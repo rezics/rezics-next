@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeAll } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
+const { Window } = require(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`))),
 );
 export const dom = new Window({ url: 'https://auth.test/organizations/new' });
 const previous = new Map<string, PropertyDescriptor | undefined>();
