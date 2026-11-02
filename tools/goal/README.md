@@ -1548,15 +1548,20 @@ prompt names it; the supermanager receives one environment event with the old to
 `manager renew` also accepts Codex Goals in `budgetLimited` or `blocked` status without a separate stop.
 
 Manager events are committed to SQLite and signaled through filesystem notifications. Inbox waiting has no sleep loop.
-Codex managers are event-driven: the opening tells a manager to end the turn when no decision is pending. When an
-event is delivered, the host steers it into the manager's active turn or starts a new turn on the persisted thread; if
-the app-server has not loaded that thread, the host resumes it once and starts the turn there. The opening also states
-the manager's outputs (ready briefs in its backlog and decisions), the stopped-task hour, the message limits, and that
-the brief and continuation are read once per session. The host counts `clock.sleep` items per manager and UTC hour;
+The control plane's manager wakeup path is event-driven: the opening tells a manager to end the turn when no decision
+is pending. When an event is delivered, the host steers it into the manager's active turn or starts a new turn on the
+persisted thread; if the app-server has not loaded that thread, the host resumes it once and starts the turn there. The
+opening also states the manager's outputs (ready briefs in its backlog and decisions), the stopped-task hour, the
+message limits, and that the brief and continuation are read once per session. The host counts `clock.sleep` items per manager and UTC hour;
 the eleventh in an hour sends the supermanager one `environment` alarm and the manager one correction. For the
 turns-without-decision limit, a turn in which a ready brief in the Goal's backlog was written or moved back (by
 modification or status time), or a brief the backlog run dispatched was written, counts as a decision, as any
 control-plane command already does.
+This controller behavior does not disable native Goal continuation. The current app-server protocol has no persistent
+idle-continuation setting in `ThreadGoalSetParams` or `ThreadSettingsUpdateParams`. `ThreadForkParams.deferGoalContinuation`
+only delays the fork's first continuation; automatic continuation resumes after the next explicit turn. The provider
+must add a persistent policy that keeps an active Goal and its budget tracked while waiting for an explicit controller
+turn. Until then, inbox dispatch and suppression of provider-generated idle turns remain separate capabilities.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is
 a proposal: `manager complete <goal>` records the request and returns immediately while the host checks that all scoped
 tasks are merged and the main gate passes in an isolated checkout. The gate checks the main commit captured when it

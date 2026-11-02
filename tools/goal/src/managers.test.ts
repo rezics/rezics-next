@@ -433,13 +433,23 @@ test('JSON-RPC errors propagate and an exiting app-server rejects pending reques
   }
 });
 
-test('host recovery rejoins an existing thread and dispatches committed events without starting a second thread', async () => {
+test('an active Goal waits for inbox decisions and recovery dispatches one on the same thread', async () => {
   const s = await setup();
   let recovered: ManagerSessions | undefined;
   const closeTransport = s.client.close.bind(s.client);
   try {
     const state = await s.managers.start(s.spec);
     await s.managers.flush();
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: state.threadId, turn: { id: state.activeTurnId, status: 'completed' } },
+    });
+    expect(s.managers.get(state.id)).toMatchObject({
+      status: 'running',
+      activeTurnId: null,
+      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
+    });
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(1);
     // The managed daemon survives a host disconnect; retain that fake transport across the handoff.
     s.client.close = () => {};
     await s.managers.close();
@@ -447,8 +457,18 @@ test('host recovery rejoins an existing thread and dispatches committed events w
     recovered = new ManagerSessions(s.db, s.inbox, s.services);
     await recovered.recover();
     await recovered.flush();
-    expect(recovered.get(state.id).threadId).toBe(state.threadId);
-    expect(recovered.get(state.id).activeTurnId).toBe(state.activeTurnId);
+    expect(recovered.get(state.id)).toMatchObject({
+      threadId: state.threadId,
+      status: 'running',
+      activeTurnId: 'turn-2',
+      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
+    });
+    const wakeTurns = s.requests().filter((r) => r.method === 'turn/start');
+    expect(wakeTurns).toHaveLength(2);
+    expect(wakeTurns[1].params).toMatchObject({
+      threadId: state.threadId,
+      input: [{ text: 'Committed while the host was down' }],
+    });
     expect(s.requests().filter((r) => r.method === 'thread/start')).toHaveLength(1);
     expect(s.requests().find((r) => r.method === 'thread/resume')?.params).toMatchObject({
       approvalPolicy: 'never',
@@ -456,6 +476,9 @@ test('host recovery rejoins an existing thread and dispatches committed events w
     });
     expect(s.requests().some((r) => r.method === 'thread/goal/get')).toBe(true);
     expect(s.inbox.notifications(state.id)).toHaveLength(0);
+    await recovered.recover();
+    await recovered.flush();
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
   } finally {
     await recovered?.close();
     closeTransport();
