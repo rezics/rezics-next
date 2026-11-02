@@ -208,7 +208,7 @@ membership page using the native result's account ID and the existing membership
 represent that destination keeps the Security fallback. Navigation grants no membership authority; the destination
 retains its own current-session and permission checks. Each explicit submission rechecks the initiating session before and after the native command; the ordinary flow uses five Auth requests regardless of the person's existing sessions or organizations, excluding bounded protocol retries.
 
-Both creation pages retire browser callbacks on departure, cached-page restoration and session replacement. Retry restores the exact saved operation and initiating account; organization review uses its saved handle and original key. Automated review keeps the exact selected operator. Leaving never clears an unresolved attempt or reverses native creation; uncertain results require explicit confirmation of the same command.
+Both creation pages retire browser callbacks on departure, cached-page restoration and session replacement. Retry restores the exact saved operation and initiating account; organization review uses its saved handle and original key. Automated review keeps the exact selected operator. Leaving never clears an unresolved attempt or reverses native creation; uncertain results require explicit confirmation of the same command and never automatically repeat execution.
 
 Deletion, creation, rename and operator-transfer pages provide a fixed local return to `/security`, including their
 loading and refusal states. Query parameters and response text cannot replace that return target. Leaving performs

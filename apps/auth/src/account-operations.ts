@@ -76,11 +76,14 @@ function failure(result: Exclude<AuthPostResult, { ok: true }>): AccountOperatio
 export async function runAccountOperation(
   operationKey: string,
   operation: AccountOperation,
+  browser?: { isCurrent: () => boolean },
 ): Promise<AccountOperationResult> {
+  if (browser && !browser.isCurrent()) return { ok: false, reason: 'failure' };
   const approved = await post<{ reference?: unknown; expiresAt?: unknown }>('/account-operations/approve', {
     operationKey,
     operation,
   });
+  if (browser && !browser.isCurrent()) return { ok: false, reason: 'failure' };
   if (!approved.ok) return failure(approved);
   if (
     !approved.body ||
@@ -103,7 +106,9 @@ export async function runAccountOperation(
     executionBody,
   );
   const uncertain = !executed.ok && executed.status === 503;
-  if (uncertain && !executed.ok && executed.code === 'unavailable')
+  // Page-owned commands require explicit review after any uncertain execution.
+  // Other callers retain the existing immediate same-body recovery.
+  if (!browser && uncertain && !executed.ok && executed.code === 'unavailable')
     executed = await authPost('/account-operations/execute', executionBody);
   if (!executed.ok) return uncertain ? { ok: false, reason: 'unknown' } : failure(executed);
   if (

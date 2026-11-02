@@ -178,13 +178,15 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     }
     continuation = JSON.stringify(pendingAccountOperationStepUpState());
     setUnknown(true);
-    let result = await runAccountOperation(operationKey, operation);
+    let result = await runAccountOperation(operationKey, operation, { isCurrent });
     if (!isCurrent()) return;
     const after = await loadAccountSession();
     if (!isCurrent()) return;
     if (
-      after.kind !== 'ready' || after.accountId !== accountId ||
-      after.clientId !== before.clientId || JSON.stringify(after.scopes) !== JSON.stringify(before.scopes)
+      after.kind !== 'ready' ||
+      after.accountId !== accountId ||
+      after.clientId !== before.clientId ||
+      JSON.stringify(after.scopes) !== JSON.stringify(before.scopes)
     ) {
       setMessage(m.auth_account_operation_failure());
       submitting.current = false;
