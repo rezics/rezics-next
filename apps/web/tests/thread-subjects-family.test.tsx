@@ -46,14 +46,15 @@ async function componentBundle() {
     entrypoints: ['thread-subjects-fixture'],
     target: 'browser',
     format: 'iife',
-    plugins: [{
-      name: 'actual-thread-subjects',
-      setup(build) {
-        build.onResolve({ filter: /^thread-subjects-fixture$/ }, () => ({ path: 'entry', namespace: 'subjects' }));
-        build.onLoad({ filter: /.*/, namespace: 'subjects' }, () => ({
-          loader: 'tsx',
-          resolveDir: app,
-          contents: `
+    plugins: [
+      {
+        name: 'actual-thread-subjects',
+        setup(build) {
+          build.onResolve({ filter: /^thread-subjects-fixture$/ }, () => ({ path: 'entry', namespace: 'subjects' }));
+          build.onLoad({ filter: /.*/, namespace: 'subjects' }, () => ({
+            loader: 'tsx',
+            resolveDir: app,
+            contents: `
             import React from 'react';
             import { createRoot } from 'react-dom/client';
             import { flushSync } from 'react-dom';
@@ -79,9 +80,10 @@ async function componentBundle() {
               </>));
             };
           `,
-        }));
+          }));
+        },
       },
-    }],
+    ],
   });
   expect(result.success, result.logs.map(String).join('\n')).toBe(true);
   return result.outputs[0]!.text();
@@ -137,9 +139,11 @@ async function assertList(list: Locator, subjects: ThreadSubject[], titles: stri
     expect(await link.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe('none');
   }
   expect(await list.locator('a a, a button, a input, a select, a textarea').count()).toBe(0);
-  expect(await list.locator('[data-slot="cover"]').evaluateAll((elements) =>
-    elements.map((element) => element.getAttribute('data-ratio')),
-  )).toEqual(subjects.map(() => sharedRatio(subjects)));
+  expect(
+    await list
+      .locator('[data-slot="cover"]')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-ratio'))),
+  ).toEqual(subjects.map(() => sharedRatio(subjects)));
 }
 
 // Authored UNRUN for integration: actual client-rendered production components and real generated utilities.
@@ -154,10 +158,12 @@ test('Finish the related thread subjects shared-family list', async () => {
   try {
     const page = await browser.newPage();
     await page.route('**/*', (route) => route.abort());
-    await page.route('https://rezics.test/fixture', (route) => route.fulfill({
-      contentType: 'text/html',
-      body: '<html><body><button id="start">Start</button><main style="max-width:768px;margin:auto;padding:16px"><h1>Flight notes</h1><div id="app"></div></main><button id="end">End</button></body></html>',
-    }));
+    await page.route('https://rezics.test/fixture', (route) =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<html><body><button id="start">Start</button><main style="max-width:768px;margin:auto;padding:16px"><h1>Flight notes</h1><div id="app"></div></main><button id="end">End</button></body></html>',
+      }),
+    );
     await page.route(`https://rezics.test${coverSrc(cover.media, 'webp', 320)}`, (route) =>
       route.fulfill({ contentType: 'image/webp', body: image }),
     );
@@ -194,7 +200,9 @@ test('Finish the related thread subjects shared-family list', async () => {
         expect(await lists.count()).toBe(2);
         const titles = [longTitle, 'The Little Prince', '夜間飛行'.repeat(35), m.threads_untitled()];
         for (const index of [0, 1]) await assertList(lists.nth(index), dense, titles, 'en');
-        const headingIds = await lists.getByRole('heading').evaluateAll((elements) => elements.map((element) => element.id));
+        const headingIds = await lists
+          .getByRole('heading')
+          .evaluateAll((elements) => elements.map((element) => element.id));
         expect(new Set(headingIds).size).toBe(dense.length * 2);
         expect(await page.locator('img, source').count()).toBe(0);
         expect(await page.locator('[data-slot="cover"][data-state="placeholder"]').count()).toBe(6);
@@ -219,7 +227,9 @@ test('Finish the related thread subjects shared-family list', async () => {
           if (focus.href) visited.push(focus.href);
           else expect(focus.tag).toBe('BUTTON');
         }
-        const destinations = dense.map((subject, index) => subjectHref({ id: subject.id, label: titles[index]! }, 'en').href);
+        const destinations = dense.map(
+          (subject, index) => subjectHref({ id: subject.id, label: titles[index]! }, 'en').href,
+        );
         expect(visited).toEqual([...destinations, ...destinations]);
 
         const reveal = lists.first().getByRole('button', { name: m.thread_cover_reveal() });

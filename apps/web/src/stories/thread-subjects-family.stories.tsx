@@ -78,10 +78,7 @@ async function observeList(element: HTMLElement, subjects: readonly ThreadSubjec
     const heading = row.getByRole('heading', { level: 2, name: title });
     const link = row.getByRole('link', { name: title });
     await expect(heading).toHaveAttribute('data-content-item-slot', 'title');
-    await expect(link).toHaveAttribute(
-      'href',
-      subjectHref({ id: subject.id, label: title }, getLocale()).href,
-    );
+    await expect(link).toHaveAttribute('href', subjectHref({ id: subject.id, label: title }, getLocale()).href);
     await expect(link).toHaveAttribute('aria-labelledby', heading.id);
     const target = link.getBoundingClientRect();
     await expect(target.width).toBeGreaterThanOrEqual(44);
@@ -143,10 +140,7 @@ export const TwoIndependentLists: Story = {
     const reveal = within(first).getByRole('button', { name: m.thread_cover_reveal() });
     reveal.focus();
     await userEvent.keyboard('{Enter}');
-    await expect(first.querySelector('img')).toHaveAttribute(
-      'src',
-      coverSrc(covered.cover!.media, 'webp', 320),
-    );
+    await expect(first.querySelector('img')).toHaveAttribute('src', coverSrc(covered.cover!.media, 'webp', 320));
     await expect(second.querySelector('img')).toBeNull();
     await expect(within(second).getByRole('button', { name: m.thread_cover_reveal() })).toBeVisible();
     // The installed Cover contract keeps credits at the source, never on a list cover.
