@@ -1286,7 +1286,9 @@ test(
       expect(shelf.members.find((member) => member.id === gamma.id)?.note).toBe('A second margin thought');
       expect(shelf.members.find((member) => member.id === alpha.id)?.note).toBeNull();
       expect(shelf.members.map((member) => member.id)).toEqual([beta.id, gamma.id, alpha.id]);
-      expect(calls.find((call) => call.method === 'PATCH' && call.path === `/v1/collections/${shelf.id}`)?.body).toMatchObject({
+      expect(
+        calls.find((call) => call.method === 'PATCH' && call.path === `/v1/collections/${shelf.id}`)?.body,
+      ).toMatchObject({
         revision: 1,
       });
       await memberRow(page, 'Beta story').locator('p', { hasText: 'A margin thought' }).waitFor();
