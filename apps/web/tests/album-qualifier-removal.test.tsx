@@ -22,6 +22,7 @@ test('Album qualifier cancellation, stable correction targets, selective removal
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { AlbumProfileCreate } = await import('../src/features/catalogue/album-profile-create');
+  const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
   const { albumFixture, artistId, roleId } = await import('../src/kernel/fake/catalogue-album-profile');
   const { m } = await import('../src/paraglide/messages.js');
   const testing = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
@@ -37,6 +38,8 @@ test('Album qualifier cancellation, stable correction targets, selective removal
   const commands: AlbumCommand[] = [];
   let enabled = true,
     metadata = true;
+  let revision = 'current',
+    holder = 0;
   let finish!: (result: Awaited<ReturnType<AlbumTransport['create']>>) => void;
   const invalid = {
     ok: false as const,
@@ -78,7 +81,9 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     act(async () =>
       root.render(
         <QueryClientProvider client={client}>
-          <AlbumProfileCreate {...props} enabled={enabled} />
+          <CatalogueCurrentReading visible ready revision={revision}>
+            <AlbumProfileCreate key={holder} {...props} enabled={enabled} />
+          </CatalogueCurrentReading>
         </QueryClientProvider>,
       ),
     );
@@ -105,12 +110,16 @@ test('Album qualifier cancellation, stable correction targets, selective removal
       }
     ).onChange;
   const pickerChange = (node: Element) => {
-    type Fiber = { memoizedProps: { onValueChange?: (items: (typeof selected)[]) => void }; return?: Fiber };
+    type Fiber = {
+      memoizedProps: { search?: unknown; onValueChange?: (items: (typeof selected)[]) => void };
+      return?: Fiber;
+    };
     let fiber = Reflect.get(
       node,
       Object.keys(node).find((key) => key.startsWith('__reactFiber$'))!,
     ) as Fiber;
-    while (!fiber.memoizedProps.onValueChange) fiber = fiber.return!;
+    while (typeof fiber.memoizedProps.search !== 'function' || !fiber.memoizedProps.onValueChange)
+      fiber = fiber.return!;
     return fiber.memoizedProps.onValueChange;
   };
   const selected = { id: artistId, title: 'Late descriptor', types: [], typeLabel: '', cover: null };
@@ -142,12 +151,19 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     await select(row, m.relation_qualifier(), 'wdt:P3831');
     await choose(row, 'wdt:P3831', roleId);
     const role = within(row).getByRole('combobox', { name: name('wdt:P3831') });
+    const oldRole = pickerChange(role);
     const roleTarget = role.closest('[id^="album-row-"]')!.id;
     await select(row, m.relation_qualifier(), 'schema:position');
     await select(host, m.character_add_fact(), 'schema:sameAs');
     await click(host, m.correction_add());
     const sibling = [...host.querySelectorAll<HTMLElement>('fieldset[id^="album-row-"]')].at(-1)!;
     await type(sibling, m.correction_url(), 'https://example.test/album');
+    const oldScalar = inputChange(within(sibling).getByRole('textbox', { name: m.correction_url() }));
+    await type(sibling, m.correction_url(), '/newer');
+    await act(async () => oldScalar({ target: { value: 'https://example.test/stale' } }));
+    expect((within(sibling).getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement).value).toBe(
+      'https://example.test/album/newer',
+    );
     await click(row, remove('wdt:P1932'));
     await click(row, m.candidate_cancel());
     expect(within(row).getByRole('textbox', { name: name('wdt:P1932') })).toBe(original);
@@ -171,6 +187,10 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     expect(within(row).getByRole('combobox', { name: name('wdt:P3831') })).toBe(role);
     expect(role.closest('[id^="album-row-"]')!.id).toBe(roleTarget);
     await click(row, m.candidate_cancel());
+    await select(row, m.relation_qualifier(), 'wdt:P1932');
+    await act(async () => oldCredit({ target: { value: 'Replacement overwritten' } }));
+    expect((within(row).getByRole('textbox', { name: name('wdt:P1932') }) as HTMLInputElement).value).toBe('');
+    await click(row, remove('wdt:P1932'));
     expect(row.textContent).toContain(publicRead.related[roleId]!.labels.en!);
     await click(row, remove('wdt:P3831'));
     enabled = false;
@@ -208,13 +228,31 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     expect(window.document.activeElement).toBe(within(row).getByRole('combobox', { name: m.relation_qualifier() }));
     await click(host, m.album_create());
     const facts = commands.at(-1)!.item.statements;
+    await act(async () => oldRole([{ ...selected, id: roleId }]));
+    expect(within(row).queryByRole('combobox', { name: name('wdt:P3831') })).toBeNull();
     expect(facts['schema:contributor']![0]!.qualifiers).toEqual([]);
     expect(facts['schema:contributor']![0]!.value).toEqual({ type: 'value', content: artistId });
     expect(facts['schema:contributor']![0]!.references[0]!.parts[0]!.value).toEqual({
       type: 'value',
       content: 'https://example.test/source/newer',
     });
-    expect(facts['schema:sameAs']![0]!.value).toEqual({ type: 'value', content: 'https://example.test/album' });
+    expect(facts['schema:sameAs']![0]!.value).toEqual({ type: 'value', content: 'https://example.test/album/newer' });
+    await click(host, m.catalogue_create_review_new());
+    revision = 'replacement-reading';
+    await paint();
+    await act(async () => currentArtist([selected]));
+    expect(row.textContent).not.toContain('Late descriptor');
+    const retiredArtist = pickerChange(within(row).getByRole('combobox', { name: name('schema:contributor') }));
+    await click(row, m.recipe_remove_field());
+    await click(row, m.recipe_remove_field());
+    await select(host, m.character_add_fact(), 'schema:contributor');
+    await click(host, m.correction_add());
+    await act(async () => retiredArtist([selected]));
+    expect(host.textContent).not.toContain('Late descriptor');
+    holder++;
+    await paint();
+    await act(async () => retiredArtist([selected]));
+    expect(host.querySelector('fieldset[id^="album-row-"]')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     client.clear();
