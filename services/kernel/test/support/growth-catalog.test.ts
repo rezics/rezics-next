@@ -78,7 +78,7 @@ test('catalog-only statements are counted apart and one refresh per query passes
   expect(report.samples.map(({ cost }) => cost.rows)).toEqual([1, 1, 1]);
 }, 60_000);
 
-test('Reylo freshness probes are set apart without a bound however often they repeat', async () => {
+test('Reylo freshness probes use a finite per-backend cache-window allowance', async () => {
   const database = db!;
   await reset(database);
   const pool = database.openPool({ max: 2 });
@@ -107,34 +107,60 @@ test('Reylo freshness probes are set apart without a bound however often they re
   ];
 
   try {
-    const measured = await capture(
-      database,
-      async () => {
-        await Promise.all([
-          (async () => {
-            await clients[0]!.query(dataQueries[0]!, [1]);
-            for (const query of probeQueries) {
-              await clients[0]!.query(query, [`${schema}.records`]);
-              await clients[0]!.query(query, [`${schema}.records`]);
-            }
-          })(),
-          (async () => {
-            await clients[1]!.query(dataQueries[1]!, [1]);
-            await clients[1]!.query(dataQueries[2]!, [1]);
-            for (const query of probeQueries) await clients[1]!.query(query, [`${schema}.records`]);
-          })(),
-        ]);
-      },
-      { includeBackends: true },
-    );
+    const run = (repeated: boolean) =>
+      capture(
+        database,
+        async () => {
+          await Promise.all([
+            (async () => {
+              await clients[0]!.query(dataQueries[0]!, [1]);
+              const queries = repeated ? probeQueries.flatMap((query) => [query, query]) : [probeQueries[0]!];
+              for (const query of queries) await clients[0]!.query(query, [`${schema}.records`]);
+            })(),
+            (async () => {
+              await clients[1]!.query(dataQueries[1]!, [1]);
+              await clients[1]!.query(dataQueries[2]!, [1]);
+              const queries = repeated ? probeQueries : probeQueries.slice(1);
+              for (const query of queries) await clients[1]!.query(query, [`${schema}.records`]);
+            })(),
+          ]);
+        },
+        { includeBackends: true },
+      );
 
-    const classification = catalogStatementBound(measured.capture);
-    expect(classification).toMatchObject({ catalogStatements: 0, freshnessProbes: 9, allowedStatements: 3 });
-    expect(new Set(measured.capture.statementBackends).size).toBe(2);
-
-    const kept = withoutCatalogStatements('freshness probe capture', measured.capture);
+    const supported = await run(false);
+    const supportedCapture = { ...supported.capture, elapsedMs: 0 };
+    expect(catalogStatementBound(supportedCapture)).toMatchObject({
+      catalogStatements: 3,
+      freshnessProbes: 3,
+      allowedStatements: 6,
+    });
+    const kept = withoutCatalogStatements('freshness probe capture', supportedCapture);
     expect(kept.statements).toEqual(dataQueries);
     expect(kept.plans).toHaveLength(3);
+
+    const repeated = await run(true);
+    const shortCapture = { ...repeated.capture, elapsedMs: 0 };
+    expect(catalogStatementBound(shortCapture)).toMatchObject({
+      catalogStatements: 9,
+      freshnessProbes: 9,
+      allowedStatements: 6,
+    });
+    expect(new Set(repeated.capture.statementBackends).size).toBe(2);
+    expect(() => withoutCatalogStatements('repeated freshness probe capture', shortCapture)).toThrow(
+      expect.objectContaining({
+        name: 'GrowthBoundError',
+        message: expect.stringMatching(/catalog count \(9\) exceeds allowed count 6;/),
+      }),
+    );
+
+    const longCapture = { ...repeated.capture, elapsedMs: 60_000 };
+    expect(catalogStatementBound(longCapture)).toMatchObject({
+      catalogStatements: 9,
+      freshnessProbes: 9,
+      allowedStatements: 9,
+    });
+    expect(withoutCatalogStatements('timed freshness probe capture', longCapture).statements).toEqual(dataQueries);
   } finally {
     for (const client of clients) client.release();
   }

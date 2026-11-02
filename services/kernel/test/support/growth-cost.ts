@@ -13,6 +13,8 @@ import { validateCaptureEvidence } from './growth-capture-evidence.ts';
 
 export type Capture = {
   readonly statements: readonly string[];
+  /** Elapsed operation time, including outstanding queries drained before capture returns. */
+  readonly elapsedMs?: number;
   readonly requestBytes?: readonly number[];
   readonly responseBytes?: readonly number[];
   readonly plans: readonly unknown[];
@@ -149,6 +151,8 @@ function isFreshnessProbeText(text: string): boolean {
   return [/\bAS\s+fresh_table\b/i, /\bAS\s+fresh_column\b/i, /\bAS\s+fresh_type\b/i].every((alias) => alias.test(text));
 }
 
+const reyloFreshnessIntervalMs = 60_000;
+
 function classifyCatalogStatements(capture: Capture, planCollection = 'plans'): CatalogClassification {
   const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
   const statementEntries = capture.statements.flatMap((text, index) =>
@@ -218,38 +222,46 @@ function classifyCatalogStatements(capture: Capture, planCollection = 'plans'): 
       if (catalogKeys.has(catalogKey(backendAware, backend, text))) catalogStatementIndexes.add(index);
   }
 
-  const catalogStatements = statementEntries.filter(({ index, text, backend }) => {
-    if (capture.planStatements !== undefined) return catalogStatementIndexes.has(index) && !isFreshnessProbeText(text);
-    const key = catalogKey(backendAware, backend, text);
-    return catalogKeys.has(key) && !freshnessProbeKeys.has(key);
-  }).length;
+  const isCatalogOccurrence = ({ index, text, backend }: (typeof statementEntries)[number]) =>
+    capture.planStatements !== undefined
+      ? catalogStatementIndexes.has(index)
+      : catalogKeys.has(catalogKey(backendAware, backend, text));
+  const nonCatalogTexts = new Set<string>();
+  const nonCatalogTextsByBackend = new Map<number | undefined, Set<string>>();
+  for (const entry of statementEntries) {
+    if (isCatalogOccurrence(entry)) continue;
+    nonCatalogTexts.add(entry.text);
+    const backend = backendAware ? entry.backend : undefined;
+    const texts = nonCatalogTextsByBackend.get(backend) ?? new Set<string>();
+    texts.add(entry.text);
+    nonCatalogTextsByBackend.set(backend, texts);
+  }
+  if (capture.elapsedMs !== undefined) requireNonNegativeFiniteNumber(capture.elapsedMs, 'Capture duration');
+  const elapsedMs = capture.elapsedMs ?? 0;
+  const freshnessWindows = Math.floor(elapsedMs / reyloFreshnessIntervalMs) + 1;
+  const freshnessAllowance = [...nonCatalogTextsByBackend.values()].reduce(
+    (total, texts) =>
+      checkedAdd(
+        total,
+        checkedMultiply(texts.size, freshnessWindows, 'Reylo freshness allowance'),
+        'Reylo freshness allowance',
+      ),
+    0,
+  );
+  const catalogStatements = statementEntries.filter(isCatalogOccurrence).length;
   const freshnessProbes = statementEntries.filter(({ index, text, backend }) =>
     capture.planStatements !== undefined
       ? catalogStatementIndexes.has(index) && isFreshnessProbeText(text)
       : freshnessProbeKeys.has(catalogKey(backendAware, backend, text)),
   ).length;
-  const nonCatalogTexts = new Set(
-    statementEntries
-      .filter(({ index, text, backend }) =>
-        capture.planStatements !== undefined
-          ? !catalogStatementIndexes.has(index)
-          : !catalogKeys.has(catalogKey(backendAware, backend, text)),
-      )
-      .map(({ text }) => text),
-  );
-  const firstCatalogStatement = statementEntries.find(({ index, text, backend }) =>
-    capture.planStatements !== undefined
-      ? catalogStatementIndexes.has(index) && !isFreshnessProbeText(text)
-      : catalogKeys.has(catalogKey(backendAware, backend, text)) &&
-        !freshnessProbeKeys.has(catalogKey(backendAware, backend, text)),
-  )?.text;
+  const firstCatalogStatement = statementEntries.find(isCatalogOccurrence)?.text;
   const classification: CatalogClassification = {
     catalogTexts,
     catalogKeys,
     backendAware,
     catalogStatements,
     freshnessProbes,
-    allowedStatements: nonCatalogTexts.size,
+    allowedStatements: checkedAdd(nonCatalogTexts.size, freshnessAllowance, 'Allowed catalog statements'),
     firstCatalogStatement,
   };
   nativeCatalogOccurrences.set(classification, catalogStatementIndexes);

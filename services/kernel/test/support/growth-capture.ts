@@ -1015,6 +1015,7 @@ async function captureInternal<T>(
     let value!: T;
     let operationError: unknown;
     let operationFailed = false;
+    const operationStartedAt = performance.now();
     try {
       value = await growing.run(
         { capture: active, background: false, ...(isAttribution(parent) ? { parent } : {}) },
@@ -1026,6 +1027,7 @@ async function captureInternal<T>(
     }
     // Wait through failures too: queued queries and setup work must settle before attribution is restored.
     const cleanupErrors = await drainCaptureWork(active.pending, state.setupTasks);
+    const elapsedMs = performance.now() - operationStartedAt;
     const failures: unknown[] = [];
     const addFailure = (error: unknown): void => {
       if (!failures.includes(error)) failures.push(error);
@@ -1078,6 +1080,7 @@ async function captureInternal<T>(
       value,
       capture: {
         statements: foreground.map(({ text }) => text),
+        elapsedMs,
         requestBytes: foreground.map(({ requestBytes }) => requestBytes),
         responseBytes: foreground.map(({ responseBytes }) => responseBytes),
         plans: active.plans,

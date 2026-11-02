@@ -550,9 +550,10 @@ The harness provides `connections` as the number of distinct backend processes u
 `includeBackends` is enabled. The filtered-list plan counts live in [Filtered lists](../../docs/filtered-lists.md#cost),
 under Cost.
 Reylo freshness probes (statements selecting `fresh_table`, `fresh_column` and `fresh_type` with a catalog-only plan)
-are set apart without a bound: Reylo repeats them by time and concurrency, never by data size. Other catalog-only
-statements are counted apart, with one allowed per distinct non-catalog query text across the measured run; a
-statement that also reads data counts in full.
+remain counted as catalog statements. The harness adds one finite allowance per distinct non-catalog SQL text and
+attributed backend for each 60-second cache window during the captured operation (one group without backend IDs),
+matching `reylo@0.6.0`'s per-query cache interval and concurrent first use. Other catalog-only statements retain one
+allowance per distinct non-catalog query text; a statement that also reads data counts in full.
 
 A statement that fails still counts as a statement, in the operation's or the background count, and its SQLSTATE is
 recorded in `statementErrors` or `backgroundStatementErrors`; reports list failed attempts by SQLSTATE. PostgreSQL
