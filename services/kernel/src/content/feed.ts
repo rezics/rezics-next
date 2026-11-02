@@ -85,6 +85,14 @@ export function createFeedReads(deps: FeedDependencies) {
   const collections = createCollectionReads(deps);
   const content = { ...deps, access: deps.contentAccess };
 
+  async function supported(activity: ActivityRef, actor: Actor, deadline: number): Promise<boolean> {
+    const status = (
+      await (await followSource()).checkCurrentFollowSupport(actor, { targets: [activity.target] }, deadline)
+    )[0]?.status;
+    if (status === 'unavailable') throw new ProblemError('dependency_unavailable');
+    return status === 'following';
+  }
+
   async function hydrate(
     activity: ActivityRef,
     actor: Actor,
@@ -93,12 +101,7 @@ export function createFeedReads(deps: FeedDependencies) {
     threads: ReadonlyMap<string, ThreadView | null>,
     authors: Map<string, string>,
   ): Promise<FeedItem | null> {
-    const supported = async () =>
-      (await (await followSource()).checkCurrentFollowSupport(actor, { targets: [activity.target] }, deadline))[0]
-        ?.status;
-    const initial = await supported();
-    if (initial === 'unavailable') throw new ProblemError('dependency_unavailable');
-    if (initial !== 'following') return null;
+    if (!(await supported(activity, actor, deadline))) return null;
     const object = activity.object;
     if (activity.target.type === 'subject' && !summaries.get(activity.target.id)) return null;
     let item: FeedItem | null = null;
@@ -183,9 +186,7 @@ export function createFeedReads(deps: FeedDependencies) {
         destination: { kind: 'collection', id: collection.id, title: collection.title },
       };
     }
-    const final = await supported();
-    if (final === 'unavailable') throw new ProblemError('dependency_unavailable');
-    return final === 'following' ? item : null;
+    return item;
   }
 
   return {
@@ -417,13 +418,20 @@ export function createFeedReads(deps: FeedDependencies) {
                 [...new Set(authorIds.values())],
                 { languages },
               );
-              for (const candidate of lanes.following) {
-                const item = candidate.item;
-                if (!item || item.key.owner !== 'content') continue;
-                const authorId = authorIds.get(item.id);
-                const author = authorId ? feedAuthor(accounts.get(authorId)) : undefined;
-                if (author && 'createdAt' in item.summary) item.summary = { ...item.summary, author };
-              }
+              // Keep the existing final follow disclosure after all owner hydration, including identities.
+              lanes.following = await Promise.all(
+                lanes.following.map(async (candidate, index) => {
+                  const item = candidate.item;
+                  if (!item) return candidate;
+                  if (!(await supported(page.activities[index]!, actor, deadline))) return { item: null };
+                  if (item.key.owner === 'content' && 'createdAt' in item.summary) {
+                    const authorId = authorIds.get(item.id);
+                    const author = authorId ? feedAuthor(accounts.get(authorId)) : undefined;
+                    if (author) item.summary = { ...item.summary, author };
+                  }
+                  return candidate;
+                }),
+              );
               next.following = page.next ?? false;
             }
           } catch (error) {
