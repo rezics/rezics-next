@@ -80,7 +80,9 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
       {selected ? (
         <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
           <p className="flex min-w-0 items-start gap-2 text-sm font-medium">
-            {selected.phase === 'ready' ? <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /> : null}
+            {selected.phase === 'ready' ? (
+              <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+            ) : null}
             {m.setup_context_selected()}
           </p>
           <Resolution value={selected} />

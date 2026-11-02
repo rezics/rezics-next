@@ -17,7 +17,9 @@ const directory = { id: chosen.id, label: 'Supplied directory name — ' + 'Long
 type Mode = 'long' | 'loading' | 'denied' | 'unavailable' | 'empty' | 'manual' | 'sparse';
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 async function prepare(mode: Mode) {
@@ -47,7 +49,16 @@ async function prepare(mode: Mode) {
     picker.retrySearch();
     await new Promise((done) => setTimeout(done, 10));
   }
-  return { picker, source, searches, resolutions, recover: () => { failure = null; }, pendingPage };
+  return {
+    picker,
+    source,
+    searches,
+    resolutions,
+    recover: () => {
+      failure = null;
+    },
+    pendingPage,
+  };
 }
 type Observation = Awaited<ReturnType<typeof prepare>>;
 const load = (mode: Mode) => async () => ({ observation: await prepare(mode) });
@@ -75,9 +86,12 @@ const meta = {
         desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
       },
     },
-    docs: { description: { component:
-      'Authored observations UNRUN. The actual setup field receives the installed controller with explicit presentation-only sources. Long labels, distinct read states, reference recovery, exact continuation and independent current/selected controls are retained. Keyboard, 44px geometry, 390/1280 and RTL observations await browser execution; native authorization, private reads and full acceptance remain owed.',
-    } },
+    docs: {
+      description: {
+        component:
+          'Authored observations UNRUN. The actual setup field receives the installed controller with explicit presentation-only sources. Long labels, distinct read states, reference recovery, exact continuation and independent current/selected controls are retained. Keyboard, 44px geometry, 390/1280 and RTL observations await browser execution; native authorization, private reads and full acceptance remain owed.',
+      },
+    },
   },
   globals: { locale: 'en', viewport: { value: 'phone390', isRotated: false } },
 } satisfies Meta<typeof SetupContextPickerField>;
@@ -276,7 +290,10 @@ export const CurrentnessAndRetiredWork: Story = {
     await expect(await canvas.findByText(saved.label)).toBeVisible();
     await expect(canvas.queryByText('RETIRED LABEL MUST NOT APPEAR')).toBeNull();
     let retiredReads = 0;
-    observation.source.resolve = async () => { retiredReads++; return saved; };
+    observation.source.resolve = async () => {
+      retiredReads++;
+      return saved;
+    };
     observation.picker.dispose();
     await userEvent.click(canvas.getByRole('button', { name: m.setup_context_use_current() }));
     await expect(retiredReads).toBe(0);

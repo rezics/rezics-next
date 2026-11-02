@@ -59,18 +59,24 @@ function source(overrides: Partial<ContextChoiceSource> = {}): ContextChoiceSour
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 async function tick(milliseconds = 0) {
-  await act(async () => { await new Promise((done) => setTimeout(done, milliseconds)); });
+  await act(async () => {
+    await new Promise((done) => setTimeout(done, milliseconds));
+  });
 }
 async function mount(boundary = source(), reference = '', disabled = false, dir: 'ltr' | 'rtl' = 'ltr') {
   setLocale('en', { reload: false });
   host.dir = dir;
   picker = createSetupContextPicker(boundary, reference);
   root = createRoot(host);
-  await act(async () => { root!.render(<SetupContextPickerField picker={picker} disabled={disabled} />); });
+  await act(async () => {
+    root!.render(<SetupContextPickerField picker={picker} disabled={disabled} />);
+  });
 }
 function button(label: string) {
   const found = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
@@ -80,7 +86,9 @@ function button(label: string) {
   return found!;
 }
 async function click(node: HTMLElement) {
-  await act(async () => { node.click(); });
+  await act(async () => {
+    node.click();
+  });
   await tick();
 }
 async function edit(input: HTMLInputElement, value: string) {
@@ -90,9 +98,13 @@ async function edit(input: HTMLInputElement, value: string) {
   });
   await tick();
 }
-function referenceInput() { return host.querySelector<HTMLInputElement>('input:not([type="search"])')!; }
+function referenceInput() {
+  return host.querySelector<HTMLInputElement>('input:not([type="search"])')!;
+}
 async function browse() {
-  await act(async () => { picker.retrySearch(); });
+  await act(async () => {
+    picker.retrySearch();
+  });
   await tick(10);
 }
 function outsideDetails(text: string) {
@@ -101,7 +113,10 @@ function outsideDetails(text: string) {
   expect(node!.closest('details')).toBeNull();
 }
 afterEach(async () => {
-  await act(async () => { root?.unmount(); picker?.dispose(); });
+  await act(async () => {
+    root?.unmount();
+    picker?.dispose();
+  });
   root = undefined;
   host.replaceChildren();
 });
@@ -116,7 +131,10 @@ afterAll(() => {
 
 test('complete supplied current, selected and reference identities remain readable in the actual RTL field', async () => {
   await mount(source(), chosen.id, false, 'rtl');
-  await act(async () => { await picker.current(saved.id, 'saved-head'); await picker.choose(chosen.id); });
+  await act(async () => {
+    await picker.current(saved.id, 'saved-head');
+    await picker.choose(chosen.id);
+  });
   expect(host.textContent).toContain(saved.label);
   expect(host.textContent).toContain(chosen.label);
   expect(host.textContent).toContain(saved.id);
@@ -137,7 +155,14 @@ test('complete supplied current, selected and reference identities remain readab
 test('manual reference validation, loading disablement and exact resolution retain existing recovery guidance', async () => {
   const resolution = deferred<SetupChoice | null>();
   const calls: string[] = [];
-  await mount(source({ resolve: (requested) => { calls.push(requested); return resolution.promise; } }));
+  await mount(
+    source({
+      resolve: (requested) => {
+        calls.push(requested);
+        return resolution.promise;
+      },
+    }),
+  );
   expect(host.querySelector('details')!.open).toBe(true);
   expect(button(m.space_setup_resolve()).disabled).toBe(true);
   expect(host.textContent).toContain(m.space_setup_reference_hint());
@@ -149,14 +174,23 @@ test('manual reference validation, loading disablement and exact resolution reta
   expect(calls).toEqual([chosen.id]);
   expect(referenceInput().disabled).toBe(true);
   expect(button(m.space_setup_loading()).disabled).toBe(true);
-  await act(async () => { resolution.resolve(chosen); });
+  await act(async () => {
+    resolution.resolve(chosen);
+  });
   expect(host.textContent).toContain(chosen.label);
   expect(host.querySelector('details')!.open).toBe(false);
 });
 
 test('directory display labels do not resolve rows; choosing resolves only the exact requested ID', async () => {
   const calls: string[] = [];
-  await mount(source({ resolve: async (requested) => { calls.push(requested); return chosen; } }));
+  await mount(
+    source({
+      resolve: async (requested) => {
+        calls.push(requested);
+        return chosen;
+      },
+    }),
+  );
   await browse();
   expect(calls).toEqual([]);
   const result = host.querySelector<HTMLButtonElement>('ul button')!;
@@ -170,10 +204,14 @@ test('directory display labels do not resolve rows; choosing resolves only the e
 
 test('sparse Next preserves an empty-string cursor distinctly from terminal null', async () => {
   const requests: { query: string; cursor?: string }[] = [];
-  await mount(source({ search: async ({ query, cursor }) => {
-    requests.push({ query, ...(cursor === undefined ? {} : { cursor }) });
-    return requests.length === 1 ? { contexts: [], next: '' } : { contexts: [directory], next: null };
-  } }));
+  await mount(
+    source({
+      search: async ({ query, cursor }) => {
+        requests.push({ query, ...(cursor === undefined ? {} : { cursor }) });
+        return requests.length === 1 ? { contexts: [], next: '' } : { contexts: [directory], next: null };
+      },
+    }),
+  );
   await browse();
   expect(host.textContent).toContain(m.setup_context_empty());
   await click(button(m.setup_context_next()));
@@ -187,10 +225,15 @@ for (const reason of ['denied', 'unavailable'] as const) {
   test(`${reason} and pending reads stay distinct from empty, with explicit retry and known-reference recovery`, async () => {
     const page = deferred<{ contexts: readonly SetupChoice[]; next: string | null }>();
     let attempts = 0;
-    await mount(source({ search: async () => {
-      if (++attempts === 1) throw new ContextChoiceError(reason);
-      return page.promise;
-    } }), chosen.id);
+    await mount(
+      source({
+        search: async () => {
+          if (++attempts === 1) throw new ContextChoiceError(reason);
+          return page.promise;
+        },
+      }),
+      chosen.id,
+    );
     await browse();
     expect(host.querySelector('[role="alert"]')!.textContent).toBe(
       reason === 'denied' ? m.setup_context_denied() : m.setup_context_unavailable(),
@@ -202,7 +245,9 @@ for (const reason of ['denied', 'unavailable'] as const) {
     expect(host.querySelector('[role="status"]')!.textContent).toBe(m.setup_context_searching());
     expect(host.textContent).not.toContain(m.setup_context_empty());
     expect(referenceInput().value).toBe(chosen.id);
-    await act(async () => { page.resolve({ contexts: [], next: null }); });
+    await act(async () => {
+      page.resolve({ contexts: [], next: null });
+    });
     expect(host.textContent).toContain(m.setup_context_empty());
     await click(button(m.space_setup_resolve()));
     expect(host.textContent).toContain(chosen.label);
@@ -212,11 +257,18 @@ for (const reason of ['denied', 'unavailable'] as const) {
 test('current check, use-current, clear and selected retry keep saved and chosen pointers independent', async () => {
   let deny = false;
   const calls: string[] = [];
-  await mount(source({ resolve: async (requested) => {
-    calls.push(requested);
-    return deny ? null : requested === saved.id ? saved : chosen;
-  } }));
-  await act(async () => { await picker.current(saved.id, 'head'); await picker.choose(chosen.id); });
+  await mount(
+    source({
+      resolve: async (requested) => {
+        calls.push(requested);
+        return deny ? null : requested === saved.id ? saved : chosen;
+      },
+    }),
+  );
+  await act(async () => {
+    await picker.current(saved.id, 'head');
+    await picker.choose(chosen.id);
+  });
   await click(button(m.setup_context_check_current()));
   expect(picker.getSnapshot().selected?.id).toBe(chosen.id);
   await click(button(m.setup_context_use_current()));
@@ -247,17 +299,24 @@ test('mismatched exact resolutions fail closed and do not reveal their supplied 
 test('current head ABA and synchronous disconnect/reconnect cannot publish retired labels through the field', async () => {
   const old = deferred<SetupChoice | null>();
   let calls = 0;
-  await mount(source({ resolve: async (requested) => ++calls === 1 ? old.promise : { id: requested, label: saved.label } }));
+  await mount(
+    source({ resolve: async (requested) => (++calls === 1 ? old.promise : { id: requested, label: saved.label }) }),
+  );
   const disconnect = picker.connect();
   let pending!: Promise<void>;
-  await act(async () => { pending = picker.current(saved.id, 'head-a'); });
+  await act(async () => {
+    pending = picker.current(saved.id, 'head-a');
+  });
   await act(async () => {
     disconnect();
     picker.connect();
     await picker.current(saved.id, 'head-b');
     await picker.current(saved.id, 'head-a');
   });
-  await act(async () => { old.resolve({ id: saved.id, label: 'RETIRED CURRENT LABEL' }); await pending; });
+  await act(async () => {
+    old.resolve({ id: saved.id, label: 'RETIRED CURRENT LABEL' });
+    await pending;
+  });
   expect(host.textContent).toContain(saved.label);
   expect(host.textContent).not.toContain('RETIRED CURRENT LABEL');
   const retainedUseCurrent = button(m.setup_context_use_current());
@@ -269,11 +328,20 @@ test('current head ABA and synchronous disconnect/reconnect cannot publish retir
 
 test('disabled controls retain supplied selection and reference while manual guidance remains accessible', async () => {
   const calls: string[] = [];
-  await mount(source({ resolve: async (requested) => {
-    calls.push(requested);
-    return requested === saved.id ? saved : chosen;
-  } }), chosen.id, true);
-  await act(async () => { await picker.current(saved.id); await picker.choose(chosen.id); });
+  await mount(
+    source({
+      resolve: async (requested) => {
+        calls.push(requested);
+        return requested === saved.id ? saved : chosen;
+      },
+    }),
+    chosen.id,
+    true,
+  );
+  await act(async () => {
+    await picker.current(saved.id);
+    await picker.choose(chosen.id);
+  });
   await click(host.querySelector('summary')!);
   expect(host.querySelector('details')!.open).toBe(true);
   expect(host.textContent).toContain(m.space_setup_reference_hint());
