@@ -15,6 +15,7 @@ import type { RuleChoicePage, RuleChoices, RulePage } from './collection-rule-re
 import type { RuleWrite } from './collection-rule-actions';
 import type { CollectionWriteResult } from './collection-records';
 import { CollectionRuleControls } from './collection-rule-controls';
+import { collectionRuleLabelPrefix } from './collection-rule-label-input';
 import { ruleDraftSnapshot, useCollectionRuleDraftNavigation } from './collection-rule-draft-navigation';
 
 type AvailablePage = Extract<RulePage, { state: 'new' | 'ready' }>;
@@ -479,6 +480,12 @@ function RuleForm({
   );
   const [choices, setChoices] = useState(page.choices);
   const [query, setQuery] = useState('');
+  const prefix = collectionRuleLabelPrefix(query);
+  const prefixError = prefix.ok
+    ? null
+    : prefix.issue === 'transport'
+      ? m.library_rule_label_input_transport()
+      : m.library_rule_label_input_correction();
   const { pending, start } = useRuleWork(epoch, ownerCurrent, isOwnerCurrent);
   const [feedback, setFeedback] = useState('');
   const [conflict, setConflict] = useState(false);
@@ -486,9 +493,8 @@ function RuleForm({
   const captured = useRef<RuleWrite | null>(null);
   const request = useRef<{ csrf: string; send: typeof save } | null>(null);
   const attempted = useRef(false);
-  const choiceAddress = useRef({ q: '', cursor: undefined as string | undefined, generation: 0 });
-  const choiceContext = useRef({ q: '', next: page.choices.labels.next });
-  const [choiceQuery, setChoiceQuery] = useState('');
+  const choiceAddress = useRef({ raw: '', q: '', cursor: undefined as string | undefined, generation: 0 });
+  const choiceContext = useRef({ q: '', next: page.choices.labels.next, generation: 0 });
   const [savedId, setSavedId] = useState<string | null>(null);
   const confirmed = useRef(false);
   const snapshot = ruleDraftSnapshot({ filter, title, description });
@@ -606,10 +612,9 @@ function RuleForm({
         // An uncertain command retains its exact revision, filter, metadata and key across reads.
         if (!captured.current) setBase(current);
         if (choiceAddress.current === choiceOrigin) {
-          choiceAddress.current = { q: '', cursor: undefined, generation: choiceOrigin.generation + 1 };
-          choiceContext.current = { q: '', next: current.choices.labels.next };
+          choiceAddress.current = { raw: '', q: '', cursor: undefined, generation: choiceOrigin.generation + 1 };
+          choiceContext.current = { q: '', next: current.choices.labels.next, generation: choiceAddress.current.generation };
           setQuery('');
-          setChoiceQuery('');
           setChoices(current.choices);
         }
         setConflict(false);
@@ -632,13 +637,17 @@ function RuleForm({
       !canLabel ||
       !(canLabelCurrent?.() ?? true) ||
       captured.current ||
-      query !== choiceAddress.current.q ||
-      (cursor !== undefined && (query !== choiceContext.current.q || cursor !== choiceContext.current.next))
+      !prefix.ok ||
+      query !== choiceAddress.current.raw ||
+      (cursor !== undefined &&
+        (prefix.query !== choiceContext.current.q ||
+          choiceAddress.current.generation !== choiceContext.current.generation ||
+          cursor !== choiceContext.current.next))
     )
       return;
     const operation = start();
     if (!operation) return;
-    const requested = { q: query, cursor, generation: choiceAddress.current.generation + 1 };
+    const requested = { ...choiceAddress.current, q: prefix.query, cursor };
     choiceAddress.current = requested;
     try {
       if (!operation.current()) return;
@@ -653,8 +662,7 @@ function RuleForm({
         result?.viewerId === viewerId &&
         (!result.address || (result.address.q === requested.q && result.address.cursor === (requested.cursor ?? null)))
       ) {
-        choiceContext.current = { q: requested.q, next: result.choices.labels.next };
-        setChoiceQuery(requested.q);
+        choiceContext.current = { q: requested.q, next: result.choices.labels.next, generation: requested.generation };
         setChoices(result.choices);
       } else setFeedback(m.library_rule_unavailable());
     } catch {
@@ -737,27 +745,40 @@ function RuleForm({
                 <FieldLabel htmlFor={`${metadataId}-label-search`}>{m.library_rule_label_search()}</FieldLabel>
                 <Input
                   id={`${metadataId}-label-search`}
-                  aria-describedby={`${metadataId}-label-limit`}
+                  aria-describedby={`${metadataId}-${prefixError ? 'label-error' : 'label-limit'}`}
+                  aria-invalid={!!prefixError}
                   value={query}
                   maxLength={1000}
                   onChange={(event) => {
                     if (!isCurrent() || !(canLabelCurrent?.() ?? true) || captured.current) return;
+                    const raw = event.currentTarget.value;
+                    const next = collectionRuleLabelPrefix(raw);
                     choiceAddress.current = {
-                      q: event.currentTarget.value,
+                      raw,
+                      q: next.ok ? next.query : '',
                       cursor: undefined,
                       generation: choiceAddress.current.generation + 1,
                     };
-                    setQuery(event.currentTarget.value);
+                    // A raw edit retires even equal normalized queries and their continuation positions.
+                    choiceContext.current = { q: '', next: null, generation: -1 };
+                    setChoices((current) => ({ ...current, labels: { state: 'ready', values: [], next: null } }));
+                    setQuery(raw);
                   }}
                 />
                 <FieldDescription id={`${metadataId}-label-limit`}>
-                  {m.library_rule_label_search_limit()}
+                  {m.library_rule_label_input_help()}
                 </FieldDescription>
+                {prefixError && (
+                  <FieldDescription id={`${metadataId}-label-error`} role="alert">
+                    {prefixError}
+                  </FieldDescription>
+                )}
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={() => void labelPage()}>
+                  <Button type="button" variant="outline" disabled={!prefix.ok} onClick={() => void labelPage()}>
                     {m.search_apply()}
                   </Button>
-                  {choices.labels.next && choiceQuery === query && (
+                  {choices.labels.next && prefix.ok && choiceContext.current.q === prefix.query &&
+                    choiceContext.current.generation === choiceAddress.current.generation && (
                     <Button type="button" variant="outline" onClick={() => void labelPage(choices.labels.next!)}>
                       {m.library_label_more()}
                     </Button>

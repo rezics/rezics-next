@@ -4765,5 +4765,8 @@
   "library_subject_label_steps_created": "Libellé créé. Il n’a pas encore été attribué à ce contenu.",
   "library_subject_label_steps_retry": "Le résultat de la commande est inconnu. Réessayez la même commande.",
   "library_subject_label_steps_continue": "Continuer",
-  "library_subject_label_steps_conflict": "Cette commande entre en conflit avec les libellés actuels. Consultez la liste avant de lancer une nouvelle commande."
+  "library_subject_label_steps_conflict": "Cette commande entre en conflit avec les libellés actuels. Consultez la liste avant de lancer une nouvelle commande.",
+  "library_rule_label_input_help": "La recherche utilise NFC et regroupe les espaces Unicode. Au plus 100 valeurs scalaires Unicode après normalisation ; une recherche vide affiche les étiquettes.",
+  "library_rule_label_input_correction": "Utilisez au plus 100 valeurs scalaires Unicode après normalisation, sans caractères de contrôle ni substituts isolés.",
+  "library_rule_label_input_transport": "Limitez la recherche brute à 1 000 unités de code UTF-16."
 }

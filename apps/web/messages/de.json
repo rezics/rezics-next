@@ -4765,5 +4765,8 @@
   "library_subject_label_steps_created": "Label erstellt. Es wurde diesem Inhalt noch nicht zugeordnet.",
   "library_subject_label_steps_retry": "Das Ergebnis des Befehls ist unklar. Wiederhole denselben Befehl.",
   "library_subject_label_steps_continue": "Weiter",
-  "library_subject_label_steps_conflict": "Diese Label-Aktion steht im Konflikt mit den aktuellen Labels. Prüfe die Liste, bevor du eine neue Aktion startest."
+  "library_subject_label_steps_conflict": "Diese Label-Aktion steht im Konflikt mit den aktuellen Labels. Prüfe die Liste, bevor du eine neue Aktion startest.",
+  "library_rule_label_input_help": "Die Suche verwendet NFC und vereinheitlichte Unicode-Leerzeichen. Höchstens 100 Unicode-Skalarwerte nach der Normalisierung; eine leere Suche listet Labels auf.",
+  "library_rule_label_input_correction": "Verwende nach der Normalisierung höchstens 100 Unicode-Skalarwerte, ohne Steuerzeichen oder einzelne Surrogate.",
+  "library_rule_label_input_transport": "Die unveränderte Suche darf höchstens 1.000 UTF-16-Codeeinheiten enthalten."
 }

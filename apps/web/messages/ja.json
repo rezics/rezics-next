@@ -4765,5 +4765,8 @@
   "library_subject_label_steps_created": "ラベルを作成しました。この対象にはまだ割り当てられていません。",
   "library_subject_label_steps_retry": "操作の結果を確認できません。同じ操作を再試行してください。",
   "library_subject_label_steps_continue": "続ける",
-  "library_subject_label_steps_conflict": "この操作は現在のラベルと競合しています。新しい操作を始める前に一覧を確認してください。"
+  "library_subject_label_steps_conflict": "この操作は現在のラベルと競合しています。新しい操作を始める前に一覧を確認してください。",
+  "library_rule_label_input_help": "検索にはNFC正規化とUnicode空白の集約を適用します。正規化後はUnicodeスカラー値100個まで。空欄ではラベル一覧を表示します。",
+  "library_rule_label_input_correction": "正規化後のUnicodeスカラー値を100個以内にし、制御文字や単独のサロゲートを除いてください。",
+  "library_rule_label_input_transport": "入力した検索文字列はUTF-16コード単位で1,000個以内にしてください。"
 }

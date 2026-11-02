@@ -14,6 +14,7 @@ import {
   type CollectionWriteResult,
 } from './collection-records';
 import { loadCollectionRule, loadCollectionRuleChoices } from './collection-rule-read';
+import { validateRuleLabelPage } from './collection-rule-label-input';
 
 export type RuleWrite = {
   id?: string;
@@ -119,18 +120,7 @@ export const saveCollectionRule = createServerFn({ method: 'POST' })
     return submitCollectionRule(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
 export const readCollectionRuleChoices = createServerFn({ method: 'GET' })
-  .validator((input: { q?: string; cursor?: string }) => {
-    if (
-      !input ||
-      typeof input !== 'object' ||
-      Array.isArray(input) ||
-      Object.keys(input).some((key) => key !== 'q' && key !== 'cursor') ||
-      (input.q !== undefined && (typeof input.q !== 'string' || input.q.length > 1000)) ||
-      (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 4096))
-    )
-      throw new Error('Invalid label page');
-    return input;
-  })
+  .validator(validateRuleLabelPage)
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     return loadCollectionRuleChoices(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);

@@ -4765,5 +4765,8 @@
   "library_subject_label_steps_created": "Etiqueta creada. Aún no se ha asignado a este contenido.",
   "library_subject_label_steps_retry": "Se desconoce el resultado de la operación. Reintenta la misma operación.",
   "library_subject_label_steps_continue": "Continuar",
-  "library_subject_label_steps_conflict": "Esta operación entra en conflicto con las etiquetas actuales. Revisa la lista antes de iniciar otra operación."
+  "library_subject_label_steps_conflict": "Esta operación entra en conflicto con las etiquetas actuales. Revisa la lista antes de iniciar otra operación.",
+  "library_rule_label_input_help": "La búsqueda usa NFC y espacios Unicode unificados. Máximo 100 valores escalares Unicode tras normalizar; una búsqueda vacía muestra las etiquetas.",
+  "library_rule_label_input_correction": "Usa como máximo 100 valores escalares Unicode tras normalizar, sin controles ni sustitutos aislados.",
+  "library_rule_label_input_transport": "Limita la búsqueda original a 1.000 unidades de código UTF-16."
 }

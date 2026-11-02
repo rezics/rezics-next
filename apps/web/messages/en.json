@@ -4818,5 +4818,8 @@
   "library_subject_label_steps_created": "Label created. It has not yet been assigned to this subject.",
   "library_subject_label_steps_retry": "The command outcome is unknown. Retry the same command.",
   "library_subject_label_steps_continue": "Continue",
-  "library_subject_label_steps_conflict": "This label command conflicts with the current labels. Review the list before starting a new command."
+  "library_subject_label_steps_conflict": "This label command conflicts with the current labels. Review the list before starting a new command.",
+  "library_rule_label_input_help": "Search uses NFC and collapsed Unicode whitespace. Up to 100 Unicode scalar values after normalization; an empty search lists labels.",
+  "library_rule_label_input_correction": "Use at most 100 Unicode scalar values after normalization, without controls or lone surrogates.",
+  "library_rule_label_input_transport": "Keep the raw search within 1,000 UTF-16 code units."
 }

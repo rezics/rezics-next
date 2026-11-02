@@ -5,6 +5,7 @@ import { conditionMetadata, type ConditionMetadata } from '../search/condition-e
 import type { Release } from '../subject/definitions';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { validateRuleLabelPage } from './collection-rule-label-input';
 
 export type SavedRule = {
   filter: FilterDocument;
@@ -78,8 +79,9 @@ export async function loadRuleChoices(
     })(),
     (async () => {
       try {
+        const prefix = validateRuleLabelPage(labels ?? {});
         const response = await client.libraryLabels.get({
-          query: { limit: 100, ...labels },
+          query: { limit: 100, ...prefix },
           headers: { authorization },
         });
         if (response.error || !response.data) {
@@ -146,14 +148,15 @@ export async function loadCollectionRuleChoices(
   sessionEnv: Partial<SessionEnv>,
   address: { q?: string; cursor?: string },
 ): Promise<RuleChoicePage | null> {
+  const prefix = validateRuleLabelPage(address);
   if (await prepareSession(request, sessionEnv)) return null;
   const authorization = viewerCredential(request);
   const viewerId = sessionSubject(request);
   return authorization && viewerId
     ? {
         viewerId,
-        address: { q: address.q ?? '', cursor: address.cursor ?? null },
-        choices: await loadRuleChoices(client, authorization, address),
+        address: { q: prefix.q, cursor: prefix.cursor ?? null },
+        choices: await loadRuleChoices(client, authorization, prefix),
       }
     : null;
 }

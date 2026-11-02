@@ -4765,5 +4765,8 @@
   "library_subject_label_steps_created": "라벨을 만들었습니다. 아직 이 대상에 지정되지 않았습니다.",
   "library_subject_label_steps_retry": "작업 결과를 알 수 없습니다. 같은 작업을 다시 시도하세요.",
   "library_subject_label_steps_continue": "계속",
-  "library_subject_label_steps_conflict": "이 작업이 현재 라벨과 충돌합니다. 새 작업을 시작하기 전에 목록을 확인하세요."
+  "library_subject_label_steps_conflict": "이 작업이 현재 라벨과 충돌합니다. 새 작업을 시작하기 전에 목록을 확인하세요.",
+  "library_rule_label_input_help": "검색에는 NFC 정규화와 유니코드 공백 병합이 적용됩니다. 정규화 후 유니코드 스칼라 값 100개까지 허용되며, 빈 검색은 라벨 목록을 표시합니다.",
+  "library_rule_label_input_correction": "정규화 후 유니코드 스칼라 값 100개 이내로 입력하고 제어 문자나 단독 서로게이트를 제거하세요.",
+  "library_rule_label_input_transport": "원본 검색 입력은 UTF-16 코드 단위 1,000개 이내로 유지하세요."
 }
