@@ -13,29 +13,33 @@ import {
 import { m } from '../../paraglide/messages.js';
 
 // Reuse localized departure copy; unresolved commands warn that leaving loses retry recovery but does not cancel the request.
-/** Protects only the unsubmitted Context creation owned by this mounted editor. */
+/** Protects this editor's creation draft and unresolved lifecycle command. */
 export function EditorialContextNavigation({
   locale,
   dirty,
   unsettled,
+  onLeave,
 }: {
   locale: string;
   dirty: boolean;
   unsettled: boolean;
+  onLeave: () => void;
 }) {
   const protect = dirty || unsettled;
   const router = useRouter({ warn: false });
-  return router ? createElement(RouterDepartureGuard, { locale, protect, unsettled }) : null;
+  return router ? createElement(RouterDepartureGuard, { locale, protect, unsettled, onLeave }) : null;
 }
 
 function RouterDepartureGuard({
   locale,
   protect,
   unsettled,
+  onLeave,
 }: {
   locale: string;
   protect: boolean;
   unsettled: boolean;
+  onLeave: () => void;
 }) {
   const returnFocus = useRef<HTMLElement | null>(null);
   const stayButton = useRef<HTMLButtonElement>(null);
@@ -77,8 +81,10 @@ function RouterDepartureGuard({
     if (blocker.status !== 'blocked' || resolved.current) return;
     resolved.current = true;
     leaving.current = leave;
-    if (leave) blocker.proceed();
-    else blocker.reset();
+    if (leave) {
+      onLeave();
+      blocker.proceed();
+    } else blocker.reset();
   }
 
   const o = { locale: locale as never };

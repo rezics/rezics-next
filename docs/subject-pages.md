@@ -612,6 +612,10 @@ eligibility or promises success. Context deletion makes its editorial source una
 30-day restore period subject to current native permission and retention checks. This workspace changes no
 Realm/Space binding, fallback, grant or ownership.
 
+Existing Context deletion and restoration protect route departure and browser unload while sent or unavailable:
+Stay retains exact recovery; Leave retires local callbacks without cancelling native work. Ordinary reads and
+confirmed commands permit departure even when the subsequent read fails.
+
 Private query keys include actor, locale, directory query/filter/cursor or resource identity. Private data is
 removed on actor retirement, logout and denial, and hidden during current rereads. All eight launch locales share
 the same phone390/desktop1280 behavior stories. Ordinary Web visual review receives these exact story IDs, each

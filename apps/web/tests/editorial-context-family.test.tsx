@@ -2,7 +2,7 @@
 // Original lifecycle, reader/session/credential, ABA and retirement campaigns remain unchanged.
 import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, type ReactNode } from 'react';
+import { act, useState, type ReactNode } from 'react';
 import { editorialContextFixture } from '../src/kernel/fake/editorial-context';
 import { contextFixture } from '../src/kernel/fake/context-curation';
 import type { EditorialTransport } from '../src/features/catalogue/editorial-context';
@@ -379,6 +379,29 @@ test('Editorial Context family retains supplied comparison, independent controls
     const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } =
       await import('@tanstack/react-router');
     const draft = editorialContextFixture();
+    const existing = editorialContextFixture();
+    const commands: Parameters<EditorialTransport['submit']>[0][] = [];
+    let finishCommand!: (value: Awaited<ReturnType<EditorialTransport['submit']>>) => void;
+    let finishRead!: (value: Awaited<ReturnType<EditorialTransport['read']>>) => void;
+    let holdRead = false;
+    let reads = 0;
+    const existingTransport: EditorialTransport = {
+      read: (address) => {
+        reads++;
+        return holdRead
+          ? new Promise((resolve) => {
+              finishRead = resolve;
+            })
+          : existing.transport.read(address);
+      },
+      submit: (command) => {
+        commands.push(command);
+        return new Promise((resolve) => {
+          finishCommand = resolve;
+        });
+      },
+    };
+    let replaceIdentity!: (kind: 'context' | 'session') => void;
     let arrivals = 0;
     const rootRoute = createRootRoute({ component: Outlet });
     const createRouteView = createRoute({
@@ -399,8 +422,30 @@ test('Editorial Context family retains supplied comparison, independent controls
       },
       component: () => <h1>Next</h1>,
     });
+    const existingRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/en/contexts/existing',
+      component: () => {
+        const [identity, setIdentity] = useState({ id: existing.id, csrfToken: 'original' });
+        replaceIdentity = (kind) =>
+          setIdentity((value) =>
+            kind === 'context'
+              ? { ...value, id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e12' }
+              : { ...value, csrfToken: 'replacement' },
+          );
+        return (
+          <CandidateReaderBoundary
+            observed={{ ...reader('reader'), csrfToken: identity.csrfToken }}
+            address="editorial"
+          >
+            <Link to="/next">Next</Link>
+            <EditorialContextWorkspace id={identity.id} locale="en" transport={existingTransport} />
+          </CandidateReaderBoundary>
+        );
+      },
+    });
     const router = createRouter({
-      routeTree: rootRoute.addChildren([createRouteView, nextRoute]),
+      routeTree: rootRoute.addChildren([createRouteView, existingRoute, nextRoute]),
       history: createMemoryHistory({ initialEntries: ['/en/contexts/new'] }),
     });
     await router.load();
@@ -465,6 +510,79 @@ test('Editorial Context family retains supplied comparison, independent controls
     await act(async () => userEvent.click(host.querySelector('a')!));
     await until(() => router.state.location.pathname === '/next');
     expect(arrivals).toBe(3);
+
+    // Existing commands share the creation departure owner; ordinary reads stay unprotected.
+    const openExisting = async () => {
+      holdRead = false;
+      await act(async () => router.navigate({ to: '/en/contexts/existing' }));
+      await until(() => buttons(host, m.editorial_delete({}, o)).length === 1);
+      expect(unload()).toBe(false);
+    };
+    const stay = async () => {
+      expect((await navigateNext()).textContent).toContain(m.thread_authoring_leave_pending({}, o));
+      await act(async () => userEvent.click(dialogButton(m.thread_authoring_stay({}, o))));
+      await until(() => !window.document.querySelector('[role="alertdialog"]'));
+      expect(unload()).toBe(true);
+    };
+    const sendDelete = async () => {
+      await click(m.editorial_delete({}, o));
+      await click(m.contribution_confirm({}, o));
+    };
+    await openExisting();
+    await sendDelete();
+    expect(commands[0]).toMatchObject({ operation: 'delete', id: existing.id, session: 'editorial-session' });
+    expect(commands[0]!.key).toBeTruthy();
+    await stay();
+    expect(button(m.editorial_retry({}, o)).disabled).toBe(true);
+    await act(async () => finishCommand({ ok: false, reason: 'unavailable', session: 'new-session' }));
+    const retryDelete = button(m.editorial_retry({}, o));
+    await stay();
+    expect(button(m.editorial_retry({}, o))).toBe(retryDelete);
+    expect(buttons(host, m.editorial_revise({}, o))).toHaveLength(0);
+    await click(m.editorial_retry({}, o));
+    expect(commands[1]).toBe(commands[0]);
+    holdRead = true;
+    await act(async () => finishCommand({ ok: true, operation: 'delete', id: existing.id }));
+    expect(unload()).toBe(false); // Confirmed completion releases even its still-running ordinary read.
+    await act(async () => finishRead({ ok: false, reason: 'unavailable' }));
+    expect(unload()).toBe(false);
+    await click(m.editorial_restore({}, o));
+    await click(m.contribution_confirm({}, o));
+    await act(async () => finishCommand({ ok: false, reason: 'unavailable' }));
+    await stay();
+    await click(m.editorial_retry({}, o));
+    expect(commands[3]).toBe(commands[2]);
+    expect(commands[2]).toMatchObject({ operation: 'restore', id: existing.id, session: 'new-session' });
+    await navigateNext();
+    await act(async () => userEvent.click(dialogButton(m.thread_authoring_leave({}, o))));
+    await until(() => router.state.location.pathname === '/next');
+    expect(arrivals).toBe(4);
+    const readsBeforeLate = reads;
+    await act(async () => finishCommand({ ok: true, operation: 'restore', id: existing.id }));
+    expect(reads).toBe(readsBeforeLate);
+    expect(host.textContent).not.toContain(m.editorial_restored({}, o));
+
+    for (const kind of ['context', 'session'] as const) {
+      await openExisting();
+      await sendDelete();
+      const late = finishCommand;
+      const oldRetry = button(m.editorial_retry({}, o));
+      await navigateNext();
+      await act(async () => replaceIdentity(kind));
+      await until(() => !window.document.querySelector('[role="alertdialog"]'));
+      const readsAfterRetirement = reads;
+      const sent = commands.length;
+      await act(async () => {
+        oldRetry.click();
+        late({ ok: true, operation: 'delete', id: existing.id });
+      });
+      expect(commands).toHaveLength(sent);
+      expect(reads).toBe(readsAfterRetirement);
+      expect(host.textContent).not.toContain(m.editorial_deleted({}, o));
+      expect(unload()).toBe(false);
+      await act(async () => userEvent.click(host.querySelector('a')!));
+      await until(() => router.state.location.pathname === '/next');
+    }
     await render(null);
 
     // Local acceptance does not adopt a value or turn the selected Context into publication.
