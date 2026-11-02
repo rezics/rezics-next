@@ -221,7 +221,7 @@ test('Game and Addon complete fields family preserves independent labels, native
     }
     await act(async () => user.selectOptions(selectors[0]!, 'schema:url'));
     expect(selectors[1]!.value).toBe('');
-    const add = within(mounts[0]!).getAllByRole('button', { name: m.correction_add(), exact: true })[0]!;
+    const add = within(mounts[0]!).getAllByRole('button', { name: m.correction_add() })[0]!;
     await act(async () => user.tab());
     expect(host.ownerDocument.activeElement).toBe(add);
     expect(add.className).toContain('focus-visible:outline-2');
@@ -252,16 +252,12 @@ test('Game and Addon complete fields family preserves independent labels, native
     await render(<Initial key="cap" index={0} rows={Array.from({ length: 31 }, () => initialRow())} />);
     let select = within(host).getByRole('combobox', { name: m.character_add_fact() }) as HTMLSelectElement;
     await act(async () => user.selectOptions(select, 'schema:inLanguage'));
-    await act(async () => user.click(within(host).getByRole('button', { name: m.correction_add(), exact: true })));
+    await act(async () => user.click(within(host).getByRole('button', { name: m.correction_add() })));
     expect(host.querySelectorAll('[data-slot="game-initial-fact"]')).toHaveLength(32);
     await act(async () => user.selectOptions(select, 'schema:inLanguage'));
-    expect(
-      (within(host).getByRole('button', { name: m.correction_add(), exact: true }) as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect((within(host).getByRole('button', { name: m.correction_add() }) as HTMLButtonElement).disabled).toBe(true);
     await act(async () => user.click(within(host).getAllByRole('button', { name: m.recipe_remove_field() })[0]!));
-    expect(
-      (within(host).getByRole('button', { name: m.correction_add(), exact: true }) as HTMLButtonElement).disabled,
-    ).toBe(false);
+    expect((within(host).getByRole('button', { name: m.correction_add() }) as HTMLButtonElement).disabled).toBe(false);
     const removed = structuredClone(release);
     delete removed.properties['schema:inLanguage'];
     await render(<Initial key="removed" index={0} current={removed} />);
@@ -302,7 +298,7 @@ test('Game and Addon complete fields family preserves independent labels, native
     await act(async () =>
       user.selectOptions(within(host).getByRole('combobox', { name: m.character_add_fact() }), 'schema:inLanguage'),
     );
-    await act(async () => user.click(within(host).getByRole('button', { name: m.correction_add(), exact: true })));
+    await act(async () => user.click(within(host).getByRole('button', { name: m.correction_add() })));
     const creationFrame = host.querySelector<HTMLElement>('[data-slot="game-initial-fact"]')!;
     await act(async () => user.type(within(creationFrame).getByRole('textbox', { name: m.correction_value() }), 'ja'));
     expect(gameCreations).toEqual([]);

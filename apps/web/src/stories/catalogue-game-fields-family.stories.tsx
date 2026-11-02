@@ -237,9 +237,7 @@ export const IndependentSelectors: Story = {
       await userEvent.selectOptions(selectors[index]!, 'schema:url');
       await target(selectors[index]!);
       await userEvent.tab();
-      await expect(
-        [first, second][index]!.getAllByRole('button', { name: m.correction_add(), exact: true })[0]!,
-      ).toHaveFocus();
+      await expect([first, second][index]!.getAllByRole('button', { name: m.correction_add() })[0]!).toHaveFocus();
       await userEvent.tab({ shift: true });
       await expect(selectors[index]!).toHaveFocus();
       const focus = canvasElement.ownerDocument.defaultView!.getComputedStyle(selectors[index]!);
@@ -250,7 +248,7 @@ export const IndependentSelectors: Story = {
       await expect(selectors[index]!).toHaveAccessibleName(m.character_add_fact());
     }
     await userEvent.selectOptions(selectors[0]!, 'schema:url');
-    const add = first.getAllByRole('button', { name: m.correction_add(), exact: true })[0]!;
+    const add = first.getAllByRole('button', { name: m.correction_add() })[0]!;
     await target(add);
     await userEvent.keyboard('{Tab}{Enter}');
     await expect(selectors[0]!).toHaveValue('');
@@ -265,7 +263,7 @@ export const MultiplicityAndLimit: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const select = canvas.getByRole('combobox', { name: m.character_add_fact() });
-    const add = canvas.getByRole('button', { name: m.correction_add(), exact: true });
+    const add = canvas.getByRole('button', { name: m.correction_add() });
     await userEvent.selectOptions(select, 'schema:inLanguage');
     await target(add);
     await userEvent.click(add);
@@ -430,7 +428,7 @@ export const GameCreation: Story = {
     );
     await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'The Lantern Game');
     await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:inLanguage');
-    await userEvent.click(canvas.getByRole('button', { name: m.correction_add(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
     const frame = canvasElement.querySelector<HTMLElement>('[data-slot="game-initial-fact"]')!;
     await userEvent.type(within(frame).getByRole('textbox', { name: m.correction_value() }), 'ja');
     await inspectFrames(canvasElement);
