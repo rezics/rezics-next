@@ -259,7 +259,9 @@ export const DiscussionAndIndependentExcerpts: Story = {
       const excerpt = row.querySelector<HTMLElement>('[data-content-item-slot="preview"] [data-slot="excerpt"]')!;
       const link = within(excerpt).getByRole('link', { name: 'The asteroid' });
       await expect(link).toHaveAttribute('href', 'https://example.com/b612');
-      await expect(link.closest('[data-slot="list-row-control"]')).toHaveClass('relative', 'z-10');
+      await expect(getComputedStyle(link).position).toBe('relative');
+      await expect(getComputedStyle(link).zIndex).toBe('10');
+      await expect(excerpt.closest('[data-slot="list-row-control"]')).toBeNull();
       await expect(primary.contains(link)).toBe(false);
       primary.focus();
       await userEvent.tab();
@@ -272,7 +274,9 @@ export const DiscussionAndIndependentExcerpts: Story = {
       const spoilerRow = rows[1]!;
       const reveal = within(spoilerRow).getByRole('button', { name: m.thread_reveal_spoiler() });
       await expect(reveal.closest('[data-content-item-slot="preview"]')).toBeTruthy();
-      await expect(reveal.closest('[data-slot="list-row-control"]')).toHaveClass('relative', 'z-10');
+      await expect(getComputedStyle(reveal).position).toBe('relative');
+      await expect(getComputedStyle(reveal).zIndex).toBe('10');
+      await expect(reveal.closest('[data-slot="list-row-control"]')).toBeNull();
       await expect(reveal).toHaveAttribute('aria-expanded', 'false');
       reveal.focus();
       await userEvent.keyboard('{Enter}');
