@@ -1,5 +1,6 @@
 import type { MemberPageTarget } from './member-list-query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
+import { createServerFn } from '@tanstack/react-start';
 import { PAGE_GLOBAL_CONTEXT, type SelectedContext } from '@rezics/composition';
 import { useOperation } from '../../kernel/exposure';
 import { RatingsSection } from './subject-ratings-view';
@@ -19,7 +20,7 @@ import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rez
 import { ListRowControl } from '@rezics/ui/list-row';
 import { CoverViewer } from '@rezics/ui/cover-viewer';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
@@ -51,7 +52,12 @@ import {
 import { statementDocument } from './documents';
 import { DocumentValue, LanguageTag, readableDocument, SpoilerGate, type ValueLabels } from './values';
 import { DescriptionPassage, SubjectPassage } from './subject-passage';
-import { SubjectReadingState } from '../../subject/reading-state';
+import {
+  createSubjectTextRetryController,
+  SubjectReadingState,
+  type SubjectTextRetryToken,
+} from '../../subject/reading-state';
+import { kernelClient } from '../../kernel/client';
 import { countFromLinks, formatCount, sumCounts, type Count } from '../count';
 export type { Count } from '../count';
 
@@ -117,6 +123,26 @@ export type OverviewValue = {
 export const OverviewContext = createContext<OverviewValue | null>(null);
 
 const SUMMARY_PROPERTY = 'schema:abstract';
+
+const readPublicSummaryDocument = createServerFn({ method: 'GET' })
+  .inputValidator((value: unknown) => {
+    if (!isRecord(value) || typeof value.documentId !== 'string' || typeof value.locale !== 'string')
+      throw new TypeError('Invalid public summary document request');
+    return { documentId: value.documentId, locale: value.locale };
+  })
+  .handler(async ({ data }) => {
+    try {
+      const result = await kernelClient(data.locale).documents({ id: data.documentId }).get({
+        fetch: { redirect: 'manual' },
+      });
+      return result.status === 200 && result.data
+        ? { kind: 'read' as const, document: result.data.document }
+        : { kind: 'failed' as const };
+    } catch {
+      return { kind: 'failed' as const };
+    }
+  });
+
 export const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
 export const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
@@ -931,8 +957,10 @@ export function Cover(props: Record<string, unknown>) {
   );
 }
 
-/** The summary the reader's language chain reaches first, with the statement that holds it. */
-export function chosenSummary(subject: Subject, locale: string, filled?: unknown) {
+type SummaryCandidate = { statement: Stmt; document: DocumentSnapshot | undefined; language: string };
+
+/** The selected summary statement, whether its separately disclosed text was filled or not. */
+function selectedSummary(subject: Subject, locale: string, filled?: unknown): SummaryCandidate | undefined {
   const held = Object.hasOwn(subject.statements, SUMMARY_PROPERTY) ? subject.statements[SUMMARY_PROPERTY] : undefined;
   const documents = bestRank((held ?? []) as unknown as Stmt[]).flatMap((statement) => {
     const content = statement.value.type === 'value' ? statement.value.content : undefined;
@@ -948,7 +976,13 @@ export function chosenSummary(subject: Subject, locale: string, filled?: unknown
     originalLanguage(subject),
   );
   const selected = documents.find((entry) => entry.language === language) ?? documents[0]!;
-  return selected.document ? { ...selected, document: selected.document } : undefined;
+  return selected;
+}
+
+/** The summary the reader's language chain reaches first, with its disclosed document. */
+export function chosenSummary(subject: Subject, locale: string, filled?: unknown) {
+  const selected = selectedSummary(subject, locale, filled);
+  return selected?.document ? { ...selected, document: selected.document } : undefined;
 }
 
 /** A bounded plain excerpt has no clipped links or spoiler text. The complete rich document stays intact. */
@@ -1028,20 +1062,125 @@ function SummaryPassage({
   );
 }
 
-/**
- * About: the summary, or the description when there is no summary, then the key facts and the tags. A summary above
- * the reader's spoiler level waits behind a reveal.
- */
-export function Summary(props: Record<string, unknown>) {
-  const state = useOverview(props.id);
-  if (!state) return null;
-  const { value, section } = state;
-  if (!section) return null;
-  const id = String(props.id);
+type SummaryRetryTarget = {
+  subjectId: string;
+  statementId: string;
+  documentId: string;
+  digest: string;
+  language: string;
+  locale: string;
+};
+type SummaryRetryController = {
+  select(target: SummaryRetryTarget | null): void;
+  begin(target: SummaryRetryTarget): SubjectTextRetryToken<SummaryRetryTarget> | null;
+  isCurrent(token: SubjectTextRetryToken<SummaryRetryTarget>): boolean;
+  finish(token: SubjectTextRetryToken<SummaryRetryTarget>): void;
+};
+type SummaryRetryState =
+  | { target: SummaryRetryTarget; status: 'pending' | 'failed' }
+  | { target: SummaryRetryTarget; status: 'read'; document: unknown };
+
+function summaryRetryReference(
+  candidate: SummaryCandidate | undefined,
+): Omit<SummaryRetryTarget, 'subjectId' | 'locale'> | undefined {
+  const statement = candidate?.statement;
+  const content = statement?.value.type === 'value' ? statement.value.content : undefined;
+  if (
+    !statement ||
+    typeof statement.id !== 'string' ||
+    !isRecord(content) ||
+    typeof content.document !== 'string' ||
+    typeof content.digest !== 'string' ||
+    typeof content.language !== 'string'
+  )
+    return;
+  return {
+    statementId: statement.id,
+    documentId: content.document,
+    digest: content.digest,
+    language: content.language,
+  };
+}
+
+function summaryDocumentMatches(document: unknown, target: SummaryRetryTarget): boolean {
+  return (
+    isRecord(document) &&
+    document.id === target.documentId &&
+    document.subjectId === target.subjectId &&
+    document.candidateId === target.statementId &&
+    document.digest === target.digest &&
+    document.language === target.language &&
+    document.availability === 'available'
+  );
+}
+
+function SummaryContent({
+  id,
+  value,
+  section,
+  read,
+}: {
+  id: string;
+  value: OverviewValue;
+  section: Section;
+  read: SubjectRead;
+}) {
   const title = m.subject_about({}, { locale: value.locale as never });
-  const read = subjectRead(section);
-  if (!read) return <Failed slot="subject-summary" id={id} title={title} locale={value.locale} />;
-  const chosen = chosenSummary(read.subject, value.locale, read.documents);
+  const baseCandidate = selectedSummary(read.subject, value.locale, read.documents);
+  const reference = summaryRetryReference(baseCandidate);
+  const target = useMemo<SummaryRetryTarget | null>(
+    () => (reference ? { ...reference, subjectId: read.subject.id, locale: value.locale } : null),
+    [
+      section,
+      value.sections,
+      value.cacheReader,
+      value.context,
+      value.realm,
+      value.locale,
+      value.subject,
+      read.subject.id,
+      read.subject.context,
+      reference?.statementId,
+      reference?.documentId,
+      reference?.digest,
+      reference?.language,
+    ],
+  );
+  const controller = useRef<SummaryRetryController | null>(null);
+  if (!controller.current) controller.current = createSubjectTextRetryController<SummaryRetryTarget>();
+  controller.current.select(target);
+  const [retryState, setRetryState] = useState<SummaryRetryState | null>(null);
+  const activeRetry = retryState?.target === target ? retryState : null;
+  const documents =
+    activeRetry?.status === 'read' && baseCandidate?.statement.id
+      ? {
+          ...(isRecord(read.documents) ? read.documents : {}),
+          [baseCandidate.statement.id]: activeRetry.document,
+        }
+      : read.documents;
+  const selected = activeRetry?.status === 'read' ? selectedSummary(read.subject, value.locale, documents) : baseCandidate;
+  const chosen = selected?.document ? { ...selected, document: selected.document } : undefined;
+  const onRetry = target
+    ? (event: MouseEvent<HTMLAnchorElement>) => {
+        event.preventDefault();
+        const attempt = controller.current?.begin(target);
+        if (!attempt) return;
+        setRetryState({ target, status: 'pending' });
+        void readPublicSummaryDocument({ data: { documentId: target.documentId, locale: target.locale } })
+          .then((result) => {
+            if (!controller.current?.isCurrent(attempt)) return;
+            setRetryState(
+              result.kind === 'read' && summaryDocumentMatches(result.document, target)
+                ? { target, status: 'read', document: result.document }
+                : { target, status: 'failed' },
+            );
+          })
+          .catch(() => {
+            if (controller.current?.isCurrent(attempt)) setRetryState({ target, status: 'failed' });
+          })
+          .finally(() => controller.current?.finish(attempt));
+      }
+    : undefined;
   const unavailable =
     !chosen &&
     (read.subject.statements[SUMMARY_PROPERTY] ?? []).some(
@@ -1073,7 +1212,21 @@ export function Summary(props: Record<string, unknown>) {
       <h2 id={`${id}-title`} className={headingClass}>
         {title}
       </h2>
-      {unavailable && <SubjectReadingState locale={value.locale} />}
+      {unavailable && (
+        <SubjectReadingState
+          locale={value.locale}
+          href={
+            viewHref(value, 'details') ??
+            subjectViewHref(
+              { id: read.subject.id, label: value.subjectLabel || value.unlabelled },
+              value.locale,
+              'details',
+            )
+          }
+          onRetry={onRetry}
+          busy={activeRetry?.status === 'pending'}
+        />
+      )}
       {chosen &&
         (spoilerLevel(chosen.statement) > value.reader.spoilerLevel ? (
           <SpoilerGate
@@ -1108,6 +1261,29 @@ export function Summary(props: Record<string, unknown>) {
       )}
     </section>
   );
+}
+
+/**
+ * About: the summary, or the description when there is no summary, then the key facts and the tags. A summary above
+ * the reader's spoiler level waits behind a reveal.
+ */
+export function Summary(props: Record<string, unknown>) {
+  const state = useOverview(props.id);
+  if (!state) return null;
+  const { value, section } = state;
+  if (!section) return null;
+  const id = String(props.id);
+  const read = subjectRead(section);
+  if (!read)
+    return (
+      <Failed
+        slot="subject-summary"
+        id={id}
+        title={m.subject_about({}, { locale: value.locale as never })}
+        locale={value.locale}
+      />
+    );
+  return <SummaryContent id={id} value={value} section={section} read={read} />;
 }
 
 export function RatingSummary(props: Record<string, unknown>) {
