@@ -19,6 +19,13 @@ test('cover replacement focuses the displayed-locale subject cover group and lea
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window({ url: 'https://site.test/en/subjects/book', width: 1280 });
+  const image = window.HTMLImageElement.prototype;
+  Object.defineProperty(image, 'complete', { configurable: true, get: () => false });
+  const dispatch = image.dispatchEvent;
+  image.dispatchEvent = function (event: Event) {
+    if (event.type === 'error' || event.type === 'load') return true;
+    return dispatch.call(this, event);
+  };
   const globals = {
     window,
     document: window.document,
