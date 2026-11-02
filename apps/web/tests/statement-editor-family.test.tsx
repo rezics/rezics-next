@@ -604,17 +604,31 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     let rejectRead!: (error: Error) => void;
     let refreshes = 0;
     await render(
-      <StatementEditor initial={fresh} locale="en" review={() => refreshing.review} transport={{
-        ...refreshing.editor,
-        read: () => { refreshes++; return new Promise((resolve, reject) => { deliver = resolve; rejectRead = reject; }); },
-      }} />,
+      <StatementEditor
+        initial={fresh}
+        locale="en"
+        review={() => refreshing.review}
+        transport={{
+          ...refreshing.editor,
+          read: () => {
+            refreshes++;
+            return new Promise((resolve, reject) => {
+              deliver = resolve;
+              rejectRead = reject;
+            });
+          },
+        }}
+      />,
     );
     await input(control(host, m.correction_year()), '1947');
     const oldSubmit = queued(host.querySelector('form')!, 'onSubmit');
     const publicLabel = host.querySelector('header a')!.textContent;
     const keyboardReload = async () => {
       const opener = button(host, m.correction_reload());
-      await act(async () => { opener.focus(); opener.click(); });
+      await act(async () => {
+        opener.focus();
+        opener.click();
+      });
     };
     const privateDraft = () => {
       expect(host.querySelector('form')).toBeNull();

@@ -843,8 +843,13 @@ function StatementEditorLive({
   useLayoutEffect(() => {
     const cancel = (event: Event) => {
       const intent = reloadIntent.current;
-      if (intent && (event.type === 'pointerdown' ||
-        (event.target !== intent.opener && event.target !== document.body && event.target !== document.documentElement)))
+      if (
+        intent &&
+        (event.type === 'pointerdown' ||
+          (event.target !== intent.opener &&
+            event.target !== document.body &&
+            event.target !== document.documentElement))
+      )
         reloadIntent.current = undefined;
     };
     document.addEventListener('pointerdown', cancel, true);
@@ -897,24 +902,37 @@ function StatementEditorLive({
     if (!next.ok) return next;
     const original = address.current;
     const subject = next.public?.subject;
-    if (!subject || !subject.labels || !subject.statements || !next.public.related ||
-      !next.release?.types || !next.release.properties || !next.release.types[subject.type])
+    if (
+      !subject ||
+      !subject.labels ||
+      !subject.statements ||
+      !next.public.related ||
+      !next.release?.types ||
+      !next.release.properties ||
+      !next.release.types[subject.type]
+    )
       return { ok: false, reason: 'unavailable' };
-    if (original && (subject.id !== original.public.subject.id || subject.type !== original.public.subject.type ||
-      next.source?.id !== original.source?.id || next.source?.property.id !== original.source?.property.id))
+    if (
+      original &&
+      (subject.id !== original.public.subject.id ||
+        subject.type !== original.public.subject.type ||
+        next.source?.id !== original.source?.id ||
+        next.source?.property.id !== original.source?.property.id)
+    )
       return { ok: false, reason: 'stale' };
     if (next.source) {
       if (!correctionProperty(next.release, subject.type, next.source.property.id))
         return { ok: false, reason: 'invalid' };
-      if (validateStatement(statementInput(next.source)).length)
-        return { ok: false, reason: 'unavailable' };
+      if (validateStatement(statementInput(next.source)).length) return { ok: false, reason: 'unavailable' };
     }
     return next;
   }
   async function reload(event: MouseEvent<HTMLButtonElement>) {
     if (!lifetime.active() || running.current || pending.current || result) return;
-    reloadIntent.current = event.detail === 0 && event.currentTarget === document.activeElement && event.currentTarget.isConnected
-      ? { opener: event.currentTarget, completed: false } : undefined;
+    reloadIntent.current =
+      event.detail === 0 && event.currentTarget === document.activeElement && event.currentTarget.isConnected
+        ? { opener: event.currentTarget, completed: false }
+        : undefined;
     // Retire callbacks synchronously; the holder and its native command remain independent of this read.
     lifetime.retire();
     const revision = ++draftRevision.current;
@@ -994,7 +1012,9 @@ function StatementEditorLive({
     >
       <StatementEditorNavigation dirty={dirty} pending={pending.current !== null} />
       <header className="space-y-2">
-        <h1 ref={heading} tabIndex={-1} className="text-2xl font-semibold">{m.correction_title({}, o)}</h1>
+        <h1 ref={heading} tabIndex={-1} className="text-2xl font-semibold">
+          {m.correction_title({}, o)}
+        </h1>
         {subject && (
           <p>
             <a className={linkClassName} href={href}>
@@ -1010,7 +1030,9 @@ function StatementEditorLive({
         {subject && <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: guideReturn }} />}
       </header>
       {!read.ok && !result && !busy && (
-        <div ref={recovery} tabIndex={-1}><EditorFailure reason={read.reason} locale={locale} /></div>
+        <div ref={recovery} tabIndex={-1}>
+          <EditorFailure reason={read.reason} locale={locale} />
+        </div>
       )}
       {failure && (
         <div className="space-y-3 rounded-lg border border-destructive/50 p-4">
@@ -1176,7 +1198,9 @@ function StatementEditorLive({
                 {JSON.stringify(draft, null, 2)}
               </pre>
             </section>
-          ) : <p>{m.correction_empty({}, o)}</p>}
+          ) : (
+            <p>{m.correction_empty({}, o)}</p>
+          )}
           {href && (
             <a className={linkClassName} href={`${href}/details`}>
               {m.correction_back({}, o)}
