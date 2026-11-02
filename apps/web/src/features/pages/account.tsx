@@ -381,13 +381,7 @@ function threadHref(locale: string, thread: { id: unknown; title?: unknown }): s
 
 /** The locator chooses the native post page; the fragment selects the disclosed post on that page. */
 function accountPostHref(locale: string, post: Record<string, unknown>): string | undefined {
-  if (
-    typeof post.id !== 'string' ||
-    !post.id ||
-    typeof post.threadId !== 'string' ||
-    !post.threadId
-  )
-    return undefined;
+  if (typeof post.id !== 'string' || !post.id || typeof post.threadId !== 'string' || !post.threadId) return undefined;
 
   const thread = isRecord(post.thread) ? post.thread : undefined;
   const href = threadHref(locale, {
