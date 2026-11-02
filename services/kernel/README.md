@@ -619,11 +619,14 @@ When a settle fails, moving table counters classify a concurrent writer, which t
 operation under the background-statements decision; static counters with a newer `backend_xmin` classify a snapshot
 held during VACUUM, which the harness must release.
 
-When a bound fails, `GrowthBoundError` keeps its scale and relation summary and adds the statements with the largest
-first-to-last-scale growth for each failing metric. Each statement line shows its normalized first line, its value at
-every scale, and the plan node that used the most buffers (including its relation or index when present). Statements
-that appeared in only some repetitions are listed as intermittent with their repetition numbers. SQL literals and
-parameters are normalized together while leading SQL comments remain, so comments can identify a tagged statement.
+When a bound fails, `GrowthBoundError` identifies each failing three-sample window and its actual constant peak or
+second-step comparison, with the observed and allowed growth. Relation and repetition context comes from that window
+and labels each scale; each list shows at most five entries and marks omissions. The growth report also includes the
+statements with the largest first-to-last-scale growth for each failing metric. Each statement line shows its normalized
+first line, its value at every scale, and the plan node that used the most buffers (including its relation or index when
+present). Statements that appeared in only some repetitions are listed as intermittent with their repetition
+numbers. SQL literals and parameters are normalized together while leading SQL comments remain, so comments can
+identify a tagged statement.
 Set `GROWTH_PROFILE` to a file inside the workspace to collect profiles on local and remote check runs. Remote stack
 runs forward its workspace-relative path and return the file with the result; earlier local lines are retained when the
 returned profile is merged. Write failures are best-effort by default: `checkGrowth` warns once per destination and still

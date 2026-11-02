@@ -253,56 +253,105 @@ export function growthByteViolations(
   return violations;
 }
 
-function formatRelations(samples: readonly GrowthSample[]): string[] {
-  const relations = samples.at(-1)?.cost.relations;
-  if (!relations) return [];
-  const entries = Object.entries(relations);
-  const rows = entries.toSorted((left, right) => right[1].rows - left[1].rows).slice(0, 5);
-  const blocks = entries.toSorted((left, right) => right[1].blocks - left[1].blocks).slice(0, 5);
-  const lines: string[] = [];
-  if (rows.length > 0)
-    lines.push(`Largest relations by rows: ${rows.map(([name, cost]) => `${name} (${cost.rows} rows)`).join(', ')}`);
-  if (blocks.length > 0)
+const MAX_DIAGNOSTIC_ITEMS = 5;
+const MAX_DIAGNOSTIC_VIOLATIONS = 15;
+const MAX_RELATION_NAME_LENGTH = 80;
+
+function formatLimited(items: readonly string[]): string {
+  const shown = items.slice(0, MAX_DIAGNOSTIC_ITEMS);
+  const omitted = items.length - shown.length;
+  return `${shown.join(', ')}${omitted > 0 ? `, ${omitted} more omitted` : ''}`;
+}
+
+function formatRelationName(name: string): string {
+  const safeName = name.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ');
+  return safeName.length > MAX_RELATION_NAME_LENGTH
+    ? `${safeName.slice(0, MAX_RELATION_NAME_LENGTH - 1)}…`
+    : safeName;
+}
+
+function formatRelationContext(samples: readonly GrowthSample[]): string[] {
+  const lines = samples.flatMap(({ scale, cost }) => {
+    const entries = Object.entries(cost.relations ?? {});
+    if (entries.length === 0) return [];
+    const rows = entries.toSorted((left, right) => right[1].rows - left[1].rows);
+    const blocks = entries.toSorted((left, right) => right[1].blocks - left[1].blocks);
+    const sequentialScans = entries
+      .filter(([, relation]) => (relation.sequentialScans ?? 0) > 0)
+      .toSorted((left, right) => right[1].rows - left[1].rows);
+    return [
+      `Scale ${scale} largest relations by rows: ${formatLimited(rows.map(([name, relation]) => `${formatRelationName(name)} (${relation.rows} rows)`))}`,
+      `Scale ${scale} largest relations by blocks: ${formatLimited(blocks.map(([name, relation]) => `${formatRelationName(name)} (${relation.blocks} blocks)`))}`,
+      ...(sequentialScans.length > 0
+        ? [
+            `Scale ${scale} Sequential scans: ${formatLimited(sequentialScans.map(([name, relation]) => `${formatRelationName(name)} (${relation.rows} rows)`))} (a sequential scan may be a planner's choice for a small relation; use measured relation pages for the path guard; the growth bounds still apply)`,
+          ]
+        : []),
+    ];
+  });
+
+  const first = samples[0];
+  const last = samples.at(-1);
+  const firstSizes = first?.relationSizes;
+  const lastSizes = last?.relationSizes;
+  if (!first || !last || !firstSizes || !lastSizes) return lines;
+  const nonGrowing = Object.entries(firstSizes)
+    .flatMap(([name, size]) => {
+      const lastSize = lastSizes[name];
+      return lastSize && lastSize.reltuples <= size.reltuples
+        ? [[name, size.reltuples, lastSize.reltuples] as const]
+        : [];
+    })
+    .toSorted(([left], [right]) => left.localeCompare(right));
+  if (nonGrowing.length > 0)
     lines.push(
-      `Largest relations by blocks: ${blocks.map(([name, cost]) => `${name} (${cost.blocks} blocks)`).join(', ')}`,
+      `Relations whose reltuples did not grow from scale ${first.scale} to ${last.scale}: ${formatLimited(nonGrowing.map(([name, initial, final]) => `${formatRelationName(name)} (${initial} to ${final})`))}`,
     );
-  const sequentialScans = entries
-    .filter(([, cost]) => (cost.sequentialScans ?? 0) > 0)
-    .toSorted((left, right) => right[1].rows - left[1].rows);
-  if (sequentialScans.length > 0)
-    lines.push(
-      `Sequential scans: ${sequentialScans.map(([name, cost]) => `${name} (${cost.rows} rows)`).join(', ')} (a sequential scan may be a planner's choice for a small relation; use measured relation pages for the path guard; the growth bounds still apply)`,
-    );
-  const firstSizes = samples[0]?.relationSizes;
-  const lastSizes = samples.at(-1)?.relationSizes;
-  if (firstSizes && lastSizes) {
-    const nonGrowing = Object.entries(firstSizes)
-      .flatMap(([name, first]) => {
-        const last = lastSizes[name];
-        return last && last.reltuples <= first.reltuples ? [[name, first.reltuples, last.reltuples] as const] : [];
-      })
-      .toSorted(([left], [right]) => left.localeCompare(right));
-    if (nonGrowing.length > 0)
-      lines.push(
-        `Relations whose reltuples did not grow: ${nonGrowing.map(([name, first, last]) => `${name} (${first} to ${last})`).join(', ')}`,
-      );
-  }
   return lines;
 }
 
-function formatMessage(violations: readonly Violation[], samples: readonly GrowthSample[]): string {
-  const lines = violations.map(
-    ({ metric, bound, scales, values, observed, allowed }) =>
-      `${metric} grows beyond ${bound}: ${values.join(', ')} at scales ${scales.join(', ')}; second step +${observed} exceeds allowed +${allowed}`,
-  );
-  const repetitionLines = violations.flatMap(({ metric }) => {
-    if (!samples.some(({ repetitions }) => repetitions !== undefined)) return [];
-    const byScale = samples.map(
-      ({ scale, repetitions }) => `${scale} [${repetitions?.map((cost) => cost[metric] ?? '').join(', ') ?? ''}]`,
-    );
-    return [`${metric} repetitions by scale: ${byScale.join(', ')}`];
+function formatRepetitionContext(metric: GrowthMetric, samples: readonly GrowthSample[]): string[] {
+  if (!samples.some(({ repetitions }) => repetitions !== undefined)) return [];
+  return samples.map(({ scale, repetitions }) => {
+    if (repetitions === undefined) return `Scale ${scale} ${metric} repetitions: not recorded`;
+    const shown = repetitions.slice(0, MAX_DIAGNOSTIC_ITEMS).map((cost) => String(cost[metric] ?? 'n/a'));
+    const omitted = repetitions.length - shown.length;
+    return `Scale ${scale} ${metric} repetitions: [${shown.join(', ')}${omitted > 0 ? `, ${omitted} more omitted` : ''}]`;
   });
-  return [...lines, ...repetitionLines, ...formatRelations(samples)].join('\n');
+}
+
+function formatGrowthValue(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value}`;
+}
+
+function formatViolation({ metric, bound, scales, values, observed, allowed }: Violation): string {
+  const window = `window scales ${scales.join(', ')} values ${values.join(', ')}`;
+  if (bound === 'constant') {
+    const peak = Math.max(values[1], values[2]);
+    const peakScales = [values[1] === peak ? scales[1] : undefined, values[2] === peak ? scales[2] : undefined]
+      .filter((scale): scale is number => scale !== undefined)
+      .join(' and ');
+    return `${metric} constant bound failed in ${window}: maximum ${peak} at scale ${peakScales} minus baseline ${values[0]}; observed ${formatGrowthValue(observed)} exceeds allowed ${formatGrowthValue(allowed)}`;
+  }
+  return `${metric} ${bound} bound failed in ${window}: second step from scale ${scales[1]} to ${scales[2]}; observed ${formatGrowthValue(observed)} exceeds allowed ${formatGrowthValue(allowed)}`;
+}
+
+function formatMessage(violations: readonly Violation[], samples: readonly GrowthSample[]): string {
+  const visible = violations.slice(0, MAX_DIAGNOSTIC_VIOLATIONS);
+  const blocks = visible.map((violation) => {
+    const window = violation.scales.flatMap((scale) => {
+      const sample = samples.find((candidate) => candidate.scale === scale);
+      return sample ? [sample] : [];
+    });
+    return [
+      formatViolation(violation),
+      ...formatRepetitionContext(violation.metric, window),
+      ...formatRelationContext(window),
+    ].join('\n');
+  });
+  const omitted = violations.length - visible.length;
+  if (omitted > 0) blocks.push(`${omitted} additional growth violations omitted`);
+  return blocks.join('\n\n');
 }
 
 export function assertGrowth(
