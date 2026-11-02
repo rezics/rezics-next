@@ -1,7 +1,8 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
-import { useRef, useState, type ReactNode } from 'react';
+import { useId, useRef, useState, type ReactNode } from 'react';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -26,6 +27,9 @@ const keyboardFocus = 'focus-visible:outline-2 focus-visible:outline-offset-2 fo
 const touchAction = `${coarseTarget} max-md:w-full pointer-coarse:w-full`;
 const disclosureSummary = `min-h-8 min-w-0 cursor-pointer break-words text-xl font-semibold max-md:min-h-11 pointer-coarse:min-h-11 ${keyboardFocus} [overflow-wrap:anywhere]`;
 
+const initialAction = `h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] ${keyboardFocus} max-md:w-full pointer-coarse:w-full`;
+const initialPropertySelect = `w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11 [&_select]:max-w-full [&_select]:whitespace-normal [&_select]:[overflow-wrap:anywhere] [&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring [&_select]:ps-3 [&_select]:pe-8 rtl:[&_[data-slot=native-select-icon]]:right-auto rtl:[&_[data-slot=native-select-icon]]:left-2.5`;
+
 /** Optional initial facts share the scalar codecs. A row exists only after an explicit Add action. */
 function InitialFacts({
   type,
@@ -44,139 +48,158 @@ function InitialFacts({
 }) {
   const o = { locale: locale as never };
   const [property, setProperty] = useState('');
+  const propertyId = useId();
   if (!isLiteraryType(type)) return null;
   const fields = literaryFields(read.release, type, locale).scalars;
   const context = { release: read.release, public: { related: {} } };
   const update = (id: string, statement: StatementInput) =>
     change(rows.map((row) => (row.id === id ? { ...row, statement } : row)));
   return (
-    <fieldset disabled={disabled} className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
-      <legend className="px-1 font-semibold">{m.literary_bibliography({}, o)}</legend>
-      <p className="text-sm text-muted-foreground">{m.literary_initial_help({}, o)}</p>
-      {rows.map(({ id, statement }) => {
-        const definition = read.release.properties[statement.property.id];
-        if (!definition)
+    <fieldset disabled={disabled} className="min-w-0 max-w-full">
+      <legend className="max-w-full px-1 font-semibold [overflow-wrap:anywhere]">
+        {m.literary_bibliography({}, o)}
+      </legend>
+      <ContentItemFrame as="div" className="min-w-0 space-y-4 rounded-xl bg-card p-4 sm:p-6 [overflow-wrap:anywhere]">
+        <p className="text-sm text-muted-foreground">{m.literary_initial_help({}, o)}</p>
+        {rows.map(({ id, statement }) => {
+          const definition = read.release.properties[statement.property.id];
+          if (!definition)
+            return (
+              <section key={id} className="min-w-0">
+                <ContentItemFrame
+                  as="div"
+                  className="min-w-0 space-y-3 rounded-xl bg-muted/30 p-4 [overflow-wrap:anywhere]"
+                >
+                  <EditorFailure locale={locale} reason="stale" />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={initialAction}
+                    onClick={() => change(rows.filter((row) => row.id !== id))}
+                  >
+                    {m.literary_remove_fact({}, o)}
+                  </Button>
+                </ContentItemFrame>
+              </section>
+            );
+          const label = pickText(definition.labels, locale);
+          const description = pickText(definition.descriptions ?? {}, locale);
+          const citation = statement.references[0]?.parts[0] ?? {
+            property: { id: 'schema:url' },
+            value: { type: 'value' as const, content: '' },
+          };
           return (
-            <section key={id} className="min-w-0 space-y-3">
-              <EditorFailure locale={locale} reason="stale" />
-              <Button
-                type="button"
-                variant="ghost"
-                className={touchAction}
-                onClick={() => change(rows.filter((row) => row.id !== id))}
+            <section id={`literary-fact-${id}`} key={id} aria-label={label.text} className="min-w-0">
+              <ContentItemFrame
+                as="div"
+                className="min-w-0 space-y-3 rounded-xl bg-muted/30 p-4 [overflow-wrap:anywhere]"
               >
-                {m.literary_remove_fact({}, o)}
-              </Button>
+                <ContentItemHeading
+                  level={3}
+                  lang={label.lang ?? undefined}
+                  className="break-words font-semibold [overflow-wrap:anywhere]"
+                >
+                  {label.text}
+                </ContentItemHeading>
+                {description.text && (
+                  <p
+                    lang={description.lang ?? undefined}
+                    className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]"
+                  >
+                    {description.text}
+                  </p>
+                )}
+                <ScalarControl
+                  part={statement}
+                  definition={definition}
+                  read={context}
+                  locale={locale}
+                  onChange={(value) => update(id, { ...statement, value })}
+                />
+                <h4 className="text-sm font-medium">{m.correction_references({}, o)}</h4>
+                <ScalarControl
+                  part={citation}
+                  definition={read.release.properties['schema:url']}
+                  read={context}
+                  locale={locale}
+                  onChange={(value) =>
+                    update(id, {
+                      ...statement,
+                      references:
+                        value.type === 'value' && value.content === '' ? [] : [{ parts: [{ ...citation, value }] }],
+                    })
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={initialAction}
+                  onClick={() => change(rows.filter((row) => row.id !== id))}
+                >
+                  {m.literary_remove_fact({}, o)}
+                </Button>
+              </ContentItemFrame>
             </section>
           );
-        const label = pickText(definition.labels, locale);
-        const description = pickText(definition.descriptions ?? {}, locale);
-        const citation = statement.references[0]?.parts[0] ?? {
-          property: { id: 'schema:url' },
-          value: { type: 'value' as const, content: '' },
-        };
-        return (
-          <section
-            id={`literary-fact-${id}`}
-            key={id}
-            aria-label={label.text}
-            className="min-w-0 space-y-3 rounded-lg border border-border p-4"
-          >
-            <h3 lang={label.lang ?? undefined} className="break-words font-semibold [overflow-wrap:anywhere]">
-              {label.text}
-            </h3>
-            {description.text && (
-              <p
-                lang={description.lang ?? undefined}
-                className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]"
-              >
-                {description.text}
-              </p>
-            )}
-            <ScalarControl
-              part={statement}
-              definition={definition}
-              read={context}
-              locale={locale}
-              onChange={(value) => update(id, { ...statement, value })}
-            />
-            <h4 className="text-sm font-medium">{m.correction_references({}, o)}</h4>
-            <ScalarControl
-              part={citation}
-              definition={read.release.properties['schema:url']}
-              read={context}
-              locale={locale}
-              onChange={(value) =>
-                update(id, {
-                  ...statement,
-                  references:
-                    value.type === 'value' && value.content === '' ? [] : [{ parts: [{ ...citation, value }] }],
-                })
-              }
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              className={touchAction}
-              onClick={() => change(rows.filter((row) => row.id !== id))}
+        })}
+        <div className="flex flex-wrap items-end gap-3 max-md:flex-col max-md:items-stretch pointer-coarse:flex-col pointer-coarse:items-stretch">
+          <Field className="w-full min-w-0 flex-1">
+            <FieldLabel
+              className="min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]"
+              htmlFor={propertyId}
             >
-              {m.literary_remove_fact({}, o)}
-            </Button>
-          </section>
-        );
-      })}
-      <div className="flex flex-wrap items-end gap-3 max-md:flex-col max-md:items-stretch pointer-coarse:flex-col pointer-coarse:items-stretch">
-        <Field className="w-full min-w-0 flex-1">
-          <FieldLabel htmlFor="literary-initial-property">{m.refinement_property({}, o)}</FieldLabel>
-          <NativeSelect
-            id="literary-initial-property"
-            className={`${coarseTarget} w-full max-w-full`}
-            value={fields.includes(property) ? property : ''}
-            onChange={(event) => setProperty(event.target.value)}
-          >
-            <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-            {fields
-              .filter(
-                (id) =>
-                  read.release.properties[id]!.multivalued || !rows.some((row) => row.statement.property.id === id),
-              )
-              .map((id) => (
-                <NativeSelectOption key={id} value={id}>
-                  {pickText(read.release.properties[id]!.labels, locale).text}
-                </NativeSelectOption>
-              ))}
-          </NativeSelect>
-        </Field>
-        <Button
-          type="button"
-          variant="outline"
-          className={touchAction}
-          disabled={
-            !fields.includes(property) ||
-            rows.length >= 12 ||
-            (!read.release.properties[property]?.multivalued &&
-              rows.some((row) => row.statement.property.id === property))
-          }
-          onClick={() => {
-            change([
-              ...rows,
-              {
-                id: crypto.randomUUID(),
-                statement: {
-                  property: { id: property },
-                  value: { type: 'value', content: '' },
-                  qualifiers: [],
-                  references: [],
-                  rank: 'normal',
+              {m.refinement_property({}, o)}
+            </FieldLabel>
+            <NativeSelect
+              id={propertyId}
+              className={initialPropertySelect}
+              value={fields.includes(property) ? property : ''}
+              onChange={(event) => setProperty(event.target.value)}
+            >
+              <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
+              {fields
+                .filter(
+                  (id) =>
+                    read.release.properties[id]!.multivalued || !rows.some((row) => row.statement.property.id === id),
+                )
+                .map((id) => (
+                  <NativeSelectOption key={id} value={id}>
+                    {pickText(read.release.properties[id]!.labels, locale).text}
+                  </NativeSelectOption>
+                ))}
+            </NativeSelect>
+          </Field>
+          <Button
+            type="button"
+            variant="outline"
+            className={initialAction}
+            disabled={
+              !fields.includes(property) ||
+              rows.length >= 12 ||
+              (!read.release.properties[property]?.multivalued &&
+                rows.some((row) => row.statement.property.id === property))
+            }
+            onClick={() => {
+              change([
+                ...rows,
+                {
+                  id: crypto.randomUUID(),
+                  statement: {
+                    property: { id: property },
+                    value: { type: 'value', content: '' },
+                    qualifiers: [],
+                    references: [],
+                    rank: 'normal',
+                  },
                 },
-              },
-            ]);
-            setProperty('');
-          }}
-        >
-          {m.correction_add({}, o)}
-        </Button>
-      </div>
+              ]);
+              setProperty('');
+            }}
+          >
+            {m.correction_add({}, o)}
+          </Button>
+        </div>
+      </ContentItemFrame>
     </fieldset>
   );
 }
