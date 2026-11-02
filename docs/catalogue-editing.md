@@ -543,11 +543,13 @@ Metadata text retains its actual fallback language, independently of the entered
 The Storybook page is **Pages/Catalogue/Person and organization catalogue editor**, with base ID
 `pages-catalogue-person-and-organization-catalogue-editor`. Its `create-route`, `person-route` and
 `organization-route` stories enter the real router; `create`, `person`, `organization`, `correct-cited-fact`,
-`loading`, `empty`, `signed-out`, `denied`, `invalid`, `stale-metadata`, `unavailable`, `uncertain-submit`,
-`created-readback-unavailable` and `created-readback-concealed` expose the connected states. Locale, viewport and
-theme use globals. Connected relationship writes are deliberately unavailable in the preview; real routes bind
-the existing session relation editor. These fixtures do not establish native execution or visual acceptance;
-Web owns normal phone390/desktop1280, light/dark captures.
+`loading`, `person-loading`, `organization-loading`, `empty`, `signed-out`, `denied`, `invalid`, `stale-metadata`,
+`unavailable`, `uncertain-submit`, `created-readback-unavailable` and `created-readback-concealed` expose the
+connected states. Current-profile loading is Character/add-on `current-loading`, Screen `correction-loading`, and
+People `person-loading`/`organization-loading`. Locale, viewport and theme use globals. Connected relationship
+writes are deliberately unavailable in the preview; real routes bind the existing session relation editor. These
+fixtures do not establish native execution or visual acceptance; Web owns normal phone390/desktop1280, light/dark
+captures.
 
 ## Browser flow: released album catalogue editor
 

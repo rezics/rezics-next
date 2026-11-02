@@ -335,6 +335,7 @@ export const Invalid: Story = {
   },
 };
 export const Loading: Story = { args: { scenario: 'loading' } };
+export const CurrentLoading: Story = { args: { existing: true, scenario: 'loading' } };
 export const SignedOut: Story = { args: { scenario: 'signed-out', existing: true } };
 export const Denied: Story = { args: { scenario: 'denied', existing: true } };
 export const Unavailable: Story = { args: { scenario: 'unavailable' } };

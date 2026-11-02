@@ -275,6 +275,8 @@ export const CorrectCitedFact: Story = {
   },
 };
 export const Loading: Story = { args: { scenario: 'loading' } };
+export const PersonLoading: Story = { args: { mode: 'person', scenario: 'loading' } };
+export const OrganizationLoading: Story = { args: { mode: 'organization', scenario: 'loading' } };
 export const Empty: Story = { args: { scenario: 'empty' } };
 export const SignedOut: Story = { args: { signedOut: true } };
 export const Denied: Story = {

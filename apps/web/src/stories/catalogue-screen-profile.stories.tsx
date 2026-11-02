@@ -188,6 +188,7 @@ export const CurrentRoute: Story = {
 };
 export const Ready: Story = {};
 export const Loading: Story = { args: { scenario: 'loading' } };
+export const CorrectionLoading: Story = { args: { correction: true, scenario: 'loading' } };
 export const Empty: Story = { args: { scenario: 'empty' } };
 export const SignedOut: Story = { args: { scenario: 'signed-out' } };
 export const Unavailable: Story = { args: { scenario: 'definitions-unavailable' } };
