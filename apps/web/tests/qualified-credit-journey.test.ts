@@ -142,7 +142,9 @@ test('default qualified relation list exposes full readable credit facts and wor
         `Role: ${roleTitle}`,
         `Credited as: ${creditedAs} Japanese`,
         'Character: The Traveller',
+        'Character: Unlabelled subject',
       ]);
+      expect(within(rows[0]!).getByText('Character: Unlabelled subject').closest('a')).toBeNull();
       expect(within(rows[0]!).getByText(`Credited as: ${creditedAs}`).getAttribute('lang')).toBe('ja');
       expect(rows[1]!.textContent).toContain('Order: 1');
       expect(rows[1]!.textContent).toContain(

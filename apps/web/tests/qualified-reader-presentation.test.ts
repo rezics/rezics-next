@@ -105,7 +105,12 @@ test('qualified reader journey keeps complete statement fields and presentation-
       'Character: The Traveller',
       `Credited as: ${creditedAs} Japanese`,
       'Applies to part: The return',
+      'Role: Unlabelled subject',
     ]);
+    expect(firstRow.querySelector('[data-property="wdt:P3831"]:last-child a')).toBeNull();
+    expect(firstRow.querySelector('[data-property="wdt:P3831"]:last-child')!.textContent).toBe(
+      'Role: Unlabelled subject',
+    );
     expect(firstRow.querySelector('[lang="ja"]')!.textContent).toBe(`Credited as: ${creditedAs}`);
     // The essential slot is independent of the generic card's clamped secondary metadata at every breakpoint.
     expect(firstRow.querySelector('[data-slot="cover-card-essential-credit"]')).not.toBeNull();

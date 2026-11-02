@@ -63,7 +63,7 @@ test('Qualified credits characters spoilers and complete group continuation are 
   expect(relationPreviewCount({ relationCounts: {} }, 'schema:character')).toBeUndefined();
 });
 
-test('qualified rows preserve unknown values and quantity bounds, pair roles by statement, and gate the whole spoiler row', () => {
+test('qualified rows preserve unknown values and quantity bounds, retain unavailable categories, and gate the whole spoiler row', () => {
   const snak = (property: string, type: string, content: unknown) => ({
     property: { id: property, data_type: type },
     value: { type: 'value', content },
@@ -92,10 +92,11 @@ test('qualified rows preserve unknown values and quantity bounds, pair roles by 
     12,
   )!;
   expect(rows.items.map((item) => item.qualified?.map((note) => note.text))).toEqual([
-    ['Credited as: First name', 'Role: Unknown value', 'Order:'],
+    ['Credited as: First name', 'Role: Unlabelled subject', 'Order:'],
     ['Credited as: Second name'],
   ]);
-  expect(rows.items[0]!.qualified?.[1]).toEqual({ property: 'wdt:P3831', text: 'Role: Unknown value' });
+  expect(rows.items[0]!.qualified?.[1]).toEqual({ property: 'wdt:P3831', text: 'Role: Unlabelled subject' });
+  expect(rows.items[0]!.qualified![1]!.subject).toBeUndefined();
   expect(rows.items[0]!.qualified?.[2]!.quantity?.content).toEqual({
     amount: '+2',
     unit: 'http://www.wikidata.org/entity/Q7727',
@@ -125,6 +126,10 @@ test('qualified rows preserve unknown values and quantity bounds, pair roles by 
   const body = page.reads[plan.nodes.cast!]!.body as {
     relations: { statement: { qualifiers: unknown[] }; label: string }[];
   };
+  body.relations[0]!.statement.qualifiers.push(snak('wdt:P3831', 'wikibase-item', 'hidden-role'));
+  const unavailable = render(page);
+  expect(unavailable).toContain('<span>Role: Unlabelled subject</span>');
+  expect(unavailable).not.toContain('hidden-role');
   body.relations[0]!.statement.qualifiers.push(
     snak('schema:position', 'quantity', {
       amount: '+2',

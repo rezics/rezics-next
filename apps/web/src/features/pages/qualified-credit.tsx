@@ -26,65 +26,67 @@ export function QualifiedCredit({
   value: RowValue;
 }) {
   return (
-    <CoverCard
-      title={title}
-      {...(titleLang ? { titleLang } : {})}
-      href={href}
-      link={value.link}
-      cover={{ ...cover, ...(value.ratio ? { ratio: value.ratio } : {}) }}
-      essentialCredit={
-        <>
-          {(notes.length > 0 || qualified.length > 0) && (
-            <ul className="flex min-w-0 flex-col gap-1 text-sm leading-6">
-              {notes.map((note, index) => (
-                <li key={`note-${index}`}>{note}</li>
-              ))}
-              {qualified.map((note, index) => {
-                const quantity = note.quantity?.presentation;
-                const unit = quantity
-                  ? (quantity.unitLabel ?? m.quantity_unit_unavailable({}, { locale: value.locale as never }))
-                  : '';
-                return (
-                  <li
-                    key={`qualified-${index}`}
-                    data-property={note.property}
-                    className={
-                      note.property === 'wdt:P3831' ||
-                      note.property === 'wdt:P453' ||
-                      note.property === 'schema:character'
-                        ? 'font-medium'
-                        : undefined
-                    }
-                  >
-                    {quantity ? (
-                      <span>
-                        {note.text} {quantity.numbers}
-                        {unit ? ` ${unit}` : ''}
-                      </span>
-                    ) : note.subject ? (
-                      <value.link
-                        href={relationTargetHref(note.subject, value.locale, value.context)}
-                        lang={note.language}
-                        className="text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
-                      >
-                        {note.text}
-                      </value.link>
-                    ) : (
-                      <span lang={note.language}>{note.text}</span>
-                    )}
-                    {note.language && (
-                      <>
-                        {' '}
-                        <LanguageTag lang={note.language} locale={value.locale} />
-                      </>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </>
-      }
-    />
+    <div className="min-w-0 [&_h3_a]:inline-block [&_h3_a]:min-h-11 [&_h3_a]:max-w-full [&_h3_a]:min-w-11 [&_h3_a]:whitespace-pre-wrap">
+      <CoverCard
+        title={title}
+        {...(titleLang ? { titleLang } : {})}
+        href={href}
+        link={value.link}
+        cover={{ ...cover, ...(value.ratio ? { ratio: value.ratio } : {}) }}
+        essentialCredit={
+          <>
+            {(notes.length > 0 || qualified.length > 0) && (
+              <ul className="flex min-w-0 flex-col gap-1 whitespace-pre-wrap text-sm leading-6 wrap-anywhere">
+                {notes.map((note, index) => (
+                  <li key={`note-${index}`}>{note}</li>
+                ))}
+                {qualified.map((note, index) => {
+                  const quantity = note.quantity?.presentation;
+                  const unit = quantity
+                    ? (quantity.unitLabel ?? m.quantity_unit_unavailable({}, { locale: value.locale as never }))
+                    : '';
+                  return (
+                    <li
+                      key={`qualified-${index}`}
+                      data-property={note.property}
+                      className={
+                        note.property === 'wdt:P3831' ||
+                        note.property === 'wdt:P453' ||
+                        note.property === 'schema:character'
+                          ? 'font-medium'
+                          : undefined
+                      }
+                    >
+                      {quantity ? (
+                        <span>
+                          {note.text} {quantity.numbers}
+                          {unit ? ` ${unit}` : ''}
+                        </span>
+                      ) : note.subject ? (
+                        <value.link
+                          href={relationTargetHref(note.subject, value.locale, value.context)}
+                          lang={note.language}
+                          className="inline-block min-h-11 min-w-11 max-w-full py-2.5 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
+                          {note.text}
+                        </value.link>
+                      ) : (
+                        <span lang={note.language}>{note.text}</span>
+                      )}
+                      {note.language && (
+                        <>
+                          {' '}
+                          <LanguageTag lang={note.language} locale={value.locale} />
+                        </>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>
+        }
+      />
+    </div>
   );
 }

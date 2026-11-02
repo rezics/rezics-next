@@ -47,13 +47,22 @@ export function qualifiedNotes(statement: Stmt, related: unknown, locale: string
     if (snak.value.type !== 'value') return [];
     const content = snak.value.content;
     if (snak.property.data_type === 'wikibase-item' && typeof content === 'string') {
-      const summary = Object.hasOwn(disclosed, content)
-        ? (disclosed[content] as SubjectSummary | undefined)
+      const summary = Object.hasOwn(disclosed, content) ? disclosed[content] : undefined;
+      const suppliedLabel = isRecord(summary)
+        ? isRecord(summary.label)
+          ? summary.label.value
+          : summary.label
         : undefined;
-      const label = typeof summary?.label === 'object' ? summary.label?.value : undefined;
-      return summary && label
-        ? [{ property, text: `${prefix}: ${label}`, subject: { id: summary.id, label } }]
-        : [{ property, text: `${prefix}: ${m.subject_value_unknown({}, options)}` }];
+      const label = typeof suppliedLabel === 'string' && suppliedLabel.trim() ? suppliedLabel : undefined;
+      const id = isRecord(summary) && typeof summary.id === 'string' && summary.id.trim() ? summary.id : undefined;
+      // A missing human label does not disclose the target or erase the qualifier's category.
+      return [
+        {
+          property,
+          text: `${prefix}: ${label ?? m.subject_value_unlabelled({}, options)}`,
+          ...(label && id ? { subject: { id, label } } : {}),
+        },
+      ];
     }
     if (
       (snak.property.data_type === 'string' || snak.property.data_type === 'external-id') &&
