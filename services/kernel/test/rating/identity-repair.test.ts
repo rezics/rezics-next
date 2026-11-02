@@ -169,22 +169,26 @@ test('identity page locks the selected native vote until its transaction release
   const reader = await database.admin.connect();
   try {
     await reader.query('BEGIN');
-    const page = await reader.query(pageVotes.sql, [
-      route, actor.accountId, null, null, STANDARD_QUESTION_ID, target,
-    ]);
+    const page = await reader.query(pageVotes.sql, [route, actor.accountId, null, null, STANDARD_QUESTION_ID, target]);
     expect(page.rows.map((row) => row.targetId)).toEqual([target]);
-    await expect(database.admin.query(
-      'SELECT 1 FROM rating.vote WHERE route = $1 AND voter_id = $2 FOR UPDATE NOWAIT',
-      [route, actor.accountId],
-    )).rejects.toMatchObject({ code: '55P03' });
+    await expect(
+      database.admin.query('SELECT 1 FROM rating.vote WHERE route = $1 AND voter_id = $2 FOR UPDATE NOWAIT', [
+        route,
+        actor.accountId,
+      ]),
+    ).rejects.toMatchObject({ code: '55P03' });
   } finally {
     await reader.query('ROLLBACK');
     reader.release();
   }
-  expect((await database.admin.query(
-    'SELECT 1 FROM rating.vote WHERE route = $1 AND voter_id = $2 FOR UPDATE NOWAIT',
-    [route, actor.accountId],
-  )).rowCount).toBe(1);
+  expect(
+    (
+      await database.admin.query('SELECT 1 FROM rating.vote WHERE route = $1 AND voter_id = $2 FOR UPDATE NOWAIT', [
+        route,
+        actor.accountId,
+      ])
+    ).rowCount,
+  ).toBe(1);
 });
 
 test('effects, receipt and checkpoint roll back together; lost responses replay while original votes and clears survive', async () => {

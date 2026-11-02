@@ -40,6 +40,12 @@ The publication suite additionally exercises independently anchored population p
 ten target votes plus forty prior votes establish the fifty-vote epoch, and later publication must not regress its
 prior generation. This is distinct from a directly seeded figure or a synchronous hand-written prior.
 
+`rating/identity-repair.test.ts` separately pins the supporting repair page's 64-row limit, exclusive continuation,
+inclusive admitted upper bound, exclusion of later votes and native row locks. Its typed-input SQL binds each
+parameter once while retaining the voter range and `FOR UPDATE` on selected votes. Run this changed-file regression
+with `bun run --cwd services/kernel check test/rating/identity-repair.test.ts`; compiler validation uses
+`bun run --cwd services/kernel typecheck`. A compiler infrastructure failure cannot confirm a SQL diagnostic.
+
 ## Values and freshness
 
 The released standard question stores integer units from 0 through 20. Two stored units represent one display
