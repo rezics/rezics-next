@@ -6,7 +6,13 @@ import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { selectedReviewSubject } from './review-policy';
-import { selectedVoteCitation, type CurrentReviewVote } from './review-vote';
+import {
+  CURRENT_REVIEW_VOTE_UNAVAILABLE,
+  isCurrentReviewVoteUnavailable,
+  selectedVoteCitation,
+  type CurrentReviewVote,
+  type CurrentReviewVoteReadResult,
+} from './review-vote';
 import { contentSubjectPreset, searchContentSubjects } from './content-subject-search';
 import { useThreadCreationVisit } from './thread-creation-lifetime';
 import { readCurrentReviewVote } from './review-vote-read';
@@ -15,6 +21,14 @@ export { STANDARD_QUESTION_ID } from './review-vote';
 export type { CurrentReviewVote } from './review-vote';
 
 export { readCurrentReviewVote } from './review-vote-read';
+
+async function readReviewVote(subjectId: string): Promise<CurrentReviewVoteReadResult> {
+  try {
+    return await readCurrentReviewVote({ data: { subjectId } });
+  } catch {
+    return CURRENT_REVIEW_VOTE_UNAVAILABLE;
+  }
+}
 
 export function ReviewFields({
   ...props
@@ -48,24 +62,36 @@ function ReviewFieldsVisit({
   const [subject, setSubject] = useState<EntityPickerSubject | null>(() =>
     initialSubjectId ? contentSubjectPreset(initialSubjectId, initialSubjectTitle ?? m.thread_review_subject()) : null,
   );
-  const [readVote, setReadVote] = useState<{ subjectId: string; vote: CurrentReviewVote } | null>(null);
+  const [readVote, setReadVote] = useState<{ subjectId: string; result: CurrentReviewVoteReadResult } | null>(null);
   const [citingVote, setCitingVote] = useState(false);
+  const [retryingVote, setRetryingVote] = useState(false);
   const visit = useThreadCreationVisit();
   const readGeneration = useRef(0);
+  const retryToken = useRef<object | null>(null);
   const selectedSubject = useRef<string | null>(subject?.id ?? null);
+  const visitRef = useRef(visit);
+  const disabledRef = useRef(disabled);
+  const onVoteCitationChangeRef = useRef(onVoteCitationChange);
   selectedSubject.current = subject?.id ?? null;
-  const vote = readVote && readVote.subjectId === subject?.id ? readVote.vote : null;
+  visitRef.current = visit;
+  disabledRef.current = disabled;
+  onVoteCitationChangeRef.current = onVoteCitationChange;
+  const result = readVote?.subjectId === subject?.id ? readVote.result : undefined;
+  const vote = result && !isCurrentReviewVoteUnavailable(result) ? result : null;
+  const unavailable = result !== undefined && isCurrentReviewVoteUnavailable(result);
   const locale = getLocale();
 
-  const current = () => visit.isCurrent();
-  const editable = () => !disabled && visit.isEditable();
+  const current = () => visitRef.current.isCurrent();
+  const editable = () => !disabledRef.current && visitRef.current.isEditable();
 
   useEffect(() => {
     const generation = ++readGeneration.current;
     let active = true;
+    retryToken.current = null;
+    setRetryingVote(false);
     setReadVote(null);
     setCitingVote(false);
-    if (editable()) onVoteCitationChange(undefined);
+    if (editable()) onVoteCitationChangeRef.current(undefined);
     if (!subject) return () => void (active = false);
     // Keep the invocation behind a visit and subject check so queued effects cannot start an obsolete read.
     void Promise.resolve().then(async () => {
@@ -77,26 +103,21 @@ function ReviewFieldsVisit({
         !editable()
       )
         return;
-      try {
-        const value = await readCurrentReviewVote({ data: { subjectId: subject.id } });
-        if (
-          active &&
-          readGeneration.current === generation &&
-          selectedSubject.current === subject.id &&
-          current() &&
-          editable() &&
-          value
-        )
-          setReadVote({ subjectId: subject.id, vote: value });
-      } catch {
-        // An unavailable private read cannot produce a citation.
-      }
+      const value = await readReviewVote(subject.id);
+      if (
+        active &&
+        readGeneration.current === generation &&
+        selectedSubject.current === subject.id &&
+        current() &&
+        editable()
+      )
+        setReadVote({ subjectId: subject.id, result: value });
     });
     return () => {
       active = false;
       if (readGeneration.current === generation) readGeneration.current++;
     };
-  }, [onVoteCitationChange, subject?.id, searchScope, visit.ticket]);
+  }, [subject?.id, searchScope, visit.ticket]);
 
   function chooseSubject(items: EntityPickerSubject[]) {
     if (!editable()) return;
@@ -107,6 +128,8 @@ function ReviewFieldsVisit({
       return;
     }
     readGeneration.current++;
+    retryToken.current = null;
+    setRetryingVote(false);
     setReadVote(null);
     setCitingVote(false);
     setSubject(next);
@@ -118,6 +141,36 @@ function ReviewFieldsVisit({
     if (!editable() || !current()) return;
     setCitingVote(checked);
     onVoteCitationChange(selectedVoteCitation(vote, checked));
+  }
+
+  async function retryCurrentVoteRead() {
+    const subjectId = subject?.id;
+    if (
+      !subjectId ||
+      result === undefined ||
+      !isCurrentReviewVoteUnavailable(result) ||
+      !editable() ||
+      !current() ||
+      retryToken.current
+    )
+      return;
+    const generation = ++readGeneration.current;
+    const token = {};
+    retryToken.current = token;
+    setRetryingVote(true);
+    const value = await readReviewVote(subjectId);
+    if (
+      retryToken.current === token &&
+      readGeneration.current === generation &&
+      selectedSubject.current === subjectId &&
+      current() &&
+      editable()
+    )
+      setReadVote({ subjectId, result: value });
+    if (retryToken.current === token) {
+      retryToken.current = null;
+      setRetryingVote(false);
+    }
   }
 
   return (
@@ -140,6 +193,20 @@ function ReviewFieldsVisit({
         <p data-slot="review-selected-subject" className="min-w-0 text-sm [overflow-wrap:anywhere]">
           {m.thread_review_details_selected_subject({ title: subject.title })}
         </p>
+      ) : null}
+      {result === null ? <p role="status">{m.thread_review_vote_none()}</p> : null}
+      {unavailable ? (
+        <div className="flex flex-col items-start gap-2">
+          <p role="alert">{m.thread_review_vote_read_failed()}</p>
+          <button
+            type="button"
+            className="w-fit cursor-pointer text-sm font-medium underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={disabled || retryingVote || !current() || !editable()}
+            onClick={() => void retryCurrentVoteRead()}
+          >
+            {m.thread_review_vote_retry()}
+          </button>
+        </div>
       ) : null}
       {vote ? (
         <Field

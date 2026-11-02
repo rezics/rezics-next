@@ -4,7 +4,11 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
-import { loadCurrentReviewVote, type CurrentReviewVote } from './review-vote';
+import {
+  CURRENT_REVIEW_VOTE_UNAVAILABLE,
+  loadCurrentReviewVote,
+  type CurrentReviewVoteReadResult,
+} from './review-vote';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -21,11 +25,11 @@ export const readCurrentReviewVote = createServerFn({ method: 'GET' })
       throw new Error('Invalid review subject');
     return { subjectId: input.subjectId };
   })
-  .handler(async ({ data }): Promise<CurrentReviewVote | null> => {
+  .handler(async ({ data }): Promise<CurrentReviewVoteReadResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
-    if (!authorization) return null;
+    if (!authorization) return CURRENT_REVIEW_VOTE_UNAVAILABLE;
     return loadCurrentReviewVote(kernelClient(), data.subjectId, authorization);
   });

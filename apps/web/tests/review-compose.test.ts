@@ -106,6 +106,21 @@ test('an unavailable private vote cannot manufacture a review citation', async (
   const current = await loadCurrentReviewVote(client, id(14), 'Bearer viewer');
 
   expect(requested).toEqual([`${id(14)}:${STANDARD_QUESTION_ID}`]);
+  expect(current).toEqual({ kind: 'unavailable' });
+  expect(current && 'kind' in current ? undefined : selectedVoteCitation(current, true)).toBeUndefined();
+});
+
+test('a private vote 404 represents no current vote', async () => {
+  const client = {
+    subjects: () => ({
+      ratings: () => ({
+        vote: { get: async () => ({ status: 404, error: { value: { code: 'not_found' } } }) },
+      }),
+    }),
+  } as unknown as KernelClient;
+
+  const current = await loadCurrentReviewVote(client, id(14), 'Bearer viewer');
+
   expect(current).toBeNull();
   expect(selectedVoteCitation(current, true)).toBeUndefined();
 });
@@ -315,6 +330,9 @@ test('review interface copy is present in all eight locales', () => {
     >;
     expect(messages.thread_review_subject, locale).toBeTruthy();
     expect(messages.thread_review_cite_vote, locale).toBeTruthy();
+    expect(messages.thread_review_vote_none, locale).toBeTruthy();
+    expect(messages.thread_review_vote_read_failed, locale).toBeTruthy();
+    expect(messages.thread_review_vote_retry, locale).toBeTruthy();
     expect(messages.thread_review_write, locale).toBeTruthy();
     expect(messages.thread_review_duplicate, locale).toBeTruthy();
   }

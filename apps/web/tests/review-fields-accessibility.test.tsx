@@ -101,6 +101,8 @@ async function mountFields(locale: 'en' | 'de' | 'es' | 'fr' | 'ja' | 'ko' | 'zh
     return (
       <ThreadCreationLifetimeProvider lifetime={visit.lifetime}>
         <form aria-label={`Review ${index + 1}`}>
+          <input aria-label="Review title" defaultValue="Draft title" />
+          <textarea aria-label="Review body" defaultValue="Draft body" />
           {visit.bound ? (
             <ReviewFields
               {...(selected ? { initialSubjectId: id(index + 1), initialSubjectTitle: longTitle } : {})}
@@ -255,6 +257,14 @@ test('subject switching, an absent vote and a failed private read cannot expose 
   try {
     await page.render();
     await page.settle(() => page.reads.length === 2);
+    const title = page.forms()[1]!.querySelector<HTMLInputElement>('[aria-label="Review title"]')!;
+    const body = page.forms()[1]!.querySelector<HTMLTextAreaElement>('[aria-label="Review body"]')!;
+    await act(async () => {
+      await page.user.clear(title);
+      await page.user.type(title, 'My review title');
+      await page.user.clear(body);
+      await page.user.type(body, 'My review body');
+    });
     const input = page.forms()[0]!.querySelector<HTMLInputElement>('[role="combobox"]')!;
     await act(async () => {
       await page.user.clear(input);
@@ -275,9 +285,25 @@ test('subject switching, an absent vote and a failed private read cannot expose 
     expect(page.host.querySelector('[data-slot="field-description"]')).toBeNull();
     expect(page.citations.every((values) => values.every((value) => value === undefined))).toBe(true);
     expect(page.forms()[0]!.textContent).toContain('Next subject');
+    expect(page.forms()[0]!.textContent).toContain(page.m.thread_review_vote_none());
+    expect(page.forms()[1]!.textContent).toContain(page.m.thread_review_vote_read_failed());
+    const retry = page.forms()[1]!.querySelector<HTMLButtonElement>('button')!;
+    expect(retry.textContent).toBe(page.m.thread_review_vote_retry());
+    await act(async () => {
+      retry.click();
+      retry.click();
+    });
+    await page.settle(() => page.reads.length === 4);
+    expect(page.reads[3]!.subjectId).toBe(id(2));
+    await act(async () => page.reads[3]!.work.resolve(votes[1]!));
+    await page.settle(() => page.checkbox(1) !== null);
+    expect(page.checkbox(1)!.getAttribute('aria-checked')).toBe('false');
+    expect(page.citations[1]!.at(-1)).toBeUndefined();
+    expect(title.value).toBe('My review title');
+    expect(body.value).toBe('My review body');
     expect(input.value).toBe('Next subject');
     await page.render();
-    expect(page.reads).toHaveLength(3);
+    expect(page.reads).toHaveLength(4);
   } finally {
     await page.dispose();
   }

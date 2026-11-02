@@ -3,6 +3,15 @@ import type { VoteCitation } from './post-writes';
 
 export const STANDARD_QUESTION_ID = '00000000-0000-7000-8000-000000000001';
 export type CurrentReviewVote = VoteCitation;
+export type CurrentReviewVoteUnavailable = { kind: 'unavailable' };
+export type CurrentReviewVoteReadResult = CurrentReviewVote | null | CurrentReviewVoteUnavailable;
+export const CURRENT_REVIEW_VOTE_UNAVAILABLE: CurrentReviewVoteUnavailable = { kind: 'unavailable' };
+
+export function isCurrentReviewVoteUnavailable(
+  result: CurrentReviewVoteReadResult,
+): result is CurrentReviewVoteUnavailable {
+  return result !== null && 'kind' in result && result.kind === 'unavailable';
+}
 
 /** Reads only the caller's vote; the question never selects another account's vote. */
 export async function loadCurrentReviewVote(
@@ -10,16 +19,17 @@ export async function loadCurrentReviewVote(
   subjectId: string,
   authorization: string,
   questionId: string = STANDARD_QUESTION_ID,
-): Promise<CurrentReviewVote | null> {
+): Promise<CurrentReviewVoteReadResult> {
   try {
     const result = await client
       .subjects({ id: subjectId })
       .ratings({ questionId })
       .vote.get({ headers: { authorization } });
-    if (result.error || !result.data) return null;
+    if (result.error) return result.status === 404 ? null : CURRENT_REVIEW_VOTE_UNAVAILABLE;
+    if (!result.data) return null;
     return { questionId, units: result.data.units, revision: result.data.revision };
   } catch {
-    return null;
+    return CURRENT_REVIEW_VOTE_UNAVAILABLE;
   }
 }
 

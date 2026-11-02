@@ -10,6 +10,8 @@ The lifetime observes only the existing `['session']` cache. It adds no session 
 retry. The review vote read checks the selected subject, current visit and connection before invocation and after
 completion. A stale result cannot publish a private preview or citation. Discussion selections keep their existing
 ordered zero-to-128 reference contract and are admitted only while the route visit is current and unlocked.
+An unavailable current-vote read shows localized recovery and retries only on request; an explicit no-vote result is
+shown separately, and a refreshed vote still requires an explicit citation choice.
 
 The departure owner decides before navigation to a different pathname or preset subject can commit. Stay preserves
 the caller and any immutable uncertain intent; Leave unmounts the old editor and creates a fresh usable visit for the

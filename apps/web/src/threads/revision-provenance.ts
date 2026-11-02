@@ -1,6 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import type { VoteCitation } from './post-writes';
-import { loadCurrentReviewVote } from './review-vote';
+import { isCurrentReviewVoteUnavailable, loadCurrentReviewVote } from './review-vote';
 import { readThreadSubjects, THREAD_SUBJECT_LIMIT, type ThreadSubject } from './subjects';
 
 type PostResource = ReturnType<KernelClient['posts']>;
@@ -35,7 +35,7 @@ export async function readAuthorRevisionVotes(
   viewer: { id: string; authorization: string } | null,
 ): Promise<RevisionVotes> {
   if (!viewer) return {};
-  const reads = new Map<string, Promise<VoteCitation | null>>();
+  const reads = new Map<string, ReturnType<typeof loadCurrentReviewVote>>();
   const values = await Promise.all(
     revisions.map(async (revision) => {
       if (revision.authorId !== viewer.id || !revision.voteCitation || revision.subjectIds?.length !== 1) return null;
@@ -48,7 +48,7 @@ export async function readAuthorRevisionVotes(
         reads.set(key, pending);
       }
       const vote = await pending;
-      return vote ? ([revision.id, vote] as const) : null;
+      return vote && !isCurrentReviewVoteUnavailable(vote) ? ([revision.id, vote] as const) : null;
     }),
   );
   return Object.fromEntries(values.filter((value) => value !== null));
