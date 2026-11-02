@@ -97,6 +97,8 @@ scopes. They add no resource type or scope and change no Collection action. The 
 
 **WEB NAME READER DECISION:** Measured overflow offers local inline expansion and collapse beside the independent shelf link, following the Collection note reader; fitting names have no reader control, and reading preserves exact text, locale and focus without requests or rename permission.
 
+The catalogue's single visible heading name is the shelf link; its row hit area stays separate from the local reader control, whose actual touch target is at least 44px in each dimension.
+
 **WEB DRAFT DECISION:** Only non-whitespace name text differing exactly from its separate create or captured rename baseline needs a draft-loss choice; an original pending or uncertain command is not an unsent draft. Dismissal, replacing an action, internal navigation and supported document unload protect unsent names; Stay preserves exact text and field focus, while Discard sends no command. Confirmed saves clear only the submitted text, and authority retirement bypasses protection.
 
 Both lists use signed, authenticated/encrypted cursors and `limit` 1..100, default 20. Assignments by label are ordered

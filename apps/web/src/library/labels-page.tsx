@@ -5,7 +5,7 @@ import { PageHeading } from '../shell/page-heading';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { ListRow, ListRowControl } from '@rezics/ui/list-row';
 import { ContentItemTitleLink } from '@rezics/ui/content-item';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@rezics/ui/shadcn/dialog';
@@ -25,18 +25,20 @@ import { LabelNameReader } from './label-name-reader';
 /** A catalogue label opens its complete personal shelf. */
 export function LabelShelfLink({ label, locale }: { label: LibraryLabelSummary; locale: string }) {
   return (
-    <>
-      <ContentItemTitleLink
-        as={ListRowLink}
-        stretch={false}
-        data-library-label-link
-        lang={locale}
-        href={shelfHref(locale, { label: label.id })}
-      >
-        {label.name}
-      </ContentItemTitleLink>
-      <LabelNameReader key={label.name} name={label.name} locale={locale} />
-    </>
+    <LabelNameReader
+      key={label.name}
+      name={label.name}
+      locale={locale}
+      renderName={(text) => (
+        <ContentItemTitleLink
+          data-library-label-link
+          lang={locale}
+          href={shelfHref(locale, { label: label.id })}
+        >
+          {text}
+        </ContentItemTitleLink>
+      )}
+    />
   );
 }
 
