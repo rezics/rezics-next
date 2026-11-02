@@ -9,7 +9,8 @@ import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import type { CandidateTransport } from '../../subject/candidate-review';
@@ -17,7 +18,7 @@ import { relationFields, type RelationTransport } from '../../subject/relation-c
 import { subjectHref } from '../../subject/subject-href';
 import { albumFields, albumType, type AlbumTransport } from './album-profile';
 import { AlbumProfileCreate } from './album-profile-create';
-import { changeAlbumSelection } from './album-correction-selection';
+import { albumDraftIdentity, albumDraftPopulated, changeAlbumSelection } from './album-correction-selection';
 import { DefinitionMeaning } from './definition-meaning';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { DefinitionGuideLink } from './definition-guide-view';
@@ -27,6 +28,7 @@ import { ExactReview, FactField, SelectedFacts } from './subject-facts-view';
 import {
   factChanged,
   factLimit,
+  factLocked,
   sealFacts,
   sendFacts,
   type FactDraft,
@@ -460,22 +462,18 @@ function AlbumCorrectionWorkspaceLive({
                     }}
                   />
                 )}
-                {visible && draft && !draft.command && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-auto min-h-11 max-w-full whitespace-normal break-words"
-                    disabled={busy}
-                    onClick={() => {
-                      if (!lifetime.active() || running.current) return;
-                      setDrafts((previous) => changeAlbumSelection(previous, { kind: 'remove', property }));
+                {visible && draft && !draft.command && !factLocked(draft) && (
+                  <AlbumDraftRemoval
+                    key={albumDraftIdentity(draft)}
+                    draft={draft}
+                    locale={locale}
+                    label={pickText(current.release.properties[property]?.labels ?? {}, locale).text || property}
+                    disabled={busy || !enabled}
+                    onRemove={() => {
+                      if (!lifetime.active() || running.current || !visible || !enabled || draft.command) return;
+                      setDrafts((previous) => changeAlbumSelection(previous, { kind: 'remove', property, target: draft }));
                     }}
-                  >
-                    {m.album_remove_draft(
-                      { field: pickText(current.release.properties[property]?.labels ?? {}, locale).text || property },
-                      o,
-                    )}
-                  </Button>
+                  />
                 )}
               </div>
             );
@@ -567,6 +565,88 @@ function AlbumCorrectionWorkspaceLive({
           <p className="text-sm text-muted-foreground">{m.album_summary_help({}, o)}</p>
           <AuthoredFieldEntry id={subject!.id} title={title} locale={locale} />
         </section>
+      )}
+    </div>
+  );
+}
+
+/** The pending choice belongs to this local draft, independently of its property and siblings. */
+function AlbumDraftRemoval({ draft, locale, label, disabled, onRemove }: {
+  draft: FactDraft;
+  locale: string;
+  label: string;
+  disabled: boolean;
+  onRemove: () => void;
+}) {
+  const lifetime = useEditorLifetime();
+  const o = { locale: locale as never };
+  const action = m.album_remove_draft({ field: label }, o);
+  const [confirming, setConfirming] = useState(false);
+  const section = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  const current = useRef({ draft, disabled, onRemove });
+  current.current = { draft, disabled, onRemove };
+  const editable = () => lifetime.active() && !current.current.disabled && !current.current.draft.command;
+  useLayoutEffect(() => {
+    if (!editable()) return;
+    if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current) {
+      trigger.current?.focus();
+      restoreFocus.current = false;
+    }
+  }, [confirming, disabled]);
+  const cancelRemoval = () => {
+    restoreFocus.current = true;
+    setConfirming(false);
+  };
+  const remove = () => {
+    if (!editable() || !section.current?.isConnected) return;
+    // Return to this property's retained source choice or staging control after the draft disappears.
+    const row = section.current.parentElement!;
+    const form = row.closest('form');
+    flushSync(() => current.current.onRemove());
+    const selector = 'select:not(:disabled), button:not(:disabled):not([hidden]), input:not(:disabled):not([type="hidden"])';
+    (row.querySelector<HTMLElement>(selector) ?? form?.querySelector<HTMLElement>(selector))?.focus();
+  };
+  return (
+    <div ref={section} className="space-y-2">
+      <Button
+        ref={trigger}
+        type="button"
+        variant="outline"
+        className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+        disabled={disabled}
+        hidden={confirming}
+        onClick={() => {
+          if (editable()) albumDraftPopulated(current.current.draft) ? setConfirming(true) : remove();
+        }}
+      >
+        {action}
+      </Button>
+      {confirming && (
+        <div
+          role="group"
+          aria-label={m.candidate_confirm_title({ action }, o)}
+          className="space-y-2"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              cancelRemoval();
+            }
+          }}
+        >
+          <p>{m.candidate_confirm_title({ action }, o)}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button ref={cancel} type="button" variant="outline" disabled={disabled} onClick={cancelRemoval}>
+              {m.candidate_cancel({}, o)}
+            </Button>
+            <Button type="button" variant="destructive" disabled={disabled} onClick={remove}>
+              {action}
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );

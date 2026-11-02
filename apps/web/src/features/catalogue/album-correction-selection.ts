@@ -3,7 +3,31 @@ import { factLimit, factLocked, stageFact, type FactDraft, type FactsCurrent } f
 type SelectionChange =
   | { kind: 'stage'; read: FactsCurrent; property: string; source: string | null }
   | { kind: 'revise'; draft: FactDraft }
-  | { kind: 'remove'; property: string };
+  | { kind: 'remove'; property: string; target?: FactDraft };
+
+const identities = new WeakMap<FactDraft, number>();
+const touched = new WeakSet<FactDraft>();
+let nextIdentity = 0;
+/** Revisions retain the local row; staging the same property again creates a new target. */
+export function albumDraftIdentity(draft: FactDraft): number {
+  if (!identities.has(draft)) identities.set(draft, ++nextIdentity);
+  return identities.get(draft)!;
+}
+
+export function albumDraftPopulated(draft: FactDraft): boolean {
+  const hasValue = (value: unknown): boolean => {
+    if (typeof value === 'string') return !!value.trim();
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'object') return Object.values(value).some(hasValue);
+    return true;
+  };
+  const meaningful = (part: Pick<FactDraft['statement'], 'value'>) => part.value.type !== 'value' || hasValue(part.value.content);
+  const statement = draft.statement;
+  return !!(
+    touched.has(draft) || draft.source || meaningful(statement) || statement.qualifiers?.some(meaningful) ||
+    statement.references.some((reference) => reference.parts.some(meaningful))
+  );
+}
 
 /** Only an unsubmitted draft can release a slot. Removing it never changes another field's intent. */
 export function changeAlbumSelection(drafts: FactDraft[], change: SelectionChange): FactDraft[] {
@@ -16,10 +40,13 @@ export function changeAlbumSelection(drafts: FactDraft[], change: SelectionChang
       return draft ? [...drafts, draft] : drafts;
     }
     case 'remove':
-      return current && !current.command ? drafts.filter((draft) => draft !== current) : drafts;
+      return current && !current.command && !factLocked(current) && (!change.target || change.target === current)
+        ? drafts.filter((draft) => draft !== current) : drafts;
     case 'revise':
       // A delayed control event must not unseal a command whose delivery is now uncertain.
       if (!current || factLocked(current) || current.source !== change.draft.source) return drafts;
+      identities.set(change.draft, albumDraftIdentity(current));
+      if (touched.has(current) || current.statement !== change.draft.statement) touched.add(change.draft);
       return drafts.map((draft) => (draft === current ? change.draft : draft));
   }
 }
