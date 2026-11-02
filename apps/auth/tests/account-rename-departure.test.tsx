@@ -128,10 +128,10 @@ test('clean navigation is quiet; Stay preserves the proposed handle and confirma
   const dirtyUnload = new dom.Event('beforeunload', { cancelable: true });
   window.dispatchEvent(dirtyUnload);
   expect(dirtyUnload.defaultPrevented).toBe(true);
-  const { navigation } = await startNavigation(ui.router, '/next');
+  await startNavigation(ui.router, '/next');
   expect(ui.host.querySelector('[role="alertdialog"]')).not.toBeNull();
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-stay]')!.click());
-  await flush(() => navigation);
+  expect(ui.router.state.location.pathname).toBe('/account/rename');
   const input = ui.host.querySelector<HTMLInputElement>('#rename-handle')!;
   expect(input.value).toBe('after');
   expect(ui.host.querySelector<HTMLInputElement>('#rename-confirm')!.checked).toBe(true);
