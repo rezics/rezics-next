@@ -132,7 +132,7 @@ test('Initialization failures preserve their cause and remove only the failed ac
     const write = fs.writeFileSync;
     const cause = Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' });
     const blocked = spyOn(fs, 'writeFileSync').mockImplementation(((path: unknown, data: unknown, options?: unknown) => {
-      if (String(path).includes('.initializing')) throw cause;
+      if (String(path).startsWith(t.path) && String(path).includes('.initializing')) throw cause;
       return write(path as never, data as never, options as never);
     }) as typeof fs.writeFileSync);
     try {
