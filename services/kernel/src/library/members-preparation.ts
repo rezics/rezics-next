@@ -785,50 +785,11 @@ export function createMembersPreparation(config: {
     },
 
     async readWorkDefinition(tx, locator) {
-      const definition = await service.readRetainedDefinition(tx, locator);
-      if (!definition) return null;
-      const state = await readPreparationStep(tx, locator);
-      if (!state) throw new ProblemError('dependency_unavailable');
-      const source = await nativeSource.run(tx, {
-        route: locator.route,
-        owner_account_id: locator.ownerAccountId,
-        collection_id: locator.collectionId,
+      if (!(await service.readRetainedDefinition(tx, locator))) return null;
+      // Immutable meaning and a locator cannot supply the producer's missing Source declaration or authority.
+      throw new ProblemError('dependency_unavailable', {
+        detail: 'members-preparation-source-authority-unavailable',
       });
-      if (
-        !source ||
-        !source.incarnation ||
-        !source.generation ||
-        !source.receivingEpoch ||
-        !source.effectKey ||
-        !source.basisDigest ||
-        !source.identityDigest ||
-        source.incarnation !== state.incarnation ||
-        source.generation !== state.generation ||
-        (state.preparedIncarnation !== null &&
-          (state.preparedIncarnation !== source.incarnation || state.preparedGeneration !== source.generation))
-      )
-        throw new ProblemError('dependency_unavailable');
-      const sourceIdentity = preparationSourceIdentity(locator, source);
-      if (!sourceIdentity) throw new ProblemError('dependency_unavailable');
-      return {
-        definition,
-        sourceIdentity,
-        observation: {
-          route: locator.route,
-          collectionId: locator.collectionId,
-          incarnation: source.incarnation,
-          revision: source.revision,
-          authority: { kind: 'curated' },
-          stamp: { partition: partitionOf(locator.route), epoch: source.epoch, position: BigInt(source.position) },
-          basis: {
-            digest: source.basisDigest,
-            identity: { digest: source.identityDigest },
-            query: null,
-            profilePins: source.releaseDigest ? [source.releaseDigest] : [],
-            projection: null,
-          },
-        },
-      };
     },
   };
   return service;

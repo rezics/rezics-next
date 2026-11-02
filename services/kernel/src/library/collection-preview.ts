@@ -29,7 +29,7 @@ export async function readCollectionPreviews(
   parents: readonly PreviewParent[],
   deadline: number,
   authorizeCurrent: (parent: PreviewParent) => Promise<void>,
-  prepareUnresolved?: (previews: Map<string, CollectionPreview>) => Promise<void>,
+  prepareUnresolved?: (previews: ReadonlyMap<string, CollectionPreview>) => Promise<void>,
 ): Promise<Map<string, CollectionPreview>> {
   if (parents.length > 20) throw new ProblemError('invalid_request');
   const result = new Map<string, CollectionPreview>(
@@ -85,6 +85,7 @@ export async function readCollectionPreviews(
     const exhausted = raw.length < quota;
     if (members.length === 3 || exhausted) result.set(parent.id, { previewMembers: members, previewStatus: 'ready' });
   }
+  await prepareUnresolved?.(result);
   await display.verify();
   const current = await withReadTransaction(deps.pool, (client) =>
     fencesRead.run(deadlineClient(client, deadline), binding),
@@ -98,6 +99,5 @@ export async function readCollectionPreviews(
   )
     throw new ProblemError('dependency_unavailable');
   for (const parent of parents) await authorizeCurrent(parent);
-  await prepareUnresolved?.(result);
   return result;
 }
