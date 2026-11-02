@@ -10,7 +10,7 @@ const { Window } = await import(
 const dom = new Window({ url: 'https://auth.test/security' });
 const globals = {
   ...Object.fromEntries(
-    ['window', 'document', 'navigator', 'HTMLElement', 'HTMLInputElement', 'Element', 'Node'].map((key) => [
+    ['window', 'document', 'navigator', 'HTMLElement', 'HTMLInputElement', 'Element', 'Node', 'Event'].map((key) => [
       key,
       dom[key as keyof typeof dom],
     ]),
