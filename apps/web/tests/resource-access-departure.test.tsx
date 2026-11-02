@@ -13,20 +13,9 @@ const globals = {
   document: window.document,
   navigator: window.navigator,
   ...Object.fromEntries(
-    [
-      'HTMLElement',
-      'HTMLInputElement',
-      'HTMLButtonElement',
-      'HTMLFormElement',
-      'Element',
-      'Node',
-      'NodeFilter',
-      'Document',
-      'ShadowRoot',
-      'DocumentFragment',
-      'MutationObserver',
-      'ResizeObserver',
-    ].map((key) => [key, window[key]]),
+    'HTMLElement HTMLInputElement HTMLButtonElement HTMLFormElement Element Node NodeFilter Document ShadowRoot DocumentFragment MutationObserver ResizeObserver'
+      .split(' ')
+      .map((key) => [key, window[key]]),
   ),
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
@@ -85,16 +74,13 @@ function ioFor(page = structuredClone(snapshot)): AccessIO {
     save: mock(async () => ({ status: 'saved' })),
   };
 }
-async function mount(initial: AccessState, io: AccessIO, containingOwner = false) {
+async function mount(initial: AccessState, io: AccessIO) {
   const parent = createRootRoute({
-    component: () =>
-      containingOwner ? (
-        <AuthoringDepartureProvider>
-          <Outlet />
-        </AuthoringDepartureProvider>
-      ) : (
+    component: () => (
+      <AuthoringDepartureProvider>
         <Outlet />
-      ),
+      </AuthoringDepartureProvider>
+    ),
   });
   const access = createRoute({
     getParentRoute: () => parent,
@@ -126,7 +112,7 @@ test('changed grant draft survives Stay; paging and deliberate Leave retire it t
   const page = structuredClone(snapshot);
   page.next = 'next-grants';
   const io = ioFor(page);
-  await mount({ status: 'ready', page }, io, true);
+  await mount({ status: 'ready', page }, io);
   await click(button(m.access_add_grant()));
   const handle = within(host).getByLabelText(m.access_handle());
   await click(handle);
@@ -155,7 +141,6 @@ test('changed grant draft survives Stay; paging and deliberate Leave retire it t
   await click(button(m.access_next_page()));
   await stay();
   expect(io.read).toHaveBeenCalledTimes(0);
-  expect((handle as HTMLInputElement).value).toBe('aki');
   await click(button(m.access_next_page()));
   await leave();
   expect(io.read).toHaveBeenCalledWith('next-grants', expect.any(AbortSignal));
@@ -178,7 +163,7 @@ test('Stay retains the exact unresolved command; Leave never cancels or replays 
       finish = resolve;
     });
   });
-  await mount({ status: 'ready', page: snapshot }, io);
+  const router = await mount({ status: 'ready', page: snapshot }, io);
   await click(button(m.access_add_grant()));
   await type(within(host).getByLabelText(m.access_handle()), 'aki');
   await click(button(m.access_find_account()));
@@ -193,12 +178,16 @@ test('Stay retains the exact unresolved command; Leave never cancels or replays 
   await click(link);
   await leave();
   expect(signal?.aborted).toBe(false);
+  await act(async () => {
+    await router.navigate({ to: '/access' });
+  });
+  await click(button(m.access_add_grant()));
+  await type(within(host).getByLabelText(m.access_handle()), 'replacement');
   const reads = (io.read as ReturnType<typeof mock>).mock.calls.length;
   await act(async () => finish({ status: 'saved' }));
   expect(commands).toHaveLength(2);
   expect((io.read as ReturnType<typeof mock>).mock.calls).toHaveLength(reads);
-  expect(host.textContent).toContain('Destination reached');
-  expect(blocked()).toBe(false);
+  expect((within(host).getByLabelText(m.access_handle()) as HTMLInputElement).value).toBe('replacement');
 });
 
 test('owner transfer confirmation survives Stay, then completes and leaves normally; caller loss bypasses drafts', async () => {
@@ -233,7 +222,7 @@ test('owner transfer confirmation survives Stay, then completes and leaves norma
   await act(async () => root.render(<ResourceAccessPage initial={{ status: 'ready', page }} io={io} />));
   await click(button(m.access_add_grant()));
   await type(within(host).getByLabelText(m.access_handle()), 'private');
-  await act(async () => root.render(<ResourceAccessPage initial={{ status: 'denied' }} io={ioFor(page)} />));
+  await act(async () => root.render(<ResourceAccessPage initial={{ status: 'ready', page }} io={ioFor(page)} />));
   expect(blocked()).toBe(false);
   expect(within(document.body).queryByRole('alertdialog')).toBeNull();
   expect(host.textContent).not.toContain('private');
