@@ -24,6 +24,8 @@ import type { StatementInput } from './statement-editor';
 import { gameCreationAddress } from './game-creation-address';
 import { GameClassifications, GameInitialFacts, gameGroupLabel } from './game-profile-fields';
 import { gameDefinitions, gameDraft, gameGroups, type GameCommand, type GameRead } from './game-profile';
+import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
+import { GameDraftDeparture } from './game-classification-departure';
 
 const gameActionClass =
   'min-h-8 min-w-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
@@ -127,16 +129,18 @@ function GameProfileLive({
           </article>
         )}
         {privateReading.current && (
-          <GameCorrection
-            read={privateReading.current}
-            visible={!!admitted}
-            locale={locale}
-            session={session}
-            transport={transport}
-            search={search}
-            refresh={() => query.refetch({ cancelRefetch: false }).then(() => undefined)}
-            refreshing={query.isFetching}
-          />
+          <AuthoringDepartureBoundary>
+            <GameCorrection
+              read={privateReading.current}
+              visible={!!admitted}
+              locale={locale}
+              session={session}
+              transport={transport}
+              search={search}
+              refresh={() => query.refetch({ cancelRefetch: false }).then(() => undefined)}
+              refreshing={query.isFetching}
+            />
+          </AuthoringDepartureBoundary>
         )}
       </CatalogueCurrentReading>
     );
@@ -393,6 +397,7 @@ function GameCorrection({
                 initial={relationRead}
                 search={search}
                 transport={transport.relations}
+                navigation={(state) => <GameDraftDeparture {...state} />}
               />
             </details>
           )}

@@ -14,6 +14,8 @@ import { InitialFieldChoice } from './initial-field-choice';
 import { StatementFields, PartValue, EditorFailure, type StatementFieldsRead } from './statement-editor-view';
 import { statementInput, type SnakInput, type StatementInput } from './statement-editor';
 import { factChanged, factLocked, sealFacts, sendFacts, type FactDraft, type FactsTransport } from './subject-facts';
+import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
+import { GameFactsDeparture } from './game-classification-departure';
 
 const gameActionClass =
   'min-h-8 min-w-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
@@ -446,7 +448,15 @@ function GameClassificationDiscard({
 }
 
 /** Common per-field sealing/retry and review, with item controls for native classification slots. */
-export const GameClassifications = catalogueEditor(GameClassificationsLive);
+export const GameClassifications = catalogueEditor(function GameClassificationsBoundary(
+  props: Parameters<typeof GameClassificationsLive>[0],
+) {
+  return (
+    <AuthoringDepartureBoundary>
+      <GameClassificationsLive {...props} />
+    </AuthoringDepartureBoundary>
+  );
+});
 
 function GameClassificationsLive({
   read,
@@ -525,8 +535,7 @@ function GameClassificationsLive({
       setBusy(false);
     }
   }
-  if (!visible) return null;
-  return (
+  const content = visible ? (
     <section ref={holder} className="min-w-0 max-w-full space-y-5" aria-busy={busy}>
       <h2 className="font-sans text-xl font-semibold">{m.game_profile_classification({}, o)}</h2>
       <p className="text-sm text-muted-foreground">{m.facts_separate_results({}, o)}</p>
@@ -707,5 +716,11 @@ function GameClassificationsLive({
         />
       )}
     </section>
+  ) : null;
+  return (
+    <>
+      <GameFactsDeparture drafts={drafts} />
+      {content}
+    </>
   );
 }

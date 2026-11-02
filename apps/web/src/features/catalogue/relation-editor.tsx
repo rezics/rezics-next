@@ -1,6 +1,6 @@
 import { catalogueEditor, useEditorLifetime, useCurrentReadingVisible } from './editor-lifetime';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useId } from 'react';
 import type { SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
@@ -71,6 +71,7 @@ function RelationEditorLive({
   requireCloseConfirmation = false,
   composition,
   embedded = false,
+  navigation,
 }: {
   id: string;
   locale: string;
@@ -81,6 +82,8 @@ function RelationEditorLive({
   onClose?: () => void;
   requireCloseConfirmation?: boolean;
   embedded?: boolean;
+  /** A containing profile can compose the existing dirty/pending state into one decision. */
+  navigation?: (state: Parameters<typeof RelationEditorNavigation>[0]) => ReactNode;
   /** A composition correction keeps every non-order qualifier and native slot key intact. */
   composition?: {
     statement: RelationDraft;
@@ -412,10 +415,10 @@ function RelationEditorLive({
         : confirmation === 'reject'
           ? m.relation_reject({}, options)
           : m.candidate_adopt({}, options);
-  if (!visible) return null;
-  return (
+  const navigationState = { dirty, pending: !!request.current, isCurrent: () => lifetime.active() };
+  const departure = navigation?.(navigationState);
+  const content = visible ? (
     <section aria-label={m.relation_title({}, options)} className={relationSurface} aria-busy={busy}>
-      <RelationEditorNavigation dirty={dirty} pending={!!request.current} isCurrent={() => lifetime.active()} />
       <header className="space-y-2">
         {composition ? (
           <ContentItemHeading level={2} className="font-sans text-2xl font-semibold">
@@ -1033,6 +1036,12 @@ function RelationEditorLive({
         </div>
       )}
     </section>
+  ) : null;
+  return (
+    <>
+      {navigation ? departure : visible && <RelationEditorNavigation {...navigationState} />}
+      {content}
+    </>
   );
 }
 
