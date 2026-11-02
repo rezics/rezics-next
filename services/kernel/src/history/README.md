@@ -155,14 +155,14 @@ The local declaration lives in `operational-work-budget.ts`. Axis order is candi
 metadata rows, empty seeks, native points, witness keys, statements, bytes. Exact native keys use no semantic
 candidate/witness or identity-metadata allowance. Each key's bound covers either a hit or an empty seek.
 
-| Body | Complete local bound |
-| --- | --- |
-| Executor attempt controls and native fence | `(0,7,0,3,3,0,14,768)` |
-| Registration, counter, sole SDK enqueue/callback, inventory and deferred seal | `(0,1191,0,1221,1221,0,464,596352)` |
-| Committed resolution or independent held verification, each | `(0,4,0,4,4,0,9,291328)` |
-| Receiving and exact readback | `(0,1137,0,1136,1136,0,429,678016)` |
-| Replay or guarded retirement probe, each | `(0,29,0,25,25,0,25,318592)` |
-| Original ceiling, three complete attempts including every child reservation | `(0,7203,0,7254,7254,0,2925,7484928)` |
+| Body                                                                          | Complete local bound                  |
+| ----------------------------------------------------------------------------- | ------------------------------------- |
+| Executor attempt controls and native fence                                    | `(0,7,0,3,3,0,14,768)`                |
+| Registration, counter, sole SDK enqueue/callback, inventory and deferred seal | `(0,1191,0,1221,1221,0,464,596352)`   |
+| Committed resolution or independent held verification, each                   | `(0,4,0,4,4,0,9,291328)`              |
+| Receiving and exact readback                                                  | `(0,1137,0,1136,1136,0,429,678016)`   |
+| Replay or guarded retirement probe, each                                      | `(0,29,0,25,25,0,25,318592)`          |
+| Original ceiling, three complete attempts including every child reservation   | `(0,7203,0,7254,7254,0,2925,7484928)` |
 
 The literal declaration includes both allocator INSERT and conflict-UPDATE trigger paths, partition FK and PK,
 exact head/original deferred constraints, original/episode unique indexes, position index, stamp serialization,

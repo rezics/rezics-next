@@ -3,16 +3,33 @@ import { currentOperationalResources, type OperationalTransaction } from '../com
 
 /** The eight native axes. This allocation belongs only to the operational History producer. */
 export const OPERATIONAL_WORK_AXES = [
-  'candidateKeys', 'nativeRows', 'identityMetadataRows', 'emptySeeks',
-  'nativePoints', 'witnessKeys', 'statements', 'bytes',
+  'candidateKeys',
+  'nativeRows',
+  'identityMetadataRows',
+  'emptySeeks',
+  'nativePoints',
+  'witnessKeys',
+  'statements',
+  'bytes',
 ] as const;
 export type OperationalWorkCost = Readonly<Record<(typeof OPERATIONAL_WORK_AXES)[number], number>>;
 const cost = (nativeRows: number, nativePoints: number, statements: number, bytes: number): OperationalWorkCost =>
-  Object.freeze({ candidateKeys: 0, nativeRows, identityMetadataRows: 0, emptySeeks: nativePoints,
-    nativePoints, witnessKeys: 0, statements, bytes });
+  Object.freeze({
+    candidateKeys: 0,
+    nativeRows,
+    identityMetadataRows: 0,
+    emptySeeks: nativePoints,
+    nativePoints,
+    witnessKeys: 0,
+    statements,
+    bytes,
+  });
 export function sumOperationalWork(...parts: readonly OperationalWorkCost[]): OperationalWorkCost {
-  return Object.freeze(Object.fromEntries(OPERATIONAL_WORK_AXES.map(axis =>
-    [axis, parts.reduce((total, part) => total + part[axis], 0)]))) as OperationalWorkCost;
+  return Object.freeze(
+    Object.fromEntries(
+      OPERATIONAL_WORK_AXES.map((axis) => [axis, parts.reduce((total, part) => total + part[axis], 0)]),
+    ),
+  ) as OperationalWorkCost;
 }
 const times = (n: number, part: OperationalWorkCost) => sumOperationalWork(...Array.from({ length: n }, () => part));
 
@@ -73,23 +90,37 @@ export const OPERATIONAL_WORK_COST = Object.freeze({
 });
 
 export const OPERATIONAL_WORK_REGISTRATION = sumOperationalWork(
-  OPERATIONAL_WORK_COST.originalLookup, OPERATIONAL_WORK_COST.sourceDomain,
-  OPERATIONAL_WORK_COST.positionAllocate, OPERATIONAL_WORK_COST.positionBinding, OPERATIONAL_WORK_COST.originalIndexes,
-  OPERATIONAL_WORK_COST.sdkDomain, OPERATIONAL_WORK_COST.sdkProbe,
-  OPERATIONAL_WORK_COST.sdkEnqueue, OPERATIONAL_WORK_COST.sdkWriter,
+  OPERATIONAL_WORK_COST.originalLookup,
+  OPERATIONAL_WORK_COST.sourceDomain,
+  OPERATIONAL_WORK_COST.positionAllocate,
+  OPERATIONAL_WORK_COST.positionBinding,
+  OPERATIONAL_WORK_COST.originalIndexes,
+  OPERATIONAL_WORK_COST.sdkDomain,
+  OPERATIONAL_WORK_COST.sdkProbe,
+  OPERATIONAL_WORK_COST.sdkEnqueue,
+  OPERATIONAL_WORK_COST.sdkWriter,
   OPERATIONAL_WORK_COST.sdkProjectionGuard,
-  OPERATIONAL_WORK_COST.originalInsert, OPERATIONAL_WORK_COST.originalFinalize,
-  times(8, OPERATIONAL_WORK_COST.seal), OPERATIONAL_WORK_COST.workInsert, times(8, locator),
+  OPERATIONAL_WORK_COST.originalInsert,
+  OPERATIONAL_WORK_COST.originalFinalize,
+  times(8, OPERATIONAL_WORK_COST.seal),
+  OPERATIONAL_WORK_COST.workInsert,
+  times(8, locator),
 );
 export const OPERATIONAL_WORK_RECEIVING = sumOperationalWork(
-  OPERATIONAL_WORK_COST.receivingControl, OPERATIONAL_WORK_COST.mappingInsert,
-  OPERATIONAL_WORK_COST.mappingRead, OPERATIONAL_WORK_COST.writerBarrier,
+  OPERATIONAL_WORK_COST.receivingControl,
+  OPERATIONAL_WORK_COST.mappingInsert,
+  OPERATIONAL_WORK_COST.mappingRead,
+  OPERATIONAL_WORK_COST.writerBarrier,
   OPERATIONAL_WORK_COST.sdkReadback,
-  times(8, OPERATIONAL_WORK_COST.seal), OPERATIONAL_WORK_COST.workInsert, times(8, locator),
+  times(8, OPERATIONAL_WORK_COST.seal),
+  OPERATIONAL_WORK_COST.workInsert,
+  times(8, locator),
 );
 export const OPERATIONAL_WORK_RECHECK = sumOperationalWork(
-  OPERATIONAL_WORK_COST.receivingControl, OPERATIONAL_WORK_COST.mappingRead,
-  OPERATIONAL_WORK_COST.writerBarrier, OPERATIONAL_WORK_COST.sdkReadback,
+  OPERATIONAL_WORK_COST.receivingControl,
+  OPERATIONAL_WORK_COST.mappingRead,
+  OPERATIONAL_WORK_COST.writerBarrier,
+  OPERATIONAL_WORK_COST.sdkReadback,
   OPERATIONAL_WORK_COST.replaySeals,
 );
 export const OPERATIONAL_WORK_TRANSFER_COST = Object.freeze({
@@ -103,22 +134,32 @@ export type OperationalWorkPhase = keyof typeof OPERATIONAL_WORK_TRANSFER_COST;
 /** Three complete attempts share ONE balance. Rollback and failed prefixes are never refunded.
  * The caller's Members/Source/Access bodies are separate declarations, not this child's price. */
 export const OPERATIONAL_WORK_LOCAL_DECLARATION = sumOperationalWork(
-  times(3, sumOperationalWork(OPERATIONAL_WORK_COST.attempt, OPERATIONAL_WORK_REGISTRATION,
-    ...Object.values(OPERATIONAL_WORK_TRANSFER_COST))),
+  times(
+    3,
+    sumOperationalWork(
+      OPERATIONAL_WORK_COST.attempt,
+      OPERATIONAL_WORK_REGISTRATION,
+      ...Object.values(OPERATIONAL_WORK_TRANSFER_COST),
+    ),
+  ),
 );
 
 export class OperationalWorkUnavailable extends Error {
-  constructor(readonly gap: string) { super(gap); }
+  constructor(readonly gap: string) {
+    super(gap);
+  }
 }
 /** Query adapter over the SAME checked-out client. A wait for a connection/lock never
  * extends the original deadline. Cleanup uses the raw client so expiry cannot prevent rollback. */
 export function operationalWorkDeadlineClient(client: PoolClient, deadline: number): Pick<PoolClient, 'query'> {
-  return { query: new Proxy(client.query, {
-    apply(target, _receiver, args) {
-      if (Date.now() >= deadline) throw new OperationalWorkUnavailable('operational-work-deadline');
-      return Reflect.apply(target, client, args);
-    },
-  }) };
+  return {
+    query: new Proxy(client.query, {
+      apply(target, _receiver, args) {
+        if (Date.now() >= deadline) throw new OperationalWorkUnavailable('operational-work-deadline');
+        return Reflect.apply(target, client, args);
+      },
+    }),
+  };
 }
 export type OperationalWorkOriginal = Readonly<{ pool: Pool; deadline: number }>;
 type Balance = { remaining: OperationalWorkCost; attempts: number };
@@ -126,8 +167,13 @@ const originals = new WeakMap<OperationalWorkOriginal, Balance>();
 const transactionOriginals = new WeakMap<OperationalTransaction, OperationalWorkOriginal>();
 export function attachOperationalWorkOriginal(tx: OperationalTransaction, original: OperationalWorkOriginal): void {
   const resources = currentOperationalResources(tx);
-  if (transactionOriginals.has(tx) || resources.pool !== original.pool || resources.deadline !== original.deadline ||
-    !originals.has(original)) throw new TypeError('Foreign or repeated operational History original');
+  if (
+    transactionOriginals.has(tx) ||
+    resources.pool !== original.pool ||
+    resources.deadline !== original.deadline ||
+    !originals.has(original)
+  )
+    throw new TypeError('Foreign or repeated operational History original');
   transactionOriginals.set(tx, original);
 }
 export function openOperationalWorkOriginal(pool: Pool, deadline: number): OperationalWorkOriginal {
@@ -137,12 +183,17 @@ export function openOperationalWorkOriginal(pool: Pool, deadline: number): Opera
 }
 export function debitOperationalWork(original: OperationalWorkOriginal, amount: OperationalWorkCost): void {
   const balance = originals.get(original);
-  if (!balance || Date.now() >= original.deadline ||
-    OPERATIONAL_WORK_AXES.some(axis => !Number.isSafeInteger(amount[axis]) || amount[axis] < 0 ||
-      amount[axis] > balance.remaining[axis]))
+  if (
+    !balance ||
+    Date.now() >= original.deadline ||
+    OPERATIONAL_WORK_AXES.some(
+      (axis) => !Number.isSafeInteger(amount[axis]) || amount[axis] < 0 || amount[axis] > balance.remaining[axis],
+    )
+  )
     throw new OperationalWorkUnavailable('operational-work-native-funding-unavailable');
-  balance.remaining = Object.freeze(Object.fromEntries(OPERATIONAL_WORK_AXES.map(axis =>
-    [axis, balance.remaining[axis] - amount[axis]]))) as OperationalWorkCost;
+  balance.remaining = Object.freeze(
+    Object.fromEntries(OPERATIONAL_WORK_AXES.map((axis) => [axis, balance.remaining[axis] - amount[axis]])),
+  ) as OperationalWorkCost;
 }
 export function debitOperationalWorkAttempt(original: OperationalWorkOriginal): void {
   const balance = originals.get(original);
@@ -153,19 +204,31 @@ export function debitOperationalWorkAttempt(original: OperationalWorkOriginal): 
 
 declare const transfer: unique symbol;
 export type OperationalWorkTransfer = { readonly [transfer]: true };
-type Transfer = { original: OperationalWorkOriginal; phase: OperationalWorkPhase;
-  custodyId: string; state: 'live' | 'committed' | 'invalid'; used: boolean };
+type Transfer = {
+  original: OperationalWorkOriginal;
+  phase: OperationalWorkPhase;
+  custodyId: string;
+  state: 'live' | 'committed' | 'invalid';
+  used: boolean;
+};
 const transfers = new WeakMap<OperationalWorkTransfer, Transfer>();
 const byTransaction = new WeakMap<OperationalTransaction, Set<OperationalWorkTransfer>>();
 /** Executor/producer internal. Public issuance verifies the genuine live transaction first. */
 export function issueOperationalWorkTransfer(
-  tx: OperationalTransaction, original: OperationalWorkOriginal, phase: OperationalWorkPhase, custodyId: string,
+  tx: OperationalTransaction,
+  original: OperationalWorkOriginal,
+  phase: OperationalWorkPhase,
+  custodyId: string,
 ): OperationalWorkTransfer {
   const resources = currentOperationalResources(tx);
-  if (transactionOriginals.get(tx) !== original || resources.pool !== original.pool || resources.deadline !== original.deadline)
+  if (
+    transactionOriginals.get(tx) !== original ||
+    resources.pool !== original.pool ||
+    resources.deadline !== original.deadline
+  )
     throw new OperationalWorkUnavailable('operational-work-native-transfer-unavailable');
   const issued = byTransaction.get(tx) ?? new Set<OperationalWorkTransfer>();
-  if ([...issued].some(token => transfers.get(token)?.phase === phase))
+  if ([...issued].some((token) => transfers.get(token)?.phase === phase))
     throw new TypeError('Operational work phase already transferred');
   debitOperationalWork(original, OPERATIONAL_WORK_TRANSFER_COST[phase]);
   const token = Object.freeze({}) as OperationalWorkTransfer;
@@ -183,11 +246,21 @@ export function finishOperationalWorkTransfers(tx: OperationalTransaction, commi
   transactionOriginals.delete(tx);
 }
 export function consumeOperationalWorkTransfer(
-  pool: Pool, token: OperationalWorkTransfer, phase: OperationalWorkPhase, custodyId: string,
+  pool: Pool,
+  token: OperationalWorkTransfer,
+  phase: OperationalWorkPhase,
+  custodyId: string,
 ): Readonly<{ deadline: number }> {
   const bound = transfers.get(token);
-  if (!bound || bound.used || bound.phase !== phase || bound.custodyId !== custodyId || bound.state !== 'committed' ||
-    bound.original.pool !== pool || Date.now() >= bound.original.deadline)
+  if (
+    !bound ||
+    bound.used ||
+    bound.phase !== phase ||
+    bound.custodyId !== custodyId ||
+    bound.state !== 'committed' ||
+    bound.original.pool !== pool ||
+    Date.now() >= bound.original.deadline
+  )
     throw new OperationalWorkUnavailable('operational-work-native-transfer-unavailable');
   bound.used = true;
   return Object.freeze({ deadline: bound.original.deadline });

@@ -33,8 +33,11 @@ import {
   HISTORY_LOCATOR_INVALIDATION,
 } from './agent-identity-inventory-work.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { isOperationalWorkCustodyId, type CommittedOperationalWork,
-  type OperationalWorkTransfer } from './operational-work.ts';
+import {
+  isOperationalWorkCustodyId,
+  type CommittedOperationalWork,
+  type OperationalWorkTransfer,
+} from './operational-work.ts';
 import { inspectOperationalWorkRetirement } from './operational-work-receiving.ts';
 
 /** Historical executions without captured native SDK creation keep this exact unresolved gap.
