@@ -13,14 +13,16 @@ test('rule label action bounds raw input separately and validates the native nor
 
 test('direct rule choice reads use normalized prefixes and never look up invalid input', async () => {
   const queries: string[] = [];
-  const client = createKernelClient('https://kernel.test', { fetch: async (input) => {
-    const url = new URL(new Request(input).url);
-    if (url.pathname === '/v1/libraryLabels') {
-      queries.push(url.searchParams.get('q')!);
-      return Response.json({ labels: [], next: null });
-    }
-    return Response.json({}, { status: 503 });
-  } });
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input) => {
+      const url = new URL(new Request(input).url);
+      if (url.pathname === '/v1/libraryLabels') {
+        queries.push(url.searchParams.get('q')!);
+        return Response.json({ labels: [], next: null });
+      }
+      return Response.json({}, { status: 503 });
+    },
+  });
   await loadRuleChoices(client, 'Bearer owner', { q: ' e\u0301 ' });
   for (const q of ['😀'.repeat(101), 'x\u0001', ' '.repeat(1001)])
     expect((await loadRuleChoices(client, 'Bearer owner', { q })).labels.state).toBe('unavailable');

@@ -379,7 +379,6 @@ describe('Private rule editor data and asynchronous work stay with the originati
   });
 });
 
-
 test('rule label lookup normalizes a copy, corrects invalid prefixes, and retains the unsaved rule without CSRF', async () => {
   const reads: string[] = [];
   const writes: RuleWrite[] = [];
@@ -389,7 +388,10 @@ test('rule label lookup normalizes a copy, corrects invalid prefixes, and retain
       reads.push(q);
       return { viewerId: 'alice', address: { q, cursor: cursor ?? null }, choices: ready().choices };
     },
-    save: async (value) => { writes.push(value); return { ok: false, reason: 'invalid' }; },
+    save: async (value) => {
+      writes.push(value);
+      return { ok: false, reason: 'invalid' };
+    },
   });
   try {
     await ui.changeLabel();
@@ -412,7 +414,9 @@ test('rule label lookup normalizes a copy, corrects invalid prefixes, and retain
     await ui.render({ csrfToken: 'csrf-alice' });
     await ui.submit();
     expect(writes[0]!.filter).toEqual({ owner: { label: { id: 'changed' } } });
-  } finally { await ui.close(); }
+  } finally {
+    await ui.close();
+  }
 });
 
 test('raw prefix edits retire choices and cursors, and equal normalized edits cannot revive an old request', async () => {
@@ -445,5 +449,7 @@ test('raw prefix edits retire choices and cursors, and equal normalized edits ca
     await reply(3, 'é');
     expect(ui.host.textContent).toContain('Fresh result');
     expect(pending.map(({ q, cursor }) => [q, cursor])).toEqual(Array(4).fill(['é', undefined]));
-  } finally { await ui.close(); }
+  } finally {
+    await ui.close();
+  }
 });

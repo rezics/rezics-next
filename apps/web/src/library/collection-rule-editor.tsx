@@ -613,7 +613,11 @@ function RuleForm({
         if (!captured.current) setBase(current);
         if (choiceAddress.current === choiceOrigin) {
           choiceAddress.current = { raw: '', q: '', cursor: undefined, generation: choiceOrigin.generation + 1 };
-          choiceContext.current = { q: '', next: current.choices.labels.next, generation: choiceAddress.current.generation };
+          choiceContext.current = {
+            q: '',
+            next: current.choices.labels.next,
+            generation: choiceAddress.current.generation,
+          };
           setQuery('');
           setChoices(current.choices);
         }
@@ -777,12 +781,14 @@ function RuleForm({
                   <Button type="button" variant="outline" disabled={!prefix.ok} onClick={() => void labelPage()}>
                     {m.search_apply()}
                   </Button>
-                  {choices.labels.next && prefix.ok && choiceContext.current.q === prefix.query &&
+                  {choices.labels.next &&
+                    prefix.ok &&
+                    choiceContext.current.q === prefix.query &&
                     choiceContext.current.generation === choiceAddress.current.generation && (
-                    <Button type="button" variant="outline" onClick={() => void labelPage(choices.labels.next!)}>
-                      {m.library_label_more()}
-                    </Button>
-                  )}
+                      <Button type="button" variant="outline" onClick={() => void labelPage(choices.labels.next!)}>
+                        {m.library_label_more()}
+                      </Button>
+                    )}
                 </div>
               </Field>
             )}

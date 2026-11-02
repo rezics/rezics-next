@@ -17,7 +17,8 @@ export function validateRuleLabelPage(input: unknown): { q: string; cursor?: str
     Object.keys(value).some((key) => key !== 'q' && key !== 'cursor') ||
     (value.q !== undefined && typeof value.q !== 'string') ||
     (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length > 4096))
-  ) throw new Error('Invalid label page');
+  )
+    throw new Error('Invalid label page');
   const prefix = collectionRuleLabelPrefix((value.q as string | undefined) ?? '');
   if (!prefix.ok) throw new Error('Invalid label page');
   return { q: prefix.query, ...(value.cursor === undefined ? {} : { cursor: value.cursor as string }) };
