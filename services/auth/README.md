@@ -174,6 +174,114 @@ external custody and backup expiry remain separate pending owner obligations in
 external/restore custody tests retain their explicit missing-owner failures;
 this change does not certify before-T restore or overall erasure completion.
 
+### Current receiving closure provenance
+
+[receiving-closure.ts](src/receiving-closure.ts) implements the private
+`auth.receiving-closure/v1` receipt factory. Default service composition exposes
+that fixed factory to the native Access binding; callers supply an obligation
+key, never a publication blob. The producer wire includes the exact accepted
+source continuation and receipt, reread from the durable Auth obligation. Access
+matches that tuple against native consumption and stores it in the immutable
+receiving receipt; a publication for the same barrier alone cannot substitute.
+Legacy source-unbound receipts remain historical without a backfill.
+Native terminal role/cursor work records its
+commit under the permanent account writer fence. Copy cleanup records the real
+permanent SDK fence after actual deletion and absence checks. Receipt creation
+rereads current role coverage, the original source discharge, consent cutoff,
+actual consent/copy absence and the exact restored replay when applicable. It
+preserves original progress and never waits for a final participant ACK.
+
+Access stores independent per-home receiving control, exact account/barrier
+obligations and immutable current-closure receipts. Registration creates pending
+obligations without claiming physical ownership. Invalidation locks the same
+control that verification locks and advances its revision before replacement
+consumers may arm. Restore import, replay and bounded live-home enrollment
+require that control; inventory and live enrollment remain distinct authorities.
+
+`prepareCurrentAuthReceivingClosure` observes only released native homes.
+`verifyCurrentAuthReceivingClosure` rereads the exact Source/control/root/receipt
+in the caller's live transaction and retains shared locks through commit. It
+performs no Auth or foreign I/O. The opaque locator includes the original barrier,
+Source continuity, receiver binding and durable receipt; a JavaScript brand or
+process-local cache cannot substitute for the native read. Autocommit cannot
+certify destructive work. Foreign or unavailable homes remain unavailable.
+
+The required original physical-owner operation is absent. In particular:
+
+- `AuthRestoreDatabaseOwner.verifyRestoredDatabase` verifies restored inventory;
+  `recoverCommittedNativeProgress` recovers one original obligation. Neither
+  operation establishes the current original database's physical ownership,
+  receiving incarnation or independently controlled restore generation.
+- `host.ts` compares product and system connection URLs. That comparison does not
+  identify a physical database or fence an old database/executor after replacement.
+- Access's `auth_erasure_source` binds a Source partition's generation, epoch and
+  node. Those values identify Source continuity, not an Auth receiving database.
+  Its native registration and live enrollment do not control Auth writers.
+
+The missing host provenance is the conjunction of original ownership/control
+records outside the restorable image, the actual connected receiver's identity,
+surviving deployment inventory/isolation and installation, receiving/restore
+generation, and actual per-obligation physical and writer closure. Inventory and
+live enrollment do not establish that conjunction. The installed host inputs
+cannot serialize old/current Auth writers, restore/replay admission, receiver
+replacement and destructive verification against one independently owned fence.
+Replacement must invalidate earlier receipts before either database can serve or
+write. No replacement owner interface is specified here; deployment owns the
+trusted provenance that the current host inputs lack.
+
+The exact integration gap is at `createAuthHost`/`createAuthService` and
+`createAuthHistoryProofBindings`: no existing owner export supplies an actual
+original database identity, receiving incarnation, restore generation, original
+installation/writer fence or per-obligation physical and receiving closure.
+`auth_receiving_control_guard` therefore rejects activation and identity changes;
+`auth_receiving_obligation_guard` rejects physical-custody installation. These
+refusals must be replaced by the original owner's record validation when that
+operation exists. There is no installer flag, generic owner setter or SQL backfill.
+The register, invalidate, publish and current verify bodies are implemented;
+they cannot manufacture this missing authority. The new native-fixture
+missing-owner regression is authored and unrun. A genuine fresh-receiver and
+owner-replacement regression still requires the missing original operation.
+Ordinary authentication and historical erasure publications retain their roles.
+
+### Receiving producer and restore costs
+
+The native control prices are in [Access](../kernel/src/access/README.md#bounded-receiving-sql).
+The following additions use exact local keys and the existing original engines;
+they do not scan retained obligations, restart a cursor or renew consent. Key
+visits count repeated keyed reads/writes and FK checks. `restoreDatabaseWithin`
+executes BEGIN + initial settings, settings before each body statement, and
+settings + COMMIT: a body of n statements costs 2n+4 client statements. A
+standalone query through it costs six. Failure adds at most one ROLLBACK per
+opened transaction. Advisory locks/settings access no product table keys.
+
+| Local entry                         |                       Key visits |              Client SQL bound | Derivation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------------- | -------------------------------: | ----------------------------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Begin receiving work                |                                5 |                            18 | Root point 1 (six statements); advisory lock, exact restored generation 1, marked-image LIMIT1 1, work INSERT + erasure FK 2 (four body statements, twelve with wrapper); PLUS native registration at released Access home                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Actual native terminal callback     |                                3 | 1, or 2 under restore wrapper | Exact erasure 1, latest work reverse PK 1, one work UPDATE 1; no reset or new native erasure algorithm                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Record one SDK copy                 |                                8 |                            19 | Latest work point 1/six statements, then root 1, advisory lock, work/copy INSERT SELECT 2 + receipt INSERT/two-column work FK 2, exact reread 1 (four body statements/twelve with wrapper); PLUS one actual SDK fence PK read/one statement/one key. The FK is one composite-key lookup; total local visits seven plus the SDK key                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Private receipt factory after begin |                               12 |                            20 | Exact work/erasure preflight 2/six statements, checking account/version/T before any native page; then five body statements: explicit settings, advisory lock, coverage 1, exact work/erasure 2 + marked-image LIMIT1 1 + exact replay/generation 2 + copy/consent absence prefixes 2 + coverage 1, then work UPDATE 1. Fourteen includes all transaction wrapper settings and controls. Every factory call first repeats begin receiving work (5 local keys/18 statements plus native registration 12 keys/9 statements), including historical obligations with no local work yet. Thus the complete Auth factory has 17 keys/38 client statements plus that native registration. If the preflight lacks a current native xid, one original native page and its existing producer fence run first, with their original separate bounds and no cursor reset; its receiving begin and terminal callback are additional, not included twice for free |
+| Restored import addition            |     native invalidate + register |             no added Auth SQL | Owner recovery and existing source floor/lineage validation precede control operations; exact database identity/generation must match verified inventory before the original import transaction                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Restored replay addition            | 1 + native invalidate + register |       6 added Auth statements | Exact original source tuple read through deadline wrapper before existing native replay; original replay/copy costs remain charged on every reached invocation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Live home addition                  | native invalidate + read-control |             no added Auth SQL | One existing rotating home; quarantine commits before any original live enrollment                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+
+The copy row bound above includes a successful immutable receipt insertion and
+its composite FK. `getWorkflowWriterFence` is the installed SDK patch's single
+`workflow_writer_fences(workflow_uuid)` query; it neither retires nor scans SDK
+history. All calls occur with Auth and Access homes released. The existing
+`eraseCopy` operation still performs genuine writer retirement and physical
+absence checks before this extra read/receipt. Its original 139-row/10-MiB,
+eight-locator page and one-execution limits remain unchanged and are additional
+to this table. The new receipt never treats SDK status, callback or that old
+receipt alone as current restored physical closure. Local factory output is
+bounded below 64 KiB; Access additionally rejects a current locator above 1 KiB.
+The original 310-second cutoff, page sizes, source high water/floor and lineage
+are unchanged. Factory registration and its native-page receiving hook retain
+the same absolute deadline; they cannot renew its five-second budget. New work requires the native terminal engine to run under the
+registered binding; the private factory invokes one original page when needed.
+Historical completion cannot populate its fresh `native_xid`.
+Focused native fixture cases are authored but UNRUN. Original acceptance/native
+and browser checks remain deferred to integration.
+
 ## Database and checks
 
 From the repository root:

@@ -181,15 +181,15 @@ export async function terminalStoreBlocker(
       return (
         (await nativeContinuationBlocker(tx, key[0]!, root.rows[0].continuation_id)) ?? 'continuation-child-consumer'
       );
-    // A released deletion root transfers its exact dependency to the immutable
-    // Auth witness. Foreign operator-origin fences require their own consumer.
-    const proof = await tx.query(
-      `SELECT 1 FROM access.auth_history_proof p JOIN access.erasure e USING(route,account_id)
-       WHERE p.route=$1 AND p.account_id=$2 AND p.receipt_id=$3 AND p.phase='native-consumed'
-         AND p.version=e.version AND p.at=e.at`,
-      [...key],
+    // The source transfer remains historical. Re-lock current receiving custody
+    // in THIS destructive transaction; replacement takes the same native fence.
+    // Foreign operator-origin fences still require their own exact consumer.
+    const proof = await tx.query<{ closure: { sourceReceiptId: string } | null }>(
+      `SELECT access.lock_current_auth_receiving_closure(e.route,e.account_id,e.version,e.at) AS closure
+       FROM access.erasure e WHERE e.route=$1 AND e.account_id=$2`,
+      [key[0], key[1]],
     );
-    if (!proof.rowCount) return 'auth-fence-release-witness-unavailable';
+    if (proof.rows[0]?.closure?.sourceReceiptId !== key[2]) return 'auth-fence-release-witness-unavailable';
   }
   if (store === 'account') {
     if (role === 'operator_account_id' || role === 'controller_id') {

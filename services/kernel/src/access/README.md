@@ -3345,11 +3345,100 @@ and makes no maintenance call into Auth.
 native fence/release dependency transferred by Auth's actual consumer. Mere
 acceptance/enqueue/progress or terminal DBOS status supplies no witness. This
 phase can precede Auth copy cleanup and cannot discharge other native consumers.
-`readAuthHistoryCompletion(pool, barrier)` separately reads later local-copy
-completion. Shared-history acknowledgement requires that fact and kernel's own
-producer/minimizer closure; this implementation emits no participant ACK and
-introduces no final-ACK dependency cycle. The global participant inventory and
-Search's explicitly undelivered cleanup are preserved.
+`readHistoricalAuthHistoryCompletion(pool, barrier)` reads the later immutable
+local-copy publication. It carries no current receiver or restore authority.
+`readAuthHistoryCompletion` now requires the independent current closure described
+below. No participant ACK or final Kernel ACK dependency is introduced.
+
+### Current Auth receiving controls
+
+`shared-history-auth.ts` retains its original native/history exports and supplies
+registration, invalidation, publication, released preparation and live-transaction
+verification. `createNativeAccountBindings` binds publication to the actual Auth
+service's private `internal.receivingClosure` factory. The caller supplies only
+an exact obligation key; it cannot submit a consumer proof blob.
+
+Access owns `auth_receiving_control`, `auth_receiving_obligation` and immutable
+`auth_receiving_closure` outside the Auth image. A control revision is a fencing
+sequence, never a receiving incarnation. Every current receipt fixes Source
+continuity, exact account/version/T, database identity, receiving incarnation,
+restore generation, installation, writer fence, physical/receiving custody and
+the original accepted source continuation/receipt. Historical copy publication,
+early source transfer, successful child, registration and page EOF cannot issue it.
+Registration creates only a pending obligation. No identity is backfilled.
+
+`prepareCurrentAuthReceivingClosure` releases its native checkout before returning.
+`verifyCurrentAuthReceivingClosure` re-locks that exact receipt and binding in the
+caller's live transaction; it refuses autocommit and changed receipts. The local
+SQL function `lock_current_auth_receiving_closure` locks Source/home, current
+control, account/original floor/barrier and exact custody/receipt/history keys.
+All keys belong to one partition. Invalidation takes the same control exclusively;
+its quarantine/revision commit precedes replacement enrollment or replay. Locks
+survive destructive COMMIT. No Auth I/O, second home, cross-home join, process-only
+cache or caller attestation supplies authority. JSONB object ordering is irrelevant
+to exact structural equality.
+
+The native fence-receipt consumer uses this same function inside its existing
+transaction. The forward `auth_receiving_witness` DELETE trigger independently
+rechecks it, including the original receipt identity. The closure INSERT guard
+independently validates Source, control, original tombstone receipt/floor and
+exact custody/native consumption under those same locks. A held tombstone cannot be
+retired on early transfer or historical custody. Other native consumers retain
+their original release requirements.
+
+External installation is parked explicitly: no existing Auth host owner input
+supplies independently verified original database identity, surviving installation
+and inventory/isolation, receiving/restore generation, permanent writer isolation
+and per-obligation physical/receiving closure together. The existing
+`AuthRestoreDatabaseOwner` inventory/progress operations supply only their stated
+operands. Control activation/identity and obligation custody transitions therefore
+refuse natively. There is no installer ABI, default identity, ready callback,
+historical-image claim or SQL permission bypass. Restored host composition can
+forward the existing trusted Access controls; import/replay/live enrollment still
+refuse missing control or a database identity different from verified inventory.
+Ordinary authentication is unchanged. The allowed missing external operand does
+not establish whole-feature or native acceptance.
+
+#### Bounded receiving SQL
+
+These are derived upper bounds for the implemented local entries, rather than
+physical-owner allowances. A key visit counts each keyed table row read or write,
+including repeated reads and FK checks; a missing indexed prefix costs at most
+one examined key. Q is client SQL statements on the successful longest path;
+inner SQL table statements are stated separately. Add one ROLLBACK statement on
+a failure after BEGIN. Engine MVCC visibility work follows the architecture rule.
+Returned binding/locator limits are 1 KiB, total result limit 64 KiB. Each entry
+selects one exact account and one home; none expands into an owner inventory.
+
+| Entry                               | Key visits |        Client Q | Additional SQL table statements / bounds                                                                                                                                                                                                                                 |
+| ----------------------------------- | ---------: | --------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Read control                        |          3 |               5 | Source/home 2, control 1; includes BEGIN/settings/COMMIT                                                                                                                                                                                                                 |
+| Register                            |         12 |               9 | Source/home 2; control INSERT + source FK 2; control lock 1; account/barrier/original floor 3; obligation INSERT + two FKs 3; binding 1. At most two inserted rows                                                                                                       |
+| Invalidate                          |          6 |               7 | Source/home 2; control INSERT + FK 2; control lock 1; revision/quarantine UPDATE 1. Same requested generation is idempotent; no fanout                                                                                                                                   |
+| Native current locator              |          9 |               1 | Four inner table statements: Source/home 2, control 1, root/floor 3, obligation/closure/native consumption 3. No writes                                                                                                                                                  |
+| Prepare                             |          9 |               4 | Native locator's four inner table statements, plus BEGIN/settings/COMMIT                                                                                                                                                                                                 |
+| Verify in caller transaction        |          9 |               3 | Same four inner statements plus xid assignment and live-xid comparison; caller funds its transaction controls                                                                                                                                                            |
+| Publish, native portion             |         39 |              19 | Full register 12/9, then released Auth producer, then final native transaction 27/10. Final Source/home 2, binding 1, root 3, custody 1, consumption 1, closure INSERT + FK 2 + insert guard 8, current locator 9; adds four inner statements each for guard and locator |
+| Closure INSERT guard                |          8 |   within INSERT | Four inner table statements: Source/home 2, control 1, root/floor 3, custody/native consumption 2; no Auth I/O or writes                                                                                                                                                 |
+| Shared-history verify Auth addition |          9 |               1 | Same-home locator, four inner statements; a different job home refuses before the call; original History work is unchanged                                                                                                                                               |
+| Shared-history ACK Auth gate        |         11 |               2 | Exact job/registry 2 then current locator 9/four inner statements; removes the historical Auth-proof join; caller retains transaction/final ACK costs                                                                                                                    |
+| Fence consumer current check        |         10 |               1 | Exact barrier 1 plus native locator 9/four inner statements, independently repeated per actual selected witness                                                                                                                                                          |
+| Fence DELETE guard                  |         11 | caller's DELETE | Selected old row 1, barrier 1, native locator 9; five inner table statements. Every deletion repeats the guard; earlier readiness cannot fund it                                                                                                                         |
+
+Read/registration/invalidation/preparation/publication share the caller's absolute
+deadline, SQL statement/lock timeouts and bounded pool wait. Publication releases
+registration before the Auth factory and releases Auth before its final native
+transaction. Its complete price is the native portion above PLUS the actual Auth
+factory below. The factory also repeats a full native registration (12 keys/9
+client statements) before creating local work; thus publication without a native
+page totals 51 native key visits/28 native client statements, plus 17 Auth key
+visits/38 Auth client statements. If a native page is reached, add its original
+engine/Kind fence bounds, that fence's receiving begin (5 Auth keys/18 client
+statements plus native registration 12/9), and its terminal callback (3 Auth
+keys/one body statement). Every invocation pays again. No cost from an identity
+original or another child is reused. Physical installation/custody is unavailable and is never assigned
+an assumed fixed foreign price. A future physical-owner binding must supply its
+actual independently bounded implementation before activation is enabled.
 
 ### Auth obligation discovery
 

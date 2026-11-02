@@ -41,6 +41,7 @@ import {
 
 type Job = {
   job_id: string;
+  partition_no: number;
   account_route: number;
   account_id: string;
   barrier_id: string;
@@ -442,13 +443,15 @@ async function verifyHome(tx: CommandTransaction, job: Job, registry: HistoryReg
   }
   const gaps = registry.gaps();
   if (gaps.length) return pending(tx, job, gaps.join(','));
-  const auth = await tx.query(
-    `SELECT version,at::text FROM access.auth_history_proof
-    WHERE route=$1 AND account_id=$2 AND phase='copies-erased'`,
-    [job.account_route, job.account_id],
+  // The operational job may only hold current receiving custody at its own
+  // native home. Historical copies-erased rows cannot certify another receiver.
+  if (job.partition_no !== Math.floor(job.account_route / 16))
+    return pending(tx, job, 'auth-receiving-home-unavailable');
+  const auth = await tx.query<{ closure: unknown | null }>(
+    'SELECT access.lock_current_auth_receiving_closure($1,$2,$3,$4) AS closure',
+    [job.account_route, job.account_id, job.barrier_version, job.barrier_at],
   );
-  if (auth.rows[0]?.version !== job.barrier_version || auth.rows[0]?.at !== job.barrier_at)
-    return pending(tx, job, 'auth-copies-proof-unavailable');
+  if (!auth.rows[0]?.closure) return pending(tx, job, 'auth-copies-proof-unavailable');
   // The present router exposes individual home epochs, but no native aggregate invalidation
   // fence. Separate successful reads cannot certify that an earlier home has not moved.
   return pending(tx, job, 'routing-aggregate-proof-unavailable');

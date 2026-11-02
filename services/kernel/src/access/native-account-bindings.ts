@@ -270,7 +270,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
     }),
     ...createAuthBindings({
-      ...createAuthHistoryProofBindings(pool),
+      ...createAuthHistoryProofBindings(pool, () => config.auth().internal.receivingClosure),
       pool,
       access,
       ...createRecoveryCompletion({

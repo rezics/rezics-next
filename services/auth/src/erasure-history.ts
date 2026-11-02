@@ -1,5 +1,6 @@
 import type { AuthErasureBarrier, AuthErasureSource, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
+import { beginAuthReceivingClosure, recordAuthReceivingCopy } from './receiving-closure.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { NATIVE_PHASE_END, nativePhaseComplete } from './erasure-role-upgrade.ts';
 import { nativeRoleCoverageComplete } from './erasure-coverage.ts';
@@ -100,6 +101,7 @@ export async function erasureHistoryPage(database: Pool, id: string, restoreGene
         await database.query('UPDATE auth_erasure SET pending_code=$2 WHERE id=$1', [id, pending]);
       return false;
     }
+    if (!(await recordAuthReceivingCopy(database, id, work.workflow_id))) return false;
     await database.query('DELETE FROM auth_copy_role WHERE account_id=$1 AND workflow_id=$2', [
       row.account_id,
       work.workflow_id,
@@ -185,6 +187,14 @@ export async function publishErasureProofs(database: Pool, ports: TrustedAccessP
       [id],
     );
   }
+  // Current receiving publication is independently pending. Its unavailable
+  // owner/home cannot hold the original discharged-source transfer hostage.
+  const receivingDeadline = Date.now() + 5000;
+  await beginAuthReceivingClosure(database, ports, id, receivingDeadline).catch(() => false);
+  if (ports.publishAuthReceivingClosure)
+    await ports
+      .publishAuthReceivingClosure({ barrier: root, nativeObligationId: id, deadline: receivingDeadline })
+      .catch(() => false);
   return 1;
 }
 export async function redriveErasureHistory(database: Pool, ports: TrustedAccessPorts): Promise<number> {

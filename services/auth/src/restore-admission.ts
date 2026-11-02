@@ -101,6 +101,8 @@ export interface AuthRestoreDatabaseOwner {
 }
 
 export interface AuthRestoredGeneration {
+  /** Fixed native control operations; neither inventory nor live enrollment installs custody. */
+  receiving?: Partial<import('@rezics/auth-contract').AuthReceivingClosurePorts>;
   kind: 'RESTORED';
   generation: string;
   databaseOwner?: AuthRestoreDatabaseOwner;
@@ -266,6 +268,32 @@ export async function importProgress(
       String(progress.floor) !== obligation.minimumAuthnEpoch)
   )
     fail('original-progress-mismatch');
+  const receiving = restored.receiving;
+  if (!receiving?.invalidateAuthReceivingClosure || !receiving.registerAuthReceivingClosure)
+    fail('receiving-closure-pending');
+  const receivingDeadline = deadline ?? Date.now() + 5000;
+  if (
+    !(await receiving.invalidateAuthReceivingClosure({
+      partition: Math.floor(progress.source.route / 16),
+      restoreGeneration: restored.generation,
+      deadline: receivingDeadline,
+    }))
+  )
+    fail('receiving-closure-pending');
+  const registration = await receiving.registerAuthReceivingClosure({
+    barrier: {
+      accountId: progress.source.accountId,
+      version: progress.source.version,
+      at: progress.source.at,
+    },
+    deadline: receivingDeadline,
+  });
+  if (
+    registration.state !== 'bound' ||
+    registration.binding.restoreGeneration !== restored.generation ||
+    registration.binding.databaseIdentity !== inventory.databaseIdentity
+  )
+    fail('receiving-closure-pending');
   await bindInventory(database, inventory);
   // ALL owner reads have completed before this checkout. There is no foreign
   // call, wait or SDK recovery while holding a native producer lock.
@@ -515,6 +543,37 @@ export async function replayRestoredAuthPage(
     )
   ).rows[0];
   if (!row) return { pending: 'original-progress-unavailable' };
+  const root = (
+    await database.query<{ accountId: string; version: number; at: string; route: number | null }>(
+      `SELECT account_id::text AS "accountId",kernel_version AS version,kernel_at AS at,source_route AS route
+     FROM auth_erasure WHERE id=$1`,
+      [id],
+    )
+  ).rows[0];
+  const receiving = restored.receiving;
+  if (
+    !root ||
+    root.route === null ||
+    !receiving?.invalidateAuthReceivingClosure ||
+    !receiving.registerAuthReceivingClosure
+  )
+    return { pending: 'receiving-closure-pending' };
+  if (
+    !(await receiving.invalidateAuthReceivingClosure({
+      partition: Math.floor(root.route / 16),
+      restoreGeneration: restored.generation,
+      deadline,
+    }))
+  )
+    return { pending: 'receiving-closure-pending' };
+  const { route: _route, ...expected } = root;
+  const registration = await receiving.registerAuthReceivingClosure({ barrier: expected, deadline });
+  if (
+    registration.state !== 'bound' ||
+    registration.binding.restoreGeneration !== restored.generation ||
+    registration.binding.databaseIdentity !== inventory.databaseIdentity
+  )
+    return { pending: 'receiving-closure-pending' };
   if (await reconcileRestoredAuthCoverage(database, restored)) return { pending: 'native-replay-pending' };
   if (row.phase !== NATIVE_PHASE_END || !row.native_completed_at || !row.consent_completed_at) {
     const page = await nativeErasurePage(database, id, runtime, restored.generation);

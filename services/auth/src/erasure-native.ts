@@ -1,3 +1,4 @@
+import { recordAuthReceivingNativeCompletion } from './receiving-closure.ts';
 import type { Pool, PoolClient } from 'pg';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { AuthErasureBarrier, AuthErasureSource } from '@rezics/auth-contract';
@@ -864,6 +865,7 @@ export async function nativeErasurePage(
          WHERE generation=$1 AND obligation_id=$2`,
         [restoreGeneration, id],
       );
+      await recordAuthReceivingNativeCompletion(connection, id, restoreGeneration);
       return answer('pending', 'shared-copy-custody');
     }
     if (!covered || row.native_role_version !== 1) {
@@ -876,6 +878,7 @@ export async function nativeErasurePage(
       'UPDATE auth_erasure SET native_completed_at=COALESCE(native_completed_at,clock_timestamp()) WHERE id=$1',
       [id],
     );
+    await recordAuthReceivingNativeCompletion(connection, id);
     const external = await recoveryCopyPendingCode(connection, row.account_id);
     await connection.query('UPDATE auth_erasure SET recovery_copy_pending=$2 WHERE id=$1', [id, external]);
     const code = !covered ? 'native-role-coverage' : row.consent_completed_at ? 'shared-copy-custody' : 'consent';

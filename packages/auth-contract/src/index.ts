@@ -1,5 +1,7 @@
 export type * from './auth-erasure-live.ts';
 export * from './kind-consent.ts';
+export type * from './auth-receiving-closure.ts';
+import type { AuthReceivingClosurePorts } from './auth-receiving-closure.ts';
 import type { AuthErasureObligationPorts } from './auth-erasure-obligations.ts';
 import type { ReadNativeCreationContext } from './native-creation-context.ts';
 export type * from './native-creation-context.ts';
@@ -219,7 +221,10 @@ export type BarrierReceipt = {
 export type AuthErasureBarrier = { accountId: string; version: number; at: string };
 /** The original, fixed erase-auth-owner dependency, not a general continuation. */
 export type AuthErasureSource = AuthErasureBarrier & { continuationId: string; receiptId: string };
-/** Auth-only service capabilities. Neither method acknowledges a participant. */
+/** Auth-only historical publication capabilities. These carry no current Auth
+ * receiving incarnation or independent restore/writer fence. Neither publication
+ * acknowledges a participant or issues CurrentAuthReceivingClosure.
+ */
 export type AuthErasureProofPorts = {
   readAuthErasureBarrier?(accountId: string): Promise<AuthErasureBarrier | null>;
   readAuthErasureSource?(input: { accountId: string; receiptId: string }): Promise<AuthErasureSource | null>;
@@ -228,7 +233,8 @@ export type AuthErasureProofPorts = {
 };
 
 /** Internal application ports. Never construct these results from HTTP fields. */
-interface SharedAccessPorts extends AuthErasureProofPorts, Partial<AuthErasureObligationPorts> {
+interface SharedAccessPorts
+  extends AuthErasureProofPorts, Partial<AuthErasureObligationPorts>, Partial<AuthReceivingClosurePorts> {
   /** Private attribution only, resolved before creating a new private copy. */
   readNativeCreationContext?: ReadNativeCreationContext;
   /** Private mechanical consumer only; never current user disclosure or authority. */
@@ -626,6 +632,7 @@ export type RecoveryEstablishmentEvidence = Readonly<{
 /** Auth capabilities consumed by kernel session composition. */
 export interface AuthSessionPort {
   internal: {
+    receivingClosure?: import('./auth-receiving-closure.ts').AuthReceivingClosureProducer;
     accessTokenForProof(proof: SessionProof): Promise<string>;
   };
 }

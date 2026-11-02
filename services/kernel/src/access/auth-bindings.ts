@@ -6,6 +6,7 @@ import type { Access } from '../request/access.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
 import type {
   AuthErasureProofPorts,
+  AuthReceivingClosurePorts,
   AuthErasureLivePorts,
   AuthErasureLiveReceiver,
   AuthErasureObligationPorts,
@@ -44,25 +45,28 @@ export type AuthAuthorizationReceipt<Purpose extends CredentialFloorPurpose = Cr
  * epoch checks. These callbacks are capabilities, never request JSON or authorization flags.
  * Workflow/provider implementations can bind here without another account or policy authority.
  */
-export type AuthBindingCapabilities = AuthErasureProofPorts & {
-  /** Native pending reader, including verified original receipt metadata. The
-   * composition must also verify current workflow approval for automated chains. */
-  verifyPendingIdentity?: (reference: string) => Promise<
-    | (AccessAccount & {
-        operatorAccountId: string | null;
-        registrationId: string;
-        expiresAt: string;
-        receipt: ProvisioningReceiptMetadata;
-      })
-    | null
-  >;
-  verifyProvisioningReceipt?: (commandReference: string) => Promise<AuthProvisioningReceipt | null>;
-  consumeAuthAuthorization?: (input: ConsumeInput) => Promise<AuthAuthorizationReceipt<CredentialFloorPurpose> | null>;
-  invalidateAccount?: (input: InvalidateInput) => Promise<LifecycleFenceReceipt | null>;
-  authorizeRecovery?: (input: RecoveryInput) => Promise<LifecycleFenceReceipt | null>;
-  completeRecovery?: TrustedAccessPorts['completeRecovery'];
-  confirmBarrier?: TrustedAccessPorts['confirmBarrier'];
-};
+export type AuthBindingCapabilities = AuthErasureProofPorts &
+  Partial<AuthReceivingClosurePorts> & {
+    /** Native pending reader, including verified original receipt metadata. The
+     * composition must also verify current workflow approval for automated chains. */
+    verifyPendingIdentity?: (reference: string) => Promise<
+      | (AccessAccount & {
+          operatorAccountId: string | null;
+          registrationId: string;
+          expiresAt: string;
+          receipt: ProvisioningReceiptMetadata;
+        })
+      | null
+    >;
+    verifyProvisioningReceipt?: (commandReference: string) => Promise<AuthProvisioningReceipt | null>;
+    consumeAuthAuthorization?: (
+      input: ConsumeInput,
+    ) => Promise<AuthAuthorizationReceipt<CredentialFloorPurpose> | null>;
+    invalidateAccount?: (input: InvalidateInput) => Promise<LifecycleFenceReceipt | null>;
+    authorizeRecovery?: (input: RecoveryInput) => Promise<LifecycleFenceReceipt | null>;
+    completeRecovery?: TrustedAccessPorts['completeRecovery'];
+    confirmBarrier?: TrustedAccessPorts['confirmBarrier'];
+  };
 export class AuthBindingUnavailableError extends Error {
   constructor(capability: keyof AuthBindingCapabilities) {
     super(`Auth binding capability unavailable: ${capability}`);
@@ -345,6 +349,14 @@ export function createAuthBindings(
       if (!config.recordAuthHistoryCompletion) throw new AuthBindingUnavailableError('recordAuthHistoryCompletion');
       return config.recordAuthHistoryCompletion(barrier);
     },
+    ...(config.readAuthReceivingControl ? { readAuthReceivingControl: config.readAuthReceivingControl } : {}),
+    ...(config.registerAuthReceivingClosure
+      ? { registerAuthReceivingClosure: config.registerAuthReceivingClosure }
+      : {}),
+    ...(config.invalidateAuthReceivingClosure
+      ? { invalidateAuthReceivingClosure: config.invalidateAuthReceivingClosure }
+      : {}),
+    ...(config.publishAuthReceivingClosure ? { publishAuthReceivingClosure: config.publishAuthReceivingClosure } : {}),
     ...(config.completeRecovery ? { completeRecovery: config.completeRecovery } : {}),
     async confirmBarrier(input) {
       if (!config.confirmBarrier) throw new AuthBindingUnavailableError('confirmBarrier');

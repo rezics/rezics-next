@@ -1047,3 +1047,60 @@ test('default native expiry releases the exact registration, handle and operator
     restoreExpiryObservation?.();
   }
 }, 2_000_000);
+
+// UNRUN receiving regression: neither the early transfer nor an old immutable
+// copy publication authorizes removal of the native held tombstone witness.
+test('native Auth fence witness survives historical closure without an independently installed receiver', async () => {
+  const person = await f.person('native-receiving-witness');
+  expect((await f.delete(person)).status).toBe(200);
+  const barrier = await f.bindings.trustedAccess.readAuthErasureBarrier!(person.accountId);
+  if (!barrier) throw new Error('Missing original deletion barrier');
+  const route = f.routeOf(person.accountId)!;
+  const selected = (
+    await f.kernel.query<{ receipt_id: string }>(
+      "SELECT receipt_id FROM access.lifecycle_fence_receipt WHERE route=$1 AND account_id=$2 AND kind='tombstone'",
+      [route, person.accountId],
+    )
+  ).rows[0];
+  if (!selected) throw new Error('Missing original tombstone witness');
+  await f.kernel.query(
+    `INSERT INTO access.auth_history_proof(route,account_id,phase,version,at)
+    VALUES($1,$2,'copies-erased',$3,$4) ON CONFLICT DO NOTHING`,
+    [route, person.accountId, barrier.version, barrier.at],
+  );
+  const { terminalStoreBlocker } = await import('../../kernel/src/access/erasure-native-consumers.ts');
+  const tx = await f.kernel.connect();
+  try {
+    await tx.query('BEGIN');
+    expect(
+      await terminalStoreBlocker(
+        tx,
+        'lifecycle_fence_receipt',
+        'account_id',
+        [String(route), person.accountId, selected.receipt_id],
+        person.accountId,
+        randomUUID(),
+        -1,
+        true,
+      ),
+    ).not.toBeNull();
+    await expect(
+      tx.query('DELETE FROM access.lifecycle_fence_receipt WHERE route=$1 AND account_id=$2 AND receipt_id=$3', [
+        route,
+        person.accountId,
+        selected.receipt_id,
+      ]),
+    ).rejects.toThrow('Auth current receiving closure unavailable');
+  } finally {
+    await tx.query('ROLLBACK');
+    tx.release();
+  }
+  expect(
+    (
+      await f.kernel.query(
+        'SELECT 1 FROM access.lifecycle_fence_receipt WHERE route=$1 AND account_id=$2 AND receipt_id=$3',
+        [route, person.accountId, selected.receipt_id],
+      )
+    ).rowCount,
+  ).toBe(1);
+}, 120_000);

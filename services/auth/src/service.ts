@@ -36,6 +36,7 @@ import {
   publishErasureProofs,
   redriveErasureHistory,
 } from './erasure-history.ts';
+import { beginAuthReceivingClosure, createAuthReceivingClosureProducer } from './receiving-closure.ts';
 import { startNativeErasure, nativeErasurePage, redriveNativeErasure } from './erasure-native.ts';
 import { installNativeRoleProducer, installNativeRoleCoverage } from './erasure-coverage.ts';
 import { recordRecoveryCompletion } from './erasure-consumers.ts';
@@ -232,7 +233,14 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   // request cannot install it through a header, body or native endpoint name.
   const attemptDispatch = new AsyncLocalStorage<() => Promise<Response>>();
   const proofHash = (token: string) => createHash('sha256').update(token).digest('hex');
-  async function fenceKindConsentErasure(obligationId: string) {
+  async function fenceKindConsentErasure(
+    obligationId: string,
+    _restoreGeneration?: string,
+    receivingDeadline = Date.now() + 5000,
+  ) {
+    // Receiving availability cannot hold already-authorized source cleanup.
+    // No binding means no current closure, even when ordinary erasure completes.
+    await beginAuthReceivingClosure(database, trustedAccess, obligationId, receivingDeadline).catch(() => false);
     const changed = await kindConsent.writer.fenceAll({
       transitionKey: `kind-consent:erasure:${digestOf(obligationId)}`,
       operation: 'erasure-drain',
@@ -1176,6 +1184,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       accessTokenLifetimeSeconds: 300,
     },
     internal: {
+      receivingClosure: createAuthReceivingClosureProducer(database, trustedAccess, fenceKindConsentErasure),
       kindConsentParticipant: kindConsent.participant,
       continueKindConsentInvalidations: () => kindConsent.writer.continuePending(),
       resolveRecoveryEstablishment: recoveryEstablishment.resolve,

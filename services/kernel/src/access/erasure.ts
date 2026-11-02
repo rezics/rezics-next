@@ -169,13 +169,20 @@ export async function acknowledgeErasure(
         const proof = await tx.query(
           `SELECT j.applicable FROM core.preference_history_job j
           JOIN core.history_registry r ON r.singleton AND r.digest=j.registry_digest AND r.gaps='[]'::jsonb
-          JOIN access.auth_history_proof a ON a.route=j.account_route AND a.account_id=j.account_id
-            AND a.phase='copies-erased' AND a.version=j.barrier_version AND a.at::text=j.barrier_at
           WHERE j.account_route=$1 AND j.account_id=$2 AND j.barrier_id=$2 AND j.phase='complete'
-            AND j.barrier_version=$3 AND j.barrier_at=$4 FOR SHARE OF j,r,a`,
+            AND j.barrier_version=$3 AND j.barrier_at=$4 AND j.partition_no=$5 FOR SHARE OF j,r`,
+          [route, accountId, record.version, record.at, partitionOf(route)],
+        );
+        const current = await tx.query<{ closure: unknown | null }>(
+          'SELECT access.lock_current_auth_receiving_closure($1,$2,$3,$4) AS closure',
           [route, accountId, record.version, record.at],
         );
-        if (!proof.rows.length || retained.length || outcome !== (proof.rows[0].applicable ? 'erased' : 'none'))
+        if (
+          !current.rows[0]?.closure ||
+          !proof.rows.length ||
+          retained.length ||
+          outcome !== (proof.rows[0].applicable ? 'erased' : 'none')
+        )
           throw new SharedHistoryIncompleteError();
       }
       const rows = await acknowledge.run(tx, { ...key, participant, outcome, retained });

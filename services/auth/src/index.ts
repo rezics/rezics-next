@@ -254,6 +254,7 @@ export interface AuthService {
   security: SecurityInventory;
   verifier: VerifierConfiguration;
   internal: {
+    receivingClosure?: import('@rezics/auth-contract').AuthReceivingClosureProducer;
     /** Native Auth-owned participant used before Collection Kind evidence work. */
     kindConsentParticipant: KindConsentParticipant;
     /** One bounded page of durable Auth-to-Source invalidation recovery. */
@@ -450,5 +451,12 @@ export interface AuthService {
 }
 
 export async function createAuthService(options: AuthServiceOptions): Promise<AuthService> {
-  return buildAuthService(options);
+  return buildAuthService(
+    options.restoredGeneration
+      ? {
+          ...options,
+          restoredGeneration: { ...options.restoredGeneration, receiving: options.trustedAccess },
+        }
+      : options,
+  );
 }

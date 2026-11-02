@@ -36,8 +36,16 @@ import { createInternalConsentHandler, type InternalConsentAccessConfiguration }
 /** Deployment lifecycle for an isolated restored database. It exposes no
  * handler, signer, SDK or maintenance writer. Durable native cursors, not this
  * timer or an in-memory ready bit, own all future reconciliation. */
-export function createAuthRestoreHost(options: { database: Pool; restoredGeneration: AuthRestoredGeneration }) {
-  const kindConsentReceiver = options.restoredGeneration.kindConsentReceiver;
+export function createAuthRestoreHost(options: {
+  database: Pool;
+  restoredGeneration: AuthRestoredGeneration;
+  /** Original native Access controls, as on the ordinary host. No physical owner is installed by this port. */
+  trustedAccess?: AuthServiceOptions['trustedAccess'];
+}) {
+  const restored = options.trustedAccess
+    ? { ...options.restoredGeneration, receiving: options.trustedAccess }
+    : options.restoredGeneration;
+  const kindConsentReceiver = restored.kindConsentReceiver;
   const kindConsent = createKindConsentParticipant({
     database: options.database,
     ...(kindConsentReceiver ? { receiver: kindConsentReceiver } : {}),
@@ -56,7 +64,7 @@ export function createAuthRestoreHost(options: { database: Pool; restoredGenerat
         identity: options.restoredGeneration.generation,
       });
       if (fenced.status !== 'applied') return { pending: 'source-consumer-pending' as const };
-      return reconcileRestoredAuthPage(options.database, options.restoredGeneration);
+      return reconcileRestoredAuthPage(options.database, restored);
     })()
       .catch((error: unknown) => {
         if (error instanceof AuthRestoreAdmissionError) return { pending: error.code };

@@ -158,6 +158,24 @@ export async function stageRestoredAuthLive(
   ).rows[0];
   if (!generation) return { pending: 'source-consumer-pending' };
   const selected = generation.selected;
+  // Existing bounded home rotation, never an all-home scan or two held homes.
+  // Revocation commits before this replacement may arm any receiving consumer.
+  if (
+    !restored.receiving?.invalidateAuthReceivingClosure ||
+    !(await restored.receiving.invalidateAuthReceivingClosure({
+      partition: selected,
+      restoreGeneration: restored.generation,
+      deadline,
+    }))
+  )
+    return { pending: 'receiving-closure-pending' };
+  const binding = await restored.receiving.readAuthReceivingControl?.({
+    partition: selected,
+    restoreGeneration: restored.generation,
+    deadline,
+  });
+  if (!binding || binding.databaseIdentity !== inventory.databaseIdentity)
+    return { pending: 'receiving-closure-pending' };
   const receiver = receiverFor(inventory, generation.source_cut_id);
   const matches = await database.query(
     'SELECT 1 FROM auth_restore_live_generation WHERE generation=$1 AND inventory=$2::jsonb',
