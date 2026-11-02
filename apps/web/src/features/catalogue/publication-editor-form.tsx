@@ -264,7 +264,7 @@ function PublicationEditorLive({
           if (!open) navigation.reset?.();
         }}
       >
-        <AlertDialogContent initialFocus={stay}>
+        <AlertDialogContent initialFocus={stay} finalFocus={() => (lifetime.active() ? undefined : false)}>
           <AlertDialogHeader>
             <AlertDialogTitle>{m.thread_authoring_leave_title({}, o)}</AlertDialogTitle>
             <AlertDialogDescription>

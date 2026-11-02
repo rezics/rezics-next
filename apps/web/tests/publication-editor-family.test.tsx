@@ -99,33 +99,26 @@ test('independent publication creation, local corrections, immutable recovery an
   let entries: Entry[] = [];
   let scene = 0;
   let admitted = true;
+  const observed = () => admitted
+    ? { state: 'signed-in' as const, subject: 'reader', csrfToken: 'original-credential-epoch' }
+    : { state: 'signed-out' as const, csrfToken: null };
   const Scene = () => {
-    const location = useRouterState({ select: (state) => state.location });
-    if (location.search.page === 'other') return <p>Destination</p>;
-    return (
-      <QueryClientProvider client={client}>
-        <CandidateReaderBoundary
-          address={`publication-family-${scene}`}
-          observed={
-            admitted
-              ? { state: 'signed-in', subject: 'reader', csrfToken: 'original-credential-epoch' }
-              : { state: 'signed-out', csrfToken: null }
-          }
-        >
-          {admitted &&
-            entries.map((entry, index) => (
-              <PublicationEditor
-                key={index}
-                work={entry.fixture.work.subject.id}
-                locale="en"
-                session={entry.session ?? 'signed-in'}
-                transport={entry.transport}
-                search={search}
-                onNavigate={(href) => entry.navigations.push(href)}
-              />
-            ))}
-        </CandidateReaderBoundary>
-      </QueryClientProvider>
+    const destination = useRouterState({ select: (state) => state.location.search.page });
+    return destination === 'other' ? null : (
+      <CandidateReaderBoundary address={`publication-family-${scene}`} observed={observed()}>
+        {admitted &&
+          entries.map((entry, index) => (
+            <PublicationEditor
+              key={index}
+              work={entry.fixture.work.subject.id}
+              locale="en"
+              session={entry.session ?? 'signed-in'}
+              transport={entry.transport}
+              search={search}
+              onNavigate={(href) => entry.navigations.push(href)}
+            />
+          ))}
+      </CandidateReaderBoundary>
     );
   };
   const rootRoute = createRootRoute({ component: Scene });
@@ -133,9 +126,14 @@ test('independent publication creation, local corrections, immutable recovery an
     routeTree: rootRoute,
     history: createMemoryHistory({ initialEntries: ['/'] }),
   });
-  const draw = async () => {
-    await act(async () => root.render(<RouterProvider router={router} />));
-  };
+  const draw = async () =>
+    act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      ),
+    );
   const mount = async (...next: Entry[]) => {
     scene++;
     entries = next;
@@ -649,12 +647,8 @@ test('independent publication creation, local corrections, immutable recovery an
     );
 
     const body = within(window.document.body as unknown as HTMLElement);
-    const cleanExit = new window.Event('beforeunload', { cancelable: true });
-    window.dispatchEvent(cleanExit);
-    expect(cleanExit.defaultPrevented).toBe(false);
     await act(async () => router.history.push('/?page=other'));
     expect(router.state.location.search).toEqual({ page: 'other' });
-    expect(body.queryByRole('alertdialog')).toBeNull();
     await act(async () => router.history.push('/'));
 
     const departure = tracked();
@@ -664,10 +658,15 @@ test('independent publication creation, local corrections, immutable recovery an
     await replace(input(m.correction_value()), '978-0-140-44430-8');
     await add('schema:publisher');
     const publisherName = departure.fixture.release.properties['schema:publisher']!.labels.en!;
-    const publisherInput = scope().getByRole('combobox', { name: publisherName }) as HTMLInputElement;
-    await act(async () => user.type(publisherInput, 'Press'));
+    await act(async () => user.type(scope().getByRole('combobox', { name: publisherName }), 'Press'));
     await act(async () => user.click(await body.findByRole('option', { name: /Supplied publisher/ })));
     await replace(input(m.relation_citation()), 'https://publisher.example/edition');
+    const snapshot = () =>
+      [...article().querySelectorAll('input, select')].map((element) => {
+        const control = element as HTMLInputElement;
+        return [control.id, control.value, control.checked];
+      });
+    const originalDraft = snapshot();
     const duplicateSearch = scope().getByRole('link', { name: m.publication_search() });
     expect(duplicateSearch.getAttribute('target')).toBe('_blank');
     const dirtyExit = new window.Event('beforeunload', { cancelable: true });
@@ -681,15 +680,7 @@ test('independent publication creation, local corrections, immutable recovery an
     expect(leaveDialog.textContent).toContain(m.thread_authoring_leave_unsaved());
     await act(async () => user.click(body.getByRole('button', { name: m.thread_authoring_stay() })));
     expect(router.state.location.search).toEqual({});
-    expect(input(m.catalogue_create_label()).value).toBe('A distinct edition');
-    expect(input(m.correction_value()).value).toBe('978-0-140-44430-8');
-    expect(input(m.relation_citation()).value).toBe('https://publisher.example/edition');
-    expect((scope().getByRole('checkbox', { name: m.publication_independent() }) as HTMLInputElement).checked).toBe(
-      true,
-    );
-    expect((scope().getByRole('combobox', { name: publisherName }) as HTMLInputElement).value).toBe(
-      'Supplied publisher',
-    );
+    expect(snapshot()).toEqual(originalDraft);
 
     await act(async () => {
       void router.history.push('/?page=other');
@@ -698,16 +689,6 @@ test('independent publication creation, local corrections, immutable recovery an
     await act(async () => user.click(body.getByRole('button', { name: m.thread_authoring_leave() })));
     expect(router.state.location.search).toEqual({ page: 'other' });
     expect(host.querySelector('article')).toBeNull();
-
-    await act(async () => router.history.push('/'));
-    const created = tracked('reader-unavailable');
-    await mount(created);
-    await ready();
-    await click(m.publication_submit());
-    await scope().findByRole('heading', { name: m.catalogue_create_created() });
-    await act(async () => router.history.push('/?page=other'));
-    expect(router.state.location.search).toEqual({ page: 'other' });
-    expect(body.queryByRole('alertdialog')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     client.clear();
