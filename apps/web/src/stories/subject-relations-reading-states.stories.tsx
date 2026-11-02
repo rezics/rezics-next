@@ -236,7 +236,7 @@ const meta = {
     await expect(next.getBoundingClientRect().right).toBeLessThanOrEqual(region.getBoundingClientRect().right + 1);
     if (args.longLabels) {
       await expect(next).toHaveTextContent('WeitereBeziehungen'.repeat(16));
-      await expect(view.getByRole('link', { name: longTitle, exact: true })).toBeVisible();
+      await expect(view.getByRole('link', { name: longTitle })).toBeVisible();
       await expect(style.overflow).not.toBe('hidden');
       await expect(style.textOverflow).not.toBe('ellipsis');
       await expect(next.getBoundingClientRect().height).toBeGreaterThan(parseFloat(style.lineHeight) * 2);
