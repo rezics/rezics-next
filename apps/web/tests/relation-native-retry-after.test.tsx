@@ -15,7 +15,9 @@ import {
 const subject = '0192f3a0-6c1e-7b2a-9d4e-000000000101';
 const document: CompositionDocument = {
   root: { props: {} },
-  content: [{ type: 'SubjectList', props: { id: 'editions', property: 'schema:exampleOfWork', limit: 12, paged: true } }],
+  content: [
+    { type: 'SubjectList', props: { id: 'editions', property: 'schema:exampleOfWork', limit: 12, paged: true } },
+  ],
 };
 
 test('outer and leaf Relation 429 hints become one captured Search deadline', async () => {
