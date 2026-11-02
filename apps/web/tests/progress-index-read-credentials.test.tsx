@@ -338,16 +338,23 @@ test('Null-CSRF readers load, retry and navigate captured sessions while new com
     expect(h.host.querySelector('details code')?.textContent).toBe('scalar_amount / original:page~unknown');
     expect(h.host.querySelector('[data-slot="progress-row"]')?.textContent).toContain('0');
     expect(h.host.querySelector('ol a')?.getAttribute('href')).toBe(`/en/library/progress/${id(20)}`);
-    for (const kind of ['start', 'complete', 'abandon'] as const) {
-      const submit = await h.prepare(kind);
-      const label =
-        kind === 'start'
-          ? m.library_progress_start()
-          : kind === 'complete'
-            ? m.library_progress_confirm_complete()
-            : m.library_progress_confirm_abandon();
-      expect(h.view.getByRole('button', { name: label, exact: true }).hasAttribute('disabled')).toBe(true);
-      await tick(submit);
+    expect(h.view.getByRole('button', { name: m.library_progress_start(), exact: true }).hasAttribute('disabled')).toBe(
+      true,
+    );
+    await tick(h.callback('start'));
+    for (const kind of ['complete', 'abandon'] as const) {
+      await h.click(
+        h.view.getByRole('button', {
+          name: kind === 'complete' ? m.library_progress_complete() : m.library_progress_abandon(),
+          exact: true,
+        }),
+      );
+      expect(
+        h.view.queryByRole('button', {
+          name: kind === 'complete' ? m.library_progress_confirm_complete() : m.library_progress_confirm_abandon(),
+          exact: true,
+        }),
+      ).toBeNull();
     }
     expect(writes).toHaveLength(0);
     await tick(() => {
