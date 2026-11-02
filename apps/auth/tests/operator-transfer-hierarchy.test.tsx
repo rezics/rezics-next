@@ -68,6 +68,7 @@ const source: TransferAttempt = {
 };
 let close: (() => Promise<void>) | undefined;
 let calls: string[] = [];
+let render: (initial: AccountSessionResult) => Promise<void>;
 afterEach(async () => {
   await close?.();
   close = undefined;
@@ -99,6 +100,7 @@ async function mount(initial: AccountSessionResult | undefined = session, attemp
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
+  render = (initial) => act(async () => root.render(<OperatorTransferPage initial={initial} />));
   close = async () => {
     await act(async () => root.unmount());
     host.remove();
@@ -423,4 +425,95 @@ test('current refusal is focused and visible while response diagnostics remain a
   expect(guide(host).contains(diagnostics)).toBe(false);
   identities(host);
   await disclosure(host);
+});
+
+const unavailable = { kind: 'failure', message: 'Temporary read failure' } as const;
+const sessionBody = {
+  account_id: source.accountId,
+  client_id: OPERATOR_MANAGEMENT_PROFILE.client_id,
+  scope: ['account:manage'],
+};
+for (const attempt of [
+  undefined,
+  source,
+  { ...source, side: 'destination' },
+  { ...source, side: 'destination', phase: 'accepted', reference: 'acceptance' },
+  { ...source, phase: 'execute', reference: 'approval', acceptance: 'acceptance' },
+  { ...source, phase: 'readback', reference: 'approval', acceptance: 'acceptance' },
+] satisfies (TransferAttempt | undefined)[]) {
+  test(`failed session read recovers ${attempt?.side ?? 'new'} ${attempt?.phase ?? 'handoff'} without writing`, async () => {
+    const host = await mount(unavailable, attempt);
+    const saved = window.sessionStorage.getItem('rezics.operator-transfer.attempt');
+    let resolve!: (response: Response) => void;
+    globalThis.fetch = ((input) => {
+      calls.push(String(input));
+      return new Promise<Response>((done) => { resolve = done; });
+    }) as typeof fetch;
+    const retry = button(host, m.auth_account_delete_retry());
+    await flush(() => { retry.click(); retry.click(); });
+    expect(retry.disabled).toBe(true);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(calls).toEqual(['/session']);
+    await flush(() => resolve(new Response(null, { status: 503 })));
+    expect(button(host, m.auth_account_delete_retry()).disabled).toBe(false);
+    await flush(() => button(host, m.auth_account_delete_retry()).click());
+    await flush(() => resolve(Response.json(sessionBody)));
+    expect(window.sessionStorage.getItem('rezics.operator-transfer.attempt')).toBe(saved);
+    expect(host.textContent).not.toContain(m.auth_transfer_account_changed());
+    if (!attempt) expect(host.querySelector('#transfer-subject')).not.toBeNull();
+    else {
+      identities(host, attempt);
+      expect(host.querySelector<HTMLTextAreaElement>('#transfer-request')!.value).toBe(JSON.stringify(attempt.request));
+      const confirm = host.querySelector<HTMLInputElement>('#transfer-confirm');
+      expect(confirm?.checked ?? false).toBe(false);
+      if (attempt.phase === 'accepted') text(host, m.auth_transfer_accepted());
+      if (attempt.phase === 'execute') expect(host.textContent).toContain(m.auth_transfer_uncertain());
+    }
+    expect(calls).toEqual(['/session', '/session']);
+  });
+}
+
+for (const changed of [null, 'different-human']) {
+  test(`read recovery rejects ${changed ?? 'signed-out'} ownership`, async () => {
+    const host = await mount(unavailable, source);
+    globalThis.fetch = (async () => changed
+      ? Response.json({ ...sessionBody, account_id: changed })
+      : new Response(null, { status: 401 })) as typeof fetch;
+    await flush(() => button(host, m.auth_account_delete_retry()).click());
+    expect(host.querySelector('form, #transfer-request')).toBeNull();
+    expect(host.textContent).toContain(m.auth_transfer_account_changed());
+    expect(JSON.parse(window.sessionStorage.getItem('rezics.operator-transfer.attempt')!)).toEqual(source);
+  });
+}
+
+test('a superseded view ignores a late recovered session', async () => {
+  const host = await mount(unavailable, source);
+  let resolve!: (response: Response) => void;
+  globalThis.fetch = (() => new Promise<Response>((done) => { resolve = done; })) as typeof fetch;
+  await flush(() => button(host, m.auth_account_delete_retry()).click());
+  await render({ ...session, accountId: 'different-human' });
+  await flush(() => resolve(Response.json(sessionBody)));
+  expect(host.querySelector('form, #transfer-request')).toBeNull();
+  expect(host.textContent).toContain(m.auth_transfer_account_changed());
+});
+
+test('relation read retry preserves uncertain execution and never resubmits it', async () => {
+  const host = await mount(session, { ...source, phase: 'execute', reference: 'approval', acceptance: 'acceptance' });
+  const saved = window.sessionStorage.getItem('rezics.operator-transfer.attempt');
+  let failed = true;
+  globalThis.fetch = (async (input) => {
+    calls.push(String(input));
+    if (String(input) === '/session') return Response.json(sessionBody);
+    if (String(input) === OPERATOR_RELATION_PATH) return failed
+      ? new Response(null, { status: 503 })
+      : Response.json({ previous: source.request.previous, expectedVersion: '12' });
+    throw new Error(`Unexpected write: ${input}`);
+  }) as typeof fetch;
+  await flush(() => button(host, m.auth_transfer_readback()).click());
+  failed = false;
+  await flush(() => button(host, m.auth_account_delete_retry()).click());
+  expect([...host.querySelectorAll('h2')].some((heading) => heading.textContent === m.auth_transfer_current())).toBe(true);
+  expect(host.querySelector<HTMLInputElement>('#transfer-confirm')!.checked).toBe(false);
+  expect(window.sessionStorage.getItem('rezics.operator-transfer.attempt')).toBe(saved);
+  expect(calls).toEqual(['/session', OPERATOR_RELATION_PATH, '/session', OPERATOR_RELATION_PATH]);
 });

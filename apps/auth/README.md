@@ -210,6 +210,11 @@ until an initiating account is known; subsequent reads retain that account and o
 organizations ends pending browser continuations before they can install a review or start another request.
 An already dispatched change continues independently; its stored command, exact operands and original key remain
 available for explicit confirmation and native reconciliation. Failed identity confirmation keeps the current review usable.
+Operator-transfer read failures offer Retry within the same page view. A failed session read preserves the saved
+attempt without treating it as an account mismatch; recovery restores it only for its initiating account and requires
+fresh confirmation. Signed-out or changed accounts cannot act on it. Relation retries repeat only the failed read;
+after a submit failure, Retry reads the current relationship and leaves approval/execution in the original explicit
+reconciliation flow, retaining the request, operation key and references.
 
 ## Step-up
 

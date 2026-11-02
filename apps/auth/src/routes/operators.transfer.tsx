@@ -88,6 +88,8 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   const [password, setPassword] = useState('');
   const [fileFeedback, setFileFeedback] = useState<{ error: boolean; text: string } | null>(null);
   const [uncertain, setUncertain] = useState(false);
+  const [readRecovery, setReadRecovery] = useState(false);
+  const retryRead = useRef<(() => Promise<TransferFailure | void>) | null>(null);
   const view = useRef(0);
   const fileRead = useRef(0);
   const liveAttempt = useRef<TransferAttempt | null>(null);
@@ -114,6 +116,8 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     setReconfirmed(false);
     setInvalidContinuation(false);
     setUncertain(false);
+    retryRead.current = null;
+    setReadRecovery(false);
     setPending(false);
     setPassword('');
     setEmail('');
@@ -125,39 +129,68 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     };
   }, [initial]);
   useEffect(() => {
-    let active = true;
-    void (initial ? Promise.resolve(initial) : loadAccountSession()).then((value) => {
-      if (!active) return;
-      setSession(value);
-      setNeedsProof(value.kind === 'ready' && !managementSession(value));
-      const saved = restoreTransferAttempt();
-      if (saved === 'invalid' || (saved && (value.kind !== 'ready' || saved.accountId !== value.accountId))) {
-        setInvalidContinuation(true);
-        setResult({ kind: 'failure', reason: 'account-changed' });
-      } else if (saved) {
-        liveAttempt.current = saved;
-        setAttempt(saved);
-        setAcceptance(saved.acceptance ?? '');
-        setReconfirmed(true);
-        // A previous submit may have reached native even if its response was lost.
-        if (saved.phase === 'execute') {
-          setUncertain(true);
-          setResult({ kind: 'failure', reason: 'uncertain' });
-        }
-        if (saved.phase === 'accepted') setResult({ kind: 'accepted', reference: saved.reference! });
-      }
-    });
-    return () => {
-      active = false;
-    };
+    readPage(() => loadPageSession(initial));
   }, [initial]);
   useLayoutEffect(() => {
-    if (result || reconfirmed || fileFeedback) notice.current?.focus();
-  }, [result, reconfirmed, fileFeedback]);
+    if (result || reconfirmed || fileFeedback || readRecovery) notice.current?.focus();
+  }, [result, reconfirmed, fileFeedback, readRecovery]);
+
+  async function loadPageSession(supplied?: AccountSessionResult) {
+    const started = view.current;
+    const value = supplied ?? (await loadAccountSession());
+    if (started !== view.current) return;
+    setSession(value);
+    setNeedsProof(value.kind === 'ready' && !managementSession(value));
+    // An unavailable read says nothing about the saved attempt's owner.
+    if (value.kind === 'failure') {
+      offerReadRetry(() => loadPageSession());
+      return;
+    }
+    const saved = restoreTransferAttempt();
+    if (saved === 'invalid' || (saved && (value.kind !== 'ready' || saved.accountId !== value.accountId))) {
+      setInvalidContinuation(true);
+      setResult({ kind: 'failure', reason: 'account-changed' });
+    } else if (saved) {
+      liveAttempt.current = saved;
+      setAttempt(saved);
+      setAcceptance(saved.acceptance ?? '');
+      setReconfirmed(true);
+      // A previous submit may have reached native even if its response was lost.
+      if (saved.phase === 'execute') {
+        setUncertain(true);
+        setResult({ kind: 'failure', reason: 'uncertain' });
+      }
+      if (saved.phase === 'accepted') setResult({ kind: 'accepted', reference: saved.reference! });
+    }
+  }
+
+  function offerReadRetry(action: () => Promise<TransferFailure | void>) {
+    retryRead.current = action;
+    setReadRecovery(true);
+  }
+  function readPage(action: () => Promise<TransferFailure | void>) {
+    const started = view.current;
+    void perform(async () => {
+      setConfirmed(false);
+      setResult((value) => (value?.kind === 'failure' && value.reason === 'unavailable' ? null : value));
+      const failure = await action();
+      if (started !== view.current || !failure) return;
+      showFailure(failure);
+      if (failure.reason === 'unavailable') offerReadRetry(action);
+    });
+  }
+  async function readCurrent(value: TransferAttempt) {
+    const started = view.current;
+    const relation = await readOperatorRelation(value.request.previous.subjectAccountId, value.accountId);
+    if (started !== view.current) return;
+    if (relation.kind !== 'ready') return relation;
+    setCurrent(relation.relation);
+  }
 
   async function perform(action: () => Promise<void>) {
     if (busy.current) return;
     busy.current = true;
+    retryRead.current = null;
     const started = view.current;
     fileRead.current++;
     setPending(true);
@@ -167,6 +200,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       if (started === view.current) {
         busy.current = false;
         setPending(false);
+        if (!retryRead.current) setReadRecovery(false);
       }
     }
   }
@@ -201,10 +235,10 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     if (session?.kind !== 'ready' || needsProof || invalidContinuation || attempt || restoreTransferAttempt() !== null)
       return;
     const started = view.current;
-    void perform(async () => {
+    readPage(async () => {
       const value = await prepareTransfer(subject.trim(), destination.trim(), session.accountId);
       if (started !== view.current) return;
-      if ('kind' in value) showFailure(value);
+      if ('kind' in value) return value;
       else install({ accountId: session.accountId, request: value, side: 'source', phase: 'approve' });
     });
   }
@@ -222,13 +256,10 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   function reviewRequest(request: TransferAttempt['request']) {
     if (session?.kind !== 'ready' || needsProof || invalidContinuation || uncertain) return;
     const started = view.current;
-    void perform(async () => {
+    readPage(async () => {
       const relation = await readOperatorRelation(request.previous.subjectAccountId, session.accountId);
       if (started !== view.current) return;
-      if (relation.kind !== 'ready') {
-        showFailure(relation);
-        return;
-      }
+      if (relation.kind !== 'ready') return relation;
       // Native approve repeats the exact tuple/version check after review.
       if (!sameRelation(relation.relation, request)) {
         showFailure({ kind: 'failure', reason: 'conflict' });
@@ -251,7 +282,11 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       });
       if (started !== view.current) return;
       setConfirmed(false);
-      if (outcome.kind === 'failure') showFailure(outcome);
+      if (outcome.kind === 'failure') {
+        showFailure(outcome);
+        // Read recovery never repeats approve/execute, even after an uncertain write.
+        if (outcome.reason === 'unavailable') offerReadRetry(() => readCurrent(liveAttempt.current ?? value));
+      }
       else {
         setUncertain(false);
         setResult(outcome);
@@ -370,6 +405,18 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
             {fileFeedback ? <p>{fileFeedback.text}</p> : null}
           </div>
           {reconfirmed ? <p>{m.auth_transfer_reconfirm()}</p> : null}
+          {readRecovery ? (
+            <Button
+              disabled={pending}
+              aria-busy={pending}
+              onClick={() => {
+                const action = retryRead.current;
+                if (action) readPage(action);
+              }}
+            >
+              {m.auth_account_delete_retry()}
+            </Button>
+          ) : null}
           {result?.kind === 'failure' ? (
             <ErrorAlert>
               {errorMessage(result)}
@@ -634,18 +681,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
             <Button
               variant="outline"
               disabled={pending || needsProof || invalidContinuation}
-              onClick={() => {
-                const started = view.current;
-                void perform(async () => {
-                  const value = await readOperatorRelation(
-                    attempt.request.previous.subjectAccountId,
-                    attempt.accountId,
-                  );
-                  if (started !== view.current) return;
-                  if (value.kind === 'ready') setCurrent(value.relation);
-                  else showFailure(value);
-                });
-              }}
+              onClick={() => readPage(() => readCurrent(attempt))}
             >
               {m.auth_transfer_readback()}
             </Button>
