@@ -5,7 +5,7 @@ import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { acquireDirectoryLease } from './lease.ts';
 import { StaleAttemptError } from './contracts.ts';
-import { captureLaunchContext } from './launch-context.ts';
+import { captureLaunchContext, renderLaunchContext } from './launch-context.ts';
 import { WorkerJob } from './job.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { importAttempt } from './import-attempt.ts';
@@ -1075,6 +1075,49 @@ test('a wake without a resumable session uses a full prompt with the current dep
   }
 });
 
+test('a later dependency merge is described truthfully and an unavailable source observation is not described as proven absence', async () => {
+  const h = harness(provider);
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.start(task.id);
+    const prepared = h.store.task(task.id).base;
+    const dependency = h.tasks.dispatch(h.briefFile);
+    writeFileSync(join(dependency.worktree, 'later.ts'), 'export const later = true;\n');
+    git(dependency.worktree, ['add', 'later.ts']);
+    git(dependency.worktree, ['commit', '-m', 'Later dependency']);
+    const commit = git(dependency.worktree, ['rev-parse', 'HEAD']);
+    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
+      current.state = 'integrated';
+      current.integratedCommit = commit;
+    });
+    git(task.worktree, ['merge', '--no-edit', '-m', 'Take later dependency', commit]);
+    replaceTaskContract(
+      h,
+      task.id,
+      1,
+      readFileSync(amendedBrief(h.root, 'later-merge', dependency.id, 'Use later merge.'), 'utf8'),
+    );
+    const later = underLease(h, task.id, () =>
+      captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'),
+    );
+    expect(later.task.base).toBe(prepared);
+    expect(later.dependencies.receipts[0]).toMatchObject({
+      commit,
+      sourcePresence: 'present',
+      basePresence: 'absent',
+      precondition: 'unmet',
+    });
+    const laterPrompt = renderLaunchContext(later);
+    expect(laterPrompt).toContain(
+      `- \`${dependency.id}\`: present in current source at \`${commit}\`; not in your prepared base.`,
+    );
+    expect(laterPrompt).not.toContain(`integrated in your base at \`${commit}\``);
+  } finally {
+    h.dispose();
+  }
+});
+
 test('unknown, cancelled, missing and absent dependency source proofs are never rendered as installed code', async () => {
   const h = harness(provider);
   try {
@@ -1140,8 +1183,14 @@ test('unknown, cancelled, missing and absent dependency source proofs are never 
       completion: 'integrated',
       commit: unavailableCommit,
       sourcePresence: 'unknown',
+      basePresence: 'unknown',
       precondition: 'unknown',
     });
+    const unknownPrompt = renderLaunchContext(unknownCommit);
+    expect(unknownPrompt).toContain(
+      `- \`${dependency.id}\`: source observation is unavailable; build against its contract.`,
+    );
+    expect(unknownPrompt).not.toContain('not in your base');
 
     const missingContract = amendedBrief(h.root, 'missing-source-proof', 'missing-task', 'Unknown dependency.');
     replaceTaskContract(h, task.id, 1, readFileSync(missingContract, 'utf8'));

@@ -140,6 +140,7 @@ test('dependencies render as one factual line each, without receipt rules', () =
     completion: 'integrated' as const,
     commit: present ? 'a'.repeat(40) : null,
     sourcePresence: present ? ('present' as const) : ('unknown' as const),
+    basePresence: present ? ('present' as const) : ('unknown' as const),
     precondition: present ? ('satisfied' as const) : ('unknown' as const),
   });
   const context: LaunchContext = {
@@ -170,7 +171,7 @@ test('dependencies render as one factual line each, without receipt rules', () =
   };
   const rendered = renderLaunchContext(context);
   expect(rendered).toContain(`- \`schema\`: integrated in your base at \`${'a'.repeat(40)}\`.`);
-  expect(rendered).toContain('- `client`: not in your base; build against its contract.');
+  expect(rendered).toContain('- `client`: source observation is unavailable; build against its contract.');
   expect(rendered).not.toContain('sourcePresence');
   expect(rendered).not.toContain('Treat code as installed');
   expect(rendered).toContain('"boundary":"retry"');

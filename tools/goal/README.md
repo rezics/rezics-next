@@ -146,9 +146,10 @@ attempt ends as an ordinary missing-report failure.
 
 Every fresh launch, retry, held-task release and check wake renders a bounded controller launch context from the current
 task generation under its lease. It records the current contract hash and path, task base and worktree identity, and one
-line for each declared `after:` dependency: integrated in the task's base at its commit, or not in the base, so the
-worker builds against its contract. Lifecycle completion alone never renders as integrated: the line requires the
-integrated commit to be an ancestor of the task source. A new context supersedes future-tense instructions in an older prompt, retry manifest or
+line for each declared `after:` dependency: whether its integrated commit is in the prepared task base, in the current
+source only, or unobserved. An unavailable observation is not described as proven absence. Lifecycle completion alone
+never renders as present: prepared-base and current-source presence each require the integrated commit to be an ancestor
+of that tip. A new context supersedes future-tense instructions in an older prompt, retry manifest or
 attempt result; recovery does not reuse an older attempt's context.
 
 When a waiting session wakes on a finished failed check, Goal includes the exact result identity, command, exit status

@@ -7,12 +7,14 @@ import type { WorkerStore } from './store.ts';
 import type { Task } from './types.ts';
 
 export type LaunchBoundary = 'fresh' | 'retry' | 'held-release' | 'wake' | 'adopted-legacy';
+export type Presence = 'present' | 'absent' | 'unknown' | 'not-checked';
 export type DependencyReceipt = {
   id: string;
   state: string;
   completion: 'integrated' | 'not-integrated' | 'unknown';
   commit: string | null;
-  sourcePresence: 'present' | 'absent' | 'unknown' | 'not-checked';
+  sourcePresence: Presence;
+  basePresence: Presence;
   precondition: 'satisfied' | 'unmet' | 'unknown';
   reason?: string;
 };
@@ -78,19 +80,34 @@ function isCommit(cwd: string, value: string | null): boolean {
   return result.status === 0;
 }
 
+type Ancestry = { presence: Exclude<Presence, 'not-checked'>; reason?: string };
+function ancestorPresence(cwd: string, commit: string, tip: string): Ancestry {
+  const result = spawnSync('git', ['merge-base', '--is-ancestor', commit, tip], {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024,
+  });
+  if (result.status === 0) return { presence: 'present' };
+  if (result.status === 1) return { presence: 'absent' };
+  const reason = result.error?.message ?? result.stderr?.trim() ?? `git exited ${result.status}`;
+  return { presence: 'unknown', reason: bounded(reason, 300) ?? 'Git could not verify dependency ancestry' };
+}
+
 function dependencyReceipt(
   store: WorkerStore,
   id: string,
-  source: { worktree: string | null; head: string | null; verified: boolean },
+  source: { worktree: string | null; head: string | null; base: string | null; verified: boolean },
 ): DependencyReceipt {
+  const name = bounded(id) ?? '<unknown dependency>';
   const dependency = store.dependency(id);
   if (!dependency)
     return {
-      id: bounded(id) ?? '<unknown dependency>',
+      id: name,
       state: 'missing',
       completion: 'unknown',
       commit: null,
       sourcePresence: 'unknown',
+      basePresence: 'unknown',
       precondition: 'unknown',
       reason: 'no task record exists for this declared dependency',
     };
@@ -103,79 +120,82 @@ function dependencyReceipt(
   const complete = state === 'integrated' || state === 'merged';
   if (!complete)
     return {
-      id: bounded(id) ?? '<unknown dependency>',
+      id: name,
       state,
       completion: 'not-integrated',
       commit,
       sourcePresence: 'not-checked',
+      basePresence: 'not-checked',
       precondition: 'unmet',
       reason: state === 'cancelled' ? 'dependency is cancelled' : 'dependency is not integrated or merged',
     };
 
   if (!commit)
     return {
-      id: bounded(id) ?? '<unknown dependency>',
+      id: name,
       state,
       completion: 'integrated',
       commit: null,
       sourcePresence: 'unknown',
+      basePresence: 'unknown',
       precondition: 'unknown',
       reason: 'the current task record has no valid integrated or merged commit',
     };
   if (!source.verified || !source.worktree || !source.head)
     return {
-      id: bounded(id) ?? '<unknown dependency>',
+      id: name,
       state,
       completion: 'integrated',
       commit,
       sourcePresence: 'unknown',
+      basePresence: 'unknown',
       precondition: 'unknown',
       reason: 'the current task source identity could not be verified',
     };
   if (!isCommit(source.worktree, commit))
     return {
-      id: bounded(id) ?? '<unknown dependency>',
+      id: name,
       state,
       completion: 'integrated',
       commit,
       sourcePresence: 'unknown',
+      basePresence: 'unknown',
       precondition: 'unknown',
       reason: 'the dependency commit is not available in the current task checkout',
     };
 
-  const result = spawnSync('git', ['merge-base', '--is-ancestor', commit, source.head], {
-    cwd: source.worktree,
-    encoding: 'utf8',
-    maxBuffer: 16 * 1024,
-  });
-  if (result.status === 0)
-    return {
-      id: bounded(id) ?? '<unknown dependency>',
-      state,
-      completion: 'integrated',
-      commit,
-      sourcePresence: 'present',
-      precondition: 'satisfied',
-    };
-  if (result.status === 1)
-    return {
-      id: bounded(id) ?? '<unknown dependency>',
-      state,
-      completion: 'integrated',
-      commit,
-      sourcePresence: 'absent',
-      precondition: 'unmet',
-      reason: 'the dependency commit is not an ancestor of the current task source',
-    };
-  const reason = result.error?.message ?? result.stderr?.trim() ?? `git exited ${result.status}`;
+  const sourceSeen = ancestorPresence(source.worktree, commit, source.head);
+  const baseSeen =
+    source.base && source.base !== source.head
+      ? ancestorPresence(source.worktree, commit, source.base)
+      : source.base
+        ? sourceSeen
+        : { presence: 'unknown' as const, reason: 'prepared task base is unavailable' };
+  const sourcePresence = sourceSeen.presence;
+  const basePresence = baseSeen.presence;
+  const precondition =
+    basePresence === 'present'
+      ? 'satisfied'
+      : sourcePresence === 'unknown' && basePresence === 'unknown'
+        ? 'unknown'
+        : 'unmet';
+  const reason =
+    basePresence === 'present'
+      ? undefined
+      : sourcePresence === 'present' && basePresence === 'absent'
+        ? 'the dependency commit is in the current task source but not an ancestor of the prepared base'
+        : sourcePresence === 'absent'
+          ? 'the dependency commit is not an ancestor of the current task source'
+          : (baseSeen.reason ?? sourceSeen.reason);
   return {
-    id: bounded(id) ?? '<unknown dependency>',
+    id: name,
     state,
     completion: 'integrated',
     commit,
-    sourcePresence: 'unknown',
-    precondition: 'unknown',
-    reason: bounded(reason, 300) ?? 'Git could not verify dependency ancestry',
+    sourcePresence,
+    basePresence,
+    precondition,
+    ...(reason ? { reason } : {}),
   };
 }
 
@@ -284,12 +304,14 @@ export function captureLaunchContext(
         completion: 'unknown' as const,
         commit: null,
         sourcePresence: 'unknown' as const,
+        basePresence: 'unknown' as const,
         precondition: 'unknown' as const,
         reason: 'historical task record contains an invalid dependency id',
       };
     return dependencyReceipt(store, value, {
       worktree: source.worktree,
       head: source.head,
+      base: source.base,
       verified: source.verified,
     });
   });
@@ -322,11 +344,18 @@ export function captureLaunchContext(
   };
 }
 
-/** One factual line per declared dependency: whether its integrated commit is in this task's base. */
+/** One factual line: prepared-base presence, current-source presence, or an unproven observation. */
 export function dependencyLine(receipt: DependencyReceipt): string {
-  return receipt.sourcePresence === 'present' && receipt.precondition === 'satisfied' && receipt.commit
-    ? `- \`${receipt.id}\`: integrated in your base at \`${receipt.commit}\`.`
-    : `- \`${receipt.id}\`: not in your base; build against its contract.`;
+  const id = `\`${receipt.id}\``;
+  if (receipt.basePresence === 'present' && receipt.commit)
+    return `- ${id}: integrated in your base at \`${receipt.commit}\`.`;
+  if (receipt.sourcePresence === 'present' && receipt.commit)
+    return receipt.basePresence === 'absent'
+      ? `- ${id}: present in current source at \`${receipt.commit}\`; not in your prepared base.`
+      : `- ${id}: present in current source at \`${receipt.commit}\`; prepared-base presence is unavailable.`;
+  if (receipt.sourcePresence === 'unknown' && receipt.basePresence !== 'absent')
+    return `- ${id}: source observation is unavailable; build against its contract.`;
+  return `- ${id}: not in your base; build against its contract.`;
 }
 
 /** Render the launch facts without log text, provider output, configuration, secrets or unbounded dependency lists. */
