@@ -135,12 +135,15 @@ test('removal hides owned public navigation and restoration uses current visibil
     for (const kind of ['space', 'realm'] as const) {
       const { space, realm } = await create();
       if (visibility === 'protected')
-        expect((await call(owner(), 'PATCH', `/v1/realms/${realm.realmId}`, { visibility }, realm.headRevisionId)).status).toBe(200);
+        expect(
+          (await call(owner(), 'PATCH', `/v1/realms/${realm.realmId}`, { visibility }, realm.headRevisionId)).status,
+        ).toBe(200);
       const id = kind === 'space' ? space.spaceId : realm.realmId;
       expect(await listed(realm.realmId)).toBe(visibility === 'public');
       expect((await change(owner(), await lifecycle(owner(), kind, id), 'removal')).status).toBe(200);
       expect(await listed(realm.realmId)).toBe(false);
-      const removed = await lifecycle(owner(), kind, id), key = crypto.randomUUID();
+      const removed = await lifecycle(owner(), kind, id),
+        key = crypto.randomUUID();
       expect((await change(owner(), removed, 'restoration', key)).status).toBe(200);
       expect(await listed(realm.realmId)).toBe(visibility === 'public');
       expect((await change(owner(), await lifecycle(owner(), kind, id), 'removal')).status).toBe(200);

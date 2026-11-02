@@ -266,12 +266,7 @@ async function listedSpace(
     const home = deadlineClient(client, deadline);
     if (!(await check(home))) return null;
     const head = await readSpace.run(home, params);
-    if (
-      !sameSpaceSource(head, initial) ||
-      head.address === null ||
-      head.revision_created_at === null
-    )
-      return null;
+    if (!sameSpaceSource(head, initial) || head.address === null || head.revision_created_at === null) return null;
     return { id: candidate.id, address: head.address, lastModified: sitemapTimestamp(head.revision_created_at) };
   });
 }
