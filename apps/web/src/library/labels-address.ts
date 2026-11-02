@@ -1,3 +1,5 @@
+import { normalizeLibraryLabelName } from './subject-label-name';
+
 export const LABELS_PREFIX_MAX_SCALARS = 100;
 export const LABELS_CURSOR_MAX_LENGTH = 4096;
 
@@ -49,5 +51,3 @@ export function parseLabelsAddress(value: unknown): LabelsAddressResult {
   const cursor = typeof input.cursor === 'string' && input.cursor !== '' ? input.cursor : null;
   return { valid: true, cursor, query };
 }
-import { normalizeLibraryLabelName } from './subject-label-name';
-

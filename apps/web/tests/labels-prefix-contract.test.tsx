@@ -17,7 +17,13 @@ const load = Route.options.loader as unknown as (input: {
 
 test('native-invalid saved prefixes require explicit correction before any private catalogue read', async () => {
   for (const query of [
-    'a\0b', 'a\u0001b', 'a\u007fb', 'a\u009fb', '\u0344'.repeat(51), ' '.repeat(101), 'e\u0301'.repeat(51),
+    'a\0b',
+    'a\u0001b',
+    'a\u007fb',
+    'a\u009fb',
+    '\u0344'.repeat(51),
+    ' '.repeat(101),
+    'e\u0301'.repeat(51),
   ]) {
     read.mockClear();
     const result = await load({ deps: { query, cursor: 'saved+/cursor==' } });
@@ -34,7 +40,7 @@ test('native-invalid saved prefixes require explicit correction before any priva
   expect(html).toContain(`value="${query}"`);
   expect(html).toContain('method="get"');
   expect(html).not.toContain('name="cursor"');
-  expect(html).not.toContain('maxLength');
+  expect(html).not.toContain('maxlength');
 });
 
 test('valid saved prefixes keep their raw spelling and opaque cursor through the reader boundary', async () => {
@@ -42,7 +48,8 @@ test('valid saved prefixes keep their raw spelling and opaque cursor through the
   for (const query of ['', '\t\n\u0085\u00a0\u2003', '  e\u0301\t読書  ', '😀'.repeat(100), '\u0344'.repeat(50)]) {
     read.mockClear();
     expect(await load({ deps: { query, cursor } })).toMatchObject({
-      kind: 'loaded', address: { valid: true, query, cursor },
+      kind: 'loaded',
+      address: { valid: true, query, cursor },
     });
     expect(read).toHaveBeenCalledTimes(1);
     expect(read).toHaveBeenCalledWith({ data: { query, cursor } });
@@ -50,6 +57,8 @@ test('valid saved prefixes keep their raw spelling and opaque cursor through the
   expect(parseLabelsAddress({ query: '', cursor: '' })).toEqual({ valid: true, query: '', cursor: null });
   expect(parseLabelsAddress({ query: 'a\0b', cursor: 'x'.repeat(4097) })).toMatchObject({ issue: 'prefix' });
   expect(parseLabelsAddress({ query: ' e\u0301 ', cursor: 'x'.repeat(4097) })).toMatchObject({
-    valid: false, issue: 'cursor', query: ' e\u0301 ',
+    valid: false,
+    issue: 'cursor',
+    query: ' e\u0301 ',
   });
 });
