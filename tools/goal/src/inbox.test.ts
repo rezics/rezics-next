@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { openDb } from './db.ts';
-import { SqliteManagerInbox } from './inbox.ts';
+import { SqliteManagerInbox, quietDelivery } from './inbox.ts';
 import { temporaryDirectory } from './test-support.ts';
 
 function setup() {
@@ -201,6 +201,41 @@ test('manager sends are capped at six an hour and 600 characters, except the con
     expect(inbox.pending('web')).toHaveLength(10);
     now = Date.UTC(2026, 10, 2, 13, 0, 0, 1);
     expect(() => send('Decision 8')).not.toThrow();
+  } finally {
+    db.close();
+    t.close();
+  }
+});
+
+test('a worker info message is read at the next wake but never wakes the manager; worker questions still wake', async () => {
+  const t = temporaryDirectory();
+  const db = openDb(join(t.path, 'state.sqlite'));
+  const inbox = new SqliteManagerInbox(db, t.path);
+  const { existsSync } = await import('node:fs');
+  try {
+    const from = 'worker:task-1/2';
+    expect(quietDelivery({ kind: 'info', from })).toBe(true);
+    expect(quietDelivery({ kind: 'info', from: 'search' })).toBe(false);
+    expect(quietDelivery({ kind: 'question', from })).toBe(false);
+    inbox.deliver({ managerId: 'web', kind: 'info', from, taskId: 'task-1', summary: 'Chose cursor pagination' });
+    expect(existsSync(inbox.signalPath('web'))).toBe(false);
+    expect(inbox.pending('web')).toHaveLength(0);
+    expect(inbox.notifications('web')).toHaveLength(0);
+    let woken = false;
+    const waiting = inbox.wait('web').then((events) => {
+      woken = true;
+      return events;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(woken).toBe(false);
+    inbox.deliver({ managerId: 'web', kind: 'question', from, taskId: 'task-1', summary: 'Which owner decides?' });
+    expect(existsSync(inbox.signalPath('web'))).toBe(true);
+    expect(inbox.notifications('web').map((entry) => entry.event.kind)).toEqual(['question']);
+    // The wake reads both: the quiet decision travels with the next real event.
+    expect((await waiting).map((entry) => entry.event.summary)).toEqual([
+      'Chose cursor pagination',
+      'Which owner decides?',
+    ]);
   } finally {
     db.close();
     t.close();

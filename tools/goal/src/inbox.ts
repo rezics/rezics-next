@@ -44,6 +44,14 @@ export class InboxSendRefusedError extends Error {
   override name = 'InboxSendRefusedError';
 }
 
+/**
+ * A worker's `info` reports a decision it already made: it is stored for the manager's next read but never wakes the
+ * manager on its own. Worker questions and blockers still wake.
+ */
+export function quietDelivery(event: Pick<ManagerEvent, 'kind' | 'from'>): boolean {
+  return event.kind === 'info' && typeof event.from === 'string' && event.from.startsWith('worker:');
+}
+
 /** The delivery identity: recipient, kind, sender, task, reply target and the first line of the summary. */
 function dedupeKey(manager: string, fields: ReturnType<typeof sharedInboxFields>): string {
   const firstLine = (fields.summary ?? '').split(/\r?\n/, 1)[0]!.trim();
@@ -66,11 +74,15 @@ export class SqliteManagerInbox implements ManagerInbox {
   signalPath(manager: string): string {
     return join(this.signalDirectory, createHash('sha256').update(manager).digest('hex'));
   }
-  /** An identical delivery within the last hour only increments that row's count and wakes nobody. */
+  /**
+   * An identical delivery within the last hour only increments that row's count and wakes nobody. A quiet delivery
+   * (see `quietDelivery`) is read with the next `inbox read` but sends no wakeup.
+   */
   deliver(event: ManagerEvent): void {
     if (!wakingKinds.has(event.kind)) throw new Error(`Recorded-only event cannot be delivered: ${event.kind}`);
     if (/[\r\n]/.test(event.summary)) throw new Error('Manager event summary must be one line');
-    if (!this.insert(event.managerId, event, true)) return;
+    const quiet = quietDelivery(event);
+    if (!this.insert(event.managerId, event, true, quiet) || quiet) return;
     // The committed row is authoritative. A signal is only a wakeup hint.
     const signal = () => writeFileSync(this.signalPath(event.managerId), String(Date.now()));
     // Worker decisions may call us inside their shared synchronous transaction. Signal after its commit.
@@ -112,7 +124,7 @@ export class SqliteManagerInbox implements ManagerInbox {
   record(manager: string, event: unknown): void {
     this.insert(manager, event, false);
   }
-  private insert(manager: string, event: unknown, wakeable: boolean): boolean {
+  private insert(manager: string, event: unknown, wakeable: boolean, quiet = false): boolean {
     const write = (): boolean => {
       const fields = sharedInboxFields(event);
       const key = wakeable && !unfoldedKinds.has(fields.kind ?? '') ? dedupeKey(manager, fields) : null;
@@ -163,8 +175,8 @@ export class SqliteManagerInbox implements ManagerInbox {
       const inserted = this.db
         .query(`INSERT INTO manager_inbox(
         manager, event, wakeable, created_at, sender, goal_id, task_id, kind, summary,
-        reply_to_id, thread_root_id, document_refs, escalation, dedupe_key
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        reply_to_id, thread_root_id, document_refs, escalation, dedupe_key, quiet
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(
           manager,
           JSON.stringify(storedEvent),
@@ -180,6 +192,7 @@ export class SqliteManagerInbox implements ManagerInbox {
           fields.documentRefs ? JSON.stringify(fields.documentRefs) : null,
           fields.escalation ? JSON.stringify(fields.escalation) : null,
           key,
+          Number(quiet),
         );
       const id = Number(inserted.lastInsertRowid);
       if (rootId === null) {
@@ -236,8 +249,9 @@ export class SqliteManagerInbox implements ManagerInbox {
       return null;
     }
   }
+  /** Unread events that wake the manager; quiet ones wait for a read caused by something else. */
   pending(manager: string): InboxEntry[] {
-    return this.rows(manager, 'wakeable = 1 AND read_at IS NULL');
+    return this.rows(manager, 'wakeable = 1 AND quiet = 0 AND read_at IS NULL');
   }
   private rows(manager: string, condition: string): InboxEntry[] {
     return (
@@ -291,7 +305,7 @@ export class SqliteManagerInbox implements ManagerInbox {
       .immediate();
   }
   notifications(manager: string): InboxEntry[] {
-    return this.rows(manager, 'wakeable = 1 AND notified = 0 AND read_at IS NULL');
+    return this.rows(manager, 'wakeable = 1 AND quiet = 0 AND notified = 0 AND read_at IS NULL');
   }
   notified(id: number): void {
     this.db.query('UPDATE manager_inbox SET notified = 1 WHERE id = ?').run(id);

@@ -56,6 +56,7 @@ const inboxMigrations = [
       ALTER TABLE manager_inbox ADD COLUMN dedupe_key TEXT;
       ALTER TABLE manager_inbox ADD COLUMN delivery_count INTEGER NOT NULL DEFAULT 1;
       ALTER TABLE manager_inbox ADD COLUMN last_delivered_at INTEGER;
+      ALTER TABLE manager_inbox ADD COLUMN quiet INTEGER NOT NULL DEFAULT 0;
       CREATE INDEX manager_inbox_dedupe ON manager_inbox(dedupe_key, created_at) WHERE dedupe_key IS NOT NULL;
       CREATE INDEX manager_inbox_sender_created ON manager_inbox(sender, created_at);`,
   },

@@ -1036,7 +1036,10 @@ an hourly report.
 A delivery identical to one made to the same recipient within the last hour is not stored again: the earlier row's
 `delivery_count` and `last_delivered_at` change, nobody is woken, and `inbox read` shows the count as `deliveries`.
 Identity is the recipient, kind, sender, task, reply target and the summary's first line, so the same alarm for two
-tasks stays two events. Records and completion results (`goal-met`, `goal-unmet`) are never folded. A Goal manager's `inbox send` is refused above six sends in the last
+tasks stays two events. Records and completion results (`goal-met`, `goal-unmet`) are never folded. A worker's
+`info` message (sender `worker:<task>/<attempt>`) reports a decision the worker already made: it is stored and
+returned by the manager's next `inbox read`, but it sends no wakeup, starts no turn and does not end an `inbox wait`.
+Worker questions, blockers and handoffs still wake. A Goal manager's `inbox send` is refused above six sends in the last
 hour or 600 characters, with an error that says which limit was reached; the configured supermanager, workers and
 system events are not capped, and the `continuation written` handshake neither counts nor is refused by the hourly
 limit.
