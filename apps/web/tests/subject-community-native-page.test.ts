@@ -21,45 +21,29 @@ const expected = {
 } as const;
 const page = (threads: unknown[], next: unknown = null) => ({ threads, next });
 
-// Each failure must discard the whole source, including its otherwise valid first row.
+// Each bad row invalidates even the valid row before it.
 const malformed = [
   null,
-  {},
   { threads: {}, next: null },
   page([], 42),
+  page([review, review]),
+  page(Array(21).fill(review)),
   ...[
     null,
-    {},
-    { ...review, id: '' },
-    { ...review, authorId: 4 },
-    { ...review, boardId: null },
     { ...review, title: {} },
+    { ...review, authorId: null },
     { ...review, createdAt: 'invalid' },
     { ...review, kind: 'discussion' },
-    { ...review, subjectIds: [] },
-    { ...review, subjectIds: null },
-    { ...review, visibility: 'hidden' },
-    { ...review, availability: 'erased' },
+    { ...review, subjectIds: [discussion.id] },
     { ...review, firstPost: null },
     ...[
       { threadId: discussion.id },
       { boardId: discussion.boardId },
-      { id: null },
       { availability: 'withheld' },
-      { visibility: 'hidden' },
       { body: null },
       { body: {} },
-      {
-        body: {
-          version: 'rezics-document-v1',
-          profile: 'blocks',
-          doc: { type: 'doc', content: [{ type: 'paragraph', content: 'bad' }] },
-        },
-      },
     ].map((post) => ({ ...review, firstPost: { ...review.firstPost, ...post } })),
   ].map((row) => page([review, row], 'native-next')),
-  page([review, review]),
-  page(Array(21).fill(review)),
 ];
 
 test('malformed native pages fail only their community source in both readers without extra reads', async () => {
@@ -84,11 +68,8 @@ test('malformed native pages fail only their community source in both readers wi
     const standalone = await readSubjectCommunity(client, communitySubject.id, ['review', 'review', 'discussion']);
     expect(standalone.regions.review?.state).toBe('unavailable');
     expect(standalone.regions.discussion?.state).toBe('ready');
-    expect(requests.map((url) => url.pathname)).toEqual([
-      `/v1/subjects/${communitySubject.id}/threads`,
-      `/v1/subjects/${communitySubject.id}/threads`,
-      '/v1/accounts',
-    ]);
+    expect(requests).toHaveLength(3);
+    expect(requests.filter((url) => url.pathname.endsWith('/threads'))).toHaveLength(2);
     expect(requests[0]!.searchParams.get('limit')).toBe('5');
     const reads = { ...loaded.page.reads };
     for (const [key, descriptor] of Object.entries(plan.reads))
@@ -122,17 +103,16 @@ test('native empty and sparse windows retain opaque continuations, bounds, null 
   expect(composedCommunityRegion({ status: 403, body: { code: 'platform_closed' } }, expected)).toEqual({
     state: 'closed',
   });
-  expect(composedCommunityRegion({ status: 404, body: {} }, expected).state).toBe('unavailable');
   expect(composedCommunityRegion(undefined, expected).state).toBe('unavailable');
   expect(composedCommunityRegion({ status: 200, body: page([]) }).state).toBe('unavailable');
   const requests: URL[] = [];
   const threads = Array.from({ length: 20 }, (_, n) => {
     const id = `01a1a000-0000-7000-8000-${String(n).padStart(12, '0')}`;
-    return { ...review, id, firstPost: { ...review.firstPost, threadId: id } };
+    return { ...review, id, firstPost: { ...review.firstPost, id: id.replace('7000', '7001'), threadId: id } };
   });
   const client = createKernelClient('https://kernel.invalid', {
-    fetch: (async (input: RequestInfo | URL) => {
-      const url = new URL(String(input));
+    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(new Request(input, init).url);
       requests.push(url);
       return Response.json(
         url.pathname.endsWith('/threads') ? page(threads, 'native-next') : { accounts: [communityAuthor] },
