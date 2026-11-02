@@ -152,7 +152,8 @@ test('Cancel isolates metadata/notes; uncertain retry keeps identity; failed con
     await change();
     await settle(() => button(m.library_collection_cancel()).click());
     expect(host.querySelector('form')).toBeNull();
-    expect(members.members).toEqual(initial.members);
+    expect(host.textContent).not.toContain('Draft note');
+    expect(client.getQueryData(queryKey)).toEqual(initial);
     expect(update).not.toHaveBeenCalled();
     await begin();
     await change();
@@ -168,7 +169,7 @@ test('Cancel isolates metadata/notes; uncertain retry keeps identity; failed con
     refresh.mockRejectedValueOnce(new Error('reload failed'));
     await settle(() => button(m.library_collection_reload()).click());
     expect(title().value).toBe('Draft');
-    expect(members.members[0]!.note).toBe('Draft note');
+    expect(host.querySelector<HTMLTextAreaElement>('[id^="collection-member-note-"]')!.value).toBe('Draft note');
     latest = { ...initial, revision: 8, memberState: 'preparing' };
     await settle(() => button(m.library_collection_reload()).click());
     expect(title().value).toBe('Draft');
@@ -186,7 +187,7 @@ test('Cancel isolates metadata/notes; uncertain retry keeps identity; failed con
     expect(update.mock.calls[2]![0]!.data).toMatchObject({ revision: 9, visibility: 'private' });
     expect(update.mock.calls[2]![0]!.data.idempotencyKey).not.toBe(first.idempotencyKey);
     expect(host.querySelector('form')).toBeNull();
-    expect(members.members[0]!.note).toBe('Draft note');
+    expect(host.textContent).toContain('Draft note');
   } finally {
     await act(async () => root.unmount());
     client.clear();
