@@ -174,7 +174,8 @@ function pinProjectionBytes(size: { projectionBytes: string | null; projectionCo
   return 6 * (size.projectionCompressed ? 4 * 1024 * 1024 * 1024 : bytes) + 1024;
 }
 
-function leafProvider(accountId: string, filter: FilterDocument, deadline: number): OwnerFilterLeafProvider {
+/** Native point implementation only. Callers must independently admit the owner and complete original closure. */
+export function leafProvider(accountId: string, filter: FilterDocument, deadline: number): OwnerFilterLeafProvider {
   const route = routeOf(accountId);
   if (route === null) throw new TypeError('Invalid native owner');
   const families = new Set<OwnerFilterFactLocator['kind']>();

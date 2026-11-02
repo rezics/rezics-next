@@ -503,6 +503,50 @@ receipt and source custody. Search also checks the returned source/observation/c
 whole native result comparison before settlement. Neither getter data nor a successful admission scalar grants
 reader access.
 
+The Members branch retains the entire native `{definition,sourceIdentity,observation}` result in its factory-local
+handle. Caller filter, release and structural order are exact compatibility checks. Search rereads the immutable
+release on the admitted operational client, compiles with `compileCurrentOwnerFilter`, and uses
+`evaluateScopeSubjects` and Library's existing native fact points and owner matcher. It never constructs a reader
+Actor or runs ordinary read permission to admit background work. Pure owner plans use the exclusive native
+`ScopeBasis` branch, with the actual native source and Collection observation; they have no public index,
+generation or UUID. A plan requiring public catalogue evidence refuses `dependency_unavailable` before opening
+OpenSearch or another checkout. Native owner truth cannot supply that independent public authority.
+
+`scope-members-work.ts` reads the actual `library.canonical_source_scope.capture_id` and `committed_revision` on
+that same client, at the complete current canonical generation and exact source fence. The complete native
+identity, Collection basis and capture/revision digest must agree. Semantic revalidation receives the live `tx`.
+Original-to-terminal mapping comes from the actual READY scoped enrollment's forward directory and ticket,
+including its original, registration and capture; Search creates no association, History position, custody or
+physical release. A complete bounded canonical original group supplies Library's shared owner-fact evaluator.
+The terminal original is included even when it has no stored occurrence. Historical profile predicates read
+their actual immutable accepting releases. Full raw fact windows and incomplete groups remain `not_proven`.
+
+Members ID continuation uses the existing native `sourcePrefix`. Ordinal continuation consumes one fixed raw
+window, advances past deleted and rejected positions, and returns the earliest live occurrence of each canonical
+group. It never refills to fill output. Unknown evidence stops before its raw slot and cannot establish exhaustion.
+Raw group keys and leaf progress remain private to this live factory/transaction; supplied continuation is
+validated against the native composite basis and never restores a verdict. A fresh factory reconstructs the
+bounded group from the real source instead of trusting a serialized alias list. Members uses no retained Search
+preparation, ordinal table, pooled progress read or save. Admission, complete definition/source observation,
+Scope70 and the native owner-fact fence are reread after dependent work and before any result is used. A changed
+episode, release, source/capture, deadline or completed transaction refuses and requires fresh preparation.
+
+Every Members operation transfers the remaining caller original across all eight work axes. Native definition
+SQL is metered on the same transaction before dispatch, including locking reads and repeated admission. Existing
+Source operations receive a disjoint allowance while native admission retains its own declared ceiling. Narrow
+Search SQL, scoped metadata, original mapping, raw groups, fact points, pinned releases and final rereads reserve
+their physical bounds before I/O. Dispatched failures settle their full bound; repeats add to the same receipt.
+Cold release projections first read their native size and conservatively require the maximum expansion bound for
+compressed data; a warm immutable cache still checks existence on the same client. Unknown native admission SQL
+without a declared footprint refuses before dispatch. The opaque result and additive receipt grant neither
+Commerce admission nor final episode completion. Commerce still owns its independent final fences and storage.
+
+`test/search/members-native-scope.test.ts` authors real configured Members admission, useful ID/ordinal owner
+evaluation, rejected/deleted positions, hostile hints, stale/expired admission, transaction reuse, final currentness
+and cumulative cost controls, plus unrelated owner data at 1/10/100. Connected/native/growth execution remains
+UNRUN under the minimal source-delivery policy. The current explicit Members producer stub remains an exact
+activation refusal; these Search bodies do not substitute a ready certificate for genuine producer delivery.
+
 Whole-query publication has its own additive `{kind:'collection-publication',tx,locator}` branch,
 `CollectionPublicationWorkContext`. It imports the original `CollectionPublicationLocator`,
 `CollectionPublicationWorkDefinition`, `admitCollectionPublicationStep` and

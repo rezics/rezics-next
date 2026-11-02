@@ -51,7 +51,6 @@ import type { SearchHit } from './query.ts';
 import { readSearchScopeRelease } from './scope-release.ts';
 import { subjectPartition, type RelationFacetMatch, type SubjectSource } from './source.ts';
 import {
-  readMembersPreparationWorkDefinition,
   readCollectionKindPreparationWorkDefinition,
   readCollectionPublicationScopeWorkDefinition,
   readScopeWorkDefinition,
@@ -59,6 +58,18 @@ import {
 import type { ScopeLeafResume } from './scope-execution.ts';
 import type { CollectionKindWorkDefinition } from '../library/collection-kind-work-admission.ts';
 import type { CollectionPublicationWorkDefinition } from '../library/collection-publication-work-admission.ts';
+import {
+  firstMembersOrdinal,
+  membersExecution,
+  membersRelease,
+  membersTerminal,
+  readMembersSnapshot,
+  runMembersWork,
+  sameMembersSnapshot,
+  type MembersExecution,
+  type MembersWorkInput,
+} from './scope-members-work.ts';
+import { membersSource } from './scope-members-work-cost.ts';
 import {
   compareScopeOrderedTuple,
   addScopePublicCost,
@@ -205,6 +216,7 @@ type ScopeState = {
   };
   workDefinition?: CollectionKindWorkDefinition | CollectionPublicationWorkDefinition;
   workResume?: ScopeLeafResume | null;
+  members?: MembersExecution;
 };
 
 /** Native service runtime, immutable admission and factory-local handles. Native producers
@@ -245,6 +257,10 @@ export function createSearchScopeSource({
     if (!evidence || Date.now() >= evidence.deadline) unavailable();
     return evidence;
   }
+  function membersFailure(error: unknown, work: ScopeWork): never {
+    if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
+    throw error;
+  }
   function engineWork(work: ScopeWork): SearchRequestWork {
     const options = context();
     return {
@@ -256,6 +272,26 @@ export function createSearchScopeSource({
     };
   }
   async function current(value: ScopeState, work: ScopeWork): Promise<void> {
+    if (value.members) {
+      try {
+        const options = context();
+        const members = value.members;
+        if (
+          options.work !== members.input.work ||
+          !value.collection ||
+          !value.basis.nativeOwner ||
+          !isDeepStrictEqual(value.basis.nativeOwner.source, value.collection.order.source) ||
+          !isDeepStrictEqual(value.basis.nativeOwner.observation, value.collection.observation)
+        )
+          unavailable();
+        await runMembersWork(members.input, work, async (native) => {
+          if (!sameMembersSnapshot(members.snapshot, await readMembersSnapshot(members.input, native))) unavailable();
+        });
+      } catch (error) {
+        membersFailure(error, work);
+      }
+      return;
+    }
     const options = context();
     async function currentNativeWork() {
       if (!options.work) return;
@@ -384,36 +420,86 @@ export function createSearchScopeSource({
         if (evidence?.work) throw new ProblemError('dependency_unavailable');
       }
       if (evidence?.work?.kind === 'members-preparation') {
-        const native = await readMembersPreparationWorkDefinition(evidence.work, {
-          pool,
-          access: evidence.access,
-          deadline: evidence.deadline,
-        });
-        const nativeOrder: SearchScopeOrder = {
-          kind: native.definition.sort,
-          source: native.sourceIdentity,
-        };
-        // Caller fields are compatibility hints only. The native getter owns ALL immutable
-        // definition/release/order/source fields and reads them on this same live Core client.
-        if (
-          !isDeepStrictEqual(filter, native.definition.filter) ||
-          (options?.releaseDigest !== undefined && options.releaseDigest !== native.definition.release.digest) ||
-          (options?.order !== undefined && !isDeepStrictEqual(options.order, nativeOrder))
-        )
-          unavailable();
+        context();
         const work = new ScopeWork(options?.allowance ?? scopeAllowance(256, 'scope.prepare'));
-        // Use the whole existing Source adapter. It fails explicitly until native same-client
-        // Source/Scope70 composition is delivered; no pool checkout, retain, or second evaluator.
-        const prepared = await order!.prepare(nativeOrder, work.remaining());
-        work.native(prepared.work);
-        if (!isDeepStrictEqual(prepared.collection.observation, native.observation)) unavailable();
-        const final = await readMembersPreparationWorkDefinition(evidence.work, {
+        const input: MembersWorkInput = {
           pool,
           access: evidence.access,
           deadline: evidence.deadline,
-        });
-        if (!isDeepStrictEqual(final, native)) unavailable();
-        throw new ProblemError('dependency_unavailable');
+          work: evidence.work,
+        };
+        try {
+          const snapshot = await runMembersWork(input, work, (native) => readMembersSnapshot(input, native));
+          const { native } = snapshot;
+          const nativeOrder: SearchScopeOrder = { kind: native.definition.sort, source: native.sourceIdentity };
+          // Caller fields are compatibility hints only. Retain ALL native fields, including the release body.
+          if (
+            !isDeepStrictEqual(filter, native.definition.filter) ||
+            (options?.releaseDigest !== undefined && options.releaseDigest !== native.definition.release.digest) ||
+            (options?.order !== undefined && !isDeepStrictEqual(options.order, nativeOrder))
+          )
+            unavailable();
+          const body = await runMembersWork(input, work, (budget) =>
+            membersRelease(input, budget, native.definition.release.digest),
+          );
+          if (!body || !isDeepStrictEqual(body, native.definition.release.value)) unavailable();
+          const admitted = admitFilter(parseFilter(native.definition.filter), body, { owner: true, saved: true });
+          if (!isDeepStrictEqual(admitted, native.definition.filter)) unavailable();
+          const plan = compileCurrentOwnerFilter(admitted);
+          // No public capture or index proof is supplied by Members admission. Refuse the exact missing
+          // evidence before any foreign checkout, even if an owner OR branch could evaluate true.
+          if (!plan.leaves.length || plan.leaves.some((leaf) => leaf.kind !== 'owner'))
+            throw new ProblemError('dependency_unavailable');
+          const preparedOrder = await runMembersWork(input, work, (budget) =>
+            membersSource(budget, 4, (allowance) => order!.prepare(nativeOrder, allowance)),
+          );
+          if (!isDeepStrictEqual(preparedOrder.collection.observation, native.observation)) unavailable();
+          const query = digest({
+            filter: admitted,
+            release: native.definition.release.digest,
+            order: nativeOrder,
+            locator: input.work.locator,
+            source: {
+              ...native.observation,
+              stamp: { ...native.observation.stamp, position: native.observation.stamp.position.toString() },
+            },
+            scope: observationDigest(snapshot.observation),
+            ownerFence: snapshot.ownerFence,
+          });
+          const basis: ScopeBasis = Object.freeze({
+            release: native.definition.release.digest,
+            query,
+            profile: native.observation.basis.digest,
+            canonical: observationDigest(snapshot.observation),
+            nativeOwner: Object.freeze({
+              source: structuredClone(native.sourceIdentity),
+              observation: structuredClone(native.observation),
+            }),
+          });
+          const value: ScopeState = {
+            filter: structuredClone(admitted),
+            plan,
+            compiled: null,
+            basis,
+            uuid: null,
+            observation: snapshot.observation,
+            publicObservation: null,
+            collection: preparedOrder.collection,
+            readOnly: false,
+            members: membersExecution(input, snapshot, plan, query, body),
+            workResume: null,
+          };
+          await current(value, work);
+          const prepared: PreparedSearchScope = Object.freeze({
+            [preparedScope]: true as const,
+            readiness: 'ready',
+            basis,
+          });
+          states.set(prepared, value);
+          return measured(prepared, work);
+        } catch (error) {
+          membersFailure(error, work);
+        }
       }
       const publicationWorkDefinition =
         evidence?.work?.kind === 'collection-publication'
@@ -1033,6 +1119,17 @@ export function createSearchScopeSource({
       const value = state(prepared);
       if (reservation.progress && reservation.progress.basis !== value.basis.query)
         throw new RangeError('Scope progress basis changed');
+      if (value.members && reservation.progress) {
+        const pending = reservation.progress;
+        if (
+          pending.leafOrdinal !== 0 ||
+          pending.valueOrdinal !== 0 ||
+          pending.phase !== 'selection' ||
+          pending.after === null ||
+          !/^(?:0|[1-9][0-9]?|100)$/.test(pending.after)
+        )
+          throw new RangeError('Invalid Members raw progress');
+      }
       const { native } = reservation;
       const supplied =
         reservation.allowance ??
@@ -1058,19 +1155,20 @@ export function createSearchScopeSource({
           bytes: Math.min(native.bytes, supplied.remaining.bytes),
         },
       });
+      if (value.members) await current(value, work);
       if (!work.leafBudget())
         return measured(
           {
             values: subjects.map(() => 'not_proven'),
             basis: value.basis,
             usage: {
-              keys: 0,
+              keys: value.members ? work.receipt().used.candidateKeys : 0,
               native: {
-                points: 0,
-                witnesses: 0,
-                rows: 0,
-                bytes: 0,
-                emptySeeks: 0,
+                points: value.members ? work.receipt().used.nativePoints : 0,
+                witnesses: value.members ? work.receipt().used.witnessKeys : 0,
+                rows: value.members ? work.receipt().used.nativeRows : 0,
+                bytes: value.members ? work.receipt().used.bytes : 0,
+                emptySeeks: value.members ? work.receipt().used.emptySeeks : 0,
               },
             },
             evidence: [],
@@ -1084,7 +1182,7 @@ export function createSearchScopeSource({
           leaf.kind === 'catalogue' && 'values' in leaf.clause ? leaf.clause.values.length : 1,
         ),
       });
-      if (!value.readOnly && !value.workDefinition)
+      if (!value.readOnly && !value.workDefinition && !value.members)
         work.consume({
           ...zeroScopeWork(),
           statements: 1,
@@ -1093,13 +1191,14 @@ export function createSearchScopeSource({
         });
       const resume = value.readOnly
         ? null
-        : value.workDefinition
+        : value.workDefinition || value.members
           ? (value.workResume ?? null)
           : await store.readLeafProgress(value.basis.query);
       const { resume: nextResume, ...checked } = await evaluateScopeSubjects({
         pool,
         options: context(),
         owner: await ownerContext(value, work),
+        ...(value.members ? { members: value.members } : {}),
         plan: value.plan,
         basis: value.basis.query,
         subjects,
@@ -1109,7 +1208,7 @@ export function createSearchScopeSource({
       });
       if (!value.readOnly) {
         await current(value, work);
-        if (value.workDefinition) value.workResume = nextResume;
+        if (value.workDefinition || value.members) value.workResume = nextResume;
         else {
           work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 4096 });
           await store.saveLeafProgress(value.basis.query, nextResume);
@@ -1147,8 +1246,14 @@ export function createSearchScopeSource({
       if (!value.collection || value.collection.order.kind !== 'id') unavailable();
       const work = new ScopeWork(request.allowance);
       await current(value, work);
-      const page = await order!.prefix(value.collection, request.afterSubjectId, work.remaining());
-      work.native(page.work);
+      const page = value.members
+        ? await runMembersWork(value.members.input, work, (budget) =>
+            membersSource(budget, 4, (allowance) =>
+              order!.prefix(value.collection!, request.afterSubjectId, allowance),
+            ),
+          )
+        : await order!.prefix(value.collection, request.afterSubjectId, work.remaining());
+      if (!value.members) work.native(page.work);
       await current(value, work);
       return { ...page, basis: value.basis, work: work.receipt() };
     },
@@ -1179,6 +1284,81 @@ export function createSearchScopeSource({
       if (!value.collection || value.collection.order.kind !== 'ordinal' || value.readOnly) unavailable();
       const work = new ScopeWork(request.allowance);
       await current(value, work);
+      if (value.members) {
+        const members = value.members;
+        // One fixed raw window, including deletions/rejections. Unknown work stops before that raw slot.
+        const limit = Math.min(request.quota, work.remaining().remaining.candidateKeys);
+        if (limit < 1) membersFailure(new ProblemError('dependency_unavailable'), work);
+        const raw = await runMembersWork(members.input, work, (budget) =>
+          membersSource(budget, 4, (allowance) =>
+            order!.rawOrdinal(value.collection!, request.after, limit, allowance),
+          ),
+        );
+        const subjects: { subject: string; after: NativeOrdinalKey }[] = [];
+        let after = request.after;
+        let unknown = false;
+        for (const row of raw.rows) {
+          const position = { ordinalKey: row.ordinalKey, memberId: row.memberId };
+          if (row.deletionId || row.deletedAt) {
+            after = position;
+            continue;
+          }
+          const terminal = await runMembersWork(members.input, work, (budget) =>
+            membersTerminal(members, row.subjectId, budget),
+          );
+          if (!terminal) {
+            unknown = true;
+            break;
+          }
+          const first = await runMembersWork(members.input, work, (budget) =>
+            firstMembersOrdinal(members, terminal, budget),
+          );
+          if (!first) {
+            unknown = true;
+            break;
+          }
+          if (!isDeepStrictEqual(position, first)) {
+            after = position;
+            continue;
+          }
+          const remaining = work.remaining().remaining;
+          const checked = await evaluateScopeSubjects({
+            pool,
+            options: context(),
+            plan: value.plan,
+            members,
+            basis: value.basis.query,
+            subjects: [terminal],
+            resume: value.workResume ?? null,
+            reservation: {
+              rawKeys: remaining.candidateKeys,
+              native: {
+                points: remaining.nativePoints,
+                witnesses: remaining.witnessKeys,
+                rows: remaining.nativeRows,
+                bytes: remaining.bytes,
+                emptySeeks: remaining.emptySeeks,
+              },
+            },
+            work,
+          });
+          value.workResume = checked.resume;
+          if (checked.values[0] === 'not_proven') {
+            unknown = true;
+            break;
+          }
+          if (checked.values[0] === true) subjects.push({ subject: terminal, after: position });
+          after = position;
+        }
+        await current(value, work);
+        return {
+          subjects,
+          frontier: { after },
+          exhausted: !unknown && raw.exhausted && isDeepStrictEqual(after, raw.frontier.after),
+          observation: value.collection.observation,
+          work: work.receipt(),
+        };
+      }
       work.consume({
         ...zeroScopeWork(),
         statements: 1,

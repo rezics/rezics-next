@@ -14,6 +14,7 @@ import { holdsCurrentStatements, holdsCurrentType } from './current-leaf.ts';
 import type { FactClause } from './disclosure/check.ts';
 import type { ScopeEvaluationProgress, ScopeEvaluationReservation } from './scope-source.ts';
 import type { RelationFacetMatch } from './source.ts';
+import { evaluateMembersSubject, membersProgress, type MembersExecution } from './scope-members-work.ts';
 
 export const scopeWorkAxes = [
   'candidateKeys',
@@ -162,6 +163,7 @@ export async function evaluateScopeSubjects(
     reservation: ScopeEvaluationReservation;
     work: ScopeWork;
     resume?: ScopeLeafResume | null;
+    members?: MembersExecution;
     owner?:
       | Readonly<{
           admission: Parameters<typeof readOwnerFilterCandidate>[1];
@@ -177,6 +179,33 @@ export async function evaluateScopeSubjects(
   let progress: ScopeEvaluationProgress | null = null;
   let resume: ScopeLeafResume | null = null;
   for (const subject of subjects) {
+    if (input.members) {
+      if (plan.leaves.some((leaf) => leaf.kind !== 'owner')) throw new ProblemError('dependency_unavailable');
+      const pending = input.reservation.progress ?? input.resume?.progress;
+      if (
+        pending?.subject === subject &&
+        (pending.basis !== basis ||
+          pending.leafOrdinal !== 0 ||
+          pending.valueOrdinal !== 0 ||
+          pending.phase !== 'selection' ||
+          pending.after === null ||
+          !/^(?:0|[1-9][0-9]?|100)$/.test(pending.after))
+      )
+        throw new RangeError('Invalid Members raw progress');
+      // Only the retained native raw-key prefix supplies a SQL frontier. A supplied count can be
+      // replayed in a fresh factory, but cannot skip unread keys or install a predicate verdict.
+      const value = await evaluateMembersSubject(input.members, subject, work);
+      values.push(value);
+      if (value === 'not_proven') {
+        progress = membersProgress(input.members, subject, basis);
+        resume = { progress, nativeBasis: basis };
+        // A later subject must not overwrite the first unfinished raw position.
+        values.push(...subjects.slice(values.length).map(() => 'not_proven' as const));
+        break;
+      }
+      evidence.add(`members:${basis}:${subject}`);
+      continue;
+    }
     if (plan.leaves.some((leaf) => leaf.kind === 'owner')) {
       // The Library producer owns complete original/terminal support and same-owner
       // native point evidence. Its matcher invokes the same shared Boolean plan.

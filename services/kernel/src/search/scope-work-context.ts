@@ -17,6 +17,7 @@ import {
 import type { Access } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { isDeepStrictEqual } from 'node:util';
+import { meterMembersDefinition } from './scope-members-work-cost.ts';
 import {
   admitCollectionKindPreparationStep,
   readCollectionKindWorkDefinition,
@@ -309,22 +310,36 @@ export async function readMembersPreparationWorkDefinition(
   work: MembersPreparationWorkContext,
   options: Readonly<{ pool: Pool; access: Access; deadline: number }>,
 ): Promise<MembersPreparationWorkDefinition> {
+  return meterMembersDefinition(work.tx, () => readMembersDefinition(work, options));
+}
+async function readMembersDefinition(
+  work: MembersPreparationWorkContext,
+  options: Readonly<{ pool: Pool; access: Access; deadline: number }>,
+): Promise<MembersPreparationWorkDefinition> {
   const { tx } = work;
   if (work.kind !== 'members-preparation' || !hasLiveOperationalTransaction(tx))
     throw new ProblemError('semantic_not_ready');
   const resources = currentOperationalResources(tx);
-  const locator = Object.freeze({ ...work.locator });
+  const locator = Object.freeze({
+    route: work.locator.route,
+    ownerAccountId: work.locator.ownerAccountId,
+    collectionId: work.locator.collectionId,
+    episodeId: work.locator.episodeId,
+  });
   const route = routeOf(locator.collectionId);
   if (
     route === null ||
     locator.route !== route ||
     routeOf(locator.ownerAccountId) !== route ||
+    routeOf(locator.episodeId) !== route ||
+    !isDeepStrictEqual(work.locator, locator) ||
     resources.pool !== options.pool ||
     resources.mode !== 'work-step' ||
     resources.partition !== partitionOf(route) ||
     resources.accounts.length !== 1 ||
     resources.accounts[0] !== locator.ownerAccountId ||
     !Number.isFinite(options.deadline) ||
+    options.deadline > resources.deadline ||
     Date.now() >= Math.min(options.deadline, resources.deadline)
   )
     throw new ProblemError('semantic_not_ready');
@@ -340,7 +355,12 @@ export async function readMembersPreparationWorkDefinition(
   // Its unavailable native producer must propagate; no local permission or fabricated episode substitutes.
   if ((await preparation.admitStep(tx, locator)) !== true) throw new ProblemError('semantic_not_ready');
   const native = await preparation.readWorkDefinition(tx, locator);
-  if (!hasLiveOperationalTransaction(tx) || Date.now() >= Math.min(options.deadline, resources.deadline))
+  if (
+    !hasLiveOperationalTransaction(tx) ||
+    Date.now() >= Math.min(options.deadline, resources.deadline) ||
+    commandTime(tx) !== time ||
+    !isDeepStrictEqual(work.locator, locator)
+  )
     throw new ProblemError('semantic_not_ready');
   authoritativeTimeValue(time);
   if (!native) throw new ProblemError('semantic_not_ready');
@@ -350,6 +370,12 @@ export async function readMembersPreparationWorkDefinition(
     source.route !== locator.route ||
     source.collectionId !== locator.collectionId ||
     source.accountId !== locator.ownerAccountId ||
+    !source.incarnation ||
+    !source.generation ||
+    !source.receivingEpoch ||
+    !source.effectKey ||
+    (native.definition.sort !== 'id' && native.definition.sort !== 'ordinal') ||
+    !/^sha256:[0-9a-f]{64}$/.test(native.definition.release.digest) ||
     observation.collectionId !== source.collectionId ||
     observation.route !== source.route ||
     observation.incarnation !== source.incarnation ||
