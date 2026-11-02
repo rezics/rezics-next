@@ -65,10 +65,12 @@ test('Multilingual terms show actionable field-specific corrections without chan
       const commands: TermsCommand[] = [];
       let serverFailure: TermsFailure | undefined;
       let lost = false;
+      let hold: Promise<void> | undefined;
       const transport: TermsTransport = {
         read: async () => ({ state: 'ready', snapshot }),
         submit: async (command) => {
           commands.push(structuredClone(command));
+          if (hold) await hold;
           if (serverFailure) return serverFailure;
           if (!lost) {
             lost = true;
@@ -189,6 +191,31 @@ test('Multilingual terms show actionable field-specific corrections without chan
         expect(window.document.activeElement).toBe(focused);
       }
 
+      const queuedChange = (element: object, value: string) => {
+        const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;
+        const props = Reflect.get(element, key) as { onChange: (event: unknown) => unknown };
+        return () => props.onChange({ target: { value } });
+      };
+      await language('en');
+      await mode('labels', 'set');
+      await replace('terms-labels', 'Current draft');
+      const retiredEdit = queuedChange(control('terms-labels'), 'Retired edit');
+      const retiredNavigation = queuedChange(control('terms-language'), 'en');
+      await language('ja');
+      await act(async () => {
+        retiredEdit();
+        retiredNavigation();
+      });
+      expect(control('terms-language').value).toBe('ja');
+      await language('en');
+      await act(async () => retiredEdit());
+      expect(control('terms-labels').value).toBe('Current draft');
+      const liveInput = control('terms-labels');
+      await replace('terms-labels', 'Current editing continues');
+      expect(control('terms-labels')).toBe(liveInput);
+      await mode('labels', 'keep');
+      await language(locale);
+
       await replace('terms-new-language', 'english!');
       await keyboardClick(button(m.catalogue_create_add_language({}, options)));
       correction('terms-new-language', m.catalogue_terms_validation_language({}, options));
@@ -290,6 +317,7 @@ test('Multilingual terms show actionable field-specific corrections without chan
       await mode('labels', 'keep');
       await mode('labels', 'set');
       await replace('terms-labels', 'Temporary title');
+      const beforeDiscard = queuedChange(control('terms-labels'), 'Retired draft');
       await click(discardEnglish);
       await clickElement(dialogButton(cancelLabel));
       expect(control('terms-labels').value).toBe('Temporary title');
@@ -299,6 +327,7 @@ test('Multilingual terms show actionable field-specific corrections without chan
       expect(control('terms-labels').value).toBe('Temporary title');
       await click(discardEnglish);
       await clickElement(dialogButton(discardEnglish));
+      await act(async () => beforeDiscard());
       expect(control('terms-labels').value).toBe('Original film');
       expect(window.document.activeElement).toBe(control('terms-language'));
       expect(commands).toHaveLength(0);
@@ -440,10 +469,21 @@ test('Multilingual terms show actionable field-specific corrections without chan
         await replace('terms-labels', 'Corrected title');
       }
       serverFailure = undefined;
+      const beforeSeal = queuedChange(control('terms-labels'), 'After sealing');
       await replace('terms-new-language', 'fr');
       const refusedAdd = queued(button(m.catalogue_create_add_language({}, options)));
       retiredLanguage = queued(button(`ja: ${m.catalogue_create_description({}, options)}`));
+      let release!: () => void;
+      hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
       await save();
+      await act(async () => beforeSeal());
+      expect(control('terms-labels').value).toBe('Corrected title');
+      await act(async () => release());
+      hold = undefined;
+      await act(async () => beforeSeal());
+      expect(control('terms-labels').value).toBe('Corrected title');
       expect(host.textContent).toContain(m.catalogue_terms_uncertain({}, options));
       expect(control('terms-labels').closest('fieldset')?.disabled).toBe(true);
       const beforeRefusal = window.document.activeElement;

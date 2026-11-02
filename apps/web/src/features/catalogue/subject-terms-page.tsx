@@ -334,6 +334,8 @@ function SubjectTermsPageLive({
   const locked = busy || uncertain || stale || !!saved || session !== 'signed-in' || !!activeDecision;
 
   function chooseLanguage(next: string) {
+    // Retire immediately, including two retained callbacks dispatched before React renders.
+    if (next !== languageRef.current) currentLanguageAdmission.current = null;
     languageRef.current = next;
     setLanguage(next);
   }
@@ -343,8 +345,29 @@ function SubjectTermsPageLive({
     () => ({}),
     [visit, base, drafts, addedLanguages, language, newLanguage, busy, locked],
   );
-  const currentLanguageAdmission = useRef(languageAdmission);
+  const currentLanguageAdmission = useRef<object | null>(languageAdmission);
   currentLanguageAdmission.current = languageAdmission;
+
+  function isCurrentLanguageWorkspace() {
+    return (
+      lifetime.active() &&
+      currentVisit.current === visit &&
+      currentLanguageAdmission.current === languageAdmission &&
+      languageRef.current === language &&
+      !!base &&
+      !running.current
+    );
+  }
+
+  function canEditWorkspace() {
+    return isCurrentLanguageWorkspace() && !locked && !localDecisionRef.current;
+  }
+
+  function navigateLanguage(next: string) {
+    // Native selection stays quiet and keeps its existing uncertain-delivery admission.
+    if (!isCurrentLanguageWorkspace() || busy || localDecisionRef.current) return;
+    chooseLanguage(next);
+  }
   const languageFocus = useRef<{
     visit: TermsReadVisit;
     snapshot: TermsSnapshot;
@@ -388,16 +411,7 @@ function SubjectTermsPageLive({
   });
 
   function reachLanguage(event: MouseEvent<HTMLButtonElement>, tag: string, add = false) {
-    if (
-      !lifetime.active() ||
-      currentVisit.current !== visit ||
-      currentLanguageAdmission.current !== languageAdmission ||
-      !base ||
-      busy ||
-      running.current ||
-      (add && locked)
-    )
-      return;
+    if (!isCurrentLanguageWorkspace() || !base || busy || localDecisionRef.current || (add && locked)) return;
     languageFocus.current?.cancel();
     const invalid = add && !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(tag);
     const opener = event.currentTarget;
@@ -458,6 +472,7 @@ function SubjectTermsPageLive({
     if (drafts[target] !== expected) return;
     // Stored terms can only be removed through an explicit field change and submission.
     if (remove && termFields.some((field) => Object.hasOwn(base.subject[field], target))) return;
+    if (expected) currentLanguageAdmission.current = null;
     setDrafts((previous) => {
       if (previous[target] !== expected) return previous;
       const next = { ...previous };
@@ -588,9 +603,9 @@ function SubjectTermsPageLive({
                 : m.catalogue_terms_uncertain({}, options);
 
   function update(field: TermField, edit: Partial<LanguageDraft[TermField]>) {
-    if (!lifetime.active()) return;
-    if (!base || locked) return;
+    if (!canEditWorkspace() || !base) return;
     setDrafts((previous) => {
+      if (!canEditWorkspace()) return previous;
       const current = previous[language] ?? languageDraft(base.subject, language);
       return { ...previous, [language]: { ...current, [field]: { ...current[field], ...edit } } };
     });
@@ -932,7 +947,7 @@ function SubjectTermsPageLive({
                     aria-describedby={domId('language-help')}
                     value={language}
                     disabled={busy || !!activeDecision}
-                    onChange={(event) => chooseLanguage(event.target.value)}
+                    onChange={(event) => navigateLanguage(event.target.value)}
                   >
                     {languages.map((tag) => (
                       <NativeSelectOption key={tag} value={tag}>
@@ -962,6 +977,7 @@ function SubjectTermsPageLive({
                       aria-invalid={languageError}
                       aria-describedby={languageError ? domId('new-language-error') : undefined}
                       onChange={(event) => {
+                        if (!canEditWorkspace()) return;
                         setNewLanguage(event.target.value);
                         setLanguageError(false);
                       }}
