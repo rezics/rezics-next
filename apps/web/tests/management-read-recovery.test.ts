@@ -57,14 +57,20 @@ test('caller cancellation retires a read, removes its listener and prevents disp
   const clear = spyOn(globalThis, 'clearTimeout');
   let transport: AbortSignal | undefined;
   let finish!: (response: Response) => void;
+  let started!: () => void;
+  const dispatched = new Promise<void>((resolve) => {
+    started = resolve;
+  });
   const fetcher = mock((_input: unknown, init?: RequestInit) => {
     transport = init?.signal ?? undefined;
+    started();
     return new Promise<Response>((resolve) => {
       finish = resolve;
     });
   });
   const client = createKernelClient('https://kernel.test', { fetch: fetcher as typeof fetch });
   const pending = loadDetail(client, 'Bearer viewer', organization.id, {}, caller.signal);
+  await dispatched;
   caller.abort();
   expect(await pending).toEqual({ state: 'unavailable' });
   expect(transport?.aborted).toBe(true);
