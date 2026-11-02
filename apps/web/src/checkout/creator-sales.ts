@@ -47,9 +47,19 @@ export interface CreatorSalesCaller {
   }): Promise<{ status: number; data: unknown }>;
 }
 
+/** Narrow bridge until the controller's canonical generated client includes this mounted endpoint. */
+type CreatorSalesKernelClient = {
+  commerceSales: {
+    get(input: Parameters<CreatorSalesCaller['get']>[0] & {
+      fetch: { cache: 'no-store'; redirect: 'manual' };
+    }): Promise<{ status: number; data?: unknown; error?: unknown }>;
+  };
+};
+
 const nativeCreatorSalesCaller: CreatorSalesCaller = {
   async get(input) {
-    const result = await kernelClient().commerceSales.get({
+    const client = kernelClient() as unknown as CreatorSalesKernelClient;
+    const result = await client.commerceSales.get({
       ...input,
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
