@@ -17,11 +17,42 @@ export type MixedDiscoveryRequest = DiscoveryRequest & {
   kindCountLeaf?: number;
 };
 
+const OWNED_FIELDS = [
+  'text',
+  'filter',
+  'sort',
+  'limit',
+  'cursor',
+  'kindCursor',
+  'descriptions',
+  'languages',
+  'properties',
+  'kindPage',
+  'kindCountLeaf',
+] as const satisfies readonly (keyof MixedDiscoveryRequest)[];
+
 function invalid(pointer: string): never {
   throw new ProblemError('invalid_request', { errors: [{ pointer, code: 'invalid_format' }] });
 }
 function unsupported(pointer: string): never {
   throw new ProblemError('unsupported_query', { errors: [{ pointer, code: 'unsupported' }] });
+}
+
+/** Copy bounded caller fields before the first await. Omitted keys stay omitted. */
+export function ownDiscoveryRequest(request: MixedDiscoveryRequest): MixedDiscoveryRequest {
+  const owned: MixedDiscoveryRequest = { representation: request.representation };
+  for (const key of OWNED_FIELDS) {
+    if (!Object.hasOwn(request, key)) continue;
+    const value = request[key];
+    (owned as MixedDiscoveryRequest)[key] = (
+      Array.isArray(value)
+        ? [...value]
+        : value !== null && typeof value === 'object'
+          ? structuredClone(value)
+          : value
+    ) as MixedDiscoveryRequest[typeof key];
+  }
+  return owned;
 }
 
 /** Admission precedes any native enumeration. Saved/private domains remain closed here. */
@@ -95,9 +126,9 @@ export function admitDiscoveryRequest(
     filter: filter ?? null,
     sort,
     limit,
-    languages: options.languages ?? [],
+    languages: options.languages ? [...options.languages] : [],
     descriptions: options.descriptions,
-    properties: options.properties ?? [],
+    properties: options.properties ? [...options.properties] : [],
     kindLimit,
     kindCountLeaf: request.kindCountLeaf ?? null,
   };

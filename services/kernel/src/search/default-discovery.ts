@@ -11,6 +11,7 @@ import {
   type RetainedDiscoveryRead,
   type RetainedDiscoverySearch,
 } from './discovery-service.ts';
+import { ownDiscoveryRequest } from './discovery-request.ts';
 import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntimeConfig } from './public-runtime.ts';
 import { createPublicPreparationStore } from './public-preparation-store.ts';
 import { discoveryConsumer } from './generations.ts';
@@ -44,6 +45,12 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
   let closing: Promise<void> | undefined;
   const open: RetainedDiscoverySearch = (principal, request, context) => {
     if (closed) return Promise.reject(new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } }));
+    request = ownDiscoveryRequest(request);
+    const deadline = context.deadline;
+    const actor =
+      context.actor.kind === 'account'
+        ? Object.freeze({ ...context.actor, scopes: Object.freeze([...context.actor.scopes]) })
+        : Object.freeze({ kind: 'anonymous' as const });
     const execute = async () => {
       let operations: PublicDiscoveryConsumerOperations | undefined;
       const current = await activeRelease(config.pool);
@@ -125,7 +132,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
             throw new Error('Discovery freshness requires the actual queried mixed generation');
           return (await readFreshness(config.pool, discoveryConsumer(config.prefix, generation))).asOf.toISOString();
         },
-      })(principal, request, { ...context, access: config.access });
+      })(principal, request, { ...context, deadline, actor, access: config.access });
       const wrapped: RetainedDiscoveryRead = Object.freeze({
         search: () => read.search(),
         currentPrimaryCandidates: (keys) => read.currentPrimaryCandidates(keys),

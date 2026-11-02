@@ -7,7 +7,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { decodeDiscoveryCursor, decodeSearchCursor, encodeDiscoveryCursor, encodeSearchCursor } from './cursor.ts';
 import { currentDiscoveryCandidates, currentDiscoveryPrimaryCandidates } from './discovery-current.ts';
 import { compileDiscoveryCapture } from './discovery-filter.ts';
-import { admitDiscoveryRequest, type MixedDiscoveryRequest } from './discovery-request.ts';
+import { admitDiscoveryRequest, ownDiscoveryRequest, type MixedDiscoveryRequest } from './discovery-request.ts';
 import type {
   DiscoveryHit,
   DiscoveryPage,
@@ -72,7 +72,7 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
   return async (principal, request, context) => {
     // Retention extends past the caller's initial await. Keep the admitted actor,
     // request and deadline stable while preserving the actual Access dependency.
-    request = structuredClone(request);
+    request = ownDiscoveryRequest(request);
     context = Object.freeze({
       ...context,
       actor: Object.freeze(
