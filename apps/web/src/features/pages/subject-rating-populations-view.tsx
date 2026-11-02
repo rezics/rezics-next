@@ -16,6 +16,13 @@ import {
 } from './subject-rating-populations';
 import { displayRating, PUBLIC_RATING_SCALE, type RatingQuestion } from './subject-ratings';
 import { RatingSourceStatus } from './subject-ratings-view';
+import {
+  acceptPopulationPage,
+  nextPopulationPage,
+  populationRequestKey,
+  restartPopulationProgress,
+  startPopulationProgress,
+} from './rating-population-progress';
 
 type Session = ReturnType<typeof useSession>;
 export type PopulationTransport = (input: PopulationInput) => Promise<PopulationEnvelope>;
@@ -261,17 +268,18 @@ function PopulationVisit({
 }) {
   const options = { locale: locales.find((item) => item === locale) ?? 'en' };
   const { lease, reader, registry } = admission;
-  const [pageState, setPageState] = useState<{ cursor: string | undefined; revision: number }>({
-    cursor: undefined,
-    revision: 0,
-  });
+  const [pageState, setPageState] = useState(startPopulationProgress);
   const [selection, setSelection] = useState<{ ids: string[]; revision: number }>({ ids: [], revision: 0 });
-  const cursor = pageState.cursor;
+  const { request } = pageState;
+  const acceptedRequest = pageState.accepted ?? request;
   const selected = selection.ids;
-  const cursorKey = JSON.stringify([pageState.revision, cursor]);
+  const cursorKey = populationRequestKey(request);
+  const acceptedKey = populationRequestKey(acceptedRequest);
   const selectedKey = JSON.stringify([selection.revision, selected]);
-  const wanted = useRef({ cursorKey, selectedKey });
-  wanted.current = { cursorKey, selectedKey };
+  const wanted = useRef({ cursorKey, acceptedKey, selectedKey });
+  wanted.current = { cursorKey, acceptedKey, selectedKey };
+  const progress = useRef(pageState);
+  progress.current = pageState;
   const helpId = useId();
   const region = useRef<HTMLDivElement>(null);
   const [focusPage, setFocusPage] = useState(false);
@@ -284,13 +292,16 @@ function PopulationVisit({
   }, []);
   const current = () => mounted.current && lease?.isCurrent() === true;
 
-  function query(kind: 'directory' | 'selected') {
-    const operand = kind === 'directory' ? cursorKey : selectedKey;
+  function query(kind: 'directory' | 'selected', pageRequest = request) {
+    const pageKey = populationRequestKey(pageRequest);
+    const operand = kind === 'directory' ? pageKey : selectedKey;
     const queryKey = ['subject-rating-populations', subjectId, question.id, locale, reader, lease?.key, kind, operand];
     const hash = JSON.stringify(queryKey);
     const matches = () =>
       current() &&
-      (kind === 'directory' ? wanted.current.cursorKey === cursorKey : wanted.current.selectedKey === selectedKey);
+      (kind === 'directory'
+        ? wanted.current.cursorKey === pageKey || wanted.current.acceptedKey === pageKey
+        : wanted.current.selectedKey === selectedKey);
     return {
       queryKey,
       queryHash: hash,
@@ -305,12 +316,17 @@ function PopulationVisit({
       queryFn: async () => {
         const version = registry.version(hash);
         if (!matches()) throw new Error('Rating population visit retired');
+        if (kind === 'directory' && progress.current.stopped) throw new Error('Rating population traversal stopped');
         const value = await read({
           id: subjectId,
           question: question.id,
           locale,
           expectedReader: reader,
-          ...(kind === 'directory' ? (cursor !== undefined ? { cursor } : {}) : { selected }),
+          ...(kind === 'directory'
+            ? pageRequest.cursor !== undefined
+              ? { cursor: pageRequest.cursor }
+              : {}
+            : { selected }),
         });
         if (
           !matches() ||
@@ -325,33 +341,70 @@ function PopulationVisit({
     };
   }
   const directoryOptions = query('directory');
+  const acceptedOptions = query('directory', acceptedRequest);
   const selectedOptions = query('selected');
   if (lease)
     lease.ownsQuery = (hash) =>
-      current() && (hash === directoryOptions.queryHash || hash === selectedOptions.queryHash);
+      current() && [directoryOptions.queryHash, acceptedOptions.queryHash, selectedOptions.queryHash].includes(hash);
   const directory = useQuery(directoryOptions);
+  // Keep the accepted page observed while a different request is pending. Its disclosure context
+  // remains live, and gcTime: 0 removes superseded queries as soon as both observers move on.
+  const acceptedDirectory = useQuery({ ...acceptedOptions, enabled: false });
   const comparison = useQuery(selectedOptions);
   const pageVersion = registry.version(directoryOptions.queryHash);
+  const acceptedVersion = registry.version(acceptedOptions.queryHash);
   const selectionVersion = registry.version(selectedOptions.queryHash);
-  const guard = () =>
+  const directoryGuard = () =>
     current() &&
     wanted.current.cursorKey === cursorKey &&
-    wanted.current.selectedKey === selectedKey &&
+    wanted.current.acceptedKey === acceptedKey &&
     registry.version(directoryOptions.queryHash) === pageVersion &&
+    registry.version(acceptedOptions.queryHash) === acceptedVersion;
+  const selectionGuard = () =>
+    current() &&
+    wanted.current.selectedKey === selectedKey &&
     registry.version(selectedOptions.queryHash) === selectionVersion;
-  const page = current() && directory.data?.result.kind === 'ready' ? directory.data.result.value : undefined;
+  const guard = () => directoryGuard() && selectionGuard();
+  const pending = pageState.accepted?.revision !== request.revision;
+  const busy = directory.isFetching || acceptedDirectory.isFetching;
+  const directoryKind = directory.data?.result.kind;
+  // Transport failures preserve the accepted page; current refusal/withdrawal does not.
+  const disclosed = !directoryKind || directoryKind === 'ready' || directoryKind === 'failed';
+  const page =
+    current() && disclosed && acceptedDirectory.data?.result.kind === 'ready'
+      ? acceptedDirectory.data.result.value
+      : undefined;
+  const observed = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    if (!current()) return;
+    const sources = new Map([
+      [acceptedOptions.queryHash, { request: acceptedRequest, version: acceptedVersion, data: acceptedDirectory.data }],
+      [directoryOptions.queryHash, { request, version: pageVersion, data: directory.data }],
+    ]);
+    let next = pageState;
+    for (const [hash, source] of sources) {
+      if (source.version === observed.current.get(hash)) continue;
+      const result = source.data?.result;
+      if (result?.kind === 'ready') next = acceptPopulationPage(next, source.request, result.value.next);
+      else if (result && result.kind !== 'failed' && result.kind !== 'idle') next = { ...next, accepted: undefined };
+    }
+    observed.current = new Map([...sources].map(([hash, source]) => [hash, source.version]));
+    if (next !== pageState) setPageState(next);
+  }, [directory.data, acceptedDirectory.data, pageVersion, acceptedVersion, cursorKey, acceptedKey]);
   const comparisons = current() && comparison.data?.result.kind === 'ready' ? comparison.data.result.value : undefined;
-  const directoryOutcome = directory.data?.result ?? {
-    kind: directory.isError ? ('failed' as const) : ('idle' as const),
-  };
+  const directoryOutcome = directory.isFetching
+    ? { kind: 'idle' as const }
+    : (directory.data?.result ?? {
+        kind: directory.isError ? ('failed' as const) : ('idle' as const),
+      });
   const selectedOutcome = comparison.data?.result ?? {
     kind: comparison.isError ? ('failed' as const) : ('idle' as const),
   };
   const visibility = useRef<{ hidden: Set<string>; directory?: PopulationEnvelope; selected?: PopulationEnvelope }>({
     hidden: new Set(),
   });
-  if (directory.data && visibility.current.directory !== directory.data) {
-    visibility.current.directory = directory.data;
+  if (acceptedDirectory.data && visibility.current.directory !== acceptedDirectory.data) {
+    visibility.current.directory = acceptedDirectory.data;
     const retained = new Set([...selected, ...(page?.items.map((item) => item.id) ?? [])]);
     for (const id of visibility.current.hidden) if (!retained.has(id)) visibility.current.hidden.delete(id);
     for (const item of page?.items ?? []) visibility.current.hidden.delete(item.id);
@@ -372,32 +425,43 @@ function PopulationVisit({
       comparisons?.items.some((item) => item.figure.kind !== 'ready'));
 
   useLayoutEffect(() => {
-    if (!focusPage || !page || !guard()) return;
+    if (!focusPage || !page || pending || busy || !guard()) return;
     region.current?.querySelector<HTMLElement>('input:not(:disabled), button:not(:disabled)')?.focus();
     setFocusPage(false);
-  }, [cursor, directory.data, focusPage, pageVersion, selectionVersion]);
+  }, [
+    cursorKey,
+    acceptedKey,
+    acceptedDirectory.data,
+    focusPage,
+    pending,
+    busy,
+    pageVersion,
+    acceptedVersion,
+    selectionVersion,
+  ]);
 
   const changeSelection = (next: string[]) => {
-    if (!guard() || next.length > POPULATION_LIMIT) return;
+    if (!selectionGuard() || next.length > POPULATION_LIMIT) return;
     const revision = selection.revision + 1;
-    wanted.current = { cursorKey, selectedKey: JSON.stringify([revision, next]) };
+    wanted.current = { ...wanted.current, selectedKey: JSON.stringify([revision, next]) };
     setSelection({ ids: next, revision });
   };
-  const move = (next: string | undefined) => {
-    if (!guard()) return;
-    const revision = pageState.revision + 1;
-    wanted.current = { cursorKey: JSON.stringify([revision, next]), selectedKey };
-    setPageState({ cursor: next, revision });
+  const move = (restart = false) => {
+    if (!directoryGuard() || (!restart && (busy || pending))) return;
+    const next = restart ? restartPopulationProgress(pageState) : nextPopulationPage(pageState, page?.next ?? null);
+    if (next === pageState) return;
+    wanted.current = { ...wanted.current, cursorKey: populationRequestKey(next.request) };
+    setPageState(next);
     setFocusPage(true);
   };
   const retry = (kind: 'directory' | 'selected') => {
-    if (!guard()) return;
+    if (kind === 'directory' ? !directoryGuard() || busy || !!pageState.stopped : !selectionGuard()) return;
     // No mutation/invalidation of siblings, own votes, or drafts. Query finally is owned by TanStack.
     if (kind === 'directory') setFocusPage(true);
     void (kind === 'directory' ? directory.refetch() : comparison.refetch()).catch(() => {});
   };
   const clear = () => {
-    if (!guard()) return;
+    if (!selectionGuard()) return;
     region.current?.querySelector<HTMLElement>('legend')?.focus();
     changeSelection([]);
   };
@@ -405,7 +469,7 @@ function PopulationVisit({
   if (!lease || !current()) return null;
   return (
     <div ref={region} data-slot="rating-populations" className="space-y-4 text-sm">
-      <FieldSet aria-describedby={helpId}>
+      <FieldSet aria-describedby={helpId} aria-busy={directory.isFetching}>
         <FieldLegend
           tabIndex={-1}
           className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -419,8 +483,15 @@ function PopulationVisit({
           outcome={directoryOutcome}
           source="directory"
           locale={locale}
-          retry={() => retry('directory')}
+          retry={pageState.stopped ? undefined : () => retry('directory')}
         />
+        {pageState.stopped && (
+          <p role="status">
+            {pageState.stopped === 'cycle'
+              ? m.relation_window_cycle({}, options)
+              : m.relation_window_limit({}, options)}
+          </p>
+        )}
         {page && (
           <>
             {choices.length === 0 && <p role="status">{m.rating_population_empty_page({}, options)}</p>}
@@ -435,11 +506,14 @@ function PopulationVisit({
                       className="size-5 shrink-0 accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                       checked={selected.includes(item.id)}
                       disabled={!selected.includes(item.id) && selected.length >= POPULATION_LIMIT}
-                      onChange={() =>
-                        changeSelection(
-                          selected.includes(item.id) ? selected.filter((id) => id !== item.id) : [...selected, item.id],
-                        )
-                      }
+                      onChange={() => {
+                        if (guard())
+                          changeSelection(
+                            selected.includes(item.id)
+                              ? selected.filter((id) => id !== item.id)
+                              : [...selected, item.id],
+                          );
+                      }}
                     />
                     <span className="min-w-0 break-words">{item.name}</span>
                   </label>
@@ -454,8 +528,8 @@ function PopulationVisit({
                 className={actionClass}
                 type="button"
                 variant="outline"
-                disabled={directory.isFetching || cursor === undefined}
-                onClick={() => move(undefined)}
+                disabled={!pageState.stopped && request.cursor === undefined && !pending}
+                onClick={() => move(true)}
               >
                 {m.rating_population_restart({}, options)}
               </Button>
@@ -463,18 +537,16 @@ function PopulationVisit({
                 className={actionClass}
                 type="button"
                 variant="outline"
-                disabled={directory.isFetching || page.next === null}
-                onClick={() => {
-                  if (page.next !== null) move(page.next);
-                }}
+                disabled={busy || pending || !!pageState.stopped || page.next === null}
+                onClick={() => move()}
               >
                 {m.rating_population_next({}, options)}
               </Button>
             </div>
           </>
         )}
-        {directoryOutcome.kind !== 'ready' && cursor !== undefined && (
-          <Button className={actionClass} type="button" variant="outline" onClick={() => move(undefined)}>
+        {!page && (request.cursor !== undefined || pageState.accepted || pageState.stopped) && (
+          <Button className={actionClass} type="button" variant="outline" onClick={() => move(true)}>
             {m.rating_population_restart({}, options)}
           </Button>
         )}

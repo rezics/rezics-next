@@ -872,6 +872,10 @@ A reader opens the installed `GET /v1/subjects/:id/ratings/populations` director
 and question. One native page examines at most twenty candidates. It may be sparse or empty while carrying `next`;
 the consumer preserves that cursor opaquely and offers explicit Next, Start again and Retry, with no automatic
 refill, text search, membership enumeration or history accumulation. Global is explicit and read separately.
+A pending or failed transport read, including an explicit first-page restart, keeps the currently disclosed directory
+window; a current refusal removes it. Repeated/cyclic cursors or 64 successful reads (including the first, excluding
+failed retries) require an explicit fresh traversal. Directory moves and restarts preserve ordered comparisons and
+their independent disclosure and source-local retry.
 The reader can select up to twenty Realm populations across pages. The selected aggregate request carries the exact
 complete selection in one call; it never silently truncates it or includes Global beyond the native twenty limit.
 Removing a selection retires its held response and callbacks. Page transitions and removal place keyboard focus at
