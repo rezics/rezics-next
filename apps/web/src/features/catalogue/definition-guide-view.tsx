@@ -281,10 +281,16 @@ function ActiveGuide({
   const prefixId = useId();
   const exactId = useId();
   const key = JSON.stringify([address.type, address.property, address.release, address.returnTo, locale]);
-  const [search, setSearch] = useState({ draft: '', query: '', cursor: undefined as string | undefined, active: false });
+  const [search, setSearch] = useState({
+    draft: '',
+    query: '',
+    cursor: undefined as string | undefined,
+    active: false,
+  });
   const [selection, setSelection] = useState({ key, type: address.type ?? '', requested: false, attempt: 0 });
   const [searchExactDraft, setSearchExactDraft] = useState(address.type ?? '');
-  const currentSelection = selection.key === key ? selection : { key, type: address.type ?? '', requested: false, attempt: 0 };
+  const currentSelection =
+    selection.key === key ? selection : { key, type: address.type ?? '', requested: false, attempt: 0 };
   if (selection.key !== key) setSelection(currentSelection);
 
   const pageQuery = useQuery({
@@ -343,7 +349,12 @@ function ActiveGuide({
   };
   const submitExact = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSelection({ key, type: searchExactDraft, requested: searchExactDraft.length > 0, attempt: currentSelection.attempt + 1 });
+    setSelection({
+      key,
+      type: searchExactDraft,
+      requested: searchExactDraft.length > 0,
+      attempt: currentSelection.attempt + 1,
+    });
   };
   const selectType = (typeId: string) => {
     setSearchExactDraft(typeId);
@@ -458,14 +469,17 @@ function ActiveGuide({
           )}
         </section>
       )}
-      {search.active && !pageRead && !pageQuery.isFetching && (
-        <p role="status">{m.guide_loading({}, o)}</p>
-      )}
+      {search.active && !pageRead && !pageQuery.isFetching && <p role="status">{m.guide_loading({}, o)}</p>}
 
       {currentSelection.requested && typeQuery.isFetching && <p role="status">{m.guide_loading({}, o)}</p>}
       {typeFailure && (
         <section className="space-y-3">
-          <p role={typeFailure === 'no-match' ? 'status' : 'alert'} tabIndex={-1} data-guide-recovery className={recoveryClassName}>
+          <p
+            role={typeFailure === 'no-match' ? 'status' : 'alert'}
+            tabIndex={-1}
+            data-guide-recovery
+            className={recoveryClassName}
+          >
             {typeFailure === 'no-match'
               ? m.guide_no_exact_match({}, o)
               : typeFailure === 'stale'
@@ -513,16 +527,25 @@ function ActiveGuide({
             >
               <Meaning values={type.labels} locale={locale} />
             </ContentItemHeading>
-            <p><Meaning values={type.descriptions} locale={locale} /></p>
+            <p>
+              <Meaning values={type.descriptions} locale={locale} />
+            </p>
           </header>
           {field && property ? (
             <section>
               <ContentItemFrame as="div" className="flex min-w-0 flex-col gap-5 p-4 sm:p-6">
                 <header className="space-y-2">
-                  <ContentItemHeading level={3} tabIndex={-1} data-guide-recovery className={cn('text-lg font-semibold', recoveryClassName)}>
+                  <ContentItemHeading
+                    level={3}
+                    tabIndex={-1}
+                    data-guide-recovery
+                    className={cn('text-lg font-semibold', recoveryClassName)}
+                  >
                     <Meaning values={field.labels} locale={locale} />
                   </ContentItemHeading>
-                  <p><Meaning values={field.descriptions} locale={locale} /></p>
+                  <p>
+                    <Meaning values={field.descriptions} locale={locale} />
+                  </p>
                 </header>
                 <Constraints definition={field} release={release} locale={locale} />
                 <p className="text-sm">
@@ -532,14 +555,19 @@ function ActiveGuide({
                   <summary className={summaryClassName}>{m.guide_identifier({}, o)}</summary>
                   <code className="break-all">{property}</code>
                 </details>
-                <a className={linkClassName} href={definitionGuideHref(locale, { ...address, type: currentSelection.type, property: undefined })}>
+                <a
+                  className={linkClassName}
+                  href={definitionGuideHref(locale, { ...address, type: currentSelection.type, property: undefined })}
+                >
                   {m.guide_fields({}, o)}
                 </a>
               </ContentItemFrame>
             </section>
           ) : (
             <>
-              <ContentItemHeading level={3} className="font-semibold">{m.guide_fields({}, o)}</ContentItemHeading>
+              <ContentItemHeading level={3} className="font-semibold">
+                {m.guide_fields({}, o)}
+              </ContentItemHeading>
               {type.properties.length === 0 ? (
                 <p>{m.guide_no_fields({}, o)}</p>
               ) : (
@@ -550,7 +578,11 @@ function ActiveGuide({
                         {release.properties[id] ? (
                           <ContentItemTitleLink
                             className={cn(linkClassName, 'w-full')}
-                            href={definitionGuideHref(locale, { ...address, type: currentSelection.type, property: id })}
+                            href={definitionGuideHref(locale, {
+                              ...address,
+                              type: currentSelection.type,
+                              property: id,
+                            })}
                           >
                             <Meaning values={release.properties[id]?.labels} locale={locale} />
                           </ContentItemTitleLink>
@@ -645,11 +677,11 @@ export function DefinitionGuideContent({
                   ? m.guide_no_exact_match({}, o)
                   : read.reason === 'stale'
                     ? m.guide_stale_results({}, o)
-                : read.reason === 'denied'
-                  ? m.guide_denied({}, o)
-                  : read.reason === 'concealed'
-                    ? m.guide_concealed({}, o)
-                    : m.guide_unavailable({}, o)}
+                    : read.reason === 'denied'
+                      ? m.guide_denied({}, o)
+                      : read.reason === 'concealed'
+                        ? m.guide_concealed({}, o)
+                        : m.guide_unavailable({}, o)}
             </p>
           )}
           {(read.reason === 'unavailable' || read.reason === 'denied') && (
@@ -666,14 +698,17 @@ export function DefinitionGuideContent({
         </section>
       )}
       {transport && address.release === undefined && (
-        <ActiveGuide address={address} locale={locale} initial={retryPending ? undefined : read} transport={transport} />
+        <ActiveGuide
+          address={address}
+          locale={locale}
+          initial={retryPending ? undefined : read}
+          transport={transport}
+        />
       )}
       {read?.ok && release && (
         <>
           <details className="text-sm text-muted-foreground">
-            <summary className={summaryClassName}>
-              {m.guide_pinned({}, o)}
-            </summary>
+            <summary className={summaryClassName}>{m.guide_pinned({}, o)}</summary>
             <p className="mt-2 break-all">
               {m.guide_digest({}, o)}: <code>{release.digest}</code>
             </p>

@@ -145,10 +145,7 @@ function typeDescriptor(value: unknown): value is GuideTypeDescriptor {
   if (!record(definition) || !record(properties)) return false;
   if (!releasedMetadata({ types: { [value.typeId]: definition }, properties })) return false;
   const typedDefinition = definition as Release['types'][string];
-  return (
-    strings(typedDefinition.properties) &&
-    typedDefinition.properties.every((id) => Object.hasOwn(properties, id))
-  );
+  return strings(typedDefinition.properties) && typedDefinition.properties.every((id) => Object.hasOwn(properties, id));
 }
 
 /** Generated native GETs, with current caller headers. Never cache a caller's authority or guess a release file. */
@@ -180,8 +177,7 @@ export async function fetchGuideDirectory(
   cursor?: string,
   headers: Record<string, string> = {},
 ): Promise<GuideDirectoryPage> {
-  if (query.length > 512 || (cursor !== undefined && cursor.length > 4096))
-    throw new DefinitionReadError('invalid');
+  if (query.length > 512 || (cursor !== undefined && cursor.length > 4096)) throw new DefinitionReadError('invalid');
   const directory = (client as unknown as TypeDirectoryClient).definitionTypes;
   const response = await directory.get({
     query: { locale, limit: guidePageSize, query, ...(cursor === undefined ? {} : { cursor }) },
@@ -203,8 +199,7 @@ export async function fetchGuideType(
   const route = (client as unknown as TypeDirectoryClient).definitionTypes({ typeId });
   const response = await route.get({ query: { locale }, headers });
   requireDirectorySuccess(response.status, true);
-  if (!typeDescriptor(response.data) || response.data.typeId !== typeId)
-    throw new DefinitionReadError('invalid');
+  if (!typeDescriptor(response.data) || response.data.typeId !== typeId) throw new DefinitionReadError('invalid');
   return response.data;
 }
 

@@ -25,8 +25,7 @@ export function guideAddress(value: unknown): GuideAddress {
   for (const key of ['type', 'property', 'release', 'returnTo'] as const) {
     if (input[key] !== undefined) {
       const limit = key === 'returnTo' ? 2048 : key === 'type' || key === 'property' ? guideIdentifierLimit : 256;
-      if (typeof input[key] !== 'string' || input[key].length > limit)
-        throw new Error('Invalid guide address');
+      if (typeof input[key] !== 'string' || input[key].length > limit) throw new Error('Invalid guide address');
       result[key] = input[key];
     }
   }
@@ -39,7 +38,8 @@ function requestObject(value: unknown): Record<string, unknown> {
 }
 
 function locale(value: unknown): GuideLocale {
-  if (typeof value !== 'string' || !guideLocales.includes(value as GuideLocale)) throw new Error('Invalid guide locale');
+  if (typeof value !== 'string' || !guideLocales.includes(value as GuideLocale))
+    throw new Error('Invalid guide locale');
   return value as GuideLocale;
 }
 
@@ -50,8 +50,7 @@ export function guideReadRequest(value: unknown): { address: GuideAddress; local
 
 export function guideDirectoryRequest(value: unknown): { query: string; cursor?: string; locale: GuideLocale } {
   const input = requestObject(value);
-  if (typeof input.query !== 'string' || input.query.length > 512)
-    throw new Error('Invalid guide search');
+  if (typeof input.query !== 'string' || input.query.length > 512) throw new Error('Invalid guide search');
   if (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 4096))
     throw new Error('Invalid guide cursor');
   return {
@@ -63,11 +62,7 @@ export function guideDirectoryRequest(value: unknown): { query: string; cursor?:
 
 export function guideTypeRequest(value: unknown): { typeId: string; locale: GuideLocale } {
   const input = requestObject(value);
-  if (
-    typeof input.typeId !== 'string' ||
-    input.typeId.length === 0 ||
-    input.typeId.length > guideIdentifierLimit
-  )
+  if (typeof input.typeId !== 'string' || input.typeId.length === 0 || input.typeId.length > guideIdentifierLimit)
     throw new Error('Invalid Type ID');
   return { typeId: input.typeId, locale: locale(input.locale) };
 }
@@ -113,7 +108,5 @@ export const readDefinitionGuideDirectory = createServerFn({ method: 'GET' })
 export const readDefinitionGuideType = createServerFn({ method: 'GET' })
   .validator(guideTypeRequest)
   .handler(async ({ data }): Promise<GuideTypeRead> =>
-    withGuideReader(data.locale, ({ client, headers }) =>
-      readGuideType(client, data.typeId, data.locale, headers),
-    ),
+    withGuideReader(data.locale, ({ client, headers }) => readGuideType(client, data.typeId, data.locale, headers)),
   );

@@ -1,7 +1,13 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import type { ReactNode } from 'react';
-import type { GuideAddress, GuidePageRead, GuideRead, GuideTransport, GuideTypeRead } from '../src/features/catalogue/definition-guide';
+import type {
+  GuideAddress,
+  GuidePageRead,
+  GuideRead,
+  GuideTransport,
+  GuideTypeRead,
+} from '../src/features/catalogue/definition-guide';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -103,123 +109,149 @@ async function surface() {
 }
 
 test('paged prefix browsing, exact lookup and selected Type ignore late results from an older query or selection', async () => {
-  await mounted(async ({ host, render, act, changeText, DefinitionGuide, definitionGuideFixture, m, definitionText }) => {
-    const fixture = definitionGuideFixture();
-    const [bookRead, recipeRead] = await Promise.all([
-      fixture.transport.exact('en', 'schema:Book'),
-      fixture.transport.exact('en', 'schema:Recipe'),
-    ]);
-    if (!bookRead.ok || !recipeRead.ok) throw new Error('Expected Type descriptors');
-    const summary = (typeId: string, label: string) => ({
-      typeId,
-      releaseDigest: bookRead.descriptor.releaseDigest,
-      label,
-      language: 'en',
-      parents: [],
-      description: null,
-      descriptionLanguage: null,
-    });
-    const first = Array.from({ length: 20 }, (_, index) => summary(`schema:Type${index}`, `Type ${index}`));
-    const initial: GuideRead = {
-      ok: true,
-      pin: 'active',
-      page: { types: first, next: 'cursor-2' },
-    };
-    let settleOldPrefix!: (page: GuidePageRead) => void;
-    let settleOldType!: (result: GuideTypeRead) => void;
-    const directoryCalls: { query: string; cursor?: string }[] = [];
-    const exactCalls: string[] = [];
-    let delayedBook = true;
-    let directoryUnavailable = true;
-    const transport: GuideTransport = {
-      read: async () => initial,
-      directory: async (_locale: string, query: string, cursor?: string) => {
-        directoryCalls.push({ query, ...(cursor ? { cursor } : {}) });
-        if (cursor === 'cursor-2') return { ok: true as const, page: { types: [summary('schema:Type20', 'Type 20')], next: null } };
-        if (query === 'Bo')
-          return new Promise<GuidePageRead>((resolve) => {
-            settleOldPrefix = resolve;
-          });
-        if (query === 'Rec')
-          return {
-            ok: true as const,
-            page: { types: [summary('schema:Book', 'Book result'), summary('schema:Recipe', 'Recipe result')], next: null },
-          };
-        if (query === 'Down') {
-          if (directoryUnavailable) {
-            directoryUnavailable = false;
-            return { ok: false as const, reason: 'unavailable' as const };
+  await mounted(
+    async ({ host, render, act, changeText, DefinitionGuide, definitionGuideFixture, m, definitionText }) => {
+      const fixture = definitionGuideFixture();
+      const [bookRead, recipeRead] = await Promise.all([
+        fixture.transport.exact('en', 'schema:Book'),
+        fixture.transport.exact('en', 'schema:Recipe'),
+      ]);
+      if (!bookRead.ok || !recipeRead.ok) throw new Error('Expected Type descriptors');
+      const summary = (typeId: string, label: string) => ({
+        typeId,
+        releaseDigest: bookRead.descriptor.releaseDigest,
+        label,
+        language: 'en',
+        parents: [],
+        description: null,
+        descriptionLanguage: null,
+      });
+      const first = Array.from({ length: 20 }, (_, index) => summary(`schema:Type${index}`, `Type ${index}`));
+      const initial: GuideRead = {
+        ok: true,
+        pin: 'active',
+        page: { types: first, next: 'cursor-2' },
+      };
+      let settleOldPrefix!: (page: GuidePageRead) => void;
+      let settleOldType!: (result: GuideTypeRead) => void;
+      const directoryCalls: { query: string; cursor?: string }[] = [];
+      const exactCalls: string[] = [];
+      let delayedBook = true;
+      let directoryUnavailable = true;
+      const transport: GuideTransport = {
+        read: async () => initial,
+        directory: async (_locale: string, query: string, cursor?: string) => {
+          directoryCalls.push({ query, ...(cursor ? { cursor } : {}) });
+          if (cursor === 'cursor-2')
+            return { ok: true as const, page: { types: [summary('schema:Type20', 'Type 20')], next: null } };
+          if (query === 'Bo')
+            return new Promise<GuidePageRead>((resolve) => {
+              settleOldPrefix = resolve;
+            });
+          if (query === 'Rec')
+            return {
+              ok: true as const,
+              page: {
+                types: [summary('schema:Book', 'Book result'), summary('schema:Recipe', 'Recipe result')],
+                next: null,
+              },
+            };
+          if (query === 'Down') {
+            if (directoryUnavailable) {
+              directoryUnavailable = false;
+              return { ok: false as const, reason: 'unavailable' as const };
+            }
+            return { ok: true as const, page: { types: [summary('schema:Down', 'Down result')], next: null } };
           }
-          return { ok: true as const, page: { types: [summary('schema:Down', 'Down result')], next: null } };
-        }
-        return { ok: true as const, page: { types: [], next: null } };
-      },
-      exact: async (_locale: string, typeId: string) => {
-        exactCalls.push(typeId);
-        if (typeId === 'schema:Book' && delayedBook) {
-          delayedBook = false;
-          return new Promise<GuideTypeRead>((resolve) => {
-            settleOldType = resolve;
-          });
-        }
-        if (typeId === 'schema:Book') return bookRead;
-        if (typeId === 'schema:Recipe') return recipeRead;
-        return { ok: false as const, reason: 'no-match' as const };
-      },
-    };
-    const component = <DefinitionGuide address={{}} locale="en" transport={transport} initial={initial} />;
-    await render(component);
-    expect(host.querySelectorAll('article ul li')).toHaveLength(20);
-    const prefix = host.querySelector<HTMLInputElement>('input')!;
-    const search = [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_search())!;
-    const next = [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_next_page())!;
-    await act(async () => next.click());
-    await render(component);
-    expect(directoryCalls).toContainEqual({ query: '', cursor: 'cursor-2' });
-    expect(host.querySelectorAll('article ul li')).toHaveLength(1);
-    expect(host.textContent).toContain('Type 20');
+          return { ok: true as const, page: { types: [], next: null } };
+        },
+        exact: async (_locale: string, typeId: string) => {
+          exactCalls.push(typeId);
+          if (typeId === 'schema:Book' && delayedBook) {
+            delayedBook = false;
+            return new Promise<GuideTypeRead>((resolve) => {
+              settleOldType = resolve;
+            });
+          }
+          if (typeId === 'schema:Book') return bookRead;
+          if (typeId === 'schema:Recipe') return recipeRead;
+          return { ok: false as const, reason: 'no-match' as const };
+        },
+      };
+      const component = <DefinitionGuide address={{}} locale="en" transport={transport} initial={initial} />;
+      await render(component);
+      expect(host.querySelectorAll('article ul li')).toHaveLength(20);
+      const prefix = host.querySelector<HTMLInputElement>('input')!;
+      const search = [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_search())!;
+      const next = [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_next_page())!;
+      await act(async () => next.click());
+      await render(component);
+      expect(directoryCalls).toContainEqual({ query: '', cursor: 'cursor-2' });
+      expect(host.querySelectorAll('article ul li')).toHaveLength(1);
+      expect(host.textContent).toContain('Type 20');
 
-    await changeText(prefix, 'Bo');
-    await act(async () => search.click());
-    await render(component);
-    await changeText(prefix, 'Rec');
-    await act(async () => search.click());
-    await render(component);
-    expect(host.textContent).toContain('Book result');
-    expect(host.textContent).toContain('Recipe result');
-    await act(async () => settleOldPrefix({ ok: true, page: { types: [summary('schema:Old', 'Old result')], next: null } }));
-    await render(component);
-    expect(host.textContent).not.toContain('Old result');
+      await changeText(prefix, 'Bo');
+      await act(async () => search.click());
+      await render(component);
+      await changeText(prefix, 'Rec');
+      await act(async () => search.click());
+      await render(component);
+      expect(host.textContent).toContain('Book result');
+      expect(host.textContent).toContain('Recipe result');
+      await act(async () =>
+        settleOldPrefix({ ok: true, page: { types: [summary('schema:Old', 'Old result')], next: null } }),
+      );
+      await render(component);
+      expect(host.textContent).not.toContain('Old result');
 
-    await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Book result'))!.click());
-    await render(component);
-    await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Recipe result'))!.click());
-    await render(component);
-    expect(host.querySelector('h2')!.textContent).toBe(definitionText(recipeRead.descriptor.definition.labels, 'en').text);
-    await act(async () => settleOldType(bookRead));
-    await render(component);
-    expect(host.querySelector('h2')!.textContent).toBe(definitionText(recipeRead.descriptor.definition.labels, 'en').text);
-    expect(exactCalls).toEqual(['schema:Book', 'schema:Recipe']);
+      await act(async () =>
+        [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Book result'))!.click(),
+      );
+      await render(component);
+      await act(async () =>
+        [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Recipe result'))!.click(),
+      );
+      await render(component);
+      expect(host.querySelector('h2')!.textContent).toBe(
+        definitionText(recipeRead.descriptor.definition.labels, 'en').text,
+      );
+      await act(async () => settleOldType(bookRead));
+      await render(component);
+      expect(host.querySelector('h2')!.textContent).toBe(
+        definitionText(recipeRead.descriptor.definition.labels, 'en').text,
+      );
+      expect(exactCalls).toEqual(['schema:Book', 'schema:Recipe']);
 
-    const exact = host.querySelectorAll<HTMLInputElement>('input')[1]!;
-    await changeText(exact, 'missing:type');
-    await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_lookup())!.click());
-    await render(component);
-    expect(host.textContent).toContain(m.guide_no_exact_match());
-    await changeText(exact, 'schema:Book');
-    await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_lookup())!.click());
-    await render(component);
-    expect(host.querySelector('h2')!.textContent).toBe(definitionText(bookRead.descriptor.definition.labels, 'en').text);
-    expect(directoryCalls.some((call) => call.query === 'Rec')).toBe(true);
+      const exact = host.querySelectorAll<HTMLInputElement>('input')[1]!;
+      await changeText(exact, 'missing:type');
+      await act(async () =>
+        [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_lookup())!.click(),
+      );
+      await render(component);
+      expect(host.textContent).toContain(m.guide_no_exact_match());
+      await changeText(exact, 'schema:Book');
+      await act(async () =>
+        [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_lookup())!.click(),
+      );
+      await render(component);
+      expect(host.querySelector('h2')!.textContent).toBe(
+        definitionText(bookRead.descriptor.definition.labels, 'en').text,
+      );
+      expect(directoryCalls.some((call) => call.query === 'Rec')).toBe(true);
 
-    await changeText(prefix, 'Down');
-    await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_search())!.click());
-    await render(component);
-    expect(host.textContent).toContain(m.guide_unavailable());
-    await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_retry())!.click());
-    await render(component);
-    expect(host.textContent).toContain('Down result');
-  });
+      await changeText(prefix, 'Down');
+      await act(async () =>
+        [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_search())!.click(),
+      );
+      await render(component);
+      expect(host.textContent).toContain(m.guide_unavailable());
+      await act(async () =>
+        [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_retry())!.click(),
+      );
+      await render(component);
+      expect(host.textContent).toContain('Down result');
+    },
+  );
 });
 
 test('pinned field rows retain native list order, exact links, missing meaning and language fallback in the shared frame', async () => {
@@ -498,7 +530,9 @@ test('active exact descriptor reads retry only on explicit eligible actions and 
           '/v1/definitionTypes/schema:Book',
           '/v1/definitionTypes/schema:Book',
         ]);
-        expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.guide_retry())).toBe(false);
+        expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.guide_retry())).toBe(
+          false,
+        );
       } else {
         expect(host.querySelector('[role="alert"]')!.textContent).toBe(m.guide_denied());
         expect(host.querySelector('input')).not.toBeNull();

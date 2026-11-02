@@ -99,9 +99,7 @@ export function definitionGuideFixture(scenario: GuideScenario = 'active') {
           description: description.text || null,
           descriptionLanguage: description.lang,
           definition,
-          properties: Object.fromEntries(
-            definition.properties.map((id) => [id, activeRelease.properties[id]]),
-          ),
+          properties: Object.fromEntries(definition.properties.map((id) => [id, activeRelease.properties[id]])),
         });
       }
       return Response.json({ code: 'not_found' }, { status: 404 });

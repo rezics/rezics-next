@@ -230,12 +230,7 @@ function LongGuideStory() {
     <PatternStory path="/catalogue/definitions" visitor="Signed Out">
       <AppShell>
         <div className="flex min-w-0 flex-col gap-12">
-          <DefinitionGuideContent
-            locale={locale}
-            address={{ type: 'schema:Book' }}
-            read={read}
-            retry={() => {}}
-          />
+          <DefinitionGuideContent locale={locale} address={{ type: 'schema:Book' }} read={read} retry={() => {}} />
           <DefinitionGuideContent
             locale={locale}
             address={{ type: 'schema:Book', property: 'schema:author' }}
