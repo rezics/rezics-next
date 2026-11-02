@@ -1,3 +1,4 @@
+import { registerLiveCopyRecovery } from './live-copy-work.ts';
 import { registerNativeErasureWork } from './erasure-native.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { WorkModule } from '../work/registry.ts';
@@ -409,7 +410,8 @@ export async function advanceErasureCompletion(deps: { pool: Pool; clock?: () =>
 /** The terminal workflow survives retries and completion is independent of retained DBOS history. */
 export const erasureWorkModule: WorkModule = {
   name: 'account_erasure',
-  register(context) {
+  async register(context) {
+    await registerLiveCopyRecovery(context);
     registerNativeErasureWork(context);
     const advance = DBOS.registerStep(
       async (accountId: string) => (await advanceErasureCompletion({ pool: context.pool }, accountId)).value,

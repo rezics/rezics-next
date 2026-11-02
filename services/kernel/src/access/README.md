@@ -4650,3 +4650,204 @@ missing child operand. `requireIdentityFxOriginalDispatch` refuses with
 `identity-fx-original-child-declaration-unavailable` before wrapper enqueue or effect execution. Receiving retains
 `pending-physical-owner`; consumer/workflow completion, SDK observations, registration and EOF never close it.
 Source/Library/Search physical custody and private SDK closure remain their independent owner boundaries.
+
+## Native live business copies
+
+`live-copy.ts` implements a distinct `live-copy` lifecycle-coordination purpose for the fixed Commerce creator-sale
+and Library subject-listing adapters. It does not reinterpret membership/operator reservations or History's erased
+artifact families, and grants no Access/Source permission. Source admission uses the existing native operational
+executor, current partition/domain, exact committed business basis and account `FOR UPDATE` serialization. All local
+role holds commit with the immutable source transition. Remote roles are admitted one home at a time after release;
+no positive receiver effect is eligible before every finite original role has a native hold. Roles come from actual
+buyer/creator/Collection facts, write basis and exact native outbox role locators, not copied event role JSON. The
+roster merges masks by account, refuses more than 64 accounts or 8 KiB, and never truncates. The coordination's
+related account is the held account itself; its transaction is the genuine original business transaction, while
+reservation and transition IDs are separate native identities.
+
+Each transition binds module, original home/domain/epoch, business object and revision/transaction/event position,
+native effect generation, receiver home/domain/epoch and exact immutable payload/role roster. Native full keys and
+a canonical digest are both checked. The digest survives minimization solely as a negative deduplication tombstone;
+a retired match refuses a fresh payload. It cannot join another operation or mint permission. Commerce generations
+advance only in actual exact-event admission's native work CAS. A resumed locator cannot choose another generation.
+
+The fixed receiver factories release all source checkouts before entering one current receiver home. `openLiveCopyGate`
+serializes insert, apply and cancellation through one primary key, including first cancellation. The projection,
+role-first inverse entries and `finishLiveCopyGate` terminal result commit together; a deferred native constraint
+rejects committed `applying`. A unique partial `(route,applying_transaction)` index admits at most one open gate per
+native receiving transaction. Commerce and Library projection triggers seek that exact current transaction and
+compare the immutable payload, refusing legacy/prepared positive writers and fresh zero-marker writers without it. Already terminal apply returns its original result without another payload, timestamp,
+inventory or receipt write. Superseded source revisions have an immutable no-write result. Cancel creates a terminal
+negative gate without copying personal payload; if apply won it returns that applied result, leaving real erasure
+obligations intact. Missing rows are never cancellation evidence.
+
+`consumeLiveCopy` independently reads the genuine committed receiver result, releases that checkout, then enters
+each role account home under its original account serialization. Full original transition, role, generation,
+receiver incarnation and terminal identity must match. Only that hold and coordination row are consumed atomically.
+An exact repeat reads the same result. A terminal role gate also bars a delayed first admission when cancellation
+preceded that role's hold. Account deletion/operator responsibility changes retain the existing native unresolved
+hold trigger; physical account deletion also refuses these holds. No timer, dispatch, absent row, cache or queue
+completion releases them. A pending hold yields the existing truthful lifecycle blocked outcome before native T.
+
+The ordinary `erasureWorkModule` registers `access.liveCopy.recover` on the existing maintenance queue/schedule.
+A maintained partial `(route,next_run,transition_id)` index supplies one exact pending effect per step. Up to 4096
+fixed native homes are visited with locator-only durable continuations. A reservation survives a dead enqueuer;
+a receiver-commit/source-consume crash reads its original terminal result without rewriting the copy or restoring
+an initiating principal. Retry dispatch time controls scheduling only. Transport ambiguity leaves the original
+transition/holds pending. Migration frontiers additionally revisit one existing native Library pair/version and one
+creator-sale row per step. Two independent primary-key seeks return at most two raw candidate keys and select one
+Library key; both positive rows and zero version markers require genuine role coverage. Native source proof and role enrollment precede their coverage checkpoint. Old Library
+observation cuts beyond the available original business-role basis remain an exact historical gap, as do missing
+financial source proofs; neither is an empty successful projection. A terminal buyer permits only exact negative
+legacy sale removal, never a new positive admission.
+Commerce work and receipt keys have separate raw1 native primary-key frontiers. Current work uses the authentic
+current order source; each retained historic receipt verifies its original outbox slot and native role inventory.
+Unknown or minimized original proof retains that exact frontier. A genuine terminal buyer permits only deletion
+of the exact old work or minimization of its receipt after the exact pending-transition check. These source-intent
+frontiers cover roles independently of creator-row coverage; observing no creator row cannot discharge them.
+
+### Live-copy inventory and minimization
+
+`live-copy-erasure.ts` adds two append-only discovery groups to existing native erasure: `live_copy_inventory` for
+source/hold/receiver payloads, and `live_copy_business_inventory` for exact Commerce work/receipt keys. Every retained
+personal role has an inverse keyed by account then native home and exact item. Discovery retains the existing
+4096-home, raw100 selected-key, 1 KiB locator and 64 KiB page limits (101st-row lookahead is charged and refused when
+oversized). It first verifies the actual terminal account root and releases it. In the selected inventory home,
+all four bounded historical role frontiers (Library pairs/versions, creator rows, source work and source receipts)
+must be covered before its permanent account seal commits. Unknown coverage
+retains an exact blocked native phase while other independent phases advance; it does not certify table exhaustion.
+Before returning that pending outcome, a raw100 known-key page (101st-row lookahead charged, the same locator/page
+byte refusal) can minimize already enrolled copies in that home using the genuine original native progress/root.
+Each selected key uses the same minimizer below. Inverse deletion is its durable progress; the discovery cursor,
+home frontier and closure status do not advance. Thus unknown historic coverage or financial participant readiness
+does not suppress known-copy minimization. Pending copies remain exact locators for ordinary recovery.
+The seal uses its own operational transaction. The checkpoint rechecks that same frontier; a changed frontier retries rather
+than crossing homes with a lock. Native inventory admission and permanent per-home account seals serialize late
+writers against discovery. A pending transition/hold keeps its exact locator; it cannot disappear via table EOF.
+
+The minimizer rereads the genuine original root/progress and releases it before one selected copy home. It refuses
+pending transition/hold/result state, removes or minimizes actual payload children first, then removes only that
+role inverse. Commerce receipts lose order/revision, work is deleted only without pending transitions, and sales
+are removed under exact creator/order/revision keys. Library pairs decrement the existing public aggregate once;
+a real public change emits the ordinary `subject.listed` command event. Later replacement revisions/stamps are not
+deleted by an older gate. Terminal gates keep only non-payload exact replay identity/result, and source transitions
+scrub payload, role roster and business keys. Hold account links are deleted only after exact terminal consume.
+Technical role gates, source digests and receiver tombstones retain the minimum negative replay identity; they
+contain no account ID, financial view or original business object keys after minimization. Inverse account
+associations themselves are removed. This is an explicit local disposition, not an opaque-key exemption or legal
+financial retention rule. Original core receipt/outbox/record/SDK custody, root maintenance and History all-copy
+closure remain independent and can keep the participant pending.
+
+### Native domains and restore admission
+
+The narrow Access migration admits domains once at actual `core.partition` node/epoch/committed position and creates
+bounded old-pair, old-sale, source-work and source-receipt frontiers. Existing pending intents and projections are retained as coverage debt;
+the migration invalidates earlier native-complete checkpoints for the two appended groups. Coverage is established
+only by their maintained native scan and authenticated source/receiver outcome, never by missing new inventory rows. Writers cannot insert, rotate
+or delete domains. Online partition activation rejects a missing/mismatched domain; online position rollback is
+rejected. Routine position advancement adds no domain SQL lookup. Native reads require admitted active domain,
+actual active placement and committed position at least the admitted cut. No missing domain is lazily seeded.
+
+A physical backup rollback can restore matching old metadata and evade an online comparison. Database ownership
+must therefore keep a restored home isolated/non-writable before service starts, reconcile original backup lineage
+and committed tails at BOTH endpoints (transitions, holds, results, role inventory and terminal accounts), or durably
+fence the affected old domains at every endpoint before any positive resume. Controlled owner/epoch movement needs
+the same isolated migration barrier and row transfer. Replacing the immutable domain guard is Database-owner
+migration work after that reconciliation, never application permission. The partition read API supplies placement,
+not a universal restore attestation. Unavailable/mismatched lineage stays a specific fenced branch; this module
+does not claim an implemented external backup reconciliation service. Fresh migration-admitted default operation
+uses the positive native body above.
+
+### New statement and row bounds
+
+These are design bounds on indexed keys/finite fanout, not PostgreSQL invisible-version work or native execution
+measurements. They do not allocate a second frame or raise existing Work/command/Source allowances. All dispatched
+statements, rejected lookahead, failed attempts, rollback and repeated verification remain charged. An invocation
+under Source must fit its SAME actual frame/planned remainder; unknown SQL is refused by that owner. Semantic's
+strict footprint is unchanged here and requires composition against these actual bodies before use.
+
+| New primitive                          | Direct statements and nested guard work per attempt                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Native protocol read                   | BEGIN, two 2,000ms local statement/lock settings, exact domain/partition point, at most one exact transition/gate/hold join, COMMIT; ROLLBACK on failure. Transition/gate return <=1 KiB key + 8 KiB payload + 8 KiB roster.                                                                                                                                                                                                                                                                                                                                                                                       |
+| Standalone recovery/root/frontier read | Existing `withReadTransaction`: BEGIN RR READ ONLY, one remaining-deadline statement timeout (<=5,000ms), bounded exact points/seeks stated below, COMMIT or ROLLBACK. Each dispatch also has the same remaining client query timeout. No unbounded attribution text is fetched.                                                                                                                                                                                                                                                                                                                                   |
+| Stage                                  | Domain point, insert transition, lock exact digest/full-key transition, one <=64-row source inverse insert; each inverse insert reaches one seal insert and one seal lock. Then local roles use the hold body below.                                                                                                                                                                                                                                                                                                                                                                                               |
+| One role hold                          | Eight direct statements: domain, insert/lock role gate, lock account, insert/read hold, insert coordination, insert inverse. Hold insert guard reaches role gate, account and domain/partition points; coordination guard reaches one hold; inverse guard reaches two seal statements. Total <=14 body statements, plus original operational executor fencing/deadline/commit costs.                                                                                                                                                                                                                               |
+| Admission observation                  | One native read per role, <=64 released homes; indexed exact hold/coordination/role-gate join, no account enumeration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Receiver apply                         | Domain point, gate insert/lock, owner projection body, <=64-row inverse insert (two seal statements per row), terminal CAS; deferred commit check is one exact gate point per insert/update trigger firing. Commerce adds account lock, prior revision point and original fenced DAO/CAS; Library retains original exact-pair listing SQL and command/event costs. Each attempted Commerce INSERT/UPDATE or Library pair/version INSERT/UPDATE adds one exact current-transaction gate point (at most one raw gate); ON CONFLICT can fire both row guards.                                                         |
+| Cancel                                 | Domain point, gate insert/lock and its deferred exact gate check if inserted. No payload/inverse enrollment for a fresh negative gate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| One role consume                       | Domain point, account lock, insert/lock role gate; if open, read hold, repeat domain point, update hold, delete exact coordination (one hold guard point), update role gate. <=10 body statements, plus original executor. Exact closed repeats stop after four. Complete uses domain, native source CAS and exact result read.                                                                                                                                                                                                                                                                                    |
+| Inventory page/minimize                | Existing raw100/101 lookahead and byte refusal. Unknown-coverage preparation adds one such indexed known-key seek after its root/frontier read and failed seal attempt; at most 100 selected keys use the identical minimizer without advancing discovery. Each selected key invokes a released root point and one native copy-home body: configuration + inverse point, <=4 child/terminal mutations/probes, inverse delete. Public Library changes may roll back the operational attempt and repeat in the original command envelope; races may repeat within its existing 5,000ms deadline. All attempts count. |
+
+Commerce source staging additionally uses the original four exact source/provenance reads, locked native order,
+one exact original identity-basis point, one <=65-row original event-role read and two business inverse inserts (each <=64 roles, two nested seal statements
+per role). Library staging uses partition/truth/Collection/write-basis/event points plus <=100 original event-role
+reads of <=65 rows each; overflow refuses, and the final distinct roster still caps at 64. Human/delegation roles
+come from that native inventory, never a UUID-shaped attribution reference. A missing original personal-role basis
+is a specific pending branch; it is not fabricated as a successful empty roster.
+
+Commerce's provenance statement reaches three indexed keys (native order, write basis and the exact trusted checkout
+receipt); its source financial statement reaches work/order/account keys. If an original identity write basis is
+absent, one additional receipt/order join (two indexed points) verifies the genuine buyer-owned checkout commit.
+That receipt supplies provenance, never an invented service principal, financial response truth or permission.
+Delegated original attribution requires actual native event-role inventory. No attribution text is fetched or cast.
+Existing listing truth examines at most the original 5,000 live Collection occurrences under its exact pair key. No engine/provider IO is
+added. Commerce's raw100 backfill locks/checks each selected buyer, inserts an intent, verifies the same four source
+reads and their bounded join fanout above, reads original event roles and enrolls the two exact inventories within a savepoint. Missing proof rolls
+back that item and checkpoints only the verified prefix with a future retry; fetched suffix and failed dispatch
+are still charged. Each new work/receipt insert additionally defers one exact native order/account join and account
+lock plus two exact mandatory-role inventory probes to commit (three body statements). Native identity-update
+guards add no SQL. Minimized receipts contain no order/revision and bypass only that personal-intent check.
+Each historical source-intent frontier attempt adds one locked frontier point, one raw1 work/receipt seek and
+one native order/account lock. Active work then uses the four authentic source reads; an active receipt instead
+uses one exact byte-capped outbox slot. Both use the same identity-basis point and optional receipt/order
+verification above, read <=65 original event-role rows, enroll two <=64-role inverses (two nested seal statements
+per role), and checkpoint once. Terminal buyer cleanup adds one exact pending-order
+transition probe and one negative mutation instead. A recovery step attempts at most one work and one receipt
+frontier in separate transactions, including a failed/rolled-back first attempt; all dispatched costs remain charged.
+The legacy creator frontier adds one exact frontier point and one raw1 creator-primary-key seek, followed by the
+same native delivery and an exact frontier CAS. Terminal legacy removal uses one released native order/account
+point and one receiver delete limited by the observed revision. Library historic coverage adds the two raw1 primary-key seeks above, one exact frontier point and one exact
+receiver pair/version probe; an uncovered old source cut refuses coverage. Discovery admission adds one exact four-frontier point,
+seal insert/update and the existing executor. Library negative work creates no new transition, payload or missing pair/version. Never-public zero absence uses
+a released partition/Collection/truth read and bounded receiver UPDATE/DELETE seeks with no inserted identity.
+An existing nonterminal version can only advance its same-source monotone exclusion cut to zero; its personal
+inverse remains enrolled for erasure. A genuine terminal curator permits negative-only cleanup of retained pair/version identities: two
+released source/account points, one account-domain observation, one exact pair delete plus conditional listing-aggregate update and one exact version delete, within the existing
+bounded command/operational retry body and limited by its observed source cut. It never inserts a missing
+identity. The exported released-observation compatibility entrypoint re-reads source truth and uses the same native
+factory, including equal-stamp conflict refusal. Each positive/negative step stays in one authoritative home,
+released before the next.
+
+### Cost: native live-copy admission and terminal consumption
+
+- Touches: the exact transition, role gate, hold, lifecycle coordination, receiver gate and inverse keys listed
+  above. Source and receiver domain reads join `core.partition` by its actual primary key; no global role scan
+  or account-name/JSON discovery is used. Each role's active account lock serializes hold admission and terminal
+  consumption with T. One native domain/hold observation per role is released before receiver acquisition.
+- Bound: <=64 roles; transition/gate byte caps and per-primitive direct/nested statement bounds are in the table
+  above. All eight axes are accounted separately: `candidateKeys` includes each attempted original event/role
+  and rejected lookahead; `identityMetadataRows` includes the actual account/provenance children;
+  `nativeRows` and `nativePoints` include guard joins and inverse seal children, not just returned projection rows;
+  `witnessKeys` includes the actual original role/Access witnesses; `statements` includes BEGIN/settings/COMMIT,
+  deferred triggers, savepoints and ROLLBACK; `bytes` includes capped full key/payload/roster and original selected
+  source bytes; `emptySeeks` includes absent holds/gates/frontiers and duplicate negative probes. No value is
+  guessed zero because an outer helper hides a child. Failed locks, refused rosters, replay, cancellation and
+  partial/rolled-back attempts consume their actual full terms. Parent totals remain explicitly unknown pending
+  complete child terms. Existing Accounts selected admission is local and fully spent; it funds no foreign child.
+  No Semantic Source or History allowance is borrowed or increased.
+- Growth check: `test/access/live-copy.test.ts` is focused source coverage for authentic positive/default paths,
+  terminal arbitration, crash/replay/deletion and incarnation fencing. Execution and native examined-work evidence
+  remain controller obligations. Existing History source/inventory/custody tests retain their original meaning.
+
+### Cost: copy discovery and minimization
+
+- Touches: the account-first `live_copy_inventory` and `live_business_inventory` indexes, exact native root,
+  discovery seal and four historical frontiers, followed by named source, hold, gate or owner payload mutations.
+  Unknown historic coverage permits bounded known-key minimization but neither a discovery checkpoint nor ACK.
+- Bound: raw100/101 lookahead, <=64-KiB selected locator page and <=1-KiB locator, <=4096 actual homes. Each
+  selected key's root and home body is charged independently, including seal refusal, negative/empty probes,
+  deferred guards and public Library operational rollback plus ordinary command retry. Each of the eight axes
+  above includes these selected keys and actual children; page exhaustion is not free physical completion.
+  Aggregate native/DBOS/History work remains unknown until actual complete terms compose; no second allowance
+  or erased-artifact receipt supplies live-copy admission, financial retention or all-copy acknowledgment.
+- Growth check: retain original Accounts erasure/History custody acceptance and the new live-copy deletion/recovery
+  cases. All native and physical execution is deferred; source-code bounds establish no measured closure.

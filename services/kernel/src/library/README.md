@@ -2633,3 +2633,86 @@ its own exact lookup and the original Core entry supplies its existing control d
 and accounting remain unchanged. The raw interval cannot establish a pinned Kind definition, Type/disclosure,
 Semantic repair receipt or any of the five audience closures. Those dependent dispatches retain the precise
 Semantic refusal described in [Access](../access/README.md).
+
+### Native foreign listing copies
+
+The default `library/work.ts` Collection/member handlers call `listing.ts:syncSubjectListing`. Its finite positive
+foreign-copy entrypoint is `listing-source-observer.ts:admitListingSource` followed by `recoverSubjectListing`;
+Commerce's sibling entrypoint is `creator-sales-work.ts:prepareCreatorSaleDelivery` / `recoverCreatorSale`.
+The exported `applySubjectListing` compatibility entrypoint re-reads actual native truth and enters that same
+factory; it cannot replay an observation as permission. Native projection triggers seek the unique open gate for
+the current PostgreSQL transaction and compare the exact immutable payload, so old prepared writers cannot bypass
+the migration barrier. Local personal copy create/update/restore remains in its own
+account home with `ownAccountPrepared`, current local fence and original copy/profile/session semantics.
+
+The Collection adapter reads current native multiplicity/public history, curator, actual Collection revision and
+transaction/write basis, and original native outbox role basis in one owning operational transaction. Collection
+IDs are never cast to account IDs. It stages the separate [Access live-copy transition](../access/README.md#native-live-business-copies)
+and local-role holds, then releases the Collection home before visiting any other role or Subject home. Exact
+original commit position/epoch orders the immutable positive effect; fresh same-home business generation/truth is
+rechecked after all admissions and released again. The Subject transaction acquires the exact native receiver gate
+and commits the original listing CAS/count/event body, every personal-role inverse and terminal result atomically.
+Equal/stale deliveries cannot repeat public count deltas. Ordering-only work stays operational; real public change
+retains `subject.listed`. Negative work creates no transition, gate payload, missing pair or missing version.
+An existing nonterminal version advances only its monotone same-source zero cut; a never-public zero with no
+retained receiver identity performs bounded negative seeks without an inserted identity. Genuine terminal curator cleanup deletes only already retained identities up to its native
+source cut, with the original public count/event envelope; it never creates a new zero marker after T. Original
+source-fence and equal-stamp conflict semantics remain intact.
+The gate supplies terminal exclusion, not Source visibility/currentness permission.
+
+Accounts' default recovery finds maintained native pending transitions, including a dead enqueuer and a crash after
+receiving commit. Apply and first cancel arbitrate the same key; only the authentic committed result releases holds.
+A cancelled effect cannot become positive on replay, including after account T. The migration's separate fixed-home
+old-pair/version frontier reenrolls one actual existing identity per step through two raw1 primary-key seeks through this same adapter, with unknown old evidence
+remaining incomplete. New writers enroll independently of the frontier. Restore activation, byte/role ceilings and
+exact statement/guard bounds are owned by Access's native contract; unsupported lineage remains fenced, while a
+fresh migration-admitted default path performs real positive copies. Source/native/physical/privacy/main acceptance
+has not been established by source presence or typing.
+
+### Identity retirement dependency retained
+
+This live-business protocol does not implement `identity-scope-effects.ts`. Its actual `readLibraryScopeEffectsPage`
+currently returns unavailable and `verifyLibraryScopeEffectsSeal` returns false: that is pending, never an empty
+successful page, replacement receiving receipt, effect seal or discharged Source. The original owner must first
+complete supported custody reconciliation and receive a separate admitted continuation. Its unchanged obligation
+is the actual native admitted original job/source/scope, exhaustive six-driver expected effects and a current seal;
+verification must use the SAME Source home with no foreign IO, with actual receiving/custody placement and every
+intermediate-page and final sealed-zero verification plus durable writer/replay/restore fences.
+
+The positive retirement chain still requires the installed original SDK/Work same-configured-pool writer locks
+through Source commit, original durable Source custody/terminal transfer and current source/writer/restore fences,
+actual receiving commit/copy guards, current Account reversal settlement and every repeated same-home native
+verification, exhaustive Library pages/current same-home seal, then History recording and independent final
+maintenance/root/all-copy closure. Existing adapters and receiving bodies cover their own branches only. Missing
+Library effects/seal, historical SDK recording/coverage, original Source terminal-transfer or external restore
+proof retain their own exact pending branch; neither this transition nor provisional helper types discharge them.
+
+The original Library owner still owes final exact page/verifier/nested-current-plan SQL, native receiving/fence
+placement and per-axis rows/points/statements/bytes/engine bounds, including failed dispatches, repeated native
+verification and its local ledger interaction. The held Semantic consumer may reconcile its exact footprint/final
+SAME frame only after that original producer and its required live Source continuation are actually integrated.
+That Source continuation is stopped with a paid interface/cost body awaiting Accounts review; it is not an
+installed dependency. Accounts' complete positive History preflight waits for those actual bodies. The interrupted
+Library producer and Members remain stopped under operations recovery, without a supported custody reconciliation
+release or product retry authority. Semantic's stopped Source producer and held consumer are unchanged.
+The old History aggregate funds only its documented body; directory envelope,
+all child caps and verification remain independent. No new aggregate total, funding or runtime pass follows from a
+local ledger, ACK or this live-copy result. Foreign SDK/History/Source retirement is not implemented here.
+
+### Cost: foreign listing copy and negative cleanup
+
+- Touches: one exact Collection/truth/write-basis/outbox-role source and released native role homes, then the
+  exact Subject pair/version and listing aggregate through the live-copy gate. Local personal copies retain
+  their existing local transaction. Negative cleanup seeks only the retained pair/version and aggregate;
+  terminal cleanup may delete those identities, while nonterminal cleanup updates an existing exclusion cut.
+- Bound: original live occurrences <=5,000; original events <=100 with 101 lookahead and <=65 original roles
+  per event before the final <=64-account distinct roster refusal. Key/payload/roster bounds are 1/8/8 KiB.
+  Source and Subject acquisition never overlap. All eight axes (`candidateKeys`, `identityMetadataRows`,
+  `nativeRows`, `nativePoints`, `witnessKeys`, `statements`, `bytes`, `emptySeeks`) include the actual source,
+  role holds, guard/inventory children and original command/event costs described in Access. Negative seeks,
+  equal/stale results, failed admission and operational rollback followed by a public-change command are charged,
+  including repeated/refused dispatch. No fully spent local Accounts admission or Semantic/History allowance
+  funds those children; the complete composed native total remains unknown until actual child terms arrive.
+- Growth check: `test/access/live-copy.test.ts` authors the actual foreign positive, immutable guard, repeated
+  negative/no-new-payload and deletion/recovery outcomes. Existing listing and History acceptance remains intact;
+  execution and measured physical/failure/repeat/rollback work are deferred to controller integration.

@@ -63,7 +63,7 @@ Creator minimums are an offer/benefit editor and owned-offer list, a bounded pri
 views. Existing HTTP mutations are `POST /v1/offers`, `PATCH /v1/offers/:offerId` (price), and
 `POST /v1/offers/:offerId:delist`, under `offer:create`/`offer:manage` and `gate:selling`.
 Owned-offer listing is `GET /v1/offers`, described below. The offer/benefit editor,
-benefit publication/versioning and the native creator-sales producer remain incomplete. Creator-home sales projections use stable buyer-order effects,
+benefit publication/versioning remain incomplete. The creator-sales source implementation is described below. Creator-home sales projections use stable buyer-order effects,
 show lag/unknowns and only necessary accounting/order locators, not buyer email, Library activity or use telemetry.
 They cannot authorize use or establish complete provider settlement. Existing statement APIs are
 `GET /v1/payoutStatements`, `GET /v1/payoutStatements/:statementId`,
@@ -162,6 +162,101 @@ all native privacy/physical/whole-journey/main obligations below remain in force
 
 The focused acceptance is `test/commerce/subject-offers.test.ts`. Source delivery and typing do not establish
 native sale, protected use, privacy, reviewed Subject slot, whole-suite acceptance or promoted-main completion.
+### Private creator sales accounting
+
+`GET /v1/commerceSales` publishes operation `commerce_sale.list`, the exact `commerce_sale:list` consent/action,
+`gate:selling`, nonanonymous `own-account` authority and `access.account` resource type. It evaluates the existing
+Access formula on the actual actor account before the native read and again after leaving its snapshot. Principal,
+current consent, assignment, account floor and denials remain with Accounts. There is no new grant, role, client or
+evaluator. Neither a buyer nor another creator can be selected, including a creator sharing the actor's route.
+
+The exact response is `{sales: CreatorSaleView[], next: string|null, projectionState: 'ready'|'preparing'}`.
+`CreatorSaleView` has only `orderId`, `offerId`, `title`, `targetSubjectId`, `currency`, `unitAmountMinor`, nullable
+captured `moneyUnit`, `taxBehavior: 'exclusive'|null`, `settlement: 'pending'|'paid'|'failed'|'unknown'`, and `createdAt`.
+These locators and captured terms describe historical purchase settlement. They reveal no buyer account/email,
+current Library, reading/use telemetry or entitlement fact. Historical `paid` does not establish cash availability,
+creator payability, net refund finality or a full refund. Statement adjustments keep their separate actual source;
+there is no public aggregate, FX conversion or currency summation.
+
+The private no-store page seeks `(route, creator_account_id, order_id)` in the one native creator-home derived
+`creator_sale` source. It defaults to 20, caps at 100 and 256 KiB, and signs a descending keyset bound to viewer,
+operation, view/order, requested limit and native creator-home epoch. Buyer-home order IDs may carry another route.
+Current native partition/session fences apply before and after the read. No buyer source fanout occurs on GET.
+
+Default Commerce composition, including an unconfigured Stripe worker, admits actual committed order-created and
+order-updated events through existing native effects. Admission verifies the exact log slot; native
+`creator_sale_receipt` and `creator_sale_work` locators remain pending after dispatch. A fresh exact admitted
+`purchase_order` read, native revision/transaction and its current actual write-basis/outbox provenance supply
+financial truth, never copied event JSON. The source snapshot is released before a creator write. The local DAO
+fences the native creator account, rejects immutable-term conflicts and only advances a lower source revision;
+duplicate/late events cannot roll it back. It creates no command receipt, financial event or second order authority.
+
+Initial/recovery work uses existing maintenance workflows/schedules and an epoch-bound native partition/key
+frontier. Each bootstrap step admits at most 100 raw order keys; a separate delivery step processes one exact pending locator. No GET scans
+buyer history, counts rows, uses offset, or drives bootstrap. Exhausting that frontier proves only local key coverage.
+Missing transaction or current-revision event provenance defers that exact work generation with a named gap and
+retry time, so other due locators can progress. A newer admitted generation cannot be delayed by that older proof
+failure. A fenced foreign live-copy home defers the same source work generation with
+`commerce-creator-sale-live-copy-home-unavailable`, its observed revision and retry time. Any partial holds and
+committed receiver result remain untouched for exact recovery; the gap is neither cancellation nor an ACK. A
+fenced source home still fails the step, since it cannot commit even that pending checkpoint. Infrastructure
+errors also fail rather than being treated as missing proof. The pending update is the same indexed work-key/
+generation CAS used for unavailable source provenance, with no additional scan or receiver write.
+The closed History receiving APIs continue to certify erased artifacts only. The default Commerce factory now
+installs the separate [native live-copy transition](../access/README.md#native-live-business-copies): the buyer-home
+source transaction stages the exact business/event/transaction/revision and native work generation, original role
+roster and receiver incarnation, together with local role holds. Other role homes are admitted individually after
+release. The factory observes all durable admissions and releases those checkouts. The creator transaction then
+locks its current account, arbitrates the exact receiver gate, and commits projection, inverse inventory and immutable terminal result together. Source connections
+are released before receiver work; receiver connections are released before exact hold consumption. Cancellation
+and first apply use the same native key. A late event cannot reopen a terminal effect or rewrite an equal revision.
+A native projection trigger additionally binds every insert/update, including old prepared DAO calls, to the exact
+current-transaction open gate and immutable financial payload. A newly admitted event advances the native work generation by CAS; it cannot manufacture financial revision truth.
+
+`access.liveCopy.recover`, installed by the default Accounts erasure WorkModule, recovers maintained pending keys,
+including a crash before enqueue or after receiving commit. Its inputs contain only native partition/frontier
+coordinates. The existing raw100 buyer frontier remains; missing original provenance or temporarily fenced buyers
+leave its exact native frontier pending with a retry time. A scheduler yield is not covered state. GET never drives
+this work. `projectionState` remains `preparing` while historic or complete cross-home coverage is unknown, including
+on an empty page. Verified rows may be shown. Dispatch, a timer, a complete local key frontier and an immutable
+receiver result each have their own meaning; none supplies a complete accounting coverage certificate.
+
+Bounded creator-home recovery also revisits one historic sale row per step through the same authentic source and
+receiver adapters. Missing original proof retains coverage debt; a terminal buyer allows only exact negative legacy
+removal. Accounts discovery cannot seal an unknown historical role frontier.
+Source work and original event receipts have their own raw1 primary-key role-coverage frontiers, independent of
+the creator-row frontier. A retained receipt requires its exact original native event and role basis, even after
+the order advanced to a later revision. Missing original proof keeps that precise frontier pending. New source
+intents require native buyer/creator inverse inventory and a locked active buyer at deferred commit; native update
+guards preserve their original keys. After actual buyer T, coverage can only delete exact old work or minimize its
+receipt, and only after its exact pending-transition check. No new personal intent is admitted by this cleanup.
+
+The producer enrolls source transition/roster, each role hold, actual creator row and receiver payload under every
+retained native personal role. Exact source work and event receipts have separate role-first inverse locators.
+Accounts' existing bounded discovery seals each visited home before paging and minimizes these copies independently
+of financial participant readiness. If historic role coverage prevents that seal, a bounded known-key page still
+minimizes enrolled copies under the original native root, without advancing discovery or claiming closure. The
+ordinary sealed page retains the same minimizer:
+terminal holds first, payload before inverse removal, and source work only after
+its pending transitions resolve. Receipt minimization retains only the original event slot/identity for duplicate
+refusal. Permanent source digest and receiver/role terminal tombstones bar replay after personal payload removal;
+the full native effect keys are compared before any positive effect, including a digest match. A retired digest
+collision refuses rather than joining effects. Existing bounded `purgeSales` remains in Commerce erasure too.
+
+Original core outbox, command receipt, write-basis, durable work and record custody retain their independent owner
+obligations. The financial participant and shared event owner still report their genuine pending qualifications;
+this live-copy result is neither a History receipt nor an all-copy/financial ACK, retention exception or payability
+rule. No Actor, JWT or allow assertion is serialized into this work. Native/physical/privacy/protected-use,
+whole-suite and promoted-main proof remain deferred; source delivery and typing establish none of them.
+
+The internal checkout record, refresh and apply writers intentionally omit actor write-basis attribution. Their
+actual `core.receipt` commit is the source adapter's selected provenance for that exact native order transaction,
+buyer-owned receipt, epoch and outbox position. Two narrow unique partial indexes seek those three command kinds
+by transaction or position. No receipt response supplies financial truth: the current native order and its exact
+committed revision event remain mandatory. Ordinary actor writes use their original native write basis and
+principal plus original event-role inventory; delegated attribution with missing native role inventory is pending,
+never interpreted as an Account id. Internal receipt ownership does not create a worker principal or Access grant.
+These provenance reads leave financial retention and the shared receipt/outbox minimizer qualifications intact.
 
 ### Private creator offer history
 
@@ -195,49 +290,35 @@ Checkout link. Root navigation adds the immutable `commerce.creator-offers` pers
 order 15 for `offer.list`.
 
 Caller seam: `loadCreatorOffers` / `readCreatorOffers` in Web's `checkout/creator-offers.ts`.
-The generated client in this base has no `offers.get`; the authorized exact typed unavailable adapter is used,
-without hand-editing generated declarations or inventing a public-read substitute. Controller API/client generation
-must replace that adapter with the actual generated binding. Stories `pages-commerce-creator-offers--history`,
+The current adapter uses generated `offers.get` with private no-store/manual-redirect transport.
+Controller API/client generation remains authoritative for new mounted operations; generated declarations are
+not edited by hand. Stories `pages-commerce-creator-offers--history`,
 `--second-page`, `--empty`, `--denied`, `--unavailable`, `--error`, `--stale`, `--preparing`, `--long-title`,
 `--mobile390` and `--desktop1280` describe contract-shaped source states, not recorded native evidence.
 390/1280 browser visual review, native acceptance and promoted-main proof remain controller work under minimal
-verification. The native private-sales producer, target use and native sale/use proof remain open.
+verification. The private-sales source producer is described below; target use and native sale/use proof remain open.
 
-### Private creator sales history
+### Served creator sales
 
-The selected read interface is `GET /v1/commerceSales`, operation `commerce_sale.list`, exact action/scope
-`commerce_sale:list`, with own-account authority. Default page size is 20, maximum 100, with native signed cursor
-pagination. No seller/account selector is accepted. Current native creator, acting account, independent principal,
-assignment, scope, denial, terminal and source-currentness checks remain server responsibilities through existing
-Access. The website registers and requests this exact scope from the mounted catalogue and obtains new consent;
-first-party status, old offer scopes and an existing refresh token do not supply it.
+The served `/creator/sales` page calls the generated `kernelClient().commerceSales.get` through
+`checkout/creator-sales.ts`, using the existing signed-in BFF, `prepareSession` and `viewerCredential`.
+Each call uses `cache: no-store` and `redirect: manual`; both the route and response prohibit private retention
+and indexing. The server prepares a session once, binds the normalized cursor and subject to the page, checks
+the existing selling exposure and uses the same credential for both native reads. The existing current-origin
+observer retires reads synchronously on viewer, admission or locale/cursor replacement, including ABA before
+React commits. Healthy same-viewer credential renewal can retain an accepted read but never an in-flight result.
 
-The closed response is `{sales,next,projectionState:'ready'|'preparing'}`. Each sale contains only
-`{orderId,offerId,title,targetSubjectId,currency,unitAmountMinor,moneyUnit,taxBehavior,settlement,createdAt}`.
-Settlement is the source-backed historical `paid|pending|failed|unknown` purchase fact, not a current entitlement,
-creator payment, cash/payability or refund/dispute finality claim. The native producer supplies only necessary
-accounting locators and captured terms, never buyer identities, Library data or use telemetry. It owns bounded
-creator-home projections and their lifecycle; clients add no count, offset, history scan or per-row fanout.
+The existing list/card family renders captured titles, separate recorded currency amounts, explicit historic
+unknowns, signed continuation, retry/restart and genuine denial/error/stale/unavailable outcomes. Preparing can
+show verified rows but never claims completed zero sales. Rows add neither guessed offer links nor buyer-order
+links. `/creator/offers` and `/creator/statements` retain their separate management and royalty destinations.
+The mounted catalogue and existing website registration/request helpers supply exact `commerce_sale:list`;
+old consent and refresh tokens never widen themselves. Navigation uses `gate:selling` for `commerce_sale.list`.
 
-The served `/creator/sales` page uses the existing signed-in BFF, private no-store responses, zero route retention
-and fresh request credentials. It renders one 20-row page with signed continuation, retry/restart, loading,
-denied/unavailable, genuine empty and incomplete preparation states in all eight locales. A preparing response
-can show known rows but never claims completed zero sales. No totals span pages or currencies. Exact recorded-unit
-amounts remain separate from royalties and current pricing; absent historic units/tax facts remain unknown.
-Captured titles survive delisting or missing target mapping. This DTO has no current offer-availability fact, so
-rows have no guessed offer or buyer-order links. Existing `/creator/offers` and `/creator/statements` remain the
-management and royalty destinations, with no new payout control. Immutable root NavigationContributions add sales
-and statements through shared operation visibility; the pending sales operation stays closed unless explicitly
-advertised.
-
-`checkout/creator-sales.ts` owns the typed caller and sanitized boundary. This checkout has neither the selected
-native module nor a generated `commerceSales` binding; its actual BFF uses the explicit unavailable adapter and
-never fabricates ready/empty results. Controller delivery must replace that port with the real generated GET,
-no-store/manual-redirect transport, confirm native operation exposure, and include `commerce_sale:list` in the
-real website registration and matching `WEBSITE_SCOPES`. Auth correctly rejects unmounted scopes, so source-only
-delivery does not insert an unsupported scope or widen old consent. Constructed fixtures and focused test source
-describe the interface only. Native, privacy, protected-use, whole-journey, visual and promoted-main proof remain
-pending.
+Endpoint DTO and generated client are authoritative. The controller regenerates OpenAPI and the client after
+mounting the endpoint; the unused standalone `creator-sales.d.ts` is not an alternative contract. Source delivery,
+constructed Web responses and permitted workspace typing establish no native, privacy, browser, physical or
+promoted-main acceptance. Original acceptance remains required after integration.
 
 ### Adopted native Content edition and delivery state
 
@@ -767,8 +848,8 @@ unknown classifications/FX/tax evidence cannot justify payment. A full customer 
 or earnings because tax/fees may remain. Do not fabricate tax credits, zero fees or full reversal evidence.
 Further commercial/shared adoption is required before runtime bodies for provider allocation versus reserves,
 release conditions, same-currency negative carry and positive evidence-complete payable rules; and richer external
-attestation with actual date/method/amount/currency/reference. These are the provider
-report's recommendations, not hidden adopted economics. Reserve duration, clawback, thresholds, partial external
+attestation with actual date/method/amount/currency/reference. The provider report recommends these additions;
+they remain unadopted economics. Reserve duration, clawback, thresholds, partial external
 payment, correction states and FX netting remain unchosen. Existing mark-paid records an authorized external reference
 on a statement; it sends no Stripe transfer and does not prove payability or external finality.
 
@@ -854,7 +935,7 @@ Disclosure/rights stay with existing Access and target owners. [Shared deletion]
 [Accounts erasure](../access/README.md#erasure-consumers) govern T, restricted retention and fixed-participant completion.
 Financial Commerce is separate from Library's erasure participant. It must acknowledge actual minimized cleanup
 or no applicable data, never mere dispatch; minimal completion outside workflow history prevents late resurrection.
-No account restore, hold engine or new lifecycle service is authorized.
+The native live-copy purpose extends existing lifecycle coordination; it adds no account restore, workflow engine or lifecycle service.
 
 At T conceal private orders/statements/entitlements and fence late producers. Minimize offer party data, buyer/target
 relations and Checkout payloads, entitlement relations, immutable transaction/royalty source relations and statement
@@ -880,6 +961,47 @@ aggregates. Charge account/order/receipt/outbox probes, partition counter conten
 persistence separately. No constant-row/cross-machine claim follows from key predicates or timeouts. Existing locator
 and combined-refresh growth evidence contains unresolved native/DBOS examined-row failures; queue/backlog/partition
 fanout and full erasure bounds remain unproved. Do not raise allowances or subtract workflow work to disguise them.
+
+## Cost
+
+### Creator sales page
+
+- Touches: `creator-sales.sql` seeks `commerce.creator_sale` by `(route,creator_account_id,order_id)` in one
+  creator home, reads at most `limit+1` (101) rows, and trims before the 256-KiB serialized sales cap. The read
+  also dispatches two existing Access evaluations and two `core.partition` points, RR BEGIN/COMMIT or ROLLBACK,
+  and deadline controls. Signed cursor verification performs no database enumeration. It reads no buyer home.
+- Bound: default 20/max 100, one signed descending keyset, one home, fixed native points and no refill. The eight
+  accounting axes are the actual composed `candidateKeys`, `identityMetadataRows`, `nativeRows`, `nativePoints`,
+  `witnessKeys`, `statements`, `bytes`, and `emptySeeks`: page candidates include the rejected lookahead; native
+  rows/points include the partition and Access children; identity/witness work belongs to those exact Access
+  children, not an assumed zero. Every dispatched control, error, repeat and rollback is charged. Failed empty
+  seeks still count. Complete allowance totals remain unknown until those existing children supply their actual
+  complete terms; Accounts' selected local admission is fully spent and cannot fund these children.
+- Growth check: `test/commerce/creator-sales.test.ts` authors the real native order/default-work/current-viewer,
+  signed old-epoch, same-route isolation and genuine unavailable outcomes. Execution and measured physical work
+  are deferred to controller acceptance; key predicates and typing alone are no growth proof.
+
+### Native order admission, copy and recovery
+
+- Touches: exact `purchase_order`, `creator_sale_work`, native `core.outbox`, original `editorial.write_basis`
+  and event-role inventory, with the narrow buyer-owned `core.receipt` provenance alternative for the three
+  internal Checkout commands. These feed exact full-key `access.live_copy_transition`, source/role holds,
+  immutable receiver gate, `commerce.creator_sale` and account-first inverse inventory. All four historical
+  coverage frontiers and durable pending scheduling retain their own work. The live-copy owner lists direct
+  and nested SQL in [Access](../access/README.md#new-statement-and-row-bounds).
+- Bound: one order per effect, <=64 distinct roles, <=1-KiB effect key, <=8-KiB payload and <=8-KiB roster; each
+  foreign-home transaction is released before another home is acquired. Source event-role lookahead is 65;
+  raw100 buyer backfill and raw1 historical work/receipt/sale frontiers never turn missing proof into coverage.
+  On all eight axes above, role fanout, original provenance, nested SQL guards, inverse enrollment and DBOS
+  persistence must be added to the same actual invoking frame. Candidate/identity/witness costs are the actual
+  original native role lookups, not borrowed Semantic Source or erased-artifact History allowance. Point/row
+  bounds are not examined-version bounds. Failed/duplicate admission, savepoint rollback, cancelled apply,
+  consume repeat, operational rollback followed by a public command and retries all charge their entire dispatch.
+  Complete end-to-end totals are explicitly unknown; no new funded parent allowance is claimed.
+- Growth check: `test/access/live-copy.test.ts` authors positive default Commerce/foreign Library, exact repeat,
+  crash-after-receive, cancel-before-apply, delayed result, payload conflict, native activation fence and deletion
+  outcomes. Original History custody/source/inventory/recovery acceptance remains independent and unchanged.
+  Native physical and composed cost acceptance is deferred, including failure/repeat/rollback measurements.
 
 ## Delivery and acceptance
 

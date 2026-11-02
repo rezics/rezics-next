@@ -2,6 +2,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { WorkerAuthorization } from '../work/authorization.ts';
 import { registerSubjectOfferWork } from './subject-offer-work.ts';
+import { registerCreatorSales } from './creator-sales-work.ts';
 import { registerCommerceErasure } from './erasure-participant.ts';
 import { routeOf } from '../route/route.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
@@ -51,10 +52,11 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
   const checkout = { ...deps.checkout };
   return {
     name: 'commerce',
-    register(context) {
+    async register(context) {
       const { pool, queues, client, addEffects, env, clock: workClock } = context;
       registerCommerceErasure(context);
       registerSubjectOfferWork(context);
+      await registerCreatorSales(context);
       const provider = { ...(deps.provider ?? readCommerceProviderConfig(env)) };
       const locator: StripeCheckoutLocatorPort = {
         readCheckoutLocator(sessionId) {

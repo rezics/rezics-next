@@ -147,3 +147,24 @@ provider bank payout setup, creator agreements/payment method and lawful financi
 and unproved. Do not wait for private setup to prove deterministic signed-event, entitlement and lifecycle fixtures.
 Commercial/shared adoption of tax/unit, reserve/carry/payability, richer attestation and authenticated recovery
 remains explicit in the owner contract; unknown economics cannot be silently implemented.
+
+
+### Creator Sales source delivery
+
+The native order-event producer, exact source-role holds, immutable live-copy receiver, bounded WorkModule recovery,
+creator-home page and existing served Sales adapter are implemented in source. Foreign Library listing uses the
+same native protocol with released Collection/Subject homes, original curator roles and monotone version cuts;
+negative work creates no new personal identity. Accounts discovers/minimizes source control and receiver copies
+without treating History receipts as live-copy permission or financial/all-copy acknowledgment.
+
+The page uses current own-account Access, exact `commerce_sale:list`, `gate:selling`, native signed epoch-bound
+keysets and generated typed transport, with synchronous viewer/admission/address retirement. Complete historical
+cross-home coverage is unknown, so verified rows remain `preparing`; local empty/frontier exhaustion is no complete
+empty certificate. Unsupported backup/restore lineage remains fenced by actual native activation/domain guards;
+no offline reconciliation or external physical closure is claimed. Full financial retention/shared custody remain
+separate pending producer obligations.
+
+Controller generation of OpenAPI/client and original native/physical/privacy/browser/main acceptance remain
+required. Focused new tests are source-only and UNRUN at this delivery boundary. Workspace typing is a source
+check, not acceptance or whole-Goal completion. The current acceptance command remains
+`bun run --cwd services/kernel check test/commerce/creator-sales.test.ts` for controller integration.

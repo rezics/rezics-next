@@ -402,8 +402,8 @@ Configure these variables in the environment of `bun run dev`:
 - `API_RESOURCE`: the API's RFC 8707 resource identifier and access token audience, exactly `https://api.rezics.com`
   in production, with no trailing slash. Tests use `https://api.rezics.test`.
 - `WEBSITE_SCOPES`: exactly the space-separated scopes registered for the website client, including `openid offline_access`, never a wildcard.
-  Private creator sales need the exact `commerce_sale:list` scope once that native action is mounted. Register it
-  and request renewed consent before switching the sales caller; an old consent or refresh token never widens.
+  Private creator sales use the mounted exact `commerce_sale:list` scope. Register it
+  and request renewed consent for this journey; an old consent or refresh token never widens.
   Media routes need `media:create`, `media:read_reservation`, `media:read`, `media:complete` and `media:erase`;
   posting routes need `thread:create` and `post:create`; reactions need `reaction:set`; presentation curation needs `presentation:publish` and
   `presentation:activate`; checkout start needs `order:create` and order pages and purchase history need `order:read`; the explicit known-order status check separately needs `order:reconcile`; the settings page needs
@@ -469,11 +469,10 @@ Registration and `WEBSITE_SCOPES` must change together
 when more protected site features are mounted. Auth's [website contract](../../services/auth/README.md#website-client)
 defines registration and key rotation.
 Rating writes also require the documented website client scope `rating:vote`.
-The shared registration helper retains only real mounted scopes, including `commerce_sale:list` when delivered.
+The shared registration helper retains only real mounted scopes, including `commerce_sale:list`.
 The existing native Web bootstrap uses that helper and deploys its exact joined list as `WEBSITE_SCOPES`;
-sign-in uses `websiteRequestedScopes` on that configured list. Auth refuses unknown scopes, so the current
-unavailable sales adapter cannot authorize a fabricated action. Controller integration must mount the producer,
-register/request the new scope and obtain renewed consent before enabling the real caller.
+sign-in uses `websiteRequestedScopes` on that configured list. Auth refuses unknown scopes. Registration, configured scope requests and renewed consent must agree with the
+mounted catalogue; refreshing an old credential never adds this scope.
 
 Generate the website's own P-256 key from `apps/web`, keeping intermediate files under `.temp/`:
 
@@ -3203,3 +3202,31 @@ immutable profile POST and activation POST. There are no new descriptors, grants
 After a definite released-definition refusal, the Recipe editor requires an explicit current-definition read before retry;
 compatible draft values remain intact, while changed or removed fields stay visible and read-only until removed, and
 uncertain commands retain their original payload and key.
+
+
+## Private creator Sales
+
+`/creator/sales` uses the existing signed-in route and list/card family. Its current read prepares one server
+session, observes selling exposure and calls the real generated `kernelClient().commerceSales.get` with that
+credential, a 20-row limit and the signed cursor. Every call sets `cache: no-store` and `redirect: manual`;
+responses are private/no-store/noindex/nofollow and route retention is zero. Native authorization remains final.
+The shared current-origin observer retires viewer, admission and locale/cursor replacements synchronously,
+including ABA before React commits. A healthy credential renewal may retain accepted same-viewer data while
+retiring its in-flight read. No caller-selected creator, token or CSRF value enters the returned page envelope.
+
+The endpoint DTO owns the sanitized boundary: captured amounts and historic unknowns, separate currencies,
+preparing versus complete empty, and genuine denied/error/stale/unavailable states. There are no buyer details,
+Library telemetry, guessed current-offer links, mixed-currency totals or payout/entitlement claims. The mounted
+operation uses the existing selling gate and exact action/catalogue/website scope helpers without widening consent.
+OpenAPI/client generation remains controller-owned; standalone ambient declarations are not another contract.
+
+Cost: current sales read
+
+- Touches: one session preparation, one existing exposure GET and one generated sales GET, at most 20 displayed
+  rows, signed continuation only; no per-row HTTP, source/backfill dispatch, buyer reads or prefetch.
+- Bound: per-call restrictive transport, source DTO validation and zero personal query retention; repeats and
+  failures charge their actual calls. The native owner's eight-axis composed SQL/Work total remains explicitly
+  unknown until actual complete terms arrive; existing local Accounts admission supplies no child funding.
+- Growth check: `creator-sales-native.test.ts` and `creator-sales-current-viewer.test.tsx` author default transport,
+  current preparation, healthy rotation, delayed viewer/admission/address ABA and foreign-empty rejection.
+  These source cases are UNRUN; native/browser/visual/full acceptance remains controller-owned after integration.

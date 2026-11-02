@@ -23,8 +23,8 @@ Private/unlisted/deleted Collection graphs are removed child-first. Collection l
 the owning Collection header still supplies the exact curator relation.
 
 This local work does **not** establish a complete no-data proof or permit a participant ACK. Bulk effects may be
-on target homes without an account-home locator/fence; remote subject listing destinations lack late-first-apply
-disposition; shared receipts/outbox/write-basis/work payloads have no complete Library producer handoff; and
+on target homes without an account-home locator/fence; historical subject listing destinations still require bounded source/role coverage beyond the newly admitted
+live-copy domain; shared receipts/outbox/write-basis/work payloads have no complete Library producer handoff; and
 deleted Collections may leave history after their curator header is gone. Logs, caches, exports, replicas and
 backups also lack a complete custody inventory. The workflow records `pending` with exact blockers and does not
 call `acknowledgeErasure`. Empty local probes never establish those missing roles or custody.
@@ -54,7 +54,7 @@ Inventory checked against `db/library/schema.sql`, its migrations, the module RE
 | `published_log`; `published-logs.ts`                                                                                                                                        | Account page index; erase every snapshot, including published reading logs. No public log retention.                                                                                                                                                                                                               |
 | `collection`, `collection_member`, `collection_listing_history`; `collections.ts`, `collection-store.ts`                                                                    | `collection_curator_listing` finds existing headers, including deleted ones. Exact child pages remove history before retention or parent removal. Orphan history with no curator header remains an unknown role.                                                                                                   |
 | `canonical_source_state`, `canonical_source_fact`; `canonical-source-store.ts`                                                                                              | Collection-parent keys; all generations and private source terms are deleted before parent disposition. Active-public output survives only if completed and is frozen in member output; no fresh query runs at T.                                                                                                  |
-| `subject_collection`, `subject_collection_version`, `subject_listing`, `subject_collection_source_fence`; `listing.ts`, `listing-apply.sql`, `listing-apply.sql`, `work.ts` | Remote subject pairs/versions have exact Collection reverse indexes. Listing totals and partition fences require per-item source/target reconciliation and late-first-apply guards before parent removal. No account-home copy locator or terminal locator fence exists.                                           |
+| `subject_collection`, `subject_collection_version`, `subject_listing`, `subject_collection_source_fence`; `listing.ts`, `listing-apply.sql`, `work.ts` | Remote subject pairs/versions have exact Collection reverse indexes. Listing totals and partition fences require per-item source/target reconciliation and late-first-apply guards before parent removal. The new live-copy domain enrolls per-role exact receiver/source/hold locators and permanent terminal gates; old unknown coverage remains pending.                                           |
 | `builtin_collection_reference`, `builtin_state_reference_source`; `builtin-reference-store.ts`                                                                              | Owner tuple/PK probes exist. Source children precede reference parents; no full terminal purge or repair fence.                                                                                                                                                                                                    |
 | `shelf_count`, `shelf_type_reservation`, `shelf_type_node`, `shelf_type_root`, `shelf_type_value`; shelf/type DAOs                                                          | All have owner-prefix keys. Erase zero-use and orphan data; nodes/roots precede values.                                                                                                                                                                                                                            |
 | `type_preparation_header`, `type_preparation_progress`, `type_preparation_slot`; preparation DAOs                                                                           | Owner-prefix keys; fence publication, then progress/slots before immutable headers and type values. All staging generations need disposition.                                                                                                                                                                      |
@@ -115,3 +115,23 @@ private/unlisted Collection reads check the current curator tombstone before dis
 - Touches: existing account-fact page command authorization, receipt, at most 100 source keys/deletes, fact-head triggers and bounded events; each home is released before another command. No remote cleanup is claimed.
 - Bound: 100 raw UUID keys (copy keys also carry one timestamp), at most 100 fixed deletion events plus one page event; cursor/page result under 512 bytes. Source result under 12KiB; row payload deletion additionally pays existing entry/copy/follow schema limits. DBOS checkpoints store only this bounded result. Workflow arguments and results obey the kernel's [4,096-byte Bounded job steps ceiling](../../README.md#bounded-job-steps). The native participant test checks the UTF-8 JSON size of the complete workflow result against that ceiling; output contains only fixed store/blocker names, bounded counters and one raw-key continuation.
 - Growth check: `test/library/erasure-owned-graph-growth.test.ts` measures fixed child-page work across three owned-history scales and unrelated owners/partitions. `test/library/erasure-owned-graph.test.ts` covers default-worker local cleanup, retained public output, bounded continuation and replay. Shared-custody, late-locator lock-order and final ACK crash cases remain open until their actual producer APIs land.
+
+
+## Native live-copy slice
+
+The default Accounts erasure WorkModule now installs `access.liveCopy.recover`, while Library's ordinary work uses
+its real source-hold/receiver-gate adapter. Accounts discovers `live_copy_inventory` and
+`live_copy_business_inventory` under every actual retained personal role with the existing fixed 4096-home,
+raw100/1 KiB locator/64 KiB page limits. Each home seal is committed after released genuine root observation and
+before discovery, and the native checkpoint compares the same frontier. Minimized payload precedes inverse removal;
+unresolved transition/hold/result keeps its exact locator. Receiver replay tombstones survive projection removal.
+A real public pair removal decrements its aggregate once and emits the existing `subject.listed` event in the
+ordinary command envelope. An older gate cannot remove a newer replacement. This body also handles a projection
+that never reached ready and remains independent of Commerce financial retention and participant readiness.
+
+The original closed History receiving families and their proofs are unchanged. These live-copy dispositions do
+not certify old unknown copies, original outbox/record/SDK custody, six-driver identity effect coverage, public
+retention authority, final maintenance/root or all-copy closure. The participant remains pending for its actual
+remaining gaps above. The [Library identity retirement dependency](README.md#identity-retirement-dependency-retained)
+retains the real unavailable page/false verifier and exhaustive same-home seal obligations; it is not replaced by
+this protocol. Normal source implementation and typing are separate from deferred native/physical/privacy proof.

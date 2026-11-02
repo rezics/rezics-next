@@ -14,6 +14,7 @@ import initialize from './erasure-progress.sql';
 import read from './erasure-read.sql';
 import page from './erasure-page.sql';
 import purge from './erasure-purge.sql';
+import purgeSales from './erasure-creator-sales.sql';
 import checkpoint from './erasure-checkpoint.sql';
 
 export const COMMERCE_ERASURE_WORKFLOW = 'commerce.eraseAccount';
@@ -51,6 +52,14 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
       await initialize.run(tx, { ...key, had_data: found.hasData });
       const progress = await read.run(tx, key);
       if (!progress) throw new Error('Commerce erasure progress unavailable');
+      // Projection cleanup also runs for already-pending financial accounts. It cannot ACK
+      // foreign/source receipt or shared work custody, which remains an exact obligation.
+      const removedSales = await purgeSales.run(tx, key);
+      if (removedSales.length)
+        return {
+          value: 'more' as const,
+          events: [{ type: 'com.rezics.access.account-updated.v1', subject: accountId, data: { accountId } }],
+        };
       // Terminal progress never reopens; the coordinator acknowledgement is also immutable.
       if (progress.phase === 'pending') return noEffect('pending' as const);
       const keys = await page.run(tx, { ...key, after: progress.cursor });

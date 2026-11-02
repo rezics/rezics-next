@@ -1,4 +1,5 @@
 import { registerSubjectOfferWork } from './subject-offer-work.ts';
+import { registerCreatorSales } from './creator-sales-work.ts';
 import { registerCommerceErasure } from './erasure-participant.ts';
 import { createStripePort } from './stripe.ts';
 import { readCommerceWorkerConfig, readCommerceProviderConfig } from './config.ts';
@@ -11,6 +12,7 @@ export const commerceWorkModule: WorkModule = {
     if (config === null) {
       registerCommerceErasure(context);
       registerSubjectOfferWork(context);
+      await registerCreatorSales(context);
       return;
     }
     const { createCommerceWork } = await import('./work.ts');

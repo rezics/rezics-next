@@ -321,3 +321,28 @@ metadata remain in existing terminal retention until real control handoff.
   effect, exhaustive zero, late first apply, changed fences/rekey and failure/repeat/rollback accounting.
   Source delivery defers integrated native, database, browser and whole-feature/growth acceptance; typing
   alone establishes none of those outcomes.
+
+## Native foreign listing delivery
+
+The [Library owner contract](../services/kernel/src/library/README.md#native-foreign-listing-copies) now implements
+the normal Collection-home to Subject-home positive copy using a separate native live-copy transition. Original
+curator/writer/outbox roles acquire durable account lifecycle holds; after all source clients are released, the
+Subject home atomically applies its existing monotone listing/count body, role inventory and immutable receiver
+result. Exact cancel/apply arbitration and result-bound consume prevent a delayed first apply after account deletion.
+Native projection guards also refuse old prepared writers without an exact current-transaction gate. Negative work creates no new personal payload or missing pair/version; retained versions only advance their
+monotone zero cut, and terminal cleanup deletes retained identities without creating a marker.
+The existing Work queue recovers incomplete transitions and bounded historical pair/version coverage. Local personal copies
+retain their own-account preparation/fence and original profile/session behavior.
+
+Erasure discovers actual copied row/transition/work locators under every retained personal role and minimizes them
+in bounded native homes. Shared History/root obligations and retained public-output qualifications stay separate;
+local table exhaustion is not an ACK. Restore requires admitted placement plus genuine Database-owner isolated
+lineage/committed-tail reconciliation at both endpoints. No universal restore service or native/physical/main proof
+is claimed.
+
+The original identity scope-effects page and verifier remain unfinished and pending. The owner must still deliver
+actual admitted job/source/scope, exhaustive six-driver expected effects/current seal, same-Source-home native
+verification without foreign IO, receiving/custody/fence placement, every intermediate-page and final sealed-zero
+verification, and exact nested SQL/cost bounds. The live-copy gate supplies none of that missing effects seal. The
+existing SDK/Source/Account/Library/History retirement chain and the held original producer/consumer dependencies
+remain as qualified in the [owner dependency contract](../services/kernel/src/library/README.md#identity-retirement-dependency-retained).

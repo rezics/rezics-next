@@ -22,6 +22,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { checkout } from './checkout.ts';
 import { reconcileOrder } from './order-reconcile.ts';
 import { listCreatorOffers } from './creator-offers.ts';
+import { listCreatorSales } from './creator-sales.ts';
 import { createCommerceCommands, OfferRevisionConflictError, OfferUnavailableError } from './commands.ts';
 import { StripeUnavailableError, type Entitlement, type Offer, type Order, type StripePort } from './model.ts';
 import * as store from './store.ts';
@@ -160,6 +161,20 @@ const orderSchema = t.Object(
     checkoutUrl: nullableId,
     checkoutExpiresAt: nullableId,
     entitlementId: nullableId,
+    createdAt: t.String(),
+  },
+  object,
+);
+const creatorSaleSchema = t.Object(
+  {
+    orderId: id,
+    offerId: id,
+    title: t.String({ maxLength: 512 }),
+    targetSubjectId: id,
+    currency: t.String(),
+    unitAmountMinor: t.Integer(),
+    ...capturedMoneySchemas,
+    settlement: t.Union([t.Literal('pending'), t.Literal('paid'), t.Literal('failed'), t.Literal('unknown')]),
     createdAt: t.String(),
   },
   object,
@@ -460,6 +475,51 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         taxBehavior: moneyPolicy.taxBehavior,
         configuredSaleCurrencies: moneyPolicy.configuredSaleCurrencies.map((rule) => ({ ...rule })),
       }),
+    )
+    .get(
+      '/v1/commerceSales',
+      {
+        query: t.Object(
+          {
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+            limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
+          },
+          object,
+        ),
+        response: {
+          200: t.Object(
+            {
+              sales: t.Array(creatorSaleSchema, { maxItems: 100 }),
+              next: nullableId,
+              projectionState: t.Union([t.Literal('ready'), t.Literal('preparing')]),
+            },
+            object,
+          ),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          409: problemSchema('stale_cursor'),
+          503: unavailable,
+        },
+        detail: {
+          ...detail('commerce_sale.list', 'commerce_sale:list', 'gate:selling'),
+          'x-authority-anchor': 'own-account',
+          'x-authority-resource-types': ['access.account'],
+        },
+      },
+      async ({ actor, authorize, query, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        set.headers['x-robots-tag'] = 'noindex, nofollow';
+        const account = requireAccount(actor);
+        const check = await authorize({ route: routeOf(account.accountId)!, id: account.accountId });
+        return admission.run('normal', job, () =>
+          listCreatorSales(pool, tokens, actor, check, {
+            ...query,
+            deadline: job.deadline,
+            seen: session.components,
+          }),
+        );
+      },
     )
     .get(
       '/v1/offers',

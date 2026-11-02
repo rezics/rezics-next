@@ -79,6 +79,8 @@ export const ADDITIONAL_NATIVE_ERASURE_GROUPS = [
   ['agent_identity_technical_role', 'account_id'],
   ['agent_identity_technical_role', 'role_account_id'],
   ['agent_identity_reversal_settlement', 'account_id'],
+  ['live_copy_inventory', 'account_id'],
+  ['live_copy_business_inventory', 'account_id'],
 ] as const;
 
 export type NativeStoreBlocker =

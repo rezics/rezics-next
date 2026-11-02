@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { CreatorSalesPage } from '../../../checkout/creator-sales-page';
-import { creatorSalesSearch, readCreatorSales } from '../../../checkout/creator-sales';
+import { CreatorSalesCurrent } from '../../../checkout/creator-sales-current';
+import { creatorSalesSearch, readCreatorSalesCurrent } from '../../../checkout/creator-sales';
 import { requireSignedIn } from '../../../session/guard';
 import { pageHead } from '../../../shell/head';
 import { pageHeadContext } from '../../../shell/head-context';
@@ -11,7 +12,7 @@ export const Route = createFileRoute('/creator/sales/')({
   beforeLoad: requireSignedIn,
   validateSearch: creatorSalesSearch,
   loaderDeps: ({ search }) => creatorSalesSearch(search),
-  loader: ({ deps }) => readCreatorSales({ data: deps }),
+  loader: ({ deps }) => readCreatorSalesCurrent({ data: deps }),
   staleTime: 0,
   gcTime: 0,
   head: ({ match }) =>
@@ -19,6 +20,6 @@ export const Route = createFileRoute('/creator/sales/')({
   pendingComponent: () => <CreatorSalesPage page={{ kind: 'loading' }} locale={getLocale()} />,
   component: function CreatorSalesRoute() {
     const search = creatorSalesSearch(Route.useSearch());
-    return <CreatorSalesPage page={Route.useLoaderData()} locale={getLocale()} {...search} />;
+    return <CreatorSalesCurrent initial={Route.useLoaderData()} locale={getLocale()} {...search} />;
   },
 });

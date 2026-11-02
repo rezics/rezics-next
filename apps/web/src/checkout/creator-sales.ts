@@ -3,8 +3,10 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import * as v from 'valibot';
+import { kernelClient } from '../kernel/client';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { recordedMoneyUnit, recordedTaxBehavior, type StripeMoneyUnit } from './money-schema';
 import { UUID } from './price';
 
@@ -30,6 +32,12 @@ export type CreatorSalesPage = {
 export type CreatorSalesData =
   | ({ kind: 'ready' } & CreatorSalesPage)
   | { kind: 'denied' | 'unavailable' | 'error' | 'stale' | 'loading' };
+export type CreatorSalesCurrentRead = {
+  sessionSubject: string | null;
+  requested: { cursor: string | null };
+  selling: boolean;
+  page: CreatorSalesData;
+};
 
 /** GET /v1/commerceSales; commerce_sale.list, exact commerce_sale:list, own-account. */
 export interface CreatorSalesCaller {
@@ -39,11 +47,17 @@ export interface CreatorSalesCaller {
   }): Promise<{ status: number; data: unknown }>;
 }
 
-/**
- * The selected native module and generated commerceSales caller are absent in this checkout.
- * Replace this port with the real generated GET, using cache:no-store and redirect:manual.
- * No client cast, public offer/order fallback, projection builder or positive empty response.
- */
+const nativeCreatorSalesCaller: CreatorSalesCaller = {
+  async get(input) {
+    const result = await kernelClient().commerceSales.get({
+      ...input,
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    });
+    return { status: result.status, data: result.error ? null : result.data };
+  },
+};
+
+/** Explicit unavailable source for injected callers without a native binding. */
 export const unavailableCreatorSalesCaller: CreatorSalesCaller = {
   async get() {
     return { status: 503, data: null };
@@ -119,6 +133,18 @@ export async function loadCreatorSales(
     const stale = await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { kind: 'denied' };
+    return await loadPreparedCreatorSales(caller, authorization, query);
+  } catch (error) {
+    return { kind: isPlatformClosedError(error) ? 'denied' : 'unavailable' };
+  }
+}
+
+async function loadPreparedCreatorSales(
+  caller: CreatorSalesCaller,
+  authorization: string,
+  query: CreatorSalesSearch,
+): Promise<CreatorSalesData> {
+  try {
     const result = await caller.get({
       query: { limit: CREATOR_SALES_PAGE_SIZE, ...query },
       headers: { authorization },
@@ -130,8 +156,8 @@ export async function loadCreatorSales(
     const page = parseCreatorSalesPage(result.data);
     if (!page || (result.status === 202 && page.projectionState !== 'preparing')) return { kind: 'unavailable' };
     return { kind: 'ready', ...page };
-  } catch {
-    return { kind: 'unavailable' };
+  } catch (error) {
+    return { kind: isPlatformClosedError(error) ? 'denied' : 'unavailable' };
   }
 }
 
@@ -140,5 +166,39 @@ export const readCreatorSales = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<CreatorSalesData> => {
     setResponseHeader('cache-control', 'private, no-store');
     setResponseHeader('x-robots-tag', 'noindex, nofollow');
-    return loadCreatorSales(unavailableCreatorSalesCaller, getRequest(), env as Partial<SessionEnv>, data);
+    return loadCreatorSales(nativeCreatorSalesCaller, getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+/** Viewer/address evidence and both reads belong to this one fresh session preparation. */
+export const readCreatorSalesCurrent = createServerFn({ method: 'GET' })
+  .validator(input)
+  .handler(async ({ data }): Promise<CreatorSalesCurrentRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    setResponseHeader('x-robots-tag', 'noindex, nofollow');
+    const result: CreatorSalesCurrentRead = {
+      sessionSubject: null,
+      requested: { cursor: data.cursor ?? null },
+      selling: false,
+      page: { kind: 'denied' },
+    };
+    try {
+      const request = new Request(getRequest());
+      if (await prepareSession(request, env as Partial<SessionEnv>)) return result;
+      const authorization = viewerCredential(request);
+      const subject = request.headers.has('authorization') ? null : sessionSubject(request);
+      if (!authorization || !subject) return result;
+      result.sessionSubject = subject;
+      const client = kernelClient();
+      const exposure = await client.platform.exposure.get({
+        headers: { authorization },
+        fetch: { cache: 'no-store', redirect: 'manual' },
+      });
+      if (exposure.error || !exposure.data) return { ...result, page: { kind: 'unavailable' } };
+      if (!exposure.data.admitted.includes('selling')) return result;
+      result.selling = true;
+      result.page = await loadPreparedCreatorSales(nativeCreatorSalesCaller, authorization, data);
+      return result;
+    } catch (error) {
+      return { ...result, page: { kind: isPlatformClosedError(error) ? 'denied' : 'unavailable' } };
+    }
   });

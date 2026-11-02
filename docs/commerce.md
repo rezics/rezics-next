@@ -36,3 +36,24 @@ the older native recordings or establish native financial evidence. Named termin
 The single focused `apps/web/tests/buyer-receipt.test.ts` exercises the actual generated client, default BFF and
 renderer using bounded HTTP inputs, including repricing isolation and failed/canceled versus paid/revoked messaging.
 Native persistence, provider, browser, visual and original acceptance execution remain integration obligations.
+
+
+## Private creator accounting delivery
+
+`GET /v1/commerceSales` retains the exact own-account `commerce_sale:list` consent/action, selling gate,
+`{sales,next,projectionState}` DTO and native signed keyset. Captured title, terms, nullable money unit and historical
+settlement are accounting facts; buyer identity, Library/use data, current entitlement, cash/payability and net-refund
+finality are absent. Current Access authorization is checked before and after the private native read; no browser
+selector, privilege, grant or evaluator is added.
+
+The [Commerce owner contract](../services/kernel/src/commerce/README.md#private-creator-sales-accounting) now uses
+actual committed order effects, a fresh exact buyer-home source and the separate native live-copy hold/gate body.
+Default worker composition performs the positive creator-home write and recovers its exact immutable result before
+consuming source-role holds. Unknown historic coverage stays `preparing`, even on an empty page.
+Historical source work and receipt roles are covered through independent bounded native frontiers before Accounts
+can seal a home; original event-proof gaps remain pending. Financial source,
+statement adjustments, unchosen economics and shared History custody remain separate. This implementation does not
+establish native, privacy, physical, whole-journey or main acceptance.
+Internal checkout updates use their genuine buyer-owned native commit receipt when actor write-basis attribution
+is intentionally absent. Current native order/revision-event proof remains mandatory; receipt ownership creates
+neither a worker principal nor financial truth from its response.

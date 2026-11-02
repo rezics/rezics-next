@@ -1,3 +1,5 @@
+import { minimizeLiveCopyInventory } from './live-copy-erasure.ts';
+import { LiveCopyPendingError } from './live-copy.ts';
 import {
   continuationRoleBlocker,
   continuationEffectBlockers,
@@ -161,6 +163,20 @@ export async function advanceNativeErasure(
       page: expected.page,
     });
   } catch (error) {
+    if (error instanceof LiveCopyPendingError) {
+      return transaction(pool,async tx=>{
+        const locked=(await tx.query<Progress>('SELECT route,account_id,progress_id,phase,page,retry_phase FROM access.erasure_native_progress WHERE progress_id=$1 FOR UPDATE',[progressId])).rows[0];
+        allow(locked);
+        if (locked.phase!==anchor.phase || locked.page!==anchor.page) return 'advanced';
+        await tx.query(`INSERT INTO access.erasure_native_blocked(progress_id,phase,page,reason,consumer_index)
+          VALUES($1,$2,$3,'live-copy-original-role-coverage',0)
+          ON CONFLICT(progress_id,phase) DO UPDATE SET page=excluded.page,reason=excluded.reason`,[progressId,expected.phase,expected.page]);
+        await tx.query(`UPDATE access.erasure_native_progress SET phase=$2,page=0,retry_phase=$3,
+          pending='native-inventory',native_complete_at=NULL WHERE progress_id=$1`,
+          [progressId,expected.retry?locked.phase:expected.phase+1,expected.retry?expected.phase:locked.retry_phase]);
+        return expected.retry?'pending-native-consumer':'advanced';
+      });
+    }
     // A concurrent consumer can commit (and remove the copied page) between our
     // initial read and discovery. Only its changed checkpoint makes this stale.
     if (!(error instanceof LifecycleDeniedError)) throw error;
@@ -296,6 +312,13 @@ export async function advanceNativeErasure(
     }
   }
   const effectBlocked = await continuationEffectBlockers(pool, store, page);
+  const copyBlocked = new Set<string>();
+  if (store === 'live_copy_inventory' || store === 'live_copy_business_inventory') {
+    for (const key of page.keys) {
+      if (!(await minimizeLiveCopyInventory(pool, store, key, expected.account_id, progressId)))
+        copyBlocked.add(JSON.stringify(key));
+    }
+  }
   return transaction(pool, async (tx) => {
     const locked = await tx.query<Progress>(
       `SELECT route,account_id,progress_id,phase,page,retry_phase FROM access.erasure_native_progress
@@ -369,6 +392,7 @@ export async function advanceNativeErasure(
     // whole raw page replayable, and cannot leave a partly purged checkpoint.
     for (const key of page.keys) {
       const blocker =
+        (copyBlocked.has(JSON.stringify(key)) ? 'native-terminal-consumer' : null) ??
         foreignBlocked.get(JSON.stringify(key)) ??
         effectBlocked.get(JSON.stringify(key)) ??
         (store === 'erasure_continuation_role' ? await continuationRoleBlocker(tx, key) : null) ??

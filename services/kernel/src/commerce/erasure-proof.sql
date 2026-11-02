@@ -13,5 +13,6 @@ SELECT
   OR EXISTS (SELECT 1 FROM commerce.entitlement WHERE route = i.route AND account_id = i.account_id)
   OR EXISTS (SELECT 1 FROM commerce.royalty_line WHERE route = i.route AND creator_account_id = i.account_id)
   OR EXISTS (SELECT 1 FROM commerce.payout_statement WHERE route = i.route AND creator_account_id = i.account_id)
+  OR EXISTS (SELECT 1 FROM commerce.creator_sale WHERE route = i.route AND creator_account_id = i.account_id)
   AS "hasData"
 FROM input i;

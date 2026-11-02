@@ -1,3 +1,4 @@
+import { prepareLiveCopyDiscovery } from './live-copy-erasure.ts';
 import type { Pool } from 'pg';
 import { defineQuery } from 'reylo';
 import { withConnection } from '../database/pool.ts';
@@ -24,6 +25,8 @@ type Routing = 'owner' | 'zero' | 'partitions';
  * No identifier or SQL predicate comes from a caller.
  */
 export const ERASURE_DISCOVERY_ROLES: readonly (readonly [string, string, Routing, string, string])[] = [
+  ['live_copy_inventory', 'account_id', 'partitions', 'route:int,account_id:uuid,item:text,source_domain:uuid,transition_id:uuid', ''],
+  ['live_copy_business_inventory', 'account_id', 'partitions', 'route:int,account_id:uuid,kind:text,locator:jsonb', ''],
   ['account', 'account_id', 'owner', 'route:int,account_id:uuid', ''],
   ['account', 'operator_account_id', 'partitions', 'route:int,account_id:uuid', ''],
   ['account', 'controller_id', 'partitions', 'route:int,account_id:uuid', ''],
@@ -280,6 +283,8 @@ export async function discoverErasurePage(
     return { name: name!, type: type! };
   });
   const seekColumns = columns.filter(({ name }) => name !== role);
+  const sealedPartition = store === 'live_copy_inventory' || store === 'live_copy_business_inventory'
+    ? await prepareLiveCopyDiscovery(pool,store,accountId) : null;
   return withConnection(pool, async (tx) => {
     await tx.query('BEGIN');
     try {
@@ -303,6 +308,7 @@ export async function discoverErasurePage(
       }
       if (page !== progress.last_page + 1 || progress.state === 'discovered') throw new LifecycleDeniedError();
       const partition = progress.partition_no;
+      if (sealedPartition !== null && sealedPartition !== partition) throw new Error('Live copy discovery frontier changed; retry original page');
       const low = routing === 'owner' ? route : partition * 16;
       const high = routing === 'owner' || routing === 'zero' ? low : low + 15;
       const values: unknown[] = [accountId, low, high];

@@ -46,8 +46,7 @@ export const operationGroups = {
   'library_shelf.types': 'personal_library',
   'offer.get': 'purchases',
   'offer.list': 'selling',
-  // Exact operation admission until the selected commerceSales producer is mounted.
-  'commerce_sale.list': 'commerce_sale.list',
+  'commerce_sale.list': 'selling',
   'payout_statement.list': 'selling',
   'order.create': 'purchases',
   'order.get': 'purchases',

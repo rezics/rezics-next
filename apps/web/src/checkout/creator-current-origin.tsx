@@ -5,7 +5,7 @@ import { viewerExposureLifetime, viewerExposureQuery } from '../kernel/viewer-ex
 import { sessionQuery } from '../session/query';
 import type { CreatorOfferGuard } from './creator-offers';
 
-type Operation = 'offer.list' | 'payout_statement.list';
+type Operation = 'offer.list' | 'payout_statement.list' | 'commerce_sale.list';
 export const creatorPreviewGuard: CreatorOfferGuard = { isCurrent: () => false, csrfToken: () => null };
 type Observation = {
   state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
