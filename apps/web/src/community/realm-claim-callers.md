@@ -17,6 +17,20 @@ keep the original Realm, request, source episode and idempotency key, including 
 pending queue. Retirement hides the caller without determining whether a remote command was applied. A new visit cannot
 inherit that intent.
 
+Claim controls join the existing page departure owner, including sibling authoring work. Sending and uncertain
+requests or approvals protect the original immutable intent; a reviewed, unsent approval confirmation is protected
+until deliberately cancelled. Stay keeps the same caller and confirmation without native I/O or a new key. Confirmed
+Leave retires every registered claim caller synchronously before navigation continues, so late results cannot expose
+a receipt, refresh the old queue or restore recovery. Leaving only retires local work: a command may already have
+applied and is neither cancelled nor rolled back. Session/cache-generation, CSRF and Realm replacement immediately
+invalidate protection through the private lifetime and never transfer recovery.
+
+Decision: a validated receipt releases command protection immediately, including while the existing post-approval
+queue refresh is pending; reading, preparing, untouched management and settled receipts add no protection.
+An isolated claim boundary delegates session retirement to its private caller lifetime; an existing authoring page
+owner remains shared. Registration and rendering add no native reads or sends, storage, timers or background work.
+Claim registrations reuse the shared per-work Leave callback; other page owners retain their own departure copy.
+
 The review route binds its loader page to the Realm and the signed-in subject, session query update count and update
 time. A client loader also carries its QueryClient source identity. The subject and cache markers transfer authentic
 server-rendered loader data through initial hydration without copying the CSRF token into loader data. Once hydrated,

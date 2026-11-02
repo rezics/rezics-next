@@ -30,6 +30,7 @@ type Draft = {
   unresolved: () => boolean;
   discard: () => void;
   leave?: () => void;
+  kind?: 'realm-claim' | undefined;
 };
 type Decision = { kind: 'navigation'; resolve: (stay: boolean) => void } | { kind: 'discard'; draftId: number };
 
@@ -66,6 +67,8 @@ export class AuthoringDepartureState {
     return this.leaving;
   }
   needsDecision = () => this.active && [...this.drafts.values()].some((draft) => draft.needsDecision());
+  hasRealmClaim = () =>
+    this.active && [...this.drafts.values()].some((draft) => draft.kind === 'realm-claim' && draft.needsDecision());
   unresolved = () => {
     const id = this.decision?.kind === 'discard' ? this.decision.draftId : undefined;
     return (
@@ -150,7 +153,8 @@ export class AuthoringDepartureState {
     const decision = this.decision;
     if (!decision) return;
     if (decision.kind === 'navigation') {
-      for (const draft of this.drafts.values()) if (draft.needsDecision()) draft.leave?.();
+      for (const draft of [...this.drafts.values()])
+        if (draft.kind === 'realm-claim' || draft.needsDecision()) draft.leave?.();
       this.onNavigationLeave();
       this.settleNavigation(false);
     } else {
@@ -181,11 +185,14 @@ export function AuthoringDepartureProvider({
   navigationContext = pathnameContext,
   onNavigationLeave,
   navigationMessages,
+  sessionBound = true,
 }: {
   children: ReactNode;
   navigationContext?: NavigationContext;
   onNavigationLeave?: () => void;
   navigationMessages?: NavigationMessages;
+  /** Claim panels already bind replacement sessions through their private caller lifetime. */
+  sessionBound?: boolean;
 }) {
   const leave = useRef(onNavigationLeave);
   leave.current = onNavigationLeave;
@@ -201,11 +208,11 @@ export function AuthoringDepartureProvider({
   const session = useSyncExternalStore(sessionSubscribe, sessionSnapshot, sessionSnapshot);
   const owner = useRef<{ subject: string | null; csrfToken: string | null } | null>(null);
   const retired = useRef(false);
-  if (session?.state === 'signed-in') {
+  if (sessionBound && session?.state === 'signed-in') {
     if (!owner.current) owner.current = { subject: session.subject ?? null, csrfToken: session.csrfToken };
     else if (owner.current.subject !== (session.subject ?? null) || owner.current.csrfToken !== session.csrfToken)
       retired.current = true;
-  } else if (owner.current) retired.current = true;
+  } else if (sessionBound && owner.current) retired.current = true;
 
   useLayoutEffect(() => {
     if (retired.current) navigation.deactivate();
@@ -301,6 +308,7 @@ function DepartureDialog({
   const stayButton = useRef<HTMLButtonElement>(null);
   const discard = navigation.prompt?.kind === 'discard';
   const recovery = navigation.unresolved();
+  const claim = !discard && navigation.hasRealmClaim();
   return (
     <AlertDialogContent
       className="min-w-0 max-w-lg grid-cols-[minmax(0,1fr)] gap-6 p-5 text-start sm:max-w-xl sm:p-6"
@@ -315,16 +323,24 @@ function DepartureDialog({
     >
       <AlertDialogHeader className="min-w-0 grid-cols-[minmax(0,1fr)] place-items-stretch gap-3 text-start sm:group-data-[size=default]/alert-dialog-content:place-items-stretch sm:group-data-[size=default]/alert-dialog-content:text-start">
         <AlertDialogTitle className="min-w-0 text-xl leading-snug [overflow-wrap:anywhere]">
-          {discard ? m.thread_authoring_discard_title() : (messages?.title ?? m.thread_authoring_leave_title())}
+          {discard
+            ? m.thread_authoring_discard_title()
+            : claim
+              ? m.realm_claim_leave_title()
+              : (messages?.title ?? m.thread_authoring_leave_title())}
         </AlertDialogTitle>
         <AlertDialogDescription className="min-w-0 text-base leading-relaxed text-pretty [overflow-wrap:anywhere]">
-          {discard
+          {claim
             ? recovery
-              ? m.thread_authoring_discard_pending()
-              : m.thread_authoring_discard_unsaved()
-            : recovery
-              ? (messages?.pending ?? m.thread_authoring_leave_pending())
-              : (messages?.unsaved ?? m.thread_authoring_leave_unsaved())}
+              ? m.realm_claim_leave_pending()
+              : m.realm_claim_leave_confirmation()
+            : discard
+              ? recovery
+                ? m.thread_authoring_discard_pending()
+                : m.thread_authoring_discard_unsaved()
+              : recovery
+                ? (messages?.pending ?? m.thread_authoring_leave_pending())
+                : (messages?.unsaved ?? m.thread_authoring_leave_unsaved())}
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-stretch gap-3 sm:grid-cols-2">
@@ -347,34 +363,55 @@ function DepartureDialog({
 }
 
 /** An isolated composer gets the same native guard and decision UI; route siblings share their page owner. */
-export function AuthoringDepartureBoundary({ children }: { children: ReactNode }) {
-  return useContext(DepartureContext) ? children : <AuthoringDepartureProvider>{children}</AuthoringDepartureProvider>;
+export function AuthoringDepartureBoundary({
+  children,
+  sessionBound = true,
+}: {
+  children: ReactNode;
+  sessionBound?: boolean;
+}) {
+  return useContext(DepartureContext) ? (
+    children
+  ) : (
+    <AuthoringDepartureProvider sessionBound={sessionBound}>{children}</AuthoringDepartureProvider>
+  );
 }
 
+type Protection = boolean | (() => boolean);
+const protectedNow = (value: Protection) => (typeof value === 'function' ? value() : value);
+
 export function useAuthoringDeparture(
-  needsDecision: boolean,
-  unresolved: boolean,
+  needsDecision: Protection,
+  unresolved: Protection,
   signature: string,
   onDiscard?: () => void,
   onLeave?: () => void,
+  kind?: 'realm-claim',
 ) {
   const navigation = useContext(DepartureContext);
-  const latest = useRef({ needsDecision, unresolved, signature, onDiscard, onLeave, released: false });
+  const latest = useRef({ needsDecision, unresolved, signature, onDiscard, onLeave, kind, released: false });
   if (latest.current.signature !== signature) latest.current.released = false;
   latest.current.needsDecision = needsDecision;
   latest.current.unresolved = unresolved;
   latest.current.signature = signature;
   latest.current.onDiscard = onDiscard;
   latest.current.onLeave = onLeave;
+  latest.current.kind = kind;
+  const needsProtection = protectedNow(needsDecision);
+  const pending = protectedNow(unresolved);
   const registration = useRef<{ owner: AuthoringDepartureState; id: number; remove: () => void } | null>(null);
 
   useLayoutEffect(() => {
     if (!navigation) return;
     const registered = navigation.register({
-      needsDecision: () => !latest.current.released && latest.current.needsDecision,
-      unresolved: () => latest.current.unresolved,
+      needsDecision: () => !latest.current.released && protectedNow(latest.current.needsDecision),
+      unresolved: () => protectedNow(latest.current.unresolved),
       discard: () => latest.current.onDiscard?.(),
-      leave: () => latest.current.onLeave?.(),
+      kind: latest.current.kind,
+      leave: () => {
+        latest.current.released = true;
+        latest.current.onLeave?.();
+      },
     });
     registration.current = { owner: navigation, ...registered };
     return () => {
@@ -382,7 +419,7 @@ export function useAuthoringDeparture(
       registered.remove();
     };
   }, [navigation]);
-  useLayoutEffect(() => navigation?.refresh(), [navigation, needsDecision, unresolved, signature]);
+  useLayoutEffect(() => navigation?.refresh(), [navigation, needsProtection, pending, signature]);
 
   const release = useCallback(() => {
     latest.current.released = true;

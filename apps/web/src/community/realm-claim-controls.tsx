@@ -10,7 +10,12 @@ import {
   type RealmClaimAdapter,
   type RealmClaimRead,
 } from './realm-claim';
-import type { RealmClaimCallerLifetime } from './realm-claim-caller-lifetime';
+import {
+  createRealmClaimCallerLifetime,
+  useRealmClaimDeparture,
+  type RealmClaimCallerLifetime,
+} from './realm-claim-caller-lifetime';
+import { AuthoringDepartureBoundary } from '../threads/authoring-departure';
 
 function OriginalDate({ value }: { value: string }) {
   return (
@@ -29,18 +34,15 @@ function OriginalDate({ value }: { value: string }) {
 }
 
 /** The same management region is mounted in Space/Realm home and Pattern stories. */
-export function RealmClaimControls({
-  realmId,
-  initial,
-  adapter,
-  returnTo,
-  ready = true,
-  load = false,
-  onRead,
-  recoveryOnly = false,
-  lifetime,
-  connectionRevision = 0,
-}: {
+export function RealmClaimControls(props: RealmClaimControlsProps) {
+  return (
+    <AuthoringDepartureBoundary sessionBound={false}>
+      <RealmClaimControlsContent {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
+
+type RealmClaimControlsProps = {
   realmId: string;
   initial: RealmClaimRead;
   adapter: RealmClaimAdapter;
@@ -51,13 +53,31 @@ export function RealmClaimControls({
   recoveryOnly?: boolean;
   lifetime?: RealmClaimCallerLifetime;
   connectionRevision?: number;
-}) {
+};
+
+function RealmClaimControlsContent({
+  realmId,
+  initial,
+  adapter,
+  returnTo,
+  ready = true,
+  load = false,
+  onRead,
+  recoveryOnly = false,
+  lifetime: suppliedLifetime,
+  connectionRevision = 0,
+}: RealmClaimControlsProps) {
   const id = useId();
+  const lifetime = useMemo(
+    () => suppliedLifetime ?? createRealmClaimCallerLifetime(() => true),
+    [suppliedLifetime, realmId, adapter],
+  );
   const control = useMemo(
     () => createRealmClaim(realmId, initial, adapter, undefined, lifetime),
     [realmId, adapter, lifetime],
   );
   const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
+  useRealmClaimDeparture(lifetime, control, ready);
   const [copy, setCopy] = useState<{
     control: typeof control;
     requestId: string;

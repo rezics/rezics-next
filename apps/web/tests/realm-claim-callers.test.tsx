@@ -7,7 +7,12 @@ import type {
   RealmClaimReviewRead,
   RealmClaimReviewRequest,
 } from '../src/community/realm-claim-review';
-import type { RealmClaimSnapshot } from '../src/community/realm-claim';
+import type {
+  RealmClaimAdapter,
+  RealmClaimInput,
+  RealmClaimResult,
+  RealmClaimSnapshot,
+} from '../src/community/realm-claim';
 import type { RealmClaimStatusInput, RealmClaimStatusRead } from '../src/community/realm-claim-status';
 import * as start from '../.storybook/react-start';
 
@@ -120,6 +125,15 @@ type StatusPending = ReturnType<typeof deferred<RealmClaimStatusRead>> & { input
 const reviewReads: ReviewReadPending[] = [];
 const approvals: ApprovalPending[] = [];
 const statusReads: StatusPending[] = [];
+const requests: (ReturnType<typeof deferred<RealmClaimResult>> & { input: RealmClaimInput })[] = [];
+const claimAdapter: RealmClaimAdapter = {
+  read: async () => ({ kind: 'ready', snapshot: source, admission: 'allowed' }),
+  request: (input) => {
+    const pending = { ...deferred<RealmClaimResult>(), input };
+    requests.push(pending);
+    return pending.promise;
+  },
+};
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -143,6 +157,12 @@ mock.module('../src/community/realm-claim-review-actions', () => ({
   },
 }));
 mock.module('../src/community/space-actions', () => ({
+  readRealmClaimState: () => {
+    throw new Error('Unexpected native read');
+  },
+  submitRealmClaim: () => {
+    throw new Error('Unexpected native request');
+  },
   readOwnRealmClaimStatus: ({ data }: { data: RealmClaimStatusInput }) => {
     const pending = { ...deferred<RealmClaimStatusRead>(), input: data };
     statusReads.push(pending);
@@ -156,6 +176,10 @@ const { sessionQuery } = await import('../src/session/query');
 const { realmClaimCallerSessionSource } = await import('../src/community/realm-claim-caller-lifetime');
 const { RealmClaimReviewPanel } = await import('../src/community/realm-claim-review-panel');
 const { RealmClaimStatusPanel } = await import('../src/community/realm-claim-status-panel');
+const { RealmClaimPanel } = await import('../src/community/realm-claim-panel');
+const { AuthoringDepartureProvider, useAuthoringDeparture } = await import('../src/threads/authoring-departure');
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
+  await import('@tanstack/react-router');
 const { m } = await import('../src/paraglide/messages.js');
 const host = window.document.createElement('main') as unknown as HTMLElement;
 window.document.body.append(host);
@@ -163,10 +187,55 @@ window.document.body.append(host);
 let root: ReturnType<typeof createRoot>;
 let client: InstanceType<typeof QueryClient>;
 let mounted = false;
+let router: ReturnType<typeof journeyRouter> | undefined;
+let destination = deferred<void>();
+let destinationReads = 0;
+let siblingDirty = false;
+function Sibling() {
+  useAuthoringDeparture(() => siblingDirty, false, 'sibling');
+  return null;
+}
+function journeyRouter() {
+  const root = createRootRoute({ component: Outlet });
+  const current = createRoute({
+    getParentRoute: () => root,
+    path: '/',
+    component: () => (
+      <AuthoringDepartureProvider sessionBound={false}>
+        <Sibling />
+        <App />
+      </AuthoringDepartureProvider>
+    ),
+  });
+  const next = createRoute({
+    getParentRoute: () => root,
+    path: '/next',
+    loader: () => {
+      destinationReads++;
+      return destination.promise;
+    },
+    component: () => <p>Destination</p>,
+  });
+  return createRouter({
+    routeTree: root.addChildren([current, next]),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  });
+}
 let target:
   | { kind: 'review'; realmId: string; initial: RealmClaimReviewRead }
+  | { kind: 'request'; realmId: string }
   | { kind: 'status'; realmId: string; requestId: string };
 function App() {
+  if (target.kind === 'request')
+    return (
+      <RealmClaimPanel
+        realmId={target.realmId}
+        initial={source}
+        adapter={claimAdapter}
+        returnTo="/"
+        onRead={() => {}}
+      />
+    );
   return target.kind === 'review' ? (
     <RealmClaimReviewPanel realmId={target.realmId} initial={target.initial} />
   ) : (
@@ -179,7 +248,7 @@ async function paint() {
     root.render(
       <StrictMode>
         <QueryClientProvider client={client}>
-          <App />
+          {router ? <RouterProvider router={router} /> : <App />}
         </QueryClientProvider>
       </StrictMode>,
     );
@@ -195,16 +264,22 @@ async function close() {
   mounted = false;
   client.clear();
   host.textContent = '';
+  router = undefined;
+  siblingDirty = false;
+  destination = deferred<void>();
+  destinationReads = 0;
 }
 function clearCalls() {
   reviewReads.length = 0;
   approvals.length = 0;
   statusReads.length = 0;
+  requests.length = 0;
 }
 async function mountReview(
   initial: RealmClaimReviewRead = reviewPage(),
   session: ReturnType<typeof viewer> | { state: string; subject: string | null; csrfToken: string | null } = viewer(),
   targetRealmId = realmId,
+  journey?: 'request' | 'review',
 ) {
   await close();
   clearCalls();
@@ -223,6 +298,11 @@ async function mountReview(
       callerSessionDataUpdatedAt: client.getQueryState(sessionQuery.queryKey)?.dataUpdatedAt,
     },
   };
+  if (journey === 'request') target = { kind: 'request', realmId: targetRealmId };
+  if (journey) {
+    router = journeyRouter();
+    await router.load();
+  }
   root = createRoot(host);
   mounted = true;
   await paint();
@@ -238,7 +318,7 @@ async function mountStatus(session: ReturnType<typeof viewer> = viewer(), target
   await paint();
 }
 function button(label: string) {
-  const found = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+  const found = [...window.document.querySelectorAll<HTMLButtonElement>('button')].find(
     (node) => node.textContent?.trim() === label,
   );
   expect(found).toBeDefined();
@@ -509,3 +589,86 @@ test('sparse review continuation advances by one exact opaque cursor', async () 
   expect(reviewReads).toHaveLength(1);
   expect(host.textContent).toContain(claimantId);
 });
+
+const unloadProtected = () => {
+  const event = new window.Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+};
+async function depart() {
+  await act(async () => {
+    void router!.navigate({ to: '/next' });
+    await tick();
+  });
+  expect(window.document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+}
+for (const kind of ['request', 'review'] as const) {
+  test(`${kind} departure preserves confirmation and immutable recovery on Stay, then retires before destination reads finish`, async () => {
+    await mountReview(reviewPage(), viewer(), realmId, kind);
+    expect(unloadProtected()).toBe(false);
+    if (kind === 'review') {
+      expect(reviewReads).toHaveLength(0);
+      await click(m.realm_review_review());
+      expect(unloadProtected()).toBe(false);
+      await settle(reviewReads[0]!, reviewPage());
+      await depart();
+      expect(window.document.body.textContent).toContain(m.realm_claim_leave_confirmation());
+      await click(m.thread_authoring_stay());
+      expect(host.textContent).toContain(claimantId);
+      await click(m.realm_review_cancel());
+      expect(unloadProtected()).toBe(false);
+      await click(m.realm_review_review());
+      await settle(reviewReads[1]!, reviewPage());
+    }
+    await click(kind === 'request' ? m.realm_claim_request() : m.realm_review_confirm());
+    const original = kind === 'request' ? requests[0]! : approvals[0]!;
+    await depart();
+    expect(window.document.body.textContent).toContain(m.realm_claim_leave_pending());
+    await click(m.thread_authoring_stay());
+    if (kind === 'request') await settle(requests[0]!, { kind: 'unavailable' });
+    else await settle(approvals[0]!, { kind: 'unavailable' });
+    siblingDirty = true;
+    await depart();
+    await click(m.thread_authoring_stay());
+    await click(kind === 'request' ? m.realm_claim_retry() : m.realm_review_retry());
+    if (kind === 'review') await settle(reviewReads[2]!, reviewPage([]));
+    const retry = kind === 'request' ? requests[1]! : approvals[1]!;
+    expect(retry.input).toEqual(original.input);
+    expect(kind === 'request' ? requests.length : approvals.length).toBe(2);
+    await depart();
+    const reads = reviewReads.length;
+    await click(m.thread_authoring_leave());
+    expect(destinationReads).toBe(1);
+    expect(unloadProtected()).toBe(false);
+    expect(host.textContent).not.toContain(claimantId);
+    if (kind === 'request') await settle(requests[1]!, { kind: 'pending', request: row });
+    else await settle(approvals[1]!, { kind: 'approved', claim: approvalReceipt });
+    expect(reviewReads).toHaveLength(reads);
+    expect(host.textContent).not.toContain(m.realm_review_success());
+    expect(host.textContent).not.toContain(m.realm_claim_pending());
+    await settle(destination, undefined);
+  });
+
+  test(`${kind} releases protection as soon as a validated receipt settles`, async () => {
+    await mountReview(reviewPage(), viewer(), realmId, kind);
+    if (kind === 'review') {
+      await click(m.realm_review_review());
+      await settle(reviewReads[0]!, reviewPage());
+    }
+    await click(kind === 'request' ? m.realm_claim_request() : m.realm_review_confirm());
+    if (kind === 'request') await settle(requests[0]!, { kind: 'pending', request: row });
+    else await settle(approvals[0]!, { kind: 'approved', claim: approvalReceipt });
+    expect(unloadProtected()).toBe(false);
+    if (kind === 'review') {
+      expect(reviewReads).toHaveLength(2);
+      await settle(reviewReads[1]!, reviewPage([]));
+      expect(host.textContent).toContain(m.realm_review_success());
+    } else expect(host.textContent).toContain(m.realm_claim_pending());
+    await act(async () => {
+      void router!.navigate({ to: '/next' });
+      await tick();
+    });
+    expect(window.document.querySelector('[role="alertdialog"]')).toBeNull();
+    await settle(destination, undefined);
+  });
+}

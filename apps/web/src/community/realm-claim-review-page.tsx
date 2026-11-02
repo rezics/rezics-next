@@ -11,7 +11,12 @@ import {
   type RealmClaimReviewRead,
   type RealmClaimReviewRequest,
 } from './realm-claim-review';
-import type { RealmClaimCallerLifetime } from './realm-claim-caller-lifetime';
+import {
+  createRealmClaimCallerLifetime,
+  useRealmClaimDeparture,
+  type RealmClaimCallerLifetime,
+} from './realm-claim-caller-lifetime';
+import { AuthoringDepartureBoundary } from '../threads/authoring-departure';
 
 function OriginalDate({ value }: { value: string }) {
   return (
@@ -92,15 +97,15 @@ function RequestDetails({ request }: { request: RealmClaimReviewRequest }) {
 }
 
 /** A page region inside AppShell's single main, shared by the route and review stories. */
-export function RealmClaimReviewView({
-  realmId,
-  initial,
-  adapter,
-  ready = true,
-  load = false,
-  lifetime,
-  connectionRevision = 0,
-}: {
+export function RealmClaimReviewView(props: RealmClaimReviewViewProps) {
+  return (
+    <AuthoringDepartureBoundary sessionBound={false}>
+      <RealmClaimReviewContent {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
+
+type RealmClaimReviewViewProps = {
   realmId: string;
   initial: RealmClaimReviewRead;
   adapter: RealmClaimReviewAdapter;
@@ -108,13 +113,29 @@ export function RealmClaimReviewView({
   load?: boolean;
   lifetime?: RealmClaimCallerLifetime;
   connectionRevision?: number;
-}) {
+};
+
+function RealmClaimReviewContent({
+  realmId,
+  initial,
+  adapter,
+  ready = true,
+  load = false,
+  lifetime: suppliedLifetime,
+  connectionRevision = 0,
+}: RealmClaimReviewViewProps) {
   const id = useId();
+  const lifetime = useMemo(
+    () => suppliedLifetime ?? createRealmClaimCallerLifetime(() => true),
+    [suppliedLifetime, realmId, initial, adapter],
+  );
   const control = useMemo(
     () => createRealmClaimReview(realmId, initial, adapter, undefined, lifetime),
     [realmId, initial, adapter, lifetime],
   );
   const snapshot = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
+  useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.snapshot);
+  useRealmClaimDeparture(lifetime, control, ready);
   useEffect(() => {
     control.reconnect();
     if (load || (lifetime && connectionRevision > 0)) {

@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useEffect, useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 import { sessionQuery, useSession } from '../session/query';
+import { useAuthoringDeparture } from '../threads/authoring-departure';
 
 type SessionRecord = {
   state: string;
@@ -78,6 +79,26 @@ export type RealmClaimCallerLifetime = {
   subscribe: (listener: () => void) => () => void;
   connect: () => () => void;
 };
+
+/** Departure only retires the visit; native commands may already have applied. */
+export function useRealmClaimDeparture(
+  lifetime: RealmClaimCallerLifetime,
+  control: { getSnapshot: () => { intent: unknown; outcome: string } },
+  ready: boolean,
+) {
+  const unresolved = () => {
+    const state = control.getSnapshot();
+    return !!state.intent && ['sending', 'uncertain'].includes(state.outcome);
+  };
+  useAuthoringDeparture(
+    () => ready && lifetime.current() && (unresolved() || control.getSnapshot().outcome === 'confirming'),
+    unresolved,
+    String(lifetime.id),
+    undefined,
+    lifetime.retire,
+    'realm-claim',
+  );
+}
 
 let nextLifetimeId = 0;
 

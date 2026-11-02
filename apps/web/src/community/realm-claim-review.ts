@@ -223,6 +223,7 @@ export function createRealmClaimReview(
     )
       result = { kind: 'unavailable' };
     if (result.kind === 'approved' && receipt) {
+      update({ receipt, outcome: 'approved' });
       // A receipt alone never enables another approval. Re-read the first native page first.
       const read = await load(undefined, ticket);
       if (!read || !owns(ticket)) return;
