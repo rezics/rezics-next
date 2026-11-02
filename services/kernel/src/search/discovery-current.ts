@@ -1,14 +1,16 @@
 import { relationFacetProperty, type DiscoveryFilterDocument, type FilterRelease } from '@rezics/filter';
 import { partitionOf, routeOf } from '../route/route.ts';
-import type {
-  DiscoveryHit,
-  DiscoveryReadContext,
-  DiscoveryRegistry,
-  IndexedAccount,
-  DiscoveryEngineHit,
-  DiscoveryKey,
-  DiscoveryRegistration,
-  AccountSnapshot,
+import { validateAccountSnapshot } from './account-discovery.ts';
+import {
+  MAX_ACCOUNT_DISCOVERY_BATCH,
+  type DiscoveryHit,
+  type DiscoveryReadContext,
+  type DiscoveryRegistry,
+  type IndexedAccount,
+  type DiscoveryEngineHit,
+  type DiscoveryKey,
+  type DiscoveryRegistration,
+  type AccountSnapshot,
 } from './discovery.ts';
 import type { DiscoveryCandidate } from './discovery-query.ts';
 import { currentDiscoveryFilter } from './discovery-filter.ts';
@@ -279,20 +281,19 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
   if (entry.owner !== 'accounts') unavailable();
   if (filter && currentDiscoveryFilter(filter, registry, entry.kind, release) !== true) return passed;
   const selectedAccounts = new Map<Candidate, IndexedAccount>();
+  // Admit every native Account chunk before hydration; a later invalid chunk must not publish a prefix.
   for (const [partition, group] of partitioned(accounts.map(({ key }) => key))) {
     const ids = [...new Set(group.map(({ id }) => id))];
     const current = new Map<string, IndexedAccount>();
-    for (let offset = 0; offset < ids.length; offset += 100) {
-      const chunk = ids.slice(offset, offset + 100);
-      const snapshot = await entry.source.read(partition, chunk);
-      if (
-        snapshot.partition !== partition ||
-        typeof snapshot.position !== 'bigint' ||
-        snapshot.position < 0n ||
-        !Array.isArray(snapshot.accounts) ||
-        snapshot.accounts.length > chunk.length
-      )
+    for (let offset = 0; offset < ids.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
+      const chunk = ids.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
+      const observed = await entry.source.read(partition, chunk);
+      let snapshot;
+      try {
+        snapshot = validateAccountSnapshot(observed, partition, chunk, 0n);
+      } catch {
         unavailable();
+      }
       if (
         accounts.some(
           (candidate) =>
@@ -302,19 +303,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
         )
       )
         unavailable();
-      for (const account of snapshot.accounts) {
-        if (
-          !chunk.includes(account.id) ||
-          current.has(account.id) ||
-          typeof account.revision !== 'bigint' ||
-          account.revision < 0n ||
-          (account.accountKind !== 'actor' && account.accountKind !== 'organization') ||
-          (account.handle !== null && typeof account.handle !== 'string') ||
-          (account.displayName !== null && typeof account.displayName !== 'string')
-        )
-          unavailable();
-        current.set(account.id, account);
-      }
+      for (const account of snapshot.accounts) current.set(account.id, account);
     }
     const selected = accounts.filter((candidate) => {
       const row = current.get(candidate.key.id);
@@ -332,8 +321,8 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
     for (const candidate of selected) selectedAccounts.set(candidate, current.get(candidate.key.id)!);
   }
   const selected = [...selectedAccounts.keys()];
-  for (let offset = 0; offset < selected.length; offset += 100) {
-    const chunk = selected.slice(offset, offset + 100);
+  for (let offset = 0; offset < selected.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
+    const chunk = selected.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
     const summaries = await entry.hydrate(
       chunk.map(({ key }) => key.id),
       context,

@@ -1577,7 +1577,10 @@ outcomes remain useful evidence; old protocol-specific home-certificate proof is
 The default starter and rebuild CLI install the actual Accounts source and current-summary readers in the closed
 Discovery registry. Both owners write canonical `discovery-v1` identities into the same `discovery-gN` family;
 legacy Subject callers retain their existing family and ABI. Account documents use only current handle/displayName,
-kind and exact native revision. Summaries remain owner reads. Source census is used only for generation reconciliation.
+kind and exact native revision. Summaries remain owner reads. Current Account disclosure admits each bounded native
+chunk through `validateAccountSnapshot` with no indexer envelope obligation, then checks candidate source-position
+coverage against that admitted position; a later invalid chunk fails the whole response before Account hydration.
+Source census is used only for generation reconciliation.
 
 A generation registers its replay consumer before bounded native enumeration. Independent Account/Subject frontiers
 advance after visible keyed settlement. Reconciliation checks every engine identity against current owner documents
