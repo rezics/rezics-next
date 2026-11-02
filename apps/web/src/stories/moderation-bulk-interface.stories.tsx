@@ -274,7 +274,7 @@ function RetiringQueue(args: ReportQueueProps) {
       </Button>
       <BoardReportQueue
         {...args}
-        queueIdentity={retired ? 'illustrative-replacement' : args.queueIdentity}
+        {...(retired ? { queueIdentity: 'illustrative-replacement' } : {})}
         state={retired ? 'denied' : 'ready'}
       />
     </>
