@@ -27,7 +27,9 @@ test('a cover tile has no card surface: no background, outline, border or shadow
   const article = tagWithSlot(html, 'cover-card');
   const caption = tagWithSlot(html, 'cover-card-text');
   const frame = tagWithSlot(html, 'aspect-ratio');
-  expect(classOf(article)).not.toMatch(/(?:\bbg-(?!transparent\b)|\b(?:outline(?:-|\s)|border(?:-|\s)|shadow(?:-|\s))|(?<!before:)\brounded(?:-[^\s]+)?)/);
+  expect(classOf(article)).not.toMatch(
+    /(?:\bbg-(?!transparent\b)|\b(?:outline(?:-|\s)|border(?:-|\s)|shadow(?:-|\s))|(?<!before:)\brounded(?:-[^\s]+)?)/,
+  );
   expect(classOf(article)).toContain('focus-within:ring-2');
   expect(classOf(caption)).not.toMatch(/\b(?:bg-|outline(?:-|\s)|border(?:-|\s)|shadow(?:-|\s))/);
   expect(classOf(frame)).not.toContain('bg-muted');
