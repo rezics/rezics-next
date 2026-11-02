@@ -544,212 +544,219 @@ function GameClassificationsLive({
       setBusy(false);
     }
   }
-  const content = visible && (fields.length > 0 || withdrawnDrafts.length > 0) ? (
-    <section ref={holder} className="min-w-0 max-w-full space-y-5" aria-busy={busy}>
-      <h2 className="font-sans text-xl font-semibold">{m.game_profile_classification({}, o)}</h2>
-      <p className="text-sm text-muted-foreground">{m.facts_separate_results({}, o)}</p>
-      {properties.map((property) => {
-        const admitted = fields.includes(property);
-        const draft = drafts.find((row) => row.property === property);
-        const editorRelease = admitted ? read.release : draftReleases[property];
-        const definition = editorRelease?.properties[property];
-        const label = definition ? pickText(definition.labels, locale) : { text: property, lang: undefined };
-        const selected = admitted ? (read.public.subject.statements[property] ?? []) : [];
-        const editorContext = editorRelease ? { ...context, release: editorRelease } : context;
-        const stage = (source: (typeof selected)[number] | null) => {
-          if (
-            !current.current.lifetime.active() ||
-            current.current.read !== read ||
-            !current.current.fields.includes(property)
-          )
-            return;
-          const baseline = source ? statementInput(source) : null;
-          setDraftReleases((rows) => ({ ...rows, [property]: read.release }));
-          setDrafts((rows) => [
-            ...rows,
-            {
-              property,
-              source: source?.id ?? null,
-              baseline,
-              included: true,
-              statement: baseline
-                ? structuredClone(baseline)
-                : {
-                    property: { id: property },
-                    value: { type: 'value', content: '' },
-                    qualifiers: [],
-                    references: [],
-                    rank: 'normal',
-                  },
-            },
-          ]);
-        };
-        return (
-          <section key={property} data-classification-property={property} className="min-w-0 max-w-full">
-            <ContentItemFrame as="div" data-slot="game-classification" className={gameFieldFrameClass}>
-              <ContentItemHeading
-                level={3}
-                className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans font-semibold"
-                lang={label.lang ?? undefined}
-              >
-                {label.text}
-              </ContentItemHeading>
-              {!selected.length && <p>{m.facts_no_value({}, o)}</p>}
-              {selected.map((statement) => (
-                <div
-                  key={statement.id}
-                  className="min-w-0 max-w-full space-y-2 border-s-2 ps-3 [overflow-wrap:anywhere]"
+  const content =
+    visible && (fields.length > 0 || withdrawnDrafts.length > 0) ? (
+      <section ref={holder} className="min-w-0 max-w-full space-y-5" aria-busy={busy}>
+        <h2 className="font-sans text-xl font-semibold">{m.game_profile_classification({}, o)}</h2>
+        <p className="text-sm text-muted-foreground">{m.facts_separate_results({}, o)}</p>
+        {properties.map((property) => {
+          const admitted = fields.includes(property);
+          const draft = drafts.find((row) => row.property === property);
+          const editorRelease = admitted ? read.release : draftReleases[property];
+          const definition = editorRelease?.properties[property];
+          const label = definition ? pickText(definition.labels, locale) : { text: property, lang: undefined };
+          const selected = admitted ? (read.public.subject.statements[property] ?? []) : [];
+          const editorContext = editorRelease ? { ...context, release: editorRelease } : context;
+          const stage = (source: (typeof selected)[number] | null) => {
+            if (
+              !current.current.lifetime.active() ||
+              current.current.read !== read ||
+              !current.current.fields.includes(property)
+            )
+              return;
+            const baseline = source ? statementInput(source) : null;
+            setDraftReleases((rows) => ({ ...rows, [property]: read.release }));
+            setDrafts((rows) => [
+              ...rows,
+              {
+                property,
+                source: source?.id ?? null,
+                baseline,
+                included: true,
+                statement: baseline
+                  ? structuredClone(baseline)
+                  : {
+                      property: { id: property },
+                      value: { type: 'value', content: '' },
+                      qualifiers: [],
+                      references: [],
+                      rank: 'normal',
+                    },
+              },
+            ]);
+          };
+          return (
+            <section key={property} data-classification-property={property} className="min-w-0 max-w-full">
+              <ContentItemFrame as="div" data-slot="game-classification" className={gameFieldFrameClass}>
+                <ContentItemHeading
+                  level={3}
+                  className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans font-semibold"
+                  lang={label.lang ?? undefined}
                 >
-                  <PartValue part={statement} read={context} locale={locale} />
-                  {statement.qualifiers.map((part, i) => (
-                    <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
-                      <span>{pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).text}: </span>
-                      <PartValue part={part} read={context} locale={locale} />
-                    </div>
-                  ))}
-                  {statement.references.map((reference, i) => (
-                    <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
-                      {reference.parts.map((part, j) => (
-                        <PartValue key={j} part={part} read={context} locale={locale} />
-                      ))}
-                    </div>
-                  ))}
-                  {!draft && (
-                    <Button
-                      className={gameActionClass}
-                      type="button"
-                      variant="outline"
-                      disabled={busy}
-                      data-classification-source={statement.id}
-                      onClick={() => stage(statement)}
-                    >
-                      {m.facts_edit_field({}, o)}
-                    </Button>
-                  )}
-                </div>
-              ))}
-              {!draft && (!selected.length || read.release.properties[property]!.multivalued) && (
-                <Button
-                  className={gameActionClass}
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  data-classification-source=""
-                  onClick={() => stage(null)}
-                >
-                  {m.facts_add_value({}, o)}
-                </Button>
-              )}
-              {draft && (
-                <>
-                  <fieldset className="space-y-4" disabled={busy || !admitted || factLocked(draft) || !!draft.command}>
-                    <GameStatementFields
-                      statement={draft.statement}
-                      context={editorContext}
-                      locale={locale}
-                      search={search}
-                      change={(statement) =>
-                        lifetime.active() &&
-                        current.current.read === read &&
-                        current.current.fields.includes(property) &&
-                        current.current.drafts.includes(draft) &&
-                        setDrafts((rows) =>
-                          rows.map((row) =>
-                            row.property === property
-                              ? { ...row, statement, result: undefined, command: undefined }
-                              : row,
-                          ),
-                        )
-                      }
-                    />
-                  </fieldset>
-                  <GameClassificationDiscard
-                    draft={draft}
-                    disabled={busy || !!draft.command || factLocked(draft) || !lifetime.active()}
-                    locale={locale}
-                    allowed={canDiscard}
-                    discard={(row) => {
-                      if (!canDiscard(row)) return;
-                      focusAfterDiscard.current = row;
-                      setDrafts((rows) => rows.filter((item) => item !== row));
-                      setDraftReleases((rows) => {
-                        const next = { ...rows };
-                        delete next[row.property];
-                        return next;
-                      });
-                    }}
-                  />
-                  {!admitted && <p role="status">{m.game_profile_support({}, o)}</p>}
-                  {admitted && draft.result && !draft.result.ok && (
-                    <EditorFailure reason={draft.result.reason} locale={locale} />
-                  )}
-                  {draft.result?.ok && (
-                    <div role="status">
-                      <p>{m.correction_proposed({}, o)}</p>
+                  {label.text}
+                </ContentItemHeading>
+                {!selected.length && <p>{m.facts_no_value({}, o)}</p>}
+                {selected.map((statement) => (
+                  <div
+                    key={statement.id}
+                    className="min-w-0 max-w-full space-y-2 border-s-2 ps-3 [overflow-wrap:anywhere]"
+                  >
+                    <PartValue part={statement} read={context} locale={locale} />
+                    {statement.qualifiers.map((part, i) => (
+                      <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
+                        <span>{pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).text}: </span>
+                        <PartValue part={part} read={context} locale={locale} />
+                      </div>
+                    ))}
+                    {statement.references.map((reference, i) => (
+                      <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
+                        {reference.parts.map((part, j) => (
+                          <PartValue key={j} part={part} read={context} locale={locale} />
+                        ))}
+                      </div>
+                    ))}
+                    {!draft && (
                       <Button
                         className={gameActionClass}
                         type="button"
-                        onClick={() => {
-                          if (lifetime.active() && draft.result?.ok) {
-                            setAddress({ property, candidate: draft.result.candidate, session: draft.result.session });
-                            setComparison(review(property, draft.result.session));
-                          }
-                        }}
+                        variant="outline"
+                        disabled={busy}
+                        data-classification-source={statement.id}
+                        onClick={() => stage(statement)}
                       >
-                        {m.correction_review({}, o)}
+                        {m.facts_edit_field({}, o)}
                       </Button>
-                    </div>
-                  )}
-                  {admitted && draft.command && draft.result && !draft.result.ok && !factLocked(draft) && (
-                    <Button
-                      className={gameActionClass}
-                      type="button"
-                      variant="outline"
-                      onClick={() =>
-                        lifetime.active() &&
-                        setDrafts((rows) =>
-                          rows.map((row) =>
-                            row.property === property ? { ...row, command: undefined, result: undefined } : row,
-                          ),
-                        )
-                      }
+                    )}
+                  </div>
+                ))}
+                {!draft && (!selected.length || read.release.properties[property]!.multivalued) && (
+                  <Button
+                    className={gameActionClass}
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    data-classification-source=""
+                    onClick={() => stage(null)}
+                  >
+                    {m.facts_add_value({}, o)}
+                  </Button>
+                )}
+                {draft && (
+                  <>
+                    <fieldset
+                      className="space-y-4"
+                      disabled={busy || !admitted || factLocked(draft) || !!draft.command}
                     >
-                      {m.catalogue_create_review_new({}, o)}
-                    </Button>
-                  )}
-                </>
-              )}
-            </ContentItemFrame>
-          </section>
-        );
-      })}
-      <Button
-        className={gameActionClass}
-        type="button"
-        disabled={
-          busy ||
-          drafts.some(
-            (row) =>
-              fields.includes(row.property) && row.result && !row.result.ok && row.result.reason === 'stale',
-          ) ||
-          !drafts.some((row) => fields.includes(row.property) && factChanged(row) && !row.result?.ok)
-        }
-        onClick={() => void submit()}
-      >
-        {m.facts_submit({}, o)}
-      </Button>
-      {address && comparison && (
-        <CandidateReview
-          key={address.candidate}
-          id={read.public.subject.id}
-          locale={locale}
-          initialProperty={address.property}
-          exactCandidate={address.candidate}
-          transport={comparison}
-        />
-      )}
-    </section>
-  ) : null;
+                      <GameStatementFields
+                        statement={draft.statement}
+                        context={editorContext}
+                        locale={locale}
+                        search={search}
+                        change={(statement) =>
+                          lifetime.active() &&
+                          current.current.read === read &&
+                          current.current.fields.includes(property) &&
+                          current.current.drafts.includes(draft) &&
+                          setDrafts((rows) =>
+                            rows.map((row) =>
+                              row.property === property
+                                ? { ...row, statement, result: undefined, command: undefined }
+                                : row,
+                            ),
+                          )
+                        }
+                      />
+                    </fieldset>
+                    <GameClassificationDiscard
+                      draft={draft}
+                      disabled={busy || !!draft.command || factLocked(draft) || !lifetime.active()}
+                      locale={locale}
+                      allowed={canDiscard}
+                      discard={(row) => {
+                        if (!canDiscard(row)) return;
+                        focusAfterDiscard.current = row;
+                        setDrafts((rows) => rows.filter((item) => item !== row));
+                        setDraftReleases((rows) => {
+                          const next = { ...rows };
+                          delete next[row.property];
+                          return next;
+                        });
+                      }}
+                    />
+                    {!admitted && <p role="status">{m.game_profile_support({}, o)}</p>}
+                    {admitted && draft.result && !draft.result.ok && (
+                      <EditorFailure reason={draft.result.reason} locale={locale} />
+                    )}
+                    {draft.result?.ok && (
+                      <div role="status">
+                        <p>{m.correction_proposed({}, o)}</p>
+                        <Button
+                          className={gameActionClass}
+                          type="button"
+                          onClick={() => {
+                            if (lifetime.active() && draft.result?.ok) {
+                              setAddress({
+                                property,
+                                candidate: draft.result.candidate,
+                                session: draft.result.session,
+                              });
+                              setComparison(review(property, draft.result.session));
+                            }
+                          }}
+                        >
+                          {m.correction_review({}, o)}
+                        </Button>
+                      </div>
+                    )}
+                    {admitted && draft.command && draft.result && !draft.result.ok && !factLocked(draft) && (
+                      <Button
+                        className={gameActionClass}
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          lifetime.active() &&
+                          setDrafts((rows) =>
+                            rows.map((row) =>
+                              row.property === property ? { ...row, command: undefined, result: undefined } : row,
+                            ),
+                          )
+                        }
+                      >
+                        {m.catalogue_create_review_new({}, o)}
+                      </Button>
+                    )}
+                  </>
+                )}
+              </ContentItemFrame>
+            </section>
+          );
+        })}
+        <Button
+          className={gameActionClass}
+          type="button"
+          disabled={
+            busy ||
+            drafts.some(
+              (row) => fields.includes(row.property) && row.result && !row.result.ok && row.result.reason === 'stale',
+            ) ||
+            !drafts.some((row) => fields.includes(row.property) && factChanged(row) && !row.result?.ok)
+          }
+          onClick={() => void submit()}
+        >
+          {m.facts_submit({}, o)}
+        </Button>
+        {address && comparison && (
+          <CandidateReview
+            key={address.candidate}
+            id={read.public.subject.id}
+            locale={locale}
+            initialProperty={address.property}
+            exactCandidate={address.candidate}
+            transport={comparison}
+          />
+        )}
+      </section>
+    ) : null;
   return (
     <>
       <GameFactsDeparture drafts={drafts} />

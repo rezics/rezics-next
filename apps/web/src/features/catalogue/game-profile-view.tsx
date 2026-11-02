@@ -498,18 +498,18 @@ function GameCorrection({
                 : 'contents'
             }
           >
-              {visible && !!groups.classification.length && (
-                <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
-                  {m.game_profile_classification({}, o)}
-                </summary>
-              )}
-              <GameClassifications
-                read={read}
-                locale={locale}
-                search={search}
-                transport={transport.classifications}
-                review={transport.classificationReview}
-              />
+            {visible && !!groups.classification.length && (
+              <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
+                {m.game_profile_classification({}, o)}
+              </summary>
+            )}
+            <GameClassifications
+              read={read}
+              locale={locale}
+              search={search}
+              transport={transport.classifications}
+              review={transport.classificationReview}
+            />
           </details>
           {!!fields.length && (
             <details hidden={!visible} className="min-w-0 max-w-full rounded-xl border border-border p-4">

@@ -238,8 +238,7 @@ test('Game retires refused readings, privately retains exact corrections, and re
       if (removeDefinition) delete next.release.properties[property];
       return next;
     };
-    const field = (property: string) =>
-      host.querySelector<HTMLElement>(`[data-classification-property="${property}"]`);
+    const field = (property: string) => host.querySelector<HTMLElement>(`[data-classification-property="${property}"]`);
     const fieldInput = (property: string) =>
       within(field(property)!).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement;
     const classification = () =>
