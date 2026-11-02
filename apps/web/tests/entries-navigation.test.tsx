@@ -94,7 +94,7 @@ test('GET controls, page-local emptiness and failed reads retain the selected fi
     const later = html();
     expect(later).toContain(m.library_entries_page_empty());
     expect(later).not.toContain(m.library_empty_title());
-    expect(later).toContain('method="get" action="/en/library"');
+    expect(later).toMatch(/<form[^>]*action="\/en\/library"[^>]*method="get"/);
     expect(later).toContain('name="type" value="schema:Book"');
     expect(later).toContain('name="state" value="planned"');
     expect(later).toContain('name="columns" value="title"');
@@ -149,6 +149,7 @@ test('sort and display navigate complete queries; history restores the controls 
     MutationObserver: window.MutationObserver,
     ResizeObserver: window.ResizeObserver,
     FormData: window.FormData,
+    scrollTo: window.scrollTo.bind(window),
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
