@@ -485,8 +485,7 @@ test('Statement consent composes the complete family with isolated confirmation,
         await click(button(host, m.statement_consent_open()));
         await until(() => !!host.querySelector('[data-consent-part="empty"]'));
         await click(button(host, m.statement_consent_continue()));
-      }
-      else {
+      } else {
         await open();
         if (stage === 'change') await confirm('disclose');
         else await click(button(host, m.statement_consent_refresh_public()));
