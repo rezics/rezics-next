@@ -6,8 +6,9 @@ import { csrfHeaders } from '../threads/composer';
 import { readReviewPage, readAccountVerificationPage, readAccountManagement, decideVerification } from './actions';
 import { AccountManagementPageView, AccountVerificationPageView, ReviewPageView } from './pages';
 import type { SubmitOperation } from './operation';
+import { verificationPageTimeout, withVerificationDeadline } from './deadline';
 
-const submit: SubmitOperation = (data) => decideVerification({ data, headers: csrfHeaders() });
+const submit: SubmitOperation = (data, signal) => decideVerification({ data, signal, headers: csrfHeaders() });
 
 export function ReviewJourney() {
   const { state, csrfToken, subject } = useSession();
@@ -32,7 +33,12 @@ function ReviewerJourney({
     retry: false,
     queryKey: ['account-verification', 'review', viewerId, cursor],
     enabled: personalRead.enabled && !!viewerId,
-    queryFn: () => readReviewPage({ data: cursor ? { cursor } : {} }),
+    queryFn: ({ signal: caller }) =>
+      withVerificationDeadline(
+        (signal) => readReviewPage({ data: cursor ? { cursor } : {}, signal }),
+        caller,
+        verificationPageTimeout,
+      ),
   });
   const refresh = () => {
     void query.refetch();
@@ -51,7 +57,7 @@ function ReviewerJourney({
       viewerId={viewerId}
       operations={query.data?.viewerId === viewerId ? (query.data?.operations ?? []) : []}
       submit={submit}
-      canWrite={canWrite}
+      canWrite={canWrite && !query.isFetching}
       refresh={refresh}
       next={(value) => {
         setCursor(value);
@@ -72,14 +78,19 @@ export function AccountVerificationJourney({ accountId }: { accountId: string })
     retry: false,
     queryKey: ['account-verification', 'account', accountId],
     enabled: personalRead.enabled && state === 'signed-in',
-    queryFn: () => readAccountVerificationPage({ data: accountId }),
+    queryFn: ({ signal: caller }) =>
+      withVerificationDeadline(
+        (signal) => readAccountVerificationPage({ data: accountId, signal }),
+        caller,
+        verificationPageTimeout,
+      ),
   });
   return (
     <AccountVerificationPageView
       accountId={accountId}
       page={query.isError ? { state: 'unavailable' } : (query.data?.page ?? { state: 'loading' })}
       viewerId={query.data?.viewerId ?? null}
-      canWrite={!!csrfToken}
+      canWrite={!!csrfToken && !query.isFetching}
       submit={submit}
       refresh={() => {
         void query.refetch();
@@ -95,7 +106,8 @@ export function AccountManagementJourney() {
     retry: false,
     queryKey: ['account-verification', 'management'],
     enabled: personalRead.enabled && state === 'signed-in',
-    queryFn: () => readAccountManagement(),
+    queryFn: ({ signal: caller }) =>
+      withVerificationDeadline((signal) => readAccountManagement({ signal }), caller, verificationPageTimeout),
   });
   return (
     <AccountManagementPageView

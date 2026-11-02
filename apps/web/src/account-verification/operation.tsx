@@ -6,8 +6,9 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { readAttempt, saveAttempt, clearAttempt } from './attempt';
 import type { Operation, OperationResult } from './transport';
+import { verificationCommandTimeout, withVerificationDeadline } from './deadline';
 
-export type SubmitOperation = (operation: Operation) => Promise<OperationResult>;
+export type SubmitOperation = (operation: Operation, signal?: AbortSignal) => Promise<OperationResult>;
 export function actionLabel(action: Operation['action']) {
   return {
     approve: m.av_approve,
@@ -55,9 +56,13 @@ export function useOperationAttempt(
     ready: boolean;
     locked: boolean;
     pending: Operation | null;
+    controller: AbortController;
   } | null>(null);
   useEffect(() => {
-    const lifetime = { scope, active: true, ready: false, locked: false, pending: null as Operation | null };
+    const lifetime = {
+      scope, active: true, ready: false, locked: false, pending: null as Operation | null,
+      controller: new AbortController(),
+    };
     current.current = lifetime;
     setAttempt(null);
     setCommand(null);
@@ -75,6 +80,7 @@ export function useOperationAttempt(
     }
     return () => {
       lifetime.active = false;
+      lifetime.controller.abort();
     };
   }, [scope]);
 
@@ -108,7 +114,11 @@ export function useOperationAttempt(
     setResult(null);
     let outcome: OperationResult;
     try {
-      outcome = await submit(operation);
+      outcome = await withVerificationDeadline(
+        (signal) => submit(operation, signal),
+        lifetime.controller.signal,
+        verificationCommandTimeout,
+      );
     } catch {
       outcome = { state: 'uncertain' };
     }

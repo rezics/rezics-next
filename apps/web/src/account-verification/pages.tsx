@@ -177,7 +177,14 @@ export function ReviewPageView({
         </div>
       )}
       {page.state !== 'ready' ? (
-        <PageState state={page.state} retry={first} />
+        <div className="space-y-3">
+          <PageState state={page.state} retry={refresh} />
+          {page.state !== 'loading' && (
+            <Button type="button" variant="ghost" onClick={first}>
+              {m.av_first_page()}
+            </Button>
+          )}
+        </div>
       ) : (
         <>
           <div className="flex flex-wrap gap-3">
@@ -271,6 +278,7 @@ export function AccountVerificationPageView({
     viewerId ? `verification:${viewerId}:account:${accountId}` : null,
     submit,
     refresh,
+    canWrite,
   );
   if (page.state !== 'ready')
     return (
@@ -328,7 +336,12 @@ export function AccountVerificationPageView({
           )}
         </CardContent>
       </Card>
-      {privateVisible && (operation.result || operation.attempt) && <OperationFeedback operation={operation} />}
+      {privateVisible && (operation.result || operation.attempt) && (
+        <OperationFeedback
+          operation={operation}
+          disabled={!canWrite || !operation.command || !actions.includes(operation.command.action)}
+        />
+      )}
       <Card>
         <CardHeader>
           <CardTitle>

@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { withVerificationDeadline } from './deadline';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { AgentVerificationRequest } from '../settings/verification-core';
 
@@ -61,9 +62,16 @@ function caught(error: unknown): Exclude<ReadState<never>, { state: 'ready' }> {
 }
 
 /** Discovery only offers controls; every read and command still checks current native authority. */
-export async function readOperations(client: KernelClient, authorization: string): Promise<ReadState<string[]>> {
+export async function readOperations(
+  client: KernelClient,
+  authorization: string,
+  caller?: AbortSignal,
+): Promise<ReadState<string[]>> {
   try {
-    const result = await client['openapi.json'].get({ headers: { authorization } });
+    const result = await withVerificationDeadline(
+      (signal) => client['openapi.json'].get({ headers: { authorization }, fetch: { signal } }),
+      caller,
+    );
     if (result.error || !result.data) return failure(result.status, result.error);
     return {
       state: 'ready',
@@ -82,33 +90,34 @@ export async function readPending(
   client: KernelClient,
   authorization: string,
   cursor?: string,
+  caller?: AbortSignal,
 ): Promise<ReadState<ReviewPage>> {
   try {
-    const result = await client['verification-requests'].get({
-      headers: { authorization },
-      query: { state: 'pending', limit: verificationPageSize, ...(cursor ? { cursor } : {}) },
-    });
+    const result = await withVerificationDeadline(
+      (signal) =>
+        client['verification-requests'].get({
+          headers: { authorization },
+          fetch: { signal },
+          query: { state: 'pending', limit: verificationPageSize, ...(cursor ? { cursor } : {}) },
+        }),
+      caller,
+    );
     if (result.error || !result.data) return failure(result.status, result.error);
     const requests = result.data.verificationRequests;
     // Resolve only this bounded, authorized page. Failed summaries are references, never fabricated identities.
-    const accounts = requests.length
-      ? await readIdentities(
-          client,
-          authorization,
-          requests.map((r) => r.accountId),
-        )
-      : [];
+    const [accounts, subjects] = await Promise.all([
+      requests.length ? readIdentities(client, authorization, requests.map((r) => r.accountId), caller) : [],
+      Promise.all(requests.map((request) => readSubject(client, authorization, request.catalogueSubjectId, caller))),
+    ]);
     return {
       state: 'ready',
       value: {
         next: result.data.next,
-        requests: await Promise.all(
-          requests.map(async (request) => ({
-            request,
-            account: accounts.find((account) => account.id === request.accountId) ?? null,
-            subject: await readSubject(client, authorization, request.catalogueSubjectId),
-          })),
-        ),
+        requests: requests.map((request, index) => ({
+          request,
+          account: accounts.find((account) => account.id === request.accountId) ?? null,
+          subject: subjects[index] ?? null,
+        })),
       },
     };
   } catch (error) {
@@ -116,12 +125,22 @@ export async function readPending(
   }
 }
 
-async function readIdentities(client: KernelClient, authorization: string, ids: string[]): Promise<Identity[]> {
+async function readIdentities(
+  client: KernelClient,
+  authorization: string,
+  ids: string[],
+  caller?: AbortSignal,
+): Promise<Identity[]> {
   try {
-    const result = await client.accounts.get({
-      headers: { authorization },
-      query: { ids: [...new Set(ids)].join(',') },
-    });
+    const result = await withVerificationDeadline(
+      (signal) =>
+        client.accounts.get({
+          headers: { authorization },
+          fetch: { signal },
+          query: { ids: [...new Set(ids)].join(',') },
+        }),
+      caller,
+    );
     return (result.data?.accounts ?? []).flatMap((account) =>
       account.state === 'deleted'
         ? []
@@ -137,9 +156,12 @@ async function readIdentities(client: KernelClient, authorization: string, ids: 
     return [];
   }
 }
-async function readSubject(client: KernelClient, authorization: string, id: string) {
+async function readSubject(client: KernelClient, authorization: string, id: string, caller?: AbortSignal) {
   try {
-    const result = await client.subjects({ id }).get({ headers: { authorization } });
+    const result = await withVerificationDeadline(
+      (signal) => client.subjects({ id }).get({ headers: { authorization }, fetch: { signal } }),
+      caller,
+    );
     const subject = result.data?.subject;
     return subject ? { id, name: Object.values(subject.labels)[0] ?? id } : null;
   } catch {
@@ -151,9 +173,13 @@ export async function readLatest(
   client: KernelClient,
   authorization: string,
   accountId: string,
+  caller?: AbortSignal,
 ): Promise<ReadState<AgentVerificationRequest | null>> {
   try {
-    const result = await client.accounts({ accountId }).verification.get({ headers: { authorization } });
+    const result = await withVerificationDeadline(
+      (signal) => client.accounts({ accountId }).verification.get({ headers: { authorization }, fetch: { signal } }),
+      caller,
+    );
     return result.data && !result.error
       ? { state: 'ready', value: result.data.verificationRequest }
       : failure(result.status, result.error);
@@ -166,39 +192,51 @@ export async function readAccount(
   client: KernelClient,
   authorization: string,
   accountId: string,
+  caller?: AbortSignal,
 ): Promise<AccountPage> {
   const [latest, identities, discovery] = await Promise.all([
-    readLatest(client, authorization, accountId),
-    readIdentities(client, authorization, [accountId]),
-    readOperations(client, authorization),
+    readLatest(client, authorization, accountId, caller),
+    readIdentities(client, authorization, [accountId], caller),
+    readOperations(client, authorization, caller),
   ]);
   const account = identities.find((identity) => identity.id === accountId) ?? null;
-  let publication: Publication = { state: 'unavailable' };
-  if (account?.handle) {
-    try {
-      const result = await client.accounts.get({ headers: { authorization }, query: { handle: account.handle } });
-      const current = result.data?.accounts.find((identity) => identity.id === accountId);
-      if (current && 'verified' in current) {
-        if (current.verified && current.subject) publication = { state: 'verified', subject: current.subject };
-        else if (current.verified === false) publication = { state: 'unverified' };
+  const publicationRead = async (): Promise<Publication> => {
+    if (account?.handle) {
+      try {
+        const handle = account.handle;
+        const result = await withVerificationDeadline(
+          (signal) => client.accounts.get({ headers: { authorization }, query: { handle }, fetch: { signal } }),
+          caller,
+        );
+        const current = result.data?.accounts.find((identity) => identity.id === accountId);
+        if (current && 'verified' in current) {
+          if (current.verified && current.subject) return { state: 'verified', subject: current.subject };
+          if (current.verified === false) return { state: 'unverified' };
+        }
+      } catch {
+        /* An unreadable public identity is unknown, even if a request was approved. */
       }
-    } catch {
-      /* An unreadable public identity is unknown, even if a request was approved. */
     }
-  }
-  // The list is the existing governance read authority. Its evidence is discarded on the status page.
-  let reviewer = false;
-  if (discovery.state === 'ready' && discovery.value.includes('account.revoke_verification')) {
-    try {
-      const result = await client['verification-requests'].get({
-        headers: { authorization },
-        query: { state: 'pending', limit: 1 },
-      });
-      reviewer = !result.error && !!result.data;
-    } catch {
-      /* A failed current authority read never grants a control. */
+    return { state: 'unavailable' };
+  };
+  const reviewerRead = async () => {
+    // The list is the existing governance read authority. Its evidence is discarded on the status page.
+    if (discovery.state === 'ready' && discovery.value.includes('account.revoke_verification')) {
+      try {
+        const result = await withVerificationDeadline(
+          (signal) => client['verification-requests'].get({
+            headers: { authorization }, fetch: { signal }, query: { state: 'pending', limit: 1 },
+          }),
+          caller,
+        );
+        return !result.error && !!result.data;
+      } catch {
+        /* A failed current authority read never grants a control. */
+      }
     }
-  }
+    return false;
+  };
+  const [publication, reviewer] = await Promise.all([publicationRead(), reviewerRead()]);
   return { account, latest, publication, reviewer, operations: discovery.state === 'ready' ? discovery.value : [] };
 }
 
@@ -224,24 +262,29 @@ export async function performOperation(
   client: KernelClient,
   authorization: string,
   operation: Operation,
+  caller?: AbortSignal,
 ): Promise<OperationResult> {
   if (!validOperation(operation)) return { state: 'invalid' };
   const { action, targetId, reason, key } = operation;
-  const options = { headers: { authorization, 'idempotency-key': key } };
   try {
     const account = client.accounts({ accountId: targetId });
     const request = client['verification-requests']({ requestId: targetId });
     const body = reason ? { reason } : {};
-    const result =
-      action === 'approve'
-        ? await request.$approve.post(body, options)
-        : action === 'reject'
-          ? await request.$reject.post(body, options)
-          : action === 'withdraw'
-            ? await account.$withdrawVerification.post({}, options)
-            : action === 'revoke'
-              ? await account.$revokeVerification.post(body, options)
-              : await account.$releaseVerification.post({}, options);
+    const result = await withVerificationDeadline(
+      (signal) => {
+        const options = { headers: { authorization, 'idempotency-key': key }, fetch: { signal } };
+        return action === 'approve'
+          ? request.$approve.post(body, options)
+          : action === 'reject'
+            ? request.$reject.post(body, options)
+            : action === 'withdraw'
+              ? account.$withdrawVerification.post({}, options)
+              : action === 'revoke'
+                ? account.$revokeVerification.post(body, options)
+                : account.$releaseVerification.post({}, options);
+      },
+      caller,
+    );
     if (!result.error && result.status === 200 && result.data) {
       if ('verificationRequest' in result.data) return { state: 'accepted', request: result.data.verificationRequest };
       if ('reversal' in result.data) return { state: 'accepted', reversal: result.data.reversal.kind };

@@ -5,6 +5,7 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { readAccount, readOperations, readPending, performOperation, validOperation } from './transport';
+import { withVerificationDeadline } from './deadline';
 
 export {
   requestVerificationAction,
@@ -16,7 +17,7 @@ async function viewer() {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
   // Unsafe calls pass the same Origin/session/CSRF boundary as the existing BFF.
-  await prepareSession(request, env as Partial<SessionEnv>);
+  await withVerificationDeadline(() => prepareSession(request, env as Partial<SessionEnv>), request.signal);
   const authorization = viewerCredential(request);
   const viewerId = sessionSubject(request);
   if (!authorization || !viewerId) return null;
@@ -35,8 +36,11 @@ export const readReviewPage = createServerFn({ method: 'GET' })
     const identity = await viewer();
     if (!identity) return { viewerId: null, page: { state: 'denied' as const }, operations: [] as string[] };
     const client = kernelClient();
-    const operations = await readOperations(client, identity.authorization);
-    const page = await readPending(client, identity.authorization, data.cursor);
+    const caller = getRequest().signal;
+    const [operations, page] = await Promise.all([
+      readOperations(client, identity.authorization, caller),
+      readPending(client, identity.authorization, data.cursor, caller),
+    ]);
     return { viewerId: identity.viewerId, page, operations: operations.state === 'ready' ? operations.value : [] };
   });
 
@@ -55,7 +59,10 @@ export const readAccountVerificationPage = createServerFn({ method: 'GET' })
     if (!identity) return { viewerId: null, page: { state: 'denied' as const } };
     return {
       viewerId: identity.viewerId,
-      page: { state: 'ready' as const, value: await readAccount(kernelClient(), identity.authorization, data) },
+      page: {
+        state: 'ready' as const,
+        value: await readAccount(kernelClient(), identity.authorization, data, getRequest().signal),
+      },
     };
   });
 
@@ -72,5 +79,5 @@ export const decideVerification = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const identity = await viewer();
     if (!identity) return { state: 'denied' as const };
-    return performOperation(kernelClient(), identity.authorization, data);
+    return performOperation(kernelClient(), identity.authorization, data, getRequest().signal);
   });

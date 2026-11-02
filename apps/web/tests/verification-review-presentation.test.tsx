@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import type { Operation, OperationResult, ReviewPage } from '../src/account-verification/transport';
@@ -95,9 +95,19 @@ test('management review keeps evidence, failed drafts and delayed decisions atta
     expect(calls).toHaveLength(0);
     const reason = 'Confirmed through an independently contacted publisher.';
     await fill(reason);
-    await decide();
+    const schedule = globalThis.setTimeout;
+    const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((fn, ms, ...args) =>
+      schedule(fn, ms === 25_000 ? 1 : ms, ...args)) as typeof setTimeout);
+    try {
+      await decide();
+      await act(async () => { await new Promise((resolve) => schedule(resolve, 15)); });
+    } finally {
+      timer.mockRestore();
+    }
     expect(calls[0]!.input).toMatchObject({ action: 'approve', targetId: request.id, reason });
-    await settle(0, { state: 'unavailable' });
+    expect(host.textContent).toContain(m.av_uncertain());
+    await settle(0, { state: 'accepted', request: { ...request, state: 'approving' } });
+    expect(host.textContent).toContain(m.av_uncertain());
     unavailable = true;
     await render();
     expect(host.textContent).toContain(request.id);
