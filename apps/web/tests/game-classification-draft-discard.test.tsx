@@ -212,7 +212,7 @@ test('Game classification keyboard opening and discard preserve independent draf
         siblingOpener.focus();
         await act(async () => user.keyboard('{Enter}'));
         expect(window.document.activeElement).toBe(section('schema:gamePlatform').querySelector('fieldset'));
-        expect(input().disabled).toBe(true);
+        expect(input().closest('fieldset')!.disabled).toBe(true);
         propose = async () => ({ ok: false, reason: 'uncertain' });
         await submit();
         expect(nativeCommands.at(-1)).toEqual(nativeCommands.at(-2));
