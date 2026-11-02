@@ -52,9 +52,10 @@ function releaseYear(
 ): string | undefined {
   const statements = subject.statements as unknown as Record<string, Stmt[]>;
   for (const property of DATE_PROPERTIES) {
-    const chosen = bestRank(Object.hasOwn(statements, property) ? (statements[property] ?? []) : []);
+    const eligible = Object.hasOwn(statements, property) ? (statements[property] ?? []) : [];
+    const chosen = bestRank(eligible.filter((statement) => spoilerLevel(statement) === 0));
     for (const statement of chosen) {
-      if (spoilerLevel(statement) > 0 || statement.property.data_type !== 'time') continue;
+      if (statement.property.data_type !== 'time') continue;
       const content = statement.value.type === 'value' ? statement.value.content : undefined;
       if (
         !isRecord(content) ||
@@ -104,7 +105,7 @@ function descriptionFor(
 
 function visibleStatement(subject: NonNullable<ReturnType<typeof subjectBody>>['subject']): boolean {
   return Object.values(subject.statements).some((statements) =>
-    bestRank(statements as unknown as Stmt[]).some((statement) => spoilerLevel(statement) === 0),
+    bestRank((statements as unknown as Stmt[]).filter((statement) => spoilerLevel(statement) === 0)).length > 0,
   );
 }
 
