@@ -68,14 +68,22 @@ export function MangaInitialField({
   const [removingQualifier, setRemovingQualifier] = useState<string>();
   const qualifierId = useId();
   const section = useRef<HTMLElement>(null);
+  const qualifiers = row.statement.qualifiers ?? [];
+  const supportedQualifiers = property.qualifiers.filter(
+    (id) => read.release.properties[id]?.datatype === 'wikibase-item' || editableScalar(read.release.properties[id]),
+  );
+  const qualifierOptions = supportedQualifiers.filter((id) => !qualifiers.some((part) => part.property.id === id));
+  const qualifierAllowed = qualifierOptions.includes(qualifier);
+  useLayoutEffect(() => {
+    if (qualifier && !qualifierAllowed) setQualifier('');
+  }, [qualifier, qualifierAllowed]);
   // Late editor emissions obey the current lock and exact row incarnation.
-  const current = useRef({ disabled, row });
-  current.current = { disabled, row };
+  const current = useRef({ disabled, row, qualifier, qualifierOptions });
+  current.current = { disabled, row, qualifier, qualifierOptions };
   const editable = () => !current.current.disabled && current.current.row === row;
   const change = (next: MangaRow) => {
     if (editable()) onChange(next);
   };
-  const qualifiers = row.statement.qualifiers ?? [];
   const qualifierIds = qualifiers.map((_, index) => row.qualifierIds?.[index] ?? String(index));
   const citationPart = row.statement.references?.[0]?.parts.find((part) => part.property.id === 'schema:url');
   const citation =
@@ -298,10 +306,7 @@ export function MangaInitialField({
               </div>
             ))}
           </div>
-          {!!property.qualifiers.filter(
-            (id) =>
-              read.release.properties[id]?.datatype === 'wikibase-item' || editableScalar(read.release.properties[id]),
-          ).length && (
+          {!!supportedQualifiers.length && (
             <div className="flex min-w-0 flex-wrap items-end gap-3">
               <Field className="min-w-0 basis-full sm:basis-48 sm:flex-1">
                 <FieldLabel htmlFor={qualifierId}>{m.correction_add_qualifier({}, o)}</FieldLabel>
@@ -309,37 +314,36 @@ export function MangaInitialField({
                   id={qualifierId}
                   className="w-full min-w-0"
                   aria-label={m.correction_add_qualifier({}, o)}
-                  value={qualifier}
+                  value={qualifierAllowed ? qualifier : ''}
                   onChange={(event) => {
                     if (editable()) setQualifier(event.target.value);
                   }}
                 >
                   <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                  {property.qualifiers
-                    .filter(
-                      (id) =>
-                        (read.release.properties[id]?.datatype === 'wikibase-item' ||
-                          editableScalar(read.release.properties[id])) &&
-                        !(row.statement.qualifiers ?? []).some((part) => part.property.id === id),
-                    )
-                    .map((id) => (
-                      <NativeSelectOption
-                        key={id}
-                        value={id}
-                        lang={pickText(read.release.properties[id]?.labels ?? {}, locale).lang ?? undefined}
-                      >
-                        {name(id)}
-                      </NativeSelectOption>
-                    ))}
+                  {qualifierOptions.map((id) => (
+                    <NativeSelectOption
+                      key={id}
+                      value={id}
+                      lang={pickText(read.release.properties[id]?.labels ?? {}, locale).lang ?? undefined}
+                    >
+                      {name(id)}
+                    </NativeSelectOption>
+                  ))}
                 </NativeSelect>
               </Field>
               <Button
                 className="h-auto min-h-11 max-w-full whitespace-normal text-start"
                 type="button"
                 variant="outline"
-                disabled={!qualifier}
+                disabled={disabled || !qualifierAllowed}
                 onClick={() => {
-                  if (!editable()) return;
+                  if (
+                    !editable() ||
+                    !section.current?.isConnected ||
+                    current.current.qualifier !== qualifier ||
+                    !current.current.qualifierOptions.includes(qualifier)
+                  )
+                    return;
                   change({
                     ...row,
                     qualifierIds: [...qualifierIds, crypto.randomUUID()],
