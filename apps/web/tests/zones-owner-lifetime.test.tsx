@@ -193,6 +193,7 @@ const { ZoneEditorRoute, loadZoneEditor } = await import('../src/features/zones/
 const { ZoneEditorSession } = await import('../src/features/zones/editor/model');
 const { ZonesOwnerWorkspace } = await import('../src/features/zones/manage/workspace');
 const { CreateZone } = await import('../src/features/zones/manage/create');
+const { ZonesRouteError } = await import('../src/features/zones/manage/route-feedback');
 const { readOwnedZones, changeOwnedZone, createOwnedZone } = await import('../src/features/zones/manage/request');
 const { fixtureZone, fixtureZoneId, zonesFixture } = await import('../src/features/zones/manage/fixtures');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -344,8 +345,14 @@ const editRoute = createRoute({
   loader: ({ params, context }) => loadZoneEditor(params.id, 'en', context.queryClient),
   component: EditRoutePage,
 });
+let routeFeedbackLoads = 0;
+const routeFeedbackRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/my/zones/recovery',
+  loader: async () => { if (routeFeedbackLoads++ === 0) throw new Error('Temporary route failure'); },
+  errorComponent: ZonesRouteError, component: () => <p>Fresh authorized page</p>,
+});
 const router = createRouter({
-  routeTree: rootRoute.addChildren([listRoute, newRoute, editRoute]),
+  routeTree: rootRoute.addChildren([listRoute, newRoute, editRoute, routeFeedbackRoute]),
   history: createMemoryHistory({ initialEntries: ['/my/zones'] }),
   context: { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
 });
@@ -1790,4 +1797,19 @@ test('UNRUN stale leave controls cannot reset or proceed after a CSRF-only admis
   } finally {
     await visit.close();
   }
+});
+
+test('unavailable Zone routes retry once at the requested location', async () => {
+  setLocale('en', { reload: false });
+  backendViewer = signedIn('A', csrfA); queryClient.setQueryData(sessionQuery.queryKey, backendViewer);
+  routeFeedbackLoads = 0;
+  const host = document.createElement('main'); document.body.append(host); const root = createRoot(host);
+  await settle(() => root.render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>));
+  await settle(() => router.navigate({ to: '/my/zones/recovery' as never }));
+  await until(() => host.textContent?.includes(m.zones_owner_unavailable({}, { locale: 'en' })) ?? false);
+  const address = router.state.location.href, retry = button(host, m.zones_owner_retry({}, { locale: 'en' }));
+  expect(retry.type).toBe('button'); await settle(() => { retry.click(); retry.click(); });
+  await until(() => host.textContent?.includes('Fresh authorized page') ?? false);
+  expect(routeFeedbackLoads).toBe(2); expect(router.state.location.href).toBe(address);
+  await settle(() => root.unmount()); host.remove();
 });

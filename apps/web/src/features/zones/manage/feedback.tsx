@@ -10,11 +10,13 @@ export function ZoneFeedback({
   failure,
   locale,
   onRetry,
+  retryPending = false,
   returnTo = `/${locale}/my/zones`,
 }: {
   failure: Failure;
   locale: string;
   onRetry?: (() => void) | undefined;
+  retryPending?: boolean;
   returnTo?: string;
 }) {
   const options = { locale: locale as never };
@@ -40,8 +42,15 @@ export function ZoneFeedback({
           {m.zones_owner_sign_in({}, options)}
         </a>
       ) : onRetry ? (
-        <Button className={recoveryControlClassName} variant="outline" onClick={onRetry}>
-          {m.zones_owner_retry({}, options)}
+        <Button
+          className={recoveryControlClassName}
+          type="button"
+          variant="outline"
+          disabled={retryPending}
+          aria-busy={retryPending}
+          onClick={onRetry}
+        >
+          {retryPending ? m.zones_owner_loading({}, options) : m.zones_owner_retry({}, options)}
         </Button>
       ) : failure.kind === 'unavailable' ? (
         <a className={cn(buttonVariants({ variant: 'outline' }), recoveryControlClassName)} href={returnTo}>

@@ -220,7 +220,7 @@ function OwnerVisit({ locale, input, outcome, owner, onChange, onReload }: Works
   if (owner && !owner.isCurrent(capture))
     return outcome?.kind === 'signed-out' ? (
       <div className={ownerFeedbackClassName}>
-        <ZoneFeedback failure={{ kind: 'signed-out' }} locale={locale} />
+        <ZoneFeedback failure={{ kind: 'signed-out' }} locale={locale} returnTo={listHref(locale, input)} />
       </div>
     ) : (
       <p role="status">{m.zones_owner_loading({}, options)}</p>
