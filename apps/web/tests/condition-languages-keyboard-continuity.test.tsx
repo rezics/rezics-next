@@ -40,7 +40,9 @@ const tags = () => [...host.querySelectorAll('li code')].map((node) => node.text
 const row = (tag: string) =>
   [...host.querySelectorAll('li')].find((item) => item.querySelector('code')?.textContent === tag)!;
 const control = (scope: ParentNode, name: string) =>
-  [...scope.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.getAttribute('aria-label') === name)!;
+  [...scope.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.getAttribute('aria-label') === name,
+  )!;
 const press = async (button: HTMLButtonElement) =>
   act(() => {
     button.focus();
