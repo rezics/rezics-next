@@ -10,6 +10,8 @@ import { bindSemanticProducerRoles } from './erasure-producer.ts';
 import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
 import { IDENTITY_EPOCH_BOOTSTRAP } from './events.ts';
 import bootstrapHome from './identity-epoch-bootstrap-insert-bootstrap-home.sql';
+import { requireIdentityTerminalExecutor } from './identity-terminal-closure-cost.ts';
+import deleteEmptySlot from './identity-terminal-closure-delete-empty-slot.sql';
 
 export type TerminalClosureSource = Readonly<{
   route: number;
@@ -34,6 +36,8 @@ const key = (id: string) => routeOf(id)!;
  * exact native phase fields; an SDK response is never used as custody evidence.
  */
 async function native<T>(pool: Pool, partition: number, body: (tx: CommandTransaction) => Promise<T>, schedule = false) {
+  requireIdentityTerminalExecutor('terminal directory native phase (bootstrap event, erasure role and native-commit callbacks)',
+    'mutation-events-native-callbacks');
   return withSingleCommandAttempt(() => runCommand(pool, { partition }, async (tx) => {
     bindSemanticProducerRoles(tx, []);
     const value = await body(tx);
@@ -306,16 +310,7 @@ async function releaseCopies(tx: CommandTransaction, reservation: string, copies
   if (released.rowCount !== 1) throw unavailable();
   // An empty counter alone is insufficient: each actual retained range must
   // also be empty in this serialized home before releasing its physical slot.
-  await tx.query(`DELETE FROM semantic.identity_epoch_mapping_generation g WHERE partition_no=$1 AND generation=$2
-    AND job_id=$2 AND closure_copies=0
-    AND NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_group control WHERE control.partition_no=$1 AND control.closure_claim=$2)
-    AND NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_bootstrap_row b
-      JOIN semantic.identity_epoch_bootstrap_page p USING(partition_no,transaction_id)
-      WHERE b.partition_no=$1 AND p.closure_page_reservation=$2)
-    AND NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_original o WHERE o.partition_no=$1 AND o.closure_reservation=$2)
-    AND NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_mapping m WHERE m.route BETWEEN $1*16 AND $1*16+15
-      AND (m.closure_ticket_reservation=$2 OR m.closure_source_reservation=$2))`,
-  [partition, reservation]);
+  await tx.query(deleteEmptySlot.sql, [partition, reservation]);
 }
 
 /** Bottom-up, at most one successor lookup per source. No recursive alias walk,
@@ -408,9 +403,17 @@ async function finalizeDirectory(pool: Pool, entry: Directory) {
 /** Source page payloads are retired only by their actual source ACK. */
 export async function retireIdentityTerminalPage(tx: CommandTransaction, exported: IdentityNativeReceipt, rows: number) {
   if (currentCommand(tx).partition !== exported.partition) throw unavailable();
-  const allocation = (await tx.query(`SELECT closure_page_reservation FROM semantic.identity_epoch_bootstrap_page
-    WHERE partition_no=$1 AND transaction_id=$2`, [exported.partition, exported.transactionId])).rows[0]?.closure_page_reservation;
-  if (rows && allocation) await releaseCopies(tx, allocation, rows);
+  if (!Number.isInteger(rows) || rows < 0 || rows > 100) throw new RangeError('Invalid retained page size');
+  const released = (await tx.query(`WITH locked AS (
+    SELECT p.closure_page_reservation FROM semantic.identity_epoch_bootstrap_page p
+    WHERE p.partition_no=$1 AND p.transaction_id=$2 AND p.acknowledged
+      AND NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_bootstrap_row r
+        WHERE r.partition_no=$1 AND r.transaction_id=$2) FOR UPDATE OF p
+  ) UPDATE semantic.identity_epoch_bootstrap_page p SET closure_page_reservation=NULL FROM locked
+    WHERE p.partition_no=$1 AND p.transaction_id=$2 RETURNING locked.closure_page_reservation`,
+  [exported.partition, exported.transactionId])).rows[0];
+  if (!released) throw unavailable();
+  if (released.closure_page_reservation) await releaseCopies(tx, released.closure_page_reservation, rows);
 }
 
 type DrainClaim = Readonly<{

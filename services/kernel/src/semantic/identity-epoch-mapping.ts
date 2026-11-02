@@ -1,5 +1,6 @@
 /** Released-home native mapping work. The only argument is an admitted native job locator. */
 import type { Pool } from 'pg';
+import { identityTerminalArbiter } from './identity-terminal-closure-arbiter.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   currentCommand,
@@ -711,7 +712,9 @@ async function reserveGeneration(
   generation: string,
   measured: Work,
   closure = false,
+  validate?: () => void,
 ) {
+  validate?.();
   if (!closure && (
     (
       await query(
@@ -742,6 +745,7 @@ async function reserveGeneration(
       [home, generation],
     )
   ).rows[0];
+  validate?.();
   if (existing) {
     if (existing.job_id !== job.jobId) throw unavailable('Retained generation belongs to another native attempt');
     return;
@@ -755,6 +759,7 @@ async function reserveGeneration(
       [home, job.jobId, generation, terminal],
     )
   ).rows[0];
+  validate?.();
   if (!row) throw unavailable('Retained native generations exhaust the existing G+4P budget');
 }
 async function effectGate(
@@ -1673,6 +1678,29 @@ export async function reserveIdentityTerminalClosure(
   coalesce = true,
 ): Promise<string> {
   const command = currentCommand(tx);
+  return reserveClosureCopies(tx, command.partition, command.transactionId, reservation, terminal, copies, coalesce);
+}
+
+/** The native original arbiter shares the SAME allocator. Its real PoolClient
+ * is authenticated privately; a structurally similar query object is refused.
+ * This confers no CommandTransaction or source-mutation authority.
+ */
+export async function reserveIdentityTerminalOriginalCopies(
+  tx: import('pg').PoolClient, reservation: string, terminal: string, copies: number,
+): Promise<string> {
+  const native = identityTerminalArbiter(tx);
+  const allocation = await reserveClosureCopies(tx, native.partition, reservation, reservation, terminal, copies, true,
+    () => { identityTerminalArbiter(tx); });
+  identityTerminalArbiter(tx);
+  return allocation;
+}
+
+async function reserveClosureCopies(
+  tx: CommandTransaction, partition: number, transactionId: string, reservation: string,
+  terminal: string, copies: number, coalesce: boolean,
+  validate?: () => void,
+): Promise<string> {
+  validate?.();
   if (!Number.isInteger(copies) || copies < 0 || copies > 4096) throw new RangeError('Closure copy bound');
   const measured: Work = { rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 0 };
   // Provisional copies share physical inventory, never execution funds. This
@@ -1680,18 +1708,28 @@ export async function reserveIdentityTerminalClosure(
   // slot per export before its later terminal seed can be scanned.
   let allocation = reservation;
   if (coalesce) {
-    const shared = (await tx.query(`SELECT generation FROM semantic.identity_epoch_mapping_generation
+    const shared = (await tx.query(`SELECT generation,erasure_key FROM semantic.identity_epoch_mapping_generation
       WHERE partition_no=$1 AND closure_source_pool AND closure_copies+$2<=4096 ORDER BY slot LIMIT 1 FOR UPDATE`,
-    [command.partition, copies])).rows[0];
-    allocation = shared?.generation ?? command.transactionId;
+    [partition, copies])).rows[0];
+    validate?.();
+    if (validate && shared) {
+      const roles = (await tx.query(`SELECT 1 FROM semantic.erasure_copy_role
+        WHERE partition_no=$1 AND store='identity_epoch_mapping_generation' AND record_key=$2 LIMIT 1`,
+      [partition, shared.erasure_key])).rowCount;
+      validate();
+      if (roles) throw unavailable('Original allocator requires its nonpersonal native hook profile');
+    }
+    allocation = shared?.generation ?? transactionId;
   }
-  await reserveGeneration(tx, { jobId: allocation, epoch: 1n }, command.partition, terminal, allocation, measured, true);
+  await reserveGeneration(tx, { jobId: allocation, epoch: 1n }, partition, terminal, allocation, measured, true, validate);
+  validate?.();
   const allocated = await tx.query(
     `UPDATE semantic.identity_epoch_mapping_generation SET closure_copies=closure_copies+$3,
        closure_source_pool=closure_source_pool OR $4
      WHERE partition_no=$1 AND generation=$2 AND job_id=$2 AND closure_copies+$3<=4096 RETURNING slot`,
-    [command.partition, allocation, copies, coalesce],
+    [partition, allocation, copies, coalesce],
   );
+  validate?.();
   if (allocated.rowCount !== 1) throw unavailable('Closure physical copies exhaust their reserved generation');
   return allocation;
 }

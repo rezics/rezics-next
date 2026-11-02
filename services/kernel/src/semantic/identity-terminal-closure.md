@@ -76,91 +76,169 @@ producer commit, including for ordinary commands that otherwise emit no
 bootstrap receipt. Incoming-ticket and cancelled-source recovery have separate
 advancing keysets; an unresolved first page cannot hide later recovery work.
 
-## Physical allocation and remaining implementation work
+## Durable original and selected executor receiving
 
-`reserveIdentityTerminalClosure` delegates to the existing private
-`reserveGeneration`, with its four slots and 4096-copy ceiling per slot.
-Provisional source, successor, page and receiving copies coalesce into that
-inventory; distinct exports keep their individual receipt identities. Closing
-reserves a separate exact claim liability before changing group state. Release
-checks actual source, ticket, page and directory references, as well as counters.
-This is physical allocation, not execution funding.
+`identity-terminal-closure-original.ts` implements a separate, positive native
+bootstrap owner-observation original. This is a narrowly supported operation,
+not terminal authority and not funding for the retained directory driver.
+`withIdentityTerminalBootstrapOriginal` verifies the actual retained bootstrap
+page/native commit, current owner incarnation, phase and generation. It commits
+an immutable original before lending its private callback handle. The original
+binds the actual Pool, native transaction/position, absolute deadline, plan
+digest and eight-axis allocation. Identical replay opens the same native record;
+changed payload conflicts. Copies, escaped callbacks and expired handles fail.
 
-The complete contract is not yet implemented. In particular, this source does
-not install authentic finite eight-axis original frames, durable debit/spent and
-no-refill replay state, or complete private parent transfers for every listed
-producer/workflow. No literal inclusive SQL/body/framework/authorization/receipt/
-callback/failure/rollback cost derivation has been established. Unsupported
-provisional numeric costs were removed instead of being presented as funding.
-`NativeStepWork` remains reporting only. The full cohome/crash accounting proof
-for phase receipts, workflow/accounting records and old/new output coexistence
-is also outstanding. Mapping member effects and Access delivery/birth funding
-are not complete. These are owned implementation obligations, not missing
-foreign permission or another research question.
+`readIdentityTerminalOriginalOwner` receives the installed
+`withCommandDispatchLifetime(pool, deadline, owner, body)` ABI directly, without
+casts, query replacement, Pool interception or fabricated receipt authority.
+Its reserve callback checks the actual frozen `COMMAND_DISPATCH_ALLOWANCE` and
+commits one native child ticket plus a monotonic spent vector before Core can
+check out its effect connection. It wraps exactly one actual `runCommand` in
+`withSingleCommandAttempt`. The effect transaction locks and checks the actual
+owner, original and exact operation/home/phase/cursor/price ticket. Retirement
+ordinal advancement revokes that permission at the actual effect home. A
+failed dispatch, rollback, lost COMMIT reply or lost effect reply never refunds
+the ticket. Reopening a callback does not reset it.
 
-Native, growth, default-worker, legacy, RLS and full acceptance execution remains
-deferred. The new cases are authored obligations, not passing evidence.
+The metadata arbiter uses a real checked-out client, a private live callback
+association, a current native owner lock, fixed-width projections, one immutable
+deadline and separately reserved same-client rollback. It performs only original
+admission, debit and retirement metadata work. It does not reproduce Core's
+executor, issue command authority or append domain events. The selected native
+bootstrap allocator hook must have no personal source/basis/copy roles; indexed
+absence checks precede its use. Positive roles refuse this selected profile.
 
-## Source inventory and verification disposition
+`retireIdentityTerminalOriginal` spends a second one-shot ticket before its
+cleanup checkout. Cleanup requires the actual source page ACK, current native
+owner and empty exported payload. It verifies both exact spent tickets, deletes
+their physical rows and the header, and only then releases their three reserved
+copies. SDK return and an accounting counter are not retirement evidence. An
+uncertain or unsuccessful cleanup remains spent and charged. The implementation
+does not yet supply a separate maintenance original and explicit liability
+transfer after that cleanup allowance is exhausted or its deadline expires.
 
-The production entry points are:
+## Literal selected-operation declarations
 
-| File | Implemented callables and integration |
+`identity-terminal-closure-cost.ts` declares all eight axes beside the supported
+bodies. Values price bounded index/heap/lock/FK/deferred-hook work, bounded binds
+and projections, control SQL, failed dispatch and disjoint rollback. Fixed SQL
+and protocol framing follow the delivered Core byte convention. Candidate keys
+are zero for this owner/metadata-only operation; no candidate discovery occurs.
+Every remaining zero is visible in the component declarations. Repetition is
+fixed by the implemented one owner-read and one retirement attempt, not by a
+post-dispatch `NativeStepWork` counter.
+
+The actual imported Core quote is:
+
+| Component | candidateKeys/nativeRows/identityMetadataRows/nativePoints/witnessKeys/statements/bytes/emptySeeks |
 | --- | --- |
-| `identity-terminal-closure.ts` | `stepIdentityTerminalClosure`, `advanceIdentityTerminalClosures`, `drainIdentityTerminalClosure`, `bindIdentityTerminalMutation`, `cancelUnregisteredIdentityTerminalCapture`, `releaseIdentityTerminalClaim`, `recoverIdentityTerminalClosure`, `cleanIdentityTerminalClosure`, `retireIdentityTerminalPage`, `assertIdentityTerminalGroupsOpen` |
-| `identity-terminal-closure-command.ts` | `runIdentityTerminalCommand`, `admitIdentityTerminalCapture`; released discovery/drain/mutation sequencing, without authentic funding |
-| `identity-epoch-bootstrap.ts` | Existing bootstrap signatures call native recovery and pending-source progression, then export, receiving and separate source ACK; physical page reservation precedes allocation |
-| `identity-epoch-mapping.ts` | `reserveIdentityTerminalClosure` uses the existing private `reserveGeneration`; it does not supply execution funding |
-| `identity-epoch-read.ts`, `identity-terminal-closure-current.sql` | Existing ordered mapping read joins each requested original's exact current terminal directory entry |
-| `identity-epoch-admission.ts`, `identity-epoch-admission-hold-source.sql`, `identity-epoch-store.ts` | Immediate-source compatibility and additive closure-open admission/publication checks, adjacent to unchanged rating hooks |
-| `subject.ts`, `bulk.ts`, `account-agents.ts`, `merges.ts`, `merge-moves.ts` | Actual command invocations use the single-attempt wrapper; subject write, birth, ordinary merge and merge-member mutations call native capture admission |
-| `../access/agent-verification-identity.ts` | Four actual identity admission/binding commands use the wrapper; delivery and account-agent birth original funding remains incomplete |
+| Core effect | 0/2/0/1/0/7/169/1 |
+| Core cleanup | 0/0/0/0/0/1/0/0 |
+| Core total | 0/2/0/1/0/8/169/1 |
+| Owned effect-home owner/original/ticket read | 0/9/3/3/3/1/272/3 |
 
-Both forward migrations, `20261102000100_identity_terminal_closure_fresh.sql`
-and `20261102000200_identity_terminal_closure_fresh.sql`, and the Semantic schema
-snapshot contain the new constant-size locator, directory states, native phase
-references, recovery cursors, indexes, capture interlock and owner guard. The
-existing Core partition trigger and historical migrations are unchanged.
+The source exports component literals for `begin`, `lockTimeout`,
+`statementTimeout`, `owner`, `export`, `provenanceAbsence`, `copyRoleAbsence`,
+`original`, `sharedSlot`, `existingSlot`, `insertSlot`, `allocateCopies`,
+`insertOriginal`, `insertTicket`, `debitOriginal`, `provenanceBinding`, `commit`,
+`rollback`, `retirement`, `deleteTickets`, `deleteOriginal`, `releaseCopies` and
+`ownerRead` and `emptySlot` (`0/15/10/10/0/3/120/10` for the indexed native
+retirement proof). The immutable composed plan separates admission, debit, effect,
+retirement debit and retirement effect. FK and the existing deferred mapping
+state erasure hook are included. The admitted nonpersonal branch executes no
+role callbacks or domain authorization/receipt/publication work. No successful
+price is declared for absent foreign children.
 
-The implementation makes the following literal structural bounds. These are
-**not** inclusive execution prices or evidence of authentic admission:
+## Same physical inventory
 
-| Operation or inventory | Literal bound |
-| --- | --- |
-| Source page, pending-source page, each recovery keyset | 100 originals per page |
-| Requested mapping/control page | 100 originals |
-| Directory membership | 4096 originals per group |
-| Drain keyset and cleanup deletion | 100 originals per page |
-| Synchronous drain of one admitted group | 41 advancing pages |
-| Successor discovery | One immediate successor per source enrollment |
-| Shared extra-generation inventory | Four slots, at most 4096 charged copies per slot |
+`reserveIdentityTerminalOriginalCopies` authenticates the real native arbiter
+client and calls the same private `reserveGeneration` used by mapping and
+`reserveIdentityTerminalClosure`. It creates no physical allocation ledger.
+Original and ticket tables hold bounded execution metadata, not another member
+directory or transitive path. Their reservation FKs and indexed references keep
+generic closure cleanup from freeing their slot.
 
-No complete literal table exists for `candidateKeys`, `nativeRows`,
-`identityMetadataRows`, `emptySeeks`, `nativePoints`, `witnessKeys`, `statements`
-and `bytes`. Native command framework, authorization, arbitrary callbacks,
-failure/rollback, retained continuations and cleanup have not been composed into
-a prepaid original. The new funding test file covers physical reservations; it
-does not yet test an installed original frame or durable no-refill semantics.
-No genuinely missing external operand has been identified. The missing funding
-and complete accounting are this implementation's own obligations.
+Admission reserves the entire three-copy bundle before creating its header:
 
-The sole permitted compiler invocation was
-`bun run --cwd services/kernel typecheck --emit-schema=semantic`. The configured
-placement ran on host `b` and terminated with exit status 2:
+| State | Actual metadata rows | Charged bundle |
+| --- | --- | --- |
+| Admission committed | One header | Header + two provisional one-shot tickets = 3 |
+| Owner-read debit committed | Header + owner-read ticket | 3 |
+| Retirement debit committed, including abandoned/uncertain effect | Header + two spent tickets | 3 |
+| Native ACK/empty-range cleanup committed | No header or tickets | 0 |
 
-```text
-src/semantic/identity-terminal-closure.ts(604,11): error TS18047: 'current' is possibly 'null'.
-src/semantic/identity-terminal-closure.ts(604,71): error TS18047: 'current' is possibly 'null'.
-```
+All three roles use the same coalesced reservation, including at cohome
+source/successor/terminal. They are distinct rows, so they are never collapsed
+into one charged copy. No later ticket needs another slot. Together with all
+previously charged directory/source/export/old/new copies, each slot satisfies
+`closure_copies <= 4096`, and the existing allocator permits only four slots.
+For this extension, `Cq = prior reserved copies + 3 * admitted originals` is at
+most `4 * 4096 = 16384`; metadata admission waits/refuses before allocation if a
+three-copy bundle cannot fit. Canonical rows remain in `Aq`, so this extension
+uses only the existing `Aq+16384` / `Gq+4` inventory. Failed or replayed tickets
+do not release the bundle. The native ACK cleanup can reclaim its already
+reserved bundle without acquiring a fifth slot. Empty bucket retirement uses
+seven indexed native reference ranges and both original/ticket FK checks under
+the same owner transaction. It never infers emptiness from the counter. Native
+page ACK clears its allocation pointer only after deleting its exact payload;
+retired page history cannot make a slot proof grow with population.
 
-The source now explicitly rejects a null `current` before using the ticket
-reservation. The one-invocation policy prohibits a second compiler run. Later
-cancellation-recovery and schema edits are also unverified. Schema emission did
-not occur after the failed compiler; the snapshot was updated from the two
-forward migrations. This is a failed typing receipt with a committed fix, not a
-passing receipt. All native/unit/growth/full acceptance remains UNRUN. The frozen
-contract test and existing acceptance assertions were not edited. No file
-outside the declared paths was changed.
+This is a reservation argument for the new bounded metadata operation. The full
+directory protocol's export/receiving/old+new/workflow/cleanup cohome proof and
+all producer composition remain incomplete; the metadata argument does not
+establish those obligations.
+
+## Unsupported profiles and remaining source obligations
+
+The actual installed Core adapter supports `single-no-effect` only. Directory
+native phases register both Semantic erasure and native-commit callbacks and
+emit bootstrap/progress events. They require an executor mutation/event/native
+callback profile that is not exported by `command/dispatch-lifetime.ts`.
+Principal source commands additionally require Core's authorization, receipt,
+basis and source-association profile. These operations cannot use the no-effect
+quote. `IdentityTerminalCompositionError` carries the exact owner/callable/
+profile/producer operand, rather than a zero vector or invented successful
+parent. Known bootstrap native phases and principal source dispatches refuse
+before their unsupported body/checkout. The retained driver source and its
+ordering remain present for receiving a supported profile.
+
+The following owned work is still incomplete: literal inclusive compositions
+for all directory SQL bodies and initial-discovery/drain/second-source/claim
+release phases; authentic original admission/private transfer for all subject,
+bulk, merge, account birth, mapping member, workflow and Access delivery
+producers; separate maintenance admission and durable liability transfer; and
+the complete combined physical schedule. The supported owner-read original
+cannot fund those independent operations. Existing receipt-free legacy wrapper
+calls are not claimed as funded receiving. No new dependency receipt, native
+pass or whole-product completion is asserted.
+
+## Source and verification disposition
+
+New production callables are `withIdentityTerminalBootstrapOriginal`,
+`readIdentityTerminalOriginalOwner`, `retireIdentityTerminalOriginal`,
+`withIdentityTerminalArbiter`, `identityTerminalArbiter`,
+`reserveIdentityTerminalOriginalCopies`, `addIdentityTerminalCosts` and
+`requireIdentityTerminalExecutor`. Existing bootstrap signatures, ordered
+mapping states, page100, group4096 and four-slot allocation remain unchanged.
+The source command wrapper now uses typed overloads and Core's actual default
+deadline; an inherited Access five-second deadline is retained.
+
+The forward migration `20261102000300_identity_terminal_closure_fresh.sql` adds
+immutable original/ticket metadata, monotonic spent state, reservation indexes
+and owner-incarnation custody protection. Position-only owner advancement still
+returns before dependency IO. The Semantic snapshot includes the same changes.
+Historical migrations, Core executor, rating hooks, protected Library projection
+and frozen acceptance are unchanged. No file outside the declared paths was
+changed.
+
+Authored native obligations cover durable admission before handle lending,
+actual Core allowance debit, lost admission/debit replies, failed effect
+rollback, copied/escaped handles, immutable deadline replay, owner refusal,
+native ACK retirement, retained failed cleanup and SQL refill refusal. Existing
+chain/race/shared-suffix/growth acceptance is preserved byte-for-byte. All
+native/unit/growth/full acceptance remains UNRUN. The current compiler receipt
+will be recorded after the sole permitted invocation; typing cannot establish
+product completion.
 
 ## Reference sources
 

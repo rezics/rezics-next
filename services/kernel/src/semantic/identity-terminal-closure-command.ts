@@ -1,11 +1,14 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { currentCommand, currentCommandResources, currentCommandReceipt, runCommand, withSingleCommandAttempt, type CommandTransaction } from '../command/command.ts';
+import { currentCommand, currentCommandResources, currentCommandReceipt, runCommand, withSingleCommandAttempt,
+  DEFAULT_REQUEST_DEADLINE_MS, type CommandTransaction, type CommandBasis, type CommandReceipt,
+  type CommandAuthorization, type CommandOutcome, type CommandResult } from '../command/command.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { IdentityEpochStoreError } from './identity-epoch-store.ts';
 import { bindIdentityTerminalMutation, cancelUnregisteredIdentityTerminalCapture, drainIdentityTerminalClosure, releaseIdentityTerminalClaim } from './identity-terminal-closure.ts';
+import { requireIdentityTerminalExecutor } from './identity-terminal-closure-cost.ts';
 
 type Drain = NonNullable<Awaited<ReturnType<typeof drainIdentityTerminalClosure>>>;
 type Scope = { pool: Pool; deadline: number; drained: Map<string, Drain> };
@@ -61,10 +64,28 @@ export async function admitIdentityTerminalCapture(tx: CommandTransaction, origi
  * then a newly authorized source attempt consuming that exact drain. Contention
  * remains unavailable; this adds no executor retry or module backoff loop.
  */
-export const runIdentityTerminalCommand: typeof runCommand = (async (pool: Pool, options: any, body: any) => {
-  const scope: Scope = { pool, deadline: options.deadline ?? deadlineFor(5000), drained: new Map() };
-  const attempt = () => scopes.run(scope, () => withSingleCommandAttempt(() =>
-    (runCommand as any)(pool, { ...options, deadline: scope.deadline }, body)));
+type PrincipalOptions = Parameters<typeof runCommand>[1];
+type LegacyOptions = {
+  partition: number; deadline?: number; basis?: CommandBasis; receipt?: CommandReceipt;
+  authorization?: CommandAuthorization | undefined; clock?: (() => Date) | undefined;
+};
+type Context = Parameters<Parameters<typeof runCommand>[2]>[1];
+type Body<T> = (tx: CommandTransaction, context: Context) => Promise<CommandResult<T>>;
+export function runIdentityTerminalCommand<T>(pool: Pool, options: LegacyOptions, body: Body<T>): Promise<CommandOutcome<T>>;
+export function runIdentityTerminalCommand<T>(pool: Pool, options: PrincipalOptions, body: Body<T>): Promise<CommandOutcome<T>>;
+export async function runIdentityTerminalCommand<T>(pool: Pool, options: LegacyOptions | PrincipalOptions, body: Body<T>): Promise<CommandOutcome<T>> {
+  const scope: Scope = { pool, deadline: options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS), drained: new Map() };
+  const attempt = () => {
+    // No body inspection or failed attempt may discover that an authorization
+    // profile is unsupported. In particular, never read a receipt under the
+    // delivered no-effect quote and never execute these bodies then roll back.
+    if ('principal' in options || options.basis || options.receipt || options.authorization || options.clock)
+      requireIdentityTerminalExecutor('runIdentityTerminalCommand', 'principal-authorization-receipt');
+    return scopes.run(scope, () => withSingleCommandAttempt(() => {
+      const selected = { ...options, deadline: scope.deadline };
+      return 'principal' in selected ? runCommand(pool, selected, body) : runCommand(pool, selected, body);
+    }));
+  };
   try { return await attempt(); } catch (error) {
     if (!(error instanceof NeedsDrain) || error.scope !== scope) throw error;
     for (const terminal of error.terminals) {
@@ -85,4 +106,4 @@ export const runIdentityTerminalCommand: typeof runCommand = (async (pool: Pool,
       }
     }
   }
-}) as typeof runCommand;
+}

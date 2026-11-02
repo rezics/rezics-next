@@ -12,7 +12,8 @@ import { readIdentityMappings } from '../../../src/semantic/identity-epoch-read.
 import { home, identityEpochDatabase, seedLegacyRoot } from './identity-epoch.ts';
 
 export type Deployment = Awaited<ReturnType<typeof identityEpochDatabase>>;
-export type Boundary = 'export' | 'hold' | 'receive' | 'install' | 'promote' | 'ack' | 'withdraw';
+export type Boundary = 'export' | 'hold' | 'receive' | 'install' | 'promote' | 'ack' | 'withdraw'
+  | 'original-admission' | 'original-debit' | 'original-owner-read';
 const boundarySQL: Record<Boundary, RegExp> = {
   export: /INSERT INTO semantic\.identity_epoch_bootstrap_page\b/,
   hold: /SET closure_successor_ticket=\$3/,
@@ -21,6 +22,9 @@ const boundarySQL: Record<Boundary, RegExp> = {
   promote: /UPDATE semantic\.identity_epoch_original SET closure_state='installed'/,
   ack: /SET closure_state='active',closure_ack_transaction=/,
   withdraw: /SET source_revision=\$5,closure_state='withdrawn'/,
+  'original-admission': /INSERT INTO semantic\.identity_terminal_closure_original\(/,
+  'original-debit': /UPDATE semantic\.identity_terminal_closure_original SET ordinal=1,/,
+  'original-owner-read': /AND o\.original_id=\$3 AND o\.source_epoch=p\.epoch AND o\.deadline=\$4 AND o\.ordinal=1/,
 };
 
 /** Historical input only: no mapping, ready bit, source ACK or custody is seeded. */

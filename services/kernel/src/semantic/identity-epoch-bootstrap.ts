@@ -1,5 +1,7 @@
 import { stepIdentityTerminalClosure, retireIdentityTerminalPage, recoverIdentityTerminalClosure, advanceIdentityTerminalClosures } from './identity-terminal-closure.ts';
 import { reserveIdentityTerminalClosure } from './identity-epoch-mapping.ts';
+import { runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
+import { requireIdentityTerminalExecutor } from './identity-terminal-closure-cost.ts';
 import selectFrontier from './identity-epoch-bootstrap-select-frontier.sql';
 import takeClosures from './identity-epoch-bootstrap-take-closures.sql';
 import receivingBasis from './identity-epoch-bootstrap-basis.sql';
@@ -42,7 +44,7 @@ import closureReceipt from './identity-epoch-bootstrap-closure-receipt.sql';
 import advanceCursor from './identity-epoch-bootstrap-advance-cursor.sql';
 import installGate from './identity-epoch-bootstrap-install-gate.sql';
 import type { Pool } from 'pg';
-import { noEffect, registerCommandCallback, runCommand, withSingleCommandAttempt, type CommandTransaction } from '../command/command.ts';
+import { noEffect, registerCommandCallback, runCommand, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -58,8 +60,7 @@ import exportEmpty from './identity-epoch-bootstrap-export-empty.sql';
 import receiveEmpty from './identity-epoch-bootstrap-receive-empty.sql';
 import ackEmpty from './identity-epoch-bootstrap-ack-empty.sql';
 
-const singleBootstrapCommand: typeof runCommand = ((...args: any[]) =>
-  withSingleCommandAttempt(() => (runCommand as any)(...args))) as typeof runCommand;
+const singleBootstrapCommand: typeof runCommand = runIdentityTerminalCommand;
 
 const NIL = '00000000-0000-0000-0000-000000000000';
 type Phase = 'subjects' | 'members' | 'dirty' | 'member-dirty';
@@ -128,6 +129,7 @@ async function stepBootstrapHome(
   schedule: boolean,
 ): Promise<IdentityEpochBootstrapProgress> {
   if (!Number.isInteger(partition) || partition < 0 || partition > 4095) throw new RangeError('Invalid bootstrap home');
+  requireIdentityTerminalExecutor('stepIdentityEpochBootstrap export/receiving/source-ACK', 'mutation-events-native-callbacks');
   await recoverIdentityTerminalClosure(pool, partition);
   await advanceIdentityTerminalClosures(pool, partition);
   const work = { rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 0 };
@@ -486,6 +488,7 @@ export async function stepIdentityEpochBootstrapWork(
   pool: Pool,
   schedule = true,
 ): Promise<IdentityEpochBootstrapProgress | null> {
+  requireIdentityTerminalExecutor('stepIdentityEpochBootstrapWork topology registration and publication', 'mutation-events-native-callbacks');
   // Select and advance under one native topology-home lock, before releasing it for source work.
   // Parallel bounded workers therefore visit distinct frontier slots without foreign SQL or owner guesses.
   const repairPoint = await withReadTransaction(pool, async (tx) => {
@@ -558,6 +561,7 @@ export async function stepIdentityEpochBootstrapWork(
  * Selection and custody are amortized over the bounded frontier, never over foreign source rows.
  */
 export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> {
+  requireIdentityTerminalExecutor('runIdentityEpochBootstrapBatch topology/export/receiving/source-ACK', 'mutation-events-native-callbacks');
   const selected = await singleBootstrapCommand<number[]>(pool, { partition: 0 }, async (tx) => {
     const state = (await tx.query(bootstrapSelectBootstrapTopology3.sql)).rows[0];
     if (!state || state.remaining === 0) return noEffect([]);
