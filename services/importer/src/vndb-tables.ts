@@ -433,7 +433,7 @@ export class VndbTablesStore {
       const c_average = cells.c_average === null ? null : integer(cells.c_average, 1000);
       integer(cells.length, 5);
       integer(cells.devstatus, 2);
-      record = { id, olang, c_votecount, c_average, alias: cells.alias };
+      record = { id, olang, c_votecount, c_average, alias: cells.alias ?? null };
     } else if (table === 'vn_titles') {
       child = language(cells.lang);
       check(cells.official === 't' || cells.official === 'f');

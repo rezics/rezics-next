@@ -90,8 +90,9 @@ function aliasLines(value: unknown, pointer: string): string[] {
     Buffer.byteLength(value, 'utf8') > vndbLimits.recordBytes
   )
     fail('Invalid or oversized alias list', pointer);
+  const source = value as string;
   const aliases: string[] = [];
-  for (const [index, line] of value.split(/\r?\n/u).entries()) {
+  for (const [index, line] of source.split(/\r?\n/u).entries()) {
     if (line === '') continue;
     aliases.push(titleText(line, `${pointer}/${index}`));
     if (aliases.length > vndbLimits.maxAliases) fail('Alias lines exceed source cap', pointer);

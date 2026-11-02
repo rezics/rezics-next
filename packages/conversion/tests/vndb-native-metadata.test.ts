@@ -118,7 +118,7 @@ test('combined VNDB title and link limits preserve all 98 cited facts', () => {
   };
   const output = convertVndb({ ...request, record }, context);
   expect(checkBatchWrite({ commands: output.proposals })).toEqual([]);
-  expect(vndbLimits.maxCommands).toBe(98);
+  expect(vndbLimits.maxCommands).toBe(162);
   expect(output.proposals).toHaveLength(98);
   for (const [property, count] of [
     ['wdt:P3180', 1],
