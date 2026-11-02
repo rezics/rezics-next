@@ -12,6 +12,7 @@ import { localizedLabel } from '../results';
 import { useSearchRetryWait } from '../search-recovery-retry';
 import { FacetContinuationLedger } from './facet-continuation';
 import { refinementHref, type RefinementConditions, type RefinementProperty } from './model';
+import { PropertyPicker } from './property-picker';
 import { type FacetPage, type FacetState, type RequestedFacet } from './request';
 
 export type RefinementData = {
@@ -261,26 +262,14 @@ function RefinementInstance({
             </a>
           </>
         )}
-      <Field>
-        <FieldLabel htmlFor={`${id}-property`}>{m.refinement_property()}</FieldLabel>
-        <NativeSelect
-          id={`${id}-property`}
-          value=""
-          onChange={(event) => {
-            const property = event.currentTarget.value;
-            if (!property) return;
-            setShown((previous) => [property, ...previous.filter((entry) => entry !== property)].slice(0, 8));
-            if (!pages.some((entry) => entry.property === property)) void read([property]);
-          }}
-        >
-          <NativeSelectOption value="">{m.refinement_choose_property()}</NativeSelectOption>
-          {data.properties.map((entry) => (
-            <NativeSelectOption key={entry.property} value={entry.property}>
-              {entry.mode === 'types' ? m.search_subject_types() : label(entry.labels) || entry.property}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </Field>
+      <PropertyPicker
+        properties={data.properties}
+        locale={locale}
+        onSelect={(property) => {
+          setShown((previous) => [property, ...previous.filter((entry) => entry !== property)].slice(0, 8));
+          if (!pages.some((entry) => entry.property === property)) void read([property]);
+        }}
+      />
       {failed && (
         <div
           role={state.status === 'preparing' ? 'status' : 'alert'}

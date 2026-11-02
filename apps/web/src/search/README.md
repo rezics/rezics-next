@@ -45,3 +45,5 @@ Native GET sort submission uses an empty `sort` value for Relevance, parsed as t
 Result-kind traversal is keyed by the query, locale and initial discovery checkpoint (`as_of`); a changed checkpoint starts a fresh traversal.
 
 Global search accepts drafts up to 512 UTF-8 bytes; scoped inputs keep their existing 256 UTF-16-unit cap, and typeahead keeps its independent 64-code-point prefix bound.
+
+Refinement property lookup searches case-insensitive substrings of the current localized name or exact case-sensitive identifiers; options with colliding names include their property IDs.
