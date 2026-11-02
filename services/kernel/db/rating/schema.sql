@@ -96,6 +96,21 @@ CREATE TABLE rating.aggregate_component (
 
 
 --
+-- Name: erasure_page; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.erasure_page (
+    route integer NOT NULL,
+    voter_id uuid NOT NULL,
+    page_id uuid NOT NULL,
+    terminal boolean NOT NULL,
+    had_votes boolean DEFAULT false NOT NULL,
+    CONSTRAINT erasure_page_check CHECK ((route = ((get_byte(uuid_send(voter_id), 10) * 256) + get_byte(uuid_send(voter_id), 11)))),
+    CONSTRAINT erasure_page_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: population_pending; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -472,6 +487,14 @@ ALTER TABLE ONLY rating.aggregate_component
 
 
 --
+-- Name: erasure_page erasure_page_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.erasure_page
+    ADD CONSTRAINT erasure_page_pkey PRIMARY KEY (route, voter_id, page_id);
+
+
+--
 -- Name: population_pending population_pending_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
 --
 
@@ -619,6 +642,13 @@ CREATE INDEX aggregate_component_population_subject_idx ON rating.aggregate_comp
 --
 
 CREATE INDEX aggregate_component_target_population_idx ON rating.aggregate_component USING btree (route, question_id, target_id, population_id, shard) WHERE (count > 0);
+
+
+--
+-- Name: erasure_page_pending_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX erasure_page_pending_idx ON rating.erasure_page USING btree (route, voter_id, page_id) WHERE (NOT terminal);
 
 
 --
