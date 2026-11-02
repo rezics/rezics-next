@@ -2895,6 +2895,7 @@
   "realm_appearance_retry_upload": "Check uploaded image",
   "realm_appearance_uncertain": "The save response was not confirmed. Your draft and original request are kept. Retry the same request to learn its outcome.",
   "realm_appearance_retry": "Retry original save",
+  "realm_appearance_retry_image_preview": "Retry image preview",
   "realm_appearance_conflict": "Realm settings changed before this save. Your draft is kept. Refresh and review it against the current settings before saving again.",
   "realm_appearance_refresh": "Refresh current settings",
   "realm_appearance_review": "Keep draft and use current head",

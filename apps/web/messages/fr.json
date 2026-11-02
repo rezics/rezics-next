@@ -2223,6 +2223,7 @@
   "realm_appearance_readonly": "Vous pouvez consulter ces paramètres. Une autorisation actuelle de gestion du Realm est nécessaire pour les modifier.",
   "realm_appearance_refresh": "Actualiser les paramètres actuels",
   "realm_appearance_retry": "Réessayer l’enregistrement initial",
+  "realm_appearance_retry_image_preview": "Réessayer l’aperçu de l’image",
   "realm_appearance_retry_upload": "Vérifier l’image envoyée",
   "realm_appearance_review": "Conserver le brouillon et utiliser la version actuelle",
   "realm_appearance_revision_id": "ID de la révision",

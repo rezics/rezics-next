@@ -2223,6 +2223,7 @@
   "realm_appearance_readonly": "これらの設定は閲覧できます。変更するには、現在 Realm を管理する権限が必要です。",
   "realm_appearance_refresh": "現在の設定を再読み込み",
   "realm_appearance_retry": "元の保存を再試行",
+  "realm_appearance_retry_image_preview": "画像プレビューを再試行",
   "realm_appearance_retry_upload": "アップロードした画像を確認",
   "realm_appearance_review": "下書きを保持して現在の版を使う",
   "realm_appearance_revision_id": "リビジョン ID",

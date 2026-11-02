@@ -2223,6 +2223,7 @@
   "realm_appearance_readonly": "Du kannst diese Einstellungen ansehen. Zum Ändern ist eine aktuelle Berechtigung zur Verwaltung des Realms erforderlich.",
   "realm_appearance_refresh": "Aktuelle Einstellungen aktualisieren",
   "realm_appearance_retry": "Ursprüngliches Speichern erneut versuchen",
+  "realm_appearance_retry_image_preview": "Bildvorschau erneut laden",
   "realm_appearance_retry_upload": "Hochgeladenes Bild prüfen",
   "realm_appearance_review": "Entwurf beibehalten und aktuellen Stand verwenden",
   "realm_appearance_revision_id": "Revisions-ID",

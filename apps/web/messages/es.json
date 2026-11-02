@@ -2223,6 +2223,7 @@
   "realm_appearance_readonly": "Puedes consultar esta configuración. Para cambiarla, necesitas tener permiso actual para administrar el Realm.",
   "realm_appearance_refresh": "Actualizar la configuración actual",
   "realm_appearance_retry": "Reintentar el guardado original",
+  "realm_appearance_retry_image_preview": "Reintentar la vista previa de la imagen",
   "realm_appearance_retry_upload": "Comprobar la imagen subida",
   "realm_appearance_review": "Conservar el borrador y usar la versión actual",
   "realm_appearance_revision_id": "ID de revisión",

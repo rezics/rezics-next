@@ -2223,6 +2223,7 @@
   "realm_appearance_readonly": "你可以檢視這些設定。只有目前具備 Realm 管理權限，才能變更這些設定。",
   "realm_appearance_refresh": "重新整理目前設定",
   "realm_appearance_retry": "重試原始儲存",
+  "realm_appearance_retry_image_preview": "重新載入圖片預覽",
   "realm_appearance_retry_upload": "檢查已上傳的圖片",
   "realm_appearance_review": "保留草稿並使用目前版本",
   "realm_appearance_revision_id": "修訂版本 ID",

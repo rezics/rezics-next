@@ -41,39 +41,85 @@ function ImagePreview({
   pending?: string | undefined;
 }) {
   const src = realmImageSource(image);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
+  const [attempt, setAttempt] = useState<{
+    generation: number;
+    state: 'loading' | 'recovering' | 'failed' | 'loaded';
+  }>({ generation: 0, state: 'loading' });
+  const attemptRef = useRef(attempt);
+  const mounted = useRef(false);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  function settle(state: 'failed' | 'loaded') {
+    if (
+      !mounted.current ||
+      attemptRef.current !== attempt ||
+      (attempt.state !== 'loading' && attempt.state !== 'recovering')
+    )
+      return;
+    const next = { ...attempt, state };
+    attemptRef.current = next;
+    setAttempt(next);
+  }
+  function retry() {
+    if (!mounted.current || attemptRef.current !== attempt || attempt.state !== 'failed' || !src) return;
+    const next = { generation: attempt.generation + 1, state: 'recovering' as const };
+    attemptRef.current = next;
+    setAttempt(next);
+  }
   const value = image.state === 'available' ? image.value : null;
+  const loaded = src !== null && attempt.state === 'loaded';
+  const fallback = !src || attempt.state === 'failed' || attempt.state === 'recovering';
   return (
     <div className="space-y-2">
       <div
         className={`flex items-center justify-center overflow-hidden border bg-muted text-2xl font-semibold text-muted-foreground ${banner ? 'aspect-[3/1] w-full rounded-xl' : 'size-20 rounded-2xl'}`}
         style={value?.placeholder ? { backgroundColor: value.placeholder.color } : undefined}
       >
-        {src && !failed ? (
+        {src ? (
           <img
+            key={attempt.generation}
             src={src}
             alt=""
             className="size-full object-cover"
             style={
               value?.focalPoint
-                ? { objectPosition: `${value.focalPoint.x * 100}% ${value.focalPoint.y * 100}%` }
-                : undefined
+                ? {
+                    objectPosition: `${value.focalPoint.x * 100}% ${value.focalPoint.y * 100}%`,
+                    visibility: fallback ? 'hidden' : undefined,
+                  }
+                : fallback
+                  ? { visibility: 'hidden' }
+                  : undefined
             }
-            onError={() => setFailed(true)}
+            onLoad={() => settle('loaded')}
+            onError={() => settle('failed')}
           />
-        ) : (
+        ) : null}
+        {fallback ? (
           <span aria-hidden="true">{title.trim().slice(0, 2).toLocaleUpperCase()}</span>
-        )}
+        ) : null}
       </div>
       {pending ? (
         <p className="text-sm text-muted-foreground">{pending}</p>
-      ) : image.state === 'unavailable' || failed || (image.state === 'available' && !src) ? (
+      ) :
+      image.state === 'unavailable' ||
+      attempt.state === 'failed' ||
+      attempt.state === 'recovering' ||
+      (image.state === 'available' && !src) ? (
         <p className="text-sm text-muted-foreground">{m.realm_appearance_image_unavailable()}</p>
       ) : image.state === 'none' ? (
         <p className="text-sm text-muted-foreground">{m.realm_appearance_no_image()}</p>
       ) : null}
-      {value?.credit && src && !failed ? (
+      {src && attempt.state === 'failed' && !pending ? (
+        <Button variant="outline" onClick={retry}>
+          {m.realm_appearance_retry_image_preview()}
+        </Button>
+      ) : null}
+      {value?.credit && loaded ? (
         <p className="text-xs text-muted-foreground">
           {value.credit.rightsHolder} · {value.credit.license}
         </p>
@@ -380,6 +426,7 @@ export function RealmAppearanceSettings({
           <div key={slot} className="min-w-0 space-y-3">
             <h3 className="font-medium">{label(slot)}</h3>
             <ImagePreview
+              key={realmImageSource(draft[slot]) ?? 'none'}
               image={draft[slot]}
               title={snapshot.title}
               banner={slot === 'banner'}
@@ -512,6 +559,7 @@ export function RealmAppearanceSettings({
           </Field>
           {selection.candidate?.kind === 'image' ? (
             <ImagePreview
+              key={realmImageSource({ state: 'available', value: selection.candidate.image }) ?? 'none'}
               image={{ state: 'available', value: selection.candidate.image }}
               title={snapshot.title}
               banner={selection.slot === 'banner'}
@@ -653,8 +701,8 @@ export function RealmAppearanceSettings({
               <details className="space-y-3">
                 <summary>{m.realm_appearance_current()}</summary>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <ImagePreview image={snapshot.avatar} title={snapshot.title} />
-                  <ImagePreview image={snapshot.banner} title={snapshot.title} banner />
+                  <ImagePreview key={realmImageSource(snapshot.avatar) ?? 'none'} image={snapshot.avatar} title={snapshot.title} />
+                  <ImagePreview key={realmImageSource(snapshot.banner) ?? 'none'} image={snapshot.banner} title={snapshot.title} banner />
                 </div>
                 <p>
                   {snapshot.rules.state === 'available'
