@@ -102,8 +102,10 @@ test('a later client release failure stays subordinate to the VACUUM failure', a
     (error: unknown) => error,
   );
   expect(failure).toBeInstanceOf(GrowthSettleInfrastructureError);
-  expect(failure).toMatchObject({
-    message: 'Could not settle database app relation public.rows: vacuum failed; cleanup failed: release failed',
-    cause: expect.objectContaining({ cause: vacuumError, name: 'GrowthSettleInfrastructureError' }),
-  });
+  expect((failure as Error).message).toBe(
+    'Could not settle database app relation public.rows: vacuum failed; cleanup failed: release failed',
+  );
+  const primary = (failure as Error).cause;
+  expect(primary).toBeInstanceOf(GrowthSettleInfrastructureError);
+  expect((primary as Error).cause).toBe(vacuumError);
 });
