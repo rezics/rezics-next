@@ -460,6 +460,11 @@ Background limitations retain their native plan paths and identify the backgroun
 `backgroundPlanStatements` entry also identifies its statement occurrence, while plans without an occurrence remain
 unattributed. Excluded background plans add no limitations.
 
+Bulk-row seed values preserve finite JSON values, BigInt as decimal text, Date as ISO 8601 text and Uint8Array as
+PostgreSQL bytea hex text. Traversal is limited to 64 nested levels and 100,000 visits per existing 1,000-ordinal
+input window. Unsupported, cyclic or over-depth values fail with table, row and column location before the SQL batch
+containing them is submitted.
+
 Byte totals are recorded for each captured statement. Request bytes include the UTF-8 statement text whenever an
 unnamed statement is sent and once when a named statement is first prepared on a connection, plus each parameter after
 node-postgres prepares it: UTF-8 bytes for strings, the length for buffers, and zero for null or undefined. Response
