@@ -285,9 +285,10 @@ function AlbumProfileCreateLive({
             locale={locale}
             search={search}
             disabled={locked}
-            change={(statement) =>
-              setRows((previous) => previous.map((item) => (item.id === row.id ? { ...item, statement } : item)))
-            }
+            change={(statement) => {
+              if (statement.qualifiers?.length !== row.statement.qualifiers?.length) setFailure(undefined);
+              setRows((previous) => previous.map((item) => (item.id === row.id ? { ...item, statement } : item)));
+            }}
             remove={() => setRows((previous) => previous.filter((item) => item.id !== row.id))}
           />
         ))}
@@ -388,7 +389,18 @@ function AlbumProfileCreateLive({
           </p>
           {corrections.map((correction, index) => (
             <p key={index}>
-              {correction.target && (terms.some((term) => ['language', 'label', 'description', 'aliases'].some((field) => correction.target === `${termsId}-${field}-${term.id}`)) || rows.some((row) => correction.target === `album-citation-${row.id}` || correction.target === `album-row-${row.id}` || correction.target!.startsWith(`album-row-${row.id}-`))) ? (
+              {correction.target &&
+              (terms.some((term) =>
+                ['language', 'label', 'description', 'aliases'].some(
+                  (field) => correction.target === `${termsId}-${field}-${term.id}`,
+                ),
+              ) ||
+                rows.some(
+                  (row) =>
+                    correction.target === `album-citation-${row.id}` ||
+                    correction.target === `album-row-${row.id}` ||
+                    correction.target!.startsWith(`album-row-${row.id}-`),
+                )) ? (
                 <a
                   className="inline-flex min-h-11 min-w-11 max-w-full items-center underline [overflow-wrap:anywhere] md:pointer-fine:min-h-8"
                   href={`#${correction.target}`}
@@ -402,15 +414,24 @@ function AlbumProfileCreateLive({
                       });
                     }
                     const target = document.getElementById(correction.target!);
-                    const input = target?.matches('input,textarea,select') ? target :
-                      target?.querySelector<HTMLElement>('input:not(:disabled),textarea:not(:disabled),select:not(:disabled),[role="combobox"]');
+                    const input = target?.matches('input,textarea,select')
+                      ? target
+                      : target?.querySelector<HTMLElement>(
+                          'input:not(:disabled),textarea:not(:disabled),select:not(:disabled),[role="combobox"]',
+                        );
                     (input ?? target)?.focus();
                   }}
                 >
                   {correction.label}: {correction.advice}
                 </a>
-              ) : <span>{correction.label}: {correction.advice}</span>}
-              <code className="block break-all" dir="ltr">{correction.pointer} ({correction.code})</code>
+              ) : (
+                <span>
+                  {correction.label}: {correction.advice}
+                </span>
+              )}
+              <code className="block break-all" dir="ltr">
+                {correction.pointer} ({correction.code})
+              </code>
             </p>
           ))}
           {pending.current && definiteFailure && (
@@ -503,28 +524,28 @@ function AlbumInitialField({
             <DefinitionMeaning values={definition?.descriptions} locale={locale} />
           </p>
           <div id={`album-row-${row.id}-value`} tabIndex={-1}>
-          {definition?.datatype === 'wikibase-item' ? (
-            <EntityPicker
-              label={named(statement.property.id)}
-              search={targetSearch(statement.property.id)}
-              src={coverSrc}
-              disabled={disabled}
-              value={statement.value.type === 'value' ? target(statement.value.content) : []}
-              onValueChange={(items) => {
-                remember(items);
-                change({ ...statement, value: { type: 'value', content: items[0]?.id ?? '' } });
-              }}
-            />
-          ) : (
-            <ScalarControl
-              feedback={{ id: `album-row-${row.id}`, address: 'fact', errors: [] }}
-              part={statement}
-              definition={definition}
-              read={{ release, public: { related: {} } }}
-              locale={locale}
-              onChange={(value) => change({ ...statement, value })}
-            />
-          )}
+            {definition?.datatype === 'wikibase-item' ? (
+              <EntityPicker
+                label={named(statement.property.id)}
+                search={targetSearch(statement.property.id)}
+                src={coverSrc}
+                disabled={disabled}
+                value={statement.value.type === 'value' ? target(statement.value.content) : []}
+                onValueChange={(items) => {
+                  remember(items);
+                  change({ ...statement, value: { type: 'value', content: items[0]?.id ?? '' } });
+                }}
+              />
+            ) : (
+              <ScalarControl
+                feedback={{ id: `album-row-${row.id}`, address: 'fact', errors: [] }}
+                part={statement}
+                definition={definition}
+                read={{ release, public: { related: {} } }}
+                locale={locale}
+                onChange={(value) => change({ ...statement, value })}
+              />
+            )}
           </div>
           {definition?.datatype === 'url' && statement.value.type === 'value' && (
             <p

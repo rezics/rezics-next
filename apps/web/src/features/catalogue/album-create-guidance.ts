@@ -41,46 +41,99 @@ export function albumCreateCorrections(
       const index = Number(term[2]);
       const row = terms[index]!;
       const label = {
-        language: m.catalogue_create_language({}, o), label: m.catalogue_create_label({}, o),
-        description: m.catalogue_create_description({}, o), aliases: m.catalogue_create_aliases({}, o),
+        language: m.catalogue_create_language({}, o),
+        label: m.catalogue_create_label({}, o),
+        description: m.catalogue_create_description({}, o),
+        aliases: m.catalogue_create_aliases({}, o),
       }[field];
       // An alias index must name an authored alias, not merely look like an array index.
       const parts = error.pointer.split('/');
-      if (parts.length === 4 && !row.aliases.split('\n').map((alias) => alias.trim()).filter(Boolean)[Number(parts[3])])
+      if (
+        parts.length === 4 &&
+        !row.aliases
+          .split('\n')
+          .map((alias) => alias.trim())
+          .filter(Boolean)[Number(parts[3])]
+      )
         return fallback;
-      return { ...fallback, target: `${termsId}-${field}-${row.id}`,
+      return {
+        ...fallback,
+        target: `${termsId}-${field}-${row.id}`,
         label: `${row.language || index + 1} · ${label}`,
-        advice: createSubjectGuidance(error, field, { type: 'schema:MusicAlbum', rows: terms, index }, locale) };
+        advice: createSubjectGuidance(error, field, { type: 'schema:MusicAlbum', rows: terms, index }, locale),
+      };
     }
-    const parts = error.pointer.slice(1).split('/').map((part) => part.replaceAll('~1', '/').replaceAll('~0', '~'));
+    const parts = error.pointer
+      .slice(1)
+      .split('/')
+      .map((part) => part.replaceAll('~1', '/').replaceAll('~0', '~'));
     const [kind, property, entry, ...tail] = parts;
     if (kind !== 'statements' || property === undefined) return fallback;
     const group = grouped.get(property);
     // A property-level refusal is ambiguous when more than one assertion was submitted.
-    const row = entry === undefined ? (group?.length === 1 ? group[0] : undefined)
-      : canonicalIndex.test(entry) ? group?.[Number(entry)] : undefined;
+    const row =
+      entry === undefined
+        ? group?.length === 1
+          ? group[0]
+          : undefined
+        : canonicalIndex.test(entry)
+          ? group?.[Number(entry)]
+          : undefined;
     if (!row) return fallback;
     const id = `album-row-${row.id}`;
     const label = `${pickText(release.properties[property]?.labels ?? {}, locale).text || m.album_initial_facts({}, o)} · ${rows.indexOf(row) + 1}`;
-    const presented = presentStatementViolations([{ ...error, pointer: `/statement${tail.map((part) => `/${part.replaceAll('~', '~0').replaceAll('/', '~1')}`).join('')}` }], row.statement, release, locale, id)[0]!;
-    const result = (target: string, detail: string, advice = presented.instruction) =>
-      ({ ...fallback, target, label: `${label} · ${detail}`, advice });
+    const presented = presentStatementViolations(
+      [
+        {
+          ...error,
+          pointer: `/statement${tail.map((part) => `/${part.replaceAll('~', '~0').replaceAll('/', '~1')}`).join('')}`,
+        },
+      ],
+      row.statement,
+      release,
+      locale,
+      id,
+    )[0]!;
+    const result = (target: string, detail: string, advice = presented.instruction) => ({
+      ...fallback,
+      target,
+      label: `${label} · ${detail}`,
+      advice,
+    });
     if (!tail.length) return result(id, m.album_initial_facts({}, o));
     if (tail[0] === 'value') {
-      if (release.properties[property]?.datatype === 'wikibase-item' &&
-        (tail.join('/') === 'value' || tail.join('/') === 'value/type' || tail.join('/') === 'value/content'))
+      if (
+        release.properties[property]?.datatype === 'wikibase-item' &&
+        (tail.join('/') === 'value' || tail.join('/') === 'value/type' || tail.join('/') === 'value/content')
+      )
         return result(`${id}-value`, m.correction_value({}, o), m.correction_error_value({}, o));
       if (presented.target.startsWith(`${id}-fact-`)) return result(presented.target, presented.label);
     }
-    if (tail[0] === 'qualifiers' && canonicalIndex.test(tail[1] ?? '') &&
-      ['', 'value', 'value/type', 'value/content'].includes(tail.slice(2).join('/'))) {
+    if (
+      tail[0] === 'qualifiers' &&
+      canonicalIndex.test(tail[1] ?? '') &&
+      ['', 'value', 'value/type', 'value/content'].includes(tail.slice(2).join('/'))
+    ) {
       const index = Number(tail[1]);
       const qualifier = row.statement.qualifiers?.[index];
-      if (qualifier) return result(`${id}-qualifier-${index}`, `${m.relation_qualifier({}, o)} · ${pickText(release.properties[qualifier.property.id]?.labels ?? {}, locale).text}`, m.correction_error_value({}, o));
+      if (qualifier)
+        return result(
+          `${id}-qualifier-${index}`,
+          `${m.relation_qualifier({}, o)} · ${pickText(release.properties[qualifier.property.id]?.labels ?? {}, locale).text}`,
+          m.correction_error_value({}, o),
+        );
     }
-    if (['references', 'references/0', 'references/0/parts/0', 'references/0/parts/0/value',
-      'references/0/parts/0/value/type', 'references/0/parts/0/value/content'].includes(tail.join('/')) &&
-      (tail.length === 1 || row.statement.references[0]?.parts[0]?.property.id === 'schema:url'))
+    if (
+      [
+        'references',
+        'references/0',
+        'references/0/parts/0',
+        'references/0/parts/0/value',
+        'references/0/parts/0/value/type',
+        'references/0/parts/0/value/content',
+      ].includes(tail.join('/')) &&
+      (tail.length === 1 || row.statement.references[0]?.parts[0]?.property.id === 'schema:url')
+    )
       return result(`album-citation-${row.id}`, m.relation_citation({}, o), m.correction_error_url({}, o));
     return { ...fallback, label };
   });

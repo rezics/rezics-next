@@ -403,25 +403,69 @@ test('Album creation composes complete terms and initial facts while preserving 
 
     // Native grouped indices distinguish repeated creators; authored languages keep separate targets.
     const exact = albumFixture('reader-unavailable');
+    exact.publicRead.related[seriesId] = { type: 'schema:Organization', labels: { en: 'Guest ensemble' } };
+    const { albumCreateCorrections } = await import('../src/features/catalogue/album-create-guidance');
+    const escaped = 'schema:credit/~original';
+    exact.release.properties[escaped] = exact.release.properties['schema:contributor']!;
+    const sample = (id: string, property: string) => ({
+      id,
+      statement: {
+        property: { id: property },
+        value: { type: 'value' as const, content: artistId },
+        references: [],
+      },
+    });
+    const addressed = albumCreateCorrections(
+      [
+        { pointer: '/statements/schema:credit~1~0original/1/value/content', code: 'unsupported' },
+        { pointer: '/labels/bad~1~0language', code: 'invalid_format' },
+        { pointer: '/statements/schema:credit~1~0original/4/value/content', code: 'unsupported' },
+        { pointer: '/statements/schema:credit~2original/1/value/content', code: 'unsupported' },
+        { pointer: '/statements/schema:credit~1~0original', code: 'unsupported' },
+      ],
+      [{ id: 42, language: 'bad/~language', label: 'Name', description: '', aliases: '' }],
+      [sample('first', escaped), sample('middle', 'schema:contributor'), sample('second', escaped)],
+      exact.release,
+      'en',
+      'terms',
+    );
+    expect(addressed.map((error) => error.target)).toEqual([
+      'album-row-second-value',
+      'terms-language-42',
+      undefined,
+      undefined,
+      undefined,
+    ]);
     let rejection = true;
     const commands: import('../src/features/catalogue/album-profile').AlbumCommand[] = [];
-    const exactPanel = await ready(exact, { transport: {
-      ...exact.transport,
-      create: async (command) => {
-        commands.push(structuredClone(command));
-        if (!rejection) return exact.transport.create(command);
-        return { ok: false, reason: 'invalid', errors: [
-          { pointer: '/statements/schema:contributor/1/value/content', code: 'unsupported' },
-          { pointer: '/labels/ja', code: 'out_of_range' },
-          { pointer: '/statements/schema:contributor/1/qualifiers/0/value/content', code: 'invalid_format' },
-          { pointer: '/statements/schema:contributor/1/references/0/parts/0/value/content', code: 'invalid_format' },
-          { pointer: '/statements/schema:contributor/01/value/content', code: 'unsupported' },
-        ] };
+    const exactPanel = await ready(exact, {
+      transport: {
+        ...exact.transport,
+        create: async (command) => {
+          commands.push(structuredClone(command));
+          if (!rejection) return exact.transport.create(command);
+          return {
+            ok: false,
+            reason: 'invalid',
+            errors: [
+              { pointer: '/statements/schema:contributor/1/value/content', code: 'unsupported' },
+              { pointer: '/labels/ja', code: 'out_of_range' },
+              { pointer: '/statements/schema:contributor/1/qualifiers/0/value/content', code: 'invalid_format' },
+              {
+                pointer: '/statements/schema:contributor/1/references/0/parts/0/value/content',
+                code: 'invalid_format',
+              },
+              { pointer: '/statements/schema:contributor/01/value/content', code: 'unsupported' },
+            ],
+          };
+        },
       },
-    } });
+    });
     await replace(textbox(exactPanel, m.catalogue_create_label()), 'First name');
     await click(exactPanel, m.catalogue_create_add_language());
-    const secondTerms = within(exactPanel).getAllByRole('textbox', { name: m.catalogue_create_language() })[1]!.closest('fieldset')!;
+    const secondTerms = within(exactPanel)
+      .getAllByRole('textbox', { name: m.catalogue_create_language() })[1]!
+      .closest('fieldset')!;
     await replace(textbox(secondTerms, m.catalogue_create_language()), 'ja');
     await replace(textbox(secondTerms, m.catalogue_create_label()), 'Second name');
     const firstCreator = await add(exactPanel, 'schema:contributor');
@@ -440,12 +484,17 @@ test('Album creation composes complete terms and initial facts while preserving 
     expect(corrections[2]!.hash).toBe(`#${secondCreator.id}-qualifier-0`);
     expect(corrections[3]!.hash).toBe(`#album-citation-${secondCreator.id.slice('album-row-'.length)}`);
     expect(exactPanel.textContent).toContain('/statements/schema:contributor/01/value/content');
-    for (const [index, row] of [[0, secondCreator], [2, secondCreator], [3, secondCreator]] as const) {
+    for (const [index, row] of [
+      [0, secondCreator],
+      [2, secondCreator],
+      [3, secondCreator],
+    ] as const) {
       await act(async () => user.click(corrections[index]!));
       expect(row.contains(window.document.activeElement)).toBe(true);
       expect(window.document.activeElement?.matches(':disabled')).toBe(false);
     }
-    await chooseTarget(secondCreator, name(exact, 'schema:contributor'), 'Harbour', /Harbour/);
+    await replace(within(secondCreator).getByRole('combobox', { name: name(exact, 'schema:contributor') }), '');
+    await chooseTarget(secondCreator, name(exact, 'schema:contributor'), 'Guest', /Guest ensemble/);
     await act(async () => user.click(corrections[1]!));
     expect(window.document.activeElement).toBe(textbox(secondTerms, m.catalogue_create_label()));
     await replace(textbox(secondTerms, m.catalogue_create_label()), 'Corrected second name');
@@ -453,7 +502,10 @@ test('Album creation composes complete terms and initial facts while preserving 
     await click(exactPanel, m.album_create());
     await until(() => exactPanel.textContent!.includes(m.catalogue_create_reader_unavailable()));
     expect(commands[1]!.item.labels).toEqual({ en: 'First name', ja: 'Corrected second name' });
-    expect(commands[1]!.item.statements['schema:contributor']![0]).toEqual(commands[0]!.item.statements['schema:contributor']![0]);
+    expect(commands[1]!.item.statements['schema:contributor']![0]).toEqual(
+      commands[0]!.item.statements['schema:contributor']![0],
+    );
+    expect(commands[1]!.item.statements['schema:contributor']![1]!.value).toEqual({ type: 'value', content: seriesId });
     expect(commands[1]!.key).not.toBe(commands[0]!.key);
     exact.setScenario('ready');
     await click(exactPanel, m.catalogue_create_retry());
