@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, type ReactNode } from 'react';
-import { Link, useLocation, useRouter } from '@tanstack/react-router';
+import { Link, useLocation } from '@tanstack/react-router';
 import { MessageSquareIcon, HeartIcon } from 'lucide-react';
 import { ContentItem } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -126,7 +126,6 @@ export function BoardFeed({
   const heading = useRef<HTMLHeadingElement>(null);
   const locale = getLocale();
   const location = useLocation();
-  const router = useRouter();
   useLayoutEffect(() => {
     const state = location.state;
     const continuationState = state as unknown as Record<string, unknown>;
@@ -135,16 +134,20 @@ export function BoardFeed({
     lastObservedHistoryIndex = currentIndex;
     if (
       continuationState.__boardNextPage !== true ||
-      previousIndex === null ||
-      currentIndex <= previousIndex ||
       consumedContinuationStates.has(state)
     )
       return;
-    if (!heading.current) return;
-    consumedContinuationStates.add(state);
-    heading.current.focus();
-    router.history.replace(location.href, { ...state, __boardNextPage: false } as never);
-  }, [location.state, router]);
+    if (previousIndex !== null && currentIndex > previousIndex) {
+      consumedContinuationStates.add(state);
+      heading.current?.focus();
+    }
+    const browserState = window.history.state;
+    if (browserState && typeof browserState === 'object') {
+      const current = browserState as Record<string, unknown>;
+      if (current.__boardNextPage === true)
+        window.history.replaceState({ ...current, __boardNextPage: false }, '');
+    }
+  }, [location.state]);
   const refreshedAt =
     sort !== 'new' && page.rankRefreshedAt && !Number.isNaN(Date.parse(page.rankRefreshedAt))
       ? page.rankRefreshedAt
