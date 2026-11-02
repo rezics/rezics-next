@@ -650,6 +650,8 @@
   "library_member_move_to_top": "Mover al inicio",
   "library_member_move_up": "Subir",
   "library_member_occurrence": "{title} (elemento {position} de esta página)",
+  "library_collection_description_reader_expand": "Leer la descripción completa",
+  "library_collection_description_reader_collapse": "Contraer descripción",
   "library_collection_note_reader_expand": "Leer la nota completa",
   "library_collection_note_reader_collapse": "Contraer nota",
   "library_member_note": "Nota",

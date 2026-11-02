@@ -650,6 +650,8 @@
   "library_member_move_to_top": "移到顶部",
   "library_member_move_up": "上移",
   "library_member_occurrence": "{title}（本页第 {position} 项）",
+  "library_collection_description_reader_expand": "阅读完整描述",
+  "library_collection_description_reader_collapse": "收起描述",
   "library_collection_note_reader_expand": "阅读完整备注",
   "library_collection_note_reader_collapse": "收起备注",
   "library_member_note": "备注",

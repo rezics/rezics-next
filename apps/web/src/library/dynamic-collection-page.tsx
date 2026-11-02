@@ -14,6 +14,7 @@ import { FollowTargetControl } from './follow-target-control';
 import { CollectionReadActions, CollectionReadMembers } from './collection-page';
 import { collectionPageAddress } from './collection-presentation';
 import { AccountRef } from './account-ref';
+import { CollectionDescriptionReader } from './collection-description-reader';
 
 type DynamicCollectionPageProps = {
   page: DynamicCollectionPageData;
@@ -133,7 +134,7 @@ function DynamicCollectionPageLifetime({
               <AccountRef account={current.curator} avatar />
             </div>
           ) : null}
-          {current.description ? <p className="mt-3 whitespace-pre-wrap">{current.description}</p> : null}
+          <CollectionDescriptionReader description={current.description} className="mt-3" />
           <FollowTargetControl targetId={current.id} following={current.following ?? null} />
         </header>
         <p className="text-sm text-muted-foreground">{m.library_collection_social_unavailable()}</p>

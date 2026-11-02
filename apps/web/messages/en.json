@@ -664,6 +664,8 @@
   "library_member_move_to_top": "Move to top",
   "library_member_move_up": "Move up",
   "library_member_occurrence": "{title} (item {position} on this page)",
+  "library_collection_description_reader_expand": "Read full description",
+  "library_collection_description_reader_collapse": "Collapse description",
   "library_collection_note_reader_expand": "Read full note",
   "library_collection_note_reader_collapse": "Collapse note",
   "library_member_note": "Note",

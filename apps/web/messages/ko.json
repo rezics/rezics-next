@@ -650,6 +650,8 @@
   "library_member_move_to_top": "맨 위로 이동",
   "library_member_move_up": "위로 이동",
   "library_member_occurrence": "{title} (이 페이지의 {position}번째 항목)",
+  "library_collection_description_reader_expand": "설명 전체 읽기",
+  "library_collection_description_reader_collapse": "설명 접기",
   "library_collection_note_reader_expand": "메모 전체 읽기",
   "library_collection_note_reader_collapse": "메모 접기",
   "library_member_note": "메모",

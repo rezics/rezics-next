@@ -4,6 +4,7 @@ import { readCollectionDestination, type CollectionDestination } from './collect
 import { CollectionAddMembers } from './collection-add-members';
 import { CollectionMemberDetails } from './collection-member-row';
 import { CollectionNoteReader } from './collection-note-reader';
+import { CollectionDescriptionReader } from './collection-description-reader';
 import { ResourceAccessLink } from '../accounts/resource-access/link';
 import { Cover } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
@@ -1035,11 +1036,7 @@ function CollectionPageLifetime({
               </span>,
             ]}
           />
-          {page.description ? (
-            <p className="max-w-4xl text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">
-              {page.description}
-            </p>
-          ) : null}
+          <CollectionDescriptionReader description={page.description} />
           <div data-slot="collection-actions" className="flex min-w-0 flex-wrap items-center gap-2">
             <ResourceAccessLink resourceId={page.id} />
             {addAdmitted ? (

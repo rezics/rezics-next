@@ -2336,6 +2336,8 @@ fixtures; these stories do not claim visual, browser or native completion.
 
 ## Collection browse and editor
 
+Curated and dynamic Collection descriptions use a measured four-line preview and the note reader's explicit, focus-retaining expand/collapse pattern; short text needs no control, and expansion preserves the complete plain text locally without reads or writes.
+
 The existing Library Collections route composes `CollectionBrowseRow` or `CollectionPreview`, the shared Library
 navigation, and a compact toolbar. Each row has one Open action and the disclosed native total. Genuine built-ins
 come from the owner list; a current Collection title is not another tab. Pin management remains available in a
