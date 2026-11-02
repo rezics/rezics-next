@@ -1,6 +1,15 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { buildCatalogue, parseCatalogueJson, releaseDigest, valueSchema, type Release } from '@rezics/definitions';
+import {
+  CATALOGUE_FORMAT,
+  CATALOGUE_NODE_FORMAT,
+  KIND_FORMAT,
+  buildCatalogue,
+  parseCatalogueJson,
+  releaseDigest,
+  valueSchema,
+  type Release,
+} from '@rezics/definitions';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';

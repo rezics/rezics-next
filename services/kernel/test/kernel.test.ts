@@ -180,6 +180,8 @@ const typed = [
   'POST /v1/definitions/releases',
   'GET /v1/definitions/releases/:digest',
   'GET /v1/definitions/active',
+  'GET /v1/definitionTypes',
+  'GET /v1/definitionTypes/:typeId',
   'POST /v1/definitions/releases/:digest/$activate',
   'POST /v1/definitions/catalogue/artifacts',
   'POST /v1/definitions/catalogues',

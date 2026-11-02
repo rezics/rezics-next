@@ -45,6 +45,20 @@ const resource = { route: 0, id: GLOBAL_CONTEXT };
 const digestResponse = t.Object({ digest: t.String() }, { additionalProperties: false });
 const activeResponse = t.Object({ digest: t.String(), head: t.Integer() }, { additionalProperties: false });
 const releaseObject = t.Record(t.String(), t.Any());
+const typeSummary = t.Object({
+  typeId: t.String(),
+  releaseDigest: t.String(),
+  label: t.String(),
+  language: t.Union([t.String(), t.Null()]),
+  parents: t.Array(t.String()),
+  description: t.Union([t.String(), t.Null()]),
+  descriptionLanguage: t.Union([t.String(), t.Null()]),
+});
+const typeDescriptor = t.Object({
+  ...typeSummary.properties,
+  definition: releaseObject,
+  properties: t.Record(t.String(), releaseObject),
+});
 const writeHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const unavailable = problemSchema(
@@ -193,7 +207,7 @@ export function definitionRoutes(
           cursor: t.Optional(t.String({ maxLength: 4096 })),
         }),
         response: {
-          200: t.Object({ types: t.Array(releaseObject, { maxItems: 20 }), next: t.Union([t.String(), t.Null()]) }),
+          200: t.Object({ types: t.Array(typeSummary, { maxItems: 20 }), next: t.Union([t.String(), t.Null()]) }),
           ...typeReadResponses,
         },
         detail: catalogueReadDetail('definitionTypes.list'),
@@ -211,7 +225,7 @@ export function definitionRoutes(
       {
         params: t.Object({ typeId: t.String({ maxLength: 4194304 }) }),
         query: t.Object({ locale: typeLocale }),
-        response: { 200: releaseObject, ...typeReadResponses },
+        response: { 200: typeDescriptor, ...typeReadResponses },
         detail: catalogueReadDetail('definitionTypes.read'),
       },
       async ({ params, query, authorize, admission, job }) => {
