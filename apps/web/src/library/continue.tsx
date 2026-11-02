@@ -228,22 +228,24 @@ export function ContinueSection({
   if (result.state === 'signed-out') return null;
   const options = { locale: locale as Locale };
   const title = m.home_continue_heading({}, options);
-  const address = result.state === 'unavailable' &&
-    (result.reason === 'invalid-address' || result.reason === 'stale-address') ? result.reason : null;
+  const address =
+    result.state === 'unavailable' && (result.reason === 'invalid-address' || result.reason === 'stale-address')
+      ? result.reason
+      : null;
   const message =
     address === 'invalid-address'
       ? m.library_continue_address_malformed({}, options)
       : address === 'stale-address'
         ? m.library_continue_address_expired({}, options)
         : result.state === 'loaded'
-      ? m.library_continue_empty({}, options)
-      : result.state === 'preparing'
-        ? m.library_continue_preparing({}, options)
-        : result.state === 'unknown'
-          ? m.library_continue_loading({}, options)
-          : result.state === 'denied'
-            ? m.library_continue_denied({}, options)
-            : m.library_continue_unavailable({}, options);
+          ? m.library_continue_empty({}, options)
+          : result.state === 'preparing'
+            ? m.library_continue_preparing({}, options)
+            : result.state === 'unknown'
+              ? m.library_continue_loading({}, options)
+              : result.state === 'denied'
+                ? m.library_continue_denied({}, options)
+                : m.library_continue_unavailable({}, options);
   return (
     <section aria-label={title} data-continue-state={result.state} className="min-w-0 max-w-full space-y-4">
       {!destination ? (
