@@ -91,12 +91,9 @@ async function waitForFile(path: string): Promise<void> {
 function expectCurrentCheckProtocol(prompt: string): void {
   expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
   expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
-  expect(prompt).toContain('Do not return another waiting result for those same check ids');
-  expect(prompt).toContain('A terminal success result must use `"checks":[]`');
-  expect(prompt).toContain('Do not run the root typecheck or other regression suites yourself');
-  expect(prompt).toContain(
-    'The landing runs the root typecheck and verification runs affected checks and sibling tests after integration',
-  );
+  expect(prompt).toContain('do not return waiting again for those ids');
+  expect(prompt).toContain('success uses `"checks":[]`');
+  expect(prompt).toContain('Do not run the root typecheck or other regression suites yourself; the landing runs them.');
   const pollingInstructions = prompt
     .split(/(?<=[.!?])\s+/)
     .filter(
@@ -126,7 +123,7 @@ test('a wake resumes the saved old session with current protocol and exact termi
     expect(waiting.checks).toEqual([checkId]);
     expect(waiting.session).toBe('legacy-session');
     expect(JSON.parse(readFileSync(join(task.worktree, '.temp/goal/initial-argv.json'), 'utf8')).at(-1)).toContain(
-      'bare UUID string printed by the wrapper',
+      'using that bare UUID',
     );
     expect(readFileSync(join(task.worktree, '.temp/goal/saved-session-prompt.txt'), 'utf8')).toContain('--wait');
 
@@ -160,10 +157,9 @@ test('a wake resumes the saved old session with current protocol and exact termi
     expect(prompt).toContain(
       'check ' + checkId + ': exit status 0; passed; log path .temp/goal/checks/' + checkId + '.log',
     );
-    expect(prompt).toContain('Every checks entry must be the bare UUID string');
-    expect(prompt).toContain('superseded instruction');
-    expect(prompt).toContain('Do not invoke `bun scripts/worker-check.ts --wait <id>`');
-    expect(prompt).toContain('Do not return another waiting result for those same check ids');
+    expect(prompt).toContain('using that bare UUID');
+    expect(prompt).toContain('no `--wait` (obsolete, whatever older sessions say)');
+    expect(prompt).toContain('do not return waiting again for those ids');
     expect(h.store.task(task.id).currentAttempt).toBe(1);
     expect(h.store.attempt(worker.attempt).session).toBe('legacy-session');
     expect(readFileSync(join(task.worktree, '.temp/goal/cli-calls.txt'), 'utf8')).toBe('2');
@@ -197,8 +193,8 @@ test('a normal retry sends the current check protocol through the same-session r
     expect(continued.argv).toContain('legacy-session');
     expect(continued.argv).not.toContain('--wait');
     expectCurrentCheckProtocol(continued.argv.at(-1)!);
-    expect(continued.argv.at(-1)).toContain('Every checks entry must be the bare UUID string');
-    expect(continued.argv.at(-1)).toContain('Do not invoke `bun scripts/worker-check.ts --wait <id>`');
+    expect(continued.argv.at(-1)).toContain('using that bare UUID');
+    expect(continued.argv.at(-1)).toContain('Never wait for it yourself: no `--wait`');
     expect(h.store.attempt(retry.attempt).attempt).toBe(2);
     await retry.exited;
     await settle(h.tasks, retry, { enqueue() {} });
@@ -244,8 +240,8 @@ test('a nonresumable adapter starts a fresh turn with the check protocol and sup
     expectCurrentCheckProtocol(prompt);
     expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
     expect(prompt).toContain(`check ${checkId}: exit status 7; assertion failed`);
-    expect(prompt).toContain('bare UUID string printed by the wrapper');
-    expect(prompt).toContain('superseded instruction');
+    expect(prompt).toContain('using that bare UUID');
+    expect(prompt).toContain('no `--wait` (obsolete, whatever older sessions say)');
     expect(h.store.task(task.id).currentAttempt).toBe(1);
     expect(h.store.attempt(worker.attempt).session).toBe('fresh-session');
     expect(readFileSync(join(task.worktree, '.temp/goal/check-start-count'), 'utf8')).toBe('1');
@@ -285,7 +281,7 @@ test('a contract-named existing runner outside the worktree enables detached che
       h.settings.mainCheckout,
     );
     expect(prompt).toContain(`as \`bun ${JSON.stringify(runner)} -- <command...>\``);
-    expect(prompt).toContain('Do not invoke `bun scripts/worker-check.ts --wait <id>`');
+    expect(prompt).toContain('Never wait for it yourself: no `--wait`');
     expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
     expect(prompt).not.toContain('This base has no scripts/worker-check.ts; do not add one.');
   } finally {

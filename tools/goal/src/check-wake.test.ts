@@ -134,11 +134,11 @@ test('same-session wake forwards the newly persisted minimal source-result and c
     expect(h.store.attempt(ref).state).toBe('exited');
     expect(prompt).toContain(h.store.task(task.id).brief.markdown);
     expect(prompt).toContain(`check ${id}: exit status 0; passed;`);
-    expect(prompt).toContain('return normal status success, blocker:null, checks:[]');
-    expect(prompt).toContain('deferred acceptance alone is neither blocked nor waiting');
+    expect(prompt).toContain('return success (blocker null, `"checks":[]`)');
+    expect(prompt).toContain('the deferred acceptance, which is neither a blocker nor a reason to wait');
     expect(prompt).toContain('Unfinished work is not a blocker');
-    expect(prompt).toContain('actual compiler database or check host is permitted');
-    expect(prompt).toContain('await its EXISTING tool command/session result');
+    expect(prompt).toContain('services/kernel and services/auth may use the compiler database or a check host');
+    expect(prompt).toContain('Wait for a long command, even one queued for a test slot, in its open session');
     expect(prompt).not.toContain('run your acceptance command once');
   } finally {
     h.dispose();
@@ -171,8 +171,8 @@ test('a waiting session uses the registered local command on wake even when its 
     expect(prompt).toContain(
       "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts'",
     );
-    expect(prompt).toContain('registered acceptance placement is local and overrides any older prompt');
-    expect(prompt).toContain('Do not invoke `bun scripts/worker-check.ts --wait <id>`');
+    expect(prompt).toContain('The acceptance placement is local and overrides any older prompt');
+    expect(prompt).toContain('Never wait for it yourself: no `--wait`');
     expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
     await recovery;
     expect(h.store.attempt(ref).state).toBe('exited');
@@ -210,9 +210,9 @@ test('an adopted waiting attempt without a resumable session gets the current lo
     expect(prompt).toContain(
       "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts'",
     );
-    expect(prompt).toContain('registered acceptance placement is local and overrides any older prompt');
-    expect(prompt).toContain('Do not invoke `bun scripts/worker-check.ts --wait <id>`');
-    expect(prompt.indexOf('registered acceptance placement is local')).toBeGreaterThan(
+    expect(prompt).toContain('The acceptance placement is local and overrides any older prompt');
+    expect(prompt).toContain('Never wait for it yourself: no `--wait`');
+    expect(prompt.indexOf('The acceptance placement is local')).toBeGreaterThan(
       prompt.indexOf('The task contract follows:'),
     );
     await recovery;
@@ -266,7 +266,7 @@ test('a same-session wake preserves the focused Web command argv under the manag
     expect(h.store.task(task.id).brief.acceptance).toMatchObject({ placement: 'local', command });
     expect(prompt).toContain(expected);
     expect(prompt.match(/bun scripts\/worker-check\.ts --local --/g)).toHaveLength(1);
-    expect(prompt).toContain('The full canonical contract below');
+    expect(prompt).toContain('This prompt and these facts supersede saved sessions');
     expect(h.store.attempt(ref).state).toBe('exited');
   } finally {
     h.dispose();
@@ -548,19 +548,12 @@ test('worker instructions start detached checks, keep working, and return waitin
     const prompt = workerPrompt(task, undefined, undefined, [], h.root);
     expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
     expect(prompt).toContain('run your acceptance command once after your last relevant edit');
-    expect(prompt).toContain('Goal owns check continuation');
-    expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
+    expect(prompt).toContain('end the turn at once with `{"status":"waiting","checks":["<bare UUID>"]}`');
+    expect(prompt).toContain('using that bare UUID');
+    expect(prompt).toContain('Never wait for it yourself: no `--wait` (obsolete, whatever older sessions say)');
+    expect(prompt).toContain('never start a duplicate');
     expect(prompt).toContain(
-      '`{"status":"waiting","summary":"acceptance check is running","blocker":null,"checks":["00000000-0000-4000-8000-000000000000"],"approaches":[]}`',
-    );
-    expect(prompt).toContain('Every checks entry must be the bare UUID string');
-    expect(prompt).toContain('Do not invoke `bun scripts/worker-check.ts --wait <id>`');
-    expect(prompt).toContain('A previous session may contain the superseded instruction');
-    expect(prompt).toContain('do not follow it or invoke `--wait`');
-    expect(prompt).toContain('or start a duplicate check');
-    expect(prompt).toContain('Do not run the root typecheck or other regression suites yourself');
-    expect(prompt).toContain(
-      'The landing runs the root typecheck and verification runs affected checks and sibling tests after integration',
+      'Do not run the root typecheck or other regression suites yourself; the landing runs them.',
     );
     const pollingInstructions = prompt
       .split(/(?<=[.!?])\s+/)

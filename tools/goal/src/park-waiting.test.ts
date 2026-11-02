@@ -140,7 +140,7 @@ test('the worker protocol starts checks asynchronously and suspends until the ho
     const prompt = workerPrompt(task, undefined, undefined, [], h.root);
     expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
     expect(prompt).toContain('run your acceptance command once after your last relevant edit');
-    expect(prompt).toContain('wait on that same check with `bun scripts/worker-check.ts --wait <id>`');
+    expect(prompt).toContain('no `--wait` (obsolete, whatever older sessions say)');
     expect(prompt).not.toContain('{"status":"waiting","checks":["<id>",...]}');
     expect(prompt).not.toContain('Never poll');
   } finally {
