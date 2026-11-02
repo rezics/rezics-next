@@ -91,6 +91,7 @@ class CreatorCurrentOrigin implements CreatorOfferGuard {
 
   observe = () => {
     const next = observe(this.client, this.operation);
+    if (this.retired) return next;
     if (
       next.state !== 'signed-in' ||
       next.subject !== this.workspace.subject ||
