@@ -43,7 +43,7 @@ test("a gate failure's automatic retry survives the process that recorded it exi
     await new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} }).recoverOrphans();
     expect(h.store.task(task.id).currentAttempt).toBe(2);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });
 
@@ -85,7 +85,7 @@ test("a command leaves another task's pending retry to the host instead of runni
     await host.drain();
     expect(h.store.task(task.id).currentAttempt).toBe(2);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });
 
