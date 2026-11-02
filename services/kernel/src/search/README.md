@@ -1707,6 +1707,7 @@ the critical section, before generation metadata becomes active; release occurs 
 only this exact alias intent while the fence remains held. Retained intent recovers a lost response or interrupted
 metadata update. Existing generation allocation, live-three-generation quota and activation expiry remain owned
 by the native generation implementations; this port neither allocates a parallel registry nor launches a worker.
+Discovery allocation obtains the historical high water with the primary key's descending full-key LIMIT 1 and the live set through `discovery_generation_live` with LIMIT 4; a fourth live row or unsafe integer exhaustion is unavailable before inserts.
 
 The Source binding/key-page modules publish the selected owner declarations and retain their existing
 unavailable adapters. The delivered ordinary writer retains its real native admission, dispatch, uncertainty

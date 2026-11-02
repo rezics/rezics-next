@@ -382,38 +382,50 @@ export type DiscoveryGeneration = DiscoveryTarget & { state: string; kinds: stri
 export const discoveryConsumer = (prefix: string, generation: number) =>
   subjectConsumer(prefix, generation).replace('subjects', 'discovery');
 
+const DISCOVERY_LIVE_LIMIT = MAX_SUBJECT_GENERATIONS + 1;
+const LIVE_QUOTA_STATES = new Set(['active', 'retiring', 'quarantined']);
+
+/** Descending primary-key seek for the historical high water, independent of retired-row count. */
+export const DISCOVERY_GENERATION_HIGH_WATER_SQL = `SELECT generation::text FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 ORDER BY partition_no DESC, prefix DESC, generation DESC LIMIT 1`;
+
+/** Partial live index plus overflow LIMIT; a fourth live row is corrupt evidence. */
+export const DISCOVERY_LIVE_GENERATIONS_SQL = `SELECT prefix,generation::float8 AS generation,index_uuid AS uuid,
+    incarnation::text,state,kinds FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 AND state <> 'retired' ORDER BY partition_no, prefix, generation LIMIT ${DISCOVERY_LIVE_LIMIT}`;
+
+function admitLiveDiscovery(rows: DiscoveryGeneration[]): DiscoveryGeneration[] {
+  if (rows.length > MAX_SUBJECT_GENERATIONS)
+    throw new SearchUnavailableError('Discovery live generation inventory is corrupt');
+  return rows;
+}
+
 export async function discoveryGenerations(pool: Pool, prefix: string): Promise<DiscoveryGeneration[]> {
-  return withConnection(
-    pool,
-    async (client) =>
-      (
-        await client.query<DiscoveryGeneration>(
-          `SELECT prefix,generation::float8 AS generation,index_uuid AS uuid,
-    incarnation::text,state,kinds FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 AND state <> 'retired' ORDER BY generation`,
-          [prefix],
-        )
-      ).rows,
+  return withConnection(pool, async (client) =>
+    admitLiveDiscovery((await client.query<DiscoveryGeneration>(DISCOVERY_LIVE_GENERATIONS_SQL, [prefix])).rows),
   );
 }
 
 /** Short allocation transaction registers replay before any native population observation. */
 export async function allocateDiscovery(pool: Pool, prefix: string, registry: DiscoveryRegistry): Promise<void> {
-  discoveryIndexName(prefix, 1);
+  discoveryAlias(prefix);
   await withConnection(pool, async (client) => {
     await client.query('BEGIN');
     try {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,1))', [discoveryAlias(prefix)]);
-      const { rows } = await client.query<{ generation: string; state: string }>(
-        'SELECT generation::text,state FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 ORDER BY generation',
-        [prefix],
+      const live = admitLiveDiscovery(
+        (await client.query<DiscoveryGeneration>(DISCOVERY_LIVE_GENERATIONS_SQL, [prefix])).rows,
       );
-      if (rows.some((row) => !['active', 'retiring', 'retired', 'quarantined'].includes(row.state))) {
+      if (live.some((row) => !LIVE_QUOTA_STATES.has(row.state))) {
         await client.query('COMMIT');
         return;
       }
-      if (rows.filter((row) => row.state !== 'retired').length >= 3)
-        throw new Error('Discovery live generation limit reached');
-      const generation = Number(BigInt(rows.at(-1)?.generation ?? '0') + 1n);
+      if (live.length >= MAX_SUBJECT_GENERATIONS) throw new Error('Discovery live generation limit reached');
+      const highest = (await client.query<{ generation: string }>(DISCOVERY_GENERATION_HIGH_WATER_SQL, [prefix]))
+        .rows[0]?.generation;
+      const next = BigInt(highest ?? '0') + 1n;
+      if (next > BigInt(Number.MAX_SAFE_INTEGER))
+        throw new SearchUnavailableError('Discovery generation numbers are exhausted');
+      const generation = Number(next);
+      discoveryIndexName(prefix, generation);
       const consumer = discoveryConsumer(prefix, generation);
       await client.query(
         `INSERT INTO search.discovery_generation(prefix,generation,incarnation,kinds,state) VALUES ($1,$2,$3,$4,'allocated')`,

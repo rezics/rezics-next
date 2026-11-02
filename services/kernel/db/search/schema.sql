@@ -1833,10 +1833,24 @@ CREATE INDEX discovery_copy_generation ON search.discovery_copy USING btree (pre
 
 
 --
+-- Name: discovery_generation_live; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX discovery_generation_live ON search.discovery_generation USING btree (partition_no, prefix, generation) WHERE (state <> 'retired'::text);
+
+
+--
 -- Name: discovery_population_pending; Type: INDEX; Schema: search; Owner: -
 --
 
 CREATE INDEX discovery_population_pending ON search.discovery_population USING btree (prefix, generation, partition_no, owner) WHERE (NOT complete);
+
+
+--
+-- Name: discovery_population_uncertified; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX discovery_population_uncertified ON search.discovery_population USING btree (prefix, generation, partition_no, owner) WHERE (NOT certified);
 
 
 --
