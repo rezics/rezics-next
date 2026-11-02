@@ -1,14 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
-import {
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-  rmdirSync,
-  unlinkSync,
-} from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { processIdentity, sameProcess } from './process.ts';

@@ -121,7 +121,7 @@ test('concurrent dispatch processes wait for the lifecycle lease to be released'
   }
 });
 
-test('Initialization failures preserve their cause and remove only the failed acquisition\'s own temporary directory.', () => {
+test("Initialization failures preserve their cause and remove only the failed acquisition's own temporary directory.", () => {
   const t = temporaryDirectory();
   try {
     const live = join(t.path, 'train.lease');
@@ -131,7 +131,11 @@ test('Initialization failures preserve their cause and remove only the failed ac
     writeFileSync(join(foreign, 'keep.json'), '{}');
     const write = fs.writeFileSync;
     const cause = Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' });
-    const blocked = spyOn(fs, 'writeFileSync').mockImplementation(((path: unknown, data: unknown, options?: unknown) => {
+    const blocked = spyOn(fs, 'writeFileSync').mockImplementation(((
+      path: unknown,
+      data: unknown,
+      options?: unknown,
+    ) => {
       if (String(path).startsWith(t.path) && String(path).includes('.initializing')) throw cause;
       return write(path as never, data as never, options as never);
     }) as typeof fs.writeFileSync);
