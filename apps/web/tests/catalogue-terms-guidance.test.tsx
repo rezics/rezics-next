@@ -88,6 +88,13 @@ test('Multilingual terms show actionable field-specific corrections without chan
         },
       };
       client.setQueryData(['catalogue-terms', snapshot.subject.id, locale], { state: 'ready', snapshot });
+      const publishSnapshot = (next: TermsSnapshot) =>
+        act(async () => {
+          client.setQueriesData(
+            { queryKey: ['catalogue-terms', snapshot.subject.id, locale] },
+            { state: 'ready', snapshot: next },
+          );
+        });
       await act(async () =>
         root.render(
           <QueryClientProvider client={client}>
@@ -129,6 +136,10 @@ test('Multilingual terms show actionable field-specific corrections without chan
         act(async () => {
           await user.click(button(text));
         });
+      const clickElement = (element: Element) => act(async () => user.click(element));
+      const dialog = () => window.document.querySelector('[role="alertdialog"]')!;
+      const dialogButton = (text: string) =>
+        [...dialog().querySelectorAll('button')].find((candidate) => candidate.textContent === text)!;
       const select = (id: string, value: string) =>
         act(async () => {
           await user.selectOptions(control(id), value);
@@ -164,6 +175,83 @@ test('Multilingual terms show actionable field-specific corrections without chan
       await replace('terms-new-language', 'en-US');
       await click(m.catalogue_create_add_language({}, options));
       expect(window.document.getElementById(languageErrorId)).toBeNull();
+
+      // A populated added language stays local through Cancel and Escape, then only its tab and draft are removed.
+      await language('ja');
+      await mode('descriptions', 'set');
+      await replace('terms-descriptions', '日本語の草稿');
+      await language('en-US');
+      await mode('aliases', 'set');
+      await replace('terms-aliases', 'Added alias');
+      const removeLanguage = m.catalogue_create_remove_language({}, options);
+      const removeOpener = button(removeLanguage);
+      await click(removeLanguage);
+      expect(dialog().textContent).toContain(m.catalogue_terms_discard_help({}, options));
+      const cancelLabel = m.candidate_cancel({}, options);
+      expect(dialog().querySelector('button')?.textContent).toBe(cancelLabel);
+      expect(window.document.activeElement).toBe(dialogButton(cancelLabel));
+      expect(control('terms-aliases').closest('fieldset')?.disabled).toBe(true);
+      expect(control('terms-language').disabled).toBe(true);
+      expect(button(m.catalogue_terms_save({}, options)).disabled).toBe(true);
+      await act(async () => user.keyboard('{Escape}'));
+      expect(window.document.activeElement).toBe(removeOpener);
+      expect(control('terms-aliases').value).toBe('Added alias');
+      await click(removeLanguage);
+      await publishSnapshot({ ...snapshot, session: 'replacement-reader' });
+      expect(window.document.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(control('terms-aliases').value).toBe('Added alias');
+      await publishSnapshot(snapshot);
+      expect(window.document.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(control('terms-aliases').value).toBe('Added alias');
+      await click(removeLanguage);
+      await clickElement(dialogButton(cancelLabel));
+      expect(window.document.activeElement).toBe(removeOpener);
+      expect(control('terms-aliases').value).toBe('Added alias');
+      await click(removeLanguage);
+      await clickElement(dialogButton(removeLanguage));
+      expect(control('terms-language').value).toBe('en');
+      expect(window.document.activeElement).toBe(control('terms-language'));
+      expect(control('terms-aliases')).toBeNull();
+      expect(commands).toHaveLength(0);
+      await language('ja');
+      expect(control('terms-descriptions').value).toBe('日本語の草稿');
+
+      // A blank added scaffold is still removable immediately.
+      await replace('new-language', 'en-US');
+      await click(m.catalogue_create_add_language({}, options));
+      await click(removeLanguage);
+      expect(window.document.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(control('terms-language').value).toBe('en');
+      expect(window.document.activeElement).toBe(control('terms-language'));
+      await replace('new-language', 'en-US');
+      await click(m.catalogue_create_add_language({}, options));
+
+      // Explicit removal edits and populated stored-language corrections require confirmation too.
+      await language('en');
+      const discardEnglish = m.catalogue_terms_discard_language({ language: 'en' }, options);
+      const discardOpener = button(discardEnglish);
+      await mode('labels', 'remove');
+      await click(discardEnglish);
+      await clickElement(dialogButton(cancelLabel));
+      expect(control('terms-labels-mode').value).toBe('remove');
+      expect(window.document.activeElement).toBe(discardOpener);
+      await mode('labels', 'keep');
+      await mode('labels', 'set');
+      await replace('terms-labels', 'Temporary title');
+      await click(discardEnglish);
+      await clickElement(dialogButton(cancelLabel));
+      expect(control('terms-labels').value).toBe('Temporary title');
+      await click(discardEnglish);
+      await act(async () => user.keyboard('{Escape}'));
+      expect(window.document.activeElement).toBe(discardOpener);
+      expect(control('terms-labels').value).toBe('Temporary title');
+      await click(discardEnglish);
+      await clickElement(dialogButton(discardEnglish));
+      expect(control('terms-labels').value).toBe('Original film');
+      expect(window.document.activeElement).toBe(control('terms-language'));
+      expect(commands).toHaveLength(0);
+      await language('en-US');
+
       await mode('labels', 'set');
       await save();
       correction('terms-labels', m.catalogue_terms_validation_name({}, options));

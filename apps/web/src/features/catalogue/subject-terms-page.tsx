@@ -1,9 +1,19 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { SubjectTermsNavigationGuard } from './subject-terms-navigation';
 import { useQuery } from '@tanstack/react-query';
-import { useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
 import {
   Field,
   FieldDescription,
@@ -50,6 +60,29 @@ const linkClassName =
 
 export const SubjectTermsPage = catalogueEditor(SubjectTermsPageLive);
 
+type LocalTermsDecision = {
+  language: string;
+  remove: boolean;
+  generation: number;
+  locale: string;
+  session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
+  transport: TermsTransport;
+  snapshot: TermsSnapshot;
+  draft: LanguageDraft | undefined;
+  opener: HTMLButtonElement;
+};
+
+function needsLocalTermsConfirmation(snapshot: TermsSnapshot, language: string, draft?: LanguageDraft) {
+  if (!draft) return false;
+  const original = languageDraft(snapshot.subject, language);
+  return termFields.some((field) => {
+    const edit = draft[field];
+    if (edit.mode === 'remove') return true;
+    if (edit.mode !== 'set' || edit.value === original[field].value) return false;
+    return edit.value !== '' || Object.hasOwn(snapshot.subject[field], language);
+  });
+}
+
 function SubjectTermsPageLive({
   id,
   locale,
@@ -86,17 +119,174 @@ function SubjectTermsPageLive({
   const [saved, setSaved] = useState<Extract<TermsResult, { ok: true }>>();
   const [busy, setBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [localDecision, setLocalDecision] = useState<LocalTermsDecision | null>(null);
   const running = useRef(false);
   const pending = useRef<TermsCommand | null>(null);
+  const localDecisionRef = useRef<LocalTermsDecision | null>(null);
+  const decisionFocus = useRef<{ decision: LocalTermsDecision; target: HTMLElement; language?: string } | null>(null);
+  const focusAfterScaffoldRemoval = useRef(false);
+  const cancelDecision = useRef<HTMLButtonElement>(null);
+  const languageRef = useRef(language);
+  languageRef.current = language;
   const base =
     saved?.reader.state === 'ready'
       ? saved.reader.snapshot
       : query.data?.state === 'ready'
         ? query.data.snapshot
         : undefined;
+  const current = useRef({
+    language,
+    locale,
+    session,
+    transport,
+    snapshot: base,
+    drafts,
+    addedLanguages,
+    generation: lifetime.generation,
+    active: lifetime.active,
+    available: false,
+  });
+  current.current = {
+    language,
+    locale,
+    session,
+    transport,
+    snapshot: base,
+    drafts,
+    addedLanguages,
+    generation: lifetime.generation,
+    active: lifetime.active,
+    available:
+      !busy &&
+      !saved &&
+      session === 'signed-in' &&
+      failure?.reason !== 'stale' &&
+      failure?.reason !== 'conflict' &&
+      !(failure?.reason === 'unavailable' && pending.current),
+  };
   const uncertain = failure?.reason === 'unavailable' && pending.current !== null;
   const stale = failure?.reason === 'stale' || failure?.reason === 'conflict';
-  const locked = busy || uncertain || stale || !!saved || session !== 'signed-in';
+  const isCurrentDecision = (decision: LocalTermsDecision) => {
+    const latest = current.current;
+    return (
+      localDecisionRef.current === decision &&
+      latest.active() &&
+      latest.available &&
+      languageRef.current === decision.language &&
+      latest.language === decision.language &&
+      latest.locale === decision.locale &&
+      latest.session === decision.session &&
+      latest.transport === decision.transport &&
+      latest.snapshot === decision.snapshot &&
+      latest.generation === decision.generation &&
+      latest.drafts[decision.language] === decision.draft &&
+      (!decision.remove || latest.addedLanguages.includes(decision.language))
+    );
+  };
+  const activeDecision = localDecision && isCurrentDecision(localDecision) ? localDecision : null;
+  const locked = busy || uncertain || stale || !!saved || session !== 'signed-in' || !!activeDecision;
+
+  function chooseLanguage(next: string) {
+    languageRef.current = next;
+    setLanguage(next);
+  }
+
+  function clearLocalDraft(target: string, remove: boolean, expected: LanguageDraft | undefined, focusScaffold = false) {
+    if (!lifetime.active() || !base || busy || uncertain || stale || saved || session !== 'signed-in' || running.current)
+      return;
+    if (drafts[target] !== expected) return;
+    // Stored terms can only be removed through an explicit field change and submission.
+    if (remove && termFields.some((field) => Object.hasOwn(base.subject[field], target))) return;
+    setDrafts((previous) => {
+      if (previous[target] !== expected) return previous;
+      const next = { ...previous };
+      delete next[target];
+      return next;
+    });
+    setFailure(undefined);
+    if (remove) {
+      setAddedLanguages((previous) => previous.filter((tag) => tag !== target));
+      chooseLanguage(locale);
+      if (focusScaffold) focusAfterScaffoldRemoval.current = true;
+    }
+  }
+
+  function restoreDecisionFocus() {
+    const intent = decisionFocus.current;
+    decisionFocus.current = null;
+    if (!intent) return false;
+    const latest = current.current;
+    return latest.active() &&
+      latest.generation === intent.decision.generation &&
+      latest.locale === intent.decision.locale &&
+      latest.session === intent.decision.session &&
+      latest.transport === intent.decision.transport &&
+      latest.snapshot === intent.decision.snapshot &&
+      (intent.language === undefined || latest.language === intent.language) &&
+      intent.target.isConnected
+      ? intent.target
+      : false;
+  }
+
+  function closeLocalDecision() {
+    const decision = localDecisionRef.current;
+    if (!decision) return;
+    if (decision && isCurrentDecision(decision)) {
+      decisionFocus.current = { decision, target: decision.opener, language: decision.language };
+    } else {
+      decisionFocus.current = null;
+    }
+    localDecisionRef.current = null;
+    setLocalDecision(null);
+  }
+
+  function requestLocalAction(remove: boolean, opener: HTMLButtonElement) {
+    if (!lifetime.active() || !base || locked || running.current) return;
+    if (remove && termFields.some((field) => Object.hasOwn(base.subject[field], language))) return;
+    const draft = drafts[language];
+    if (!needsLocalTermsConfirmation(base, language, draft)) {
+      clearLocalDraft(language, remove, draft, remove);
+      return;
+    }
+    const decision: LocalTermsDecision = {
+      language,
+      remove,
+      generation: lifetime.generation,
+      locale,
+      session,
+      transport,
+      snapshot: base,
+      draft,
+      opener,
+    };
+    decisionFocus.current = null;
+    localDecisionRef.current = decision;
+    setLocalDecision(decision);
+  }
+
+  function confirmLocalAction(decision: LocalTermsDecision) {
+    if (!isCurrentDecision(decision)) return;
+    const target = decision.remove ? document.getElementById(domId('language')) : document.getElementById(domId('language'));
+    if (target instanceof HTMLElement) decisionFocus.current = { decision, target };
+    localDecisionRef.current = null;
+    clearLocalDraft(decision.language, decision.remove, decision.draft);
+    setLocalDecision(null);
+  }
+
+  useEffect(() => {
+    if (localDecision && !isCurrentDecision(localDecision)) {
+      if (localDecisionRef.current === localDecision) localDecisionRef.current = null;
+      decisionFocus.current = null;
+      setLocalDecision(null);
+    }
+  }, [localDecision, language, locale, session, transport, base, drafts, addedLanguages, lifetime.generation]);
+
+  useLayoutEffect(() => {
+    if (focusAfterScaffoldRemoval.current) {
+      focusAfterScaffoldRemoval.current = false;
+      document.getElementById(domId('language'))?.focus();
+    }
+  }, [language, addedLanguages]);
   const fieldLabel = (field: TermField) =>
     field === 'labels'
       ? m.catalogue_create_label({}, options)
@@ -128,25 +318,10 @@ function SubjectTermsPageLive({
     setFailure(undefined);
   }
 
-  function discardLanguage(remove = false) {
-    if (!lifetime.active() || !base || locked || running.current) return;
-    // Stored terms can only be removed through an explicit field change and submission.
-    if (remove && termFields.some((field) => Object.hasOwn(base.subject[field], language))) return;
-    setDrafts((previous) => {
-      const next = { ...previous };
-      delete next[language];
-      return next;
-    });
-    setFailure(undefined);
-    if (remove) {
-      setAddedLanguages((previous) => previous.filter((tag) => tag !== language));
-      setLanguage(locale);
-    }
-  }
-
   async function submit(event: FormEvent<HTMLFormElement>, confirmed?: TermsSnapshot) {
     if (!lifetime.active()) return;
     event.preventDefault();
+    if (activeDecision) return;
     if (!base || running.current || saved || session !== 'signed-in' || (stale && !confirmed)) return;
     const snapshot = confirmed ?? base;
     if (!pending.current || confirmed) {
@@ -267,6 +442,39 @@ function SubjectTermsPageLive({
         pending={!!base && !saved && (submitting || uncertain)}
         locale={locale}
       />
+      <AlertDialog
+        open={!!activeDecision}
+        onOpenChange={(open) => {
+          if (!open) closeLocalDecision();
+        }}
+      >
+        <AlertDialogContent initialFocus={cancelDecision} finalFocus={restoreDecisionFocus}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {m.candidate_confirm_title(
+                {
+                  action: activeDecision?.remove
+                    ? m.catalogue_create_remove_language({}, options)
+                    : m.catalogue_terms_discard_language({ language: activeDecision?.language ?? language }, options),
+                },
+                options,
+              )}
+            </AlertDialogTitle>
+            <AlertDialogDescription>{m.catalogue_terms_discard_help({}, options)}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel ref={cancelDecision}>{m.candidate_cancel({}, options)}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => activeDecision && confirmLocalAction(activeDecision)}
+            >
+              {activeDecision?.remove
+                ? m.catalogue_create_remove_language({}, options)
+                : m.catalogue_terms_discard_language({ language: activeDecision?.language ?? language }, options)}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <header className="flex min-w-0 flex-col gap-3">
         <PageHeading id={domId('title')}>{m.catalogue_terms_title({}, options)}</PageHeading>
         {base && (
@@ -349,7 +557,7 @@ function SubjectTermsPageLive({
               className="flex min-w-0 flex-col gap-6"
               aria-labelledby={domId('title')}
               noValidate
-              aria-busy={busy}
+              aria-busy={busy || !!activeDecision}
               onSubmit={(event) => void submit(event, comparison?.state === 'ready' ? comparison.snapshot : undefined)}
             >
               <FieldGroup>
@@ -360,8 +568,8 @@ function SubjectTermsPageLive({
                     id={domId('language')}
                     aria-describedby={domId('language-help')}
                     value={language}
-                    disabled={busy}
-                    onChange={(event) => setLanguage(event.target.value)}
+                    disabled={busy || !!activeDecision}
+                    onChange={(event) => chooseLanguage(event.target.value)}
                   >
                     {languages.map((tag) => (
                       <NativeSelectOption key={tag} value={tag}>
@@ -414,7 +622,7 @@ function SubjectTermsPageLive({
                       if (!languages.includes(newLanguage)) {
                         setAddedLanguages((previous) => [...previous, newLanguage]);
                       }
-                      setLanguage(newLanguage);
+                      chooseLanguage(newLanguage);
                       setNewLanguage('');
                     }}
                   >
@@ -432,7 +640,7 @@ function SubjectTermsPageLive({
                     variant="outline"
                     disabled={locked || !canDiscard}
                     aria-describedby={domId('discard-help')}
-                    onClick={() => discardLanguage()}
+                    onClick={(event) => requestLocalAction(false, event.currentTarget)}
                   >
                     {m.catalogue_terms_discard_language({ language }, options)}
                   </Button>
@@ -443,7 +651,7 @@ function SubjectTermsPageLive({
                       variant="outline"
                       disabled={locked}
                       aria-describedby={domId('discard-help')}
-                      onClick={() => discardLanguage(true)}
+                      onClick={(event) => requestLocalAction(true, event.currentTarget)}
                     >
                       {m.catalogue_create_remove_language({}, options)}
                     </Button>
