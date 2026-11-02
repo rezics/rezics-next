@@ -6,6 +6,7 @@ import {
   requireNonNegativeFiniteNumber,
   sumFinite,
 } from './growth-numeric.ts';
+import { indexCteScopes, unscannedCteBlocks, type CteBlocks } from './growth-cte-cost.ts';
 import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
 import { classifyGrowthSql } from './growth-sql-kind.ts';
 
@@ -53,6 +54,8 @@ export type Cost = {
   readonly blocks: number;
   readonly sharedHit: number;
   readonly sharedRead: number;
+  /** Native CTE scan relationships that could not be paired safely during buffer accounting. */
+  readonly limitations?: readonly string[];
   readonly relations: Readonly<Record<string, RelationCost>>;
   readonly backgroundStatements?: number;
   readonly backgroundRequestBytes?: number;
@@ -66,9 +69,6 @@ export type Cost = {
 
 type NodeTotals = { readonly rows: number; readonly inclusiveHit: number; readonly inclusiveRead: number };
 type MutableRelationCost = { rows: number; blocks: number; nodes: number; sequentialScans: number };
-type Blocks = { hit: number; read: number };
-/** Per CTE name: the producer's inclusive blocks, and the exclusive blocks of the `CTE Scan` nodes that read it. */
-type CteBlocks = { readonly producers: Map<string, Blocks>; readonly scans: Map<string, Blocks> };
 
 const rowScans = new Set([
   'Seq Scan',
@@ -381,19 +381,22 @@ export function withoutCatalogTexts(
   };
 }
 
-function addBlocks(blocks: Map<string, Blocks>, name: string, hit: number, read: number): void {
-  const total = blocks.get(name) ?? { hit: 0, read: 0 };
-  total.hit = checkedAdd(total.hit, hit, `Inclusive hit blocks for CTE ${name}`);
-  total.read = checkedAdd(total.read, read, `Inclusive read blocks for CTE ${name}`);
-  blocks.set(name, total);
+function addCteScanBlocks(blocks: Map<PlanNode, CteBlocks>, producer: PlanNode, hit: number, read: number): void {
+  const total = blocks.get(producer) ?? { hit: 0, read: 0 };
+  blocks.set(producer, {
+    hit: checkedAdd(total.hit, hit, 'CTE Scan shared hit blocks'),
+    read: checkedAdd(total.read, read, 'CTE Scan shared read blocks'),
+  });
 }
 
 function costNode(
   root: PlanNode,
   relations: Map<string, MutableRelationCost>,
-  ctes: CteBlocks,
   location: string,
-): NodeTotals {
+): { readonly totals: NodeTotals; readonly cteBlocks: CteBlocks; readonly cteLimitations: readonly string[] } {
+  const cteScopes = indexCteScopes(root, location);
+  const producerBlocks = new Map<PlanNode, CteBlocks>();
+  const scanBlocks = new Map<PlanNode, CteBlocks>();
   const totalsByNode = new Map<PlanNode, NodeTotals>();
   for (const { node, depth } of walkPlanTree(root, location, 'postorder')) {
     const nodeType = typeof node['Node Type'] === 'string' ? node['Node Type'] : '';
@@ -413,10 +416,9 @@ function costNode(
     );
     const exclusiveHit = Math.max(0, checkedSubtract(hit, childHit, 'Exclusive shared hit blocks'));
     const exclusiveRead = Math.max(0, checkedSubtract(read, childRead, 'Exclusive shared read blocks'));
-    const producer = typeof node['Subplan Name'] === 'string' ? /^CTE (.+)$/.exec(node['Subplan Name']) : null;
-    if (producer) addBlocks(ctes.producers, producer[1]!, hit, read);
-    if (nodeType === 'CTE Scan' && typeof node['CTE Name'] === 'string')
-      addBlocks(ctes.scans, node['CTE Name'], exclusiveHit, exclusiveRead);
+    if (cteScopes.producers.has(node)) producerBlocks.set(node, { hit, read });
+    const scanProducer = cteScopes.scanProducers.get(node);
+    if (scanProducer !== undefined) addCteScanBlocks(scanBlocks, scanProducer, exclusiveHit, exclusiveRead);
     const removedByFilter = optionalNumber(node, 'Rows Removed by Filter');
     const removedByRecheck = optionalNumber(node, 'Rows Removed by Index Recheck');
     const rowsPerLoop = rowScans.has(nodeType)
@@ -462,7 +464,11 @@ function costNode(
       inclusiveRead: read,
     });
   }
-  return totalsByNode.get(root)!;
+  return {
+    totals: totalsByNode.get(root)!,
+    cteBlocks: unscannedCteBlocks(cteScopes, producerBlocks, scanBlocks),
+    cteLimitations: cteScopes.limitations,
+  };
 }
 
 function addRelation(
@@ -513,6 +519,7 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
   let rows = 0;
   let sharedHit = 0;
   let sharedRead = 0;
+  const limitations: string[] = [];
   const catalog = classifyCatalogStatements(capture, planCollection);
   const nativeCatalogIndexes = nativeCatalogOccurrences.get(catalog);
   const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
@@ -538,28 +545,15 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
         if (backendAware && !hasMatchingStatement(matchingStatements, true, queryText, backend)) included = false;
         if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) included = false;
       }
-      const ctes: CteBlocks = { producers: new Map(), scans: new Map() };
-      const totals = costNode(plan, included ? relations : new Map<string, MutableRelationCost>(), ctes, location);
+      const nodeCost = costNode(plan, included ? relations : new Map<string, MutableRelationCost>(), location);
       if (!included) continue;
       plans++;
-      rows = checkedAdd(rows, totals.rows, 'Total examined rows');
-      sharedHit = checkedAdd(sharedHit, totals.inclusiveHit, 'Total shared hit blocks');
-      sharedRead = checkedAdd(sharedRead, totals.inclusiveRead, 'Total shared read blocks');
-      // A producer runs lazily inside the scans that read it, so those buffers are already in the root. What no scan
-      // pulled (a data-modifying CTE that runs at the end of the statement) is not.
-      for (const [name, producer] of ctes.producers) {
-        const scans = ctes.scans.get(name);
-        sharedHit = checkedAdd(
-          sharedHit,
-          Math.max(0, checkedSubtract(producer.hit, scans?.hit ?? 0, `Unscanned CTE ${name} hit blocks`)),
-          'Total shared hit blocks including CTE work',
-        );
-        sharedRead = checkedAdd(
-          sharedRead,
-          Math.max(0, checkedSubtract(producer.read, scans?.read ?? 0, `Unscanned CTE ${name} read blocks`)),
-          'Total shared read blocks including CTE work',
-        );
-      }
+      rows = checkedAdd(rows, nodeCost.totals.rows, 'Total examined rows');
+      sharedHit = checkedAdd(sharedHit, nodeCost.totals.inclusiveHit, 'Total shared hit blocks');
+      sharedRead = checkedAdd(sharedRead, nodeCost.totals.inclusiveRead, 'Total shared read blocks');
+      sharedHit = checkedAdd(sharedHit, nodeCost.cteBlocks.hit, 'Total shared hit blocks including CTE work');
+      sharedRead = checkedAdd(sharedRead, nodeCost.cteBlocks.read, 'Total shared read blocks including CTE work');
+      limitations.push(...nodeCost.cteLimitations);
     }
   }
 
@@ -620,6 +614,7 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
     blocks: totalBlocks,
     sharedHit,
     sharedRead,
+    ...(limitations.length === 0 ? {} : { limitations: [...new Set(limitations)] }),
     relations: Object.fromEntries(relations),
   };
   const requestBytes =
@@ -705,6 +700,12 @@ function validateCostEvidence(cost: Cost, index: number): void {
     for (const [sqlstate, value] of Object.entries(cost.failedStatements))
       requireNonNegativeFiniteNumber(value, `Failed statement count ${sqlstate} at repetition ${index}`);
   }
+  if (cost.limitations !== undefined) {
+    requireDenseArray(cost.limitations, `Cost limitations at repetition ${index}`);
+    for (const limitation of cost.limitations)
+      if (typeof limitation !== 'string')
+        throw new TypeError(`Cost limitation at repetition ${index} must be a string`);
+  }
   if (cost.backgroundCosts !== undefined) {
     if (!isRecord(cost.backgroundCosts))
       throw new TypeError(`Cost background costs at repetition ${index} must be an object`);
@@ -733,6 +734,7 @@ export function medianCost(costs: readonly Cost[]): Cost {
   const backgroundResponseBytes = costs.flatMap(({ backgroundResponseBytes }) =>
     backgroundResponseBytes === undefined ? [] : [backgroundResponseBytes],
   );
+  const limitations = [...new Set(costs.flatMap((cost) => cost.limitations ?? []))];
 
   const median = {
     statements: lowerMedian(costs.map((cost) => cost.statements)),
@@ -745,6 +747,7 @@ export function medianCost(costs: readonly Cost[]): Cost {
     blocks,
     sharedHit: lowerMedian(costs.map((cost) => cost.sharedHit)),
     sharedRead: lowerMedian(costs.map((cost) => cost.sharedRead)),
+    ...(limitations.length === 0 ? {} : { limitations }),
     relations: representative.relations,
   };
   const failedStatements = new Map<string, number>();

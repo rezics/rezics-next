@@ -445,6 +445,8 @@ exceed 4096.
 Every capture drains registered query and connection setup work, including tasks added while earlier work settles,
 before restoring attribution on success or failure. If cleanup also fails, the initiating error remains the aggregate's
 cause and cleanup failures remain available in its errors.
+CTE buffer costs match producers and scans within nested native plan scopes. When a unique relationship cannot be
+established, producer blocks stay in the total and the unmatched relationship appears in `Cost.limitations`.
 
 Byte totals are recorded for each captured statement. Request bytes include the UTF-8 statement text whenever an
 unnamed statement is sent and once when a named statement is first prepared on a connection, plus each parameter after
