@@ -577,10 +577,12 @@ function DecisionVisit({
               <dt className="text-muted-foreground">{m.moderation_case_details_decision_id()}</dt>
               <dd className="select-text break-all font-mono leading-6">{decision.id}</dd>
             </div>
-            <div className="space-y-1">
-              <dt className="text-muted-foreground">{m.moderation_case_details_target_id()}</dt>
-              <dd className="select-text break-all font-mono leading-6">{decision.targetId}</dd>
-            </div>
+            {target ? (
+              <div className="space-y-1">
+                <dt className="text-muted-foreground">{m.moderation_case_details_target_id()}</dt>
+                <dd className="select-text break-all font-mono leading-6">{decision.targetId}</dd>
+              </div>
+            ) : null}
             {appeal ? (
               <div className="space-y-1">
                 <dt className="text-muted-foreground">{m.moderation_case_details_appeal_id()}</dt>

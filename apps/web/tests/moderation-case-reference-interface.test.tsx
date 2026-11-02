@@ -53,6 +53,17 @@ const appeal: Appeal = {
   canResolve: true,
 };
 const withheldTarget: ModerationTarget = { key: `post:${targetId}`, kind: 'post', value: null };
+const markedWithheldTarget: ModerationTarget = {
+  key: `post:${targetId}`,
+  kind: 'post',
+  value: { post: { id: targetId, availability: 'withheld', body: 'PRIVATE target body' } },
+};
+const currentTargetText = 'The current post title and readable body supplied by the page fixture.';
+const availableAppealTarget: ModerationTarget = {
+  key: `post:${targetId}`,
+  kind: 'post',
+  value: { post: { id: targetId, body: currentTargetText } },
+};
 const decisionPage: DecisionPage = {
   viewerId: 'private-author-case-owner',
   decision: {
@@ -70,7 +81,7 @@ const decisionPage: DecisionPage = {
 const currentTarget = {
   id: targetId,
   authorId: 'private-author-case-owner',
-  text: 'The current post title and readable body supplied by the page fixture.',
+  text: currentTargetText,
   href: `/threads/current-thread#${targetId}`,
 };
 const privateReport: ReporterStatus = {
@@ -94,21 +105,20 @@ function parseMarkup(markup: string) {
   return { window, host };
 }
 
-function renderDecision(page: DecisionPage, callbacks: { reads: number; commands: number }) {
-  return renderToStaticMarkup(
-    createElement(DecisionPageView, {
-      page,
-      now: Date.parse(deadline),
-      onAppeal: async () => {
-        callbacks.commands++;
-        return { state: 'pending', decision: page.decision };
-      },
-      onRefresh: async () => {
-        callbacks.reads++;
-        return page;
-      },
-    }),
-  );
+function renderDecision(page: DecisionPage, callbacks: { reads: number; commands: number }, width?: number) {
+  const view = createElement(DecisionPageView, {
+    page,
+    now: Date.parse(deadline),
+    onAppeal: async () => {
+      callbacks.commands++;
+      return { state: 'pending', decision: page.decision };
+    },
+    onRefresh: async () => {
+      callbacks.reads++;
+      return page;
+    },
+  });
+  return renderToStaticMarkup(width ? createElement('div', { style: { width: `${width}px` } }, view) : view);
 }
 
 test('Moderation cases prioritize human outcomes while exact support references remain reachable', async () => {
@@ -131,14 +141,15 @@ test('Moderation cases prioritize human outcomes while exact support references 
       const { host, window } = appeals;
       expect(host.firstElementChild?.getAttribute('style')).toContain(`${width}px`);
       expect(host.querySelector('h1')?.textContent).toContain(m.moderation_appeals_heading());
-      expect([...host.querySelectorAll('h1, h2, h3')].map((heading) => heading.textContent).join(' ')).not.toContain(
-        targetId,
-      );
+      const appealHeadings = [...host.querySelectorAll('h1, h2, h3')].map((heading) => heading.textContent).join(' ');
+      for (const id of [appealId, decisionId, targetId]) expect(appealHeadings).not.toContain(id);
       expect([...host.querySelectorAll('h3')].some((heading) => heading.textContent === m.moderation_current_target_label())).toBe(
         true,
       );
       expect(host.textContent).toContain(m.reporter_status_post());
       expect(host.textContent).toContain(m.moderation_target_unavailable());
+      expect(host.textContent).not.toContain(targetId);
+      expect(host.innerHTML).not.toContain(targetId);
       expect(host.textContent).toContain(longDecisionReason);
       expect(host.textContent).toContain(longAppealReason);
       expect(host.querySelector(`time[datetime="${createdAt}"]`)).not.toBeNull();
@@ -152,7 +163,7 @@ test('Moderation cases prioritize human outcomes while exact support references 
       expect(details?.open).toBe(false);
       expect(details?.querySelector('summary')?.textContent).toBe(m.reporter_status_reference());
       const referenceValues = [...(details?.querySelectorAll('dd') ?? [])];
-      expect(referenceValues.map((value) => value.textContent)).toEqual([appealId, decisionId, targetId]);
+      expect(referenceValues.map((value) => value.textContent)).toEqual([appealId, decisionId]);
       for (const value of referenceValues) {
         expect(value.className).toContain('select-text');
         expect(value.className).toContain('break-all');
@@ -161,13 +172,54 @@ test('Moderation cases prioritize human outcomes while exact support references 
       summary?.focus();
       expect(window.document.activeElement).toBe(summary);
       expect(summary?.tabIndex).toBe(0);
-      const visibleAppeal = host.cloneNode(true) as HTMLElement;
-      visibleAppeal.querySelector('details')?.remove();
-      expect(visibleAppeal.textContent).not.toContain(appealId);
-      expect(visibleAppeal.textContent).not.toContain(decisionId);
-      expect(visibleAppeal.textContent).not.toContain(targetId);
     } finally {
       await appeals.window.happyDOM.close();
+    }
+
+    const currentAppeal = parseMarkup(
+      renderToStaticMarkup(
+        createElement(
+          'div',
+          { style: { width: `${width}px` } },
+          createElement(ModerationAppealsView, {
+            appeals: [appeal],
+            targets: [availableAppealTarget],
+            next: null,
+          }),
+        ),
+      ),
+    );
+    try {
+      const { host } = currentAppeal;
+      expect(host.textContent).toContain(m.reporter_status_post());
+      expect(host.textContent).toContain(currentTargetText);
+      expect([...host.querySelectorAll('details dd')].map((value) => value.textContent)).toEqual([
+        appealId,
+        decisionId,
+        targetId,
+      ]);
+    } finally {
+      await currentAppeal.window.happyDOM.close();
+    }
+
+    const markedWithheldAppeal = parseMarkup(
+      renderToStaticMarkup(
+        createElement(ModerationAppealsView, {
+          appeals: [appeal],
+          targets: [markedWithheldTarget],
+          next: null,
+        }),
+      ),
+    );
+    try {
+      const { host } = markedWithheldAppeal;
+      expect(host.textContent).toContain(m.moderation_target_withheld());
+      expect(host.textContent).not.toContain(targetId);
+      expect(host.innerHTML).not.toContain(targetId);
+      expect(host.textContent).not.toContain('PRIVATE target body');
+      expect([...host.querySelectorAll('details dd')].map((value) => value.textContent)).toEqual([appealId, decisionId]);
+    } finally {
+      await markedWithheldAppeal.window.happyDOM.close();
     }
 
     const withheldDecision = parseMarkup(
@@ -184,9 +236,8 @@ test('Moderation cases prioritize human outcomes while exact support references 
       const { host } = withheldDecision;
       expect(host.firstElementChild?.getAttribute('style')).toBeNull();
       expect(host.querySelector('h1')?.textContent).toContain(m.decision_heading());
-      expect([...host.querySelectorAll('h1, h2, h3')].map((heading) => heading.textContent).join(' ')).not.toContain(
-        decisionId,
-      );
+      const decisionHeadings = [...host.querySelectorAll('h1, h2, h3')].map((heading) => heading.textContent).join(' ');
+      for (const id of [decisionId, targetId, appealId]) expect(decisionHeadings).not.toContain(id);
       expect(host.textContent).toContain(m.reporter_status_post());
       expect(host.textContent).toContain(m.decision_appeal_reversed());
       expect(host.textContent).toContain(longDecisionReason);
@@ -197,29 +248,29 @@ test('Moderation cases prioritize human outcomes while exact support references 
       expect(host.querySelector(`a[href*="${targetId}"]`)).toBeNull();
       expect(host.textContent).not.toContain('PRIVATE target body');
       expect(host.textContent).not.toContain(currentTarget.text);
+      expect(host.textContent).not.toContain(targetId);
+      expect(host.innerHTML).not.toContain(targetId);
 
       const details = host.querySelector('details');
       expect(details?.open).toBe(false);
       expect([...details!.querySelectorAll('dd')].map((value) => value.textContent)).toEqual([
         decisionId,
-        targetId,
         appealId,
       ]);
       for (const value of details!.querySelectorAll('dd')) {
         expect(value.className).toContain('select-text');
         expect(value.className).toContain('break-all');
       }
-      const visibleDecision = host.cloneNode(true) as HTMLElement;
-      visibleDecision.querySelector('details')?.remove();
-      expect(visibleDecision.textContent).not.toContain(decisionId);
-      expect(visibleDecision.textContent).not.toContain(targetId);
-      expect(visibleDecision.textContent).not.toContain(appealId);
     } finally {
       await withheldDecision.window.happyDOM.close();
     }
 
     const currentDecision = parseMarkup(
-      renderDecision({ ...decisionPage, decision: { ...decisionPage.decision, appeal: null }, target: currentTarget }, callbacks),
+      renderDecision(
+        { ...decisionPage, decision: { ...decisionPage.decision, appeal: null }, target: currentTarget },
+        callbacks,
+        width,
+      ),
     );
     try {
       const { host } = currentDecision;
@@ -235,9 +286,29 @@ test('Moderation cases prioritize human outcomes while exact support references 
       expect(form?.contains(refresh ?? null)).toBe(false);
       expect(host.querySelector('details')?.closest('form')).toBeNull();
       expect(host.querySelector('h2')?.textContent).toContain(m.decision_current_outcome());
+      expect([...host.querySelectorAll('details dd')].map((value) => value.textContent)).toEqual([decisionId, targetId]);
       expect(host.querySelector('details dd')?.className).toContain('break-all');
     } finally {
       await currentDecision.window.happyDOM.close();
+    }
+
+    const fallbackDecision = parseMarkup(
+      renderDecision(
+        {
+          ...decisionPage,
+          decision: { ...decisionPage.decision, appeal: null },
+          target: { ...currentTarget, text: '' },
+        },
+        callbacks,
+        width,
+      ),
+    );
+    try {
+      expect(fallbackDecision.host.textContent).toContain(
+        m.decision_target_fallback({ kind: m.reporter_status_post() }),
+      );
+    } finally {
+      await fallbackDecision.window.happyDOM.close();
     }
 
     const reporter = parseMarkup(
@@ -249,6 +320,7 @@ test('Moderation cases prioritize human outcomes while exact support references 
       const { host } = reporter;
       expect(host.firstElementChild?.getAttribute('style')).toContain(`${width}px`);
       expect(host.querySelector('h1')?.textContent).toContain(m.reporter_status_heading());
+      expect(host.textContent).toContain(m.reporter_status_post());
       expect(host.textContent).toContain(m.moderation_dismissed());
       expect(host.textContent).toContain(longAppealReason);
       expect(host.textContent).toContain(m.moderation_target_unavailable());

@@ -8,14 +8,23 @@ import { reporterStatusViewports } from './reporter-status/fixture';
 import { decisionNow, openDecision, pendingDecision } from './patterns/moderation-decision/fixtures';
 import * as pattern from './patterns/moderation-decision/moderation-decision.stories';
 
-// Fixture-derived long references exercise wrapping only; this illustration is not native evidence.
+// Fixture-derived illustration, not native evidence: long reasons/references exercise wrapping while the target stays withheld.
 const longId = (value: string) => `${value}-${value}-${value}`;
+const longDecisionReason = Array.from(
+  { length: 8 },
+  (_, index) => `Decision reason paragraph ${index + 1}: ${openDecision.decision.statement}`,
+).join('\n\n');
 const longReferencePage = {
-  ...openDecision,
+  ...pendingDecision,
   decision: {
-    ...openDecision.decision,
-    id: longId(openDecision.decision.id),
-    targetId: longId(openDecision.decision.targetId),
+    ...pendingDecision.decision,
+    id: longId(pendingDecision.decision.id),
+    targetId: longId(pendingDecision.decision.targetId),
+    statement: longDecisionReason,
+    appeal: {
+      ...pendingDecision.decision.appeal!,
+      id: longId(pendingDecision.decision.appeal!.id),
+    },
   },
 };
 
@@ -71,9 +80,13 @@ export const IllustrativeLongReferences: Story = {
     await expect(view.getByRole('heading', { level: 1, name: m.decision_heading() })).toBeVisible();
     await expect(view.getByText(m.moderation_target_unavailable())).toBeVisible();
     await expect(view.queryByRole('link', { name: /affected by this decision/i })).toBeNull();
+    await expect(view.getByText(longDecisionReason)).toBeVisible();
+    await expect(view.getByText(m.decision_appeal_pending())).toBeVisible();
     const reference = view.getByText(m.reporter_status_reference(), { exact: true });
     await userEvent.click(reference);
     await expect(view.getByText(longReferencePage.decision.id, { exact: true })).toBeVisible();
-    await expect(view.getByText(longReferencePage.decision.targetId, { exact: true })).toBeVisible();
+    await expect(view.getByText(longReferencePage.decision.appeal!.id, { exact: true })).toBeVisible();
+    await expect(view.queryByText(longReferencePage.decision.targetId, { exact: true })).toBeNull();
+    expect(canvasElement.innerHTML).not.toContain(longReferencePage.decision.targetId);
   },
 };

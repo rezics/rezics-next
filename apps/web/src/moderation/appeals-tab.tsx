@@ -124,6 +124,34 @@ function AppealsVisit(props: AppealsPageProps) {
 const emptySubscribe = () => () => {};
 const zeroSnapshot = () => 0;
 
+function currentTargetIsAvailable(target: ModerationTarget | undefined, identity: { kind: 'post' | 'thread'; id: string }) {
+  if (!target?.value || target.key !== `${identity.kind}:${identity.id}`) return false;
+  const evidence = moderationEvidence(target.value);
+  if (evidence)
+    return evidence.kind === identity.kind && evidence.id === identity.id && evidence.state === 'available';
+  if (typeof target.value !== 'object' || Array.isArray(target.value)) return false;
+  const value = target.value as Record<string, unknown>;
+  const raw = value[identity.kind] ?? value;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const resource = raw as Record<string, unknown>;
+  if (
+    (resource.id !== undefined && resource.id !== identity.id) ||
+    (resource.availability !== undefined && resource.availability !== 'available') ||
+    resource.removed
+  )
+    return false;
+  const revision =
+    resource.revision && typeof resource.revision === 'object' && !Array.isArray(resource.revision)
+      ? (resource.revision as Record<string, unknown>)
+      : resource;
+  if ((revision.availability !== undefined && revision.availability !== 'available') || revision.removed) return false;
+  if (identity.kind === 'post') {
+    const body = revision.body ?? resource.body;
+    return typeof body === 'string' || Boolean(body);
+  }
+  return true;
+}
+
 export function ModerationAppealsView({
   appeals,
   targets,
@@ -338,7 +366,7 @@ function AppealCard({
                   <dt className="text-muted-foreground">{m.moderation_case_details_decision_id()}</dt>
                   <dd className="select-text break-all font-mono leading-6">{appeal.decisionId}</dd>
                 </div>
-                {identity ? (
+                {identity && currentTargetIsAvailable(target, identity) ? (
                   <div className="space-y-1">
                     <dt className="text-muted-foreground">{m.moderation_case_details_target_id()}</dt>
                     <dd className="select-text break-all font-mono leading-6">{identity.id}</dd>
