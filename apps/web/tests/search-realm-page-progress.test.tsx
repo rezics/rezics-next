@@ -195,9 +195,7 @@ test('dispose suppresses an unseeded first read or a late first-page publication
   inFlight.dispose();
   late.resolve(ready('late', cursor));
   await pending;
-  expect(lateWindows).toEqual([
-    { state: { kind: 'loading' }, pending: true, retry: false, restart: false },
-  ]);
+  expect(lateWindows).toEqual([{ state: { kind: 'loading' }, pending: true, retry: false, restart: false }]);
 
   const seededReads: Array<string | undefined> = [];
   const seeded = createRealmPageProgress({
