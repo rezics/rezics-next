@@ -64,7 +64,11 @@ function binaryParts(value: number): { readonly mantissa: number; readonly expon
 
 /** Computes a*b/c without overflowing a representable final ratio in an intermediate product. */
 export function checkedMultiplyDivide(a: number, b: number, c: number, label: string): number {
-  for (const [operand, value] of [['a', a], ['b', b], ['c', c]] as const) {
+  for (const [operand, value] of [
+    ['a', a],
+    ['b', b],
+    ['c', c],
+  ] as const) {
     requireFiniteNumber(value, `${label} operand ${operand}`);
   }
   if (c === 0) throw new TypeError(`${label} cannot divide by zero`);
