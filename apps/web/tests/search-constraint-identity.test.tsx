@@ -210,7 +210,7 @@ test('selected Search identities retain exact operands, local keyboard actions a
       await page.evaluate(() => (window as any).identity.mode('mixed'));
       await page.getByRole('link', { name: /Current property label: Value name unavailable/ }).waitFor();
       expect(await selected.textContent()).toContain('Book');
-      expect(await selected.textContent()).toContain('Kind name unavailable');
+      expect(await selected.textContent()).toContain('Type name unavailable');
       // Current authority masks protected metadata even in closed technical details.
       for (const status of ['session', 'closed', 'denied', 'restart']) {
         await page.evaluate((status) => (window as any).identity.authority(status), status);

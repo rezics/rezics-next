@@ -105,7 +105,7 @@ test('default mixed SearchPage offers direct result-kind navigation that retains
     );
     await page.goto('https://site.test/en/search');
     await page.addScriptTag({ type: 'module', content: await result.outputs[0]!.text() });
-    const navigation = page.getByRole('navigation', { name: 'Result kinds', exact: true });
+    const navigation = page.getByRole('navigation', { name: 'Result types', exact: true });
     await navigation.waitFor();
     await page.waitForFunction(
       () => document.querySelector('button[aria-controls="search-filters"]')?.getAttribute('aria-expanded') === 'false',
@@ -163,10 +163,10 @@ test('default mixed SearchPage offers direct result-kind navigation that retains
       });
     });
     await page.setViewportSize({ width: 390, height: 844 });
-    await navigation.getByText('Selected result kinds: Book, catalogue:Atlas', { exact: true }).waitFor();
+    await navigation.getByText('Selected result types: Book, catalogue:Atlas', { exact: true }).waitFor();
     expect(await all.getAttribute('aria-current')).toBeNull();
     expect(await navigation.getByRole('link', { name: 'catalogue:Atlas', exact: true }).isVisible()).toBe(true);
-    expect(await navigation.getByText('Choose more result kinds in Filters.', { exact: true }).isVisible()).toBe(true);
+    expect(await navigation.getByText('Choose more result types in Filters.', { exact: true }).isVisible()).toBe(true);
     const exact = new URL(
       (await navigation.getByRole('link', { name: 'Book', exact: true }).getAttribute('href'))!,
       'https://site.test',

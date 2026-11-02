@@ -119,7 +119,7 @@ test('kind metadata continuation makes one bounded metadata-only call and distin
   expect(html).toContain('Count unavailable');
   expect(html).toContain('1+');
   expect(html).toContain('>0<');
-  expect(html).toContain('More kinds');
+  expect(html).toContain('More types');
   expect(html).toContain('value="catalogue:Atlas"');
 });
 

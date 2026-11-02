@@ -112,11 +112,12 @@ test('default SearchPage exposes reachable result filters without an empty colum
     expect(await panel.evaluate((node) => node.contains(document.activeElement))).toBe(true);
     const subjectType = panel.getByRole('combobox', { name: 'Subject type', exact: true });
     expect(await subjectType.inputValue()).toBe('schema:Book');
-    expect(await panel.getByText('All result kinds', { exact: true }).isVisible()).toBe(true);
+    expect(await panel.getByText('All result types', { exact: true }).isVisible()).toBe(true);
     expect(await panel.getByRole('checkbox', { name: 'Book', exact: true }).count()).toBe(0);
-    await panel.getByText('Choose specific result kinds', { exact: true }).click();
+    await panel.getByText('Choose specific result types', { exact: true }).click();
     await panel.getByRole('checkbox', { name: 'Account results', exact: true }).check();
     await page.waitForFunction(() => (window as any).filterRouter.state.location.search.kinds === 'account');
+    expect(await page.getByRole('link', { name: /Type: Account/ }).isVisible()).toBe(true);
     const search = await page.evaluate(() => (window as any).filterRouter.state.location.search);
     expect(search.q).toBe('  reading | 星  ');
     expect(search.language).toBe('ja');

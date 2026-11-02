@@ -476,7 +476,7 @@ export function SearchPage({
   for (const kind of navigationState.kinds ?? [])
     add(
       `kind:${kind}`,
-      `${m.search_result_kind()}: ${label(
+      `${m.home_kind_label()}: ${label(
         discovery?.status === 'ready'
           ? discovery.page.kinds.values.find((entry) => entry.id === kind)?.labels
           : undefined,

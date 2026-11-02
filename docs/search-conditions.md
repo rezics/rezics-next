@@ -16,6 +16,9 @@ capability. New catalogue verticals add definitions and presentation configurati
 per-vertical indexes/queries or client federation. Preserve the existing catalogue `type` condition and its
 released subtype meaning; each configured catalogue type is a kind, not one hardcoded subject category.
 
+Home selectors and exact-result chips share the localized “Type” label; Search uses “Result types”, while
+“Subject type” retains subtype expansion.
+
 A configured registry declares canonical kind identity, producer, condition domains, localized label/icon and
 summary capability. Deduplicate by kind plus canonical identity, never title, handle or supporting occurrence.
 Catalogue Person/Organisation and a verified account are distinct kind hits: neither merges with nor suppresses
@@ -200,7 +203,7 @@ unchecked engine buckets, page length or estimates. Fixed maintained counters mu
 and change atomically with membership/privacy; checked enumeration is exact only on complete exhaustion.
 
 Metadata is a fixed bounded PAGE in configured order, never count order: data kind ID, localized label and icon.
-One More kinds control uses metadata continuation without excluding unshown kinds from hit search. Counts are
+One More types control uses metadata continuation without excluding unshown kinds from hit search. Counts are
 attempted once on the initial query and retained across hit continuation; changed conditions start a new query.
 Later metadata can have unavailable counts. K_page=8 is a research proposal pending first native measurement,
 not a frozen output/engine allowance. Existing property/value facets and public totals remain count-free.
