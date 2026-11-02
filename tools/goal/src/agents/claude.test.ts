@@ -69,7 +69,7 @@ test('damaged, future and foreign-identity cache entries are not fresh observati
 test('afterExit keeps a usable in-memory reading when reset data and cache persistence fail', () => {
   const pool = makePool();
   const cache = cachePath(pool);
-  const now = Date.parse('2026-11-03T00:00:00Z');
+  const startedAt = Date.now();
   const log = JSON.stringify({
     type: 'rate_limit_event',
     rate_limit_info: { unifiedWindows: { five_hour: { utilization: 0.25, resetsAt: 1e100 } } },
@@ -77,13 +77,14 @@ test('afterExit keeps a usable in-memory reading when reset data and cache persi
   mkdirSync(cache);
   try {
     expect(() => claudeAdapter.afterExit(pool, log)).not.toThrow();
-    expect(readClaudeUsage(pool, now + 180_000)).toMatchObject({
+    const reading = readClaudeUsage(pool, Date.now() + 180_000);
+    expect(reading).toMatchObject({
       pool: pool.name,
       allowanceKey: pool.allowanceKey,
-      observedAt: new Date(now).toISOString(),
       windows: [{ usedPercent: 25, resetsAt: null, minutes: 300 }],
       error: null,
     });
+    expect(Date.parse(reading.observedAt!)).toBeGreaterThanOrEqual(startedAt);
   } finally {
     rmSync(cache, { recursive: true, force: true });
     rmSync(`${cache}.${process.pid}`, { force: true });
