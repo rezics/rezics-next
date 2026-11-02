@@ -924,13 +924,14 @@ function SubjectLibrarySlotView({
       }
       uncertainLabel.current = null;
       if (input.intent === 'unassign') {
-        setLabels((current) => current.filter((row) => row.id !== input.assignmentId));
+        const removedInput = input;
+        setLabels((current) => current.filter((row) => row.id !== removedInput.assignmentId));
         const revision = response.restoreRevision;
         if (revision === undefined) {
           setLabelNotice('unavailable');
           return;
         }
-        setLabelUndo({ labelId: input.labelId, assignmentId: input.assignmentId, revision });
+        setLabelUndo({ labelId: removedInput.labelId, assignmentId: removedInput.assignmentId, revision });
         undoToast(
           m.library_subject_label_removed({ name: operation.label?.name ?? '' }),
           () => {
@@ -939,10 +940,10 @@ function SubjectLibrarySlotView({
               {
                 intent: 'restore',
                 subjectId: subject.id,
-                labelId: input.labelId,
-                assignmentId: input.assignmentId,
+                labelId: removedInput.labelId,
+                assignmentId: removedInput.assignmentId,
                 revision,
-                idempotencyKey: labelUndoKeyFor(input.assignmentId, revision),
+                idempotencyKey: labelUndoKeyFor(removedInput.assignmentId, revision),
               },
               operation.label,
             );

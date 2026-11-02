@@ -21,7 +21,8 @@ type Result<T> = {
 
 export type SubjectLabelMutationInput =
   | { intent: 'create-and-assign'; subjectId: string; name: string; createKey?: string; idempotencyKey: string }
-  | { intent: 'assign' | 'capture-assign'; subjectId: string; labelId: string; idempotencyKey: string }
+  | { intent: 'assign'; subjectId: string; labelId: string; idempotencyKey: string }
+  | { intent: 'capture-assign'; subjectId: string; labelId: string; idempotencyKey: string }
   | { intent: 'label-step'; subjectId: string; token: string }
   | {
       intent: 'unassign' | 'restore';
