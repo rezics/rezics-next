@@ -14,7 +14,7 @@ export function MyRealmsPageView({
 }: {
   page: MyRealmsPage;
   onKeyboardNext?: (cursor: string) => void;
-  focusContinuation?: () => boolean;
+  focusContinuation?: (() => boolean) | undefined;
 }) {
   const locale = getLocale();
   const headingId = useId();
