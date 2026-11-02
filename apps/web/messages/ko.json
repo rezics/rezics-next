@@ -3871,6 +3871,7 @@
   "realm_claim_status_checking": "신청 확인 중…",
   "realm_claim_status_closed": "현재 Realm 소유권 신청이 닫혀 있습니다.",
   "realm_claim_status_denied": "현재 접근 권한으로는 이 신청을 읽을 수 없습니다.",
+  "realm_status_details_reference": "참조 세부 정보",
   "realm_claim_status_heading": "내 Realm 소유권 신청",
   "realm_claim_status_old_episode": "이 신청은 이전 소유자 부재 시기에 대한 것입니다.",
   "realm_claim_status_old_pending": "이 신청은 이전 소유자 부재 시기부터 대기 중으로 기록되어 있습니다. 현재 시기의 소유권을 신청한 것은 아닙니다.",

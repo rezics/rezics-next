@@ -3871,6 +3871,7 @@
   "realm_claim_status_checking": "正在檢查申請…",
   "realm_claim_status_closed": "目前已關閉 Realm 所有權申請。",
   "realm_claim_status_denied": "你目前的存取權限無法讀取此申請。",
+  "realm_status_details_reference": "參考資訊",
   "realm_claim_status_heading": "你的 Realm 所有權申請",
   "realm_claim_status_old_episode": "此申請屬於先前的一段無主期間。",
   "realm_claim_status_old_pending": "此申請仍記錄為先前無主期間的待處理申請。它並未為目前期間申請所有權。",

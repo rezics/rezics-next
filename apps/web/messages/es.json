@@ -3871,6 +3871,7 @@
   "realm_claim_status_checking": "Comprobando la solicitud…",
   "realm_claim_status_closed": "Las solicitudes de titularidad del Realm están cerradas por ahora.",
   "realm_claim_status_denied": "No puedes leer esta solicitud con tu acceso actual.",
+  "realm_status_details_reference": "Detalles de la referencia",
   "realm_claim_status_heading": "Tu solicitud de titularidad del Realm",
   "realm_claim_status_old_episode": "Esta solicitud pertenece a un episodio anterior en el que el Realm no tenía titular.",
   "realm_claim_status_old_pending": "Esta solicitud sigue constando como pendiente desde un episodio anterior sin titular. No solicita la titularidad del episodio actual.",

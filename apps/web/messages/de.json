@@ -3871,6 +3871,7 @@
   "realm_claim_status_checking": "Anfrage wird geprüft…",
   "realm_claim_status_closed": "Anfragen zur Inhaberschaft eines Realms sind derzeit geschlossen.",
   "realm_claim_status_denied": "Mit deinem aktuellen Zugriff kann diese Anfrage nicht gelesen werden.",
+  "realm_status_details_reference": "Referenzdetails",
   "realm_claim_status_heading": "Deine Anfrage zur Realm-Inhaberschaft",
   "realm_claim_status_old_episode": "Diese Anfrage gehört zu einer früheren Episode ohne Eigentümer.",
   "realm_claim_status_old_pending": "Diese Anfrage ist aus einer früheren Episode ohne Eigentümer weiterhin als ausstehend verzeichnet. Sie beantragt keine Inhaberschaft für die aktuelle Episode.",

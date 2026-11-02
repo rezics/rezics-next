@@ -3744,6 +3744,7 @@
   "library_rule_reloaded": "Current version loaded. Review your retained draft before saving.",
   "library_rule_members": "View collection members",
   "library_rule_hint": "Combine catalogue conditions and private Library facts. Every condition is checked when you save.",
+  "realm_status_details_reference": "Reference details",
   "realm_claim_status_heading": "Your Realm claim request",
   "realm_claim_status_open": "View request status",
   "realm_claim_status_back": "Return to Realm",
