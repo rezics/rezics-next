@@ -23,3 +23,6 @@ CREATE TABLE semantic.identity_scope_native_association (
     PRIMARY KEY (partition_no,source_key,scope_id,registration,capture_id,revision,phase),
     FOREIGN KEY (partition_no,transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no,transaction_id)
 );
+
+-- migrate:down
+DO $$ BEGIN RAISE EXCEPTION 'Identity scope native associations are forward only'; END $$;

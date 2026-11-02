@@ -165,8 +165,14 @@ evidence, catalogue and audience source; the full foreign operand disposition;
 and both the Semantic native writer decision and Commerce regional consent. No
 external reference project is prescribed for this surface.
 
-The migration has its required `-- migrate:up` marker. The supported foreground
+The migration has its required `-- migrate:up` and forward-only `-- migrate:down`
+blocks. The supported foreground
 Kernel compiler can normalize this module's schema snapshot with
 `bun run --cwd services/kernel typecheck --emit-schema=semantic` using its existing
 placement and compiler database. Compiler success alone does not establish native
 acceptance, source custody, a foreign dispatch grant or an audience closure.
+
+The current foreground compiler exited 1 during migration setup because the new
+migration lacked its down block. The block is corrected; the one-invocation policy
+leaves TypeScript and generated snapshot normalization unverified. Native/unit/
+growth/full acceptance remain unrun.
