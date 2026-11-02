@@ -718,7 +718,7 @@ function ShelfEntriesPage({
   empty,
 }: ShelfEntriesProps & {
   mutationLease: ShelfMutationLease;
-  onBulkRemovalLanded: (subjectIds: readonly string[]) => void;
+  onBulkRemovalLanded: (targets: readonly ShelfRemovalIdentity[]) => void;
 }) {
   const hydrated = useHydrated();
   const shelfRows = useShelfRows(entries, locale, mutationLease, isCurrent);

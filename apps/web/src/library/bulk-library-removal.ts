@@ -1,8 +1,6 @@
-import { treaty } from '@elysia/eden';
-import type { Kernel } from '@rezics/client';
+import { createKernelClient, type Kernel, type KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import type { Elysia } from 'elysia';
 import { env } from 'cloudflare:workers';
 import type { PersonalLibraryEntry } from './entries-read';
 import type { ShelfRemovalIdentity } from './shelf-selection';
@@ -199,76 +197,6 @@ export function landedBulkLibraryRemovalEntries<Target extends ShelfRemovalIdent
   return targets.filter(({ subjectId }) => landed.has(subjectId));
 }
 
-/*
- * The received KernelClient declaration still narrows preview POST to set_status. This local Eden route seam
- * carries the dedicated remove_from_library body while reusing generated Kernel operation and outcome types.
- */
-type NativeOperationResult = Readonly<{ operation: BulkLibraryRemovalOperation }>;
-type NativeOutcomePage = BulkLibraryRemovalOutcomes;
-type NativeLibraryOperationsRoute = {
-  post: {
-    body: BulkLibraryRemovalPreviewRequest;
-    params: {};
-    query: unknown;
-    headers: { 'idempotency-key': string };
-    response: { 201: NativeOperationResult };
-  };
-  ':operationId': {
-    $confirm: {
-      post: {
-        body: object;
-        params: { operationId: string };
-        query: unknown;
-        headers: { 'idempotency-key': string };
-        response: { 200: NativeOperationResult };
-      };
-    };
-    get: {
-      body: unknown;
-      params: { operationId: string };
-      query: unknown;
-      headers: unknown;
-      response: { 200: NativeOperationResult };
-    };
-    outcomes: {
-      get: {
-        body: unknown;
-        params: { operationId: string };
-        query: { limit?: number; cursor?: string };
-        headers: unknown;
-        response: { 200: NativeOutcomePage };
-      };
-    };
-  };
-};
-type NativeLibraryRoutes = Omit<KernelRoutes, 'libraryOperations'> & {
-  libraryOperations: NativeLibraryOperationsRoute;
-};
-type NativeKernelRoutes = Omit<Kernel['~Routes'], 'v1'> & { v1: NativeLibraryRoutes };
-type NativeKernelApp = Elysia<
-  Kernel['~Prefix'],
-  'local',
-  Kernel['~Singleton'],
-  Kernel['~Definitions'],
-  Kernel['~Metadata'],
-  NativeKernelRoutes
->;
-
-function createNativeClient(origin: string, authorization: string) {
-  const fetcher: typeof fetch = (input, init) => {
-    const url = new URL(input instanceof Request ? input.url : String(input));
-    const path = url.pathname.replace(/\/\$([a-z][A-Za-z0-9]*)$/, ':$1');
-    if (path === url.pathname) return globalThis.fetch(input, init);
-    url.pathname = path;
-    return globalThis.fetch(input instanceof Request ? new Request(url, input) : url.href, init);
-  };
-  return treaty<NativeKernelApp>(origin, {
-    fetcher,
-    parseDate: false,
-    headers: () => ({ authorization }),
-  }).v1;
-}
-
 async function nativeClient(headers: Readonly<Record<string, string>>) {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
@@ -279,7 +207,7 @@ async function nativeClient(headers: Readonly<Record<string, string>>) {
   if (!authorization) throw new Error('Sign in to use Shelf operations');
   const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
   if (!origin) throw new Error('KERNEL_ORIGIN is required for Shelf operations');
-  return { client: createNativeClient(origin, authorization) };
+  return { client: createKernelClient(origin, { headers: { authorization } }) };
 }
 
 function responseData<T>(result: { data: T | null; error: unknown }): T {
@@ -291,7 +219,8 @@ const previewNativeBulkLibraryRemoval = createServerFn({ method: 'POST', strict:
   .validator((data: BulkLibraryRemovalPreviewCall) => data)
   .handler(async ({ data }) => {
     const { client } = await nativeClient(data.headers);
-    const result = await client.libraryOperations.post(data.request, {
+    const request = data.request as unknown as Parameters<KernelClient['libraryOperations']['post']>[0];
+    const result = await client.libraryOperations.post(request, {
       headers: { 'idempotency-key': data.idempotencyKey },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
