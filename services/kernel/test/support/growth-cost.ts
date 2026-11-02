@@ -6,6 +6,7 @@ import {
   requireNonNegativeFiniteNumber,
   sumFinite,
 } from './growth-numeric.ts';
+import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
 
 export type Capture = {
   readonly statements: readonly string[];
@@ -62,7 +63,6 @@ export type Cost = {
   >;
 };
 
-type PlanNode = Record<string, unknown>;
 type NodeTotals = { readonly rows: number; readonly inclusiveHit: number; readonly inclusiveRead: number };
 type MutableRelationCost = { rows: number; blocks: number; nodes: number; sequentialScans: number };
 type Blocks = { hit: number; read: number };
@@ -102,40 +102,34 @@ function optionalNumber(node: PlanNode, field: string, fallback = 0): number {
   return value;
 }
 
-type PlanEntry = { readonly queryText: string | undefined; readonly plan: PlanNode };
+type PlanEntry = { readonly queryText: string | undefined; readonly plan: PlanNode; readonly location: string };
 
-function documentEntries(document: unknown): PlanEntry[] {
+function documentEntries(document: unknown, location = 'plan'): PlanEntry[] {
   if (Array.isArray(document)) {
     if (document.length === 0) throw new TypeError('EXPLAIN plan document is empty');
-    return document.map((entry) => {
+    return document.map((entry, index) => {
       if (!isRecord(entry) || !isRecord(entry.Plan)) throw new TypeError('EXPLAIN plan document has no Plan');
       return {
         queryText: typeof entry['Query Text'] === 'string' ? entry['Query Text'] : undefined,
         plan: entry.Plan,
+        location: `${location}[${index}].Plan`,
       };
     });
   }
   if (isRecord(document) && typeof document['Query Text'] === 'string' && isRecord(document.Plan))
-    return [{ queryText: document['Query Text'], plan: document.Plan }];
+    return [{ queryText: document['Query Text'], plan: document.Plan, location: `${location}.Plan` }];
   throw new TypeError('Unrecognized plan document');
 }
 
-function isCatalogOnlyPlan(root: PlanNode): boolean {
+function isCatalogOnlyPlan(root: PlanNode, location: string): boolean {
   let hasRelation = false;
   let catalogOnly = true;
-  const visit = (node: PlanNode): void => {
+  for (const { node } of walkPlanTree(root, location)) {
     if (typeof node['Relation Name'] === 'string') {
       hasRelation = true;
       catalogOnly = catalogOnly && (node.Schema === 'pg_catalog' || node.Schema === 'information_schema');
     }
-    const children = node.Plans;
-    if (children !== undefined && !Array.isArray(children)) throw new TypeError('Plan node Plans must be an array');
-    for (const child of children ?? []) {
-      if (!isRecord(child)) throw new TypeError('Plan child must be an object');
-      visit(child);
-    }
-  };
-  visit(root);
+  }
   return hasRelation && catalogOnly;
 }
 
@@ -155,7 +149,7 @@ function isFreshnessProbeText(text: string): boolean {
   return [/\bAS\s+fresh_table\b/i, /\bAS\s+fresh_column\b/i, /\bAS\s+fresh_type\b/i].every((alias) => alias.test(text));
 }
 
-function classifyCatalogStatements(capture: Capture): CatalogClassification {
+function classifyCatalogStatements(capture: Capture, planCollection = 'plans'): CatalogClassification {
   const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
   const statementEntries = capture.statements.flatMap((text, index) =>
     !isControlStatement(text) ? [{ index, text, backend: capture.statementBackends?.[index] }] : [],
@@ -173,13 +167,14 @@ function classifyCatalogStatements(capture: Capture): CatalogClassification {
       const owner = capture.planStatements[planIndex];
       if (owner === undefined || !Number.isInteger(owner) || owner < 0 || owner >= capture.statements.length) continue;
       const plans = plansByStatement.get(owner) ?? [];
-      plans.push(...documentEntries(capture.plans[planIndex]));
+      plans.push(...documentEntries(capture.plans[planIndex], `${planCollection}[${planIndex}]`));
       plansByStatement.set(owner, plans);
     }
     for (const { index, text, backend } of statementEntries) {
       const plans = plansByStatement.get(index);
       const key = catalogKey(backendAware, backend, text);
-      const catalogOnly = plans !== undefined && plans.length > 0 && plans.every(({ plan }) => isCatalogOnlyPlan(plan));
+      const catalogOnly =
+        plans !== undefined && plans.length > 0 && plans.every(({ plan, location }) => isCatalogOnlyPlan(plan, location));
       catalogOnlyByText.set(text, (catalogOnlyByText.get(text) ?? true) && catalogOnly);
       catalogOnlyByKey.set(key, (catalogOnlyByKey.get(key) ?? true) && catalogOnly);
       textByKey.set(key, text);
@@ -198,7 +193,7 @@ function classifyCatalogStatements(capture: Capture): CatalogClassification {
     const plansByKey = new Map<string, PlanEntry[]>();
     for (let index = 0; index < capture.plans.length; index++) {
       const backend = capture.planBackends?.[index];
-      for (const entry of documentEntries(capture.plans[index])) {
+      for (const entry of documentEntries(capture.plans[index], `${planCollection}[${index}]`)) {
         if (entry.queryText === undefined) continue;
         const key = catalogKey(backendAware, backend, entry.queryText);
         if (!clientKeys.has(key)) continue;
@@ -209,7 +204,7 @@ function classifyCatalogStatements(capture: Capture): CatalogClassification {
     }
     for (const [key, plans] of plansByKey) {
       const queryText = plans[0]!.queryText!;
-      const catalogOnly = plans.length > 0 && plans.every(({ plan }) => isCatalogOnlyPlan(plan));
+      const catalogOnly = plans.length > 0 && plans.every(({ plan, location }) => isCatalogOnlyPlan(plan, location));
       if (catalogOnly) {
         catalogKeys.add(key);
         if (isFreshnessProbeText(queryText)) freshnessProbeKeys.add(key);
@@ -393,82 +388,80 @@ function addBlocks(blocks: Map<string, Blocks>, name: string, hit: number, read:
 }
 
 function costNode(
-  node: PlanNode,
-  root: boolean,
+  root: PlanNode,
   relations: Map<string, MutableRelationCost>,
   ctes: CteBlocks,
+  location: string,
 ): NodeTotals {
-  const nodeType = typeof node['Node Type'] === 'string' ? node['Node Type'] : '';
-  const actualRows = requiredNumber(node, 'Actual Rows');
-  const loops = optionalNumber(node, 'Actual Loops', 1);
-  const hit = optionalNumber(node, 'Shared Hit Blocks');
-  const read = optionalNumber(node, 'Shared Read Blocks');
+  const totalsByNode = new Map<PlanNode, NodeTotals>();
+  for (const { node, depth } of walkPlanTree(root, location, 'postorder')) {
+    const nodeType = typeof node['Node Type'] === 'string' ? node['Node Type'] : '';
+    const actualRows = requiredNumber(node, 'Actual Rows');
+    const loops = optionalNumber(node, 'Actual Loops', 1);
+    const hit = optionalNumber(node, 'Shared Hit Blocks');
+    const read = optionalNumber(node, 'Shared Read Blocks');
+    if (depth === 0 && node['Shared Hit Blocks'] === undefined)
+      throw new TypeError('Plan root is missing Shared Hit Blocks');
 
-  if (root && node['Shared Hit Blocks'] === undefined) throw new TypeError('Plan root is missing Shared Hit Blocks');
+    const childNodes = (node.Plans as PlanNode[] | undefined) ?? [];
+    const children = childNodes.map((child) => totalsByNode.get(child)!);
+    const childHit = children.reduce((sum, child) => checkedAdd(sum, child.inclusiveHit, 'Child shared hit blocks'), 0);
+    const childRead = children.reduce(
+      (sum, child) => checkedAdd(sum, child.inclusiveRead, 'Child shared read blocks'),
+      0,
+    );
+    const exclusiveHit = Math.max(0, checkedSubtract(hit, childHit, 'Exclusive shared hit blocks'));
+    const exclusiveRead = Math.max(0, checkedSubtract(read, childRead, 'Exclusive shared read blocks'));
+    const producer = typeof node['Subplan Name'] === 'string' ? /^CTE (.+)$/.exec(node['Subplan Name']) : null;
+    if (producer) addBlocks(ctes.producers, producer[1]!, hit, read);
+    if (nodeType === 'CTE Scan' && typeof node['CTE Name'] === 'string')
+      addBlocks(ctes.scans, node['CTE Name'], exclusiveHit, exclusiveRead);
+    const removedByFilter = optionalNumber(node, 'Rows Removed by Filter');
+    const removedByRecheck = optionalNumber(node, 'Rows Removed by Index Recheck');
+    const rowsPerLoop = rowScans.has(nodeType)
+      ? checkedAdd(
+          checkedAdd(actualRows, removedByFilter, 'Rows examined before recheck'),
+          removedByRecheck,
+          'Rows examined per loop',
+        )
+      : 0;
+    const examined = rowScans.has(nodeType) && loops > 0 ? checkedMultiply(rowsPerLoop, loops, 'Rows examined') : 0;
 
-  const childNodes = node.Plans;
-  if (childNodes !== undefined && !Array.isArray(childNodes)) throw new TypeError('Plan node Plans must be an array');
-  const children =
-    (childNodes as unknown[] | undefined)?.map((child) => {
-      if (!isRecord(child)) throw new TypeError('Plan child must be an object');
-      return costNode(child, false, relations, ctes);
-    }) ?? [];
-
-  const childHit = children.reduce((sum, child) => checkedAdd(sum, child.inclusiveHit, 'Child shared hit blocks'), 0);
-  const childRead = children.reduce(
-    (sum, child) => checkedAdd(sum, child.inclusiveRead, 'Child shared read blocks'),
-    0,
-  );
-  const exclusiveHit = Math.max(0, checkedSubtract(hit, childHit, 'Exclusive shared hit blocks'));
-  const exclusiveRead = Math.max(0, checkedSubtract(read, childRead, 'Exclusive shared read blocks'));
-  const producer = typeof node['Subplan Name'] === 'string' ? /^CTE (.+)$/.exec(node['Subplan Name']) : null;
-  if (producer) addBlocks(ctes.producers, producer[1]!, hit, read);
-  if (nodeType === 'CTE Scan' && typeof node['CTE Name'] === 'string')
-    addBlocks(ctes.scans, node['CTE Name'], exclusiveHit, exclusiveRead);
-  const removedByFilter = optionalNumber(node, 'Rows Removed by Filter');
-  const removedByRecheck = optionalNumber(node, 'Rows Removed by Index Recheck');
-  const rowsPerLoop = rowScans.has(nodeType)
-    ? checkedAdd(
-        checkedAdd(actualRows, removedByFilter, 'Rows examined before recheck'),
-        removedByRecheck,
-        'Rows examined per loop',
-      )
-    : 0;
-  const examined = rowScans.has(nodeType) && loops > 0 ? checkedMultiply(rowsPerLoop, loops, 'Rows examined') : 0;
-
-  if (rowScans.has(nodeType) || nodeType === 'ModifyTable') {
-    const relationName = node['Relation Name'];
-    if (typeof relationName === 'string') {
-      const schema = node.Schema;
-      const key = typeof schema === 'string' ? `${schema}.${relationName}` : relationName;
-      addRelation(
-        relations,
-        key,
-        nodeType === 'ModifyTable' && loops > 0
-          ? checkedMultiply(actualRows, loops, 'Rows modified')
-          : nodeType === 'ModifyTable'
-            ? 0
-            : examined,
-        checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive relation blocks'),
-        nodeType === 'Seq Scan' && loops > 0 ? 1 : 0,
-      );
+    if (rowScans.has(nodeType) || nodeType === 'ModifyTable') {
+      const relationName = node['Relation Name'];
+      if (typeof relationName === 'string') {
+        const schema = node.Schema;
+        const key = typeof schema === 'string' ? `${schema}.${relationName}` : relationName;
+        addRelation(
+          relations,
+          key,
+          nodeType === 'ModifyTable' && loops > 0
+            ? checkedMultiply(actualRows, loops, 'Rows modified')
+            : nodeType === 'ModifyTable'
+              ? 0
+              : examined,
+          checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive relation blocks'),
+          nodeType === 'Seq Scan' && loops > 0 ? 1 : 0,
+        );
+      }
+    } else if (nodeType === 'Bitmap Index Scan') {
+      const indexName = node['Index Name'];
+      if (typeof indexName === 'string')
+        addRelation(
+          relations,
+          `index:${indexName}`,
+          0,
+          checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive index blocks'),
+        );
     }
-  } else if (nodeType === 'Bitmap Index Scan') {
-    const indexName = node['Index Name'];
-    if (typeof indexName === 'string')
-      addRelation(
-        relations,
-        `index:${indexName}`,
-        0,
-        checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive index blocks'),
-      );
-  }
 
-  return {
-    rows: children.reduce((sum, child) => checkedAdd(sum, child.rows, 'Child rows examined'), examined),
-    inclusiveHit: hit,
-    inclusiveRead: read,
-  };
+    totalsByNode.set(node, {
+      rows: children.reduce((sum, child) => checkedAdd(sum, child.rows, 'Child rows examined'), examined),
+      inclusiveHit: hit,
+      inclusiveRead: read,
+    });
+  }
+  return totalsByNode.get(root)!;
 }
 
 function addRelation(
@@ -499,6 +492,10 @@ function validateByteMeasurements(values: readonly number[] | undefined, expecte
 }
 
 export function costOf(capture: Capture): Cost {
+  return costOfAt(capture, 'plans');
+}
+
+function costOfAt(capture: Capture, planCollection: string): Cost {
   validateByteMeasurements(capture.requestBytes, capture.statements.length, 'Request bytes');
   validateByteMeasurements(capture.responseBytes, capture.statements.length, 'Response bytes');
   validateByteMeasurements(
@@ -515,7 +512,7 @@ export function costOf(capture: Capture): Cost {
   let rows = 0;
   let sharedHit = 0;
   let sharedRead = 0;
-  const catalog = classifyCatalogStatements(capture);
+  const catalog = classifyCatalogStatements(capture, planCollection);
   const nativeCatalogIndexes = nativeCatalogOccurrences.get(catalog);
   const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
   const matchingStatements = statementKeys(capture.statements, capture.statementBackends, backendAware);
@@ -525,7 +522,7 @@ export function costOf(capture: Capture): Cost {
     const document = capture.plans[index];
     const backend = capture.planBackends?.[index];
     const owner = capture.planStatements?.[index];
-    for (const { queryText, plan } of documentEntries(document)) {
+    for (const { queryText, plan, location } of documentEntries(document, `${planCollection}[${index}]`)) {
       let included = true;
       if (capture.planStatements !== undefined) {
         if (
@@ -541,7 +538,7 @@ export function costOf(capture: Capture): Cost {
         if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) included = false;
       }
       const ctes: CteBlocks = { producers: new Map(), scans: new Map() };
-      const totals = costNode(plan, true, included ? relations : new Map<string, MutableRelationCost>(), ctes);
+      const totals = costNode(plan, included ? relations : new Map<string, MutableRelationCost>(), ctes, location);
       if (!included) continue;
       plans++;
       rows = checkedAdd(rows, totals.rows, 'Total examined rows');
@@ -578,17 +575,17 @@ export function costOf(capture: Capture): Cost {
   for (let index = 0; index < (capture.backgroundPlans ?? []).length; index++) {
     const document = capture.backgroundPlans![index];
     const backend = capture.backgroundPlanBackends?.[index];
-    for (const entry of documentEntries(document)) {
+    for (const entry of documentEntries(document, `backgroundPlans[${index}]`)) {
       const included = !(
         capture.backgroundPlanStatements === undefined &&
         backgroundBackendAware &&
         !hasMatchingStatement(backgroundStatementKeys, true, entry.queryText, backend)
       );
       const key = entry.queryText ?? '<unknown background statement>';
-      const planCost = costOf({
+      const planCost = costOfAt({
         statements: [],
         plans: [[{ Plan: entry.plan, ...(entry.queryText === undefined ? {} : { 'Query Text': entry.queryText }) }]],
-      });
+      }, `backgroundPlans[${index}]`);
       if (!included) continue;
       backgroundRows = checkedAdd(backgroundRows, planCost.rows, 'Total background examined rows');
       backgroundBlocks = checkedAdd(backgroundBlocks, planCost.blocks, 'Total background blocks');

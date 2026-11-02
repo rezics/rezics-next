@@ -1,8 +1,7 @@
 import type { Capture } from './growth-cost.ts';
 import type { GrowthMetric } from './growth-bound.ts';
 import type { ReportSample, StatementAttribution } from './growth.ts';
-
-type PlanNode = Record<string, unknown>;
+import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
 
 function normalizeStatement(statement: string): string {
   const leading = /^\s*(?:--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/\s*)*/.exec(statement)?.[0] ?? '';
@@ -10,9 +9,10 @@ function normalizeStatement(statement: string): string {
   return `${leading}${body}`.replace(/\s+/g, ' ').trim();
 }
 
-function planEntries(document: unknown): { queryText?: string; plan: PlanNode }[] {
-  const entries = Array.isArray(document) ? document : [document];
-  return entries.flatMap((entry) => {
+function planEntries(document: unknown, location = 'plan'): { queryText?: string; plan: PlanNode; location: string }[] {
+  const arrayDocument = Array.isArray(document);
+  const entries = arrayDocument ? document : [document];
+  return entries.flatMap((entry, index) => {
     if (typeof entry !== 'object' || entry === null || !('Plan' in entry)) return [];
     const candidate = entry as { Plan?: unknown; 'Query Text'?: unknown };
     if (typeof candidate.Plan !== 'object' || candidate.Plan === null) return [];
@@ -20,19 +20,20 @@ function planEntries(document: unknown): { queryText?: string; plan: PlanNode }[
       {
         ...(typeof candidate['Query Text'] === 'string' ? { queryText: candidate['Query Text'] } : {}),
         plan: candidate.Plan as PlanNode,
+        location: `${location}${arrayDocument ? `[${index}]` : ''}.Plan`,
       },
     ];
   });
 }
 
-function planCost(root: PlanNode): { rows: number; blocks: number; node?: string } {
+function planCost(root: PlanNode, location: string): { rows: number; blocks: number; node?: string } {
   let rows = 0;
   let costliest = { blocks: -1, rows: -1, name: undefined as string | undefined };
   let costliestNamed = { blocks: -1, rows: -1, name: undefined as string | undefined };
   const blocks =
     (typeof root['Shared Hit Blocks'] === 'number' ? root['Shared Hit Blocks'] : 0) +
     (typeof root['Shared Read Blocks'] === 'number' ? root['Shared Read Blocks'] : 0);
-  const visit = (node: PlanNode) => {
+  for (const { node } of walkPlanTree(root, location)) {
     const type = typeof node['Node Type'] === 'string' ? node['Node Type'] : 'Unknown';
     const relation =
       typeof node['Relation Name'] === 'string'
@@ -71,10 +72,7 @@ function planCost(root: PlanNode): { rows: number; blocks: number; node?: string
     ) {
       costliestNamed = { blocks: nodeBlocks, rows: nodeRows, name: `${type} ${relation}` };
     }
-    if (Array.isArray(node.Plans))
-      for (const child of node.Plans) if (typeof child === 'object' && child !== null) visit(child as PlanNode);
-  };
-  visit(root);
+  }
   const node = costliestNamed.name ?? costliest.name;
   return {
     rows,
@@ -91,13 +89,13 @@ export function statementAttributions(capture: Capture): StatementAttribution[] 
     current.count++;
     statements.set(key, current);
   }
-  for (const document of capture.plans)
-    for (const { queryText, plan } of planEntries(document)) {
+  for (let index = 0; index < capture.plans.length; index++)
+    for (const { queryText, plan, location } of planEntries(capture.plans[index], `plans[${index}]`)) {
       if (queryText === undefined) continue;
       const key = normalizeStatement(queryText);
       const current = statements.get(key);
       if (!current) continue;
-      const cost = planCost(plan);
+      const cost = planCost(plan, location);
       current.rows += cost.rows;
       current.blocks += cost.blocks;
       if (cost.node) current.node = cost.node;
@@ -131,6 +129,7 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
     backends: readonly (number | undefined)[] | undefined,
     plans: readonly unknown[],
     planStatements: readonly (number | undefined)[] | undefined,
+    planCollection: string,
   ): StatementOccurrence[] => {
     const plansByStatement = Array.from({ length: statements.length }, () => [] as number[]);
     for (let planIndex = 0; planIndex < plans.length; planIndex++) {
@@ -148,8 +147,8 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
       let rows = 0;
       let blocks = 0;
       for (const planIndex of planIndices) {
-        for (const entry of planEntries(plans[planIndex])) {
-          const cost = planCost(entry.plan);
+        for (const entry of planEntries(plans[planIndex], `${planCollection}[${planIndex}]`)) {
+          const cost = planCost(entry.plan, entry.location);
           rows += cost.rows;
           blocks += cost.blocks;
         }
@@ -175,6 +174,7 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
       capture.statementBackends,
       capture.plans,
       capture.planStatements,
+      'plans',
     ),
     backgroundStatements: occurrences(
       capture.backgroundStatements ?? [],
@@ -183,6 +183,7 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
       capture.backgroundStatementBackends,
       capture.backgroundPlans ?? [],
       capture.backgroundPlanStatements,
+      'backgroundPlans',
     ),
   };
 }

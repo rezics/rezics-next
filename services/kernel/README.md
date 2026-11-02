@@ -523,6 +523,8 @@ measured run, and seeding is never explained. Each report sample carries `seedin
 `grow` (every pool, `admin` included), the time of `grow`, the ANALYZE settle after it (`vacuumMs`), and total settling
 time for that scale (`settleMs`); when `GROWTH_PROFILE` names a file, `checkGrowth` appends one JSON line per check
 with the test file, check name, scales and each scale's `seeding`.
+Native plan trees are bounded to 10,000 nodes and depth 256 (root depth 0); cycles, sparse children and invalid child
+collections fail with their plan location. These are evidence input limits, not growth verdicts.
 The line also carries every repetition, relation sizes, the selected-rule `verdicts`, a shadow whole-series verdict and
 any `settleFailures` recorded on samples. For a step check, the shadow verdicts are diagnostic; for a baseline check,
 all three passing requires deleting its entry.
