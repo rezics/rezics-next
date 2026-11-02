@@ -179,10 +179,7 @@ function attemptRecords(capture: Capture, occurrences: StatementOccurrences): At
       const sqlstate = attempt.occurrences
         .map((index) => capture.statementErrors?.[index] ?? null)
         .find((code) => code === '40001' || code === '40P01');
-      if (
-        !sqlstate &&
-        (kind === 'rollback' || attempt.occurrences.some((index) => capture.statementErrors?.[index]))
-      )
+      if (!sqlstate && (kind === 'rollback' || attempt.occurrences.some((index) => capture.statementErrors?.[index])))
         throw new TypeError(
           `backend ${backend}: transaction ended without a commit or retry SQLSTATE (40001 or 40P01)`,
         );

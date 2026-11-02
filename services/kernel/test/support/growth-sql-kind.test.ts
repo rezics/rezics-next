@@ -35,7 +35,10 @@ test('commented transaction boundaries preserve savepoints, costs, and retry out
     { backend: 71, outcome: 'committed', statements: 2, occurrences: [0, 1, 2, 3, 4] },
   ]);
 
-  const retried = captured(['/* begin */ BEGIN', 'SELECT retryable_work()', '/* retry */ ROLLBACK'], [null, '40001', null]);
+  const retried = captured(
+    ['/* begin */ BEGIN', 'SELECT retryable_work()', '/* retry */ ROLLBACK'],
+    [null, '40001', null],
+  );
   expect(readAttemptLedger(retried)).toMatchObject([
     { backend: 71, outcome: 'aborted:40001', statements: 1, occurrences: [0, 1, 2] },
   ]);
