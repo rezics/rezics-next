@@ -40,19 +40,16 @@ export function qualifiedNotes(statement: Stmt, related: unknown, locale: string
         {
           property,
           text: `${prefix}: ${
-            snak.value.type === 'somevalue'
-              ? m.subject_value_unknown({}, options)
-              : m.subject_value_none({}, options)
+            snak.value.type === 'somevalue' ? m.subject_value_unknown({}, options) : m.subject_value_none({}, options)
           }`,
         },
       ];
     if (snak.value.type !== 'value') return [];
     const content = snak.value.content;
     if (snak.property.data_type === 'wikibase-item' && typeof content === 'string') {
-      const summary =
-        Object.hasOwn(disclosed, content)
-          ? (disclosed[content] as SubjectSummary | undefined)
-          : undefined;
+      const summary = Object.hasOwn(disclosed, content)
+        ? (disclosed[content] as SubjectSummary | undefined)
+        : undefined;
       const label = typeof summary?.label === 'object' ? summary.label?.value : undefined;
       return summary && label
         ? [{ property, text: `${prefix}: ${label}`, subject: { id: summary.id, label } }]
@@ -76,8 +73,7 @@ export function qualifiedNotes(statement: Stmt, related: unknown, locale: string
       if (isRecord(content) && typeof content.unit === 'string' && Object.hasOwn(disclosed, content.unit)) {
         const summary = disclosed[content.unit] as SubjectSummary | undefined;
         const label = summary?.label;
-        if (label && typeof label === 'object')
-          units[content.unit] = { labels: { [label.language]: label.value } };
+        if (label && typeof label === 'object') units[content.unit] = { labels: { [label.language]: label.value } };
       }
       const presentation = quantityPresentation(content, units, locale);
       return presentation && isRecord(content)
