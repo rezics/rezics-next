@@ -63,7 +63,7 @@ let members: ComponentProps<typeof editors.CollectionMemberList>;
 const OriginalMenu = menus.Menu,
   OriginalMembers = editors.CollectionMemberList;
 spyOn(menus, 'Menu').mockImplementation((props) => {
-  if (props.title === m.library_collection_actions()) actions = props;
+  if (props.entries?.some((entry) => 'label' in entry && entry.label === m.library_collection_edit())) actions = props;
   return <OriginalMenu {...props} />;
 });
 spyOn(editors, 'CollectionMemberList').mockImplementation((props) => {
