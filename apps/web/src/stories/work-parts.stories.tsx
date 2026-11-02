@@ -409,7 +409,7 @@ export const IndependentMounts: Story = {
     const articles = [...canvasElement.querySelectorAll<HTMLElement>('article')];
     await waitFor(() => expect(articles).toHaveLength(2));
     const controls = articles.map((article) => {
-      const select = article.querySelector<HTMLElement & Pick<HTMLSelectElement, 'value'>>('select')!;
+      const select = article.querySelector('select')!;
       expect(select).toBe(within(article).getByRole('combobox', { name: m.work_parts_relation() }));
       return select;
     });
