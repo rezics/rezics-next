@@ -115,15 +115,16 @@ test('mounted current Type pages and descriptors span releases, survive staging 
       const pin = await buildCatalogue({ releases, compatibility: 'all' }, store);
       for (const bytes of objects.values()) {
         const artifact = parseCatalogueJson(bytes, 4194304) as any;
-        const kind = artifact.format.endsWith('/catalogue/2')
-          ? 'root'
-          : artifact.format.includes('catalogue-node')
-            ? 'node'
-            : artifact.format.endsWith('/release/1')
-              ? 'release'
-              : artifact.format.endsWith('/kind/1')
-                ? 'declaration'
-                : 'node';
+        const kind =
+          artifact.format === CATALOGUE_FORMAT
+            ? 'root'
+            : artifact.format === CATALOGUE_NODE_FORMAT
+              ? 'node'
+              : artifact.format.endsWith('/release/1')
+                ? 'release'
+                : artifact.format === KIND_FORMAT
+                  ? 'declaration'
+                  : 'node';
         expect([200, 201]).toContain((await call('/v1/definitions/catalogue/artifacts', { kind, artifact })).status);
       }
       let progress = await call('/v1/definitions/catalogues', { pin });
