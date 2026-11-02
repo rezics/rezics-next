@@ -107,6 +107,7 @@ function RefinementInstance({
   useEffect(() => () => active.current?.abort(), []);
   const href = (next: RefinementConditions) => refinementHref(locale, query, next, sort);
   const label = (labels: Record<string, string>) => localizedLabel(labels, locale).text;
+  const options = { locale: locale as never };
   const selected = Object.entries(conditions.facetValues).flatMap(([property, values]) =>
     values.map((value) => ({ property, value })),
   );
@@ -237,16 +238,16 @@ function RefinementInstance({
       {showSummary &&
         (selected.length > 0 || Object.keys(conditions.ranges ?? {}).length > 0 || conditions.condition) && (
           <>
-            <ul className="flex flex-wrap gap-2" aria-label={m.refinement_selected()}>
+            <ul className="flex flex-wrap gap-2" aria-label={m.refinement_selected({}, options)}>
               {selected.map(({ property, value }) => {
                 const text =
                   label(
                     pages.find((entry) => entry.property === property)?.values.find((entry) => entry.value === value)
                       ?.labels ?? {},
-                  ) || m.refinement_selected_value();
+                  ) || m.refinement_selected_value({}, options);
                 const propertyName =
                   property === 'type'
-                    ? m.search_subject_types()
+                    ? m.search_subject_types({}, options)
                     : label(data.properties.find((entry) => entry.property === property)?.labels ?? {});
                 const chip = propertyName ? `${propertyName}: ${text}` : text;
                 const values = conditions.facetValues[property]!.filter((entry) => entry !== value);
@@ -254,7 +255,7 @@ function RefinementInstance({
                   <li key={`${property}:${value}`}>
                     <a
                       className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                      aria-label={m.refinement_remove({ value: chip })}
+                      aria-label={m.refinement_remove({ value: chip }, options)}
                       href={href({ ...conditions, facetValues: { ...conditions.facetValues, [property]: values } })}
                     >
                       <span className="max-w-44 truncate">{chip}</span>
@@ -267,11 +268,14 @@ function RefinementInstance({
                 <li key={property}>
                   <a
                     className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                    aria-label={m.refinement_remove({
-                      value:
-                        label(data.properties.find((entry) => entry.property === property)?.labels ?? {}) ||
-                        m.refinement_range(),
-                    })}
+                    aria-label={m.refinement_remove(
+                      {
+                        value:
+                          label(data.properties.find((entry) => entry.property === property)?.labels ?? {}) ||
+                          m.refinement_range({}, options),
+                      },
+                      options,
+                    )}
                     href={href({
                       ...conditions,
                       ranges: Object.fromEntries(
@@ -296,7 +300,7 @@ function RefinementInstance({
                 facetValues: {},
               })}
             >
-              {m.refinement_clear()}
+              {m.refinement_clear({}, options)}
             </a>
           </>
         )}
@@ -322,17 +326,17 @@ function RefinementInstance({
         >
           <p>
             {state.status === 'refused'
-              ? m.refinement_refused()
+              ? m.refinement_refused({}, options)
               : state.status === 'preparing'
-                ? m.search_reader_facets_not_ready()
+                ? m.search_reader_facets_not_ready({}, options)
                 : state.status === 'restart'
-                  ? m.refinement_restart()
-                  : m.search_reader_facets_unavailable()}
+                  ? m.refinement_restart({}, options)
+                  : m.search_reader_facets_unavailable({}, options)}
           </p>
-          {waiting && state.status !== 'refused' && <p>{m.search_recovery_wait()}</p>}
+          {waiting && state.status !== 'refused' && <p>{m.search_recovery_wait({}, options)}</p>}
           {state.status === 'restart' ? (
             <a href={href(conditions)} className={buttonVariants({ variant: 'link', size: 'sm' })}>
-              {m.search_facet_retry()}
+              {m.search_facet_retry({}, options)}
             </a>
           ) : (
             state.status !== 'refused' && (
@@ -346,7 +350,7 @@ function RefinementInstance({
                   void (attempt ? readRequested(attempt.facets, attempt.more) : read(shown));
                 }}
               >
-                {m.search_facet_retry()}
+                {m.search_facet_retry({}, options)}
               </Button>
             )
           )}
@@ -365,7 +369,8 @@ function RefinementInstance({
       {shown.map((property) => {
         const definition = data.properties.find((entry) => entry.property === property)!;
         const page = pages.find((entry) => entry.property === property);
-        const title = definition.mode === 'types' ? m.search_subject_types() : label(definition.labels) || property;
+        const title =
+          definition.mode === 'types' ? m.search_subject_types({}, options) : label(definition.labels) || property;
         return (
           <FieldSet
             key={property}
@@ -380,7 +385,7 @@ function RefinementInstance({
           >
             <FieldLegend variant="label">{title}</FieldLegend>
             {definition.mode === 'types' && (
-              <p className="text-sm text-muted-foreground">{m.search_subject_types_help()}</p>
+              <p className="text-sm text-muted-foreground">{m.search_subject_types_help({}, options)}</p>
             )}
             {definition.mode === 'range' ? (
               <RangeControl
@@ -388,6 +393,7 @@ function RefinementInstance({
                 conditions={conditions}
                 href={href}
                 navigate={navigate}
+                locale={locale}
                 draft={getRangeDraft(rangeDraftState, draftKey, definition.property, {
                   lower: conditions.ranges?.[definition.property]?.gte?.toString() ?? '',
                   upper: conditions.ranges?.[definition.property]?.lte?.toString() ?? '',
@@ -397,7 +403,7 @@ function RefinementInstance({
                 onDraftChange={(draft) => changeRangeDraft(definition.property, draft)}
               />
             ) : definition.mode === 'unsupported' ? (
-              <p className="text-sm text-muted-foreground">{m.refinement_unsupported()}</p>
+              <p className="text-sm text-muted-foreground">{m.refinement_unsupported({}, options)}</p>
             ) : (
               <>
                 {page?.values.map((entry, index) => (
@@ -430,11 +436,13 @@ function RefinementInstance({
                         );
                       }}
                     />
-                    <span className="min-w-0 break-words">{label(entry.labels) || m.refinement_selected_value()}</span>
+                    <span className="min-w-0 break-words">
+                      {label(entry.labels) || m.refinement_selected_value({}, options)}
+                    </span>
                   </Label>
                 ))}
                 {page?.values.length === 0 && state?.status === 'ready' && (
-                  <p className="text-sm text-muted-foreground">{m.refinement_no_values()}</p>
+                  <p className="text-sm text-muted-foreground">{m.refinement_no_values({}, options)}</p>
                 )}
                 {page?.next && (
                   <Button
@@ -444,12 +452,12 @@ function RefinementInstance({
                     disabled={disabled}
                     onClick={() => void read([property], property)}
                   >
-                    {m.refinement_more_values()}
+                    {m.refinement_more_values({}, options)}
                   </Button>
                 )}
                 {!page && !failed && (
                   <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void read(shown)}>
-                    {m.refinement_load_values()}
+                    {m.refinement_load_values({}, options)}
                   </Button>
                 )}
               </>
@@ -466,6 +474,7 @@ function RangeControl({
   conditions,
   href,
   navigate,
+  locale,
   draft,
   onDraftChange,
 }: {
@@ -473,10 +482,12 @@ function RangeControl({
   conditions: RefinementConditions;
   href: (conditions: RefinementConditions) => string;
   navigate: (href: string) => void;
+  locale: string;
   draft: RangeDraft;
   onDraftChange: (draft: RangeDraft) => void;
 }) {
   const id = useId();
+  const options = { locale: locale as never };
   const range = conditions.ranges?.[definition.property];
   const applied = range !== undefined;
   const { lower, upper, unit, invalid } = draft;
@@ -485,7 +496,7 @@ function RangeControl({
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
         <Field>
-          <FieldLabel htmlFor={`${id}-lower`}>{m.refinement_lower()}</FieldLabel>
+          <FieldLabel htmlFor={`${id}-lower`}>{m.refinement_lower({}, options)}</FieldLabel>
           <Input
             id={`${id}-lower`}
             type="number"
@@ -499,7 +510,7 @@ function RangeControl({
           />
         </Field>
         <Field>
-          <FieldLabel htmlFor={`${id}-upper`}>{m.refinement_upper()}</FieldLabel>
+          <FieldLabel htmlFor={`${id}-upper`}>{m.refinement_upper({}, options)}</FieldLabel>
           <Input
             id={`${id}-upper`}
             type="number"
@@ -515,7 +526,7 @@ function RangeControl({
       </div>
       {!time && (
         <Field>
-          <FieldLabel htmlFor={`${id}-unit`}>{m.refinement_unit()}</FieldLabel>
+          <FieldLabel htmlFor={`${id}-unit`}>{m.refinement_unit({}, options)}</FieldLabel>
           <NativeSelect
             id={`${id}-unit`}
             value={unit}
@@ -529,10 +540,10 @@ function RangeControl({
           </NativeSelect>
         </Field>
       )}
-      {time && <p className="text-sm text-muted-foreground">{m.refinement_year_hint()}</p>}
+      {time && <p className="text-sm text-muted-foreground">{m.refinement_year_hint({}, options)}</p>}
       {invalid && (
         <p role="alert" className="text-sm text-destructive">
-          {m.refinement_invalid_range()}
+          {m.refinement_invalid_range({}, options)}
         </p>
       )}
       <div className="flex flex-wrap gap-2">
@@ -546,7 +557,7 @@ function RangeControl({
               ),
             })}
           >
-            {m.refinement_range_remove_action()}
+            {m.refinement_range_remove_action({}, options)}
           </a>
         )}
         <Button
@@ -583,7 +594,7 @@ function RangeControl({
             );
           }}
         >
-          {m.search_apply()}
+          {m.search_apply({}, options)}
         </Button>
       </div>
     </div>

@@ -7,7 +7,9 @@ import { localizedLabel } from '../results';
 import type { RefinementProperty } from './model';
 
 function propertyName(entry: RefinementProperty, locale: string) {
-  return entry.mode === 'types' ? m.search_subject_types() : localizedLabel(entry.labels, locale).text;
+  return entry.mode === 'types'
+    ? m.search_subject_types({}, { locale: locale as never })
+    : localizedLabel(entry.labels, locale).text;
 }
 
 export function PropertyPicker({
@@ -19,6 +21,7 @@ export function PropertyPicker({
   locale: string;
   onSelect: (property: string) => void;
 }) {
+  const options = { locale: locale as never };
   const id = useId();
   const [query, setQuery] = useState('');
   const needle = query.trim();
@@ -37,23 +40,23 @@ export function PropertyPicker({
   return (
     <div className="space-y-2">
       <Field>
-        <FieldLabel htmlFor={`${id}-find`}>{m.refinement_property_find_label()}</FieldLabel>
+        <FieldLabel htmlFor={`${id}-find`}>{m.refinement_property_find_label({}, options)}</FieldLabel>
         <Input
           id={`${id}-find`}
           type="search"
           autoComplete="off"
-          placeholder={m.refinement_property_find_placeholder()}
+          placeholder={m.refinement_property_find_placeholder({}, options)}
           value={query}
           onChange={(event) => setQuery(event.currentTarget.value)}
         />
       </Field>
       {needle && matches.length === 0 && (
         <p role="status" className="text-sm text-muted-foreground">
-          {m.refinement_property_find_no_match()}
+          {m.refinement_property_find_no_match({}, options)}
         </p>
       )}
       <Field>
-        <FieldLabel htmlFor={`${id}-property`}>{m.refinement_property()}</FieldLabel>
+        <FieldLabel htmlFor={`${id}-property`}>{m.refinement_property({}, options)}</FieldLabel>
         <NativeSelect
           id={`${id}-property`}
           value=""
@@ -64,7 +67,7 @@ export function PropertyPicker({
             setQuery('');
           }}
         >
-          <NativeSelectOption value="">{m.refinement_choose_property()}</NativeSelectOption>
+          <NativeSelectOption value="">{m.refinement_choose_property({}, options)}</NativeSelectOption>
           {names.map(([entry, name]) => (
             <NativeSelectOption key={entry.property} value={entry.property}>
               {counts.get(name)! > 1 ? `${name} (${entry.property})` : name}
