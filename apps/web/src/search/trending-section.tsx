@@ -7,6 +7,17 @@ import { useTrendingSearches, type TrendingState } from './trending';
 import { headerSearchSessionKey, observeHeaderSearchSession } from './header-search/session-key';
 import { useSearchRetryWait } from './search-recovery-retry';
 
+/** Occurrence of delivered query/display; object allocation does not change identity. Native query is the quoted display. */
+export function trendingTermRowKeys(terms: readonly { query: string; display: string }[]): string[] {
+  const occurrences = new Map<string, number>();
+  return terms.map(({ query, display }) => {
+    const identity = JSON.stringify([query, display]);
+    const occurrence = occurrences.get(identity) ?? 0;
+    occurrences.set(identity, occurrence + 1);
+    return JSON.stringify([query, display, occurrence]);
+  });
+}
+
 /** Owner operation rendered in the existing Search frame; shadcn has no discovery-section primitive. */
 export function TrendingSearchesSection({
   state,
@@ -19,6 +30,7 @@ export function TrendingSearchesSection({
 }) {
   const values = state.status === 'ready' ? state.page.trendingSearches : [];
   const waiting = useSearchRetryWait(state.status === 'ready' ? undefined : state.retryAt);
+  const rows = trendingTermRowKeys(values).map((key, index) => ({ key, ...values[index]! }));
   return (
     <section
       className="space-y-2 pt-5"
@@ -29,8 +41,8 @@ export function TrendingSearchesSection({
       <h3 className="px-2 text-sm font-semibold">{m.header_search_trending_searches()}</h3>
       {values.length ? (
         <ul>
-          {values.map(({ query, display }) => (
-            <li key={query}>
+          {rows.map(({ key, query, display }) => (
+            <li key={key}>
               <button
                 type="button"
                 className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2 text-start text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"

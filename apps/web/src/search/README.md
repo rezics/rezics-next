@@ -23,6 +23,10 @@ Header suggestions retire on an unsettled session or a change to its state, subj
 session reloads the retained draft, while isolated presenters without a session observation use anonymous identity.
 Trending and header-suggestion retries stay manual: native Retry-After disables retry until its minimum delay, without
 polling; session observations (including CSRF changes) and locale changes retire prior suggestions and pending requests.
+Trending retries stay manual: native Retry-After disables retry until its minimum delay, without polling; session
+observations (including CSRF changes) and locale changes retire prior suggestions and pending requests.
+Native Trending may repeat a query when distinct sources share a public label; `literalQuery` is the quoted display,
+so a repeated query repeats that display, and each delivered `{query, display}` occurrence keeps its own row identity.
 
 Filters stays at the left of the composer's second row. `HeaderSearchFilterProvider` and
 `useRegisterHeaderSearchFilters` connect it to the current route's actual editor and active count. Search owns
