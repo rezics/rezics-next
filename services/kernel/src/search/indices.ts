@@ -226,7 +226,7 @@ async function readSubjectMapping(
     activatedAt = value;
   }
 
-  const properties = mappings.properties;
+  const properties = mappings.properties as Record<string, unknown>;
   const compatible = (value: unknown, type: string) =>
     record(value) && value.type === type && value.coerce === false && value.doc_values !== false;
   return {
