@@ -8,6 +8,13 @@ closed behind `search` platform grants. Advanced filters/scopes, facets and rati
 `search_advanced`. Complete population/privacy, physical incarnation, erasure and native growth proofs remain
 deferred; this closed slice does not complete the Search Goal.
 
+`subjectConsumer` and `discoveryConsumer` construct native checkpoint names from the exact admitted prefix, a
+positive safe generation and an explicit family (`subjects` or `discovery`). Ordinary names that already fit the
+63-character native consumer domain stay byte-for-byte. Longer admitted identities use a deterministic hashed
+fallback in that domain. A prefix containing `subjects` cannot rewrite the discovery family. Ambiguous legacy
+discovery identities created by replacing `subjects` inside the prefix are not inherited or copied; recover them
+through the existing unavailable/rebuild path.
+
 The optional `languages` request field is the reader's language chain, in priority order. Search follows semantic's
 label choice rule for hit labels, requested descriptions and item fact labels, returning one entry per nonempty map.
 Omitting `languages` keeps every language.

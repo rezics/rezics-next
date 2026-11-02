@@ -21,10 +21,10 @@ import { startSearchIndexing } from './runner.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { registerSearchErasure, markSearchPersonalErasure, stepSearchErasure } from './erasure.ts';
 import type { ScopeRuntime } from './service-scope.ts';
+import { isAdmittedSearchPrefix } from './consumer-name.ts';
 
 export type SearchConfig = { url: string; prefix: string };
 
-const PREFIX = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const collectionPublicationScopeRuntimes = new WeakMap<WorkContext, ScopeRuntime>();
 
 /** The Library consumer borrows this worker's existing Search client and rated source for a guarded step. */
@@ -44,7 +44,7 @@ export function readSearchConfig(env: { readonly [name: string]: string | undefi
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new ConfigError('OPENSEARCH_URL');
   const prefix = env.KERNEL_SEARCH_PREFIX ?? 'rezics-';
-  if (!PREFIX.test(prefix)) throw new ConfigError('KERNEL_SEARCH_PREFIX');
+  if (!isAdmittedSearchPrefix(prefix)) throw new ConfigError('KERNEL_SEARCH_PREFIX');
   return { url, prefix };
 }
 

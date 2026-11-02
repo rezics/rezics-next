@@ -25,11 +25,10 @@ import {
 import { createSubjectIndexer } from './indexer.ts';
 import { createSearchWriterGuard } from './writer-guard.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
+import { searchConsumerName } from './consumer-name.ts';
 
 export function subjectConsumer(prefix: string, generation: number): string {
-  const consumer = `search_${prefix.replaceAll('-', '_')}subjects_g${generation}`;
-  if (!/^[a-z][a-z0-9_]{0,62}$/.test(consumer)) throw new RangeError('consumer name is invalid');
-  return consumer;
+  return searchConsumerName(prefix, generation, 'subjects');
 }
 
 export async function startSearchIndexing(options: {

@@ -626,6 +626,7 @@ import {
 } from './writer-guard.ts';
 import { createDiscoveryProjection, nativeDiscoveryRegistry } from './account-discovery.ts';
 import { discoveryConsumer } from './generations.ts';
+import { subjectConsumer } from './runner.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { type SubjectDocument } from './document.ts';
 import type { DiscoveryConsumerQuery, DiscoveryEngineHit } from './discovery.ts';
@@ -2274,7 +2275,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         pool: m.pool,
         search: m.native,
         index: target,
-        consumer: `search_${subjectTarget[1]!.replaceAll('-', '_')}subjects_g${subjectTarget[2]}`,
+        consumer: subjectConsumer(subjectTarget[1]!, Number(subjectTarget[2])),
         source: createRatedSubjectSource(m.pool, origin.routeKey).source,
         listing: subjectListingSource(m.pool),
       });

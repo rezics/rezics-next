@@ -42,6 +42,7 @@ import lockRebuild from './rebuild-lock.sql';
 import unlockRebuild from './rebuild-unlock.sql';
 import type { SubjectSource } from './source.ts';
 import { subjectConsumer, startDiscoveryIndexing } from './runner.ts';
+import { searchConsumerName } from './consumer-name.ts';
 
 export { MAX_SUBJECT_GENERATIONS } from './indices.ts';
 export type RebuildReason = 'timeout' | 'mismatch' | 'busy' | 'running' | 'limit';
@@ -380,7 +381,7 @@ export async function rebuildSubjects(options: {
 
 export type DiscoveryGeneration = DiscoveryTarget & { state: string; kinds: string[] };
 export const discoveryConsumer = (prefix: string, generation: number) =>
-  subjectConsumer(prefix, generation).replace('subjects', 'discovery');
+  searchConsumerName(prefix, generation, 'discovery');
 
 const DISCOVERY_LIVE_LIMIT = MAX_SUBJECT_GENERATIONS + 1;
 const LIVE_QUOTA_STATES = new Set(['active', 'retiring', 'quarantined']);

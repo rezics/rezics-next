@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { systemClock } from '../../src/clock.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
+import { subjectConsumer } from '../../src/search/runner.ts';
 import { publicFilterSource } from '../../src/semantic/public-filter-source.ts';
 import { createPublicFilterSourceBinding } from '../../src/semantic/public-filter-source-binding.ts';
 import {
@@ -186,7 +187,7 @@ test('native repair settlement guards late dispatch, lost wait_for response, ori
       pool: n.f.db.pool,
       search: n.native.transport,
       index: n.native.physicalTarget,
-      consumer: `search_${match[1]!.replaceAll('-', '_')}subjects_g${match[2]}`,
+      consumer: subjectConsumer(match[1]!, Number(match[2])),
       source: createRatedSubjectSource(n.f.db.pool, n.f.config.routeKey).source,
       listing: subjectListingSource(n.f.db.pool),
     });
