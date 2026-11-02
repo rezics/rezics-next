@@ -1,6 +1,14 @@
 import { expect, test } from 'bun:test';
 import { growthCalibrationReport } from '../../scripts/growth-calibrate.ts';
-import { growthProfileCheckId, readGrowthProfiles } from './growth-profile-read.ts';
+import {
+  growthMeasurementIdentity,
+  growthProfileCheckId,
+  readGrowthProfiles,
+  type GrowthMeasurementIdentity,
+} from './growth-profile-read.ts';
+
+const TEST_SOURCE = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const TEST_MEASUREMENT = growthMeasurementIdentity(0, TEST_SOURCE);
 
 type LineOptions = Readonly<{
   check: string;
@@ -8,6 +16,7 @@ type LineOptions = Readonly<{
   offset?: number;
   relationFirst?: number;
   relationLast?: number;
+  measurement?: GrowthMeasurementIdentity | null;
   outcomes?: readonly [
     'compatible' | 'violation' | 'inconclusive',
     'compatible' | 'violation' | 'inconclusive',
@@ -21,6 +30,7 @@ function profileLine({
   offset = 0,
   relationFirst = 10,
   relationLast = 100,
+  measurement = TEST_MEASUREMENT,
   outcomes = ['compatible', 'compatible', 'compatible'],
 }: LineOptions): string {
   const relationSize = (reltuples: number) => ({ reltuples, relpages: reltuples > 0 ? Math.ceil(reltuples / 10) : 0 });
@@ -42,6 +52,7 @@ function profileLine({
       })),
     ),
     relationSizes,
+    ...(measurement === null ? {} : { measurement }),
     shadow: Object.fromEntries(
       (['rows', 'blocks', 'statements'] as const).map((metric, index) => [metric, { outcome: outcomes[index] }]),
     ),
@@ -211,6 +222,109 @@ test('different declared bounds omit a check and identify each run declaration',
 
 test('invalid profile lines identify the run and line', () => {
   expect(() => readGrowthProfiles([{ name: 'bad-run', text: '{not json}\n' }])).toThrow('bad-run:1 is not valid JSON');
+});
+
+test('incompatible indexProbes, source revisions and unidentified legacy lines are omitted with per-run diagnostics', () => {
+  const otherSource = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const read = readGrowthProfiles([
+    {
+      name: 'run-1',
+      text: [
+        profileLine({ check: 'probe mismatch', measurement: growthMeasurementIdentity(0, TEST_SOURCE) }),
+        profileLine({ check: 'legacy check', measurement: null, relationFirst: 100, relationLast: 100 }),
+      ].join('\n'),
+    },
+    {
+      name: 'run-2',
+      text: [
+        profileLine({ check: 'probe mismatch', measurement: growthMeasurementIdentity(2, TEST_SOURCE) }),
+        profileLine({ check: 'legacy check', measurement: null, offset: 1, relationFirst: 100, relationLast: 90 }),
+        profileLine({ check: 'source mismatch', measurement: growthMeasurementIdentity(0, otherSource) }),
+      ].join('\n'),
+    },
+    {
+      name: 'run-3',
+      text: profileLine({ check: 'source mismatch', measurement: growthMeasurementIdentity(0, TEST_SOURCE) }),
+    },
+  ]);
+
+  expect(read.series.rows).toEqual([]);
+  expect(read.omitted).toEqual([
+    {
+      file: 'test/search/growth-example.test.ts',
+      check: 'legacy check',
+      occurrence: 1,
+      missingRuns: ['run-3'],
+      scalesByRun: [
+        { run: 'run-1', scales: [1, 4, 16] },
+        { run: 'run-2', scales: [1, 4, 16] },
+      ],
+      incompatibleMeasurementsByRun: [
+        { run: 'run-1', measurement: null },
+        { run: 'run-2', measurement: null },
+      ],
+    },
+    {
+      file: 'test/search/growth-example.test.ts',
+      check: 'probe mismatch',
+      occurrence: 1,
+      missingRuns: ['run-3'],
+      scalesByRun: [
+        { run: 'run-1', scales: [1, 4, 16] },
+        { run: 'run-2', scales: [1, 4, 16] },
+      ],
+      incompatibleMeasurementsByRun: [
+        { run: 'run-1', measurement: growthMeasurementIdentity(0, TEST_SOURCE) },
+        { run: 'run-2', measurement: growthMeasurementIdentity(2, TEST_SOURCE) },
+      ],
+    },
+    {
+      file: 'test/search/growth-example.test.ts',
+      check: 'source mismatch',
+      occurrence: 1,
+      missingRuns: ['run-1'],
+      scalesByRun: [
+        { run: 'run-2', scales: [1, 4, 16] },
+        { run: 'run-3', scales: [1, 4, 16] },
+      ],
+      incompatibleMeasurementsByRun: [
+        { run: 'run-2', measurement: growthMeasurementIdentity(0, otherSource) },
+        { run: 'run-3', measurement: growthMeasurementIdentity(0, TEST_SOURCE) },
+      ],
+    },
+  ]);
+  expect(read.entries).toHaveLength(6);
+  expect(read.shadowOutcomes).toHaveLength(6);
+  expect(read.nonGrowingRelations).toEqual([
+    {
+      file: 'test/search/growth-example.test.ts',
+      check: 'legacy check',
+      occurrence: 1,
+      run: 'run-1',
+      relation: 'public.stable',
+      first: 100,
+      last: 100,
+    },
+    {
+      file: 'test/search/growth-example.test.ts',
+      check: 'legacy check',
+      occurrence: 1,
+      run: 'run-2',
+      relation: 'public.stable',
+      first: 100,
+      last: 90,
+    },
+  ]);
+
+  expect(() =>
+    growthCalibrationReport(
+      [
+        { name: 'calibration-1', text: profileLine({ check: 'legacy check', measurement: null }) },
+        { name: 'calibration-2', text: profileLine({ check: 'legacy check', measurement: null, offset: 1 }) },
+      ],
+      { name: 'coverage', text: profileLine({ check: 'legacy check', measurement: null, offset: 2 }) },
+    ),
+  ).toThrow('unidentified measurement');
 });
 
 test("the calibration report states each metric's uncertainty, its held-out coverage and the detectable slope", () => {

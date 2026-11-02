@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { growthCalibrationReport } from '../../scripts/growth-calibrate.ts';
+import { growthMeasurementIdentity } from './growth-profile-read.ts';
 
 const profile = (check: string, scales: number[]): string =>
   JSON.stringify({
@@ -9,6 +10,7 @@ const profile = (check: string, scales: number[]): string =>
     repetitions: scales.map(() => [{ rows: 1, blocks: 1, statements: 1 }]),
     relationSizes: scales.map(() => ({})),
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    measurement: growthMeasurementIdentity(0, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
     shadow: Object.fromEntries(['rows', 'blocks', 'statements'].map((metric) => [metric, { outcome: 'compatible' }])),
   });
 

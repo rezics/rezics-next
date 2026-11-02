@@ -502,7 +502,7 @@ of the median), blocks max(9, 3%), and statements are exact. `slack` applies onl
 their existing slack handling.
 
 When any metric lacks complete unchanged-code calibration checks, `scripts/growth-calibrate.ts` prints named omitted checks,
-missing runs and mismatched scales to stderr, then exits nonzero without reporting fitted uncertainty, coverage or classifications.
+missing runs, mismatched scales and unidentified or incompatible measurement identities to stderr, then exits nonzero without reporting fitted uncertainty, coverage or classifications.
 
 For a logarithmic or linear blocks bound, `indexProbes` may declare the positive number of index descents one run
 makes into growing relations. The blocks series may then include a non-decreasing staircase from zero, gaining at
@@ -697,6 +697,9 @@ record fails as `GrowthProfileExportError` with that destination and the origina
 serialized before write and must stay within the reader's 2 MiB physical line limit.
 The `GROWTH_PROFILE` JSON line includes `statements`, with each scale's complete statement list and median rows,
 blocks and count across measured repetitions.
+Newly exported lines carry `measurement` `{version, indexProbes, source}`: version 1, the check's index-probe
+declaration (0 when omitted), and the local `git rev-parse HEAD` revision. Git is the only source identifier; it is
+omitted when unavailable. No runtime pricing or external attestation service is used.
 The reader admits at most 64 MiB of total UTF-8 input, 250,000 physical lines, and 50,000 nonblank records per read;
 each physical line is limited to 2 MiB. It rejects excess input and reports the source and line where a limit is crossed.
 Incomplete-check missing-run diagnostics admit at most 8,192 check×run pairs (calibration's 256 checks × 32 runs) before
@@ -710,8 +713,9 @@ size and the supported capacity; it does not return a partial fit.
 Calibration CLI loading applies that same total-byte budget to observed file sizes before retaining contents, counts a
 file that grows after its size is observed against the budget, and closes every opened profile on failure; file-level
 budget and change errors use line 1 of the run basename because loading does not parse JSONL.
-Calibration combines a file/check/occurrence only when every run declares the same growth bounds and scales; omitted
-checks with differing bounds report each run and its declaration.
+Calibration combines a file/check/occurrence only when every run is identified v1 with the same source revision,
+indexProbes, growth bounds and scales. Unidentified legacy lines and mismatched identities are omitted with per-run
+diagnostics and keep their raw shadow and relation records.
 
 Each measured repetition starts from a settled state. Warm-ups and repetitions may write rows, including through
 triggers; the harness settles every relation written by the previous run before measuring the next one. An operation

@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { relative } from 'node:path';
 import {
   DEFAULT_BYTE_SLACK,
@@ -45,6 +46,7 @@ import {
 } from './growth-report.ts';
 import { appendGrowthProfile, growthProfileExportMode, type GrowthProfileExportMode } from './growth-profile-output.ts';
 import { admitGrowthCheck, COLD_BACKEND_DISCARD_LIMIT, type AdmittedGrowthCheck } from './growth-config.ts';
+import { growthMeasurementIdentity } from './growth-profile-read.ts';
 import {
   countedSample,
   countedViolations,
@@ -603,8 +605,20 @@ function writeGrowthReview(
   );
 }
 
+let measurementSource: string | undefined;
+let measurementSourceResolved = false;
+
+function growthMeasurementSource(): string | undefined {
+  if (measurementSourceResolved) return measurementSource;
+  measurementSourceResolved = true;
+  const result = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', timeout: 5_000 });
+  const source = result.stdout?.trim() ?? '';
+  if (result.status === 0 && source.length > 0) measurementSource = source;
+  return measurementSource;
+}
+
 /** Appends one JSONL record to GROWTH_PROFILE; best-effort warns once per destination, required mode throws. */
-function appendProfile(report: GrowthReport, mode: GrowthProfileExportMode): void {
+function appendProfile(report: GrowthReport, check: GrowthCheck, mode: GrowthProfileExportMode): void {
   const destination = process.env.GROWTH_PROFILE;
   if (!destination) return;
   const file = relative(process.cwd(), Bun.main);
@@ -615,6 +629,7 @@ function appendProfile(report: GrowthReport, mode: GrowthProfileExportMode): voi
     record: {
       file,
       check: name,
+      measurement: growthMeasurementIdentity(check.indexProbes, growthMeasurementSource()),
       scales: samples.map(({ scale }) => scale),
       seeding: samples.map(({ seeding }) => seeding),
       bounds,
@@ -1086,7 +1101,7 @@ async function runGrowthCheck(
           ),
         }),
   };
-  appendProfile(report, profileMode);
+  appendProfile(report, check, profileMode);
   if (
     listed &&
     growthRule !== 'series' &&

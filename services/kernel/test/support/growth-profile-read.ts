@@ -6,6 +6,7 @@ import { admitGrowthProfileInput, growthProfileLines } from './growth-profile-in
 export const GROWTH_PROFILE_DIAGNOSTIC_EXPANSION = 256 * 32;
 
 export const GROWTH_PROFILE_METRICS = ['rows', 'blocks', 'statements'] as const;
+export const GROWTH_MEASUREMENT_IDENTITY_VERSION = 1 as const;
 export type GrowthProfileMetric = (typeof GROWTH_PROFILE_METRICS)[number];
 export type GrowthProfileOutcome = 'compatible' | 'violation' | 'inconclusive';
 
@@ -13,6 +14,12 @@ export type GrowthProfileRunSource = Readonly<{ name: string; text: string }>;
 export type GrowthProfileRepetition = Readonly<Record<GrowthProfileMetric, number>>;
 export type GrowthProfileRelationSize = Readonly<{ reltuples: number; relpages: number }>;
 export type GrowthProfileBounds = Readonly<Record<GrowthProfileMetric, GrowthModelBound>>;
+export type GrowthMeasurementIdentity = Readonly<{
+  version: number;
+  indexProbes: number;
+  source?: string;
+}>;
+export type IdentifiedGrowthMeasurement = GrowthMeasurementIdentity & { readonly source: string };
 export type GrowthProfileEntry = Readonly<{
   run: string;
   file: string;
@@ -22,6 +29,7 @@ export type GrowthProfileEntry = Readonly<{
   repetitions: readonly (readonly GrowthProfileRepetition[])[];
   relationSizes: readonly Readonly<Record<string, GrowthProfileRelationSize>>[];
   bounds: GrowthProfileBounds;
+  measurement: GrowthMeasurementIdentity | null;
   shadow: Readonly<Record<GrowthProfileMetric, GrowthProfileOutcome>>;
 }>;
 
@@ -32,6 +40,10 @@ export type OmittedGrowthProfileCheck = Readonly<{
   missingRuns: readonly string[];
   scalesByRun: readonly Readonly<{ run: string; scales: readonly number[] }>[];
   incompatibleBoundsByRun?: readonly Readonly<{ run: string; bounds: GrowthProfileBounds }>[];
+  incompatibleMeasurementsByRun?: readonly Readonly<{
+    run: string;
+    measurement: GrowthMeasurementIdentity | null;
+  }>[];
 }>;
 
 export type NonGrowingRelation = Readonly<{
@@ -94,6 +106,50 @@ function parseBounds(value: unknown, description: string): GrowthProfileBounds {
   return bounds;
 }
 
+/** Versioned measurement-contract identity written on new profile lines. */
+export function growthMeasurementIdentity(
+  indexProbes: number | undefined,
+  source: string | undefined,
+): GrowthMeasurementIdentity {
+  return {
+    version: GROWTH_MEASUREMENT_IDENTITY_VERSION,
+    indexProbes: indexProbes ?? 0,
+    ...(source === undefined || source.length === 0 ? {} : { source }),
+  };
+}
+
+export function isIdentifiedGrowthMeasurement(
+  value: GrowthMeasurementIdentity | null | undefined,
+): value is IdentifiedGrowthMeasurement {
+  return (
+    value != null &&
+    value.version === GROWTH_MEASUREMENT_IDENTITY_VERSION &&
+    typeof value.source === 'string' &&
+    value.source.length > 0 &&
+    Number.isSafeInteger(value.indexProbes) &&
+    value.indexProbes >= 0
+  );
+}
+
+function sameIdentifiedMeasurement(left: IdentifiedGrowthMeasurement, right: IdentifiedGrowthMeasurement): boolean {
+  return left.version === right.version && left.indexProbes === right.indexProbes && left.source === right.source;
+}
+
+function parseMeasurement(value: unknown, description: string): GrowthMeasurementIdentity | null {
+  if (value === undefined) return null;
+  const source = record(value, description);
+  const version = source.version;
+  if (!Number.isSafeInteger(version) || version < 1)
+    throw new TypeError(`${description}.version must be a positive safe integer`);
+  const indexProbes = source.indexProbes;
+  if (!Number.isSafeInteger(indexProbes) || indexProbes < 0)
+    throw new TypeError(`${description}.indexProbes must be a non-negative safe integer`);
+  if (source.source === undefined) return { version, indexProbes };
+  if (typeof source.source !== 'string' || source.source.length === 0)
+    throw new TypeError(`${description}.source must be a non-empty string when present`);
+  return { version, indexProbes, source: source.source };
+}
+
 function parseProfile(value: unknown, run: string, occurrence: number, description: string): GrowthProfileEntry {
   const source = record(value, description);
   const file = stringField(source, 'file', description);
@@ -148,6 +204,7 @@ function parseProfile(value: unknown, run: string, occurrence: number, descripti
   });
 
   const bounds = parseBounds(source.bounds, `${description}.bounds`);
+  const measurement = parseMeasurement(source.measurement, `${description}.measurement`);
   const shadowSource = record(source.shadow, `${description}.shadow`);
   const shadow = {} as Record<GrowthProfileMetric, GrowthProfileOutcome>;
   for (const metric of GROWTH_PROFILE_METRICS) {
@@ -157,7 +214,7 @@ function parseProfile(value: unknown, run: string, occurrence: number, descripti
     shadow[metric] = outcome;
   }
 
-  return { run, file, check, occurrence, scales, repetitions, relationSizes, bounds, shadow };
+  return { run, file, check, occurrence, scales, repetitions, relationSizes, bounds, measurement, shadow };
 }
 
 function identity(file: string, check: string): string {
@@ -254,7 +311,15 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
     const boundsMatch = group.every(({ bounds }) =>
       GROWTH_PROFILE_METRICS.every((metric) => bounds[metric] === first.bounds[metric]),
     );
-    if (byRun.size === sources.length && scalesMatch && boundsMatch) {
+    const referenceMeasurement = first.measurement;
+    const measurementsMatch =
+      isIdentifiedGrowthMeasurement(referenceMeasurement) &&
+      group.every(
+        ({ measurement }) =>
+          isIdentifiedGrowthMeasurement(measurement) &&
+          sameIdentifiedMeasurement(measurement, referenceMeasurement),
+      );
+    if (byRun.size === sources.length && scalesMatch && boundsMatch && measurementsMatch) {
       complete.push(
         sources.map(({ name }) => byRun.get(name)!).filter((entry): entry is GrowthProfileEntry => entry !== undefined),
       );
@@ -273,6 +338,9 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
       missingRuns: sources.map(({ name }) => name).filter((name) => !byRun.has(name)),
       scalesByRun,
       ...(boundsMatch ? {} : { incompatibleBoundsByRun: group.map(({ run, bounds }) => ({ run, bounds })) }),
+      ...(measurementsMatch
+        ? {}
+        : { incompatibleMeasurementsByRun: group.map(({ run, measurement }) => ({ run, measurement })) }),
     });
   }
 
