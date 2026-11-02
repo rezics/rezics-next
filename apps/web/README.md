@@ -1526,6 +1526,7 @@ indicator compares only those Profile fields, never Public activity. It yields t
 outcomes; existing save, confirmed readback and recovery announcements retain their separate meanings.
 Notifications, Collection visibility and Public activity explain automatic saving inside their own sections.
 Recovery still requires the existing explicit review and confirmation controls when indicated.
+Save and reload readbacks retain later explicit field edits, including a return to the original value; retries retain that same draft protection for the original command.
 
 Profile callers give short inputs and actions a minimum 44px target. Actions wrap long labels and grow in height;
 biography keeps its multi-line control. No shared primitive defaults or save transports change.

@@ -95,6 +95,9 @@ export class ProfileEditor {
   private active = true;
   private readVersion = 0;
   private pending = false;
+  // Value comparisons alone cannot distinguish a later edit back to the original value.
+  // Keep these edits across unknown outcomes and retries of the same immutable attempt.
+  private laterEdits: ProfilePatch = {};
   constructor(
     private io: ProfileEditorIO,
     initial: ProfileValues | null = null,
@@ -134,6 +137,7 @@ export class ProfileEditor {
     if (!this.active) return;
     this.active = false;
     this.readVersion++;
+    this.laterEdits = {};
     this.update({
       known: null,
       draft: null,
@@ -179,10 +183,36 @@ export class ProfileEditor {
   }
   edit(patch: Partial<ProfileValues>) {
     if (!this.canWrite() || !this.state.draft || this.state.readAuthority !== 'allowed') return;
+    const draft = {
+      ...this.state.draft,
+      ...patch,
+      accountId: this.state.draft.accountId,
+      kind: this.state.draft.kind,
+    };
+    if (this.pending || this.state.attempt) {
+      const changes = profileChanges(this.state.draft, draft);
+      this.laterEdits = {
+        ...this.laterEdits,
+        ...changes,
+        publicViews: { ...this.laterEdits.publicViews, ...changes.publicViews },
+      };
+    }
     this.update({
-      draft: { ...this.state.draft, ...patch, accountId: this.state.draft.accountId, kind: this.state.draft.kind },
+      draft,
       phase: this.state.phase === 'saved' ? 'idle' : this.state.phase,
     });
+  }
+  private preserveLaterEdits(merged: ProfileValues, draft: ProfileValues): ProfileValues {
+    const edits = this.laterEdits;
+    return {
+      ...merged,
+      ...(edits.displayName !== undefined ? { displayName: draft.displayName } : {}),
+      ...(edits.biography !== undefined ? { biography: draft.biography } : {}),
+      ...(edits.avatar !== undefined ? { avatar: draft.avatar } : {}),
+      ...(edits.links !== undefined ? { links: draft.links } : {}),
+      publicViews: { ...merged.publicViews, ...edits.publicViews },
+      ...(edits.speakersListed !== undefined ? { speakersListed: draft.speakersListed } : {}),
+    };
   }
   review() {
     if (!this.current() || this.state.readAuthority !== 'allowed') return;
@@ -213,6 +243,7 @@ export class ProfileEditor {
     const patch = profileChanges(known, after);
     if (!Object.keys(patch).length) return;
     const next = frozen(structuredClone({ before: known, after, patch, scope, idempotencyKey: crypto.randomUUID() }));
+    this.laterEdits = {};
     this.update({ attempt: next, scope });
     await this.send(false);
   }
@@ -284,7 +315,10 @@ export class ProfileEditor {
       // Compare only the command's fields: unrelated current changes must not invalidate confirmation.
       const confirmed =
         Object.keys(profileChanges(current, rebaseProfile(attempt.before, attempt.after, current))).length === 0;
-      const nextDraft = rebaseProfile(confirmed ? attempt.after : attempt.before, draft, current);
+      const nextDraft = this.preserveLaterEdits(
+        rebaseProfile(confirmed ? attempt.after : attempt.before, draft, current),
+        draft,
+      );
       const resolved = acknowledged || confirmed;
       this.update({
         known: current,
@@ -300,7 +334,7 @@ export class ProfileEditor {
         readStatus: undefined,
       });
     } else {
-      const nextDraft = known ? rebaseProfile(known, draft, current) : current;
+      const nextDraft = this.preserveLaterEdits(known ? rebaseProfile(known, draft, current) : current, draft);
       this.update({
         known: current,
         draft: nextDraft,
@@ -310,10 +344,12 @@ export class ProfileEditor {
         readStatus: undefined,
       });
     }
+    if (!this.state.attempt) this.laterEdits = {};
     if (this.current() && this.state.readAuthority === 'allowed') this.io.confirmed?.(current);
   }
   async reload() {
     if (!this.current() || this.pending || ['saving', 'reloading'].includes(this.state.phase)) return;
+    if (!this.state.attempt) this.laterEdits = {};
     this.pending = true;
     this.update({ phase: 'reloading', readStatus: 'checking', failure: undefined });
     const version = this.readVersion;
