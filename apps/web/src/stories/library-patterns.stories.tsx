@@ -59,7 +59,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The real current personal Library composition in PatternStory, through the installed recorded HTTP transport. Selection and state destinations use production components. Layout specimens live under Entry layouts. Filter navigation is exercised on Pages/Library/Entries. All authored outcomes are UNRUN; these illustrative inputs establish no native or visual proof.',
+          'The real current personal Library composition in PatternStory, through the installed recorded HTTP transport. Selection and state destinations use production components. Layout specimens live under Entry layouts. Filter navigation is exercised on Pages/Library/Entries. Review these same states, including long titles, with the global phone390 and desktop1280 viewport controls. All authored outcomes are UNRUN; these illustrative inputs establish no native or visual proof.',
       },
     },
   },
@@ -86,6 +86,8 @@ const meta = {
     globalThis.fetch = transport;
     return () => {
       if (globalThis.fetch === transport) globalThis.fetch = previous;
+      setContinueStorySize(6);
+      setLibraryNavigationStoryState({});
     };
   },
 } satisfies Meta;
@@ -142,6 +144,9 @@ export const TrackedEntries: Story = {
   render: () => renderPattern(),
   play: async ({ canvasElement }) => {
     const { canvas } = await ready(canvasElement);
+    const titles = sourceEntries().map((entry) => displayLibraryTitle(entry.subject.label, getLocale()).text);
+    const subjectLinks = canvas.getAllByRole('link').filter((link) => titles.includes(link.textContent ?? ''));
+    expect(subjectLinks.map((link) => link.textContent)).toEqual(titles);
     for (const entry of sourceEntries()) {
       const title = displayLibraryTitle(entry.subject.label, getLocale()).text;
       await expect(canvas.getByRole('link', { name: title })).toHaveAttribute(

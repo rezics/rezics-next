@@ -63,7 +63,7 @@ export const StateFilterCleared: Story = {
     await userEvent.click(clear);
     await expect(await canvas.findByRole('heading', { name: m.library_tracked_entries() })).toBeVisible();
     expect(canvas.queryByRole('link', { name: m.library_clear_state() })).toBeNull();
-    const layout = within(canvas.getByRole('group', { name: m.library_layout() }));
+    const layout = within(await canvas.findByRole('group', { name: m.library_layout() }));
     await expect(layout.getByRole('button', { name: m.library_layout_list() })).toHaveAttribute('aria-pressed', 'true');
   },
 };
