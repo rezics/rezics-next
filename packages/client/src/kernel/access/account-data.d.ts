@@ -4,6 +4,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { KeyRing } from '../tokens/seal.ts';
 import accountRead from './account-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
+import { type AccessWorkAccounting } from './work.ts';
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 type AccountRow = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;
 /** Private authoritative row, including lifecycle's fenced flag; never a public profile. */
@@ -76,7 +77,7 @@ export declare function readPublicAccountByAgent(client: Pool, subjectId: string
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
  * Trusted Auth composition must return unavailable for a fenced account before establishing a session.
  */
-export declare function readAccount(client: Queryable, route: number, accountId: string): Promise<Account | null>;
+export declare function readAccount(client: Queryable, route: number, accountId: string, work?: AccessWorkAccounting): Promise<Account | null>;
 /** Public allowlist; pending rows are hidden and deleted rows disclose only an identity tombstone. */
 export declare function readPublicAccount(client: Queryable, route: number, accountId: string): Promise<PublicAccount | null>;
 /** Public, bounded batch projection; callers pass request-ordered route and account ID arrays. */

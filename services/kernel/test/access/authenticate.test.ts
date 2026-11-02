@@ -7,6 +7,7 @@ import { AccessUnavailableError, createAccess, createResourcePublicEligibility }
 import { readAccount } from '../../src/access/account-data.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { accessCheck, actorOf, AuthenticationError, type ActionCatalogue } from '../../src/request/access.ts';
+import { PROBLEMS, ProblemError } from '../../src/http/problem.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
@@ -318,7 +319,13 @@ test('forged expired revoked and wrong-audience sessions fail closed', async () 
   );
   const suspendedBearer = await signed({ sub: suspendedId });
   await suspendAccount(pool, suspendedId);
-  await invalid(access.authenticate(suspendedBearer, context()));
+  const suspendedError = await access.authenticate(suspendedBearer, context()).then(
+    () => null,
+    (error: unknown) => error,
+  );
+  expect(suspendedError).toBeInstanceOf(ProblemError);
+  expect(suspendedError).toMatchObject({ code: 'account_suspended' });
+  expect(PROBLEMS.account_suspended.status).toBe(403);
   await pool.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE route=$1 AND account_id=$2', [
     routeOf(robot),
     robot,
