@@ -1782,6 +1782,8 @@
   "rating_question_revision": "Révision {revision}",
   "rating_import_licence": "Licence : {licence}",
   "rating_import_attribution": "Attribution : {attribution}",
+  "buyer_entitlements_address_invalid": "L’adresse enregistrée de cette page d’avantages achetés est invalide ou trop longue. Ouvrez la première page pour continuer.",
+  "buyer_entitlements_address_first_page": "Ouvrir la première page",
   "entitlements_heading": "Accès achetés",
   "entitlements_detail_heading": "Enregistrement d’accès",
   "entitlements_intro": "Consultez ici l’état actuel de vos accès achetés. L’historique des paiements et votre bibliothèque ont des rôles distincts.",

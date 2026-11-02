@@ -1782,6 +1782,8 @@
   "rating_question_revision": "Revision {revision}",
   "rating_import_licence": "Lizenz: {licence}",
   "rating_import_attribution": "Namensnennung: {attribution}",
+  "buyer_entitlements_address_invalid": "Die gespeicherte Adresse dieser gekauften Vorteile ist ungültig oder zu lang. Öffnen Sie die erste Seite, um fortzufahren.",
+  "buyer_entitlements_address_first_page": "Erste Seite öffnen",
   "entitlements_heading": "Gekaufte Zugangsrechte",
   "entitlements_detail_heading": "Zugangsdatensatz",
   "entitlements_intro": "Hier kannst du den aktuellen Stand deiner gekauften Zugangsrechte einsehen. Zahlungsverlauf und Bibliothek erfüllen andere Zwecke.",

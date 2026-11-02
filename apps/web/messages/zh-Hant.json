@@ -1782,6 +1782,8 @@
   "rating_question_revision": "修訂版 {revision}",
   "rating_import_licence": "授權條款：{licence}",
   "rating_import_attribution": "姓名標示：{attribution}",
+  "buyer_entitlements_address_invalid": "這個已儲存的已購權益頁面地址無效或過長，無法使用。請開啟第一頁繼續。",
+  "buyer_entitlements_address_first_page": "開啟第一頁",
   "entitlements_heading": "購買的存取權",
   "entitlements_detail_heading": "存取權紀錄",
   "entitlements_intro": "在此查看目前購買的存取權紀錄。付款紀錄與個人書庫各有不同用途。",

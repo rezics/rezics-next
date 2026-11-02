@@ -1782,6 +1782,8 @@
   "rating_question_revision": "改訂 {revision}",
   "rating_import_licence": "ライセンス：{licence}",
   "rating_import_attribution": "帰属表示：{attribution}",
+  "buyer_entitlements_address_invalid": "保存された購入特典ページのアドレスが無効か長すぎるため使用できません。最初のページを開いて続けてください。",
+  "buyer_entitlements_address_first_page": "最初のページを開く",
   "entitlements_heading": "購入したアクセス権",
   "entitlements_detail_heading": "アクセス権の記録",
   "entitlements_intro": "購入したアクセス権の現在の記録を確認できます。支払い履歴とライブラリは、それぞれ用途が異なります。",

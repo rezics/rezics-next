@@ -1782,6 +1782,8 @@
   "rating_question_revision": "Revisión {revision}",
   "rating_import_licence": "Licencia: {licence}",
   "rating_import_attribution": "Atribución: {attribution}",
+  "buyer_entitlements_address_invalid": "La dirección guardada de esta página de beneficios adquiridos no es válida o es demasiado larga. Abre la primera página para continuar.",
+  "buyer_entitlements_address_first_page": "Abrir la primera página",
   "entitlements_heading": "Accesos comprados",
   "entitlements_detail_heading": "Registro de acceso",
   "entitlements_intro": "Consulta aquí el estado actual de tus accesos comprados. El historial de pagos y tu biblioteca tienen funciones distintas.",

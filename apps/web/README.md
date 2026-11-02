@@ -356,6 +356,8 @@ URL positions; each list consumes only its own opaque cursor, retries that exact
 position on restart. Optional malformed return positions are ignored. These positions never authorize use or
 alter the original credentials of an enrolled mutation.
 Malformed order-list positions offer an explicit first-page link before any order read, preserving only a valid entitlements return position.
+Malformed owned-benefit list addresses stop before a private read and offer a first-page repair while preserving a valid
+orders return position.
 After hydration, the shell reads session presence, lifetime and CSRF token once through the private browser session query,
 without refreshing tokens or contacting Auth. The root and public home, Space and board renders do not read session or preference cookies. Missing, invalid, expired or unreadable sessions render as signed
 out without changing the cookie. Media requests, checkout start and order reads resolve before calling the kernel, so

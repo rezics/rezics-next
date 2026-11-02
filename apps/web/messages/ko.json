@@ -1782,6 +1782,8 @@
   "rating_question_revision": "개정 {revision}",
   "rating_import_licence": "라이선스: {licence}",
   "rating_import_attribution": "저작자 표시: {attribution}",
+  "buyer_entitlements_address_invalid": "저장된 구매 혜택 페이지 주소가 올바르지 않거나 너무 길어 사용할 수 없습니다. 첫 페이지를 열어 계속하세요.",
+  "buyer_entitlements_address_first_page": "첫 페이지 열기",
   "entitlements_heading": "구매한 접근 권한",
   "entitlements_detail_heading": "접근 권한 기록",
   "entitlements_intro": "구매한 접근 권한의 현재 기록을 확인하세요. 결제 내역과 라이브러리는 각각 용도가 다릅니다.",

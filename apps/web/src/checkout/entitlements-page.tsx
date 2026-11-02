@@ -9,6 +9,7 @@ import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { BuyerEntitlement, BuyerEntitlementsPage, EntitlementsRead } from './entitlements';
+import { entitlementHistoryRepairHref } from './entitlement-history-address';
 import { subjectCover } from './subject-cover';
 import { capturedBenefit } from './benefit';
 
@@ -25,6 +26,40 @@ export function EntitlementTime({ value, locale }: { value: string; locale: stri
     <time dateTime={value}>
       {new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeStyle: 'short' }).format(new Date(value))}
     </time>
+  );
+}
+
+export function EntitlementsAddressRecovery({
+  locale,
+  history = {},
+}: {
+  locale: string;
+  history?: PurchaseHistoryPosition | undefined;
+}) {
+  return (
+    <section className="max-w-4xl min-w-0 space-y-6" aria-labelledby="entitlements-heading">
+      <header className="space-y-3">
+        <PageHeading id="entitlements-heading">{m.entitlements_heading()}</PageHeading>
+        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.entitlements_intro()}</p>
+        <a
+          href={purchaseHistoryHref(locale, 'orders', history)}
+          className={buttonVariants({ variant: 'link', className: 'min-h-11 px-0' })}
+        >
+          {m.entitlements_orders()}
+        </a>
+      </header>
+      <Alert role="alert">
+        <AlertDescription className="space-y-4">
+          <p>{m.buyer_entitlements_address_invalid()}</p>
+          <a
+            href={entitlementHistoryRepairHref(locale, history)}
+            className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+          >
+            {m.buyer_entitlements_address_first_page()}
+          </a>
+        </AlertDescription>
+      </Alert>
+    </section>
   );
 }
 

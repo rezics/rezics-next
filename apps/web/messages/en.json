@@ -1810,6 +1810,8 @@
   "rating_question_revision": "Revision {revision}",
   "rating_import_licence": "Licence: {licence}",
   "rating_import_attribution": "Attribution: {attribution}",
+  "buyer_entitlements_address_invalid": "This saved owned-benefits address is invalid or too long to use. Open the first page to continue.",
+  "buyer_entitlements_address_first_page": "Open first page",
   "entitlements_heading": "Purchased access",
   "entitlements_detail_heading": "Access record",
   "entitlements_intro": "Inspect current purchased-access records here. Payment history and your Library serve different purposes.",

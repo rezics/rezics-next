@@ -1782,6 +1782,8 @@
   "rating_question_revision": "修订版 {revision}",
   "rating_import_licence": "许可协议：{licence}",
   "rating_import_attribution": "署名：{attribution}",
+  "buyer_entitlements_address_invalid": "此已保存的已购权益页面地址无效或过长，无法使用。请打开第一页继续。",
+  "buyer_entitlements_address_first_page": "打开第一页",
   "entitlements_heading": "购买的访问权",
   "entitlements_detail_heading": "访问权记录",
   "entitlements_intro": "在此查看当前购买的访问权记录。付款记录与个人书库各有不同用途。",
