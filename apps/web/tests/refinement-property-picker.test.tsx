@@ -3,7 +3,9 @@ import { dirname } from 'node:path';
 import { act, type ComponentProps } from 'react';
 import type { RequestedFacet } from '../src/search/refinement/request';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://search.test/en/search' });
 const globals = {
   window,
@@ -99,8 +101,12 @@ test('finds and selects a roster property locally by name or exact ID while pres
     expect(reads).toEqual([[{ property: properties[8]!.property, size: 10 }]]);
     expect(navigations).toEqual([]);
     expect([...host.querySelectorAll('fieldset')]).toHaveLength(8);
-    expect(host.querySelector(`input[type="hidden"][name="f.${properties[0]!.property}"][value="value-0"]`)).not.toBeNull();
-    expect(host.querySelector(`input[type="hidden"][name="f.${properties[7]!.property}"][value="value-7"]`)).not.toBeNull();
+    expect(
+      host.querySelector(`input[type="hidden"][name="f.${properties[0]!.property}"][value="value-0"]`),
+    ).not.toBeNull();
+    expect(
+      host.querySelector(`input[type="hidden"][name="f.${properties[7]!.property}"][value="value-7"]`),
+    ).not.toBeNull();
     expect([...select.options].filter((option) => option.value)).toHaveLength(10);
   } finally {
     if (root) await act(async () => root!.unmount());
