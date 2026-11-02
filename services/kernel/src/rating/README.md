@@ -362,12 +362,40 @@ population or shelf membership. This internal helper adds no HTTP endpoint or sc
 
 ### Subject redirect resolution
 
-The adding segment page reads the latest redirect for its original target with one indexed lookup. It does not walk
-historical chains. A redirect resolves only to a visible terminal with no redirect of its own. Rating checks
-Semantic's `identityEpochStore.readEpoch(tx, home)` for the source and terminal homes in the same serializable voter
-command; partition zero is topology compatibility and is never used as a global lock. A pending or unavailable epoch,
-a redirecting target, or an inactive target leaves the page pending. A released mapping observation never authorizes
-vote effects.
+The existing adding segment resolver performs one indexed redirect lookup and reads source and terminal
+home epoch states in the voter command. These home states describe availability; they do not prove an exact
+original-to-terminal mapping or authorize identity repair. Released `readMapping/readMappings(Pool)` observations
+also provide no authority for vote effects.
+
+### Identity repair
+
+`createRatingIdentityRepairCommands` exposes explicit admission, selection, commit and cancellation steps to the
+controller. The controller owns process reconciliation and replacement. Rating retains one active work frame per
+voter with a monotonically increasing generation; replacement must match that generation and cannot replace active
+work. Each selected page is durable and immutable, binds its original vote revisions, counted identities and cursor
+in a digest, and visits at most 64 votes through the admission's finite upper key. A separate empty terminal page
+proves completion. The same native voter transaction writes counted vote changes, outbox events, a page receipt and
+the checkpoint. Receipt replay recovers a lost response without repeating effects. Changed selected votes invalidate
+that selection without advancing its checkpoint. Existing account, authentication-epoch and `rating:vote` scope
+checks apply before all work and receipt replay. Original vote keys, units (including explicit clears), timestamps
+and revisions are retained; only counted identities and their ordered effect revisions change. A terminal's own
+vote, including a clear, takes precedence over redirected originals; otherwise the latest original wins, with the
+existing original-ID tie break.
+
+Decision: cancellation stops eligible repair without changing votes; ineligible cancellation starts bounded local
+withdrawal pages, and repeated cancellation preserves the withdrawal checkpoint.
+
+The missing Semantic producer contract is `RatingIdentityProducer.hold/complete`: in the actual authorized voter
+`CommandTransaction`, hold exact original-to-visible-terminal mappings and their epochs against concurrent changes,
+including rollback and repoint, then atomically hand a retained Rating repair obligation to the native page receipt.
+That obligation must cover later identity changes and concurrent vote creation beyond the captured upper key; it
+must remain held until Rating's effects and checkpoint commit, including the empty terminal page. Home state reads
+and released observations cannot implement this contract. Production composition therefore returns pending with
+`semantic-exact-currentness-and-held-repair-obligation-unavailable`; pending or unavailable producer observations
+never advance work. The port is service configuration, not caller input, and supplies no authorization. A failed
+obligation handoff rolls back the entire page. Withdrawal uses local counted identities and requires no mapping
+observation. Repair has finite page, selection-byte, membership and event bounds, with no runtime funding, prepaid
+quotes, no-refill rule or foreign-price availability gate.
 
 ## Voter Realm membership
 

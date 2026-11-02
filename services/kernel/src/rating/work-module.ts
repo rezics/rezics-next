@@ -8,6 +8,9 @@ import { registerRatingSegmentWork } from './segment-job.ts';
 import { createVoterRealmsEffect } from './voter-realms.ts';
 import { registerRatingSubjectMergeWork } from './merge-job.ts';
 
+// Controller composition invokes bounded repair steps; no second repair workflow owns replacements.
+export { createRatingIdentityRepairCommands } from './identity-repair.ts';
+
 export const RATING_COUNTER_SECRET_ENV = 'KERNEL_RATING_COUNTER_SECRET';
 
 function counterSecret(value: string | undefined): Uint8Array {
