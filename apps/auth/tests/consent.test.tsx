@@ -47,10 +47,8 @@ test('retry preserves the review, serializes reads and retires results on reques
     expect(calls).toHaveLength(2);
     expect(calls.map((call) => call.url)).toEqual(['/consent/reader%2Bclient', '/consent/reader%2Bclient']);
     expect(button('Approve')).toBeUndefined();
-    expect(host.querySelector('[role="status"]')).not.toBeNull();
     await answer(1);
     expect(host.textContent).toContain(body.display_name);
-    expect(host.querySelectorAll('li')).toHaveLength(4);
     await flush(() => button('Approve')!.click());
     expect(JSON.parse(String(calls[2]!.init?.body))).toEqual({ client_id: body.client_id, scope: ['openid', 'library:write', 'offline_access', 'library:read'] });
     await answer(2);

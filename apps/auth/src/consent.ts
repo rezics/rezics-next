@@ -63,7 +63,7 @@ export async function readConsent(clientId: string, signal?: AbortSignal): Promi
       credentials: 'same-origin',
       redirect: 'error',
       cache: 'no-store',
-      signal,
+      signal: signal ?? null,
     });
     const body: unknown = await response.json().catch(() => null);
     if (response.status === 200) {
