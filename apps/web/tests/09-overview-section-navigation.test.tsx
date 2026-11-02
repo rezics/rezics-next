@@ -183,7 +183,8 @@ test('Overview previews keep bounded native rows, truthful counts and independen
       }) as HTMLAnchorElement;
       assertAction(retry);
       expect(retry.getAttribute('href')).toBe('');
-      expect(retry.href).toBe(window.location.href);
+      // Empty-relative reloads keep the current query and omit the fragment, as before.
+      expect(retry.href).toBe('https://site.test/fr/subjects/book/overview?realm=selected');
       expect(retry.getAttribute('aria-describedby')).toBe(`${id}-title ${id}-status`);
       expect(within(failed).getByRole('status').id).toBe(`${id}-status`);
       retry.focus();
