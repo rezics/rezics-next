@@ -21,7 +21,9 @@ test('preserves missing telemetry when aggregating growth repetitions', () => {
   expect(absentBytes).not.toHaveProperty('requestBytes');
   expect(absentBytes).not.toHaveProperty('responseBytes');
   expect(medianCost([cost({ requestBytes: 0 }), cost({ requestBytes: 8 })])).toHaveProperty('requestBytes', 0);
-  expect(() => medianCost([cost({ requestBytes: 8 }), cost()])).toThrow(/requestBytes.*present in repetitions 0.*missing in repetitions 1/);
+  expect(() => medianCost([cost({ requestBytes: 8 }), cost()])).toThrow(
+    /requestBytes.*present in repetitions 0.*missing in repetitions 1/,
+  );
 
   const noExecution = cost({ statements: 0 });
   expect(medianCost([cost({ requestBytes: 8 }), noExecution])).toHaveProperty('requestBytes', 0);

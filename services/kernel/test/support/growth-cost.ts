@@ -676,11 +676,7 @@ type OptionalCostField =
   | 'backgroundBlocks'
   | 'backgroundCosts';
 
-function hasConsistentCoverage(
-  costs: readonly Cost[],
-  field: OptionalCostField,
-  indexes: readonly number[],
-): boolean {
+function hasConsistentCoverage(costs: readonly Cost[], field: OptionalCostField, indexes: readonly number[]): boolean {
   if (indexes.length === 0) return false;
   const present = indexes.filter((index) => costs[index]![field] !== undefined);
   if (present.length !== 0 && present.length !== indexes.length) {
@@ -760,12 +756,13 @@ export function medianCost(costs: readonly Cost[]): Cost {
   costs.forEach(validateCostEvidence);
   const allIndexes = costs.map((_, index) => index);
   const foregroundWork = allIndexes.filter(
-    (index) =>
-      costs[index]!.statements + costs[index]!.controlStatements + costs[index]!.catalogStatements > 0,
+    (index) => costs[index]!.statements + costs[index]!.controlStatements + costs[index]!.catalogStatements > 0,
   );
-  const requestBytesAvailable = hasConsistentCoverage(costs, 'requestBytes', foregroundWork) ||
+  const requestBytesAvailable =
+    hasConsistentCoverage(costs, 'requestBytes', foregroundWork) ||
     (foregroundWork.length === 0 && anyCoverage(costs, 'requestBytes'));
-  const responseBytesAvailable = hasConsistentCoverage(costs, 'responseBytes', foregroundWork) ||
+  const responseBytesAvailable =
+    hasConsistentCoverage(costs, 'responseBytes', foregroundWork) ||
     (foregroundWork.length === 0 && anyCoverage(costs, 'responseBytes'));
 
   const backgroundFields: OptionalCostField[] = [
@@ -786,19 +783,24 @@ export function medianCost(costs: readonly Cost[]): Cost {
   const backgroundWork = backgroundStatementsAvailable
     ? allIndexes.filter((index) => costs[index]!.backgroundStatements! > 0)
     : [];
-  const backgroundRequestBytesAvailable = backgroundStatementsAvailable &&
+  const backgroundRequestBytesAvailable =
+    backgroundStatementsAvailable &&
     (hasConsistentCoverage(costs, 'backgroundRequestBytes', backgroundWork) ||
       (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundRequestBytes')));
-  const backgroundResponseBytesAvailable = backgroundStatementsAvailable &&
+  const backgroundResponseBytesAvailable =
+    backgroundStatementsAvailable &&
     (hasConsistentCoverage(costs, 'backgroundResponseBytes', backgroundWork) ||
       (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundResponseBytes')));
-  const backgroundRowsAvailable = backgroundStatementsAvailable &&
+  const backgroundRowsAvailable =
+    backgroundStatementsAvailable &&
     (hasConsistentCoverage(costs, 'backgroundRows', backgroundWork) ||
       (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundRows')));
-  const backgroundBlocksAvailable = backgroundStatementsAvailable &&
+  const backgroundBlocksAvailable =
+    backgroundStatementsAvailable &&
     (hasConsistentCoverage(costs, 'backgroundBlocks', backgroundWork) ||
       (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundBlocks')));
-  const backgroundCostsAvailable = backgroundStatementsAvailable &&
+  const backgroundCostsAvailable =
+    backgroundStatementsAvailable &&
     (hasConsistentCoverage(costs, 'backgroundCosts', backgroundWork) ||
       (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundCosts')));
 
@@ -808,12 +810,8 @@ export function medianCost(costs: readonly Cost[]): Cost {
 
   const median = {
     statements: lowerMedian(costs.map((cost) => cost.statements)),
-    ...(requestBytesAvailable
-      ? { requestBytes: lowerMedian(costs.map((cost) => cost.requestBytes ?? 0)) }
-      : {}),
-    ...(responseBytesAvailable
-      ? { responseBytes: lowerMedian(costs.map((cost) => cost.responseBytes ?? 0)) }
-      : {}),
+    ...(requestBytesAvailable ? { requestBytes: lowerMedian(costs.map((cost) => cost.requestBytes ?? 0)) } : {}),
+    ...(responseBytesAvailable ? { responseBytes: lowerMedian(costs.map((cost) => cost.responseBytes ?? 0)) } : {}),
     controlStatements: lowerMedian(costs.map((cost) => cost.controlStatements)),
     catalogStatements: lowerMedian(costs.map((cost) => cost.catalogStatements)),
     plans: lowerMedian(costs.map((cost) => cost.plans)),
@@ -846,16 +844,18 @@ export function medianCost(costs: readonly Cost[]): Cost {
             ? { backgroundBlocks: lowerMedian(costs.map((cost) => cost.backgroundBlocks ?? 0)) }
             : {}),
           ...(backgroundCostsAvailable
-            ? { backgroundCosts: Object.fromEntries(
-            [...new Set(costs.flatMap((cost) => Object.keys(cost.backgroundCosts ?? {})))].map((statement) => [
-              statement,
-              {
-                rows: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.rows ?? 0)),
-                blocks: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.blocks ?? 0)),
-                bounded: costs.some((cost) => cost.backgroundCosts?.[statement]?.bounded ?? false),
-              },
-            ]),
-          ) }
+            ? {
+                backgroundCosts: Object.fromEntries(
+                  [...new Set(costs.flatMap((cost) => Object.keys(cost.backgroundCosts ?? {})))].map((statement) => [
+                    statement,
+                    {
+                      rows: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.rows ?? 0)),
+                      blocks: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.blocks ?? 0)),
+                      bounded: costs.some((cost) => cost.backgroundCosts?.[statement]?.bounded ?? false),
+                    },
+                  ]),
+                ),
+              }
             : {}),
         }
       : {}),
