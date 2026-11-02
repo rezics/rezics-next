@@ -52,7 +52,7 @@ test('Work Parts orients only current keyboard openings, closes independent draf
     });
   const until = async (predicate: () => boolean) => {
     for (let attempt = 0; attempt < 100 && !predicate(); attempt++)
-      await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 5)));
     expect(predicate()).toBe(true);
   };
 
@@ -191,8 +191,11 @@ test('Work Parts orients only current keyboard openings, closes independent draf
 
     for (const title of ['Volume Two', 'The Traveller']) {
       const picker = host.querySelector<HTMLInputElement>(`input[aria-label="${m.work_parts_pick()}"]`)!;
+      await act(async () => picker.focus());
       await input(picker, title);
-      await until(() => !!window.document.querySelector('[role="option"]'));
+      await until(() =>
+        [...window.document.querySelectorAll('[role="option"]')].some((item) => item.textContent?.includes(title)),
+      );
       const option = [...window.document.querySelectorAll<HTMLElement>('[role="option"]')].find((item) =>
         item.textContent?.includes(title),
       )!;
