@@ -1,4 +1,4 @@
-import { useContext, useLayoutEffect, useRef, useState } from 'react';
+import { useContext, useLayoutEffect, useRef, useState, type Ref } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnonymousSessionContext, sessionQuery, useSession } from '../../session/query';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -7,6 +7,7 @@ import { isLocale } from '../../paraglide/runtime.js';
 import { useListReaderAdmission, type ListReaderSession } from './list-reader-admission';
 import { createConfiguredListRetryController } from './configured-list-retry';
 import { configuredListRetryWaiting } from './configured-list-retry-admission';
+import { useConfiguredListRetryFocus } from './configured-list-retry-focus';
 import { hasSelectedRealmTarget, typeListTargetFromPage } from './type-list-model';
 import { typeListQuery, type TypeListAdmissionInput, type TypeListQueryResult } from './type-list-query';
 import type { TypeListTarget } from './type-list-model';
@@ -16,6 +17,7 @@ import { PageData } from './data';
 import { TypeList } from './type-list';
 import { subjectPageMessages } from './route-support';
 import { useSearchRetryWait } from '../../search/search-recovery-retry';
+import { pageText } from './shared';
 
 type ConfiguredListProps = {
   list: string;
@@ -143,6 +145,8 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
   const sessionIdentity = healthySession(currentSession)
     ? JSON.stringify([currentSession.state, currentSession.subject ?? null, currentSession.csrfToken])
     : null;
+  const focusReader = useRef<string | null>(null);
+  if (sessionIdentity) focusReader.current = sessionIdentity;
   const retryOwner = selectedRealm
     ? {
         routeKey: routeIdentity,
@@ -243,31 +247,10 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
     }
   }
 
-  const messages = listMessageOptions(locale);
-  const recovery = (unavailable: boolean) => (
-    <div className="mx-auto max-w-5xl space-y-3" aria-busy={!unavailable}>
-      <p role="status">
-        {unavailable
-          ? m.configured_list_recovery_unavailable({}, messages)
-          : m.configured_list_recovery_pending({}, messages)}
-      </p>
-      {unavailable ? (
-        <Button variant="outline" disabled={retrying || retryWaiting} onClick={() => void retry()}>
-          {m.configured_list_recovery_retry({}, messages)}
-        </Button>
-      ) : null}
-    </div>
-  );
-
-  if (selectedRealm && state === 'unavailable') return recovery(true);
-  if (selectedRealm && (state === 'unknown' || !reader.current(incarnation))) return recovery(false);
-  if (query.isError) return recovery(true);
   const result = queryResult;
-  if (!result) return recovery(false);
-  if (result.kind !== 'ready') return recovery(true);
-  const request = result.admission.request;
   const isCurrentResult =
-    isCurrentRequest(request) &&
+    result?.kind === 'ready' &&
+    isCurrentRequest(result.admission.request) &&
     (!selectedRealm || state !== 'unavailable') &&
     result.node === list &&
     JSON.stringify(result.target) === JSON.stringify(target) &&
@@ -277,7 +260,59 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
         ? mode === 'initial-hydration' && !query.isFetchedAfterMount
         : result.admission.reader === expectedReader
       : result.admission.reader === null);
-  if (!isCurrentResult) return recovery(true);
+  const focusOutcome =
+    selectedRealm && state === 'unavailable'
+      ? 'unavailable'
+      : selectedRealm && (state === 'unknown' || !reader.current(incarnation))
+        ? 'pending'
+        : query.isError
+          ? 'unavailable'
+          : !result
+            ? 'pending'
+            : isCurrentResult
+              ? 'ready'
+              : 'unavailable';
+  const focus = useConfiguredListRetryFocus(
+    {
+      route: routeIdentity,
+      reader: selectedRealm ? (focusReader.current ?? 'unknown') : 'public',
+      queryClient,
+      incarnation,
+      isCurrent: () => !selectedRealm || reader.current(incarnation),
+    },
+    focusOutcome,
+    retrying,
+  );
+
+  const messages = listMessageOptions(locale);
+  const recovery = (unavailable: boolean) => (
+    <div className="mx-auto max-w-5xl space-y-3" aria-busy={!unavailable}>
+      <p ref={focus.statusRef} role="status" tabIndex={-1}>
+        {unavailable
+          ? m.configured_list_recovery_unavailable({}, messages)
+          : m.configured_list_recovery_pending({}, messages)}
+      </p>
+      {unavailable ? (
+        <Button
+          ref={focus.retryRef}
+          variant="outline"
+          disabled={retrying || retryWaiting}
+          onClick={(event) => {
+            focus.noteActivation(event.currentTarget);
+            void retry();
+          }}
+        >
+          {m.configured_list_recovery_retry({}, messages)}
+        </Button>
+      ) : null}
+    </div>
+  );
+
+  if (selectedRealm && state === 'unavailable') return recovery(true);
+  if (selectedRealm && (state === 'unknown' || !reader.current(incarnation))) return recovery(false);
+  if (query.isError) return recovery(true);
+  if (!result) return recovery(false);
+  if (result.kind !== 'ready' || !isCurrentResult) return recovery(true);
   return (
     <TypeListPage
       page={result.page}
@@ -285,6 +320,7 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
       node={result.node}
       {...(cursor !== undefined ? { cursor } : {})}
       locale={locale}
+      focusRef={focus.resultRef}
     />
   );
 }
@@ -295,17 +331,27 @@ export function TypeListPage({
   node,
   cursor,
   locale,
+  focusRef,
 }: {
   page: SubjectPageData;
   target: TypeListTarget;
   node: string;
   cursor?: string;
   locale: string;
+  focusRef: Ref<HTMLElement>;
 }) {
   const list = findTypeList(page.document, node);
   if (!list) return null;
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div
+      ref={focusRef}
+      role="region"
+      aria-label={
+        pageText(list.props.title, locale).text || m.configured_list_recovery_pending({}, listMessageOptions(locale))
+      }
+      tabIndex={-1}
+      className="mx-auto max-w-5xl space-y-6"
+    >
       <PageData
         locale={locale}
         subject={page.subject}
