@@ -1,6 +1,7 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { pickText } from '@rezics/composition';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -31,7 +32,7 @@ export function StatementConsentLink({
   const query = new URLSearchParams({ property: address.property, candidate: address.candidate, ...address.slot });
   return (
     <a
-      className="underline underline-offset-4"
+      className="inline-flex min-h-11 min-w-11 max-w-full items-center py-2 whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       href={`${subjectHref({ id: address.id, label: label ?? '' }, locale).href}/statement-consent?${query}`}
     >
       {m.statement_consent_entry({}, { locale: locale as never })}
@@ -57,20 +58,22 @@ export function ConsentError({ reason, locale }: { reason: ConsentFailure['reaso
 function PublicResult({ value, locale }: { value: ConsentPublic; locale: string }) {
   const options = { locale: locale as never };
   return (
-    <section aria-label={m.candidate_current({}, options)} className="space-y-2 rounded-lg bg-muted/40 p-4">
-      <h2 className="font-semibold">{m.candidate_current({}, options)}</h2>
-      {value.state === 'present' ? (
-        <>
-          <p>{m.statement_consent_public({}, options)}</p>
-          <CandidateValue snak={value.statement} related={value.related} locale={locale} />
-        </>
-      ) : value.state === 'absent' ? (
-        <p>{m.statement_consent_absent({}, options)}</p>
-      ) : value.state === 'pending' ? (
-        <p>{m.statement_consent_pending({}, options)}</p>
-      ) : (
-        <p role="status">{m.candidate_public_unconfirmed({}, options)}</p>
-      )}
+    <section aria-label={m.candidate_current({}, options)}>
+      <ContentItemFrame as="div" data-consent-part="public" className="flex min-w-0 flex-col gap-3 p-4 sm:p-6">
+        <ContentItemHeading className="text-lg font-semibold">{m.candidate_current({}, options)}</ContentItemHeading>
+        {value.state === 'present' ? (
+          <>
+            <p>{m.statement_consent_public({}, options)}</p>
+            <CandidateValue snak={value.statement} related={value.related} locale={locale} />
+          </>
+        ) : value.state === 'absent' ? (
+          <p>{m.statement_consent_absent({}, options)}</p>
+        ) : value.state === 'pending' ? (
+          <p>{m.statement_consent_pending({}, options)}</p>
+        ) : (
+          <p role="status">{m.candidate_public_unconfirmed({}, options)}</p>
+        )}
+      </ContentItemFrame>
     </section>
   );
 }
@@ -244,155 +247,223 @@ function StatementConsentPageLive({
     }
   }
   return (
-    <article className="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6">
-      <header className="space-y-2">
+    <article
+      lang={locale}
+      className="mx-auto flex min-w-0 w-full max-w-3xl flex-col gap-6 p-4 text-start break-words [overflow-wrap:anywhere] sm:p-6"
+    >
+      <header className="flex min-w-0 flex-col gap-2">
         <h1 className="text-2xl font-semibold">{m.statement_consent_title({}, options)}</h1>
         <p className="text-muted-foreground">{m.statement_consent_intro({}, options)}</p>
-        <a className="underline underline-offset-4" href={subjectHref({ id: address.id, label: '' }, locale).href}>
+        <a
+          className="inline-flex min-h-11 min-w-11 max-w-full items-center py-2 whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          href={subjectHref({ id: address.id, label: '' }, locale).href}
+        >
           {m.sources_back({}, options)}
         </a>
       </header>
-      {busy && <p role="status">{m.candidate_loading({}, options)}</p>}
+      {busy && (
+        <ContentItemFrame as="div" data-consent-part="loading" className="p-4 sm:p-6">
+          <p role="status">{m.candidate_loading({}, options)}</p>
+        </ContentItemFrame>
+      )}
       {!read && !failure && !busy && (
-        <Button onClick={() => void load()}>{m.statement_consent_open({}, options)}</Button>
+        <Button
+          className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          onClick={() => void load()}
+        >
+          {m.statement_consent_open({}, options)}
+        </Button>
       )}
       {(failure || (read && !read.ok)) && (
-        <div className="space-y-3 rounded-lg border border-border p-4">
-          <ConsentError reason={(failure ?? (read && !read.ok ? read : undefined))!.reason} locale={locale} />
-          {uncertain && <p>{m.statement_consent_uncertain({}, options)}</p>}
-          <Button variant="outline" disabled={busy} onClick={() => void (uncertain ? change() : load())}>
-            {uncertain ? m.candidate_retry({}, options) : m.candidate_reload({}, options)}
-          </Button>
-        </div>
+        <section aria-label={uncertain ? m.candidate_retry({}, options) : m.candidate_reload({}, options)}>
+          <ContentItemFrame as="div" data-consent-part="recovery" className="flex min-w-0 flex-col gap-3 p-4 sm:p-6">
+            <ConsentError reason={(failure ?? (read && !read.ok ? read : undefined))!.reason} locale={locale} />
+            {uncertain && <p>{m.statement_consent_uncertain({}, options)}</p>}
+            <Button
+              variant="outline"
+              className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              disabled={busy}
+              onClick={() => void (uncertain ? change() : load())}
+            >
+              {uncertain ? m.candidate_retry({}, options) : m.candidate_reload({}, options)}
+            </Button>
+          </ContentItemFrame>
+        </section>
       )}
       {terminal ? (
-        <p role="status" className="rounded-lg border border-border p-4">
-          {m.statement_consent_terminal({}, options)}
-        </p>
+        <ContentItemFrame as="div" data-consent-part="terminal" className="p-4 sm:p-6">
+          <p role="status">{m.statement_consent_terminal({}, options)}</p>
+        </ContentItemFrame>
       ) : (
         <>
           {current && !candidate && (
-            <div className="space-y-3">
+            <ContentItemFrame as="div" data-consent-part="empty" className="flex min-w-0 flex-col gap-3 p-4 sm:p-6">
               <p>{m.statement_consent_empty({}, options)}</p>
               {current.next && (
-                <Button variant="outline" disabled={busy} onClick={() => void load(current.next!)}>
+                <Button
+                  variant="outline"
+                  className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  disabled={busy}
+                  onClick={() => void load(current.next!)}
+                >
                   {m.candidate_more({}, options)}
                 </Button>
               )}
-            </div>
+            </ContentItemFrame>
           )}
           {candidate && current && (
-            <section className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
-              <h2 className="text-lg font-semibold">
-                {pickText(current.field, locale).text || m.subject_value_unlabelled({}, options)}
-              </h2>
-              {assertionView}
-              {!assertion?.identified && <p>{m.statement_consent_identity_help({}, options)}</p>}
-              <p>
-                {candidate.statement.references.length
-                  ? m.statement_consent_sourced({}, options)
-                  : m.statement_consent_unsourced({}, options)}
-              </p>
-              {!current.disclosure && <p>{m.statement_consent_not_applicable({}, options)}</p>}
-              {attempt && (
-                <>
-                  <p className="text-sm text-muted-foreground">{m.statement_consent_authority({}, options)}</p>
-                  {!confirmation && !uncertain && (
-                    <div className="flex flex-wrap gap-2">
-                      {result?.kind !== 'disclosed' && (
-                        <Button
-                          className="min-h-11"
-                          ref={(node) => {
-                            actionButtons.current.disclose = node;
-                          }}
-                          disabled={busy || reload || !assertion?.identified}
-                          onClick={() => openConfirmation('disclose')}
-                        >
-                          {m.statement_consent_share({}, options)}
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        className="min-h-11"
-                        ref={(node) => {
-                          actionButtons.current.retract = node;
-                        }}
-                        disabled={busy || reload || !assertion?.identified}
-                        onClick={() => openConfirmation('retract')}
-                      >
-                        {m.statement_consent_retract({}, options)}
-                      </Button>
-                    </div>
-                  )}
-                  {confirmation && (
-                    <section
-                      aria-labelledby={confirmationId}
-                      className="flex flex-col gap-4 rounded-lg bg-muted/40 p-4"
-                    >
-                      <h3 id={confirmationId} ref={focusConfirmation} tabIndex={-1} className="font-semibold">
-                        {confirmation === 'disclose'
-                          ? m.statement_consent_share({}, options)
-                          : m.statement_consent_retract({}, options)}
-                      </h3>
-                      <p>
-                        {confirmation === 'disclose'
-                          ? m.statement_consent_share_help({}, options)
-                          : m.statement_consent_retract_help({}, options)}
-                      </p>
-                      {assertionView}
-                      <Field orientation="horizontal">
-                        <Checkbox
-                          id={ownershipId}
-                          checked={own}
-                          disabled={busy || uncertain}
-                          onCheckedChange={(checked) =>
-                            lifetime.active() && !running.current && !request.current && setOwn(checked === true)
-                          }
-                        />
-                        <FieldLabel htmlFor={ownershipId}>{m.statement_consent_own({}, options)}</FieldLabel>
-                      </Field>
-                      {!uncertain && (
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            className="min-h-11"
-                            disabled={busy || !own || !assertion?.identified}
-                            onClick={() => void change()}
-                          >
-                            {m.statement_consent_confirm({}, options)}
-                          </Button>
+            <section aria-label={pickText(current.field, locale).text || m.subject_value_unlabelled({}, options)}>
+              <ContentItemFrame
+                as="div"
+                data-consent-part="assertion"
+                className="flex min-w-0 flex-col gap-4 p-4 sm:p-6"
+              >
+                <ContentItemHeading className="text-lg font-semibold">
+                  {pickText(current.field, locale).text || m.subject_value_unlabelled({}, options)}
+                </ContentItemHeading>
+                {assertionView}
+                {!assertion?.identified && <p>{m.statement_consent_identity_help({}, options)}</p>}
+                <p>
+                  {candidate.statement.references.length
+                    ? m.statement_consent_sourced({}, options)
+                    : m.statement_consent_unsourced({}, options)}
+                </p>
+                {!current.disclosure && <p>{m.statement_consent_not_applicable({}, options)}</p>}
+                {attempt && (
+                  <>
+                    <p className="text-sm text-muted-foreground">{m.statement_consent_authority({}, options)}</p>
+                    {!confirmation && !uncertain && (
+                      <div className="flex min-w-0 flex-col items-start gap-3">
+                        <p>{m.statement_consent_share_help({}, options)}</p>
+                        <p>{m.statement_consent_retract_help({}, options)}</p>
+                        <div className="flex min-w-0 flex-wrap gap-2">
+                          {result?.kind !== 'disclosed' && (
+                            <Button
+                              className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                              ref={(node) => {
+                                actionButtons.current.disclose = node;
+                              }}
+                              disabled={busy || reload || !assertion?.identified}
+                              onClick={() => openConfirmation('disclose')}
+                            >
+                              {m.statement_consent_share({}, options)}
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
-                            className="min-h-11"
-                            disabled={busy}
-                            onClick={() => {
-                              if (!lifetime.active() || running.current || request.current) return;
-                              returnFocus.current = confirmation;
-                              setConfirmation(undefined);
-                              setOwn(false);
+                            className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                            ref={(node) => {
+                              actionButtons.current.retract = node;
                             }}
+                            disabled={busy || reload || !assertion?.identified}
+                            onClick={() => openConfirmation('retract')}
                           >
-                            {m.candidate_cancel({}, options)}
+                            {m.statement_consent_retract({}, options)}
                           </Button>
                         </div>
-                      )}
-                    </section>
-                  )}
-                  {(reload || !assertion?.identified) && (
-                    <Button variant="outline" disabled={busy} onClick={() => void load()}>
-                      {m.candidate_reload({}, options)}
-                    </Button>
-                  )}
-                </>
-              )}
+                      </div>
+                    )}
+                    {confirmation && (
+                      <section aria-labelledby={confirmationId}>
+                        <ContentItemFrame
+                          as="div"
+                          data-consent-part="confirmation"
+                          className="flex min-w-0 flex-col gap-4 p-4 sm:p-6"
+                        >
+                          <h3
+                            id={confirmationId}
+                            ref={focusConfirmation}
+                            tabIndex={-1}
+                            className="font-semibold focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+                          >
+                            {confirmation === 'disclose'
+                              ? m.statement_consent_share({}, options)
+                              : m.statement_consent_retract({}, options)}
+                          </h3>
+                          <p>
+                            {confirmation === 'disclose'
+                              ? m.statement_consent_share_help({}, options)
+                              : m.statement_consent_retract_help({}, options)}
+                          </p>
+                          {assertionView}
+                          <Field
+                            orientation="horizontal"
+                            className="min-w-0 items-start focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring"
+                          >
+                            <Checkbox
+                              className="size-11 after:hidden"
+                              id={ownershipId}
+                              checked={own}
+                              disabled={busy || uncertain}
+                              onCheckedChange={(checked) =>
+                                lifetime.active() && !running.current && !request.current && setOwn(checked === true)
+                              }
+                            />
+                            <FieldLabel
+                              className="min-h-11 min-w-0 max-w-full flex-1 py-2 leading-relaxed whitespace-normal [overflow-wrap:anywhere]"
+                              htmlFor={ownershipId}
+                            >
+                              {m.statement_consent_own({}, options)}
+                            </FieldLabel>
+                          </Field>
+                          {!uncertain && (
+                            <div className="flex min-w-0 flex-wrap gap-2">
+                              <Button
+                                className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                disabled={busy || !own || !assertion?.identified}
+                                onClick={() => void change()}
+                              >
+                                {m.statement_consent_confirm({}, options)}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                disabled={busy}
+                                onClick={() => {
+                                  if (!lifetime.active() || running.current || request.current) return;
+                                  returnFocus.current = confirmation;
+                                  setConfirmation(undefined);
+                                  setOwn(false);
+                                }}
+                              >
+                                {m.candidate_cancel({}, options)}
+                              </Button>
+                            </div>
+                          )}
+                        </ContentItemFrame>
+                      </section>
+                    )}
+                    {(reload || !assertion?.identified) && (
+                      <Button
+                        variant="outline"
+                        className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        disabled={busy}
+                        onClick={() => void load()}
+                      >
+                        {m.candidate_reload({}, options)}
+                      </Button>
+                    )}
+                  </>
+                )}
+              </ContentItemFrame>
             </section>
           )}
         </>
       )}
-      {result?.kind === 'disclosed' && <p role="status">{m.statement_consent_shared({}, options)}</p>}
+      {result?.kind === 'disclosed' && (
+        <ContentItemFrame as="div" data-consent-part="shared" className="p-4 sm:p-6">
+          <p role="status">{m.statement_consent_shared({}, options)}</p>
+        </ContentItemFrame>
+      )}
       {publicRead && (
         <>
           <PublicResult value={publicRead} locale={locale} />
-          <Button variant="outline" disabled={busy || uncertain} onClick={() => void refreshPublic()}>
+          <Button
+            variant="outline"
+            className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            disabled={busy || uncertain}
+            onClick={() => void refreshPublic()}
+          >
             {m.statement_consent_refresh_public({}, options)}
           </Button>
         </>

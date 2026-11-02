@@ -8,8 +8,14 @@ import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
-function Example({ scenario = 'private' }: { scenario?: ConsentScenario | 'loading' }) {
-  const locale = getLocale();
+function Example({
+  scenario = 'private',
+  locale: suppliedLocale,
+}: {
+  scenario?: ConsentScenario | 'loading';
+  locale?: string;
+}) {
+  const locale = suppliedLocale ?? getLocale();
   const fixture = useMemo(() => consentFixture(scenario === 'loading' ? 'private' : scenario), [scenario, locale]);
   return (
     <PatternStory visitor="Signed In">
@@ -233,5 +239,84 @@ export const RetractionConfirmation: Story = {
     await expect(within(confirmation).getByRole('button', { name: m.statement_consent_confirm() })).toBeDisabled();
     await userEvent.click(within(confirmation).getByRole('button', { name: m.candidate_cancel() }));
     await expect(canvas.getByRole('button', { name: m.statement_consent_retract() })).toHaveFocus();
+  },
+};
+
+// Independent holders consume the same declared native sample without changing its identities or authority.
+function IndependentPanelsExample() {
+  const locale = getLocale();
+  const first = useMemo(() => consentFixture(), [locale]);
+  const second = useMemo(() => consentFixture(), [locale]);
+  return (
+    <PatternStory visitor="Signed In">
+      <AppShell>
+        <div className="grid min-w-0 gap-6 xl:grid-cols-2">
+          <div data-consent-panel="first">
+            <StatementConsentPage key={locale} address={first.address} locale={locale} transport={first.transport} />
+          </div>
+          <div data-consent-panel="second">
+            <StatementConsentPage key={locale} address={second.address} locale={locale} transport={second.transport} />
+          </div>
+        </div>
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+// Authored UNRUN. These plays exercise actual panels; DOM assertions do not establish target geometry.
+export const IndependentPanels: Story = {
+  render: () => <IndependentPanelsExample />,
+  play: async ({ canvasElement }) => {
+    const first = within(canvasElement.querySelector<HTMLElement>('[data-consent-panel="first"]')!);
+    const second = within(canvasElement.querySelector<HTMLElement>('[data-consent-panel="second"]')!);
+    for (const panel of [first, second]) {
+      await userEvent.click(panel.getByRole('button', { name: m.statement_consent_open() }));
+      await userEvent.click(await panel.findByRole('button', { name: m.statement_consent_share() }));
+    }
+    const firstCheckbox = first.getByRole('checkbox', { name: m.statement_consent_own() });
+    const secondCheckbox = second.getByRole('checkbox', { name: m.statement_consent_own() });
+    await expect(firstCheckbox.id).not.toBe(secondCheckbox.id);
+    await userEvent.click(first.getByText(m.statement_consent_own()));
+    await expect(first.getByRole('button', { name: m.statement_consent_confirm() })).toBeEnabled();
+    await expect(second.getByRole('button', { name: m.statement_consent_confirm() })).toBeDisabled();
+    await expect(secondCheckbox).not.toBeChecked();
+    await userEvent.click(first.getByRole('button', { name: m.candidate_cancel() }));
+    await expect(first.getByRole('button', { name: m.statement_consent_share() })).toHaveFocus();
+    await expect(second.getByRole('region', { name: m.statement_consent_share() })).toBeVisible();
+    await expect(second.getByRole('button', { name: m.statement_consent_confirm() })).toBeDisabled();
+  },
+};
+
+export const LongLocalizedConfirmation: Story = {
+  args: { locale: 'de' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const options = { locale: 'de' as const };
+    await userEvent.click(canvas.getByRole('button', { name: m.statement_consent_open({}, options) }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.statement_consent_retract({}, options) }));
+    const confirmation = canvas.getByRole('region', { name: m.statement_consent_retract({}, options) });
+    await expect(within(confirmation).getByRole('heading', { level: 3 })).toHaveFocus();
+    await expect(within(confirmation).getByText(m.statement_consent_retract_help({}, options))).toBeVisible();
+    await expect(within(confirmation).getByText('River Ink')).toBeVisible();
+    await expect(within(confirmation).getByText('The person behind the name')).toBeVisible();
+    await expect(
+      within(confirmation).getByRole('button', { name: m.statement_consent_confirm({}, options) }),
+    ).toBeDisabled();
+  },
+};
+
+export const LongLocalizedRecovery: Story = {
+  args: { scenario: 'lost-response', locale: 'fr' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const options = { locale: 'fr' as const };
+    await userEvent.click(canvas.getByRole('button', { name: m.statement_consent_open({}, options) }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.statement_consent_share({}, options) }));
+    await userEvent.click(canvas.getByText(m.statement_consent_own({}, options)));
+    await userEvent.click(canvas.getByRole('button', { name: m.statement_consent_confirm({}, options) }));
+    await expect(await canvas.findByText(m.statement_consent_uncertain({}, options))).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.candidate_retry({}, options) })).toBeEnabled();
+    await expect(canvas.getByRole('checkbox')).toHaveAttribute('data-disabled');
+    await expect(canvas.queryByRole('button', { name: m.candidate_cancel({}, options) })).not.toBeInTheDocument();
   },
 };
