@@ -28,7 +28,14 @@ export function homeFeedDestination(item: FeedItem, locale: string): string | un
     case 'thread':
       return threadLocation(locale, destination);
     case 'post':
-      return `${threadLocation(locale, { id: destination.threadId, title: destination.title })}#post-${encodeURIComponent(destination.postId)}`;
+      // A fragment alone only selects posts already on the rendered page.
+      // Let Content locate this post before reading its bounded page.
+      return threadLocation(
+        locale,
+        { id: destination.threadId, title: destination.title },
+        undefined,
+        destination.postId,
+      );
     case 'collection':
       return `/${encodeURIComponent(locale)}/collections/${encodeURIComponent(destination.id)}`;
   }

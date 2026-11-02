@@ -9,6 +9,8 @@ import { loadThreadPage, type LoadedThreadPage } from '../src/threads/thread-pag
 import { threadLocation, threadSearch } from '../src/threads/thread-href';
 import thread from '../src/kernel/recorded/thread.json';
 import recorded from '../src/kernel/recorded/thread-posts.json';
+import { homeFeedDestination } from '../src/features/pages/home-feed-destination';
+import { homeFeedStoryPage } from '../src/kernel/fake/home-feed-stories';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ThreadReading, focusThreadPostLocation } = await import('../src/threads/thread-reading');
@@ -78,7 +80,7 @@ async function render(loaded: LoadedThreadPage) {
 const request = new Request('https://web.test/en/threads/linked');
 const input = { id: thread.thread.id, post: target.id, cursor: 'unrelated-old-page' };
 
-test('a cross-page link renders the exact admitted post through one native page, with ordinary continuation', async () => {
+test.each(['moderation', 'Home'])('%s cross-page link renders the exact admitted post through one native page, with ordinary continuation', async (source) => {
   const { client, paths } = native('available');
   const { moderationTargetContent } = await import('../src/moderation/target-content');
   const evidence = {
@@ -97,7 +99,8 @@ test('a cross-page link renders the exact admitted post through one native page,
       value: { moderationEvidence: evidence },
     }),
   );
-  const destination = new URL(/href="([^"]+)"/.exec(markup)![1]!, request.url);
+  const href = source === 'moderation' ? /href="([^"]+)"/.exec(markup)![1]! : homeFeedDestination({ ...homeFeedStoryPage().feedItems.find((item) => item.destination.kind === 'thread')!, destination: { kind: 'post', threadId: thread.thread.id, title: thread.thread.title, postId: target.id } }, 'en')!;
+  const destination = new URL(href, request.url);
   const linkedInput = { id: input.id, ...threadSearch(Object.fromEntries(destination.searchParams)) };
   const page = await loadThreadPage(client, request, {}, linkedInput, verification, 'anonymous');
   expect(page.posts.posts.map((post) => post.id)).toEqual([target.id]);

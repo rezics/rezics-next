@@ -141,6 +141,7 @@ test('Home composes ordered ContentItems and keeps bounded filters accessible in
     expect(subjectRow.querySelector('[data-content-item-slot="visual"]')).not.toBeNull();
     expect(subjectRow.querySelector('img')).toBeNull();
     const thread = page!.feedItems.find((item) => 'title' in item.summary)!;
+    expect(homeFeedDestination({ ...thread, destination: { kind: 'post', threadId: 'thread/id', title: null, postId: 'post/id' } }, 'ja')).toBe('/ja/threads/thread%2Fid/thread?post=post%2Fid#post-post%2Fid');
     const threadRow = rows.find((row) => row.getAttribute('data-feed-id') === thread.id)!;
     expect(threadRow.querySelector('[data-content-item-slot="visual"]')).toBeNull();
     expect(host.textContent).not.toContain('2,000 references');
