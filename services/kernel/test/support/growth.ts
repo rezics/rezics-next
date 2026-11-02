@@ -142,6 +142,8 @@ export type ReportSample = {
   readonly backendRepetitions?: readonly (readonly number[])[];
   /** Measured runs discarded because they touched a backend not seen earlier at this scale. */
   readonly coldBackendDiscards?: number;
+  /** Accepted-repetition indexes that still used a new backend after the four-discard budget. */
+  readonly coldBackendExhaustion?: readonly number[];
   readonly settleFailures?: readonly string[];
   readonly counted?: CountedSample;
   readonly attempts?: AttemptSample;
@@ -400,7 +402,7 @@ export type ShadowVerdict = (
 
 export type GrowthVerdict = Readonly<{
   outcome: 'compatible' | 'violation' | 'inconclusive';
-  reason?: 'noise' | 'settle' | 'retries';
+  reason?: 'noise' | 'settle' | 'retries' | 'backends';
   medians: readonly number[];
   ranges: readonly SeriesInterval[];
   uncertainties: readonly number[];
@@ -601,6 +603,9 @@ function writeGrowthReview(
       repetitions,
       ...(settleFailures.length === 0 ? {} : { settleFailures }),
       ...(failedStatements.length === 0 ? {} : { failedStatements }),
+      ...(samples.some((sample) => (sample.coldBackendExhaustion?.length ?? 0) > 0)
+        ? { coldBackendExhaustion: samples.map((sample) => sample.coldBackendExhaustion ?? []) }
+        : {}),
     })}\n`,
   );
 }
@@ -633,6 +638,7 @@ function appendProfile(report: GrowthReport, mode: GrowthProfileExportMode): voi
       ),
       backendRepetitions: samples.map(({ backendRepetitions }) => backendRepetitions),
       coldBackendDiscards: samples.map(({ coldBackendDiscards }) => coldBackendDiscards),
+      coldBackendExhaustion: samples.map(({ coldBackendExhaustion }) => coldBackendExhaustion ?? []),
       ...(samples.some(({ counted }) => counted !== undefined)
         ? { counted: samples.map(({ counted }) => counted ?? {}) }
         : {}),
@@ -773,6 +779,42 @@ export function withoutCatalogStatements(name: string, captureResult: Capture): 
 
 /** Resolves with the report, or rejects with GrowthBoundError (message prefixed by the check name). */
 type OperationBackends = Set<number> & { readonly transactions: Map<GrowthDatabase, Map<number, number>> };
+
+const COLD_BACKEND_DISCARD_LIMIT = 4;
+
+function warmedEvidenceSamples(samples: readonly ReportSample[]): ReportSample[] | undefined {
+  const warmed: ReportSample[] = [];
+  for (const sample of samples) {
+    const exhausted = sample.coldBackendExhaustion ?? [];
+    if (exhausted.length === 0) {
+      warmed.push(sample);
+      continue;
+    }
+    const skip = new Set(exhausted);
+    const keep = sample.repetitions.map((_, index) => index).filter((index) => !skip.has(index));
+    if (keep.length === 0) return undefined;
+    const repetitions = keep.map((index) => sample.repetitions[index]!);
+    warmed.push({
+      ...sample,
+      cost: medianCost(repetitions),
+      repetitions,
+      statementRepetitions: keep.map((index) => sample.statementRepetitions[index]!),
+      occurrenceRepetitions: keep.map((index) => sample.occurrenceRepetitions[index]!),
+      ...(sample.backendRepetitions === undefined
+        ? {}
+        : { backendRepetitions: keep.map((index) => sample.backendRepetitions![index] ?? []) }),
+      ...(sample.attempts === undefined
+        ? {}
+        : {
+            attempts: {
+              ...sample.attempts,
+              repetitions: keep.map((index) => sample.attempts!.repetitions[index]!),
+            },
+          }),
+    });
+  }
+  return warmed;
+}
 
 function operationBackends(
   backends: Iterable<number> = [],
@@ -916,6 +958,7 @@ async function runGrowthCheck(db: GrowthDatabase, check: GrowthCheck): Promise<G
     const countedRuns: Record<string, number>[] = [];
     const backendRepetitions: number[][] = [];
     let coldBackendDiscards = 0;
+    const coldBackendExhaustion: number[] = [];
     for (let run = 0; run < repetitions; run++) {
       let accepted = false;
       while (!accepted) {
@@ -938,7 +981,7 @@ async function runGrowthCheck(db: GrowthDatabase, check: GrowthCheck): Promise<G
           ),
         ];
         const coldBackends = runBackends.filter((backend) => !seenBackends.has(backend));
-        if (coldBackends.length > 0 && coldBackendDiscards < 4) {
+        if (coldBackends.length > 0 && coldBackendDiscards < COLD_BACKEND_DISCARD_LIMIT) {
           coldBackendDiscards++;
           for (const backend of runBackends) seenBackends.add(backend);
           for (const [target, relations] of writes) {
@@ -951,6 +994,7 @@ async function runGrowthCheck(db: GrowthDatabase, check: GrowthCheck): Promise<G
         }
         pendingWrites = writes;
         for (const backend of runBackends) seenBackends.add(backend);
+        if (coldBackends.length > 0) coldBackendExhaustion.push(backendRepetitions.length);
         backendRepetitions.push(runBackends);
         const cost = costOf(measured.capture);
         if (check.counted) {
@@ -992,6 +1036,7 @@ async function runGrowthCheck(db: GrowthDatabase, check: GrowthCheck): Promise<G
       occurrenceRepetitions,
       backendRepetitions,
       coldBackendDiscards,
+      ...(coldBackendExhaustion.length === 0 ? {} : { coldBackendExhaustion }),
       ...(check.attempts ? { attempts: summarizeAttempts(check.attempts.commands, attemptRuns) } : {}),
       ...(settleFailures.length === 0 ? {} : { settleFailures }),
     });
@@ -1003,21 +1048,26 @@ async function runGrowthCheck(db: GrowthDatabase, check: GrowthCheck): Promise<G
     blocks: shadowVerdict(samples, check, 'blocks'),
     statements: shadowVerdict(samples, check, 'statements'),
   };
+  const exhausted = samples.some((sample) => (sample.coldBackendExhaustion?.length ?? 0) > 0);
+  const judged = exhausted ? warmedEvidenceSamples(samples) : samples;
+  const classifyFrom = judged ?? samples;
   const classified: Record<GrowthMetric, ClassifiedMetric | undefined> = {
-    rows: classifyMetric(samples, check, 'rows'),
-    blocks: classifyMetric(samples, check, 'blocks'),
-    statements: classifyMetric(samples, check, 'statements'),
+    rows: classifyMetric(classifyFrom, check, 'rows'),
+    blocks: classifyMetric(classifyFrom, check, 'blocks'),
+    statements: classifyMetric(classifyFrom, check, 'statements'),
     requestBytes:
-      check.byteBounds?.requestBytes === undefined ? undefined : classifyMetric(samples, check, 'requestBytes'),
+      check.byteBounds?.requestBytes === undefined ? undefined : classifyMetric(classifyFrom, check, 'requestBytes'),
     responseBytes:
-      check.byteBounds?.responseBytes === undefined ? undefined : classifyMetric(samples, check, 'responseBytes'),
+      check.byteBounds?.responseBytes === undefined
+        ? undefined
+        : classifyMetric(classifyFrom, check, 'responseBytes'),
   };
   const stepViolations = [
-    ...growthViolations(samples, check.bounds, check.slack),
-    ...growthByteViolations(samples, check.byteBounds ?? {}, check.slack),
+    ...growthViolations(classifyFrom, check.bounds, check.slack),
+    ...growthByteViolations(classifyFrom, check.byteBounds ?? {}, check.slack),
   ];
   const stepViolationMetrics = new Set(stepViolations.map(({ metric }) => metric));
-  const failedStatements = retryFailures(samples);
+  const failedStatements = retryFailures(classifyFrom);
   const settleFailed = samples.some(({ settleFailures: failures }) => (failures?.length ?? 0) > 0);
   const retryExplanations: Partial<Record<GrowthMetric, string>> = {};
   const verdicts: Record<GrowthMetric, GrowthVerdict | undefined> = {
@@ -1038,10 +1088,16 @@ async function runGrowthCheck(db: GrowthDatabase, check: GrowthCheck): Promise<G
       settleFailed,
       failedStatements,
       check,
-      samples,
+      classifyFrom,
     );
     verdicts[metric] = selected.verdict;
     if (selected.retryExplanation) retryExplanations[metric] = selected.retryExplanation;
+  }
+  if (judged === undefined) {
+    for (const metric of ['rows', 'blocks', 'statements', 'requestBytes', 'responseBytes'] as const) {
+      const verdict = verdicts[metric];
+      if (verdict) verdicts[metric] = { ...verdict, outcome: 'inconclusive', reason: 'backends' };
+    }
   }
 
   const report: GrowthReport = {

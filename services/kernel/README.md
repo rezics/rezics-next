@@ -473,7 +473,9 @@ does not fit even when each scale takes any value in its median's distribution-f
 repetitions' minimum and maximum for five runs), widened by its uncertainty. Otherwise the verdict is inconclusive and
 the check passes. A settle failure inside `checkGrowth` is recorded on its sample and makes a blocks violation
 inconclusive. Failed statements with SQLSTATE 40001 or 40P01 make an established violation inconclusive unless complete
-occurrence evidence independently establishes the same growth from successful foreground work. Successful statements
+occurrence evidence independently establishes the same growth from successful foreground work. Accepted runs that still
+use a new backend after four discards are retained but are not warmed evidence; without a complete warmed series the
+verdict is inconclusive with reason `backends`. Successful statements
 inside aborted attempts do not count as successful work. Byte metrics have no per-occurrence evidence, so retry-related
 byte violations remain inconclusive; incomplete attribution is explained in `GROWTH_REVIEW`. Every inconclusive
 verdict is in the report's `verdicts` and in one `GROWTH_REVIEW` stderr line, which performance reviews; it never blocks
@@ -583,8 +585,12 @@ Injected planner statistics do not replace seeding: they change only a plan's es
 measures executed work (`docs/research/growth-check-plan-stability.md`).
 
 Every scale is measured on backends already seen in a warm-up or earlier measured repetition; a repetition that
-reaches a new backend is discarded as a warm-up up to four times per scale. If later runs still use new backends, their
-actual costs, occurrences and backend IDs are retained as measured repetitions and judged by the same inclusive rule.
+reaches a new backend is discarded as a warm-up up to four times per scale. If later runs still use new backends,
+recovery stops: those runs keep their actual costs, occurrences and backend IDs and the sample records
+`coldBackendExhaustion` with their accepted-repetition indexes. They are not warmed evidence. Selected verdicts use the
+remaining warmed runs. When any scale has no warmed accepted run, every metric is inconclusive with reason `backends`
+and one `GROWTH_REVIEW` line; that series neither fails nor passes as compatible. A warmed-only series that still
+violates remains a `GrowthBoundError`.
 Keep the default `warmups`. When the operation uses up the state it measures, pass
 `warmup`, which runs the same code path on spare state (another probe, a fresh key) so the measured run is not the
 backend's first. `checkGrowth` refuses fewer than one warm-up per scale. Every periodic job step needs its own growth

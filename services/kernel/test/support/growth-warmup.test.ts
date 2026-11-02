@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { withConnection } from '../../src/database/pool.ts';
 import {
   checkGrowth,
+  GrowthBoundError,
   measure,
   openGrowthDatabase,
   type GrowthCheck,
@@ -256,4 +257,96 @@ test('a first run that costs more than later runs reaches no sample once each sc
       expect(sample.cost.relations?.[probes]).toMatchObject({ rows: 1, sequentialScans: 0 });
     }
   }
+}, 60_000);
+
+async function captureReviews<T>(run: () => Promise<T>): Promise<{ value: T; lines: string[] }> {
+  const lines: string[] = [];
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    const text = String(chunk);
+    if (text.startsWith('GROWTH_REVIEW ')) lines.push(text.trimEnd());
+    else originalWrite(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    return { value: await run(), lines };
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+}
+
+async function alwaysCold(database: GrowthDatabase, scale: number): Promise<void> {
+  const pool = database.openPool({ max: 1 });
+  for (let n = 0; n < scale; n++) await pool.query('SELECT 1 AS cold');
+}
+
+test('exhausted cold backends stay in the report and do not certify a compatible or violating series', async () => {
+  const captured = await captureReviews(() =>
+    checkGrowth(db!, {
+      name: 'exhausted cold backends',
+      scales: [1, 4, 16],
+      repetitions: 2,
+      bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+      warmup: (database) => alwaysCold(database, 1),
+      grow: async () => {},
+      operation: alwaysCold,
+    }),
+  );
+
+  expect(captured.value.samples).toHaveLength(3);
+  for (const sample of captured.value.samples) {
+    expect(sample.coldBackendDiscards).toBe(4);
+    expect(sample.coldBackendExhaustion).toEqual([0, 1]);
+    expect(sample.repetitions).toHaveLength(2);
+    expect(sample.repetitions.map(({ statements }) => statements)).toEqual([sample.scale, sample.scale]);
+    expect(sample.backendRepetitions).toHaveLength(2);
+    expect(sample.backendRepetitions.every((backends) => backends.length === 1)).toBe(true);
+  }
+  expect(new Set(captured.value.samples.flatMap(({ backendRepetitions }) => backendRepetitions.flat())).size).toBe(6);
+  for (const metric of ['rows', 'blocks', 'statements'] as const) {
+    expect(captured.value.verdicts[metric]).toMatchObject({ outcome: 'inconclusive', reason: 'backends' });
+  }
+  expect(captured.lines).toHaveLength(3);
+  expect(captured.lines.every((line) => line.includes('"reason":"backends"'))).toBe(true);
+}, 60_000);
+
+test('a warmed series that still grows fails after discard exhaustion', async () => {
+  const database = db!;
+  let held: Awaited<ReturnType<typeof database.pool.connect>> | undefined;
+  let calls = 0;
+  let error: unknown;
+  try {
+    await checkGrowth(database, {
+      name: 'warmed growth after cold exhaustion',
+      scales: [1, 4, 16],
+      repetitions: 2,
+      bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+      grow: async () => {
+        calls = 0;
+      },
+      warmup: async () => {
+        if (!held) held = await database.pool.connect();
+        await held.query('SELECT 1 AS warm');
+      },
+      operation: async (_growthDb, scale) => {
+        const index = calls++;
+        if (index === 0) {
+          for (let n = 0; n < scale; n++) await held!.query('SELECT 1 AS grown');
+          return;
+        }
+        await alwaysCold(database, 1);
+      },
+    });
+  } catch (failure) {
+    error = failure;
+  } finally {
+    held?.release();
+  }
+  expect(error).toBeInstanceOf(GrowthBoundError);
+  expect((error as GrowthBoundError).message).toContain('statements');
+  expect(
+    (error as GrowthBoundError).samples.every(
+      (sample) => ((sample as GrowthReport['samples'][number]).coldBackendExhaustion?.length ?? 0) > 0,
+    ),
+  ).toBe(true);
 }, 60_000);
