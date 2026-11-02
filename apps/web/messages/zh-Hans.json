@@ -2372,6 +2372,8 @@
   "search_history_remove": "移除 {name}",
   "search_history_offline": "当前离线，连接后将同步更改。",
   "search_history_conflict": "历史记录已在另一台设备上更改。重新加载将丢弃待同步的更改。",
+  "search_history_management_removed": "已从搜索历史中移除：{name}。",
+  "search_history_management_cleared": "已清空搜索历史。",
   "search_history_reload": "重新加载历史记录",
   "library_continue_empty": "暂时没有可继续的作品。",
   "library_continue_preparing": "正在准备你的继续列表。",

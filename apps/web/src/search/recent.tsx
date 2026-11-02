@@ -5,6 +5,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale, locales } from '../paraglide/runtime.js';
 import { coverSrc } from '../media/cover-src';
 import { useSession } from '../session/query';
+import { useCallback, useState } from 'react';
 import {
   recentBucket,
   recentSearchQuery,
@@ -12,6 +13,7 @@ import {
   type RecentHistory,
 } from './recent-history';
 import { useRecentHistory } from './recent-history-hook';
+import { useHistoryRemovalFocus } from './history-removal-focus';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -281,12 +283,26 @@ export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { hi
     onMore = native?.onMore,
     next = native?.next;
   const locale = getLocale();
+  const [announcement, setAnnouncement] = useState('');
+  const announce = useCallback((message: string) => setAnnouncement(message), []);
+  const visibleEntries = entries.slice(0, history ? 100 : 5);
+  const focus = useHistoryRemovalFocus(entries, visibleEntries, announce);
   return (
-    <section className="space-y-2 px-3 py-3" aria-label={m.search_recent()}>
+    <section ref={focus.regionRef} tabIndex={-1} className="space-y-2 px-3 py-3" aria-label={history ? m.search_history() : m.search_recent()}>
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">{history ? m.search_history() : m.search_recent()}</h2>
         {history ? (
-          <Button type="button" variant="ghost" size="sm" onClick={onClear} disabled={!entries.length}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={(event) => {
+              if (!onClear) return;
+              focus.requestClear(event.currentTarget, m.search_history_management_cleared());
+              onClear();
+            }}
+            disabled={!entries.length}
+          >
             {m.search_history_clear()}
           </Button>
         ) : (
@@ -310,8 +326,9 @@ export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { hi
       {!entries.length && status !== 'loading' && (
         <p className="text-sm text-muted-foreground">{m.search_history_empty()}</p>
       )}
-      <ul>
-        {entries.slice(0, history ? 100 : 5).map((item) => {
+      <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
+      <ul ref={focus.listRef}>
+        {visibleEntries.map((item, index) => {
           const name =
             item.entry.kind === 'query'
               ? item.entry.text
@@ -351,7 +368,17 @@ export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { hi
                 size="icon"
                 variant="ghost"
                 aria-label={m.search_history_remove({ name })}
-                onClick={() => onRemove(item.id)}
+                data-history-action=""
+                data-history-id={item.id}
+                onClick={(event) => {
+                  focus.requestRemove(
+                    item.id,
+                    index,
+                    event.currentTarget,
+                    m.search_history_management_removed({ name }),
+                  );
+                  onRemove(item.id);
+                }}
               >
                 <X aria-hidden="true" className="size-4" />
               </Button>

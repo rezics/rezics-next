@@ -2372,6 +2372,8 @@
   "search_history_remove": "Eliminar {name}",
   "search_history_offline": "Sin conexión. Los cambios se sincronizarán al conectarse.",
   "search_history_conflict": "El historial cambió en otro dispositivo. Recarga para descartar los cambios pendientes.",
+  "search_history_management_removed": "Se eliminó del historial de búsqueda: {name}.",
+  "search_history_management_cleared": "Se borró el historial de búsqueda.",
   "search_history_reload": "Recargar historial actual",
   "library_continue_empty": "Aún no hay nada que continuar.",
   "library_continue_preparing": "Se está preparando tu lista para continuar.",

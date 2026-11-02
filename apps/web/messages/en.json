@@ -2364,6 +2364,8 @@
   "search_history_remove": "Remove {name}",
   "search_history_offline": "Offline. Changes will sync when connected.",
   "search_history_conflict": "History changed on another device. Reload to discard pending changes.",
+  "search_history_management_removed": "Removed {name} from search history.",
+  "search_history_management_cleared": "Search history cleared.",
   "search_history_reload": "Reload current history",
   "library_continue_empty": "Nothing to continue yet.",
   "library_continue_preparing": "Your Continue list is being prepared.",

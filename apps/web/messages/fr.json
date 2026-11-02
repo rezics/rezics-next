@@ -2372,6 +2372,8 @@
   "search_history_remove": "Supprimer {name}",
   "search_history_offline": "Hors connexion. Les modifications seront synchronisées à la reconnexion.",
   "search_history_conflict": "L’historique a changé sur un autre appareil. Rechargez pour abandonner les modifications en attente.",
+  "search_history_management_removed": "Recherche supprimée de l’historique : {name}.",
+  "search_history_management_cleared": "Historique de recherche effacé.",
   "search_history_reload": "Recharger l’historique actuel",
   "library_continue_empty": "Rien à reprendre pour le moment.",
   "library_continue_preparing": "Votre liste de reprise est en cours de préparation.",

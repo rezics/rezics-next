@@ -2372,6 +2372,8 @@
   "search_history_remove": "{name}を削除",
   "search_history_offline": "オフラインです。接続後に変更を同期します。",
   "search_history_conflict": "別の端末で履歴が変更されました。再読み込みすると未同期の変更を破棄します。",
+  "search_history_management_removed": "検索履歴から削除しました: {name}。",
+  "search_history_management_cleared": "検索履歴を削除しました。",
   "search_history_reload": "現在の履歴を再読み込み",
   "library_continue_empty": "続ける作品はまだありません。",
   "library_continue_preparing": "続きのリストを準備しています。",

@@ -2372,6 +2372,8 @@
   "search_history_remove": "移除 {name}",
   "search_history_offline": "目前離線，連線後將同步變更。",
   "search_history_conflict": "歷史紀錄已在另一台裝置上變更。重新載入將捨棄待同步的變更。",
+  "search_history_management_removed": "已從搜尋歷史中移除：{name}。",
+  "search_history_management_cleared": "已清除搜尋歷史。",
   "search_history_reload": "重新載入歷史紀錄",
   "library_continue_empty": "暫時沒有可繼續的作品。",
   "library_continue_preparing": "正在準備你的繼續清單。",
