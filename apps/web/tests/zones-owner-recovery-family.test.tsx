@@ -73,10 +73,21 @@ const kinds = Object.keys(messages) as Failure['kind'][];
 const longReturnTo = `/ja/my/zones/new?name=${'読書と旅の記録 مكتبة الرحلات & "<書棚>" +/#?'.repeat(8)}&cursor=opaque+/cursor==#names`;
 function presentation(action: HTMLElement) {
   for (const token of [
-    'inline-flex', 'border', 'h-auto', 'max-w-full', 'whitespace-normal', '[overflow-wrap:anywhere]',
-    'focus-visible:outline-2', 'focus-visible:outline-offset-2', 'focus-visible:outline-ring',
-    'max-md:min-h-11', 'max-md:min-w-11', 'pointer-coarse:min-h-11', 'pointer-coarse:min-w-11',
-  ]) expect(action.classList.contains(token)).toBe(true);
+    'inline-flex',
+    'border',
+    'h-auto',
+    'max-w-full',
+    'whitespace-normal',
+    '[overflow-wrap:anywhere]',
+    'focus-visible:outline-2',
+    'focus-visible:outline-offset-2',
+    'focus-visible:outline-ring',
+    'max-md:min-h-11',
+    'max-md:min-w-11',
+    'pointer-coarse:min-h-11',
+    'pointer-coarse:min-w-11',
+  ])
+    expect(action.classList.contains(token)).toBe(true);
   expect(action.classList.contains('truncate')).toBe(false);
   action.focus();
   expect(document.activeElement).toBe(action);
@@ -90,9 +101,12 @@ for (const locale of UI_LOCALES) {
           const retry = mock(() => {});
           await mounted(
             <div lang={locale} dir="rtl">
-              <ZoneFeedback failure={{ kind }} locale={locale}
+              <ZoneFeedback
+                failure={{ kind }}
+                locale={locale}
                 {...(supplied ? { onRetry: retry } : {})}
-                {...(returnTo === undefined ? {} : { returnTo })} />
+                {...(returnTo === undefined ? {} : { returnTo })}
+              />
             </div>,
             async (host) => {
               const alert = host.querySelector('[role="alert"]')!;
@@ -112,14 +126,15 @@ for (const locale of UI_LOCALES) {
                 expect(anchors).toHaveLength(1);
                 expect(buttons).toHaveLength(0);
                 const anchor = anchors[0]!;
-                expect(anchor.getAttribute('href')).toBe(kind === 'signed-out'
-                  ? `/auth/sign-in?return_to=${encodeURIComponent(destination)}` : destination);
-                expect(anchor.textContent).toBe(kind === 'signed-out'
-                  ? m.zones_owner_sign_in({}, { locale }) : m.zones_owner_retry({}, { locale }));
+                expect(anchor.getAttribute('href')).toBe(
+                  kind === 'signed-out' ? `/auth/sign-in?return_to=${encodeURIComponent(destination)}` : destination,
+                );
+                expect(anchor.textContent).toBe(
+                  kind === 'signed-out' ? m.zones_owner_sign_in({}, { locale }) : m.zones_owner_retry({}, { locale }),
+                );
                 expect(anchor.hasAttribute('role')).toBe(false);
                 expect(anchor.hasAttribute('type')).toBe(false);
-                if (kind === 'signed-out')
-                  expect(new URL(anchor.href).searchParams.get('return_to')).toBe(destination);
+                if (kind === 'signed-out') expect(new URL(anchor.href).searchParams.get('return_to')).toBe(destination);
                 presentation(anchor);
                 // Focus never invokes the lower-precedence callback or navigates.
                 expect(retry).not.toHaveBeenCalled();
@@ -148,7 +163,12 @@ test('recovery preserves the shared Button implicit native type and form behavio
   const retry = mock(() => {});
   const submit = mock(() => {});
   await mounted(
-    <form onSubmit={(event) => { event.preventDefault(); submit(); }}>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
       <Button variant="outline">baseline</Button>
       <ZoneFeedback failure={{ kind: 'unavailable' }} locale="en" onRetry={retry} />
     </form>,
@@ -173,7 +193,13 @@ test('independent supplied mounts grow at 1/8/32 with no IO and one explicit loc
       await mounted(
         <div dir="rtl" lang="ja">
           {retries.map((retry, index) => (
-            <ZoneFeedback key={index} failure={{ kind: 'unavailable' }} locale="ja" onRetry={retry} returnTo={longReturnTo} />
+            <ZoneFeedback
+              key={index}
+              failure={{ kind: 'unavailable' }}
+              locale="ja"
+              onRetry={retry}
+              returnTo={longReturnTo}
+            />
           ))}
         </div>,
         async (host) => {
@@ -184,7 +210,7 @@ test('independent supplied mounts grow at 1/8/32 with no IO and one explicit loc
           presentation(action);
           await act(async () => action.click());
           expect(retries.map((retry) => retry.mock.calls.length)).toEqual(
-            Array.from({ length: count }, (_, index) => index === count - 1 ? 1 : 0),
+            Array.from({ length: count }, (_, index) => (index === count - 1 ? 1 : 0)),
           );
           expect(fetch).not.toHaveBeenCalled();
         },
@@ -198,11 +224,17 @@ test('independent supplied mounts grow at 1/8/32 with no IO and one explicit loc
 test('connected owner recovery refreshes one native fixture page; ready and empty are separate', async () => {
   for (const scenario of ['denied', 'stale', 'unavailable', 'empty', 'list'] as const) {
     const api = zonesFixture(scenario);
-    const reload = mock(async () => { await api.list({ deleted: false }); });
+    const reload = mock(async () => {
+      await api.list({ deleted: false });
+    });
     await mounted(
-      <ZonesOwnerWorkspace locale="en" input={{ deleted: false }}
+      <ZonesOwnerWorkspace
+        locale="en"
+        input={{ deleted: false }}
         outcome={scenario === 'list' || scenario === 'empty' ? api.initial() : { kind: scenario }}
-        onChange={api.change} onReload={reload} />,
+        onChange={api.change}
+        onReload={reload}
+      />,
       async (host) => {
         expect(api.calls).toHaveLength(0);
         const alert = host.querySelector('[role="alert"]');
@@ -231,8 +263,9 @@ test('connected starter sign-in and unavailable sessions preserve the actual cre
     await mounted(<CreateZone locale="ja" session={session} onCreate={api.create} onNavigate={navigate} />, (host) => {
       const alert = host.querySelector('[role="alert"]')!;
       expect(alert.querySelector('button')).toBeNull();
-      expect(alert.querySelector('a')?.getAttribute('href')).toBe(session === 'signed-out'
-        ? '/auth/sign-in?return_to=%2Fja%2Fmy%2Fzones%2Fnew' : '/ja/my/zones/new');
+      expect(alert.querySelector('a')?.getAttribute('href')).toBe(
+        session === 'signed-out' ? '/auth/sign-in?return_to=%2Fja%2Fmy%2Fzones%2Fnew' : '/ja/my/zones/new',
+      );
       presentation(alert.querySelector('a')!);
       expect(api.calls).toHaveLength(0);
       expect(navigate).not.toHaveBeenCalled();
@@ -266,14 +299,19 @@ test('actual route failure retries only explicit invalidation and keeps private 
   const { sessionQuery } = await import('../src/session/query');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, {
-    state: 'signed-in', subject: 'fixture-owner', csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
+    state: 'signed-in',
+    subject: 'fixture-owner',
+    csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
   });
   let reads = 0;
   const root = createRootRoute({ component: Outlet });
   const route = createRoute({
     getParentRoute: () => root,
     path: '/my/zones',
-    loader: () => { reads++; throw new Error('Private diagnostic must never appear'); },
+    loader: () => {
+      reads++;
+      throw new Error('Private diagnostic must never appear');
+    },
     errorComponent: ZonesRouteError,
   });
   const router = createRouter({
@@ -282,17 +320,22 @@ test('actual route failure retries only explicit invalidation and keeps private 
   });
   try {
     await router.load();
-    await mounted(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>, async (host) => {
-      const alert = host.querySelector('[role="alert"]')!;
-      expect(alert.querySelector('p')?.textContent).toBe(m.zones_owner_unavailable());
-      expect(alert.querySelector('a,details')).toBeNull();
-      expect(host.textContent).not.toContain('Private diagnostic');
-      expect(reads).toBe(1);
-      presentation(alert.querySelector('button')!);
-      expect(reads).toBe(1);
-      await act(async () => alert.querySelector('button')!.click());
-      expect(reads).toBe(2);
-    });
+    await mounted(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+      async (host) => {
+        const alert = host.querySelector('[role="alert"]')!;
+        expect(alert.querySelector('p')?.textContent).toBe(m.zones_owner_unavailable());
+        expect(alert.querySelector('a,details')).toBeNull();
+        expect(host.textContent).not.toContain('Private diagnostic');
+        expect(reads).toBe(1);
+        presentation(alert.querySelector('button')!);
+        expect(reads).toBe(1);
+        await act(async () => alert.querySelector('button')!.click());
+        expect(reads).toBe(2);
+      },
+    );
   } finally {
     client.clear();
   }
