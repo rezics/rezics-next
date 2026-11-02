@@ -51,7 +51,14 @@ async function mounted(
     Object.defineProperty(globalThis, key, {
       configurable: true,
       writable: true,
-      value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key],
+      value:
+        key === 'window'
+          ? window
+          : key === 'IS_REACT_ACT_ENVIRONMENT'
+            ? true
+            : ['getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame'].includes(key)
+              ? window[key].bind(window)
+              : window[key],
     });
   const { createRoot } = await import('react-dom/client');
   const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -728,7 +735,8 @@ test('Manga refusal retires nested readings, retains exact commands and drafts, 
       await ui.click(scalarSubmit);
       const relations = ui.host.querySelector(`[aria-label="${m.relation_title()}"]`)!;
       await ui.click(button(relations, m.relation_propose()));
-      const confirmation = relations.querySelector('[role="group"]')!;
+      const confirmationSelector = `[role="group"][aria-label="${m.candidate_confirm_title({ action: m.relation_propose() })}"]`;
+      const confirmation = relations.querySelector(confirmationSelector)!;
       const relationSubmit = button(confirmation, m.relation_propose());
       const staleRelationSubmit = callback(relationSubmit, 'onClick');
       await ui.click(relationSubmit);
@@ -767,6 +775,10 @@ test('Manga refusal retires nested readings, retains exact commands and drafts, 
       next.public!.subject.id = '00000000-0000-4000-8000-00000000d999';
       await refresh();
       expect(ui.host.querySelector('header, a, input, form')).toBeNull();
+      next = structuredClone(current);
+      next.public!.subject.type = 'schema:ComicSeries';
+      await refresh();
+      expect(ui.host.querySelector('header, a, input, form')).toBeNull();
       next = current;
       await refresh();
       await ui.until(() => !!ui.host.querySelector('form'));
@@ -786,7 +798,7 @@ test('Manga refusal retires nested readings, retains exact commands and drafts, 
         [1, 1, 1],
       );
       await ui.click(button(ui.host, m.facts_submit()));
-      await ui.click(button(ui.host.querySelector('[role="group"]')!, m.relation_propose()));
+      await ui.click(button(ui.host.querySelector(confirmationSelector)!, m.relation_propose()));
       await ui.click(button(ui.host, m.correction_retry()));
       expect([propose.mock.calls[1]![0], relationPropose.mock.calls[1]![0], authoredPropose.mock.calls[1]![0]]).toEqual(
         original,
