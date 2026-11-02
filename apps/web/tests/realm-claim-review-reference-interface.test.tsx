@@ -4,9 +4,11 @@ import { act } from 'react';
 import { RealmClaimReviewView } from '../src/community/realm-claim-review-page';
 import type {
   RealmClaimApprovalInput,
+  RealmClaimApprovalResult,
   RealmClaimReviewAdapter,
   RealmClaimReviewRead,
 } from '../src/community/realm-claim-review';
+import { createRealmClaimCallerLifetime } from '../src/community/realm-claim-caller-lifetime';
 import { pendingReview, reviewExample, reviewRequest } from '../src/stories/patterns/realm-claim-review/example';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
@@ -82,7 +84,9 @@ test('Realm claim review prioritizes the human request and preserves visible app
   }
   async function click(label: string, region: ParentNode = host) {
     await act(async () => {
-      button(label, region).click();
+      const target = button(label, region);
+      target.focus();
+      target.click();
       await tick();
     });
   }
@@ -196,6 +200,7 @@ test('Realm claim review prioritizes the human request and preserves visible app
           expect(example.reads).toHaveLength(1);
           expect(example.approvals).toHaveLength(0);
           const confirmation = host.querySelector('section[aria-labelledby$="-confirm"]')!;
+          expect(window.document.activeElement).toBe(confirmation);
           expect(confirmation.querySelector('h3')?.textContent).toBe(m.realm_review_confirm_heading());
           identity(confirmation);
           expect(confirmation.querySelectorAll('time')).toHaveLength(3);
@@ -203,10 +208,36 @@ test('Realm claim review prioritizes the human request and preserves visible app
           await click(m.realm_review_cancel());
           expect(example.approvals).toHaveLength(0);
           expect(host.querySelectorAll('li')).toHaveLength(1);
+          expect(window.document.activeElement).toBe(button(m.realm_review_review()));
           expect(example.reads).toHaveLength(1);
         }
       }
     }
+    const delayedReview = deferred<RealmClaimReviewRead>();
+    await mount({
+      initial: pendingReview,
+      adapter: { read: () => delayedReview.promise, approve: reviewExample('success').adapter.approve },
+    });
+    await click(m.realm_review_review());
+    const movedFocus = host.querySelector('h2')!;
+    movedFocus.focus();
+    await act(async () => {
+      delayedReview.resolve(pendingReview);
+      await tick();
+    });
+    expect(host.querySelector('section[aria-labelledby$="-confirm"]')).not.toBeNull();
+    expect(window.document.activeElement).toBe(movedFocus);
+
+    await mount(observed('pending'));
+    const pointerFocus = host.querySelector('h2')!;
+    pointerFocus.focus();
+    await act(async () => {
+      button(m.realm_review_review()).dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 1 }));
+      await tick();
+    });
+    expect(host.querySelector('section[aria-labelledby$="-confirm"]')).not.toBeNull();
+    expect(window.document.activeElement).toBe(pointerFocus);
+
     setLocale('en', { reload: false });
     const second = {
       ...reviewRequest,
@@ -307,6 +338,7 @@ test('Realm claim review prioritizes the human request and preserves visible app
     await mount(success);
     await click(m.realm_review_review());
     await click(m.realm_review_confirm());
+    expect(window.document.activeElement).toBe(host.querySelector('article[role="status"]'));
     expect(success.approvals).toHaveLength(1);
     expect(success.reads).toHaveLength(2);
     const receipt = host.querySelector('article[role="status"]')!;
@@ -324,6 +356,7 @@ test('Realm claim review prioritizes the human request and preserves visible app
     await mount(uncertain);
     await click(m.realm_review_review());
     await click(m.realm_review_confirm());
+    expect(window.document.activeElement).toBe(button(m.realm_review_retry()));
     expect(host.textContent).toContain(m.realm_review_uncertain());
     noIdentity();
     await act(async () => {
@@ -334,12 +367,14 @@ test('Realm claim review prioritizes the human request and preserves visible app
     expect(uncertain.approvals).toEqual([uncertain.approvals[0]!, uncertain.approvals[0]!]);
     expect(uncertain.reads).toHaveLength(3);
     expect(host.textContent).toContain(m.realm_review_success());
+    expect(window.document.activeElement).toBe(host.querySelector('article[role="status"]'));
 
     const conflict = observed('conflict');
     await mount(conflict);
     await click(m.realm_review_review());
     await click(m.realm_review_confirm());
     expect(host.textContent).toContain(m.realm_review_conflict());
+    expect(window.document.activeElement).toBe(host.querySelector('[role="alert"]'));
     noIdentity();
     await click(m.realm_review_refresh());
     expect(button(m.realm_review_review()).disabled).toBe(true);
@@ -354,6 +389,7 @@ test('Realm claim review prioritizes the human request and preserves visible app
     await click(m.realm_review_review());
     await click(m.realm_review_confirm());
     expect(host.textContent).toContain(m.realm_review_denied());
+    expect(window.document.activeElement?.textContent).toContain(m.realm_review_denied());
     noIdentity();
 
     let receiptReads = 0;
@@ -368,11 +404,36 @@ test('Realm claim review prioritizes the human request and preserves visible app
     await click(m.realm_review_review());
     await click(m.realm_review_confirm());
     expect(host.textContent).toContain(m.realm_review_refresh_after_approval());
+    expect(window.document.activeElement?.textContent).toContain(m.realm_review_refresh_after_approval());
     noIdentity();
     await click(m.realm_review_refresh());
     expect(host.textContent).toContain(m.realm_review_success());
     identity(host.querySelector('article[role="status"]')!);
     expect(fetches).not.toHaveBeenCalled();
+
+    const caller = createRealmClaimCallerLifetime(() => true);
+    const settlement = deferred<RealmClaimApprovalResult>();
+    let input: RealmClaimApprovalInput | undefined;
+    const retiredSuccess = reviewExample('success');
+    await mount({
+      initial: pendingReview,
+      lifetime: caller,
+      adapter: {
+        read: async () => pendingReview,
+        approve: (value) => {
+          input = value;
+          return settlement.promise;
+        },
+      },
+    });
+    await click(m.realm_review_review());
+    await click(m.realm_review_confirm());
+    caller.retire();
+    await act(async () => {
+      settlement.resolve(await retiredSuccess.adapter.approve(input!));
+      await tick();
+    });
+    expect(host.querySelector('[role="status"]')).toBeNull();
   } finally {
     if (root) await act(async () => root!.unmount());
     fetches.mockRestore();
