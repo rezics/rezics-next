@@ -45,9 +45,9 @@ export function ValueExplanationPage({
   result?: ValueRead | undefined;
   locale: string;
   busy?: boolean;
-  onMore?: (cursor: string, action: ValueAction) => number | undefined;
-  onReload?: (action: ValueAction) => number | undefined;
-  onRetry?: ((action: ValueAction) => number | undefined) | undefined;
+  onMore?: (cursor: string, action: ValueAction) => number | void;
+  onReload?: (action: ValueAction) => number | void;
+  onRetry?: ((action: ValueAction) => number | void) | undefined;
   reloadFromFirstPage?: boolean;
   actionResult?: ValueActionResult | undefined;
   reading?: unknown;
@@ -151,7 +151,7 @@ export function ValueExplanationPage({
   function activate(
     event: MouseEvent<HTMLButtonElement>,
     kind: ValueActionKind,
-    run: (action: ValueAction) => number | undefined,
+    run: (action: ValueAction) => number | void,
   ) {
     const source = event.currentTarget;
     const action = {
@@ -159,7 +159,8 @@ export function ValueExplanationPage({
       source,
       keyboard: event.detail === 0 && source.ownerDocument.activeElement === source,
     } satisfies ValueAction;
-    beginAction(action, run(action));
+    const token = run(action);
+    beginAction(action, typeof token === 'number' ? token : undefined);
   }
   return (
     <article
