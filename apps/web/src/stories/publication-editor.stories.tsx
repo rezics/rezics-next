@@ -303,3 +303,148 @@ export const CreatedReaderConcealed: Story = {
     expect(canvas.queryByRole('link', { name: m.catalogue_create_open() })).toBeNull();
   },
 };
+
+// Constructed supplied metadata for presentation coverage; these are not new native profiles or recordings.
+function PublicationFamilyStory({ longNames = false, rtl = false }: { longNames?: boolean; rtl?: boolean }) {
+  const locale = getLocale();
+  const fixtures = useMemo(
+    () =>
+      Array.from({ length: 2 }, (_, index) => {
+        const fixture = publicationFixture(index === 0 ? 'invalid' : 'ready', locale);
+        if (longNames) {
+          fixture.work.subject.labels[locale] =
+            'The collected journeys through the extraordinarily long unbroken archive ' + '星の図書館'.repeat(18);
+          fixture.release.types['bf:Instance']!.labels[locale] =
+            'An independently identified illustrated publication with a complete supplied profile ' + '版'.repeat(45);
+          fixture.release.properties['schema:isbn']!.labels[locale] =
+            'The complete international standard book number for this particular publication ' + '識別'.repeat(24);
+          fixture.release.properties['schema:url']!.labels[locale] =
+            'The publisher’s complete citation and supporting source for this independent publication ' +
+            '出典'.repeat(24);
+        }
+        return fixture;
+      }),
+    [locale, longNames],
+  );
+  return (
+    <PatternStory path={`/catalogue/publication?work=${fixtures[0]!.work.subject.id}`} visitor="Signed In">
+      <AppShell>
+        <div dir={rtl ? 'rtl' : undefined} className="grid min-w-0 gap-8 lg:grid-cols-2">
+          {fixtures.map((fixture, index) => (
+            <PublicationEditor
+              key={index}
+              work={fixture.work.subject.id}
+              locale={locale}
+              session="signed-in"
+              transport={fixture.transport}
+              search={async () => []}
+              onNavigate={() => {
+                /* Review only the reader returned by this instance's actual fixture transport. */
+              }}
+            />
+          ))}
+        </div>
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+async function independentFamily(canvasElement: HTMLElement, longNames = false) {
+  const canvas = within(canvasElement);
+  const articles = canvas.getAllByRole('article');
+  const first = articles[0]!;
+  const second = articles[1]!;
+  const names = [
+    await within(first).findByRole('textbox', { name: m.catalogue_create_label() }),
+    await within(second).findByRole('textbox', { name: m.catalogue_create_label() }),
+  ];
+  const local = within(first);
+  const other = within(second);
+  const ids = [...canvasElement.querySelectorAll('[id]')].map((element) => element.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  for (const article of [first, second]) {
+    for (const label of article.querySelectorAll<HTMLLabelElement>('label[for]')) {
+      expect(article.contains(canvasElement.ownerDocument.getElementById(label.htmlFor))).toBe(true);
+    }
+  }
+  await userEvent.type(names[1]!, 'Another independent draft');
+  await userEvent.click(local.getByRole('button', { name: m.publication_submit() }));
+  expect(await local.findByRole('alert')).toHaveTextContent(m.catalogue_create_invalid());
+  expect(other.queryByRole('alert')).toBeNull();
+  expect(names[1]).toHaveValue('Another independent draft');
+  // Use the original native-shaped creation flow; only this first editor is invalid at the transport boundary.
+  await fill(first);
+  await userEvent.click(local.getByRole('button', { name: m.publication_submit() }));
+  const corrections = await local.findAllByRole('alert');
+  expect(corrections.some((alert) => alert.textContent?.includes(m.catalogue_create_invalid()))).toBe(true);
+  for (const link of first.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')) {
+    const target = canvasElement.ownerDocument.getElementById(decodeURIComponent(link.hash.slice(1)))!;
+    expect(first.contains(target)).toBe(true);
+    expect(second.contains(target)).toBe(false);
+    expect(target.tabIndex).toBeGreaterThanOrEqual(-1);
+    await userEvent.click(link);
+    expect(target).toHaveFocus();
+  }
+  expect(other.queryByRole('textbox', { name: m.correction_value() })).toBeNull();
+  expect(names[1]).toHaveValue('Another independent draft');
+  if (longNames) {
+    for (const article of [first, second]) {
+      const bounds = article.getBoundingClientRect();
+      expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth + 1);
+      for (const heading of within(article).getAllByRole('heading')) {
+        expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth + 1);
+        const range = canvasElement.ownerDocument.createRange();
+        range.selectNodeContents(heading);
+        for (const line of range.getClientRects()) {
+          expect(line.left).toBeGreaterThanOrEqual(bounds.left - 1);
+          expect(line.right).toBeLessThanOrEqual(bounds.right + 1);
+        }
+      }
+    }
+  }
+}
+
+const familyEvidence = {
+  docs: {
+    description: {
+      story:
+        'UNRUN: two actual independent editors sharing the same supplied work, with local labels, validation, fact drafts and keyboard fragment targets. Constructed fixture metadata supports phone/desktop/RTL wrapping review; it supplies no native, SSR or visual proof.',
+    },
+  },
+};
+export const IndependentEditorsPhone: Story = {
+  render: () => <PublicationFamilyStory />,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: familyEvidence,
+  play: async ({ canvasElement }) => independentFamily(canvasElement),
+};
+export const IndependentEditorsDesktop: Story = {
+  render: () => <PublicationFamilyStory />,
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  parameters: familyEvidence,
+  play: async ({ canvasElement }) => independentFamily(canvasElement),
+};
+export const IndependentEditorsRtl: Story = {
+  render: () => <PublicationFamilyStory rtl />,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: familyEvidence,
+  play: async ({ canvasElement }) => independentFamily(canvasElement),
+};
+export const LongSuppliedNamesPhone: Story = {
+  render: () => <PublicationFamilyStory longNames />,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: familyEvidence,
+  play: async ({ canvasElement }) => independentFamily(canvasElement, true),
+};
+export const LongSuppliedNamesDesktop: Story = {
+  render: () => <PublicationFamilyStory longNames />,
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  parameters: familyEvidence,
+  play: async ({ canvasElement }) => independentFamily(canvasElement, true),
+};
+export const LongSuppliedNamesRtl: Story = {
+  render: () => <PublicationFamilyStory longNames rtl />,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: familyEvidence,
+  play: async ({ canvasElement }) => independentFamily(canvasElement, true),
+};
