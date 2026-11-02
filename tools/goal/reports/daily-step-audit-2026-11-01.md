@@ -164,3 +164,6 @@ Research evidence is not an adopted policy. Only this report is tracked; no code
 was changed. The existing `tools/goal/src/flow.test.ts` supplies the named tests. Local Goal workspace typing is
 required; original acceptance (`bun tools/goal/src/cli.ts report --flow --json`), acceptance tests, native/browser,
 root, worker-check and remote-check verification are deferred under the launch policy.
+
+Local foreground `bun run --cwd tools/goal typecheck` passed with exit status 0 after the report commit.
+This is workspace typing only; deferred acceptance/native obligations remain with integration.
