@@ -960,6 +960,8 @@
   "settings_account_safety_text": "Manage your password, passkeys and signed-in sessions in security settings.",
   "settings_account_sign_in_text": "Sign in to manage account security and deletion.",
   "settings_account_sign_out_text": "Sign out of your current website session.",
+  "settings_account_sign_out_failed": "Could not submit sign out. Reload your session, then try signing out again.",
+  "settings_account_sign_out_uncertain": "Sign out has not been confirmed. If this page remains open, reload your session before trying again.",
   "settings_sections_loading": "Checking which settings are available…",
   "settings_session_unavailable": "Your session could not be confirmed for these account settings. Try again. Display settings are still available.",
   "settings_account_heading": "Account",

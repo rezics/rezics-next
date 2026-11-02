@@ -1,4 +1,5 @@
-import { useEffect, useId, useSyncExternalStore, useMemo } from 'react';
+import { useContext, useEffect, useId, useSyncExternalStore, useMemo, useRef, useState } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Separator } from '@rezics/ui/shadcn/separator';
@@ -16,6 +17,7 @@ import {
   type ManagedReaderCurrent,
 } from './managed-session-reader';
 import { preferenceRetryDeadline, usePreferenceRetry } from './preference-failure-retry';
+import { sessionQuery } from '../session/query';
 
 export type AccountSafetyProps =
   | {
@@ -23,7 +25,8 @@ export type AccountSafetyProps =
       accountId?: string | null;
       securityHref: string | null;
       csrfToken: string | null;
-      onReload: () => void;
+      onReload: () => void | Promise<unknown>;
+      isCurrent?: ManagedReaderCurrent;
       renameAccount?: AccountRenameNavigation | null;
       renameRead?: {
         loading: boolean;
@@ -57,6 +60,7 @@ export class AccountRenameRegion {
     private readonly read: () => Promise<AccountRenameResult>,
     private readonly accountId?: string | null,
     private readonly current: ManagedReaderCurrent = () => true,
+    private readonly refreshSession?: () => Promise<unknown>,
   ) {}
   snapshot = () => {
     this.live();
@@ -97,14 +101,18 @@ export class AccountRenameRegion {
   reload = (): Promise<void> => {
     if (!this.live() || !this.active || this.value.loading || Date.now() < this.value.retryAt)
       return this.pending ?? Promise.resolve();
-    return this.request();
+    return this.request(true);
   };
-  private request(): Promise<void> {
+  private request(refresh = false): Promise<void> {
     if (!this.live() || !this.active) return Promise.resolve();
     if (this.pending) return this.pending;
     // Clear all old identity, links and failure metadata before awaiting a fresh read.
     this.publish({ loading: true, context: null, retryAt: 0 });
-    this.pending = Promise.resolve()
+    const ready =
+      refresh && this.refreshSession
+        ? Promise.resolve().then(() => (this.live() && this.active ? this.refreshSession!() : undefined))
+        : Promise.resolve();
+    this.pending = ready
       .then((): Promise<AccountRenameResult> | AccountRenameResult =>
         this.live() && this.active ? this.read() : { context: null },
       )
@@ -140,7 +148,14 @@ export async function readCurrentAccountRename(
 }
 
 function CurrentAccountSafety(props: Extract<AccountSafetyProps, { state: 'signed-in' }>) {
+  const client = useContext(QueryClientContext);
   const owner = useManagedSessionReader(props.accountId, props.accountId, props.csrfToken);
+  const refreshSession = useMemo(
+    () => async () => {
+      if (owner.isCurrent() && client) await client.fetchQuery({ ...sessionQuery, staleTime: 0 });
+    },
+    [client, owner],
+  );
   const region = useMemo(
     () =>
       new AccountRenameRegion(
@@ -150,8 +165,9 @@ function CurrentAccountSafety(props: Extract<AccountSafetyProps, { state: 'signe
             : Promise.resolve({ context: null }),
         props.accountId,
         owner.isCurrent,
+        refreshSession,
       ),
-    [props.accountId, props.csrfToken, owner],
+    [props.accountId, props.csrfToken, owner, refreshSession],
   );
   useManagedReaderLifetime(region.dispose, owner);
   const snapshot = useSyncExternalStore(region.subscribe, region.snapshot, region.snapshot);
@@ -160,6 +176,8 @@ function CurrentAccountSafety(props: Extract<AccountSafetyProps, { state: 'signe
   return (
     <AccountSafetyCard
       {...props}
+      onReload={refreshSession}
+      isCurrent={owner.isCurrent}
       renameAccount={result.context}
       renameRead={{
         loading: result.loading,
@@ -169,6 +187,96 @@ function CurrentAccountSafety(props: Extract<AccountSafetyProps, { state: 'signe
         retryAt: result.retryAt,
       }}
     />
+  );
+}
+
+/** Native document submission has no in-page success receipt. Recovery never resubmits it. */
+function AccountSignOut({
+  props,
+  id,
+  actionClass,
+}: {
+  props: Extract<AccountSafetyProps, { state: 'signed-in' }>;
+  id: string;
+  actionClass: string;
+}) {
+  const [phase, setPhase] = useState<'idle' | 'csrf' | 'failed' | 'uncertain'>('idle');
+  const [recovering, setRecovering] = useState(false);
+  const locked = useRef(false);
+  const unavailable = !props.csrfToken || phase === 'csrf';
+  const recover = async () => {
+    if (recovering) return;
+    setRecovering(true);
+    try {
+      await props.onReload();
+      locked.current = false;
+      setPhase('idle');
+    } catch {
+      // Keep the original failure/uncertainty visible until a session read succeeds.
+    } finally {
+      setRecovering(false);
+    }
+  };
+  return (
+    <div className="space-y-3">
+      <p id={`${id}-sign-out`} className="text-sm text-muted-foreground">
+        {m.settings_account_sign_out_text()}
+      </p>
+      <form
+        method="post"
+        action="/auth/sign-out"
+        className="m-0"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!props.csrfToken || !(props.isCurrent ?? alwaysCurrent)()) {
+            setPhase('csrf');
+            return;
+          }
+          if (locked.current || recovering) return;
+          locked.current = true;
+          setPhase('uncertain');
+          try {
+            // Keep the browser's ordinary POST/redirect, including the no-JavaScript fallback.
+            HTMLFormElement.prototype.submit.call(event.currentTarget);
+          } catch {
+            setPhase('failed');
+          }
+        }}
+      >
+        <input type="hidden" name="csrf_token" value={props.csrfToken ?? ''} />
+        <Button
+          type="submit"
+          variant="outline"
+          size="lg"
+          className={actionClass}
+          disabled={unavailable || phase !== 'idle' || recovering}
+          aria-describedby={`${id}-sign-out${unavailable || phase !== 'idle' ? ` ${id}-csrf` : ''}`}
+        >
+          {m.account_sign_out()}
+        </Button>
+      </form>
+      {unavailable || phase !== 'idle' ? (
+        <div className="space-y-2" aria-busy={recovering}>
+          <p id={`${id}-csrf`} role="status" className="text-sm text-muted-foreground">
+            {unavailable
+              ? m.settings_account_csrf_unavailable()
+              : phase === 'failed'
+                ? m.settings_account_sign_out_failed()
+                : m.settings_account_sign_out_uncertain()}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className={actionClass}
+            disabled={recovering}
+            aria-label={`${m.settings_reload()}: ${m.account_sign_out()}`}
+            onClick={() => void recover()}
+          >
+            {m.settings_reload()}
+          </Button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -250,34 +358,7 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
                 </p>
               )}
             </div>
-            <div className="space-y-3">
-              <p id={`${id}-sign-out`} className="text-sm text-muted-foreground">
-                {m.settings_account_sign_out_text()}
-              </p>
-              <form method="post" action="/auth/sign-out" className="m-0">
-                <input type="hidden" name="csrf_token" value={props.csrfToken ?? ''} />
-                <Button
-                  type="submit"
-                  variant="outline"
-                  size="lg"
-                  className={actionClass}
-                  disabled={!props.csrfToken}
-                  aria-describedby={`${id}-sign-out${!props.csrfToken ? ` ${id}-csrf` : ''}`}
-                >
-                  {m.account_sign_out()}
-                </Button>
-              </form>
-              {!props.csrfToken ? (
-                <div className="space-y-2">
-                  <p id={`${id}-csrf`} role="status" className="text-sm text-muted-foreground">
-                    {m.settings_account_csrf_unavailable()}
-                  </p>
-                  <Button type="button" variant="outline" className={actionClass} onClick={props.onReload}>
-                    {m.settings_reload()}
-                  </Button>
-                </div>
-              ) : null}
-            </div>
+            <AccountSignOut props={props} id={id} actionClass={actionClass} />
             <Separator />
             <div className="space-y-3">
               <h3 className="font-medium">{m.settings_account_delete_heading()}</h3>

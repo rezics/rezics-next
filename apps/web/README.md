@@ -357,6 +357,9 @@ element, and the token is never placed in a cookie.
 
 Sign-in uses `GET /auth/sign-in?return_to=/ja`, followed by `GET /auth/callback`. Sign-out uses `POST /auth/sign-out`.
 
+Account recovery refreshes the browser session before an explicit rename retry; sign-out recovery only refreshes the
+session and requires another explicit native form submission, preserving failed or uncertain outcomes without replay.
+
 The private Settings Account section offers handle rename at exactly `<AUTH_ISSUER origin>/account/rename`,
 only when `/account/rename` is declared in `AUTH_MANAGEMENT_PAGE_ROUTES`. Its self context comes from the existing
 session account key, `GET /v1/accounts/{accountId}/profile` and `POST /v1/viewerActions`; only an exact self
