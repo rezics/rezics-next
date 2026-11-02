@@ -536,5 +536,5 @@ export function useAuthoringDeparture(
     },
     [navigation],
   );
-  return { release, requestDiscard, requestNavigation };
+  return { release, requestDiscard, requestNavigation, hasOwner: navigation !== null };
 }

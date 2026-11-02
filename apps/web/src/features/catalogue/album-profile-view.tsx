@@ -36,6 +36,7 @@ import {
   type FactsTransport,
 } from './subject-facts';
 import { SubjectTermsEntry } from './subject-terms-entry';
+import { AuthoringDepartureProvider, useAuthoringDeparture } from '../../threads/authoring-departure';
 
 export type AlbumEditors = {
   facts: FactsTransport;
@@ -237,16 +238,26 @@ function AlbumCorrections({
     <div className="space-y-8" aria-busy={loading}>
       {loadFailure && <EditorFailure reason={loadFailure} locale={locale} />}
       {loading && <p role="status">{m.candidate_loading({}, o)}</p>}
-      <CatalogueCurrentReading visible={visible} ready={visible} revision={String(revision)}>
-        <AlbumCorrectionWorkspace
-          read={read}
-          locale={locale}
-          enabled={enabled}
-          search={search}
-          editors={editors}
-          onReload={reload}
-        />
-      </CatalogueCurrentReading>
+      <AuthoringDepartureProvider
+        onNavigationLeave={lifetime.retire}
+        navigationMessages={{
+          title: m.album_edit({}, o),
+          unsaved: m.thread_authoring_leave_unsaved({}, o),
+          pending: m.thread_authoring_leave_pending({}, o),
+        }}
+      >
+        <CatalogueCurrentReading visible={visible} ready={visible} revision={String(revision)}>
+          <AlbumCorrectionWorkspace
+            read={read}
+            locale={locale}
+            enabled={enabled}
+            search={search}
+            editors={editors}
+            onReload={reload}
+            holderActive={lifetime.active}
+          />
+        </CatalogueCurrentReading>
+      </AuthoringDepartureProvider>
       <Button type="button" variant="outline" disabled={loading} onClick={() => void reload()}>
         {loadFailure ? m.correction_retry({}, o) : m.correction_reload({}, o)}
       </Button>
@@ -263,6 +274,7 @@ function AlbumCorrectionWorkspaceLive({
   search,
   editors,
   onReload,
+  holderActive,
 }: {
   read: FactsCurrent;
   locale: string;
@@ -270,6 +282,7 @@ function AlbumCorrectionWorkspaceLive({
   search: EntityPickerSearch;
   editors: AlbumEditors;
   onReload: () => void;
+  holderActive: () => boolean;
 }) {
   const lifetime = useEditorLifetime();
   const visible = useCurrentReadingVisible();
@@ -296,6 +309,17 @@ function AlbumCorrectionWorkspaceLive({
   const href = subjectHref({ id: subject.id, label: title }, locale).href;
   const label = subject.labels;
   const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
+  // Inclusion selects a batch, not which private assertions the contributor wants to keep.
+  // Observe the whole assertion without validating or preparing a new command.
+  const unfinished = drafts.some((draft) => !draft.result?.ok && factChanged(draft) && albumDraftPopulated(draft));
+  const unresolved =
+    busy ||
+    drafts.some(
+      (draft) =>
+        draft.command &&
+        (!draft.result || (!draft.result.ok && ['uncertain', 'unavailable'].includes(draft.result.reason))),
+    );
+  useAuthoringDeparture(() => holderActive() && (unfinished || unresolved), unresolved, JSON.stringify(drafts));
   const admitted = new Set(fields.scalar);
   const staleDraft = drafts.some((draft) => !admitted.has(draft.property));
   const submit = async () => {

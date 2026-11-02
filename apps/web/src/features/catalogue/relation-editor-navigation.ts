@@ -11,6 +11,7 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../../paraglide/messages.js';
+import { useAuthoringDeparture } from '../../threads/authoring-departure';
 
 export function RelationEditorNavigation({
   dirty,
@@ -22,6 +23,13 @@ export function RelationEditorNavigation({
   isCurrent: () => boolean;
 }) {
   const router = useRouter({ warn: false });
+  const { hasOwner } = useAuthoringDeparture(
+    () => isCurrent() && (dirty || pending),
+    pending,
+    JSON.stringify([dirty, pending]),
+  );
+  // A composed correction page owns the single decision for all its sibling editors.
+  if (hasOwner) return null;
   return router ? createElement(RouterRelationEditorNavigation, { dirty, pending, isCurrent }) : null;
 }
 
