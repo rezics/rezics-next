@@ -103,10 +103,15 @@ test('an independent owned supervisor detects host exit, restarts once, and fenc
   }
 }, 15_000);
 
-test('restart failures preserve the exact cause and use durable bounded backoff across supervisor replacement', async () => {
+test('restart failures preserve the exact cause and durable backoff through damaged journal repair', async () => {
   const dir = temporaryDirectory();
   const failing = join(dir.path, 'failure.ts');
   const attempts = join(dir.path, 'attempts.jsonl');
+  const hostStatePath = join(dir.path, 'manager-host-liveness.json');
+  const retryStatePath = join(dir.path, 'manager-host-liveness-retry.json');
+  const previousError = console.error;
+  const diagnostics: string[] = [];
+  console.error = (...args: unknown[]) => diagnostics.push(args.map(String).join(' '));
   writeFileSync(
     failing,
     `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(attempts)}, JSON.stringify(Date.now())+'\\n'); console.error('fixture host startup cause'); process.exit(17);`,
@@ -114,7 +119,8 @@ test('restart failures preserve the exact cause and use durable bounded backoff 
   const dead = spawn(process.execPath, ['-e', 'setTimeout(() => process.exit(0), 50)'], { stdio: 'ignore' });
   const identity = processIdentity(dead.pid!)!;
   await new Promise((resolve) => dead.once('exit', resolve));
-  writeFileSync(join(dir.path, 'manager-host-liveness.json'), JSON.stringify({ identity, desired: true }));
+  const originalHostState = { identity, desired: true };
+  writeFileSync(hostStatePath, JSON.stringify(originalHostState));
   const config: HostLivenessConfig = {
     stateDirectory: dir.path,
     managerSocket: join(dir.path, 'manager.sock'),
@@ -132,7 +138,9 @@ test('restart failures preserve the exact cause and use durable bounded backoff 
     }
   };
   let controller = new AbortController();
-  let running = superviseHost(config, controller.signal);
+  let supervisorFailure: unknown;
+  const runSupervisor = () => superviseHost(config, controller.signal).catch((error) => (supervisorFailure = error));
+  let running = runSupervisor();
   try {
     await until(() => count().length >= 2);
     controller.abort();
@@ -142,16 +150,49 @@ test('restart failures preserve the exact cause and use durable bounded backoff 
     expect(saved.nextAt - count().at(-1)!).toBeLessThanOrEqual(240);
     const before = count().length;
     controller = new AbortController();
-    running = superviseHost(config, controller.signal);
+    running = runSupervisor();
     await pause(20);
     expect(count()).toHaveLength(before);
     await until(() => count().length > before);
     const times = count();
     expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(140);
     expect(readFileSync(join(dir.path, 'manager-host.log'), 'utf8')).toContain('fixture host startup cause');
+
+    const malformedDiagnostics = () => diagnostics.filter((message) => message.includes('Malformed manager host retry journal'));
+    writeFileSync(retryStatePath, '{');
+    await until(() => supervisorFailure !== undefined || malformedDiagnostics().length >= 1);
+    expect(supervisorFailure).toBeUndefined();
+    writeFileSync(retryStatePath, JSON.stringify({ failures: 1, nextAt: 'later' }));
+    await until(() => supervisorFailure !== undefined || malformedDiagnostics().length >= 2);
+    expect(supervisorFailure).toBeUndefined();
+    const repaired = JSON.parse(readFileSync(retryStatePath, 'utf8')) as { failures: number; nextAt: number };
+    expect(repaired.failures).toBe(30);
+    expect(repaired.nextAt - Date.now()).toBeGreaterThan(0);
+    expect(repaired.nextAt - Date.now()).toBeLessThanOrEqual(config.maxBackoffMs!);
+    expect(malformedDiagnostics()).toHaveLength(2);
+    expect(
+      malformedDiagnostics().every(
+        (message) =>
+          message.includes(retryStatePath) && message.includes('maximum backoff') && message.length < 500,
+      ),
+    ).toBe(true);
+    expect(JSON.parse(readFileSync(hostStatePath, 'utf8'))).toEqual(originalHostState);
+
+    const beforeRepairRestart = count().length;
+    controller.abort();
+    await running;
+    supervisorFailure = undefined;
+    controller = new AbortController();
+    running = runSupervisor();
+    await pause(Math.max(0, repaired.nextAt - Date.now() - 20));
+    expect(supervisorFailure).toBeUndefined();
+    expect(count()).toHaveLength(beforeRepairRestart);
+    await until(() => supervisorFailure !== undefined || count().length > beforeRepairRestart);
+    expect(supervisorFailure).toBeUndefined();
   } finally {
     controller.abort();
     await running;
+    console.error = previousError;
     dir.close();
   }
 }, 10_000);

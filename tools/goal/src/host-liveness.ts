@@ -31,6 +31,7 @@ export type HostLivenessConfig = {
 };
 type HostState = { identity: ProcessIdentity; desired: boolean };
 type RetryState = { failures: number; nextAt: number };
+const maxRetryFailures = 30;
 const statePath = (directory: string) => join(directory, 'manager-host-liveness.json');
 const retryPath = (directory: string) => join(directory, 'manager-host-liveness-retry.json');
 export const supervisorLeasePath = (directory: string) => join(directory, 'manager-host-supervisor.lease');
@@ -99,6 +100,57 @@ function readJson<T>(path: string): T | null {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;
   }
+}
+
+function isRetryState(value: unknown): value is RetryState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const retry = value as Record<string, unknown>;
+  return (
+    typeof retry.failures === 'number' &&
+    Number.isSafeInteger(retry.failures) &&
+    retry.failures >= 0 &&
+    retry.failures <= maxRetryFailures &&
+    typeof retry.nextAt === 'number' &&
+    Number.isSafeInteger(retry.nextAt) &&
+    retry.nextAt >= 0
+  );
+}
+
+function boundedDiagnostic(value: string, limit: number): string {
+  const text = value.replace(/[\r\n\t]+/g, ' ');
+  return text.length <= limit ? text : `${text.slice(0, limit - 3)}...`;
+}
+
+function repairRetryState(path: string, reason: string, maximum: number): RetryState {
+  const retry = {
+    failures: maxRetryFailures,
+    nextAt: Math.min(Number.MAX_SAFE_INTEGER, Date.now() + maximum),
+  };
+  writeJson(path, retry);
+  console.error(
+    `Malformed manager host retry journal ${boundedDiagnostic(path, 160)}: ${boundedDiagnostic(reason, 160)}; replaced with a persisted maximum backoff (${maximum}ms). Inspect the journal if this repeats.`,
+  );
+  return retry;
+}
+
+function readRetryState(path: string, maximum: number): RetryState {
+  let contents: string;
+  try {
+    contents = readFileSync(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { failures: 0, nextAt: 0 };
+    throw error;
+  }
+
+  let value: unknown;
+  try {
+    value = JSON.parse(contents);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return repairRetryState(path, reason, maximum);
+  }
+  if (isRetryState(value)) return value;
+  return repairRetryState(path, 'expected failures from 0 to 30 and a non-negative safe integer nextAt', maximum);
 }
 
 /** Called only under the host lease; identities include boot and start time, never just a PID. */
@@ -242,12 +294,12 @@ export async function superviseHost(
       } else {
         healthySince = Date.now();
         const now = Date.now();
-        const retry = readJson<RetryState>(retryPath(config.stateDirectory)) ?? { failures: 0, nextAt: 0 };
+        const retry = readRetryState(retryPath(config.stateDirectory), maximum);
         if (!retry.nextAt) {
           writeJson(retryPath(config.stateDirectory), { failures: retry.failures, nextAt: now + minimum });
         } else if (now >= retry.nextAt) {
           // Persist before launching, so supervisor replacement cannot reset a crash loop's backoff.
-          const failures = Math.min(30, retry.failures + 1);
+          const failures = Math.min(maxRetryFailures, retry.failures + 1);
           const delay = Math.min(maximum, minimum * 2 ** failures);
           writeJson(retryPath(config.stateDirectory), { failures, nextAt: now + delay });
           try {

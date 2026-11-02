@@ -1097,7 +1097,8 @@ The supermanager sets direction and the managers own the work. This applies to e
   options and a recommendation.
 - **Operations belong to the delivery-system Goal.** Manager-host liveness, stuck or stale checks, hung remote runs,
   worktree cleanup, recovery of tasks stopped by environment or tooling failures in any Goal and promotion
-  are owned by the manager of the Goal that owns `tools/goal`; check-host health is owned by the Goal
+  are owned by the manager of the Goal that owns `tools/goal`; damaged host retry journals are replaced with the
+  persisted maximum configured backoff before recovery. Check-host health is owned by the Goal
   that owns the check scripts. System alerts go to those owners.
 - **Efficiency is measured by scripts.** The hourly report, operational alarms and the supermanager watchdog run without
   model tokens ([delivery ownership](../../docs/development/delivery.md#delivery-ownership)). The supermanager acts on
