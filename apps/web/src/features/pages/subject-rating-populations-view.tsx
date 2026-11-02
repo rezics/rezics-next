@@ -657,7 +657,10 @@ function PopulationVisit({
               type="button"
               variant="outline"
               aria-disabled={selectedWaiting || undefined}
-              onClick={() => retry('selected')}
+              onClick={() => {
+                if (selectedWaiting || !admitRatingRetry(selectedRetryAt)) return;
+                retry('selected');
+              }}
             >
               {m.subject_section_retry({}, options)}
             </Button>

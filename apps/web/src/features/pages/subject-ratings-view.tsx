@@ -223,7 +223,15 @@ export function RatingsView({
       outcome={sources[source]}
       source={source}
       locale={locale}
-      retry={recovery ? () => recovery(source) : undefined}
+      retry={
+        recovery
+          ? () => {
+              const outcome = sources[source];
+              if (!admitRatingRetry(outcome.kind === 'failed' ? outcome.retryAt : undefined)) return;
+              recovery(source);
+            }
+          : undefined
+      }
       owner={owner}
     >
       {result}

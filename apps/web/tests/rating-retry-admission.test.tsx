@@ -143,39 +143,27 @@ test('Retry waits for the captured instant, ignores rapid activation and source 
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
-  const { useSearchRetryWait } = await import('../src/search/search-recovery-retry');
+  const { RatingSourceStatus } = await import('../src/features/pages/subject-ratings-view');
   let now = 1_000;
   const clock = spyOn(Date, 'now').mockImplementation(() => now);
   const recoveries: string[] = [];
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  function WaitRetry({ source, retryAt, onRetry }: { source: string; retryAt?: number; onRetry: () => void }) {
-    const waiting = useSearchRetryWait(retryAt);
-    return createElement(
-      'button',
-      {
-        type: 'button',
-        'data-source': source,
-        'aria-disabled': waiting || undefined,
-        onClick: () => {
-          if (waiting || !admitRatingRetry(retryAt)) return;
-          onRetry();
-        },
-      },
-      waiting ? m.search_recovery_wait() : m.subject_section_retry(),
-    );
-  }
   const renderStatus = async (source: string, retryAt: number) => {
     await act(async () => {
       root.render(
         createElement(
           StrictMode,
           null,
-          createElement(WaitRetry, {
+          createElement(RatingSourceStatus, {
+            outcome: { kind: 'failed', retryAfter: '30', retryAt },
             source,
-            retryAt,
-            onRetry: () => recoveries.push(source),
+            locale: 'en',
+            retry: () => {
+              if (!admitRatingRetry(retryAt)) return;
+              recoveries.push(source);
+            },
           }),
         ),
       );
@@ -184,12 +172,15 @@ test('Retry waits for the captured instant, ignores rapid activation and source 
   try {
     await renderStatus('figure', 31_000);
     const retry = () => host.querySelector<HTMLButtonElement>('button')!;
-    expect(retry().textContent).toBe(m.search_recovery_wait());
+    expect(host.textContent).toContain(m.search_recovery_wait());
+    expect(retry().textContent).toBe(m.subject_section_retry());
     expect(retry().getAttribute('aria-disabled')).toBe('true');
+    expect(host.querySelector('[data-retry-after]')?.getAttribute('data-retry-after')).toBe('30');
     await act(async () => retry().click());
     expect(recoveries).toEqual([]);
     now = 31_000;
     await renderStatus('figure', 31_000);
+    expect(host.textContent).not.toContain(m.search_recovery_wait());
     expect(retry().getAttribute('aria-disabled')).toBeNull();
     await act(async () => retry().click());
     expect(recoveries).toEqual(['figure']);
