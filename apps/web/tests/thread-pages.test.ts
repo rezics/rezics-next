@@ -99,7 +99,7 @@ test('each route has one initial page source; an explicit thread refresh preserv
   expect(refresh.match(/threadPageQuery\(/g)).toHaveLength(1);
   expect(refresh).toContain('queryClient.fetchQuery(');
   expect(refresh).toContain("const mode = session === 'signed-in' ? 'session' : 'anonymous'");
-  expect(refresh).toContain('threadPageQuery(id, cursor, mode)');
+  expect(refresh).toContain('threadPageQuery(id, cursor, mode, undefined, post)');
   expect(refresh).toContain('staleTime: 0');
   expect(refresh).toContain('onPageRefresh={refreshThreadPage}');
   expect(reading).toContain('threadLocation(getLocale(), { id: thread.id, title: displayTitle }, posts.next)');

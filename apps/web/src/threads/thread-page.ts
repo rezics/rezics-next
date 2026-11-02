@@ -17,7 +17,7 @@ type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
 export type ThreadPost = PostPage['posts'][number];
 
-type PageInput = { id: string; cursor?: string };
+type PageInput = { id: string; cursor?: string; post?: string };
 type CanonicalPageInput = PageInput & { expectedSlug: string };
 
 export type ThreadSlugRedirect = { redirect: { id: string; title: string | null } };
@@ -31,6 +31,18 @@ export type LoadedThreadPage = {
   documentMedia?: ThreadDocumentMedia;
   viewerId?: string;
   verification: VerificationConfig;
+  linkedPostUnavailable?: boolean;
+};
+
+/** Consumer seam for the native locator until the controller regenerates the client. */
+type PostLocator = (params: { postId: string }) => {
+  location: {
+    get(options: { headers?: { authorization: string }; fetch: { cache: 'no-store' } }): Promise<{
+      error?: unknown;
+      status?: number;
+      data?: { cursor: string | null } | null;
+    }>;
+  };
 };
 
 function checkRead<T>(result: { error?: unknown; status?: number; data?: T | null }, resource: string): NonNullable<T> {
@@ -81,16 +93,31 @@ export async function loadThreadPage(
   const threadRead = authorization
     ? client.threads({ id: data.id }).get({ headers: { authorization } })
     : client.threads({ id: data.id }).get();
-  const readPosts = () =>
-    authorization
+  let linkedPostUnavailable = false;
+  const readPosts = async () => {
+    let cursor = data.cursor;
+    if (data.post !== undefined) {
+      const posts = client.threads({ id: data.id }).posts as unknown as PostLocator;
+      const result = await posts({ postId: data.post }).location.get({
+        ...(authorization ? { headers: { authorization } } : {}),
+        fetch: { cache: 'no-store' },
+      });
+      if (result.status === 404) {
+        linkedPostUnavailable = true;
+        cursor = undefined;
+      } else {
+        const location = checkRead<{ cursor: string | null }>(result, 'post location');
+        if (!location || (location.cursor !== null && typeof location.cursor !== 'string'))
+          throw new Error('Invalid kernel post location');
+        cursor = location.cursor ?? undefined;
+      }
+    }
+    return authorization
       ? client
           .threads({ id: data.id })
-          .posts.get(
-            data.cursor
-              ? { query: { cursor: data.cursor }, headers: { authorization } }
-              : { headers: { authorization } },
-          )
-      : client.threads({ id: data.id }).posts.get(data.cursor ? { query: { cursor: data.cursor } } : {});
+          .posts.get(cursor ? { query: { cursor }, headers: { authorization } } : { headers: { authorization } })
+      : client.threads({ id: data.id }).posts.get(cursor ? { query: { cursor } } : {});
+  };
   let postsRead = data.expectedSlug === undefined ? readPosts() : undefined;
   const threadResult = await threadRead;
   const thread = checkRead<Thread>(threadResult, 'thread');
@@ -119,6 +146,11 @@ export async function loadThreadPage(
   const [pageContext, postsResult] = await Promise.all([readContext(), postsRead]);
   context = pageContext;
   posts = checkRead<PostPage>(postsResult, 'thread posts');
+  if (
+    data.post !== undefined &&
+    !posts.posts.some((post) => post.id === data.post && post.availability === 'available')
+  )
+    linkedPostUnavailable = true;
   const [mentions, documentMedia] = await Promise.all([
     readDocumentMentions(
       client,
@@ -134,5 +166,6 @@ export async function loadThreadPage(
     posts,
     ...(viewerId ? { viewerId } : {}),
     verification,
+    ...(data.post === undefined ? {} : { linkedPostUnavailable }),
   };
 }

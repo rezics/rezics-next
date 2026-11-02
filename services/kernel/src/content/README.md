@@ -254,6 +254,22 @@ The executable API contract is `specs/content-notification-outcomes.test.ts`, wi
 `Content notification outcome driver is required`. The suite remains red until that binding and the product
 implementation exist. The specification verifier checks this intentional red state without substituting a driver.
 
+## Linked post location
+
+`GET /v1/threads/:id/posts/:postId/location` returns only `{ cursor: string | null }`, private/no-store. The cursor
+uses the existing `content.posts` signed binding (thread, viewer, partition epoch and expiry). Null starts the first
+page. Initial and final ordinary exact post disclosure must admit an available post in that exact thread; absent,
+foreign-thread, withdrawn and unreadable posts all return the ordinary 404. A location grants no reading authority:
+`post.list` independently checks current disclosure, including after a withdrawal between location and use.
+
+Between those checks, a same-partition SQL seek reads one exact target and at most one predecessor in the existing
+`(route, thread_id, created_at, post_id)` index. It preserves timestamp microseconds and the UUID tie-breaker, including
+when the predecessor is unreadable. No predecessor content or identity is returned outside the signed cursor.
+`POST_LOCATION_BOUNDS` states two native exact reads (each with the existing 33-node ancestry cap) plus two indexed
+keys; total cost is `2 * nativePostRead + 2`, with logarithmic seeks independent of thread length. The subsequent
+ordinary reader retains its own finite 200-candidate/100-result ceiling. A linked post takes precedence over a page
+cursor; unavailable links recover at the thread beginning, while Next continues without the locator.
+
 ## Post revision provenance
 
 Ordinary site edits omit `licence`, allowing the native revision command to inherit the stored SPDX identifier.

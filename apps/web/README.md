@@ -2558,6 +2558,20 @@ reference-project source was needed for these existing controls and command surf
 
 ## Thread reading
 
+Canonical thread links retain `?post=<id>#post-<id>` through both redirects. A linked post takes precedence over a
+supplied cursor: one private native `post.locate` read supplies a signed predecessor cursor, then the existing post
+page independently admits current content. There is no page scan or exact-body fallback. An unavailable or
+foreign-thread link shows the ordinary first page with neutral recovery to the thread beginning; a withdrawal after
+location shows only the ordinary reader's current result and the same recovery. Next drops the locator. Query and
+caller identities include the linked post so navigation cannot reuse another anchor's page. The generated client
+remains controller-owned; `thread-page.ts` isolates the declared locator transport seam.
+
+The optional locator adds one kernel request to the ordinary thread page bound. Its producer bound is two exact
+native post disclosures (ancestry capped at 33 each) plus one target key and one predecessor, followed by the existing
+page's at most 200 candidates and at most 100 returned posts. `POST_LOCATION_BOUNDS` records the producer constants;
+composition is `2 * nativePostRead + 2 indexed keys + ordinaryThreadPage`, independent of the target's page number.
+Focused destination coverage is `tests/thread-post-location.test.tsx`; native and browser acceptance run at integration.
+
 The slug route composes `threads/thread-reading.tsx` with its native post/header regions and one composer across
 parent selection/cancellation. Replies render command results and refresh the existing private personal read.
 Reactions, reports, edits, history and restoration retain their command paths. Current bodies never fall back to

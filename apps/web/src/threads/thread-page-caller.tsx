@@ -22,6 +22,7 @@ type SessionStamp = {
 export type ThreadPageRouteIdentity = {
   id: string;
   cursor?: string;
+  post?: string;
   slug?: string;
   locale: string;
   credentialMode: ReadCredentialMode;
@@ -260,6 +261,7 @@ function sameIdentity(left: ThreadPageRouteIdentity, right: ThreadPageRouteIdent
   return (
     left.id === right.id &&
     left.cursor === right.cursor &&
+    left.post === right.post &&
     left.slug === right.slug &&
     left.locale === right.locale &&
     left.credentialMode === right.credentialMode
@@ -1386,7 +1388,17 @@ export function useThreadPageCaller(
   const client = useContext(QueryClientContext);
   const caller = useMemo(
     () => (client ? ThreadPageCaller.bind(client, admission, page, identity) : undefined),
-    [client, admission, page, identity.id, identity.cursor, identity.slug, identity.locale, identity.credentialMode],
+    [
+      client,
+      admission,
+      page,
+      identity.id,
+      identity.cursor,
+      identity.post,
+      identity.slug,
+      identity.locale,
+      identity.credentialMode,
+    ],
   );
   const previousCaller = useRef<ThreadPageCaller | undefined>(undefined);
   if (previousCaller.current && previousCaller.current !== caller) previousCaller.current.retireFromRouteChange();

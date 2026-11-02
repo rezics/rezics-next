@@ -19,16 +19,21 @@ export function threadPageQuery(
   cursor: string | undefined,
   credentialMode: CredentialMode,
   expectedSlug?: string,
+  post?: string,
 ) {
   return queryOptions({
     ...publicRead,
-    queryKey: readQueryKey(['thread-page', id, cursor ?? null, expectedSlug ?? null], credentialMode),
+    queryKey: readQueryKey(
+      ['thread-page', id, cursor ?? null, expectedSlug ?? null, ...(post === undefined ? [] : [post])],
+      credentialMode,
+    ),
     queryFn: () =>
       readThreadPage({
         data: {
           id,
           ...(cursor === undefined ? {} : { cursor }),
           ...(expectedSlug === undefined ? {} : { expectedSlug }),
+          ...(post === undefined ? {} : { post }),
           credentialMode,
         },
       }),

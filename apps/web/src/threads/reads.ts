@@ -65,6 +65,7 @@ export const readReplyParent = createServerFn({ method: 'GET' })
 type PageInput = {
   id: string;
   cursor?: string;
+  post?: string;
   sort?: 'hot' | 'new';
   expectedSlug?: string;
   credentialMode?: ReadCredentialMode;
@@ -77,6 +78,7 @@ function validatePageInput(input: unknown): PageInput {
     typeof input.id !== 'string' ||
     input.id.length > 128 ||
     ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string') ||
+    ('post' in input && input.post !== undefined && (typeof input.post !== 'string' || input.post.length > 128)) ||
     ('sort' in input && input.sort !== undefined && input.sort !== 'hot' && input.sort !== 'new') ||
     ('expectedSlug' in input && input.expectedSlug !== undefined && typeof input.expectedSlug !== 'string') ||
     ('credentialMode' in input &&
@@ -88,6 +90,7 @@ function validatePageInput(input: unknown): PageInput {
   return {
     id: input.id,
     ...('cursor' in input && typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
+    ...('post' in input && typeof input.post === 'string' ? { post: input.post } : {}),
     ...('sort' in input && (input.sort === 'hot' || input.sort === 'new') ? { sort: input.sort } : {}),
     ...('expectedSlug' in input && typeof input.expectedSlug === 'string' ? { expectedSlug: input.expectedSlug } : {}),
     ...('credentialMode' in input && (input.credentialMode === 'anonymous' || input.credentialMode === 'session')
@@ -376,6 +379,7 @@ export const readThreadPage = createServerFn({ method: 'GET' })
           provenanceSubjects: ThreadSubject[];
           documentMedia?: ThreadDocumentMedia;
           now: string;
+          linkedPostUnavailable?: boolean;
         }
       | ThreadSlugRedirect
     > => {

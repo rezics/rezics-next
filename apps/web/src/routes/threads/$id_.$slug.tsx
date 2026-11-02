@@ -27,7 +27,6 @@ import { useSession } from '../../session/query';
 import { createFileRoute, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { QueryClientContext, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import * as v from 'valibot';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { threadPageQuery, threadPersonalQuery } from '../../threads/thread-queries';
@@ -38,6 +37,7 @@ import {
   sameThreadSlug,
   slugMatches,
   threadLocation,
+  threadSearch,
   threadTitle,
 } from '../../threads/thread-href';
 import { BoardContext } from '../../threads/thread-context';
@@ -61,23 +61,19 @@ import {
   type ThreadPageRouteIdentity,
 } from '../../threads/thread-page-caller';
 
-function threadSearch(search: Record<string, unknown>): { cursor?: string } {
-  const cursor = v.parse(v.fallback(v.optional(v.string()), undefined), search.cursor);
-  return typeof cursor === 'string' ? { cursor } : {};
-}
-
 export const Route = createFileRoute('/threads/$id_/$slug')({
   staticData: { publicCache: true },
   validateSearch: threadSearch,
-  loaderDeps: ({ search }) => ({ cursor: threadSearch(search).cursor }),
+  loaderDeps: ({ search }) => threadSearch(search),
   loader: async ({ params, deps, context }) => {
     const mode = context.credentialMode;
     const known = rememberedThreadSlug(params.id);
     const expectedSlug = known !== undefined && slugMatches(params.slug, known) ? undefined : params.slug;
-    const query = threadPageQuery(params.id, deps.cursor, mode, expectedSlug);
+    const query = threadPageQuery(params.id, deps.cursor, mode, expectedSlug, deps.post);
     const identity: ThreadPageRouteIdentity = {
       id: params.id,
       ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
+      ...(deps.post === undefined ? {} : { post: deps.post }),
       slug: params.slug,
       locale: getLocale(),
       credentialMode: mode,
@@ -90,7 +86,7 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
     if ('redirect' in page) {
       rememberThreadSlug(page.redirect.id, page.redirect.title);
       caller.assertReadCurrent();
-      const href = threadLocation(getLocale(), page.redirect, deps.cursor);
+      const href = threadLocation(getLocale(), page.redirect, deps.cursor, deps.post);
       caller.assertReadCurrent();
       caller.retireFromRouteChange();
       throw redirect({ href, statusCode: 301 });
@@ -100,12 +96,16 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
     rememberThreadSlug(page.thread.id, title);
     caller.assertReadCurrent();
     if (!sameThreadSlug(params.slug, title)) {
-      const href = threadLocation(getLocale(), { id: page.thread.id, title }, deps.cursor);
+      const href = threadLocation(getLocale(), { id: page.thread.id, title }, deps.cursor, deps.post);
       caller.assertReadCurrent();
       caller.retireFromRouteChange();
       throw redirect({ href, statusCode: 301 });
     }
-    return { ...page, callerAdmission: caller.admission, indexable: deps.cursor === undefined };
+    return {
+      ...page,
+      callerAdmission: caller.admission,
+      indexable: deps.cursor === undefined && deps.post === undefined,
+    };
   },
   head: ({ loaderData }) => (loaderData ? threadPageHead(loaderData) : { meta: [{ title: m.threads_untitled() }] }),
   component: ThreadPage,
@@ -117,6 +117,14 @@ export function ThreadReadingHeader({ page, title }: { page: ThreadReadingPage; 
       <BoardContext realm={page.realm} board={page.board} prominent />
       {title ? <PageHeading>{title}</PageHeading> : null}
       <ThreadSubjects subjects={page.subjects} />
+      {page.linkedPostUnavailable ? (
+        <div role="status" className="space-y-2">
+          <p>{m.thread_post_unavailable()}</p>
+          <a href={threadLocation(getLocale(), { id: page.thread.id, title })} className="underline">
+            {m.thread_posts_heading()}
+          </a>
+        </div>
+      ) : null}
     </header>
   );
 }
@@ -148,13 +156,13 @@ export function ThreadPage() {
   const location = useLocation();
   const id = Route.useParams().id;
   const slug = Route.useParams().slug;
-  const cursor = Route.useSearch().cursor;
+  const { cursor, post } = Route.useSearch();
   const locale = getLocale();
   const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
   const routeSearch = JSON.stringify(location.search);
   const readScope = useMemo(
     () => ({}),
-    [id, cursor, slug, locale, location.pathname, routeSearch, queryClient, loadedPage.callerAdmission.id],
+    [id, cursor, post, slug, locale, location.pathname, routeSearch, queryClient, loadedPage.callerAdmission.id],
   );
   const activeRefresh = refreshed?.source === loadedPage && refreshed.scope === readScope ? refreshed : undefined;
   const activePage = activeRefresh?.page ?? loadedPage;
@@ -163,11 +171,12 @@ export function ThreadPage() {
     () => ({
       id,
       ...(cursor === undefined ? {} : { cursor }),
+      ...(post === undefined ? {} : { post }),
       slug,
       locale,
       credentialMode: activeAdmission.identity.credentialMode,
     }),
-    [id, cursor, slug, locale, activeAdmission.identity.credentialMode],
+    [id, cursor, post, slug, locale, activeAdmission.identity.credentialMode],
   );
   const binding = useThreadPageCaller(activeAdmission, activePage, identity);
   const caller = binding.caller;
@@ -299,10 +308,11 @@ export function ThreadPage() {
     if (read.operation?.accepted) read.operation.invalidate();
     else read.operation?.retire();
     const mode = session === 'signed-in' ? 'session' : 'anonymous';
-    const query = threadPageQuery(id, cursor, mode);
+    const query = threadPageQuery(id, cursor, mode, undefined, post);
     const nextIdentity: ThreadPageRouteIdentity = {
       id,
       ...(cursor === undefined ? {} : { cursor }),
+      ...(post === undefined ? {} : { post }),
       slug,
       locale,
       credentialMode: mode,
@@ -386,7 +396,7 @@ export function ThreadPage() {
       if (session === 'signed-in' && updated.viewerId !== undefined && (!subject || updated.viewerId !== subject))
         throw new Error('Current thread reader unavailable');
       nextCaller.assertReadCurrent();
-      const destination = threadLocation(locale, { id: updated.thread.id, title: updated.thread.title }, cursor);
+      const destination = threadLocation(locale, { id: updated.thread.id, title: updated.thread.title }, cursor, post);
       if (!current()) throw new Error('Thread reader changed');
       accepted = true;
       operation.accepted = true;

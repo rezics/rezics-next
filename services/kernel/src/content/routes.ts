@@ -1,5 +1,6 @@
 import { readAuthorErasureAdmission, type AuthorErasureAdmission } from './author-erasure-admission.ts';
 import { readEditionSourceIdentity } from './edition-reads.ts';
+import { locateThreadPost } from './post-location.ts';
 import { editionRoutes } from './edition-routes.ts';
 import { listAuthorThreads, listAuthorPosts } from './author-item-reads.ts';
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
@@ -719,6 +720,32 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const posts = await withViewerReactions(dependencies, actor, page.entries, job.deadline);
             const counted = await withReactionCounts(dependencies, posts, job.deadline);
             return { posts: [...counted.items], next: page.nextCursor, reactionsAsOf: counted.reactionsAsOf };
+          }),
+        );
+      },
+    )
+    .get(
+      '/v1/threads/:id/posts/:postId/location',
+      {
+        params: t.Object({ id: t.String(), postId: t.String() }, { additionalProperties: false }),
+        response: {
+          200: withHeaders(
+            t.Object({ cursor: t.Union([t.String(), t.Null()]) }, { additionalProperties: false }),
+            sessionHeader,
+          ),
+          ...readFailures,
+        },
+        detail: { operationId: 'post.locate', 'x-exposure': 'public', 'x-action': 'post:read', security: readSecurity },
+      },
+      async ({ params: { id, postId }, actor, admission, job, session, set }) => {
+        existingId(id);
+        existingId(postId);
+        set.headers['cache-control'] = 'private, no-store';
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const location = await locateThreadPost(dependencies, id, postId, { actor, deadline: job.deadline });
+            session.record(sessionComponent(location.anchor));
+            return location.value;
           }),
         );
       },

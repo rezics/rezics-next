@@ -75,7 +75,7 @@ export async function loadBoardPageWithAuthors(
   };
 }
 
-type ThreadPageInput = PageInput & { expectedSlug?: string };
+type ThreadPageInput = PageInput & { expectedSlug?: string; post?: string };
 type ThreadPageWithAuthors = LoadedThreadPage & { authors: PageAuthors; subjects: ThreadSubject[]; now: string };
 
 export function loadThreadPageWithAuthors(

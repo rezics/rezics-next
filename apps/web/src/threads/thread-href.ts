@@ -18,9 +18,24 @@ export function threadHref(thread: { id: string; title: string | null }): string
 }
 
 /** The locale path of a thread, keeping an opaque cursor when the reader is past the first page. */
-export function threadLocation(locale: string, thread: { id: string; title: string | null }, cursor?: string): string {
+export function threadLocation(
+  locale: string,
+  thread: { id: string; title: string | null },
+  cursor?: string,
+  post?: string,
+): string {
   const path = `/${locale}${threadHref(thread)}`;
-  return cursor === undefined ? path : `${path}?cursor=${encodeURIComponent(cursor)}`;
+  const search: string[] = [];
+  if (cursor !== undefined) search.push(`cursor=${encodeURIComponent(cursor)}`);
+  if (post !== undefined) search.push(`post=${encodeURIComponent(post)}`);
+  return `${path}${search.length ? `?${search.join('&')}` : ''}${post === undefined ? '' : `#post-${encodeURIComponent(post)}`}`;
+}
+
+export function threadSearch(search: Record<string, unknown>): { cursor?: string; post?: string } {
+  return {
+    ...(typeof search.cursor === 'string' ? { cursor: search.cursor } : {}),
+    ...(typeof search.post === 'string' && search.post.length <= 128 ? { post: search.post } : {}),
+  };
 }
 
 /**
