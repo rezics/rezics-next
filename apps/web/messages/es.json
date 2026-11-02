@@ -3664,6 +3664,7 @@
   "library_my_logs_denied": "Tu acceso actual no permite leer tus registros publicados.",
   "library_my_logs_preparing": "Se están preparando tus registros publicados. Vuelve a intentarlo en unos instantes.",
   "library_my_logs_unavailable": "Tus registros publicados no están disponibles. Vuelve a intentarlo.",
+  "library_my_logs_invalid_position": "La posición guardada de la página no es válida. Abre tus registros publicados más recientes para continuar.",
   "library_my_logs_retry": "Volver a intentar",
   "library_my_logs_restarted": "La página ha cambiado. Se muestran tus registros publicados más recientes.",
   "library_my_logs_newest": "Registros publicados más recientes",

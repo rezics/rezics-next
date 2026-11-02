@@ -184,7 +184,7 @@ test('personal route and navigation use existing signed-in/no-store authority, l
   expect(page).toContain('/logs/${encodeURIComponent(log.id)}');
   expect(page).not.toMatch(/removePublishedLog|restorePublishedLog|progress\/|completedUnitCount/);
   expect(myLogsSearch({ accountId: 'foreign', publisher: 'foreign' })).toEqual({});
-  expect(() => myLogsSearch({ cursor: 'a'.repeat(4097) })).toThrow();
+  expect(myLogsSearch({ cursor: 'a'.repeat(4097) })).toEqual({ invalidPosition: true });
   for (const locale of ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const) {
     const [entry] = resolveNavigation(myLogsNavigation, { locale, pathname: `/${locale}/library/logs` });
     expect(entry).toMatchObject({

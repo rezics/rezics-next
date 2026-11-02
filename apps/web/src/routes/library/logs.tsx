@@ -11,7 +11,10 @@ export const Route = createFileRoute('/library/logs')({
   beforeLoad: requireSignedIn,
   validateSearch: myLogsSearch,
   loaderDeps: ({ search }) => myLogsSearch(search),
-  loader: ({ deps }) => readMyPublishedLogHistoryForViewer({ data: deps }),
+  loader: ({ deps }) =>
+    deps.invalidPosition
+      ? { sessionSubject: null, cursor: null, locale: '', page: { state: 'invalid-position' as const } }
+      : readMyPublishedLogHistoryForViewer({ data: deps }),
   staleTime: 0,
   gcTime: 0,
   head: ({ match }) =>
@@ -20,5 +23,12 @@ export const Route = createFileRoute('/library/logs')({
 });
 
 function MyLogsRoute() {
-  return <MyLogsCurrentViewer initial={Route.useLoaderData()} cursor={Route.useSearch().cursor} />;
+  const search = Route.useSearch();
+  return (
+    <MyLogsCurrentViewer
+      initial={Route.useLoaderData()}
+      cursor={search.cursor}
+      invalidPosition={search.invalidPosition === true}
+    />
+  );
 }

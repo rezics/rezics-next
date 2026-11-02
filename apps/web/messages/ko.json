@@ -3664,6 +3664,7 @@
   "library_my_logs_denied": "현재 접근 권한으로는 공개한 독서 기록을 읽을 수 없습니다.",
   "library_my_logs_preparing": "공개한 독서 기록을 준비하고 있습니다. 잠시 후 다시 시도하세요.",
   "library_my_logs_unavailable": "공개한 독서 기록을 사용할 수 없습니다. 다시 시도하세요.",
+  "library_my_logs_invalid_position": "저장된 페이지 위치가 올바르지 않습니다. 계속하려면 최근에 공개한 기록을 여세요.",
   "library_my_logs_retry": "다시 시도",
   "library_my_logs_restarted": "페이지가 변경되어 가장 최근에 공개한 기록을 표시합니다.",
   "library_my_logs_newest": "최근 공개 기록",

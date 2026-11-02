@@ -35,9 +35,11 @@ function matchesOwner(read: MyLogsViewerHistory, subject: string, cursor: string
 export function MyLogsCurrentViewer({
   initial,
   cursor,
+  invalidPosition = false,
 }: {
   initial: MyLogsViewerHistory;
   cursor?: string | undefined;
+  invalidPosition?: boolean;
 }) {
   useOperation('published_log.list');
   const locale = getLocale();
@@ -63,6 +65,7 @@ export function MyLogsCurrentViewer({
       queryKey,
       enabled:
         personalRead.enabled &&
+        !invalidPosition &&
         origin.hydrated &&
         !!origin.subject &&
         origin.allowed[0] === true &&
@@ -109,8 +112,9 @@ export function MyLogsCurrentViewer({
     read.sessionSubject === null &&
     read.page.state !== 'loaded' &&
     matchesAddress(read, address.cursor, locale);
-  const page: MyLogsPage =
-    !origin.subject || !origin.allowed[0]
+  const page: MyLogsPage = invalidPosition
+    ? { state: 'invalid-position' }
+    : !origin.subject || !origin.allowed[0]
       ? !origin.hydrated && matchesAddress(initial, address.cursor, locale) && initial.page.state !== 'loaded'
         ? initial.page
         : {
@@ -168,7 +172,17 @@ export function MyLogsPageView({
         <PageHeading>{m.library_my_logs_heading()}</PageHeading>
         <p className="text-muted-foreground">{m.library_my_logs_description()}</p>
       </header>
-      {page.state === 'signed-out' ? (
+      {page.state === 'invalid-position' ? (
+        <div className="space-y-3">
+          <p role="alert">{m.library_my_logs_invalid_position()}</p>
+          <a
+            href={`/${getLocale()}/library/logs`}
+            className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded px-3 py-2 text-start whitespace-normal text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {m.library_my_logs_newest()}
+          </a>
+        </div>
+      ) : page.state === 'signed-out' ? (
         <a
           href={`/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/library/logs`)}`}
           className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded px-3 py-2 text-start whitespace-normal text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"

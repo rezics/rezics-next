@@ -3664,6 +3664,7 @@
   "library_my_logs_denied": "Mit deinem aktuellen Zugriff können deine veröffentlichten Leseeinträge nicht gelesen werden.",
   "library_my_logs_preparing": "Deine veröffentlichten Leseeinträge werden vorbereitet. Versuche es gleich noch einmal.",
   "library_my_logs_unavailable": "Deine veröffentlichten Leseeinträge sind nicht verfügbar. Versuche es erneut.",
+  "library_my_logs_invalid_position": "Die gespeicherte Seitenposition ist ungültig. Öffne deine neuesten veröffentlichten Leseeinträge, um fortzufahren.",
   "library_my_logs_retry": "Erneut versuchen",
   "library_my_logs_restarted": "Die Seite hat sich geändert. Deine neuesten veröffentlichten Leseeinträge werden angezeigt.",
   "library_my_logs_newest": "Neueste veröffentlichte Leseeinträge",

@@ -197,6 +197,8 @@ and a few pins. State is a tile chip in profile wording and a filter; state Coll
 navigation tabs. Following holds subjects, Collections and Spaces, with no following feed or public follower totals.
 History contains consumption sessions and published logs while permitted by lifecycle policy.
 
+Decision: A malformed saved published-log position shows a localized explanation and a locale-preserving GET link to the newest page; reading starts only when the owner opens that link.
+
 Authorized signed-in readers can load a private session detail, its changes and completed-units pages, and their
 published-log history without a CSRF token. Corrections, publication and withdrawal require a current mutation
 credential; an uncertain command retains its original credential, sender, request key and operands. Public log reads

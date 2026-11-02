@@ -5,7 +5,7 @@ import { nameSubjectTypes } from '../subject/definitions';
 import { kernelClient, requestLocale } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { sessionSubject, viewerCredential } from '../session/request';
-import { myLogsResult, myLogsSearch, PublishedLogListError, type MyLogsPage } from './my-logs';
+import { myLogsResult, PublishedLogListError, requireMyLogsSearch, type MyLogsPage } from './my-logs';
 import {
   deletePublishedLog as deleteLog,
   restorePublishedLog as restoreLog,
@@ -31,15 +31,7 @@ function validateLogId(input: unknown): { id: string } {
 }
 
 function validateListInput(input: unknown): { cursor?: string } {
-  if (
-    !input ||
-    typeof input !== 'object' ||
-    ('cursor' in input &&
-      input.cursor !== undefined &&
-      (typeof input.cursor !== 'string' || input.cursor.length > 4096))
-  )
-    throw new Error('Invalid published log cursor');
-  return 'cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {};
+  return requireMyLogsSearch(input);
 }
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -118,7 +110,7 @@ export const readMyPublishedLogs = createServerFn({ method: 'GET' })
 
 /** The history entry uses the same owner reader as the session page, with explicit failure states. */
 export const readMyPublishedLogHistory = createServerFn({ method: 'GET' })
-  .validator((input: unknown) => myLogsSearch(validateListInput(input)))
+  .validator(validateListInput)
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     return myLogsResult(() => readMyPublishedLogs({ data }));
@@ -134,7 +126,7 @@ export type MyLogsViewerHistory = {
 
 /** The list and its owner provenance must come from the same reader preparation. */
 export const readMyPublishedLogHistoryForViewer = createServerFn({ method: 'GET' })
-  .validator((input: unknown) => myLogsSearch(validateListInput(input)))
+  .validator(validateListInput)
   .handler(async ({ data }): Promise<MyLogsViewerHistory> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();

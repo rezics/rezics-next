@@ -3664,6 +3664,7 @@
   "library_my_logs_denied": "当前访问权限无法读取你发布的阅读日志。",
   "library_my_logs_preparing": "正在准备你发布的阅读日志，请稍后重试。",
   "library_my_logs_unavailable": "暂时无法读取你发布的阅读日志，请重试。",
+  "library_my_logs_invalid_position": "这个保存的页面位置无效。请打开最新发布的阅读日志以继续。",
   "library_my_logs_retry": "重试",
   "library_my_logs_restarted": "页面已发生变化，现显示最新发布的阅读日志。",
   "library_my_logs_newest": "最新发布的阅读日志",

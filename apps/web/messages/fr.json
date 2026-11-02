@@ -3664,6 +3664,7 @@
   "library_my_logs_denied": "Votre accès actuel ne permet pas de lire vos journaux publiés.",
   "library_my_logs_preparing": "Vos journaux publiés sont en cours de préparation. Réessayez dans un instant.",
   "library_my_logs_unavailable": "Vos journaux publiés sont indisponibles. Réessayez.",
+  "library_my_logs_invalid_position": "Cette position de page enregistrée est invalide. Ouvrez vos journaux publiés les plus récents pour continuer.",
   "library_my_logs_retry": "Réessayer",
   "library_my_logs_restarted": "La page a changé. Vos journaux publiés les plus récents sont affichés.",
   "library_my_logs_newest": "Journaux publiés les plus récents",

@@ -5,7 +5,7 @@ import { isPlatformClosedError } from '../kernel/platform-closed';
 import { assertPublicCacheReadAllowed } from '../security/page-cache';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import { PublishedLogListError } from './my-logs';
+import { PublishedLogListError, requireMyLogsSearch } from './my-logs';
 import {
   LIBRARY_PAGE_LIMIT,
   libraryFullQuery,
@@ -133,6 +133,7 @@ export async function loadMyPublishedLogs(
   sessionEnv: Partial<SessionEnv>,
   input: { cursor?: string },
 ): Promise<PublishedLogPage> {
+  const { cursor } = requireMyLogsSearch(input);
   if (await prepareSession(request, sessionEnv)) return { signedIn: false, logs: [], next: null };
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
@@ -141,9 +142,9 @@ export async function loadMyPublishedLogs(
   let page: NativePublishedLogPage;
   let restarted = false;
   try {
-    page = await readLogPage(client, accountId, authorization, input.cursor);
+    page = await readLogPage(client, accountId, authorization, cursor);
   } catch (error) {
-    if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
+    if (!(error instanceof StaleCursorError) || !cursor) throw error;
     page = await readLogPage(client, accountId, authorization);
     restarted = true;
   }

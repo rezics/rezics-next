@@ -3664,6 +3664,7 @@
   "library_my_logs_denied": "現在のアクセス権では、公開した読書ログを読み込めません。",
   "library_my_logs_preparing": "公開した読書ログを準備しています。しばらくしてから再試行してください。",
   "library_my_logs_unavailable": "公開した読書ログを利用できません。再試行してください。",
+  "library_my_logs_invalid_position": "保存されたページ位置が正しくありません。続けるには最新の公開ログを開いてください。",
   "library_my_logs_retry": "再試行",
   "library_my_logs_restarted": "ページが変更されたため、最新の公開ログを表示しています。",
   "library_my_logs_newest": "最新の公開ログ",

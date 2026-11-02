@@ -3828,6 +3828,7 @@
   "library_my_logs_denied": "Your published logs cannot be read with your current access.",
   "library_my_logs_preparing": "Your published logs are being prepared. Try again shortly.",
   "library_my_logs_unavailable": "Your published logs are unavailable. Try again.",
+  "library_my_logs_invalid_position": "This saved page position is invalid. Open your newest published logs to continue.",
   "library_my_logs_retry": "Try again",
   "library_my_logs_restarted": "The page changed. Showing your newest published logs.",
   "library_my_logs_newest": "Newest published logs",

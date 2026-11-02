@@ -3664,6 +3664,7 @@
   "library_my_logs_denied": "目前的存取權限無法讀取你發布的閱讀日誌。",
   "library_my_logs_preparing": "正在準備你發布的閱讀日誌，請稍後重試。",
   "library_my_logs_unavailable": "暫時無法讀取你發布的閱讀日誌，請重試。",
+  "library_my_logs_invalid_position": "這個儲存的頁面位置無效。請開啟最新發布的閱讀日誌以繼續。",
   "library_my_logs_retry": "重試",
   "library_my_logs_restarted": "頁面已變更，現顯示最新發布的閱讀日誌。",
   "library_my_logs_newest": "最新發布的閱讀日誌",
