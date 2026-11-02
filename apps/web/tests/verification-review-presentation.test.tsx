@@ -123,7 +123,7 @@ test('management review keeps evidence, failed drafts and delayed decisions atta
     expect(calls[1]!.input).toEqual(calls[0]!.input);
     await settle(2, { state: 'accepted', request: { ...request, state: 'approving' } });
     expect(host.textContent).toContain(m.av_approval_accepted());
-    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
+    expect(textarea().disabled).toBe(false);
     await fill('Second application evidence checked.');
     await decide();
     expect(calls[3]!.input.targetId).toBe(secondId);
