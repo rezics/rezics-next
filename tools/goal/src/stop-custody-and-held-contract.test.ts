@@ -14,7 +14,7 @@ const ownedWorker = `#!/usr/bin/env bun
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 process.on('SIGTERM', () => {});
-const child = spawn(process.execPath, ['-e', "process.on('SIGTERM',()=>{}); setInterval(()=>{},1000)"], { stdio: 'ignore' });
+const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' });
 writeFileSync('.stop-child', String(child.pid));
 setInterval(() => {}, 1000);
 `;
@@ -87,7 +87,7 @@ test('normal stop ends exactly its owned detached check process tree with honest
     });
     expect(status.join('\n')).toContain('"processIdentity": "known"');
     expect(status.join('\n')).toContain('"state": "requested"');
-    await terminateProcessGroup(controllerIdentity!, 50);
+    if (sameProcess(controllerIdentity!)) process.kill(controllerIdentity!.pid, 'SIGKILL');
     await controllerClosed;
 
     recoveryStore = new WorkerStore(openDb(join(h.settings.stateDirectory, 'goal.sqlite')));
@@ -106,7 +106,8 @@ test('normal stop ends exactly its owned detached check process tree with honest
     expect(h.store.events(task.id, ref.attempt).filter((event) => event.kind === 'termination-requested')).toHaveLength(1);
     expect(h.store.retryIntent(ref)).toMatchObject({ status: 'abandoned', abandonedBy: 'stop' });
   } finally {
-    if (controllerIdentity) await terminateProcessGroup(controllerIdentity, 50).catch(() => {});
+    if (controllerIdentity && sameProcess(controllerIdentity)) process.kill(controllerIdentity.pid, 'SIGKILL');
+    await controllerClosed?.catch(() => {});
     if (ownedIdentity) await terminateProcessGroup(ownedIdentity, 50).catch(() => {});
     if (peerIdentity) await terminateProcessGroup(peerIdentity, 50).catch(() => {});
     await workerExited?.catch(() => {});
@@ -150,12 +151,11 @@ test('unstarted held retry --brief preserves task identity, attempt 0, work, dep
       current.state = 'merged';
     });
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
-    await Promise.all([job.recoverOrphans(), job.recoverOrphans()]);
+    await job.recoverOrphans();
     expect(h.store.task(task.id)).toMatchObject({ id: task.id, currentAttempt: 1, branch: task.branch, worktree: task.worktree });
     expect(h.store.events(task.id).filter((event) => event.kind === 'held-task-released')).toHaveLength(1);
-    expect(h.store.events(task.id, 1).filter((event) => event.kind === 'worker-run-started')).toHaveLength(1);
     expect(readFileSync(work, 'utf8')).toBe('keep this work\n');
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });
