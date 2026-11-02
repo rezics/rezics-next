@@ -31,6 +31,7 @@ export type SpaceSubjectPrefix = Readonly<{
   examined: number;
   observation: SpaceSubjectObservation;
 }>;
+export type SpaceSubjectPopulation = Awaited<ReturnType<typeof openSpaceSubjectPopulation>>;
 
 /** Original native membership scope, independent of returned Search hits.
  * This complete structural population is an input to the public catalogue Source
@@ -132,6 +133,33 @@ export async function openSpaceSubjectPopulation(
       });
       await finish();
       return result;
+    },
+    async contains(subjectIds: readonly string[]): Promise<readonly boolean[]> {
+      if (
+        !Array.isArray(subjectIds) ||
+        subjectIds.length > 160 ||
+        subjectIds.some((subjectId) => typeof subjectId !== 'string' || routeOf(subjectId) === null)
+      )
+        throw new RangeError('Invalid Space Subject membership batch');
+      const ids = [...new Set(subjectIds)];
+      const result = await snapshot(async (client, current) => {
+        requireCurrent(current);
+        if (ids.length === 0 || observation.realm === null) return new Set<string>();
+        const rows = await client.query<{ subjectId: string }>(
+          `SELECT subject_id AS "subjectId"
+            FROM community.publication_head
+            WHERE route=$1 AND realm_id=$2 AND verdict='adopt' AND subject_id=ANY($3::uuid[])`,
+          [route, observation.realm.realmId, ids],
+        );
+        const found = new Set<string>();
+        for (const row of rows.rows) {
+          if (!ids.includes(row.subjectId) || found.has(row.subjectId)) throw new ProblemError('stale_cursor');
+          found.add(row.subjectId);
+        }
+        return found;
+      });
+      await finish();
+      return Object.freeze(subjectIds.map((subjectId) => result.has(subjectId)));
     },
     finish,
   });

@@ -23,5 +23,7 @@ export declare function createContinueReads(deps: Omit<OwnerQueryDependencies, '
         limit?: number;
         cursor?: string;
         view?: 'BASIC' | 'FULL';
+        spaceId?: string;
+        kind?: string;
     }, deadline: number, languages?: readonly string[]): Promise<ContinuePage>;
 };

@@ -35,6 +35,7 @@ test('native Space Subject scope retains complete publication membership and rej
     expect(prefix.subjects.map((row) => row.subjectId)).toEqual(expected.slice(0, 1));
     expect(prefix.exhausted).toBe(false);
     expect(prefix.examined).toBe(2);
+    expect(await scope.contains([world.conceptId, world.mainTarget.threadId, world.schemeId])).toEqual([true, false, true]);
     // Actual committed unrelated heads must not consume this scope's prefix or invalidate its observation.
     for (let index = 0; index < 12; index++) {
       const subject = await world.command('POST', '/v1/subjects', {
@@ -55,6 +56,7 @@ test('native Space Subject scope retains complete publication membership and rej
     });
     await expect(scope.finish()).rejects.toMatchObject({ code: 'stale_cursor' });
     await expect(scope.prefix(1, prefix.coveredThrough)).rejects.toMatchObject({ code: 'stale_cursor' });
+    await expect(scope.contains([world.conceptId])).rejects.toMatchObject({ code: 'stale_cursor' });
     await expect(open(spaceId, scope.observation)).rejects.toMatchObject({ code: 'stale_cursor' });
     expect((await (await open()).prefix(2)).subjects.map((row) => row.subjectId)).toEqual([world.schemeId]);
     const withheld = await world.createRealmTarget('Withheld Realm population', 'protected');

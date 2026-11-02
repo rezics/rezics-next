@@ -11,6 +11,7 @@ import type { OwnerQueryDependencies } from './builtin-runtime-query.ts';
 import { readContinueOwnerPage } from './continue-query.ts';
 import type { ContinueActiveSession } from './continue-source.ts';
 import type { SubjectSummary } from '../semantic/summaries.ts';
+import { openSpaceSubjectPopulation } from '../content/feed-subject-scope.ts';
 
 export type ContinueSubject = Readonly<{
   subjectId: string;
@@ -31,7 +32,7 @@ export function createContinueReads(
   return {
     async list(
       actor: Actor,
-      query: { limit?: number; cursor?: string; view?: 'BASIC' | 'FULL' },
+      query: { limit?: number; cursor?: string; view?: 'BASIC' | 'FULL'; spaceId?: string; kind?: string },
       deadline: number,
       languages: readonly string[] = [],
     ): Promise<ContinuePage> {
@@ -44,9 +45,33 @@ export function createContinueReads(
       if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
       if (query.view !== undefined && query.view !== 'BASIC' && query.view !== 'FULL')
         throw new ProblemError('invalid_request');
+      if (query.spaceId !== undefined && (typeof query.spaceId !== 'string' || routeOf(query.spaceId) === null))
+        throw new ProblemError('invalid_request', { errors: [{ pointer: '/spaceId', code: 'invalid_format' }] });
+      if (query.kind !== undefined && (typeof query.kind !== 'string' || query.kind.length === 0 || query.kind.length > 128))
+        throw new ProblemError('invalid_request', { errors: [{ pointer: '/kind', code: 'invalid_format' }] });
       const accountActor = actor;
       const route = routeOf(accountActor.accountId);
       if (route === null) throw new ProblemError('forbidden');
+      let spacePopulation: Awaited<ReturnType<typeof openSpaceSubjectPopulation>> | undefined;
+      if (query.spaceId !== undefined) {
+        if (!deps.access)
+          throw new ProblemError('dependency_unavailable', {
+            detail: 'Continue requires the current Access binding.',
+          });
+        spacePopulation = await openSpaceSubjectPopulation(
+          {
+            pool: deps.pool,
+            access: deps.access,
+            contentAccess: deps.access,
+            tokens: deps.tokens,
+            ...(deps.clock ? { clock: deps.clock } : {}),
+          },
+          actor,
+          query.spaceId,
+          deadline,
+          (deps.clock ?? systemClock)().toISOString(),
+        );
+      }
       async function snapshot<T>(read: (client: ReturnType<typeof deadlineClient>) => Promise<T>) {
         return withConnection(deps.pool, async (connection) => {
           const client = deadlineClient(connection, deadline);
@@ -85,7 +110,10 @@ export function createContinueReads(
       if (query.cursor !== undefined && (query.cursor.length === 0 || query.cursor.length > 4096))
         throw new ProblemError('invalid_cursor');
       // Native absence is a complete empty union. A continuation still needs the actual Source/cursor basis.
-      if (!presence.entry && !presence.session && query.cursor === undefined) return { subjects: [], next: null };
+      if (!presence.entry && !presence.session && query.cursor === undefined) {
+        await spacePopulation?.finish();
+        return { subjects: [], next: null };
+      }
       if (query.cursor !== undefined) {
         const decoded = await decodeListCursor(
           deps.tokens,
@@ -111,6 +139,8 @@ export function createContinueReads(
           ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
           ...(query.view === undefined ? {} : { view: query.view }),
           ...(query.view === 'FULL' ? { languages } : {}),
+          ...(spacePopulation ? { spacePopulation } : {}),
+          ...(query.kind === undefined ? {} : { kind: query.kind }),
           deadline,
           snapshot,
           readVersion: () =>

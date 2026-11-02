@@ -190,19 +190,20 @@ Module schema dumps are derived by the controller through the normal supported p
 
 ## Home dimensions
 
-Native kind selection is delivered. Space membership of the existing Following inbox is implemented;
-complete native/API and browser acceptance remains with the controller.
+Native kind and Space selection are delivered across Discovery, Continue and the existing Following inbox.
 Following threads/replies use their currently disclosed board's native Space; adopted
 Subjects use the current publication and that Space's current Realm slot. A stale follow
 reason cannot establish membership. Collections have no native Space membership; contained
 Subjects do not change their primary identity. Initial and final selected Space authority,
 head and Realm slot must agree, including on empty pages. Kind, Space and available question
 selections apply as a literal conjunction to the same primary candidate in the mixed stream.
-Discovery and Continue Space selection still depend on Search's original retained Source
-and scoped journey; a point read alone does not establish their population membership.
-
-Decision: Space-selected Home keeps native Following usable and reports Discovery/Continue
-unavailable until their original selected-population producers are ready.
+Discovery retains the original public catalogue journey and intersects each bounded native
+candidate window with current Space membership before choosing the page, preserving the
+catalogue's name order and its existing `6D+3` work ceiling. Continue applies the owner
+eligible-progress population, then the same current Space membership and exact kind before
+choosing its six rows; its existing 39-key work ceiling and examined-key cursor remain in force.
+Accounts and Collections are outside Space membership. Both lane cursors bind the selected
+Space observation and kind so a continuation cannot broaden or silently change its selection.
 
 The native structural input is now `openSpaceSubjectPopulation` in
 `content/feed-subject-scope.ts`: the complete current adopted publication-head population
@@ -213,20 +214,20 @@ that generation in their own transaction. Prefix and terminal reads revalidate t
 observation and current Space authority, including empty and Realm-less populations.
 Unrelated Realm growth neither advances that observation nor enters its prefix.
 Decision: retain structural membership separately from public catalogue and eligible-progress
-coverage; activate neither lane until its original Source intersects these complete populations
-before selecting a page. This input alone does not establish Subject disclosure, native kind
-selection, public Search freshness or owner progress readiness.
+coverage. Discovery intersects its retained public catalogue and Continue intersects its eligible
+owner progress population with this scope before selecting a page. This input alone does not
+establish Subject disclosure, public Search freshness or owner progress readiness.
 
 Home accepts exact `spaceId` and `ratingQuestionId` request selections. Space selection
 uses the existing Following order and examined positions, including sparse continuation;
-Discovery and Continue are omitted as unavailable before reading unselected candidates.
+Discovery and Continue intersect their original complete populations before page selection.
 An unknown or unreadable selected Space returns `not_found`. Question selection still
 returns `dependency_unavailable` before enumeration until its original population producer
 is composed; point review witnesses do not activate it. Failed source lanes
 remain omitted; only a ready lane with a native frontier enables Next, while Retry may
 retry a failed lane. The available default sources remain catalogue/Account discovery,
-recent Following and Continue. Public Board/Realm/discussion/Collection discovery and
-Discovery/Continue Space membership and Context membership remain pending their original producers.
+recent Following and Continue. Public Board/Realm/discussion/Collection discovery and Context
+membership remain pending their original producers.
 
 Home Space choice reads retain the resolved Space identity on point-read failure so a failed
 revalidation disables that selection; platform closure remains distinct from access denial.

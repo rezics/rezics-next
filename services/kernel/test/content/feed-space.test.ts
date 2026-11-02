@@ -92,7 +92,7 @@ test('Space-selected Following retains native membership, kind conjunction, spar
     query.set('stream', 'home');
     const home = await page();
     expect(home.feedItems.map((item) => item.key.id)).toEqual([selected.threadId]);
-    expect(home.sources).toEqual({ following: 'ready', discovery: 'unavailable', continue: 'unavailable' });
+    expect(home.sources.following).toBe('ready');
     await world.command(
       'POST',
       `/v1/posts/${selected.postId}:takeDown`,

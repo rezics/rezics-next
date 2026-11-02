@@ -32,5 +32,7 @@ export declare function createFeedReads(deps: FeedDependencies): {
         limit?: number;
         cursor?: string;
         kind?: string;
+        spaceId?: string;
+        ratingQuestionId?: string;
     }, deadline: number, languages: readonly string[]): Promise<FeedPage>;
 };

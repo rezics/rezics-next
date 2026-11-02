@@ -14,7 +14,8 @@ import { openOwnerQuery, ownerQueryWork, type OwnerQueryDependencies } from './b
 import { readOwnerOriginalActivityPrefix, type OwnerActivitySeek } from './owner-index-continue.ts';
 import { evaluateContinueGroup, readContinueOriginalFacts } from './continue-source.ts';
 import type { ContinuePage, ContinueSubject } from './continue-reads.ts';
-import { readSubjectSummaries } from '../semantic/summaries.ts';
+import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
+import type { SpaceSubjectPopulation } from '../content/feed-subject-scope.ts';
 
 type Snapshot = <T>(read: (client: Pick<PoolClient, 'query'>) => Promise<T>) => Promise<T>;
 const unavailable = () => new ProblemError('dependency_unavailable');
@@ -40,6 +41,8 @@ export async function readContinueOwnerPage(
     cursor?: string;
     view?: 'BASIC' | 'FULL';
     languages?: readonly string[];
+    spacePopulation?: SpaceSubjectPopulation;
+    kind?: string;
     deadline: number;
     snapshot: Snapshot;
     readVersion: () => Promise<string>;
@@ -49,7 +52,17 @@ export async function readContinueOwnerPage(
   const binding = {
     route: 'GET /v1/libraryContinue',
     viewer: input.actor.accountId,
-    query: { limit: input.limit, source: 'owner-active-state-session' },
+    query: {
+      limit: input.limit,
+      source: 'owner-active-state-session',
+      ...(input.spacePopulation
+        ? {
+            spaceId: input.spacePopulation.observation.spaceId,
+            spaceObservation: JSON.stringify(input.spacePopulation.observation),
+          }
+        : {}),
+      ...(input.kind === undefined ? {} : { kind: input.kind }),
+    },
   };
   const cursor =
     input.cursor === undefined ? null : await decodeListCursor(deps.tokens, binding, input.cursor, clock());
@@ -91,11 +104,39 @@ export async function readContinueOwnerPage(
       };
     }
     const rows = new Map<string, ContinueSubject>();
+    const selectionSummaries = new Map<string, SubjectSummary | null>();
     const zero = '00000000-0000-0000-0000-000000000000';
     // Resume at the timestamp boundary: original order cannot substitute for canonical tie order.
     let after: OwnerActivitySeek | null = floor ? { lastActivityAt: floor.lastActivityAt, subjectId: zero } : null;
     let exhausted = false;
     let completed: ContinueSubject[] = [];
+    async function selectPopulation(values: readonly ContinueSubject[]) {
+      let selected = [...values];
+      if (input.spacePopulation && selected.length) {
+        const members = await input.spacePopulation.contains(selected.map((row) => row.subjectId));
+        selected = selected.filter((_row, index) => members[index]);
+      }
+      if (input.kind !== undefined && selected.length) {
+        if (!deps.routeKey || deps.routeKey.byteLength < 32) throw unavailable();
+        const missing = selected.filter((row) => !selectionSummaries.has(row.subjectId));
+        if (missing.length) {
+          const current = await readSubjectSummaries(
+            {
+              pool: deps.pool,
+              access: deps.access,
+              actor: input.actor,
+              routeKey: deps.routeKey,
+              deadline: input.deadline,
+            },
+            missing.map((row) => row.subjectId),
+            { languages: input.languages ?? [] },
+          );
+          for (const row of missing) selectionSummaries.set(row.subjectId, current.get(row.subjectId) ?? null);
+        }
+        selected = selected.filter((row) => selectionSummaries.get(row.subjectId)?.type === input.kind);
+      }
+      return selected;
+    }
     async function readGroup(runtime: typeof query, subjectId: string) {
       const membership = await runtime.native.containsSubject({
         ...runtime.context,
@@ -191,9 +232,10 @@ export async function readContinueOwnerPage(
         }
         after = raw.at(-1)!;
       }
-      completed = [...rows.values()]
-        .filter((value) => exhausted || (after !== null && value.lastActivityAt > after.lastActivityAt))
-        .sort(compare);
+      completed = await selectPopulation(
+        [...rows.values()].filter((value) => exhausted || (after !== null && value.lastActivityAt > after.lastActivityAt)),
+      );
+      completed.sort(compare);
       if (exhausted || completed.length > input.limit) break;
     }
     if (!exhausted && completed.length <= input.limit) throw unavailable();
@@ -230,6 +272,27 @@ export async function readContinueOwnerPage(
     } finally {
       final.close();
     }
+    if (input.kind !== undefined && shown.length) {
+      const finalSummaries = await readSubjectSummaries(
+        {
+          pool: deps.pool,
+          access: deps.access,
+          actor: input.actor,
+          routeKey: deps.routeKey!,
+          deadline: input.deadline,
+        },
+        shown.map((row) => row.subjectId),
+        { languages: input.languages ?? [] },
+      );
+      for (const row of shown)
+        if (
+          finalSummaries.get(row.subjectId)?.type !== input.kind ||
+          selectionSummaries.get(row.subjectId)?.type !== input.kind
+        )
+          throw new ProblemError('semantic_not_ready');
+      summaries = finalSummaries;
+    }
+    await input.spacePopulation?.finish();
     return {
       subjects:
         summaries === null ? shown : shown.map((row) => ({ ...row, subject: summaries.get(row.subjectId) ?? null })),

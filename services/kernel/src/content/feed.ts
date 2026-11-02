@@ -15,6 +15,7 @@ import { createCollectionReads } from '../library/collection-reads.ts';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { feedExcerpt, feedAuthor } from './feed-summary.ts';
 import { openFollowingSpace, type FollowingSpace } from './feed-space.ts';
+import { openSpaceSubjectPopulation } from './feed-subject-scope.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import { readPublication } from '../community/publication.ts';
 import { ContentNotFoundError, discloseThreads, readBoard, readPost, type ThreadView } from './reads.ts';
@@ -292,6 +293,10 @@ export function createFeedReads(deps: FeedDependencies) {
         query.spaceId === undefined
           ? undefined
           : await openFollowingSpace(deps, actor, query.spaceId, deadline, now.toISOString());
+      const spacePopulation =
+        space && stream === 'home'
+          ? await openSpaceSubjectPopulation(deps, actor, space.spaceId, deadline, now.toISOString())
+          : undefined;
       const sources: FeedPage['sources'] = {
         discovery: stream === 'home' ? 'ready' : 'not_requested',
         following: personal ? 'ready' : 'not_requested',
@@ -322,10 +327,13 @@ export function createFeedReads(deps: FeedDependencies) {
           if (position[lane] === false) return;
           try {
             if (lane === 'discovery') {
-              // The public retained Source has not supplied Space population yet.
-              // Never enumerate an unselected discovery page as a substitute.
-              if (space) throw new ProblemError('dependency_unavailable');
               if (!deps.discovery) throw new ProblemError('dependency_unavailable');
+              const discoveryContext = {
+                access: deps.access,
+                actor,
+                deadline,
+                ...(spacePopulation ? { spacePopulation } : {}),
+              };
               const page = await deps.discovery(
                 personal ? `account:${actor.accountId}` : 'anonymous',
                 {
@@ -333,9 +341,10 @@ export function createFeedReads(deps: FeedDependencies) {
                   limit: discoveryLimit,
                   languages: [...languages],
                   ...(kind === undefined ? {} : { filter: { kind: { in: [kind] } } }),
+                  ...(space ? { spaceId: space.spaceId } : {}),
                   ...(position.discovery ? { cursor: position.discovery } : {}),
                 },
-                { access: deps.access, actor, deadline },
+                discoveryContext,
               );
               discoveryAsOf = page.as_of;
               lanes.discovery = page.hits.map((hit) => ({
@@ -364,12 +373,13 @@ export function createFeedReads(deps: FeedDependencies) {
               }));
               next.discovery = page.next ?? false;
             } else if (lane === 'continue') {
-              if (space) throw new ProblemError('dependency_unavailable');
               const page = await continued.list(
                 actor,
                 {
                   limit: FEED_CONTINUE_WIDTH,
                   view: 'FULL',
+                  ...(space ? { spaceId: space.spaceId } : {}),
+                  ...(space && kind !== undefined ? { kind } : {}),
                   ...(position.continue ? { cursor: position.continue } : {}),
                 },
                 deadline,
@@ -482,6 +492,7 @@ export function createFeedReads(deps: FeedDependencies) {
       // Repeat the original selected Space authority after all native hydration
       // and final follow checks, including on an empty/sparse examined page.
       await space?.finish();
+      await spacePopulation?.finish();
       // Keep rejected candidates in their original slots: they still consume the native
       // raw budget and examined frontier, including Continue's fingerprint/resume keys.
       if (kind !== undefined)

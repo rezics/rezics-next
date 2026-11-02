@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { FilterRelease } from '@rezics/filter';
 import { ProblemError } from '../http/problem.ts';
 import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
+import type { SpaceSubjectPopulation } from '../content/feed-subject-scope.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeDiscoveryCursor, decodeSearchCursor, encodeDiscoveryCursor, encodeSearchCursor } from './cursor.ts';
 import { currentDiscoveryCandidates, currentDiscoveryPrimaryCandidates } from './discovery-current.ts';
@@ -28,6 +29,7 @@ import { openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
 const ready = () => new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
 const invalid = (pointer: string) =>
   new ProblemError('invalid_request', { errors: [{ pointer, code: 'invalid_format' }] });
+type DiscoveryContextWithSpace = DiscoveryReadContext & { spacePopulation?: SpaceSubjectPopulation };
 type Principal = 'anonymous' | `account:${string}`;
 export type DiscoverySearch = (
   principal: Principal,
@@ -240,6 +242,12 @@ function executeDiscoverySearch(
   retain: (page: DiscoveryPage, current: RetainedPrimaryReader) => Promise<void>,
 ): DiscoverySearch {
   const execute: DiscoverySearch = async (principal, request, context) => {
+    const spacePopulation = (context as DiscoveryContextWithSpace).spacePopulation;
+    if (
+      (request.spaceId === undefined) !== (spacePopulation === undefined) ||
+      (spacePopulation && spacePopulation.observation.spaceId !== request.spaceId)
+    )
+      throw new ProblemError('dependency_unavailable');
     const { registry, release, digest } = await config.resolve(request);
     const admitted = admitDiscoveryRequest(request, registry, release);
     const registryDigest = createHash('sha256')
@@ -254,7 +262,11 @@ function executeDiscoverySearch(
         )!,
       )
       .digest('hex');
-    const binding = { operation: 'subjects.search.discovery-v1', principal, request: admitted.bindingRequest };
+    const binding = {
+      operation: 'subjects.search.discovery-v1',
+      principal,
+      request: { ...admitted.bindingRequest, spaceObservation: spacePopulation?.observation ?? null },
+    };
     const now = config.now();
     const nativeContext = { deadline: context.deadline };
     const coverage = openPublicFilterCoveragePage(config.consumer, nativeContext);
@@ -361,12 +373,30 @@ function executeDiscoverySearch(
             throw ready();
           examined += window.examined;
           if (examined > Math.min(600, 6 * admitted.limit + 3)) throw ready();
-          const current = await currentDiscoveryCandidates(registry, result.hits, admitted.filter, release, context);
+          const inSpace = new Set<string>();
+          if (spacePopulation) {
+            const subjects = result.hits.filter((candidate) => candidate.key.owner === 'semantic');
+            for (let offset = 0; offset < subjects.length; offset += 160) {
+              const batch = subjects.slice(offset, offset + 160);
+              const members = await spacePopulation.contains(batch.map((candidate) => candidate.key.id));
+              for (let index = 0; index < batch.length; index++) {
+                const candidate = batch[index]!;
+                if (members[index]) inSpace.add(`${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`);
+              }
+            }
+          }
+          const selectedCandidates = spacePopulation
+            ? result.hits.filter((candidate) =>
+                inSpace.has(`${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`),
+              )
+            : result.hits;
+          const current = await currentDiscoveryCandidates(registry, selectedCandidates, admitted.filter, release, context);
           consumed = window.examined;
           for (let index = 0; index < result.hits.length; index++) {
             const candidate = result.hits[index]!;
             const identity = `${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`;
-            const hit = seen.has(identity) ? undefined : current.get(candidate);
+            const hit =
+              seen.has(identity) || (spacePopulation && !inSpace.has(identity)) ? undefined : current.get(candidate);
             if (!hit) continue;
             seen.add(identity);
             hits.push(hit);
@@ -398,6 +428,7 @@ function executeDiscoverySearch(
         }
         const execution = last;
         const page = await finishDiscoveryDisclosure(coverage, async () => {
+          await spacePopulation?.finish();
           const entries = [...registry.entries].sort((a, b) => (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0));
           if (kindAfter && !entries.some((entry) => entry.kind === kindAfter)) throw invalid('/kindPage/cursor');
           const remaining = entries.filter((entry) => entry.kind > kindAfter);

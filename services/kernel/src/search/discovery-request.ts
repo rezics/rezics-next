@@ -7,6 +7,7 @@ import {
   type FilterRelease,
 } from '@rezics/filter';
 import { ProblemError } from '../http/problem.ts';
+import { routeOf } from '../route/route.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
 import type { DiscoveryRegistry, DiscoveryRequest } from './discovery.ts';
 import { admitProperties, validateHitOptions, validateSearchLimit } from './hits.ts';
@@ -29,6 +30,7 @@ const OWNED_FIELDS = [
   'properties',
   'kindPage',
   'kindCountLeaf',
+  'spaceId',
 ] as const satisfies readonly (keyof MixedDiscoveryRequest)[];
 
 function invalid(pointer: string): never {
@@ -61,6 +63,8 @@ export function admitDiscoveryRequest(
 ) {
   if (request.representation !== 'discovery-v1') invalid('/representation');
   if (request.kindCursor !== undefined) invalid('/kindCursor');
+  if (request.spaceId !== undefined && (typeof request.spaceId !== 'string' || routeOf(request.spaceId) === null))
+    invalid('/spaceId');
   for (const [pointer, token] of [
     ['/cursor', request.cursor],
     ['/kindPage/cursor', request.kindPage?.cursor],
@@ -129,6 +133,7 @@ export function admitDiscoveryRequest(
     properties: options.properties ? [...options.properties] : [],
     kindLimit,
     kindCountLeaf: request.kindCountLeaf ?? null,
+    spaceId: request.spaceId ?? null,
   };
   return {
     text,

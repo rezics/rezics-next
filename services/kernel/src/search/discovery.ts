@@ -94,7 +94,12 @@ export type DiscoveryPage = {
   as_of: string;
 };
 /** Opt-in wire; omitted representation retains the Subject response. */
-export type DiscoveryRequest = SearchRequest & { representation: 'discovery-v1'; kindCursor?: string };
+export type DiscoveryRequest = SearchRequest & {
+  representation: 'discovery-v1';
+  kindCursor?: string;
+  /** Exact native Home selection; callers must also supply its opened population. */
+  spaceId?: string;
+};
 /** Reuse native reader authorization/deadline and token custody, never a caller-supplied permission flag. */
 export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'actor' | 'deadline'>;
 export type DiscoveryCursorKeys = KeyRing;

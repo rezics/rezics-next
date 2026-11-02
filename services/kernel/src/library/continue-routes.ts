@@ -55,6 +55,7 @@ export function continueRoutes(
           limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
           cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
           view: t.Optional(t.Union([t.Literal('BASIC'), t.Literal('FULL')])),
+          spaceId: t.Optional(t.String({ format: 'uuid' })),
         },
         closed,
       ),
@@ -62,7 +63,10 @@ export function continueRoutes(
         set.headers['cache-control'] = 'private, no-store';
         // Check the original URL before query coercion can discard unknown fields.
         for (const name of new URL(request.url).searchParams.keys())
-          if (name !== 'limit' && name !== 'cursor' && name !== 'view') throw new ProblemError('invalid_request');
+          if (name !== 'limit' && name !== 'cursor' && name !== 'view' && name !== 'spaceId')
+            throw new ProblemError('invalid_request');
+        if (new URL(request.url).searchParams.getAll('spaceId').length > 1)
+          throw new ProblemError('invalid_request');
       },
       response: {
         200: continuePageSchema,

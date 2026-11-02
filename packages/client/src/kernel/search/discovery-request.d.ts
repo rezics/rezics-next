@@ -28,6 +28,7 @@ export declare function admitDiscoveryRequest(request: MixedDiscoveryRequest, re
         properties: readonly string[];
         kindLimit: number;
         kindCountLeaf: number | null;
+        spaceId: string | null;
     };
 };
 /** Classify the opt-in grammar at the existing gate; the legacy parser must never see kind.in. */

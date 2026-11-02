@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { readConfig, startServer } from '../../src/server.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
@@ -277,10 +278,18 @@ test('Default feed route applies the selected native kind across the mixed strea
       });
       return { status: result.status, headers: result.headers, body: await result.json() };
     }
-    async function page(kind?: string, stream = 'home', limit = 20, cursor?: string, personal = true) {
+    async function page(
+      kind?: string,
+      stream = 'home',
+      limit = 20,
+      cursor?: string,
+      personal = true,
+      spaceId?: string,
+    ) {
       const query = new URLSearchParams({ stream, limit: String(limit) });
       if (kind !== undefined) query.set('kind', kind);
       if (cursor) query.set('cursor', cursor);
+      if (spaceId) query.set('spaceId', spaceId);
       const result = await response(query, personal);
       expect(result.status, JSON.stringify(result.body)).toBe(200);
       if (personal) expect(result.headers.get('cache-control')).toBe('private, no-store');
@@ -458,6 +467,132 @@ test('Default feed route applies the selected native kind across the mixed strea
       expect(rebound.status).toBe(400);
       expect(rebound.body.code).toBe('invalid_cursor');
     }
+
+    const spaceResult = await driver.request(
+      'editor',
+      'POST',
+      '/v1/spaces',
+      { title: 'Selected Home Space', summary: 'Native selected population' },
+      key(),
+    );
+    expect(spaceResult.status, JSON.stringify(spaceResult.body)).toBe(201);
+    const spaceId = (spaceResult.body.space as { spaceId: string }).spaceId;
+    const realmResult = await driver.request(
+      'editor',
+      'POST',
+      '/v1/realms',
+      {
+        spaceId,
+        title: 'Selected Home Realm',
+        summary: 'Native selected publication population',
+        visibility: 'public',
+        contextId: GLOBAL_CONTEXT,
+      },
+      key(),
+    );
+    expect(realmResult.status, JSON.stringify(realmResult.body)).toBe(201);
+    const realmId = (realmResult.body.realm as { realmId: string }).realmId;
+    const metadata = bundledRelease.types['schema:Book']!.library!;
+    const activeBook = bundledRelease.libraryProfiles![metadata.profileId]!.entryStateSet!.states.find(
+      (state) => state.role === 'active',
+    )!.id;
+    const addBook = async (label: string) => {
+      const result = await driver.request(
+        'editor',
+        'POST',
+        '/v1/subjects',
+        { type: 'schema:Book', labels: { en: label } },
+        key(),
+      );
+      expect(result.status, JSON.stringify(result.body)).toBe(201);
+      const id = (result.body.subject as { id: string }).id;
+      expect((await driver.fixtures.send(viewer, 'PUT', `/v1/libraryEntries/${id}`, { state: activeBook }, key())).status)
+        .toBe(201);
+      return id;
+    };
+    const secondBook = await addBook('000 Native selected continuation book');
+    const outOfSpace: string[] = [];
+    for (let index = 0; index < 7; index++) outOfSpace.push(await addBook(`000 A out-of-space ${index}`));
+    const publish = async (subjectId: string) => {
+      const result = await driver.request(
+        'editor',
+        'POST',
+        `/v1/realms/${realmId}/publications`,
+        { subjectId },
+        key(),
+      );
+      expect(result.status, JSON.stringify(result.body)).toBe(201);
+      return (result.body.publication as { publicationId: string }).publicationId;
+    };
+    const publications = new Map([
+      [book, await publish(book)],
+      [secondBook, await publish(secondBook)],
+      [movie, await publish(movie)],
+    ]);
+    const canonicalSpace = await work.enqueue(
+      {
+        workflowName: CANONICAL_SOURCE_WORKFLOW,
+        queueName: 'maintenance',
+        workflowID: `feed-native-space-source:${randomUUID()}`,
+      },
+      { accounts: [viewer.accountId], collectionId: builtinCollectionId(viewer.accountId, { kind: 'everything' }) },
+    );
+    await canonicalSpace.getResult();
+
+    const selectedContinueResponse = await fetch(
+      new URL(`/v1/libraryContinue?limit=6&view=FULL&spaceId=${spaceId}`, server.url),
+      { headers },
+    );
+    expect(selectedContinueResponse.status).toBe(200);
+    const selectedContinue = (await selectedContinueResponse.json()) as { subjects: { subjectId: string }[] };
+    expect(selectedContinue.subjects.map((row) => row.subjectId).sort()).toEqual([book, movie, secondBook].sort());
+    expect((await fetch(new URL('/v1/libraryContinue?spaceId=invalid', server.url), { headers })).status).toBe(400);
+    expect(
+      (
+        await fetch(new URL(`/v1/libraryContinue?spaceId=${spaceId}&spaceId=${spaceId}`, server.url), { headers })
+      ).status,
+    ).toBe(400);
+
+    const anonymousSpacePage = (cursor?: string) => page('schema:Book', 'home', 1, cursor, false, spaceId);
+    const firstSpacePage = await eventually(async () => {
+      const result = await anonymousSpacePage();
+      return result.sources.discovery === 'ready' && result.feedItems.length === 1 ? result : undefined;
+    });
+    expect(firstSpacePage.feedItems[0]).toMatchObject({ source: 'discovery', key: { kind: 'schema:Book' } });
+    expect([book, secondBook]).toContain(firstSpacePage.feedItems[0]!.key.id);
+    expect(firstSpacePage.next).toBeString();
+    const secondSpacePage = await anonymousSpacePage(firstSpacePage.next!);
+    expect(secondSpacePage.feedItems).toHaveLength(1);
+    expect([book, secondBook]).toContain(secondSpacePage.feedItems[0]!.key.id);
+    expect(secondSpacePage.feedItems[0]!.key.id).not.toBe(firstSpacePage.feedItems[0]!.key.id);
+    expect(secondSpacePage.feedItems.some((item) => outOfSpace.includes(item.key.id))).toBe(false);
+
+    const firstMixedSpacePage = await page('schema:Book', 'home', 1, undefined, true, spaceId);
+    expect(firstMixedSpacePage.feedItems[0]).toMatchObject({ source: 'continue', key: { kind: 'schema:Book' } });
+    expect(firstMixedSpacePage.next).toBeString();
+    const secondMixedSpacePage = await page(
+      'schema:Book',
+      'home',
+      1,
+      firstMixedSpacePage.next!,
+      true,
+      spaceId,
+    );
+    expect(secondMixedSpacePage.feedItems[0]).toMatchObject({ source: 'continue', key: { kind: 'schema:Book' } });
+    expect(secondMixedSpacePage.feedItems[0]!.key.id).not.toBe(firstMixedSpacePage.feedItems[0]!.key.id);
+
+    const withdrawn = secondSpacePage.feedItems[0]!.key.id;
+    const withdrawal = await driver.request(
+      'editor',
+      'POST',
+      `/v1/realms/${realmId}/publications/${withdrawn}:withdraw`,
+      undefined,
+      { ...key(), 'if-match': JSON.stringify(publications.get(withdrawn)) },
+    );
+    expect(withdrawal.status, JSON.stringify(withdrawal.body)).toBe(200);
+    const afterWithdrawal = await anonymousSpacePage();
+    expect(afterWithdrawal.feedItems.some((item) => item.key.id === withdrawn)).toBe(false);
+    expect(afterWithdrawal.feedItems.every((item) => !outOfSpace.includes(item.key.id))).toBe(true);
   } finally {
     try {
       await server?.stop();
