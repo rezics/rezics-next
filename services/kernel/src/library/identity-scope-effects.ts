@@ -13,7 +13,11 @@ import {
   validateLibraryIdentityPlanKey,
 } from './identity-native-planner.ts';
 import type { LibraryIdentityPlan } from './identity-native-planner-types.ts';
-import { bindLibraryIdentityDeadline, currentLibraryIdentityWork, withLibraryIdentityWork } from './identity-native-planner-work.ts';
+import {
+  bindLibraryIdentityDeadline,
+  currentLibraryIdentityWork,
+  withLibraryIdentityWork,
+} from './identity-native-planner-work.ts';
 import sealRead from './identity-scope-effects-seal.sql';
 import type { IdentityJobRef, IdentityFrontier, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type {
@@ -92,15 +96,26 @@ export async function readLibraryScopeEffectsPage(
   if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
     throw new TypeError('Library expected-effects pages require a limit from 1 to 100');
   const l = bindLibraryIdentityDeadline(new NativeCollectionWork(input.allowance, input.deadline), input.deadline);
-  try { return await withLibraryIdentityWork(pool, l, () => readPage(pool, input, l)); }
-  catch (error) {
-    if (error instanceof ProblemError && error.code === 'dependency_unavailable') return {status: 'unavailable', work: l.receipt()};
-    if (error instanceof Error) Object.defineProperty(error, 'work', {get: () => l.receipt(), configurable: true});
+  try {
+    return await withLibraryIdentityWork(pool, l, () => readPage(pool, input, l));
+  } catch (error) {
+    if (error instanceof ProblemError && error.code === 'dependency_unavailable')
+      return { status: 'unavailable', work: l.receipt() };
+    if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => l.receipt(), configurable: true });
     throw error;
   }
 }
 
-async function readPage(pool: Pool, input: LibraryScopeEffectsKey & {after: LibraryExpectedEffectAfter | null; limit: number; allowance: WorkAllowance; deadline: number}, l: NativeCollectionWork): Promise<LibraryScopeEffectsPage> {
+async function readPage(
+  pool: Pool,
+  input: LibraryScopeEffectsKey & {
+    after: LibraryExpectedEffectAfter | null;
+    limit: number;
+    allowance: WorkAllowance;
+    deadline: number;
+  },
+  l: NativeCollectionWork,
+): Promise<LibraryScopeEffectsPage> {
   // A depleted reservation cannot acquire a connection, even for an absent native source.
   if (
     input.deadline <= Date.now() ||
@@ -124,50 +139,50 @@ async function readPage(pool: Pool, input: LibraryScopeEffectsKey & {after: Libr
   const limit = Math.min(input.limit, l.available('candidateKeys'));
   if (limit < 1) return { status: 'pending', rows: [], after: input.after, work: l.receipt() };
   const page = await libraryIdentityCommand(pool, l, partitionOf(input.sourceIdentity.route), async (tx) => {
-        const plan = await readLibraryIdentityPlan(tx, input, true);
-        if (!plan || plan.state !== 'sealed' || !(await currentLibraryIdentityPlan(tx, input, plan, l)))
-          return noEffect(null);
-        const receipt = await nativeSealReceipt(tx, plan);
-        if (!receipt) return noEffect(null);
-        const rows = (
-          await tx.query<{ effect_key: string; disposition: IdentityReceivingDisposition; original: string }>(
-            libraryIdentitySQL.effectPage,
-            [
-              plan.route,
-              plan.collection_id,
-              plan.plan_key,
-              input.after?.effectKey ?? '',
-              input.after?.disposition ?? '',
-              limit,
-            ],
-          )
-        ).rows;
-        const selected: IdentityReceivingSelection[] = rows.map((row) => ({
-          job: input.job,
-          original: row.original,
-          effectKey: row.effect_key,
-          owner: sourceIdentity.accountId,
-          sourceId: input.sourceIdentity.collectionId,
-          scope: input.scope,
-          disposition: row.disposition,
-          capture: { identity: input.sourceIdentity, frontier: plan.capture_frontier },
-        }));
-        const seal = {
-          key: { job: input.job, sourceIdentity: input.sourceIdentity, scope: input.scope },
-          generation: plan.generation,
-          version: plan.version,
-          frontier: plan.frontier,
-          receipt,
-        } as LibraryScopeEffectSeal;
-        const last = rows.at(-1);
-        return noEffect({
-          status: 'sealed' as const,
-          rows: selected,
-          after: last ? { effectKey: last.effect_key, disposition: last.disposition } : input.after,
-          exhausted: rows.length < limit,
-          seal,
-        });
-      });
+    const plan = await readLibraryIdentityPlan(tx, input, true);
+    if (!plan || plan.state !== 'sealed' || !(await currentLibraryIdentityPlan(tx, input, plan, l)))
+      return noEffect(null);
+    const receipt = await nativeSealReceipt(tx, plan);
+    if (!receipt) return noEffect(null);
+    const rows = (
+      await tx.query<{ effect_key: string; disposition: IdentityReceivingDisposition; original: string }>(
+        libraryIdentitySQL.effectPage,
+        [
+          plan.route,
+          plan.collection_id,
+          plan.plan_key,
+          input.after?.effectKey ?? '',
+          input.after?.disposition ?? '',
+          limit,
+        ],
+      )
+    ).rows;
+    const selected: IdentityReceivingSelection[] = rows.map((row) => ({
+      job: input.job,
+      original: row.original,
+      effectKey: row.effect_key,
+      owner: sourceIdentity.accountId,
+      sourceId: input.sourceIdentity.collectionId,
+      scope: input.scope,
+      disposition: row.disposition,
+      capture: { identity: input.sourceIdentity, frontier: plan.capture_frontier },
+    }));
+    const seal = {
+      key: { job: input.job, sourceIdentity: input.sourceIdentity, scope: input.scope },
+      generation: plan.generation,
+      version: plan.version,
+      frontier: plan.frontier,
+      receipt,
+    } as LibraryScopeEffectSeal;
+    const last = rows.at(-1);
+    return noEffect({
+      status: 'sealed' as const,
+      rows: selected,
+      after: last ? { effectKey: last.effect_key, disposition: last.disposition } : input.after,
+      exhausted: rows.length < limit,
+      seal,
+    });
+  });
   return page ? { ...page, work: l.receipt() } : { status: 'pending', rows: [], after: input.after, work: l.receipt() };
 }
 

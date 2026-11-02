@@ -329,7 +329,8 @@ function executor(client: CommandTransaction, work: NativeCollectionWork, deadli
   ): Promise<R[]> => {
     if (Date.now() >= deadline) throw new Refused('allowance');
     const args = query.params.map((name) => values[name]);
-    const metadata = query === partitionQuery || query === finishQuery || query === proofQuery || query === outputQuery ? 1 : 0;
+    const metadata =
+      query === partitionQuery || query === finishQuery || query === proofQuery || query === outputQuery ? 1 : 0;
     const admitted = work.reserve(footprint(query.sql, args, rows, points, keys, metadata));
     admitted.dispatch();
     try {
