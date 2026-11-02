@@ -17,15 +17,39 @@ test('search aliases follow shared language fallback across insertion order, scr
   ]);
   expect(pickResultAliases(jaFirst, 'zh-Hant')).toEqual({ language: 'zh-Hans', aliases: ['心'] });
   expect(pickResultAliases(hansFirst, 'zh-Hant')).toEqual({ language: 'zh-Hans', aliases: ['心'] });
-  expect(pickResultAliases(byLanguage([['ZH-HANS', ['心']], ['ja', ['こころ']]]), 'zh-Hant')).toEqual({
+  expect(
+    pickResultAliases(
+      byLanguage([
+        ['ZH-HANS', ['心']],
+        ['ja', ['こころ']],
+      ]),
+      'zh-Hant',
+    ),
+  ).toEqual({
     language: 'ZH-HANS',
     aliases: ['心'],
   });
-  expect(pickResultAliases(byLanguage([['zh-Hant', []], ['zh-Hans', ['心']]]), 'zh-Hant')).toEqual({
+  expect(
+    pickResultAliases(
+      byLanguage([
+        ['zh-Hant', []],
+        ['zh-Hans', ['心']],
+      ]),
+      'zh-Hant',
+    ),
+  ).toEqual({
     language: 'zh-Hans',
     aliases: ['心'],
   });
-  expect(pickResultAliases(byLanguage([['zh-Hant', []], ['ja', ['こころ']]]), 'zh-Hant')).toEqual({
+  expect(
+    pickResultAliases(
+      byLanguage([
+        ['zh-Hant', []],
+        ['ja', ['こころ']],
+      ]),
+      'zh-Hant',
+    ),
+  ).toEqual({
     language: 'ja',
     aliases: ['こころ'],
   });
