@@ -5,6 +5,7 @@ import {
   useCurrentReadingActive,
 } from './editor-lifetime';
 import { useMemo, useRef, useState, type ComponentProps } from 'react';
+import { flushSync } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
@@ -157,12 +158,43 @@ function ScreenProfileLive({
     staleTime: Infinity,
     gcTime: 0,
   });
+  const [retired, setRetired] = useState(false);
+  const [readingRevision, setReadingRevision] = useState(0);
+  const readingEpoch = useRef(0);
   const [drafts, setDrafts] = useState<Record<string, ScreenRow[]>>({});
   const retained = useRef<Extract<ScreenRead, { ok: true }>>(undefined);
   // Creation metadata is private draft scaffolding, never an existing subject's authority.
   if (!id && query.data?.ok) retained.current = query.data;
   const read = query.data?.ok ? query.data : retained.current;
-  const admitted = !query.isError && query.data?.ok && query.data.public?.subject.id === id ? query.data : undefined;
+  const admitted =
+    !retired &&
+    !query.isFetching &&
+    !query.isError &&
+    query.data?.ok &&
+    query.data.public?.subject.id === id
+      ? query.data
+      : undefined;
+  const reload = () => {
+    if (!lifetime.active()) return;
+    const epoch = ++readingEpoch.current;
+    flushSync(() => {
+      setReadingRevision(epoch);
+      setRetired(true);
+    });
+    void query
+      .refetch({ cancelRefetch: false })
+      .then((result) => {
+        if (
+          lifetime.active() &&
+          readingEpoch.current === epoch &&
+          result.isSuccess &&
+          result.data?.ok &&
+          result.data.public?.subject.id === id
+        )
+          setRetired(false);
+      })
+      .catch(() => {});
+  };
   const intro = (
     <div className="space-y-2 text-sm text-muted-foreground">
       <p>{m.screen_intro({}, o)}</p>
@@ -181,7 +213,8 @@ function ScreenProfileLive({
         pending={query.isPending}
         fetching={query.isFetching}
         failure={query.data && !query.data.ok ? query.data.reason : 'unavailable'}
-        reload={() => lifetime.active() && void query.refetch({ cancelRefetch: false })}
+        revision={`${id}:${readingRevision}`}
+        reload={reload}
         intro={intro}
         observe={(next) => {
           if (!lifetime.active()) return;
@@ -286,6 +319,7 @@ function ScreenCorrection({
   pending,
   fetching,
   failure,
+  revision,
   reload,
   intro,
   observe,
@@ -299,6 +333,7 @@ function ScreenCorrection({
   pending: boolean;
   fetching: boolean;
   failure: Extract<ScreenRead, { ok: false }>['reason'];
+  revision: string;
   reload: () => void;
   intro: React.ReactNode;
   observe: (next: EditorRead) => void;
@@ -317,7 +352,7 @@ function ScreenCorrection({
   const visible = !!current && session === 'signed-in';
   const readingTitle = m.candidate_current({}, o);
   return (
-    <CatalogueCurrentReading visible={visible} ready={visible} revision={id}>
+    <CatalogueCurrentReading visible={visible} ready={visible} revision={revision}>
       <article className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6 [&_h2]:font-sans [&_h3]:font-sans">
         <ViewHeadingActions label={m.screen_edit({}, o)} headingClassName="font-sans" />
         <div className="min-w-0 space-y-2" aria-busy={fetching}>

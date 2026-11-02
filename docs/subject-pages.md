@@ -81,6 +81,8 @@ Screen creation confirms removal of an unsent initial fact containing a value, m
 Screen creation confirms populated qualifier removal by stable part identity; Cancel or Escape retains picker summaries and restores the trigger, while confirmation focuses the next qualifier, a preceding qualifier or the parent control, in that order, and obeys current command locks.
 Screen citation removal confirms populated URLs by stable part identity, preserves the complete draft on Cancel or Escape, and focuses the next citation, a preceding citation or a parent control after confirmation; blank citations remain editable until explicit removal and current command locks apply to open confirmations.
 
+Existing Screen correction reloads retire the public reading before transport starts. Only a fresh matching result restores public fields and proposal admission; mounted private corrections retain their drafts and exact sealed retries, while callbacks from the preceding reading stay retired after equal-subject recovery.
+
 Album, Manga and Recipe creation confirm removal of each populated unsent language row, including language-only input; Cancel or Escape retains its inputs and correction targets and restores trigger focus, while confirmation removes that stable row only, focuses the next row or Add language, and obeys current command and metadata locks.
 
 ## Create and correct a recipe

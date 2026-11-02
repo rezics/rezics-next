@@ -54,6 +54,7 @@ test('Screen refresh keeps corrections and exact uncertain requests; refusal ret
   let next: ScreenRead | 'throw' = admitted;
   let pending: Promise<ScreenRead> | undefined;
   const scalar: EditorRead = { ok: false, reason: 'denied' };
+  let scalarRead: () => Promise<EditorRead> = async () => scalar;
   let page = fixture.id;
   let reader = { state: 'signed-in' as const, subject: 'reader-a', csrfToken: 'csrf-a' };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -69,6 +70,10 @@ test('Screen refresh keeps corrections and exact uncertain requests; refusal ret
       await user.click(button(name, region));
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
+  const clickNow = async (name: string) =>
+    act(async () => {
+      await user.click(button(name));
+    });
   const reading = () => host.querySelector('section[aria-label]')!;
   const mount = async () => {
     await act(async () => {
@@ -83,7 +88,7 @@ test('Screen refresh keeps corrections and exact uncertain requests; refusal ret
               onNavigate={() => {}}
               transport={{
                 ...fixture.transport,
-                facts: { ...fixture.facts.transport, read: async () => scalar },
+                facts: { ...fixture.facts.transport, read: () => scalarRead() },
                 load: async () => {
                   if (pending) return pending;
                   if (next === 'throw') throw new Error('Transient read failure');
@@ -127,8 +132,17 @@ test('Screen refresh keeps corrections and exact uncertain requests; refusal ret
     });
     await click(m.facts_submit());
     expect(year.closest('fieldset[disabled]')).not.toBeNull();
-    next = { ok: false, reason: 'unavailable' };
-    await click(m.candidate_reload());
+    let finishRefresh!: (read: ScreenRead) => void;
+    pending = new Promise((resolve) => {
+      finishRefresh = resolve;
+    });
+    await clickNow(m.candidate_reload());
+    retired();
+    finishRefresh({ ok: false, reason: 'unavailable' });
+    pending = undefined;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
     expect(host.textContent).toContain(m.screen_refresh_failed());
     retired();
     expect(year.isConnected).toBe(false);
@@ -153,6 +167,33 @@ test('Screen refresh keeps corrections and exact uncertain requests; refusal ret
     const writes = fixture.facts.date.calls.filter((call) => call.method === 'POST');
     expect(writes).toHaveLength(2);
     expect(writes[1]).toEqual(writes[0]);
+    let finishScalar!: (read: EditorRead) => void;
+    let scalarReadStarted = false;
+    scalarRead = () => {
+      scalarReadStarted = true;
+      return new Promise((resolve) => {
+        finishScalar = resolve;
+      });
+    };
+    await click(m.correction_reload());
+    expect(scalarReadStarted).toBe(true);
+    next = structuredClone(admitted);
+    next.public!.subject.labels = { en: 'Recovered observatory' };
+    await click(m.candidate_reload());
+    expect(reading().textContent).toContain('Recovered observatory');
+    const staleScalar: EditorRead = {
+      ok: true,
+      release: admitted.release,
+      public: { ...structuredClone(admitted.public.subject), labels: { en: 'Stale scalar reading' } },
+      source: null,
+    };
+    finishScalar(staleScalar);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(reading().textContent).toContain('Recovered observatory');
+    expect(host.textContent).not.toContain('Stale scalar reading');
+    scalarRead = async () => scalar;
     next = { ok: false, reason: 'concealed' };
     await click(m.candidate_reload());
     expect(year.isConnected).toBe(false);
