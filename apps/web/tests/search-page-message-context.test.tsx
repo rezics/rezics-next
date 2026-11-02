@@ -21,7 +21,8 @@ const media = {
     return width >= 1024;
   },
   addEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => mediaListeners.add(listener),
-  removeEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => mediaListeners.delete(listener),
+  removeEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) =>
+    mediaListeners.delete(listener),
 };
 Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => media });
 window.scrollTo = () => undefined;
@@ -141,7 +142,9 @@ test('Search page chrome and malformed-input recovery follow the page locale aga
   try {
     expectPageLocale(pageMarkup('en'), 'en');
     expectPageLocale(pageMarkup('zh-Hans'), 'zh-Hans');
-    const revert = renderToStaticMarkup(createElement(SearchPage, { query: 'Mira', data: pageData(true), locale: 'en' }));
+    const revert = renderToStaticMarkup(
+      createElement(SearchPage, { query: 'Mira', data: pageData(true), locale: 'en' }),
+    );
     expect(revert).toContain(m.search_filter_revert_action({}, options.en));
     expect(revert).not.toContain(m.search_filter_revert_action({}, options['zh-Hans']));
 

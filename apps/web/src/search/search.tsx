@@ -530,14 +530,10 @@ export function SearchPage({
       { property, range },
     );
   for (const tag of draft.languages ?? [])
-    add(
-      `language:${tag}`,
-      `${m.condition_language({}, options)}: ${languageDisplayName(tag, locale)}`,
-      {
-        ...navigationState,
-        languages: draft.languages?.filter((entry) => entry !== tag),
-      },
-    );
+    add(`language:${tag}`, `${m.condition_language({}, options)}: ${languageDisplayName(tag, locale)}`, {
+      ...navigationState,
+      languages: draft.languages?.filter((entry) => entry !== tag),
+    });
   if (draft.condition) add('condition', m.condition_heading({}, options), { ...navigationState, condition: undefined });
   if (navigationState.filter)
     add('filter', m.search_existing_filter({}, options), { ...navigationState, filter: undefined });
