@@ -245,7 +245,7 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
       if (local) {
         converted.query = local.query;
         if (converted.scope && local.scope) converted.scope.id = local.scope.id;
-        converted.id = recentId(converted.query, converted.scope);
+        converted.id = recentId(converted.query, converted.scope, converted.languages);
       }
       if (seen.has(converted.id)) return [];
       seen.add(converted.id);

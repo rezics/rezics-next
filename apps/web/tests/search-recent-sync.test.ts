@@ -122,7 +122,39 @@ test('ordered language selections stay distinct through local sync and resume wi
     rows: RecentItem[] = [],
     visible: readonly RecentEntry[] = [];
   const writes: Pending[] = [];
-  const adapter = createRecentSearchSyncAdapter({
+  const transport: RecentSearchTransport = {
+    read: async () => ({ accountId, page: { revision, next: null, recentSearches: [...rows] } }),
+    write: async ({ pending }) => {
+      writes.push(structuredClone(pending));
+      if (pending.change.kind === 'remove') {
+        const removed = rows.find((row) => row.id === pending.change.id);
+        expect(removed?.entry).toMatchObject({ kind: 'query', text: 'same query', languages: ['fr', 'en'] });
+        rows = rows.filter((row) => row.id !== pending.change.id);
+        return { ok: true, value: { id: null, revision: ++revision, lastUsed: new Date().toISOString() } };
+      }
+      if (pending.change.kind !== 'use') throw new Error('Expected a recent query visit');
+      const entry = pending.change.entry;
+      expect(entry.kind).toBe('query');
+      const lastUsed = new Date(now + revision).toISOString();
+      const id = crypto.randomUUID();
+      const params = new URLSearchParams();
+      if (entry.kind === 'query') applyRecentSearch(params, entry.text, entry.languages);
+      const row: RecentItem = {
+        id,
+        revision: ++revision,
+        lastUsed,
+        entry,
+        display: {
+          name: entry.scope ? 'Current title' : entry.kind === 'query' ? entry.text : '',
+          href: `${entry.scope ? `/collections/${collectionId}` : '/search'}?${params}`,
+          avatar: null,
+        },
+      };
+      rows = [row, ...rows];
+      return { ok: true, value: { id, revision, lastUsed } };
+    },
+  };
+  const makeAdapter = () => createRecentSearchSyncAdapter({
     accountId,
     bucket,
     currentBucket: () => bucket,
@@ -130,33 +162,8 @@ test('ordered language selections stay distinct through local sync and resume wi
     onRemote: (next) => {
       visible = next;
     },
-    transport: {
-      read: async () => ({ accountId, page: { revision, next: null, recentSearches: [...rows] } }),
-      write: async ({ pending }) => {
-        writes.push(structuredClone(pending));
-        if (pending.change.kind !== 'use') throw new Error('Expected a recent query visit');
-        const entry = pending.change.entry;
-        expect(entry.kind).toBe('query');
-        const lastUsed = new Date(now + revision).toISOString();
-        const id = crypto.randomUUID();
-        const params = new URLSearchParams();
-        if (entry.kind === 'query') applyRecentSearch(params, entry.text, entry.languages);
-        const row: RecentItem = {
-          id,
-          revision: ++revision,
-          lastUsed,
-          entry,
-          display: {
-            name: entry.scope ? 'Current title' : entry.kind === 'query' ? entry.text : '',
-            href: `${entry.scope ? `/collections/${collectionId}` : '/search'}?${params}`,
-            avatar: null,
-          },
-        };
-        rows = [row, ...rows];
-        return { ok: true, value: { id, revision, lastUsed } };
-      },
-    },
   });
+  let adapter = makeAdapter();
   local(storage, entries);
   await adapter.sync(entries, signal());
 
@@ -197,6 +204,21 @@ test('ordered language selections stay distinct through local sync and resume wi
   const old = new URL('/search?language=de&q=stale', 'https://test.invalid');
   applyRecentSearch(old.searchParams, 'old query');
   expect(old.searchParams.getAll('language')).toEqual([]);
+
+  adapter.dispose();
+  adapter = makeAdapter();
+  await adapter.sync(readRecentHistory(storage, bucket), signal());
+  expect(writes.filter((write) => write.change.kind === 'use')).toHaveLength(3);
+  const removed = stored.find((entry) => entry.languages?.[0] === 'fr')!;
+  local(storage, readRecentHistory(storage, bucket).filter((entry) => entry.id !== removed.id), [removed.id]);
+  await adapter.sync(readRecentHistory(storage, bucket), signal());
+  expect(writes.filter((write) => write.change.kind === 'remove')).toHaveLength(1);
+  expect(
+    readRecentHistory(storage, bucket)
+      .filter((entry) => entry.query === 'same query')
+      .map((entry) => entry.languages),
+  ).toEqual([['ja']]);
+  expect(visible.filter((entry) => entry.query === 'same query').map((entry) => entry.languages)).toEqual([['ja']]);
   adapter.dispose();
 });
 
