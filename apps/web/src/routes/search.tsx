@@ -7,12 +7,7 @@ import { SearchPage } from '../search/search.tsx';
 import { searchQueryOptions } from '../search/search-queries';
 import { useSearchQuery } from '../search/use-search-query';
 import { isRealmDiscoverySearch, realmDiscoveryQueryOptions } from '../search/realm-discovery-loader';
-import {
-  correctSearchInput,
-  removeSearchInput,
-  searchLoaderDeps,
-  searchParams,
-} from '../search/search-params';
+import { correctSearchInput, removeSearchInput, searchLoaderDeps, searchParams } from '../search/search-params';
 import { SearchInputRecovery } from '../search/search-input-recovery';
 import { PageHeading } from '../shell/page-heading';
 import { pageHead } from '../shell/head';

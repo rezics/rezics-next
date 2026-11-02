@@ -2,12 +2,7 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SearchInputRecovery } from '../src/search/search-input-recovery';
-import {
-  correctSearchInput,
-  removeSearchInput,
-  searchFormFields,
-  searchLoaderDeps,
-} from '../src/search/search-params';
+import { correctSearchInput, removeSearchInput, searchFormFields, searchLoaderDeps } from '../src/search/search-params';
 
 test('malformed conditions and ranges stay editable and are not omitted from search forms', () => {
   const condition = '{"and":[]}';
@@ -28,7 +23,10 @@ test('malformed conditions and ranges stay editable and are not omitted from sea
     ['f.schema:genre', 'myth'],
   ]);
 
-  for (const issue of [deps.invalidInput!, { key: 'r.schema:datePublished', value: search['r.schema:datePublished'] }]) {
+  for (const issue of [
+    deps.invalidInput!,
+    { key: 'r.schema:datePublished', value: search['r.schema:datePublished'] },
+  ]) {
     const html = renderToStaticMarkup(
       createElement(SearchInputRecovery, {
         parameter: issue.key,
