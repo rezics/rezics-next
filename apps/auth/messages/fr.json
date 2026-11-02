@@ -411,5 +411,7 @@
   "auth_account_identity_retry": "Réessayer de charger l’identité",
   "auth_automated_departure": "Quitter cette vérification de création de compte ?",
   "auth_automated_leave": "Quitter",
-  "auth_automated_stay": "Rester"
+  "auth_automated_stay": "Rester",
+  "auth_transfer_departure_heading": "Quitter le transfert d’opérateur ?",
+  "auth_transfer_departure_description": "La préparation et la vérification du transfert non envoyées seront abandonnées."
 }

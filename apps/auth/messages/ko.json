@@ -411,5 +411,7 @@
   "auth_account_identity_retry": "계정 식별 정보 다시 불러오기",
   "auth_automated_departure": "계정 생성 검토 화면을 나가시겠어요?",
   "auth_automated_leave": "나가기",
-  "auth_automated_stay": "머무르기"
+  "auth_automated_stay": "머무르기",
+  "auth_transfer_departure_heading": "운영자 이전에서 나가시겠습니까?",
+  "auth_transfer_departure_description": "아직 전송하지 않은 이전 준비 및 검토 내용이 삭제됩니다."
 }

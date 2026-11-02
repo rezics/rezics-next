@@ -202,6 +202,7 @@ export function restoreTransferAttempt(): TransferAttempt | null | 'invalid' {
 export async function submitTransferAttempt(
   attempt: TransferAttempt,
   save: (attempt: TransferAttempt) => boolean = storeTransferAttempt,
+  isCurrent: () => boolean = () => true,
 ): Promise<TransferResult> {
   if (!isAttempt(attempt) || (attempt.side === 'source' && !text(attempt.acceptance, 4096)))
     return { kind: 'failure', reason: 'invalid' };
@@ -230,10 +231,12 @@ export async function submitTransferAttempt(
     const current = await readOperatorRelation(request.previous.subjectAccountId, attempt.accountId);
     if (current.kind !== 'ready') return current;
     if (!sameRelation(current.relation, request)) return { kind: 'failure', reason: 'conflict' };
+    if (!isCurrent()) return { kind: 'failure', reason: 'unavailable' };
     const approved = await authPost<unknown>('/account-operations/approve', {
       operationKey: request.sourceOperationKey,
       operation,
     });
+    if (!isCurrent()) return { kind: 'failure', reason: 'uncertain' };
     if (!approved.ok) return failure(approved, true);
     if (
       !record(approved.body) ||
@@ -253,6 +256,7 @@ export async function submitTransferAttempt(
   if (attempt.phase === 'execute') {
     const currentCaller = await boundSession(attempt.accountId);
     if (currentCaller) return currentCaller;
+    if (!isCurrent()) return { kind: 'failure', reason: 'unavailable' };
     const executed = await authPost<unknown>('/account-operations/execute', {
       operationKey: request.sourceOperationKey,
       operation,
@@ -287,10 +291,12 @@ export async function reauthenticateTransfer(
   accountId: string,
   email: string,
   password: string,
+  isCurrent: () => boolean = () => true,
 ): Promise<TransferFailure | null> {
   const current = await loadAccountSession();
   if (current.kind !== 'ready' || current.accountId !== accountId)
     return { kind: 'failure', reason: 'account-changed' };
+  if (!isCurrent()) return { kind: 'failure', reason: 'unavailable' };
   const result = await authPost('/signin', { email, password, ...OPERATOR_MANAGEMENT_PROFILE });
   if (!result.ok) return failure(result);
   return boundSession(accountId);

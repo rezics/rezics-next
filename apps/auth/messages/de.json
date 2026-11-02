@@ -411,5 +411,7 @@
   "auth_account_identity_retry": "Kontoidentität erneut laden",
   "auth_automated_departure": "Diese Prüfung der Kontoerstellung verlassen?",
   "auth_automated_leave": "Verlassen",
-  "auth_automated_stay": "Bleiben"
+  "auth_automated_stay": "Bleiben",
+  "auth_transfer_departure_heading": "Operatorübertragung verlassen?",
+  "auth_transfer_departure_description": "Ihre noch nicht gesendete Vorbereitung und Prüfung der Übertragung werden verworfen."
 }

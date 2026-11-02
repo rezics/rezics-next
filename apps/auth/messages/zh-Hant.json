@@ -411,5 +411,7 @@
   "auth_account_identity_retry": "重新載入帳號身分",
   "auth_automated_departure": "離開此帳戶建立確認頁面？",
   "auth_automated_leave": "離開",
-  "auth_automated_stay": "留下"
+  "auth_automated_stay": "留下",
+  "auth_transfer_departure_heading": "離開操作員移轉？",
+  "auth_transfer_departure_description": "尚未提交的移轉準備與審閱內容將被捨棄。"
 }

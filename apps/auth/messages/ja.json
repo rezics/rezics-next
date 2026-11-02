@@ -411,5 +411,7 @@
   "auth_account_identity_retry": "識別情報を再読み込み",
   "auth_automated_departure": "アカウント作成の確認画面を離れますか？",
   "auth_automated_leave": "離れる",
-  "auth_automated_stay": "この画面に留まる"
+  "auth_automated_stay": "この画面に留まる",
+  "auth_transfer_departure_heading": "オペレーターの移管から離れますか？",
+  "auth_transfer_departure_description": "未送信の移管の準備内容と確認内容は破棄されます。"
 }

@@ -411,5 +411,7 @@
   "auth_account_identity_retry": "重新加载账号身份",
   "auth_automated_departure": "离开此账户创建确认页面？",
   "auth_automated_leave": "离开",
-  "auth_automated_stay": "留下"
+  "auth_automated_stay": "留下",
+  "auth_transfer_departure_heading": "离开操作员转移？",
+  "auth_transfer_departure_description": "尚未提交的转移准备和审核内容将被丢弃。"
 }

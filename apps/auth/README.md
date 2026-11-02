@@ -276,6 +276,8 @@ fresh confirmation. Signed-out or changed accounts cannot act on it. Relation re
 after a submit failure, Retry reads the current relationship and leaves approval/execution in the original explicit
 reconciliation flow, retaining the request, operation key and references.
 
+Decision: transfer departure protects meaningful input and unresolved review in memory with Stay/Leave; only a review created here and never submitted is discarded, while restored attempts are conservatively retained because approval may already have reached native. Caller replacement and permission loss retire local authority without prompting.
+
 ## Rename account
 
 Rename review belongs to the mounted page and its native source; replacing the source resets the draft and confirmation,

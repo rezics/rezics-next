@@ -411,5 +411,7 @@
   "auth_account_identity_retry": "Reintentar la identidad de la cuenta",
   "auth_automated_departure": "¿Salir de esta revisión de creación?",
   "auth_automated_leave": "Salir",
-  "auth_automated_stay": "Quedarme"
+  "auth_automated_stay": "Quedarme",
+  "auth_transfer_departure_heading": "¿Salir de la transferencia de operador?",
+  "auth_transfer_departure_description": "Se descartarán la preparación y la revisión de la transferencia que no hayas enviado."
 }

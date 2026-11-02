@@ -411,5 +411,7 @@
   "auth_account_identity_retry": "Retry account identity",
   "auth_automated_departure": "Leave this creation review?",
   "auth_automated_leave": "Leave",
-  "auth_automated_stay": "Stay"
+  "auth_automated_stay": "Stay",
+  "auth_transfer_departure_heading": "Leave operator transfer?",
+  "auth_transfer_departure_description": "Your unsent transfer preparation and review will be discarded."
 }
