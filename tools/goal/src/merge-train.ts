@@ -186,7 +186,7 @@ export function captureTrainWorktreeRemoval(tree: string): () => void {
   };
 }
 
-/** Kernel's lane runner prints failed-file summaries; passing file headings and stack frames are not failures. */
+/** Kernel summaries, FAIL lines and heading-scoped (fail) name files; passing headings, Bun's repeated summary and stack frames do not. */
 export function failingTestFiles(output: string): string[] {
   const clean = output.replace(/\x1b\[[0-9;]*m/g, '');
   const files = new Set<string>();
@@ -209,6 +209,7 @@ export function failingTestFiles(output: string): string[] {
   for (const line of clean.split(/\r?\n/)) {
     const heading = line.match(/^([^\s]+\.(?:test|spec)\.[cm]?[jt]sx?):\s*$/);
     if (heading) currentFile = heading[1];
+    else if (/^\d+ tests? failed:/.test(line.trim())) currentFile = undefined;
     else if (currentFile && /^\s*\(fail\)/.test(line)) add(currentFile);
   }
   return [...files].sort();

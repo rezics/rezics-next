@@ -6,7 +6,7 @@ import { openDb } from './db.ts';
 import type { AttemptFence, GateOutcome } from './contracts.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { SqliteLandingQueue } from './land.ts';
-import { MergeTrain } from './merge-train.ts';
+import { failingTestFiles, MergeTrain } from './merge-train.ts';
 import { firstFailure, gateRunner, git } from './merge.ts';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
 import { WorkerStore } from './store.ts';
@@ -271,6 +271,22 @@ describe('sequential integration', () => {
       s.close();
     }
   });
+});
+
+test('a repeated Bun failure summary after a passing file heading cannot attribute an earlier failure to that passing file', () => {
+  expect(
+    failingTestFiles(`tools/goal/src/config.test.ts:
+(fail) legacy affected and integration checks migrate to post-integration verifier settings [102.06ms]
+(pass) an explicit verifierChecks setting is strict and replaces legacy validation selections [93.84ms]
+
+tools/goal/src/efficiency-report.test.ts:
+(pass) hourly report uses timestamped outcomes and leaves missing lifecycle evidence unknown [78.48ms]
+(pass) hourly delivery stores one timestamped outcome and discards notifier output [93.80ms]
+
+1 tests failed:
+(fail) legacy affected and integration checks migrate to post-integration verifier settings [102.06ms]
+`),
+  ).toEqual(['tools/goal/src/config.test.ts']);
 });
 
 test('failure fingerprint ignores paths, line numbers, durations, stack frames and assertion order', () => {
