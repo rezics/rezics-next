@@ -151,9 +151,10 @@ test('startup failure diagnostics are bounded to the current launch and report t
   const dir = temporaryDirectory();
   const logPath = join(dir.path, 'manager-host.log');
   const oldFailure = 'previous launch failure';
+  const oldFailureBytes = Buffer.from(oldFailure);
   const log = openSync(logPath, 'w');
   ftruncateSync(log, 128 * 1024 * 1024);
-  writeSync(log, oldFailure, 0, oldFailure.length, 128 * 1024 * 1024 - oldFailure.length);
+  writeSync(log, oldFailureBytes, 0, oldFailureBytes.length, 128 * 1024 * 1024 - oldFailureBytes.length);
   closeSync(log);
 
   const failing = join(dir.path, 'failure.js');
