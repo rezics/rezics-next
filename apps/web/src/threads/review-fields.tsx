@@ -76,7 +76,7 @@ function ReviewFieldsVisit({
   visitRef.current = visit;
   disabledRef.current = disabled;
   onVoteCitationChangeRef.current = onVoteCitationChange;
-  const result = readVote?.subjectId === subject?.id ? readVote.result : undefined;
+  const result = readVote && readVote.subjectId === subject?.id ? readVote.result : undefined;
   const vote = result && !isCurrentReviewVoteUnavailable(result) ? result : null;
   const unavailable = result !== undefined && isCurrentReviewVoteUnavailable(result);
   const locale = getLocale();
