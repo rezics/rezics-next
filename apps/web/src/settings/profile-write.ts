@@ -163,7 +163,7 @@ export class ProfileEditor {
     if (known && current.accountId !== known.accountId) throw new Error('Profile account changed');
     this.update({
       known: current,
-      draft: known && draft ? rebaseProfile(known, draft, current) : current,
+      draft: known && draft ? this.preserveLaterEdits(rebaseProfile(known, draft, current), draft) : current,
       phase: this.state.phase === 'loading' || this.state.phase === 'unavailable' ? 'idle' : this.state.phase,
       readAuthority: 'allowed',
       ...(this.state.phase === 'loading' || this.state.phase === 'unavailable' ? { readStatus: undefined } : {}),
