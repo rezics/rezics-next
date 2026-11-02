@@ -368,7 +368,11 @@ function PublicationEditorLive({
       : [];
     return { feedback: { id: feedbackId, address: 'fact', errors }, entries };
   }
-  function linkedError(target: string, label: string, instruction = m.catalogue_create_invalid_field({}, o)) {
+  function linkedError(
+    target: string,
+    label: string,
+    instruction: string = m.catalogue_create_invalid_field({}, o),
+  ) {
     return { target, summaryId: `${target}-error`, label, instruction, unique: false };
   }
   function generalError(error: NonNullable<CreateFailure['errors']>[number], index: number) {
