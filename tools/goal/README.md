@@ -916,11 +916,9 @@ The supermanager sets direction and the managers own the work. This applies to e
   worktree cleanup, recovery of tasks stopped by environment or tooling failures in any Goal and promotion
   are owned by the manager of the Goal that owns `tools/goal`; check-host health is owned by the Goal
   that owns the check scripts. System alerts go to those owners.
-- **Performance owns efficiency and acts.** Its 30-minute reviews measure useful landings, width, queue/check time,
-  failures and allowance, then act on the largest waste in the same round. Performance may dispatch or retry for any
-  Goal whose manager has not acted within 30 minutes. It maintains an optimisation plan with at least two experiments,
-  follows up on results, reports hourly trends and announces stalls immediately. It also supervises and recovers a
-  stuck supermanager using the [full recovery procedure](../../docs/development/supermanager.md).
+- **Efficiency is measured by scripts.** An hourly report, stall alarms and the supermanager watchdog run without model
+  tokens ([delivery ownership](../../docs/development/delivery.md#delivery-ownership)). The supermanager acts on
+  alarms; Performance owns check-host health and its own Goal.
 - **Visual review belongs to the design-authority Goal.** The Goal that owns the shell and design system reviews every
   visible slice by screenshot against the maintainer's references and reopens defects with the owning Goal; each
   product Goal owns its user journeys end to end, pages included.

@@ -79,27 +79,18 @@ outcomes to resident managers. Producers choose interfaces; outcome owners decid
 with concerned managers. Record the reason and proceed when the supermanager or maintainer is unreachable. Park only
 work that genuinely depends on an unavailable decision.
 
-Performance owns efficiency. Every 30 minutes it measures useful landings per Goal over 30 minutes and two hours,
-worker width against four per Goal, held and idle work, check wait on both check hosts, host memory, repeated
-failures, dispatch-to-integration latency, manager token share and allowance per useful landing, then acts on the largest waste in that
-same round. It may dispatch or retry for a Goal whose manager has not acted within 30 minutes. Control-plane owns
-delivery-tool defects; Performance owns check-host health. Managers keep complete ready briefs available for free width.
+Efficiency is measured without model tokens. An hourly report to the project's Telegram group, in Traditional
+Chinese, leads with new product code landed in the last full clock hour under apps, services and packages, excluding
+tests, stories, fixtures, recordings, generated files, JSON, evidence and documents, against the steady 20,000-line
+target and 40,000-line aim, then width, stopped tasks, ready briefs per Goal and allowance. It raises alarms for a
+two-hour total below the target, unfilled width, a Goal with fewer than three ready briefs, more than ten stopped
+tasks, and no product landing for 60 minutes. The supermanager acts on alarms. When a cause is unclear, it
+commissions a one-off measurement from session logs and the task store instead of a standing review. Lines are a
+measure, never a goal: quality comes first.
 
-Performance keeps an optimisation plan with measured waste, change, owner, metric, expected effect, status and measured
-result, with at least two experiments running. Its private round log records time, numbers and action in three lines.
-Hourly reports to the project's Telegram group use Traditional Chinese and lead with new product code landed in the
-last full clock hour under apps, services and packages, excluding tests, stories, fixtures, recordings, generated files, JSON, evidence
-and documents, against the steady 20,000-line target and 40,000-line aim, with quality signals alongside. Useful
-landings, short-window trends, width, manager allowance share and allowance per landing provide supporting evidence.
-Internal tooling counts when it unblocks product outcomes. Follow up on the previous round's intervention.
+Control-plane owns delivery-tool defects; Performance owns check-host health. Managers keep complete ready briefs
+available for free width. A token-free watchdog [supervises the resident supermanager](supermanager.md).
 
-No product landing in the last 30 minutes, or fewer than ten running tasks, requires action immediately: use the
-first-scope backlog and review classes to fill available width, wake idle managers and dispatch/retry where the owning
-manager has not acted within 30 minutes. Apply the standing default policy exception after agreement between owners.
-For a reversible owner-recommended choice awaiting only the supermanager for 30 minutes, take the choice, record it
-and notify afterwards. Announce a stall and the action immediately in the reporting channel; do not wait for the hour.
-Measurement without action is a failed review.
-
-Performance also [supervises and recovers the resident supermanager](supermanager.md). Runtime release, authenticated
-authority receiving, physical custody, workflow execution and delivered evidence are distinct facts. Source integration
-and a successful compiler command do not certify native runtime release or consume an operational allowance.
+Runtime release, authenticated authority receiving, physical custody, workflow execution and delivered evidence are
+distinct facts. Source integration and a successful compiler command do not certify native runtime release or consume
+an operational allowance.
