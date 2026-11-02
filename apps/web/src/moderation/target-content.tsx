@@ -84,6 +84,7 @@ function EvidenceContent({ evidence }: { evidence: ModerationEvidence['moderatio
   if (evidence.state !== 'available') return m.moderation_target_unavailable();
   const post = evidence.post;
   const thread = evidence.thread;
+  const postId = evidence.kind === 'post' ? post?.id : undefined;
   // Evidence can belong to a different page of the current thread reader.
   // Keep its anchored identity and let the existing point locator admit that page.
   // Thread and board evidence still link to the thread beginning.
@@ -92,7 +93,7 @@ function EvidenceContent({ evidence }: { evidence: ModerationEvidence['moderatio
         locale,
         thread,
         undefined,
-        evidence.kind === 'post' && post ? post.id : undefined,
+        postId,
       )
     : undefined;
   return (

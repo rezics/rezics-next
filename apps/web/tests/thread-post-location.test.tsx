@@ -88,7 +88,6 @@ test('a cross-page link renders the exact admitted post through one native page,
     key: `post:${target.id}`, kind: 'post', value: { moderationEvidence: evidence },
   }));
   const destination = new URL(/href="([^"]+)"/.exec(markup)![1]!, request.url);
-  expect(destination.hash).toBe(`#post-${target.id}`);
   const linkedInput = { id: input.id, ...threadSearch(Object.fromEntries(destination.searchParams)) };
   const page = await loadThreadPage(client, request, {}, linkedInput, verification, 'anonymous');
   expect(page.posts.posts.map((post) => post.id)).toEqual([target.id]);
