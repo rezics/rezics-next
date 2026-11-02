@@ -21,14 +21,15 @@ for (const type of ['SubjectList', 'AccountPosts'] as const) {
           props: {
             id: `preview-${index}`,
             limit,
-            property: distinct && index === 1 ? 'schema:illustrator' : 'schema:author',
+            ...(type === 'SubjectList' ? { title: { en: 'Works' }, property: 'schema:author' } : {}),
+            ...(distinct && index === 1 ? { property: 'schema:illustrator' } : {}),
           },
         })),
       } as unknown as CompositionDocument;
       const plan = planReads(platformRegistry, document, { subject, account });
       const reads = Object.fromEntries(
         Object.entries(plan.reads).map(([key, read]) => {
-          const items = Array.from({ length: empty ? 0 : Math.min(read.limit ?? 2, 2) }, () => ({}));
+          const items = Array.from({ length: empty ? 0 : Math.min('limit' in read ? read.limit : 2, 2) }, () => ({}));
           const body = { links: items, posts: items, count, next: next === null && items.length === 2 ? null : 'next' };
           return [key, { status: 200, body }];
         }),
@@ -44,9 +45,7 @@ for (const type of ['SubjectList', 'AccountPosts'] as const) {
     expect(run([1, 2], { value: 2, exact: true }, null)).toEqual([{ view, count: { value: 2, relation: 'exact' } }]);
     if (type === 'SubjectList') {
       expect(run([2, 2], null)).toEqual([{ view }]);
-      expect(run([2, 2, 2], { value: 3, exact: true }, 'next', true)).toEqual([
-        { view, count: { value: 6, relation: 'exact' } },
-      ]);
+      expect(run([2, 2, 2], undefined, 'next', true)).toEqual([{ view, count: { value: 6, relation: 'exact' } }]);
     } else
       expect(run([2, 2], null, 'next', false, true)).toEqual([{ view, count: { value: 0, relation: 'lower_bound' } }]);
   });
