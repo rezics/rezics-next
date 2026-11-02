@@ -79,11 +79,17 @@ test('a withdrawn additional Recipe choice stays local until a current field is 
     await act(async () => user.type(primary.getByRole('textbox', { name: m.catalogue_create_label() }), 'Lentil soup'));
     await click(m.catalogue_create_add_language());
     const japanese = within(terms).getAllByRole('group', { name: m.catalogue_create_language() })[1]!;
-    await act(async () => user.type(within(japanese).getByRole('textbox', { name: m.catalogue_create_language() }), 'ja'));
-    await act(async () => user.type(within(japanese).getByRole('textbox', { name: m.catalogue_create_label() }), 'レンズ豆のスープ'));
+    await act(async () =>
+      user.type(within(japanese).getByRole('textbox', { name: m.catalogue_create_language() }), 'ja'),
+    );
+    await act(async () =>
+      user.type(within(japanese).getByRole('textbox', { name: m.catalogue_create_label() }), 'レンズ豆のスープ'),
+    );
     await select(keptField);
     await click(m.correction_add());
-    await act(async () => user.type(within(host).getByRole('textbox', { name: m.correction_value() }), '200 g lentils'));
+    await act(async () =>
+      user.type(within(host).getByRole('textbox', { name: m.correction_value() }), '200 g lentils'),
+    );
     await act(async () => user.type(within(host).getByRole('textbox', { name: m.correction_language() }), 'en'));
     await select(withdrawn);
 
