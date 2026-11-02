@@ -30,6 +30,7 @@ import {
   publicationTarget,
   type PublicationCommand,
   type PublicationProfile,
+  type PublicationRead,
   type PublicationTransport,
 } from './publication-editor';
 import { ScalarControl } from './statement-editor-view';
@@ -203,13 +204,27 @@ function PublicationEditorLive({
     queryFn: () => transport.load(),
     retry: false,
   });
-  const read = query.data?.ok ? query.data : undefined;
   const [draftProfile, setDraftProfile] = useState<PublicationProfile>();
   const [draftNames, setDraftNames] = useState<Record<string, string>>({});
-  const currentProfile = read?.profiles.find((entry) => !draftProfile || entry.id === draftProfile.id);
-  const profile = currentProfile ?? draftProfile;
+  const privateDefinitions = useRef<
+    Pick<Extract<PublicationRead, { ok: true }>, 'release' | 'profiles'> | undefined
+  >(undefined);
   const [reviewDefinitions, setReviewDefinitions] = useState(false);
   const [refreshRequired, setRefreshRequired] = useState(false);
+  const refreshRequiredRef = useRef(false);
+  const readingGeneration = useRef(0);
+  const renderedReadingGeneration = readingGeneration.current;
+  const matchingRead = query.data?.ok && query.data.public.subject.id === work ? query.data : undefined;
+  const read = matchingRead && !refreshRequired && !refreshRequiredRef.current ? matchingRead : undefined;
+  const currentProfile = read?.profiles.find((entry) => !draftProfile || entry.id === draftProfile.id);
+  const profile = currentProfile ?? draftProfile;
+  const displayRelease = read?.release ?? privateDefinitions.current?.release;
+  const controlRead =
+    read ??
+    (privateDefinitions.current && {
+      release: privateDefinitions.current.release,
+      public: { related: {} },
+    });
   const [relationChoice, setRelation] = useState('');
   const relation = relationChoice || profile?.relations[0] || '';
   const [language, setLanguage] = useState(locale);
@@ -226,9 +241,9 @@ function PublicationEditorLive({
   const command = useRef<PublicationCommand | null>(null);
   const uncertain = failure?.reason === 'unavailable' && command.current !== null;
   const locked = busy || uncertain || (failure?.reason === 'conflict' && !reviewDefinitions);
-  const disabled = locked || session !== 'signed-in';
+  const disabled = locked || session !== 'signed-in' || !read || refreshRequiredRef.current;
   const name = (id: string) =>
-    pickText(read?.release.properties[id]?.labels ?? {}, locale).text || draftNames[id] || '';
+    pickText(displayRelease?.properties[id]?.labels ?? {}, locale).text || draftNames[id] || '';
   const title = read ? pickText(read.public.subject.labels, locale).text : '';
   const back = read ? subjectHref({ id: work, label: title }, locale).href : `/${locale}/search`;
   // Reuse the producer's current profile and schema validation; never narrow the staged draft to fit it.
@@ -262,14 +277,43 @@ function PublicationEditorLive({
     Object.keys(facts).some(unsupportedFact) ||
     reviewErrors.length > 0;
 
+  function keepPrivateDraft() {
+    if (!read) return;
+    privateDefinitions.current = { release: read.release, profiles: read.profiles };
+    if (profile) setDraftProfile(profile);
+    const properties = [relation, ...Object.keys(facts), field, 'schema:url'].filter(Boolean);
+    setDraftNames((names) => ({
+      ...names,
+      ...Object.fromEntries(
+        properties.map((property) => [
+          property,
+          pickText(read.release.properties[property]?.labels ?? {}, locale).text || names[property] || property,
+        ]),
+      ),
+    }));
+  }
+
   async function refreshDefinitions() {
+    if (!lifetime.active()) return;
+    keepPrivateDraft();
+    const generation = ++readingGeneration.current;
+    refreshRequiredRef.current = true;
     setRefreshRequired(true);
     const refreshed = await query.refetch();
-    if (!lifetime.active()) return;
-    if (!refreshed.isError && refreshed.data?.ok) setRefreshRequired(false);
+    if (!lifetime.active() || generation !== readingGeneration.current) return;
+    if (!refreshed.isError && refreshed.data?.ok && refreshed.data.public.subject.id === work) {
+      refreshRequiredRef.current = false;
+      setRefreshRequired(false);
+    }
   }
 
   function edit(change: () => void) {
+    if (
+      !lifetime.active() ||
+      renderedReadingGeneration !== readingGeneration.current ||
+      refreshRequiredRef.current
+    )
+      return;
     change();
     localDraft.current = true;
     // Only an explicit edit after a definite refusal starts a different request. Uncertain drafts stay frozen.
@@ -299,6 +343,7 @@ function PublicationEditorLive({
   async function submit(event: FormEvent) {
     if (!lifetime.active()) return;
     event.preventDefault();
+    if (renderedReadingGeneration !== readingGeneration.current || refreshRequiredRef.current) return;
     if (
       running.current ||
       created ||
@@ -338,7 +383,7 @@ function PublicationEditorLive({
     setFailure(undefined);
     try {
       const result = await transport.submit(command.current);
-      if (!lifetime.active()) return;
+      if (!lifetime.active() || renderedReadingGeneration !== readingGeneration.current) return;
       if (result.ok) {
         localDraft.current = false;
         setCreated(result);
@@ -442,7 +487,10 @@ function PublicationEditorLive({
               {m.catalogue_create_loading({}, o)}
             </ContentItemFrame>
           )}
-          {(query.isError || query.data?.ok === false) && (
+          {(query.isError ||
+            query.data?.ok === false ||
+            (query.data?.ok && !matchingRead) ||
+            (refreshRequired && !query.isFetching)) && (
             <ContentItemFrame
               as="div"
               role="alert"
@@ -456,15 +504,25 @@ function PublicationEditorLive({
                     ? m.publication_missing_work({}, o)
                     : m.catalogue_create_unavailable({}, o)}
               </ContentItemHeading>
-              {query.data?.ok === false && query.data.reason === 'invalid' ? (
+              {query.data?.ok === false && query.data.reason === 'invalid' && !refreshRequired ? (
                 <a href={`/${locale}/search`} className={outlineLinkClassName}>
                   {m.catalogue_create_search({}, o)}
                 </a>
               ) : (
-                <Button className={actionClassName} variant="outline" onClick={() => void refreshDefinitions()}>
+                <Button
+                  className={actionClassName}
+                  variant="outline"
+                  disabled={busy || query.isFetching}
+                  onClick={() => void refreshDefinitions()}
+                >
                   {m.catalogue_create_retry({}, o)}
                 </Button>
               )}
+            </ContentItemFrame>
+          )}
+          {refreshRequired && query.isFetching && (
+            <ContentItemFrame as="div" role="status" className="p-4">
+              {m.catalogue_create_loading({}, o)}
             </ContentItemFrame>
           )}
           {read && (
@@ -488,11 +546,14 @@ function PublicationEditorLive({
                   className="[&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=title]]:[overflow-wrap:anywhere] [&_[data-slot=list-row-link]]:min-h-11"
                 />
               </ul>
-              {!profile ? (
+              {!profile && (
                 <ContentItemFrame as="div" role="status" className="p-4">
                   {m.publication_empty({}, o)}
                 </ContentItemFrame>
-              ) : (
+              )}
+            </>
+          )}
+          {profile && (read || (refreshRequired && privateDefinitions.current)) && (
                 <form onSubmit={(event) => void submit(event)} noValidate className="space-y-6" aria-busy={busy}>
                   {reviewDefinitions && (
                     <ContentItemFrame as="div" role="status" className="min-w-0 space-y-3 p-4">
@@ -627,7 +688,7 @@ function PublicationEditorLive({
                               {name(relation) || relation}
                             </NativeSelectOption>
                           )}
-                          {(currentProfile?.relations ?? []).map((id) => (
+                          {(read ? currentProfile?.relations ?? [] : profile.relations).map((id) => (
                             <NativeSelectOption key={id} value={id}>
                               {name(id)}
                             </NativeSelectOption>
@@ -694,11 +755,18 @@ function PublicationEditorLive({
                           <EntityPicker
                             label={name(property)}
                             value={publisher}
-                            search={async (text, signal) =>
-                              (await search(text, signal)).filter((item) =>
-                                item.types.some((type) => publicationTarget(read.release, type, property)),
+                            search={async (text, signal) => {
+                              const results = await search(text, signal);
+                              if (
+                                !read ||
+                                renderedReadingGeneration !== readingGeneration.current ||
+                                refreshRequiredRef.current
                               )
-                            }
+                                return [];
+                              return results.filter((item) =>
+                                item.types.some((type) => publicationTarget(read.release, type, property)),
+                              );
+                            }}
                             src={coverSrc}
                             disabled={disabled}
                             onValueChange={(items) =>
@@ -712,8 +780,8 @@ function PublicationEditorLive({
                         ) : (
                           <ScalarControl
                             part={{ property: { id: property }, value }}
-                            definition={read.release.properties[property]}
-                            read={read}
+                            definition={controlRead?.release.properties[property]}
+                            read={controlRead!}
                             locale={locale}
                             onChange={(next) => edit(() => setFacts({ ...facts, [property]: next }))}
                           />
@@ -752,26 +820,37 @@ function PublicationEditorLive({
                           className={selectClassName}
                           id={`${id}-field`}
                           value={field}
-                          onChange={(e) => setField(e.target.value)}
+                          onChange={(e) => edit(() => setField(e.target.value))}
                         >
                           <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                          {(currentProfile?.fields ?? [])
+                          {(read ? currentProfile?.fields ?? [] : profile.fields)
                             .filter((id) => !Object.hasOwn(facts, id))
                             .map((id) => (
                               <NativeSelectOption key={id} value={id}>
                                 {name(id)}
                               </NativeSelectOption>
                             ))}
+                          {field && read && !currentProfile?.fields.includes(field) && (
+                            <NativeSelectOption value={field} disabled>
+                              {name(field) || field}
+                            </NativeSelectOption>
+                          )}
                         </NativeSelect>
+                        {field && read && !currentProfile?.fields.includes(field) && (
+                          <FieldError>{m.publication_choice_review({}, o)}</FieldError>
+                        )}
                       </Field>
                       <Button
                         className={actionClassName}
                         type="button"
                         variant="outline"
-                        disabled={!field || !currentProfile?.fields.includes(field) || Object.hasOwn(facts, field)}
+                        disabled={
+                          disabled || !field || !currentProfile?.fields.includes(field) || Object.hasOwn(facts, field)
+                        }
                         onClick={() =>
                           edit(() => {
-                            const datatype = read.release.properties[field]?.datatype;
+                            const datatype = read?.release.properties[field]?.datatype;
+                            if (!datatype) return;
                             setFacts({
                               ...facts,
                               [field]: {
@@ -787,7 +866,7 @@ function PublicationEditorLive({
                       </Button>
                     </FieldSet>
                   </ContentItemFrame>
-                  {(read.release.properties['schema:url'] || citation) && (
+                  {(displayRelease?.properties['schema:url'] || citation) && (
                     <ContentItemFrame as="div" className="min-w-0 p-4 sm:p-6">
                       <FieldSet disabled={disabled} className="min-w-0 gap-3">
                         <FieldLegend className="max-w-full">
@@ -885,13 +964,13 @@ function PublicationEditorLive({
                           ? m.catalogue_create_retry({}, o)
                           : m.publication_submit({}, o)}
                     </Button>
-                    <a href={back} className={outlineLinkClassName}>
-                      {m.publication_back({}, o)}
-                    </a>
+                    {read && (
+                      <a href={back} className={outlineLinkClassName}>
+                        {m.publication_back({}, o)}
+                      </a>
+                    )}
                   </ContentItemFrame>
                 </form>
-              )}
-            </>
           )}
         </>
       )}
