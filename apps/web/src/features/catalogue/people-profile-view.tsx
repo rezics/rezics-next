@@ -231,10 +231,9 @@ function PeopleInitialFactRemove({
     const row = holder.current?.closest('fieldset');
     if (!editable() || !row) return;
     const controls = [
-      ...(row
-        .closest('form')
-        ?.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex="0"], [contenteditable="true"]') ??
-        []),
+      ...(row.parentElement?.querySelectorAll<HTMLElement>(
+        'button, input, select, textarea, [tabindex="0"], [contenteditable="true"]',
+      ) ?? []),
     ];
     const first = controls.findIndex((control) => row.contains(control));
     const last = controls.findLastIndex((control) => row.contains(control));
