@@ -224,7 +224,10 @@ export const TwoEditedLanguages: Story = {
     );
     const summary = within(canvas.getByRole('region', { name: m.catalogue_terms_unsaved_languages() }));
     await expect(summary.getByRole('button', { name: `en: ${m.catalogue_create_label()}` })).toBeVisible();
-    await expect(summary.getByRole('button', { name: `ja: ${m.catalogue_create_description()}` })).toHaveAttribute('aria-pressed', 'true');
+    await expect(summary.getByRole('button', { name: `ja: ${m.catalogue_create_description()}` })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await userEvent.click(summary.getByRole('button', { name: `en: ${m.catalogue_create_label()}` }));
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_discard_language({ language: 'en' }) }));
     await expect(summary.queryByRole('button', { name: `en: ${m.catalogue_create_label()}` })).toBeNull();

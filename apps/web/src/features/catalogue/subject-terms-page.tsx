@@ -244,7 +244,9 @@ function SubjectTermsPageLive({
   });
   const original = base ? languageDraft(base.subject, language) : undefined;
   const canDiscard =
-    row && original && termFields.some((field) => row[field].mode !== 'keep' || row[field].value !== original[field].value);
+    row &&
+    original &&
+    termFields.some((field) => row[field].mode !== 'keep' || row[field].value !== original[field].value);
   const storedLanguage = !!base && termFields.some((field) => Object.hasOwn(base.subject[field], language));
   const canRemoveLanguage = !storedLanguage && addedLanguages.includes(language);
   const typeLabel = base ? typeLabels?.[base.subject.type] : undefined;
@@ -545,7 +547,9 @@ function SubjectTermsPageLive({
                       </li>
                     ))}
                   </ul>
-                ) : <p>{m.catalogue_terms_no_edits({}, options)}</p>}
+                ) : (
+                  <p>{m.catalogue_terms_no_edits({}, options)}</p>
+                )}
               </section>
               {failure && (
                 <ContentItemFrame as="div" role="alert" className={frameClassName}>

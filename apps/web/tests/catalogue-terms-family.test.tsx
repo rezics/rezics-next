@@ -189,8 +189,10 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     const helpId = aliases.getAttribute('aria-describedby')!;
     expect(a.contains(document.getElementById(helpId))).toBe(true);
     expect(document.getElementById(helpId)!.textContent).toBe(m.catalogue_terms_alias_limits());
-    const review = () => [...a.querySelectorAll('section')]
-      .find((section) => section.textContent?.includes(m.catalogue_terms_unsaved_languages()))!;
+    const review = () =>
+      [...a.querySelectorAll('section')].find((section) =>
+        section.textContent?.includes(m.catalogue_terms_unsaved_languages()),
+      )!;
     expect(review().textContent).toContain(`en: ${m.catalogue_create_label()}`);
     expect(review().textContent).toContain(`it: ${m.catalogue_create_aliases()}`);
     await click(a, m.catalogue_terms_discard_language({ language: 'it' }));
