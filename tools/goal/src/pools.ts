@@ -3,6 +3,7 @@ import { choosePool, choosePoolWithFallback as chooseByAllowance } from './allow
 import { readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { Pool, PoolReading, Profile } from './types.ts';
+import { withoutAnnotations } from './local-settings.ts';
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value))
@@ -32,15 +33,11 @@ function burnCeiling(value: unknown): number {
 
 /** Parse only the pool section so a live reload cannot change other process settings. */
 export function readPoolPolicies(value: unknown, localFile: string): Pool[] {
+  value = withoutAnnotations(value);
   if (!Array.isArray(value)) throw new Error('pools must be an array');
   const pools = value.map((raw: unknown) => {
     const pool = object(raw, 'pool');
-    keys(
-      pool,
-      ['name', 'cli', 'classes', 'configDirectory', 'command', 'allowanceKey', 'usageFile', 'policy', 'note'],
-      'pool',
-    );
-    if (pool.note !== undefined && typeof pool.note !== 'string') throw new Error('pool note must be text');
+    keys(pool, ['name', 'cli', 'classes', 'configDirectory', 'command', 'allowanceKey', 'usageFile', 'policy'], 'pool');
     if (!isAgentCli(pool.cli)) throw new Error('unsupported pool CLI');
     if (!Array.isArray(pool.classes) || !pool.classes.length || pool.classes.some((c) => typeof c !== 'string' || !c))
       throw new Error('pool classes required');
@@ -81,39 +78,35 @@ export function readPoolPolicies(value: unknown, localFile: string): Pool[] {
 }
 
 export class PoolPolicyReloader {
-  private mtime: number | undefined;
+  private version: string;
   private pools: Pool[];
-  private readonly initial: Pool[];
-  private reported = false;
   constructor(
     private readonly localFile: string,
     initial: Pool[],
     private readonly report: (message: string) => void,
   ) {
     this.pools = initial;
-    this.initial = initial;
+    this.version = this.fileVersion();
+  }
+  private fileVersion(): string {
     try {
-      this.mtime = statSync(localFile).mtimeMs;
+      return String(statSync(this.localFile).mtimeMs);
     } catch {
-      /* first choice reports a missing file */
+      return 'unreadable';
     }
   }
+  /** The pools of the file's latest valid version; an invalid version keeps them and is reported once. */
   read(): Pool[] {
+    const version = this.fileVersion();
+    if (version === this.version) return this.pools;
+    this.version = version;
     try {
-      const mtime = statSync(this.localFile).mtimeMs;
-      if (mtime === this.mtime) return this.pools;
       const local = JSON.parse(readFileSync(this.localFile, 'utf8')) as { pools?: unknown };
-      const pools = readPoolPolicies(local?.pools ?? [], this.localFile);
-      this.mtime = mtime;
-      this.pools = pools;
+      this.pools = readPoolPolicies(local?.pools ?? [], this.localFile);
     } catch (error) {
-      this.pools = this.initial;
-      if (!this.reported) {
-        this.reported = true;
-        this.report(
-          `Unable to reload pool policies from ${this.localFile}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      this.report(
+        `Unable to reload pool policies from ${this.localFile}: ${error instanceof Error ? error.message : String(error)}; keeping the last valid pools`,
+      );
     }
     return this.pools;
   }

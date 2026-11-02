@@ -305,6 +305,15 @@ is in `risk-areas.json`. Account names, pool mapping, executable/configuration p
 in the untracked `<main checkout>/.temp/goal/local.json`. The loader refuses a tracked local file. There is no implicit
 account or pool policy.
 
+Any object in the file may carry `note` or `$comment` annotations; they are dropped before validation, and every other
+unknown field is an error. Validate an edit before replacing the live file with
+`bun tools/goal/src/cli.ts config check [file]` (the live file when omitted): it applies the strict schema, never falls
+back and changes nothing. Each valid version of a local file is kept in `<main checkout>/.temp/goal/configuration/`. When
+the live file later fails to read or validate, every process, including a new CLI command, uses that file's last valid
+version (revalidated with the current schema and environment) and reports the exact error once to the operations
+manager and the supermanager; the next valid version is adopted normally. Without a valid version on record the error
+stops the command as before.
+
 The following illustrates the local schema. Replace placeholders with local values and supply the required policy
 fields listed below; the empty policy object deliberately provides no account policy.
 
@@ -350,9 +359,9 @@ one pool within an hour temporarily exclude its allowance for one hour. Other na
 aliases of that allowance immediately. There is no credit purchase or reset-card redemption path.
 
 Control-plane processes reload only the `pools` entries from their startup local settings file whenever they choose a
-pool. An unchanged file is not reparsed; the rest of the process settings retain their startup values. If the file
-cannot be read or its pool entries are invalid, the process keeps its startup pool policies and sends one error event
-to the supermanager inbox.
+pool. An unchanged file is not reparsed; the rest of the process settings retain their startup values. If a changed
+file cannot be read or its pool entries are invalid, the process keeps the pools of the last valid version and sends one
+error event per changed version to the supermanager inbox.
 
 `mainCheckout`, `stateDirectory`, `worktreeRoot`, `mainBranch`, `integrationBranch`, `promotionParallelism`,
 `branchPrefix`, `terminationGraceMs`, `silenceMs`,
