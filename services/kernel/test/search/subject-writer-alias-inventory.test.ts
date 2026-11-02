@@ -9,13 +9,10 @@ const second = subjectIndexName(prefix, 2);
 const writer1 = `${first}-writer-${'a'.repeat(32)}`;
 const writer2 = `${second}-writer-${'b'.repeat(32)}`;
 
-function engine(body: unknown, put?: (path: string, payload: unknown) => void): OpenSearch {
+function engine(body: unknown): OpenSearch {
   return {
-    async request<T>(method, path, payload) {
-      if (method === 'PUT') {
-        put?.(path, payload);
-        return { status: 200, body: {} as T };
-      }
+    async request<T>(...args: Parameters<OpenSearch['request']>) {
+      const [method, path] = args;
       expect({ method, path }).toEqual({ method: 'GET', path: `/_resolve/index/${prefix}subjects*` });
       return { status: 200, body: body as T };
     },
@@ -29,7 +26,8 @@ test('a Subject generation allocated with its physical writer alias remains disc
   const allocated = new Map<number, string>();
   let active: number | null = null;
   const search: OpenSearch = {
-    async request<T>(method, path, payload) {
+    async request<T>(...args: Parameters<OpenSearch['request']>) {
+      const [method, path, payload] = args;
       if (method === 'PUT') {
         const generation = Number(/-g([1-9][0-9]*)$/.exec(path)?.[1]);
         const names = Object.keys((payload as { aliases: Record<string, unknown> }).aliases);
