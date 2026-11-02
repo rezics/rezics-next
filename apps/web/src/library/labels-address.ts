@@ -19,6 +19,11 @@ function validPrefix(value: string): boolean {
     if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
     if (++scalarCount > LABELS_PREFIX_MAX_SCALARS) return false;
   }
+  // Native prefix admission applies after normalization; the Web raw bound still applies above.
+  const normalized = normalizeLibraryLabelName(value);
+  if (/[\p{Cc}\p{Cs}]/u.test(normalized)) return false;
+  let normalizedScalars = 0;
+  for (const _scalar of normalized) if (++normalizedScalars > LABELS_PREFIX_MAX_SCALARS) return false;
   return true;
 }
 
@@ -44,3 +49,5 @@ export function parseLabelsAddress(value: unknown): LabelsAddressResult {
   const cursor = typeof input.cursor === 'string' && input.cursor !== '' ? input.cursor : null;
   return { valid: true, cursor, query };
 }
+import { normalizeLibraryLabelName } from './subject-label-name';
+
