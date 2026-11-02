@@ -442,16 +442,11 @@ test('the complete Subject history family keeps independent headings, bounded su
           detail: { id: initial.page.id, revision: 5, summary: { kind: 'limited' as const } },
         };
         let reads = 0;
-        await render(
-          <SubjectChanges
-            key={`${action}-${intent}`}
-            locale="en"
-            transport={{
-              list: () => (reads++ === 0 ? Promise.resolve(initial) : held.promise),
-              detail: () => held.promise,
-            }}
-          />,
-        );
+        const transport: ChangesTransport = {
+          list: () => (reads++ === 0 ? Promise.resolve(initial) : held.promise),
+          detail: () => held.promise,
+        };
+        await render(<SubjectChanges key={`${action}-${intent}`} locale="en" transport={transport} />);
         const label = action === 'more' ? m.changes_more() : selectFive;
         const opener = button(host, label);
         if (intent === 'pointer') await click(host, label);
