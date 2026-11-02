@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItem, type ContentItemProps } from '@rezics/ui/content-item';
@@ -177,6 +177,11 @@ export function ViewerInboxPage({
   const queryClient = useQueryClient();
   const [pagination, setPagination] = useState(emptyInboxPagination);
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const boundaryId = useId();
+  const boundary = useRef<HTMLHeadingElement>(null);
+  const continuation = useRef<{ cursor: string } | null>(null);
+  const [continuing, setContinuing] = useState(false);
+  const [continuationMessage, setContinuationMessage] = useState('');
   const { cursor } = pagination;
   const markedThrough = useRef<string | null>(null);
   const seenAttempt = useRef<InboxSeenAttempt | null>(null);
@@ -213,8 +218,31 @@ export function ViewerInboxPage({
     active.current = true;
     return () => {
       active.current = false;
+      continuation.current = null;
     };
   }, []);
+
+  useLayoutEffect(() => {
+    const request = continuation.current;
+    if (
+      !request ||
+      !active.current ||
+      !viewer.isCurrent() ||
+      pageQuery.isFetching ||
+      received.cursor !== request.cursor ||
+      !received.result
+    )
+      return;
+    continuation.current = null;
+    setContinuing(false);
+    if (!pageQuery.isError && received.result.signedIn && received.result.state === 'ready') {
+      setContinuationMessage(received.result.next ? m.inbox_page_loaded() : m.inbox_page_end());
+      boundary.current?.focus();
+    } else {
+      // The same control remains mounted as the exact retry; failure never moves focus.
+      setContinuationMessage('');
+    }
+  });
 
   const sendSeenAttempt = useCallback(
     async (attempt: InboxSeenAttempt) => {
@@ -316,8 +344,19 @@ export function ViewerInboxPage({
   };
 
   const loadMore = () => {
-    if (!active.current || !viewer.isCurrent() || pageQuery.isFetching || accessPending.current || !page?.next) return;
+    if (
+      !active.current ||
+      !viewer.isCurrent() ||
+      continuation.current ||
+      pageQuery.isFetching ||
+      accessPending.current ||
+      !page?.next
+    )
+      return;
     const next = nextInboxPage(received);
+    continuation.current = { cursor: next.cursor! };
+    setContinuing(true);
+    setContinuationMessage(m.inbox_page_loading());
     if (next === received) void pageQuery.refetch();
     else setPagination(next);
   };
@@ -331,12 +370,26 @@ export function ViewerInboxPage({
     setPagination(first);
   };
   const retryPage = () => {
-    if (!active.current || !viewer.isCurrent() || pageQuery.isFetching || accessPending.current || waiting) return;
+    if (
+      !active.current ||
+      !viewer.isCurrent() ||
+      continuation.current ||
+      pageQuery.isFetching ||
+      accessPending.current ||
+      waiting
+    )
+      return;
+    if (cursor !== undefined) {
+      continuation.current = { cursor };
+      setContinuing(true);
+      setContinuationMessage(m.inbox_page_loading());
+    }
     void pageQuery.refetch({ cancelRefetch: false });
   };
   const failed = pageQuery.isError || operationState !== null;
   const failure = failed ? (
     <section
+      id={`${boundaryId}-failure`}
       role="status"
       data-response-status={operationState?.failure.status ?? ''}
       data-response-code={operationState?.failure.code ?? ''}
@@ -357,16 +410,6 @@ export function ViewerInboxPage({
       ) : null}
       {waiting ? <p className="mt-2 text-sm text-muted-foreground">{m.settings_retry_wait()}</p> : null}
       <div className="mt-4 flex flex-wrap gap-3">
-        {!seenNeedsAccess ? (
-          <Button
-            variant="outline"
-            className="h-auto min-h-11 max-w-full whitespace-normal py-2"
-            onClick={retryPage}
-            disabled={pageQuery.isFetching || checkingAccess || waiting}
-          >
-            {m.inbox_retry()}
-          </Button>
-        ) : null}
         {cursor !== undefined ? (
           <Button
             variant="outline"
@@ -383,7 +426,12 @@ export function ViewerInboxPage({
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">{m.inbox_heading()}</h1>
+      <h1 id={boundaryId} ref={boundary} tabIndex={-1} className="font-display text-3xl font-semibold tracking-tight">
+        {m.inbox_heading()}
+      </h1>
+      <p role="status" aria-atomic="true" className="sr-only">
+        {continuationMessage}
+      </p>
       {seenFailure ? (
         <section
           role="status"
@@ -553,17 +601,6 @@ export function ViewerInboxPage({
                   {readable.items.length === 0 && !readable.next ? m.inbox_empty() : m.inbox_triage_no_unread_loaded()}
                 </p>
                 {readable.next ? <p className="text-sm text-muted-foreground">{m.inbox_triage_older_pages()}</p> : null}
-                {readable.next && !failed ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-auto min-h-11 max-w-full whitespace-normal py-2"
-                    onClick={loadMore}
-                    disabled={pageQuery.isFetching || checkingAccess}
-                  >
-                    {m.inbox_load_more()}
-                  </Button>
-                ) : null}
               </section>
             ) : !unreadOnly && readable.items.length === 0 ? (
               <section className="mt-6 space-y-3">
@@ -571,17 +608,6 @@ export function ViewerInboxPage({
                   {m.inbox_triage_no_loaded()}
                 </p>
                 {readable.next ? <p className="text-sm text-muted-foreground">{m.inbox_triage_older_pages()}</p> : null}
-                {readable.next && !failed ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-auto min-h-11 max-w-full whitespace-normal py-2"
-                    onClick={loadMore}
-                    disabled={pageQuery.isFetching || checkingAccess}
-                  >
-                    {m.inbox_load_more()}
-                  </Button>
-                ) : null}
               </section>
             ) : (
               <InboxRows
@@ -589,17 +615,35 @@ export function ViewerInboxPage({
                   ...readable,
                   items: visibleItems,
                 }}
-                {...(!failed && readable.next ? { onLoadMore: loadMore } : {})}
-                loading={pageQuery.isFetching || checkingAccess}
               />
             )
           ) : null}
-          {pageQuery.isFetching && readable ? (
+          {pageQuery.isFetching && readable && !continuing ? (
             <p role="status" className="mt-4 text-muted-foreground">
               {m.inbox_loading()}
             </p>
           ) : null}
           {failure}
+          {(failed ? !seenNeedsAccess : readable?.next) ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-5 h-auto min-h-11 max-w-full whitespace-normal py-2"
+              aria-controls={boundaryId}
+              aria-describedby={failed ? `${boundaryId}-failure` : undefined}
+              aria-busy={continuing}
+              aria-disabled={continuing || pageQuery.isFetching || checkingAccess || (failed && waiting)}
+              onClick={failed ? retryPage : loadMore}
+            >
+              {continuing
+                ? m.inbox_page_loading()
+                : failed
+                  ? m.inbox_retry()
+                  : visibleItems.length === 0
+                    ? m.inbox_next_page()
+                    : m.inbox_load_more()}
+            </Button>
+          ) : null}
         </>
       )}
     </div>

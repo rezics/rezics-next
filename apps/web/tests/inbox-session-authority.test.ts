@@ -53,6 +53,7 @@ const globals = {
   HTMLButtonElement: window.HTMLButtonElement,
   Element: window.Element,
   Node: window.Node,
+  NodeFilter: window.NodeFilter,
   Document: window.Document,
   DocumentFragment: window.DocumentFragment,
   MutationObserver: window.MutationObserver,
@@ -263,6 +264,92 @@ async function screen(strict = false) {
     },
   };
 }
+
+test('keyboard continuation keeps sparse pages and exact retries usable, focuses only admitted successes and retires late handoffs', async () => {
+  const { default: userEvent } = await import(
+    Bun.resolveSync('@testing-library/user-event', dirname(Bun.resolveSync('storybook/test', import.meta.dir)))
+  );
+  const user = userEvent.setup({ document });
+  const view = await screen();
+  const { client, host, pageCalls, commands } = view;
+  const viewer = currentInboxViewer(client)!;
+  const heading = host.querySelector('h1')!;
+  const outside = document.createElement('button');
+  document.body.append(outside);
+  const button = (label: string) => [...host.querySelectorAll('button')].find((node) => node.textContent === label)!;
+  const enter = () =>
+    act(async () => {
+      await user.keyboard('{Enter}');
+    });
+  const settle = async (result: InboxPage) => {
+    await act(async () => {
+      pageCalls.at(-1)!.work!.resolve(result);
+    });
+    await tick();
+  };
+  try {
+    expect(document.activeElement).not.toBe(heading);
+    const filter = button(m.inbox_triage_filter_all());
+    filter.focus();
+    await act(async () => {
+      client.setQueryData(inboxPageQuery(viewer).queryKey, ready([]));
+    });
+    await tick();
+    expect(document.activeElement).toBe(filter);
+    view.hold();
+    const next = button(m.inbox_next_page());
+    next.focus();
+    await act(async () => {
+      await user.keyboard('{Enter}{Enter}');
+    });
+    expect(pageCalls).toHaveLength(2);
+    expect(next.getAttribute('aria-busy')).toBe('true');
+    expect(next.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(next);
+    await settle(ready([], third));
+    expect(document.activeElement).toBe(heading);
+    expect(heading.tabIndex).toBe(-1);
+    expect(host.textContent).toContain(m.inbox_page_loaded());
+    const retry = button(m.inbox_next_page());
+    retry.focus();
+    await enter();
+    await settle({ signedIn: true, state: 'unavailable', failure: { status: 503 } });
+    expect(button(m.inbox_retry())).toBe(retry);
+    expect(document.activeElement).toBe(retry);
+    expect(host.textContent).not.toContain(m.inbox_empty());
+    await act(async () => {
+      await user.keyboard(' ');
+    });
+    expect(pageCalls.slice(-2).map(({ cursor }) => cursor)).toEqual([third, third]);
+    await settle(ready([], null));
+    expect(document.activeElement).toBe(heading);
+    expect(host.textContent).toContain(m.inbox_empty());
+    expect(host.textContent).toContain(m.inbox_page_end());
+    expect(host.contains(retry)).toBe(false);
+    filter.focus();
+    await act(async () => {
+      client.setQueryData(inboxPageQuery(viewer, third).queryKey, ready(['fresh']));
+    });
+    await tick();
+    expect(document.activeElement).toBe(filter);
+    expect(view.rows()).toEqual([['fresh', 'true']]);
+    button(m.inbox_load_more()).focus();
+    await enter();
+    outside.focus();
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, { state: 'signed-out' });
+    });
+    expect(view.rows()).toEqual([]);
+    await settle(ready(['late-private'], null));
+    expect(document.activeElement).toBe(outside);
+    expect(host.textContent).not.toContain('late-private');
+    expect(host.textContent).not.toContain(m.inbox_page_loaded());
+    expect(commands).toHaveLength(0);
+  } finally {
+    outside.remove();
+    await view.close();
+  }
+});
 
 test('Inbox session failure retires retained private rows badges and exact marker callbacks before recovery', async () => {
   for (const outcome of ['confirmed', 'failed'] as const) {
