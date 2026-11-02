@@ -114,7 +114,12 @@ export function MangaInitialField({
           data-content-item-slot="preview"
           className="min-w-0 space-y-4 [&_label]:whitespace-normal [&_label]:text-start"
         >
-          <div id={`${feedback.id}-fact`} data-manga-picker={property.datatype === 'wikibase-item' ? '' : undefined} tabIndex={-1} className="min-w-0 space-y-4">
+          <div
+            id={`${feedback.id}-fact`}
+            data-manga-picker={property.datatype === 'wikibase-item' ? '' : undefined}
+            tabIndex={-1}
+            className="min-w-0 space-y-4"
+          >
             {property.datatype === 'document' ? (
               <>
                 <p className="text-sm text-muted-foreground">{m.authored_citation_hint({}, o)}</p>
@@ -176,7 +181,9 @@ export function MangaInitialField({
               <div
                 key={index}
                 id={`${feedback.id}-qualifier-${index}`}
-              data-manga-picker={read.release.properties[part.property.id]?.datatype === 'wikibase-item' ? '' : undefined}
+                data-manga-picker={
+                  read.release.properties[part.property.id]?.datatype === 'wikibase-item' ? '' : undefined
+                }
                 tabIndex={-1}
                 className="min-w-0 space-y-2 border-s-2 ps-3"
               >
