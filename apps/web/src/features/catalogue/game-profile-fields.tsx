@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { catalogueEditor, useEditorLifetime, useCurrentReadingVisible } from './editor-lifetime';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
@@ -42,12 +42,14 @@ function GameItemControl({
   locale,
   search,
   change,
+  editAllowed,
 }: {
   part: SnakInput;
   context: StatementFieldsRead;
   locale: string;
   search: EntityPickerSearch;
   change: (value: SnakInput['value']) => void;
+  editAllowed?: (() => boolean) | undefined;
 }) {
   const [picked, setPicked] = useState<EntityPickerSubject[]>([]);
   const property = part.property.id;
@@ -80,6 +82,7 @@ function GameItemControl({
         )
       }
       onValueChange={(items) => {
+        if (editAllowed && !editAllowed()) return;
         setPicked(items);
         change({ type: 'value', content: items[0]?.id ?? '' });
       }}
@@ -91,7 +94,8 @@ export function GameStatementFields({
   context,
   locale,
   search,
-  change,
+  change: onChange,
+  editAllowed,
   id,
 }: {
   id?: string;
@@ -100,7 +104,11 @@ export function GameStatementFields({
   locale: string;
   search: EntityPickerSearch;
   change: (next: StatementInput) => void;
+  editAllowed?: (() => boolean) | undefined;
 }) {
+  const change = (next: StatementInput) => {
+    if (!editAllowed || editAllowed()) onChange(next);
+  };
   const control = (part: SnakInput, update: (value: SnakInput['value']) => void) => {
     if (context.release.properties[part.property.id]?.datatype !== 'wikibase-item') return;
     const qualifier = statement.qualifiers?.indexOf(part) ?? -1;
@@ -113,7 +121,14 @@ export function GameStatementFields({
           : `reference-${reference}-part-${statement.references[reference]?.parts.indexOf(part)}`;
     return (
       <div id={id ? controlId(id, address, 'value') : undefined}>
-        <GameItemControl part={part} context={context} locale={locale} search={search} change={update} />
+        <GameItemControl
+          part={part}
+          context={context}
+          locale={locale}
+          search={search}
+          change={update}
+          editAllowed={editAllowed}
+        />
       </div>
     );
   };
@@ -257,6 +272,7 @@ export function GameInitialFacts({
   statements,
   disabled,
   change,
+  editAllowed,
 }: {
   type: string;
   release: Release;
@@ -265,12 +281,28 @@ export function GameInitialFacts({
   statements: { key: string; statement: StatementInput }[];
   disabled: boolean;
   change: (rows: { key: string; statement: StatementInput }[]) => void;
+  editAllowed?: (() => boolean) | undefined;
 }) {
   const o = { locale: locale as never };
   const groups = gameGroups(release, type);
   const context: StatementFieldsRead = { release, source: null, public: { subject: { type }, related: {} } };
+  const holder = useRef<HTMLFieldSetElement>(null);
+  const observation = useMemo(() => ({}), [type, release, disabled, editAllowed]);
+  const current = useRef({ observation, statements, change });
+  current.current = { observation, statements, change };
+  const editable = (row?: (typeof statements)[number]) =>
+    current.current.observation === observation &&
+    !disabled &&
+    (!editAllowed || editAllowed()) &&
+    !!holder.current?.isConnected &&
+    !holder.current.closest('fieldset:disabled') &&
+    (!row || current.current.statements.includes(row));
+  const publish = (next: typeof statements) => {
+    current.current.statements = next;
+    current.current.change(next);
+  };
   return (
-    <fieldset disabled={disabled} className="min-w-0 max-w-full space-y-5">
+    <fieldset ref={holder} disabled={disabled} className="min-w-0 max-w-full space-y-5">
       <legend className="font-sans text-lg font-semibold">{m.game_profile_initial({}, o)}</legend>
       <p className="text-sm text-muted-foreground">{m.game_profile_optional({}, o)}</p>
       <InitialFieldChoice
@@ -288,8 +320,9 @@ export function GameInitialFacts({
         selectClassName={gamePropertySelectClass}
         buttonClassName={gameActionClass}
         add={(property) => {
-          change([
-            ...statements,
+          if (!editable()) return;
+          publish([
+            ...current.current.statements,
             {
               key: crypto.randomUUID(),
               statement: {
@@ -321,15 +354,19 @@ export function GameInitialFacts({
                 context={context}
                 locale={locale}
                 search={search}
-                change={(statement) =>
-                  change(statements.map((item) => (item.key === row.key ? { ...item, statement } : item)))
-                }
+                editAllowed={() => editable(row)}
+                change={(statement) => {
+                  if (!editable(row)) return;
+                  publish(current.current.statements.map((item) => (item === row ? { ...item, statement } : item)));
+                }}
               />
               <GameInitialFactRemove
                 row={row}
                 disabled={disabled}
                 locale={locale}
-                onRemove={() => change(statements.filter((item) => item.key !== row.key))}
+                onRemove={() => {
+                  if (editable(row)) publish(current.current.statements.filter((item) => item !== row));
+                }}
               />
             </ContentItemFrame>
           </section>

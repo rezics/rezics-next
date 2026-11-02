@@ -301,7 +301,7 @@ function GameProfileLive({
                 initial,
                 (drafts[initial.type] ?? []).map((row) => row.statement),
               ),
-            fields: (type, disabled) => (
+            fields: (type, disabled, editAllowed) => (
               <GameInitialFacts
                 key={type}
                 type={type}
@@ -310,6 +310,7 @@ function GameProfileLive({
                 search={search}
                 statements={drafts[type] ?? []}
                 disabled={disabled}
+                editAllowed={editAllowed}
                 change={(rows) => setDrafts((previous) => ({ ...previous, [type]: rows }))}
               />
             ),

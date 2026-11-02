@@ -925,6 +925,7 @@ test('Game creation recovers rejected multilingual drafts and exact corrections 
     const navigations: string[] = [];
     let unavailable = false,
       mode = 'reject';
+    let settleUncertain: (result: Awaited<ReturnType<typeof fixture.transport.create>>) => void = () => {};
     const errors = [
       '/statements/schema:inLanguage/1/value/content',
       '/statements/schema:inLanguage/1/references/0/parts/0/value/content',
@@ -945,7 +946,10 @@ test('Game creation recovers rejected multilingual drafts and exact corrections 
             errors: errors.map((pointer) => ({ pointer, code: 'invalid_format' })),
           };
         }
-        if (mode === 'uncertain') return { ok: false, reason: 'unavailable', refreshDefinitions: true };
+        if (mode === 'uncertain')
+          return new Promise((resolve) => {
+            settleUncertain = resolve;
+          });
         if (mode === 'conflict') return { ok: false, reason: 'conflict' };
         return { ok: true, id: gameId, reader: { state: 'unavailable' } };
       },
@@ -1036,8 +1040,24 @@ test('Game creation recovers rejected multilingual drafts and exact corrections 
     await click(button(m.catalogue_create_review_new()));
     mode = 'uncertain';
     unavailable = true;
+    const queuedEdits = targets.map(
+      (node) =>
+        Reflect.get(
+          node,
+          Object.keys(node).find((key) => key.startsWith('__reactProps'))!,
+        ).onChange,
+    );
     await click(button(m.catalogue_create_submit()));
     const sealed = structuredClone(commands.at(-1));
+    for (const pending of [true, false]) {
+      if (!pending)
+        await act(async () => settleUncertain({ ok: false, reason: 'unavailable', refreshDefinitions: true }));
+      await act(async () => {
+        for (const edit of queuedEdits) edit({ target: { value: 'stale intent' } });
+      });
+      expect((targets[0] as HTMLInputElement).value).toBe('fr');
+      expect((targets[1] as HTMLInputElement).value).toBe('https://example.test/corrected');
+    }
     expect(host.querySelector('form fieldset')?.hasAttribute('disabled')).toBe(true);
     mode = 'ready';
     const submit = host.querySelector<HTMLElement>('button[type="submit"]')!;

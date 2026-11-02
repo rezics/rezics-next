@@ -44,7 +44,9 @@ test('Game whole-fact removal preserves complete mounted drafts on Cancel and ob
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
-  const { GameInitialFacts } = await import('../src/features/catalogue/game-profile-fields');
+  const { GameInitialFacts: Fields } = await import('../src/features/catalogue/game-profile-fields');
+  const { catalogueEditor } = await import('../src/features/catalogue/editor-lifetime');
+  const GameInitialFacts = catalogueEditor(Fields);
   const { m } = await import('../src/paraglide/messages.js');
   const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
   const { within, waitFor } = await import(Bun.resolveSync('@testing-library/dom', storybook));
@@ -71,7 +73,10 @@ test('Game whole-fact removal preserves complete mounted drafts on Cancel and ob
   ];
   let rows = [complete],
     disabled = false,
+    admitted = true,
+    type = 'schema:VideoGame',
     changes = 0;
+  let editAllowed = () => admitted;
   const target = {
     id: '00000000-0000-4000-8000-00000000f103',
     title: 'Selected platform',
@@ -85,12 +90,13 @@ test('Game whole-fact removal preserves complete mounted drafts on Cancel and ob
         <input aria-label="English name" defaultValue="Game" />
         <input aria-label="Japanese name" defaultValue="ゲーム" />
         <GameInitialFacts
-          type="schema:VideoGame"
+          type={type}
           release={release}
           locale="en"
           search={async () => [target]}
           statements={rows}
           disabled={disabled}
+          editAllowed={editAllowed}
           change={(next) => {
             changes++;
             rows = next;
@@ -106,6 +112,16 @@ test('Game whole-fact removal preserves complete mounted drafts on Cancel and ob
     )!;
   const remove = (key: string) => within(region(key)).getByRole('button', { name: m.recipe_remove_field() });
   const click = (button: HTMLElement) => act(async () => user.click(button));
+  const callback = (node: HTMLElement) =>
+    (
+      Reflect.get(
+        node,
+        Object.keys(node).find((key) => key.startsWith('__reactProps'))!,
+      ) as {
+        onChange: (event: { target: { value: string } }) => void;
+      }
+    ).onChange;
+  const valueCallback = (name: string) => callback(within(region('complete')).getAllByRole('textbox', { name })[0]!);
   try {
     for (const selected of [
       complete,
@@ -143,6 +159,25 @@ test('Game whole-fact removal preserves complete mounted drafts on Cancel and ob
             name: release.properties['schema:gamePlatform']!.labels.en!,
           }).value,
         ).toBe('Selected platform');
+      if (selected.key === 'item') {
+        const picker = within(region('item')).getByRole('combobox', {
+          name: release.properties['schema:gamePlatform']!.labels.en!,
+        });
+        let fiber = Reflect.get(
+          picker,
+          Object.keys(picker).find((key) => key.startsWith('__reactFiber'))!,
+        );
+        while (fiber && !fiber.memoizedProps?.onValueChange) fiber = fiber.return;
+        const queued = fiber.memoizedProps.onValueChange;
+        const before = changes;
+        for (const locked of [true, false]) {
+          disabled = locked;
+          await render();
+          await act(async () => queued([{ ...target, title: 'Stale descriptor' }]));
+          expect(changes).toBe(before);
+          expect(picker.value).toBe('Selected platform');
+        }
+      }
       await click(remove(selected.key));
       await act(async () => user.keyboard('{Escape}'));
       expect(window.document.activeElement).toBe(remove(selected.key));
@@ -156,6 +191,56 @@ test('Game whole-fact removal preserves complete mounted drafts on Cancel and ob
       expect(window.document.activeElement).toBe(remove('sibling'));
       expect(within(host).getByRole('textbox', { name: 'Japanese name' }).value).toBe('ゲーム');
       expect(within(host).getByRole('textbox', { name: 'English name' }).value).toBe('Game');
+    }
+    rows = [complete, row('sibling', 'en')];
+    await render();
+    const retained = valueCallback(m.correction_url());
+    rows = [complete, row('sibling', 'de')];
+    await render();
+    await act(async () => retained({ target: { value: 'https://example.org/current' } }));
+    expect(rows[1]!.statement.value).toEqual({ type: 'value', content: 'de' });
+    expect(rows[0]!.statement.references[0]!.parts[0]!.value.content).toBe('https://example.org/current');
+    const stale = valueCallback(m.correction_url());
+    await act(async () => valueCallback(m.correction_value())({ target: { value: 'it' } }));
+    const snapshotAfterEdit = structuredClone(rows),
+      beforeEdit = changes;
+    await act(async () => stale({ target: { value: 'https://example.org/stale' } }));
+    expect(rows).toEqual(snapshotAfterEdit);
+    expect(changes).toBe(beforeEdit);
+    for (const retire of ['replace', 'part', 'type', 'metadata', 'lock']) {
+      rows = [complete];
+      await render();
+      const queued = valueCallback(m.correction_url());
+      if (retire === 'replace') {
+        rows = [];
+        await render();
+        rows = [
+          { ...complete, statement: { ...complete.statement, value: { type: 'value', content: 'replacement' } } },
+        ];
+      } else if (retire === 'part') {
+        rows = [{ ...complete, statement: { ...complete.statement, references: [] } }];
+        await render();
+        rows = [structuredClone(complete)];
+      } else if (retire === 'type') type = 'wd:Q689445';
+      else if (retire === 'metadata') {
+        admitted = false;
+        editAllowed = () => admitted;
+      } else disabled = true;
+      await render();
+      const snapshot = structuredClone(rows),
+        before = changes;
+      await act(async () => queued({ target: { value: 'https://example.org/stale' } }));
+      expect(rows).toEqual(snapshot);
+      expect(changes).toBe(before);
+      type = 'schema:VideoGame';
+      admitted = true;
+      editAllowed = () => admitted;
+      disabled = false;
+      await render();
+      await act(async () => queued({ target: { value: 'https://example.org/revived' } }));
+      expect(changes).toBe(before);
+      await act(async () => valueCallback(m.correction_url())({ target: { value: 'https://example.org/fresh' } }));
+      expect(changes).toBe(before + 1);
     }
     rows = [complete];
     await render();
