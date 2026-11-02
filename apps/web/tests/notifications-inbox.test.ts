@@ -97,7 +97,10 @@ test('readable replies and mentions carry their exact post through localized thr
 
   expect(page.items.map(({ href, unavailable }) => ({ href, unavailable }))).toEqual([
     { href: `/${getLocale()}/threads/thread-%E9%9B%AA?post=reply-%E9%9B%AA#post-reply-%E9%9B%AA`, unavailable: false },
-    { href: `/${getLocale()}/threads/thread-%E9%9B%AA?post=mentioned-%E9%9B%AA#post-mentioned-%E9%9B%AA`, unavailable: false },
+    {
+      href: `/${getLocale()}/threads/thread-%E9%9B%AA?post=mentioned-%E9%9B%AA#post-mentioned-%E9%9B%AA`,
+      unavailable: false,
+    },
   ]);
 });
 
