@@ -86,6 +86,32 @@ test('a host without a local check slice, or whose check slice has no MemoryMax,
   }
 });
 
+test('Launch a worker truthfully when host memory discovery is unavailable.', () => {
+  const calls: string[] = [];
+  const reports: string[] = [];
+  let reads = 0;
+  const empty = Buffer.alloc(0);
+  const worker = new WorkerSlice(
+    (command) => {
+      calls.push(command);
+      return { pid: 1, output: [null, empty, empty], stdout: empty, stderr: empty, status: 0, signal: null };
+    },
+    () => {
+      reads++;
+      throw new Error("ENOENT: no such file or directory, open '/proc/meminfo'");
+    },
+  );
+  const launch = () =>
+    worker.launch('task', 1, 'true', [], { env: {} }, () => false, (message) => reports.push(message));
+  expect(launch().status).toBe(0);
+  expect(launch().status).toBe(0);
+  expect(reads).toBe(1);
+  expect(calls).toEqual(['true', 'true']);
+  expect(reports).toHaveLength(2);
+  expect(reports[0]).toContain('starting without a scope');
+  expect(reports[0]).toContain("open '/proc/meminfo'");
+});
+
 test('REZICS_WORKER_MEMORY_HIGH_GIB overrides the derived value, and a value that is not a positive integer fails configuration with a message naming the variable', () => {
   const override = memoryPolicy(62 * 1024 ** 2);
   override.launch({ REZICS_WORKER_MEMORY_HIGH_GIB: '31' });
@@ -268,6 +294,22 @@ describe('worker systemd slice', () => {
     expect(() => readFileSync(fake.systemdRunCalls, 'utf8')).toThrow();
     expect(reports).toHaveLength(1);
     expect(reports[0]).toContain('No medium found');
+  });
+
+  test('does not launch twice when a failed scope has already started the worker', () => {
+    const fake = fakeSystemd({ systemdRun: 'exit 1' });
+    const reports: string[] = [];
+    const result = new WorkerSlice().launch(
+      'task',
+      6,
+      'true',
+      [],
+      { env: fake.env },
+      () => true,
+      (line) => reports.push(line),
+    );
+    expect(result.status).toBe(1);
+    expect(reports).toEqual([]);
   });
 
   test('falls back when systemd-run fails before the wrapper starts', () => {

@@ -40,3 +40,26 @@ test('a hunk with anything but single-line imports, or one name from two modules
   ).toBeUndefined();
   expect(resolveImportConflicts('no conflict\n')).toBeUndefined();
 });
+
+test('a used local name from two exports of one module is left to a person', () => {
+  expect(
+    resolveImportConflicts(
+      conflict(
+        "import { load as setup } from './harness.ts';\n",
+        "import { create as setup } from './harness.ts';\n",
+        'setup();\n',
+      ),
+    ),
+  ).toBeUndefined();
+});
+
+test('side-effect imports stay, and a type-only specifier of the same export yields to the value form', () => {
+  const text = conflict(
+    "import './polyfill.ts';\nimport { type gone } from './gone.ts';\n",
+    "import './polyfill.ts';\nimport { gone } from './gone.ts';\n",
+    'gone();\n',
+  );
+  expect(resolveImportConflicts(text)).toBe(
+    "import { expect, test } from 'bun:test';\nimport './polyfill.ts';\nimport { gone } from './gone.ts';\n\ngone();\n",
+  );
+});
