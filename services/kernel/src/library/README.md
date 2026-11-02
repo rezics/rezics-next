@@ -2697,7 +2697,6 @@ local ledger, ACK or this live-copy result. Foreign SDK/History/Source retiremen
   negative/no-new-payload and deletion/recovery outcomes. Existing listing and History acceptance remains intact;
   execution and measured physical/failure/repeat/rollback work are deferred to controller integration.
 
-
 ### Members reservation expiry frontier
 
 The reservation/result schema and native reservation bodies already exist. `members_preparation_expiry` adds a
