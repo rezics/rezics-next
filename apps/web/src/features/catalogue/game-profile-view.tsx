@@ -86,7 +86,7 @@ function GameProfileLive({
   const refreshFailed = query.isError || (!!query.data && !query.data.ok && query.data.reason === 'unavailable');
   const o = { locale: locale as never };
   const admitted =
-    !query.isError && query.data?.ok && query.data.public?.subject.id === id
+    !query.isError && query.data?.ok && query.data.public && query.data.public.subject.id === id
       ? { ...query.data, public: query.data.public }
       : undefined;
   const privateReading = useRef<ReadyGame>(undefined);
