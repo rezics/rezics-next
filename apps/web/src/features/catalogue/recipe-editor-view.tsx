@@ -137,7 +137,9 @@ function RecipeEditorLive({
   const [readEpoch, setReadEpoch] = useState(0);
   const readEpochRef = useRef(0);
   const admittedReadEpoch = useRef(0);
-  const retainedRead = useRef<{ id?: string; locale: string; generation: number; value: Ready } | undefined>(undefined);
+  const retainedRead = useRef<
+    { id: string | undefined; locale: string; generation: number; value: Ready } | undefined
+  >(undefined);
   if (
     retainedRead.current &&
     (retainedRead.current.id !== id ||
@@ -576,19 +578,19 @@ function RecipeEditorLive({
             )}
             <p className="text-sm text-muted-foreground">{m.recipe_ingredients_help({}, o)}</p>
             {id &&
-              read.public &&
+              read?.public &&
               currentFields.map((field) => (
                 <section key={field} className="min-w-0">
                   <ContentItemFrame as="div" className={recipePanelClassName}>
                     <ContentItemHeading id={`${termsId}-current-${field}`} className="font-semibold">
                       {name(field)}
                     </ContentItemHeading>
-                    {(read.public!.subject.statements[field] ?? []).map((source) => (
+                    {(read!.public!.subject.statements[field] ?? []).map((source) => (
                       <div key={source.id} className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
                         <div data-content-item-slot="preview" className="min-w-0 break-words sm:flex-1">
-                          <CandidateValue snak={source} related={read.public!.related} locale={locale} />
+                          <CandidateValue snak={source} related={read!.public!.related} locale={locale} />
                         </div>
-                        {read.fields.includes(field) && (
+                        {read!.fields.includes(field) && (
                           <Button
                             data-content-item-slot="actions"
                             type="button"
@@ -597,7 +599,7 @@ function RecipeEditorLive({
                             disabled={rows.some((row) => row.source?.id === source.id)}
                             onClick={() => {
                               if (!isReadEpochCurrent(readEpoch)) return;
-                              const definition = read.release.properties[field];
+                              const definition = read!.release.properties[field];
                               if (!definition) return;
                               setRows([
                                 ...rows,
