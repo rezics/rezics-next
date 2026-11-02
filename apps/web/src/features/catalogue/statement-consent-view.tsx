@@ -1,5 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useId, useRef, useState, type MouseEvent } from 'react';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -9,6 +9,7 @@ import { CandidateValue } from '../pages/data';
 import { subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import { StatementConsentNavigation } from './statement-consent-navigation';
+import { useConsentFocus } from './statement-consent-focus';
 import {
   consentAfterChange,
   consentAssertion,
@@ -99,18 +100,28 @@ function StatementConsentPageLive({
   const ownershipId = useId();
   const actionButtons = useRef<Partial<Record<ConsentCommand['operation'], HTMLButtonElement | null>>>({});
   const readFocusTarget = useRef<HTMLElement | null>(null);
+  const recoveryFocusTarget = useRef<HTMLElement | null>(null);
   const setReadFocusTarget = useCallback((node: HTMLElement | null) => {
     readFocusTarget.current = node;
   }, []);
-  const continuedRead = useRef(false);
-  const pendingReadFocus = useRef(false);
-  const returnFocus = useRef<ConsentCommand['operation'] | undefined>(undefined);
-  const focusConfirmation = useCallback(
-    (node: HTMLHeadingElement | null) => {
-      if (lifetime.active()) node?.focus();
-    },
-    [lifetime],
-  );
+  const focus = useConsentFocus();
+  const confirmationHeading = useRef<HTMLHeadingElement | null>(null);
+  const confirmationOrigin = useRef<{ operation: ConsentCommand['operation']; read: ConsentRead } | null>(null);
+  const transition = useRef<object | null>(null);
+  function orient(
+    event: MouseEvent<HTMLButtonElement> | undefined,
+    target: () => HTMLElement | null | undefined,
+    meaningful = () => true,
+  ) {
+    const token = {};
+    transition.current = token;
+    focus.begin(
+      event,
+      () => lifetime.active() && transition.current === token && meaningful(),
+      target,
+      () => !running.current,
+    );
+  }
   const [read, setRead] = useState(initial);
   const [result, setResult] = useState<Extract<ConsentResult, { ok: true }>>();
   const [failure, setFailure] = useState<ConsentFailure>();
@@ -149,38 +160,26 @@ function StatementConsentPageLive({
       ))}
     </dl>
   );
-  useEffect(() => {
-    if (lifetime.active() && !confirmation && returnFocus.current) {
-      actionButtons.current[returnFocus.current]?.focus();
-      returnFocus.current = undefined;
-    }
-  }, [confirmation, lifetime]);
-  useEffect(() => {
-    if (busy || !pendingReadFocus.current) return;
-    const target = readFocusTarget.current;
-    if (!target) return;
-    pendingReadFocus.current = false;
-    if (lifetime.active()) target.focus();
-    if (current) continuedRead.current = false;
-  }, [busy, current, failure, terminal, lifetime]);
-  function openConfirmation(operation: ConsentCommand['operation']) {
+  function openConfirmation(operation: ConsentCommand['operation'], event: MouseEvent<HTMLButtonElement>) {
     if (!lifetime.active()) return;
     if (running.current || request.current || busy || reload || uncertain || !attempt || !assertion?.identified) return;
+    confirmationOrigin.current = { operation, read: current! };
+    orient(event, () => confirmationHeading.current);
     setConfirmation(operation);
   }
 
   async function load(
     input: { cursor?: string; session: string | undefined } = { session: session.current },
-    focusContinuation = false,
+    event?: MouseEvent<HTMLButtonElement>,
   ) {
     if (!lifetime.active()) return;
     if (running.current || request.current || terminal) return;
-    continuedRead.current = focusContinuation;
-    pendingReadFocus.current = focusContinuation;
     running.current = true;
     setBusy(true);
     setFailure(undefined);
     page.current = input;
+    orient(event, () => recoveryFocusTarget.current ?? readFocusTarget.current, () => page.current === input);
+    confirmationOrigin.current = null;
     setRead(undefined);
     setResult(undefined);
     setConfirmation(undefined);
@@ -206,7 +205,7 @@ function StatementConsentPageLive({
       ? m.candidate_reload({}, options)
       : m.statement_consent_retry_page({}, options);
 
-  async function change() {
+  async function change(event?: MouseEvent<HTMLButtonElement>) {
     if (!lifetime.active()) return;
     if (
       running.current ||
@@ -214,6 +213,8 @@ function StatementConsentPageLive({
       (!request.current && (!confirmation || !own || !attempt || !assertion?.identified || reload))
     )
       return;
+    orient(event, () => recoveryFocusTarget.current ?? readFocusTarget.current);
+    confirmationOrigin.current = null;
     request.current ??= {
       ...address,
       operation: confirmation!,
@@ -259,6 +260,7 @@ function StatementConsentPageLive({
   async function refreshPublic() {
     if (!lifetime.active()) return;
     if (running.current || request.current) return;
+    focus.cancel();
     running.current = true;
     setBusy(true);
     try {
@@ -300,14 +302,14 @@ function StatementConsentPageLive({
       {!read && !failure && !busy && (
         <Button
           className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          onClick={() => void load()}
+          onClick={(event) => void load(undefined, event)}
         >
           {m.statement_consent_open({}, options)}
         </Button>
       )}
       {(failure || (read && !read.ok)) && (
         <section
-          ref={setReadFocusTarget}
+          ref={recoveryFocusTarget}
           tabIndex={-1}
           className="focus:outline-2 focus:outline-offset-2 focus:outline-ring"
           aria-label={recoveryLabel}
@@ -319,7 +321,7 @@ function StatementConsentPageLive({
               variant="outline"
               className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               disabled={busy}
-              onClick={() => void (uncertain ? change() : load(page.current, continuedRead.current))}
+              onClick={(event) => void (uncertain ? change(event) : load(page.current, event))}
             >
               {recoveryLabel}
             </Button>
@@ -328,7 +330,7 @@ function StatementConsentPageLive({
                 variant="outline"
                 className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 disabled={busy}
-                onClick={() => void load()}
+                onClick={(event) => void load(undefined, event)}
               >
                 {m.statement_consent_restart({}, options)}
               </Button>
@@ -363,7 +365,7 @@ function StatementConsentPageLive({
                   variant="outline"
                   className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   disabled={busy}
-                  onClick={() => void load({ cursor: current.next!, session: session.current }, true)}
+                  onClick={(event) => void load({ cursor: current.next!, session: session.current }, event)}
                 >
                   {m.statement_consent_continue({}, options)}
                 </Button>
@@ -408,7 +410,7 @@ function StatementConsentPageLive({
                                 actionButtons.current.disclose = node;
                               }}
                               disabled={busy || reload || !assertion?.identified}
-                              onClick={() => openConfirmation('disclose')}
+                              onClick={(event) => openConfirmation('disclose', event)}
                             >
                               {m.statement_consent_share({}, options)}
                             </Button>
@@ -420,7 +422,7 @@ function StatementConsentPageLive({
                               actionButtons.current.retract = node;
                             }}
                             disabled={busy || reload || !assertion?.identified}
-                            onClick={() => openConfirmation('retract')}
+                            onClick={(event) => openConfirmation('retract', event)}
                           >
                             {m.statement_consent_retract({}, options)}
                           </Button>
@@ -436,7 +438,7 @@ function StatementConsentPageLive({
                         >
                           <h3
                             id={confirmationId}
-                            ref={focusConfirmation}
+                            ref={confirmationHeading}
                             tabIndex={-1}
                             className="font-semibold focus:outline-2 focus:outline-offset-2 focus:outline-ring"
                           >
@@ -475,7 +477,7 @@ function StatementConsentPageLive({
                               <Button
                                 className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                                 disabled={busy || !own || !assertion?.identified}
-                                onClick={() => void change()}
+                                onClick={(event) => void change(event)}
                               >
                                 {m.statement_consent_confirm({}, options)}
                               </Button>
@@ -483,9 +485,15 @@ function StatementConsentPageLive({
                                 variant="outline"
                                 className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                                 disabled={busy}
-                                onClick={() => {
+                                onClick={(event) => {
                                   if (!lifetime.active() || running.current || request.current) return;
-                                  returnFocus.current = confirmation;
+                                  const origin = confirmationOrigin.current;
+                                  orient(
+                                    event,
+                                    () => origin && actionButtons.current[origin.operation],
+                                    () => !!origin && origin.read === read && !reload && !!attempt && !!assertion?.identified,
+                                  );
+                                  confirmationOrigin.current = null;
                                   setConfirmation(undefined);
                                   setOwn(false);
                                 }}
@@ -502,7 +510,7 @@ function StatementConsentPageLive({
                         variant="outline"
                         className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                         disabled={busy}
-                        onClick={() => void load()}
+                        onClick={(event) => void load(undefined, event)}
                       >
                         {m.candidate_reload({}, options)}
                       </Button>

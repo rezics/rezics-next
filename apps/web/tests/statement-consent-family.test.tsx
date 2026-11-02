@@ -59,6 +59,10 @@ test('Statement consent composes the complete family with isolated confirmation,
   window.document.body.append(outside);
   const show = (node: ReactNode) => act(async () => root.render(node));
   const click = (node: Element) => act(async () => user.click(node));
+  const keyboardClick = async (node: HTMLButtonElement) => {
+    node.focus();
+    await act(async () => user.keyboard('{Enter}'));
+  };
   const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
   const until = async (predicate: () => boolean) => {
     for (let count = 0; count < 100 && !predicate(); count++) await settle();
@@ -177,7 +181,7 @@ test('Statement consent composes the complete family with isolated confirmation,
     }
     const counts = [first.calls.length, second.calls.length];
     const originalShare = button(left, m.statement_consent_share());
-    await click(originalShare);
+    await keyboardClick(originalShare);
     const firstConfirmation = left.querySelector<HTMLElement>('[data-consent-part="confirmation"]')!;
     const firstHeading = firstConfirmation.querySelector('h3')!;
     expect(window.document.activeElement).toBe(firstHeading);
@@ -193,7 +197,7 @@ test('Statement consent composes the complete family with isolated confirmation,
     expect(firstConfirmation.textContent).toContain(m.statement_consent_share_help());
     expect(firstConfirmation.querySelector('details')).toBeNull();
     const originalRetract = button(right, m.statement_consent_retract());
-    await click(originalRetract);
+    await keyboardClick(originalRetract);
     const secondConfirmation = right.querySelector<HTMLElement>('[data-consent-part="confirmation"]')!;
     expect(window.document.activeElement).toBe(secondConfirmation.querySelector('h3'));
     expect(secondConfirmation.textContent).toContain(m.statement_consent_retract_help());
@@ -216,11 +220,11 @@ test('Statement consent composes the complete family with isolated confirmation,
     checkbox(left).focus();
     await act(async () => user.keyboard(' '));
     expect(button(left, m.statement_consent_confirm()).disabled).toBe(false);
-    await click(button(left, m.candidate_cancel()));
+    await keyboardClick(button(left, m.candidate_cancel()));
     expect(window.document.activeElement).toBe(button(left, m.statement_consent_share()));
     expect(left.querySelector('[role="checkbox"]')).toBeNull();
     expect(checkbox(right).getAttribute('aria-checked')).toBe('true');
-    await click(button(right, m.candidate_cancel()));
+    await keyboardClick(button(right, m.candidate_cancel()));
     expect(window.document.activeElement).toBe(button(right, m.statement_consent_retract()));
     expect([first.calls.length, second.calls.length]).toEqual(counts); // Opening, ownership and cancel make zero IO.
     await click(button(left, m.statement_consent_share()));
@@ -335,9 +339,51 @@ test('Statement consent composes the complete family with isolated confirmation,
     await show(panel(continued));
     await click(button(host, m.statement_consent_open()));
     await until(() => !!host.querySelector('[data-consent-part="empty"]'));
-    await click(button(host, m.statement_consent_continue()));
+    await keyboardClick(button(host, m.statement_consent_continue()));
     await until(() => !!host.querySelector('[data-consent-part="assertion"]'));
     expect(window.document.activeElement).toBe(host.querySelector('[data-consent-part="assertion"]')?.parentElement);
+
+    // Deferred orientation belongs to this activation, not to a later return to its former position.
+    for (const intent of ['current', 'away-back', 'pointer', 'retired'] as const) {
+      const more = consentFixture('more');
+      const delayed = deferred();
+      const transport: ConsentTransport = {
+        ...more.transport,
+        read: async (...args) => {
+          if (args[0]) await delayed.promise;
+          return more.transport.read(...args);
+        },
+      };
+      await show(panel(more, transport));
+      await keyboardClick(button(host, m.statement_consent_open()));
+      expect(window.document.activeElement).toBe(host.querySelector('[data-consent-part="empty"] p'));
+      const next = button(host, m.statement_consent_continue());
+      if (intent === 'pointer') await click(next);
+      else if (intent === 'away-back') {
+        await act(async () => {
+          next.focus();
+          next.click();
+          outside.focus();
+          next.focus();
+        });
+      } else await keyboardClick(next);
+      if (intent === 'retired') {
+        await show(panel(consentFixture()));
+        outside.focus();
+      }
+      const before = window.document.activeElement;
+      await act(async () => delayed.resolve());
+      await settle();
+      if (intent === 'current')
+        expect(window.document.activeElement).toBe(host.querySelector('[data-consent-part="assertion"]')?.parentElement);
+      else expect(window.document.activeElement).toBe(before);
+    }
+    const pointerConfirmation = consentFixture();
+    await show(panel(pointerConfirmation, pointerConfirmation.transport, await prepared(pointerConfirmation)));
+    await click(button(host, m.statement_consent_share()));
+    expect(window.document.activeElement).not.toBe(host.querySelector('[data-consent-part="confirmation"] h3'));
+    await click(button(host, m.candidate_cancel()));
+    expect(window.document.activeElement).not.toBe(button(host, m.statement_consent_share()));
 
     for (const failure of ['returned', 'thrown'] as const) {
       const more = consentFixture('more');
@@ -362,12 +408,12 @@ test('Statement consent composes the complete family with isolated confirmation,
       expect(window.document.activeElement).not.toBe(host.querySelector('[data-consent-part="empty"] p'));
       expect(host.textContent).toContain(m.statement_consent_empty_page());
       expect(host.textContent).not.toContain(m.statement_consent_empty());
-      await click(button(host, m.statement_consent_continue()));
+      await keyboardClick(button(host, m.statement_consent_continue()));
       await until(() => !!host.querySelector('[data-consent-part="recovery"]'));
       expect(window.document.activeElement).toBe(host.querySelector('[data-consent-part="recovery"]'));
       expect(host.querySelector('[data-consent-part="assertion"], [data-consent-part="public"]')).toBeNull();
       expect(host.textContent).not.toContain(m.statement_consent_empty());
-      await click(button(host, m.statement_consent_retry_page()));
+      await keyboardClick(button(host, m.statement_consent_retry_page()));
       await until(() => !!host.querySelector('[data-consent-part="assertion"]'));
       expect(window.document.activeElement).toBe(host.querySelector('[data-consent-part="assertion"]')?.parentElement);
       expect(pageInputs).toEqual([
@@ -384,10 +430,11 @@ test('Statement consent composes the complete family with isolated confirmation,
       await show(panel(more, sparse));
       await click(button(host, m.statement_consent_open()));
       await until(() => !!host.querySelector('[data-consent-part="empty"]'));
-      await click(button(host, m.statement_consent_continue()));
+      await keyboardClick(button(host, m.statement_consent_continue()));
       await until(() => !!host.querySelector('[data-consent-part="recovery"]'));
-      await click(button(host, m.statement_consent_restart()));
+      await keyboardClick(button(host, m.statement_consent_restart()));
       await until(() => !!host.querySelector('[data-consent-part="empty"]'));
+      expect(window.document.activeElement).toBe(host.querySelector('[data-consent-part="empty"] p'));
       expect(pageInputs.slice(-3)).toEqual([
         [undefined, undefined],
         ['next-page', 'consent-session'],
@@ -484,7 +531,7 @@ test('Statement consent composes the complete family with isolated confirmation,
       if (stage === 'read') {
         await click(button(host, m.statement_consent_open()));
         await until(() => !!host.querySelector('[data-consent-part="empty"]'));
-        await click(button(host, m.statement_consent_continue()));
+        await keyboardClick(button(host, m.statement_consent_continue()));
       } else {
         await open();
         if (stage === 'change') await confirm('disclose');
