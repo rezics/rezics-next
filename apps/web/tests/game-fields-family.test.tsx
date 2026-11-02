@@ -844,6 +844,48 @@ test('Game and Addon complete fields family preserves independent labels, native
   });
 }, 60_000);
 
+test('Game classification errors target its item group and fall back to the labelled qualifier group', async () => {
+  await mounted(async ({ host, render, user, within }) => {
+    const { GameClassifications } = await import('../src/features/catalogue/game-profile-fields');
+    const { gameProfileFixture } = await import('../src/kernel/fake/catalogue-game-profile');
+    const { m } = await import('../src/paraglide/messages.js');
+    const fixture = gameProfileFixture('ready', 'en', true);
+    const errors = [
+      { pointer: '/statement/value/content', code: 'invalid_type' as const },
+      { pointer: '/statement/qualifiers/9/value/content', code: 'required' as const },
+    ];
+    await render(
+      <GameClassifications
+        read={{ ok: true, release: fixture.release, public: fixture.publicRead }}
+        locale="en"
+        search={async () => []}
+        transport={{
+          read: fixture.transport.facts.read,
+          propose: async () => ({ ok: false, reason: 'invalid', errors }),
+        }}
+        review={fixture.transport.classificationReview}
+      />,
+    );
+    const platform = host.querySelector<HTMLElement>('[data-classification-property="schema:gamePlatform"]')!;
+    const scope = within(platform);
+    await act(async () => user.click(scope.getByRole('button', { name: m.facts_edit_field() })));
+    const qualifier = scope.getByRole('textbox', { name: m.correction_value() });
+    await act(async () => {
+      await user.clear(qualifier);
+      await user.type(qualifier, 'fr');
+    });
+    await act(async () => user.click(within(host).getByRole('button', { name: m.facts_submit() })));
+    const list = scope.getByRole('list', { name: m.correction_errors() });
+    const links = [...list.querySelectorAll<HTMLAnchorElement>('a')];
+    expect(links).toHaveLength(2);
+    const valueGroup = host.ownerDocument.getElementById(links[0]!.getAttribute('href')!.slice(1));
+    expect(valueGroup?.querySelector('input')).not.toBeNull();
+    expect(links[0]!.nextElementSibling?.textContent).toContain(m.correction_error_value());
+    expect(links[1]!.textContent).toBe(m.correction_qualifiers());
+    expect(host.ownerDocument.getElementById(links[1]!.getAttribute('href')!.slice(1))?.tagName).toBe('SECTION');
+  });
+});
+
 test('initial Game creation retry coalesces reads and orients only current deliberate keyboard recovery', async () => {
   await mounted(async ({ host, render, user, within, waitFor }) => {
     const { GameProfile } = await import('../src/features/catalogue/game-profile-view');

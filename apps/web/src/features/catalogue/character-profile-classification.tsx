@@ -21,6 +21,7 @@ import {
 import { statementInput, type StatementInput } from './statement-editor';
 import { EditorFailure, StatementFields } from './statement-editor-view';
 import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
+import { factStatementFeedback, StatementViolationFeedback } from './fact-violation-feedback';
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1';
@@ -85,6 +86,7 @@ export function CharacterClassification({
   const active = useCurrentReadingActive();
   const visible = useCurrentReadingVisible();
   const selectedValueId = useId();
+  const feedbackId = useId();
   const o = { locale: locale as never };
   const definition = read.release.properties[property];
   const admitted =
@@ -220,6 +222,7 @@ export function CharacterClassification({
     }
   }, [confirming]);
   const result = draft?.result;
+  const feedback = admitted && draft ? factStatementFeedback(draft, read.release, locale, feedbackId) : undefined;
   const reviewTransport = useMemo(
     () => review(property, result?.ok ? result.session : undefined),
     [review, property, result],
@@ -337,7 +340,7 @@ export function CharacterClassification({
   const change = (statement: StatementInput) => {
     if (!usable() || !admitted) return false;
     if (!draft || currentDraft.current !== draft || running.current || factLocked(draft)) return false;
-    setDraft({ ...draft, statement, command: undefined, result: undefined });
+    setDraft({ ...draft, statement, command: undefined, result: undefined, submission: undefined });
     return true;
   };
   async function submit() {
@@ -422,56 +425,68 @@ export function CharacterClassification({
             )}
             {admitted && !result?.ok && (
               <fieldset ref={editor} disabled={busy || factLocked(draft)} className="min-w-0 space-y-4">
-                <EntityPicker
-                  label={label.text}
-                  disabled={busy || factLocked(draft)}
-                  src={coverSrc}
-                  value={
-                    picked[0]?.id === target
-                      ? picked
-                      : target
-                        ? [
-                            {
-                              id: target,
-                              title:
-                                pageText(read.public.related[target]?.labels, locale).text ||
-                                m.subject_value_unlabelled({}, o),
-                              types: [],
-                              typeLabel: '',
-                              cover: null,
-                            },
-                          ]
-                        : []
-                  }
-                  search={async (text, signal) =>
-                    (await search(text, signal)).filter((entry) =>
-                      entry.types.some((type) =>
-                        definition?.targets?.some(
-                          (base) => type === base || read.release.types[type]?.bases.includes(base),
-                        ),
-                      ),
-                    )
-                  }
-                  onValueChange={(items) => {
-                    if (
-                      change({
-                        ...draft.statement,
-                        value: { type: 'value', content: items[0]?.id ?? '' },
-                      })
-                    )
-                      setPicked(items);
-                  }}
-                />
-                <StatementFields
-                  heading="h4"
-                  draft={draft.statement}
-                  current={{ ...read, source: current ?? null }}
-                  locale={locale}
-                  change={change}
-                />
+                <div
+                  id={`${feedbackId}-fields`}
+                  role="group"
+                  aria-label={m.correction_title({}, o)}
+                  tabIndex={-1}
+                  className="space-y-4"
+                >
+                  <StatementFields
+                    heading="h4"
+                    draft={draft.statement}
+                    current={{ ...read, source: current ?? null }}
+                    locale={locale}
+                    change={change}
+                    feedback={feedback}
+                    valueControl={
+                      <EntityPicker
+                        label={label.text}
+                        disabled={busy || factLocked(draft)}
+                        src={coverSrc}
+                        value={
+                          picked[0]?.id === target
+                            ? picked
+                            : target
+                              ? [
+                                  {
+                                    id: target,
+                                    title:
+                                      pageText(read.public.related[target]?.labels, locale).text ||
+                                      m.subject_value_unlabelled({}, o),
+                                    types: [],
+                                    typeLabel: '',
+                                    cover: null,
+                                  },
+                                ]
+                              : []
+                        }
+                        search={async (text, signal) =>
+                          (await search(text, signal)).filter((entry) =>
+                            entry.types.some((type) =>
+                              definition?.targets?.some(
+                                (base) => type === base || read.release.types[type]?.bases.includes(base),
+                              ),
+                            ),
+                          )
+                        }
+                        onValueChange={(items) => {
+                          if (
+                            change({
+                              ...draft.statement,
+                              value: { type: 'value', content: items[0]?.id ?? '' },
+                            })
+                          )
+                            setPicked(items);
+                        }}
+                      />
+                    }
+                  />
+                </div>
               </fieldset>
             )}
             {result && !result.ok && <EditorFailure reason={result.reason} locale={locale} />}
+            <StatementViolationFeedback feedback={feedback} locale={locale} />
             {result && !result.ok && factLocked(draft) && (
               <p className="text-sm text-muted-foreground">{m.facts_uncertain({}, o)}</p>
             )}

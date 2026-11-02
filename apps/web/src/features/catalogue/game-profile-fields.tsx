@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { catalogueEditor, useEditorLifetime, useCurrentReadingVisible } from './editor-lifetime';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
@@ -8,7 +8,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
-import { controlId } from './statement-validation-presentation';
+import { controlId, type StatementFeedback } from './statement-validation-presentation';
 import { gameGroups, gameTarget, type GameRead } from './game-profile';
 import { InitialFieldChoice } from './initial-field-choice';
 import { StatementFields, PartValue, EditorFailure, type StatementFieldsRead } from './statement-editor-view';
@@ -16,6 +16,7 @@ import { statementInput, type SnakInput, type StatementInput } from './statement
 import { factChanged, factLocked, sealFacts, sendFacts, type FactDraft, type FactsTransport } from './subject-facts';
 import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
 import { GameFactsDeparture } from './game-classification-departure';
+import { factStatementFeedback, StatementViolationFeedback } from './fact-violation-feedback';
 
 const gameActionClass =
   'min-h-8 min-w-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
@@ -97,8 +98,10 @@ export function GameStatementFields({
   change: onChange,
   editAllowed,
   id,
+  feedback,
 }: {
   id?: string;
+  feedback?: StatementFeedback | undefined;
   statement: StatementInput;
   context: StatementFieldsRead;
   locale: string;
@@ -109,6 +112,7 @@ export function GameStatementFields({
   const change = (next: StatementInput) => {
     if (!editAllowed || editAllowed()) onChange(next);
   };
+  const feedbackId = feedback?.id ?? id;
   const control = (part: SnakInput, update: (value: SnakInput['value']) => void) => {
     if (context.release.properties[part.property.id]?.datatype !== 'wikibase-item') return;
     const qualifier = statement.qualifiers?.indexOf(part) ?? -1;
@@ -120,7 +124,7 @@ export function GameStatementFields({
           ? `qualifier-${qualifier}`
           : `reference-${reference}-part-${statement.references[reference]?.parts.indexOf(part)}`;
     return (
-      <div id={id ? controlId(id, address, 'value') : undefined}>
+      <div id={feedbackId ? controlId(feedbackId, address, 'value') : undefined}>
         <GameItemControl
           part={part}
           context={context}
@@ -135,7 +139,7 @@ export function GameStatementFields({
   return (
     <StatementFields
       draft={statement}
-      feedback={id ? { id, errors: [] } : undefined}
+      feedback={feedback ?? (id ? { id, errors: [] } : undefined)}
       current={context}
       locale={locale}
       change={change}
@@ -519,6 +523,7 @@ function GameClassificationsLive({
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
 }) {
+  const feedbackId = useId();
   const lifetime = useEditorLifetime();
   const visible = useCurrentReadingVisible();
   const context = { ...read, source: null };
@@ -616,7 +621,13 @@ function GameClassificationsLive({
           lifetime.active() &&
           current.current.read === read &&
           current.current.fields.includes(property) &&
-          setDrafts((rows) => rows.map((row) => (row.property === property ? { ...row, result } : row))),
+          setDrafts((rows) =>
+            rows.map((row) =>
+              row.property === property && row.submission === sealedByProperty.get(property)?.submission
+                ? { ...row, result }
+                : row,
+            ),
+          ),
       );
     } finally {
       if (!lifetime.active() || current.current.read !== read) return;
@@ -637,6 +648,10 @@ function GameClassificationsLive({
           const label = definition ? pickText(definition.labels, locale) : { text: property, lang: undefined };
           const selected = admitted ? (read.public.subject.statements[property] ?? []) : [];
           const editorContext = editorRelease ? { ...context, release: editorRelease } : context;
+          const feedback =
+            admitted && draft && editorRelease
+              ? factStatementFeedback(draft, editorRelease, locale, `${feedbackId}-${property}`)
+              : undefined;
           const stage = (source: (typeof selected)[number] | null, opener: HTMLElement, keyboard: boolean) => {
             const canStage = (rows = current.current.drafts) =>
               current.current.lifetime === lifetime &&
@@ -755,23 +770,39 @@ function GameClassificationsLive({
                       className="space-y-4 focus:outline-2 focus:outline-offset-2 focus:outline-ring"
                       disabled={busy || !admitted || factLocked(draft) || !!draft.command}
                     >
-                      <GameStatementFields
-                        statement={draft.statement}
-                        context={editorContext}
-                        locale={locale}
-                        search={search}
-                        editAllowed={() => canEdit(draft)}
-                        change={(statement) =>
-                          canEdit(draft) &&
-                          setDrafts((rows) =>
-                            canEdit(draft, rows)
-                              ? rows.map((row) =>
-                                  row === draft ? { ...row, statement, result: undefined, command: undefined } : row,
-                                )
-                              : rows,
-                          )
-                        }
-                      />
+                      <div
+                        id={feedback ? `${feedback.id}-fields` : undefined}
+                        role={feedback ? 'group' : undefined}
+                        aria-label={feedback ? m.correction_title({}, o) : undefined}
+                        tabIndex={feedback ? -1 : undefined}
+                      >
+                        <GameStatementFields
+                          statement={draft.statement}
+                          context={editorContext}
+                          locale={locale}
+                          search={search}
+                          feedback={feedback}
+                          editAllowed={() => canEdit(draft)}
+                          change={(statement) =>
+                            canEdit(draft) &&
+                            setDrafts((rows) =>
+                              canEdit(draft, rows)
+                                ? rows.map((row) =>
+                                    row === draft
+                                      ? {
+                                          ...row,
+                                          statement,
+                                          result: undefined,
+                                          command: undefined,
+                                          submission: undefined,
+                                        }
+                                      : row,
+                                  )
+                                : rows,
+                            )
+                          }
+                        />
+                      </div>
                     </fieldset>
                     <GameClassificationDiscard
                       draft={draft}
@@ -793,6 +824,7 @@ function GameClassificationsLive({
                     {admitted && draft.result && !draft.result.ok && (
                       <EditorFailure reason={draft.result.reason} locale={locale} />
                     )}
+                    <StatementViolationFeedback feedback={feedback} locale={locale} />
                     {draft.result?.ok && (
                       <div role="status">
                         <p>{m.correction_proposed({}, o)}</p>
@@ -823,7 +855,9 @@ function GameClassificationsLive({
                           lifetime.active() &&
                           setDrafts((rows) =>
                             rows.map((row) =>
-                              row.property === property ? { ...row, command: undefined, result: undefined } : row,
+                              row.property === property
+                                ? { ...row, command: undefined, result: undefined, submission: undefined }
+                                : row,
                             ),
                           )
                         }

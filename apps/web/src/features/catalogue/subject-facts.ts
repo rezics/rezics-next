@@ -22,6 +22,7 @@ export type FactDraft = {
   baseline: StatementInput | null;
   statement: StatementInput;
   included: boolean;
+  submission?: { statement: StatementInput; release: Release } | undefined;
   command?: FactCommand | undefined;
   result?: FactResult | undefined;
 };
@@ -112,12 +113,15 @@ export function sealFacts(id: string, release: Release, drafts: FactDraft[]): Fa
     throw new Error('Invalid changed-field set');
   return drafts.map((draft) => {
     if (!pending.includes(draft) || draft.command) return draft;
+    const statement = structuredClone(draft.statement);
+    const submission = { statement, release };
     const errors = validateStatement(draft.statement, release);
-    if (errors.length) return { ...draft, result: { ok: false, reason: 'invalid', errors } };
+    if (errors.length) return { ...draft, submission, result: { ok: false, reason: 'invalid', errors } };
     return {
       ...draft,
+      submission,
       result: undefined,
-      command: { id, key: crypto.randomUUID(), statement: structuredClone(draft.statement) },
+      command: { id, key: crypto.randomUUID(), statement },
     };
   });
 }

@@ -732,6 +732,39 @@ test('independent property proposal results and denied/stale/unavailable distinc
   });
 });
 
+test('classification rejection links a nested correction and labels an unknown part fallback', async () => {
+  await mounted(async ({ host, render, enter }) => {
+    const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
+    const { m } = await import('../src/paraglide/messages.js');
+    const setup = await supplied();
+    const errors = [
+      { pointer: '/statement/references/0/parts/0/value/content', code: 'invalid_format' as const },
+      { pointer: '/statement/qualifiers/7/value/content', code: 'required' as const },
+    ];
+    await render(
+      <CharacterClassification
+        {...setup}
+        property={property}
+        locale="en"
+        search={async () => []}
+        transport={{ ...setup.transport, propose: async () => ({ ok: false, reason: 'invalid', errors }) }}
+      />,
+    );
+    await act(async () => button(host, m.facts_edit_field()).click());
+    await enter(host.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_url()}"]`)!, `${evidence}edit`);
+    await act(async () => button(host, m.correction_submit()).click());
+    const list = host.querySelector<HTMLElement>(`ul[aria-label="${m.correction_errors()}"]`)!;
+    const links = [...list.querySelectorAll<HTMLAnchorElement>('a')];
+    expect(links).toHaveLength(2);
+    const nested = host.ownerDocument.getElementById(links[0]!.getAttribute('href')!.slice(1));
+    expect(nested?.tagName).toBe('INPUT');
+    expect(nested?.getAttribute('aria-invalid')).toBe('true');
+    expect(links[1]!.textContent).toBe(m.correction_qualifiers());
+    expect(host.ownerDocument.getElementById(links[1]!.getAttribute('href')!.slice(1))?.tagName).toBe('SECTION');
+    expect([...list.querySelectorAll('li p')].every((instruction) => instruction.textContent)).toBe(true);
+  });
+});
+
 test('supplied selected-value growth at 1/8/32 renders only bounded rows and performs zero IO', async () => {
   await mounted(async ({ host, render }) => {
     const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
