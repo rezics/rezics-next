@@ -4,31 +4,50 @@ import { act } from 'react';
 import type { LabelsPage } from '../src/library/labels-read';
 
 test('Overflowing names read locally by touch and keyboard; fitting names keep only their shelf link', async () => {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://site.test/fr/library/labels' });
   const callbacks = new Set<() => void>();
   class Observer {
     constructor(private callback: () => void) {}
-    observe() { callbacks.add(this.callback); }
-    disconnect() { callbacks.delete(this.callback); }
+    observe() {
+      callbacks.add(this.callback);
+    }
+    disconnect() {
+      callbacks.delete(this.callback);
+    }
   }
   let narrow = true;
   // Layout is supplied: real browser checks belong to integration.
   Object.defineProperties(window.HTMLElement.prototype, {
     clientHeight: { get: () => 40 },
-    scrollHeight: { get() { return narrow && (this.textContent?.length ?? 0) > 30 ? 80 : 20; } },
+    scrollHeight: {
+      get() {
+        return narrow && (this.textContent?.length ?? 0) > 30 ? 80 : 20;
+      },
+    },
   });
   const globals = {
-    window, document: window.document, navigator: window.navigator,
-    HTMLElement: window.HTMLElement, Element: window.Element, Node: window.Node,
-    Document: window.Document, ShadowRoot: window.ShadowRoot, NodeFilter: window.NodeFilter,
-    getComputedStyle: window.getComputedStyle.bind(window), ResizeObserver: Observer,
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    ShadowRoot: window.ShadowRoot,
+    NodeFilter: window.NodeFilter,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    ResizeObserver: Observer,
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  const io = mock(() => { throw new Error('Name reading must use only the supplied catalogue'); });
+  const io = mock(() => {
+    throw new Error('Name reading must use only the supplied catalogue');
+  });
   mock.module('../src/library/labels-actions', () => ({ manageLabel: io }));
   mock.module('../src/library/labels-read-route', () => ({ readLabelsPage: io }));
   const { LabelsPageView } = await import('../src/library/labels-page');
@@ -39,14 +58,22 @@ test('Overflowing names read locally by touch and keyboard; fitting names keep o
   const root = createRoot(host as unknown as HTMLElement);
   const name = `  <名前> e\u0301 ${'📚無間隔'.repeat(190)}  `;
   const page: LabelsPage = {
-    signedIn: true, operations: ['library_label.list'], csrfToken: '', createKey: '', undoKey: '', next: null,
+    signedIn: true,
+    operations: ['library_label.list'],
+    csrfToken: '',
+    createKey: '',
+    undoKey: '',
+    next: null,
     labels: [name, 'Short'].map((name, i) => ({ id: `label-${i}`, name, revision: 1, renameKey: '', deleteKey: '' })),
   };
   const render = (value = page) => act(async () => root.render(<LabelsPageView page={value} locale="fr" />));
   const user = userEvent.setup({ document: window.document as unknown as Document });
   const navigations: string[] = [];
   host.addEventListener('click', (event) => {
-    if ((event.target as Element).closest('a')) { navigations.push('shelf'); event.preventDefault(); }
+    if ((event.target as Element).closest('a')) {
+      navigations.push('shelf');
+      event.preventDefault();
+    }
   });
   try {
     await render();
