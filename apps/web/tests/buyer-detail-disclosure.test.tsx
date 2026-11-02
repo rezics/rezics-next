@@ -93,7 +93,8 @@ test('Buyer receipt meaning and usable benefit precede closed technical referenc
       m.benefit_fixed_version(),
       fixedEditionTerms.source.licence,
       m.benefit_open_reader(),
-    ]) expect(ordinary.textContent).toContain(fact);
+    ])
+      expect(ordinary.textContent).toContain(fact);
     expect(ordinary.querySelector(`a[href="/en/entitlements/${order.entitlementId}"]`)?.textContent).toBe(
       m.entitlements_detail_heading(),
     );
@@ -146,7 +147,8 @@ test('Pending, unknown, failed and unavailable receipts keep uncertainty visible
       m.order_paid_total_unavailable(),
       m.order_tax_unavailable(),
       m.order_entitlement_unavailable(),
-    ]) expect(ordinary.textContent).toContain(fact);
+    ])
+      expect(ordinary.textContent).toContain(fact);
     expect(ordinary.textContent).not.toContain(m.benefit_open_reader());
     expect(h.host.querySelector('details')?.textContent).not.toContain(m.order_tax_code());
   } finally {
@@ -215,7 +217,9 @@ test('Refund and dispute consequences are translated ahead of optional exact nat
         };
         const ordinary = h.show(<EntitlementPage page={{ kind: 'ready', data: record }} locale={locale} />);
         expect(ordinary.textContent).toContain(m.entitlements_revoked());
-        expect(ordinary.textContent).toContain(reason === 'refund' ? m.entitlements_refund() : m.entitlements_dispute());
+        expect(ordinary.textContent).toContain(
+          reason === 'refund' ? m.entitlements_refund() : m.entitlements_dispute(),
+        );
         expect(ordinary.textContent).toContain(
           reason === 'refund' ? m.entitlements_refund_consequence() : m.entitlements_dispute_consequence(),
         );
