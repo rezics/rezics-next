@@ -1,4 +1,13 @@
-import { useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
@@ -83,7 +92,11 @@ function useReviewCaller() {
     return !retired.current;
   }, [client, owner, read]);
   const subscribe = useCallback(
-    (listener: () => void) => client?.getQueryCache().subscribe(() => { current(); listener(); }) ?? (() => {}),
+    (listener: () => void) =>
+      client?.getQueryCache().subscribe(() => {
+        current();
+        listener();
+      }) ?? (() => {}),
     [client, current],
   );
   const snapshot = useCallback(() => JSON.stringify([current(), read()]), [current, read]);
@@ -103,7 +116,7 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
   const currentPage = useRef(initial);
   const accountId = useRef(initial.status === 'ready' ? initial.account.id : null);
   const [defaultAction] = useState(() =>
-    initial.status === 'ready' && !initial.offered.includes('suspend') ? initial.offered[0] ?? 'suspend' : 'suspend',
+    initial.status === 'ready' && !initial.offered.includes('suspend') ? (initial.offered[0] ?? 'suspend') : 'suspend',
   );
   const [action, setAction] = useState<Action>(defaultAction);
   const [reason, setReason] = useState('');
@@ -141,7 +154,9 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
 
   const reconciled = outcome?.status === 'recorded' && outcome.effects?.state === 'complete';
   const needsDecision = () =>
-    current() && !reconciled && (unresolved.current !== null || confirmation !== null || reason !== '' || action !== defaultAction);
+    current() &&
+    !reconciled &&
+    (unresolved.current !== null || confirmation !== null || reason !== '' || action !== defaultAction);
   const departure = useAuthoringDeparture(
     needsDecision,
     () => current() && !reconciled && unresolved.current !== null,
@@ -251,8 +266,12 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
     return (
       <article className="mx-auto flex w-full max-w-2xl flex-col gap-6 pb-8">
         <PageHeading>{m.lifecycle_title()}</PageHeading>
-        <p role="status">{authorityLost(revoked) ? statusText(revoked.status) : m.thread_authoring_session_changed()}</p>
-        <Button variant="outline" onClick={() => window.location.reload()}>{m.settings_reload()}</Button>
+        <p role="status">
+          {authorityLost(revoked) ? statusText(revoked.status) : m.thread_authoring_session_changed()}
+        </p>
+        <Button variant="outline" onClick={() => window.location.reload()}>
+          {m.settings_reload()}
+        </Button>
       </article>
     );
   }
