@@ -14,7 +14,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { isNotFound, Link } from '@tanstack/react-router';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Menu } from '@rezics/ui/menu';
-import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { ContentItem } from '@rezics/ui/content-item';
 import { Dialog, DialogContent, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import { m } from '../paraglide/messages.js';
@@ -386,6 +386,7 @@ function SessionEditor({
   const changesHeading = useId();
   const unitsHeading = useId();
   const amountHint = useId();
+  const structureHint = useId();
 
   useLayoutEffect(() => {
     // Restore an identity after React's development effect cleanup/setup cycle.
@@ -678,6 +679,9 @@ function SessionEditor({
         <p className="text-sm">
           {m.library_progress_unit()}: {session.unitLabel || m.library_progress_unit_unspecified()}
         </p>
+        {session.mode === 'completed_units' || session.mode === 'cursor_position' ? (
+          <p className="text-sm text-muted-foreground">{m.library_progress_structure_unverified()}</p>
+        ) : null}
         {session.state !== 'active' ? <p className="text-muted-foreground">{stateLabel(session.state)}</p> : null}
         {offered && session.state === 'active' && session.mode !== 'completed_units' ? (
           <form
@@ -814,7 +818,7 @@ function SessionEditor({
           </div>
           <div className="min-w-0 flex-1 space-y-4">
             <div className="space-y-1">
-              <p className="text-2xl font-medium sm:text-3xl">
+              <p className="text-2xl font-medium [overflow-wrap:anywhere] sm:text-3xl">
                 {session.subject ? (
                   <Link
                     to={
@@ -841,15 +845,25 @@ function SessionEditor({
                 <p className="text-sm text-muted-foreground">{session.subject.typeLabel}</p>
               ) : null}
             </div>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm font-medium">
               <span data-progress-state={session.state}>{stateLabel(session.state)}</span>
             </p>
             <ProgressRow value={progress?.percent == null ? null : progress.percent / 100} label={progressLabel} />
+            {session.meaning !== 'known' ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                {session.meaning === 'unknown' ? m.library_progress_meaning_unknown() : m.library_history_unavailable()}
+              </p>
+            ) : null}
+            {session.mode === 'completed_units' || session.mode === 'cursor_position' ? (
+              <p id={structureHint} className="text-sm text-muted-foreground">
+                {m.library_progress_structure_unverified()}
+              </p>
+            ) : null}
             {session.mode === 'cursor_position' && session.position !== null && session.locator ? (
               <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
                 <div className="space-y-1">
                   <dt className="text-muted-foreground">{m.library_progress_locator()}</dt>
-                  <dd className="break-words">{session.locator}</dd>
+                  <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{session.locator}</dd>
                 </div>
               </dl>
             ) : null}
@@ -858,27 +872,29 @@ function SessionEditor({
                 {m.library_progress_total()}: {session.total}
               </p>
             ) : null}
+            <details className="space-y-2 text-sm text-muted-foreground">
+              <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                {m.library_progress_details()}
+              </summary>
+              <dl className="space-y-2">
+                <div>
+                  <dt>{m.library_progress_mode()}</dt>
+                  <dd>
+                    <code className="break-all">{session.mode}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>{m.library_progress_unit()}</dt>
+                  <dd>
+                    <code className="break-all">{session.unit}</code>
+                  </dd>
+                </div>
+              </dl>
+            </details>
           </div>
         </div>
         {session.versionSubjectId ? <SubjectIdentity subject={session.versionSubject} ratio={ratio} /> : null}
       </header>
-      {session.meaning !== 'known' ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {session.meaning === 'unknown' ? m.library_progress_meaning_unknown() : m.library_history_unavailable()}
-        </p>
-      ) : null}
-      <details className="space-y-2 text-sm text-muted-foreground">
-        <summary className="cursor-pointer">{m.library_progress_details()}</summary>
-        <p>
-          {m.library_progress_mode()} / {m.library_progress_unit()}:{' '}
-          <code className="break-all">
-            {session.mode} / {session.unit}
-          </code>
-        </p>
-      </details>
-      {session.mode === 'completed_units' || session.mode === 'cursor_position' ? (
-        <p className="text-sm text-muted-foreground">{m.library_progress_structure_unverified()}</p>
-      ) : null}
       {unsupported || session.recordingState === 'unsupported' ? (
         <p role="status">{m.library_progress_no_longer_offered()}</p>
       ) : session.recordingState !== 'supported' ? (
@@ -987,33 +1003,63 @@ function SessionEditor({
           {m.library_progress_changes()}
         </h2>
         {session.changes.length ? (
-          <ol className="space-y-3">
+          <ol className="space-y-1">
             {session.changes.map((change) => (
-              <ListRow key={change.id} className="py-3">
-                <div className="mb-2 text-sm text-muted-foreground">
-                  <RelativeTime value={change.createdAt} />
-                </div>
-                {change.action ? (
-                  <p>{stateLabel(change.action === 'complete' ? 'completed' : 'abandoned')}</p>
-                ) : (
-                  <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
-                    {[
-                      [m.library_progress_amount(), change.amount],
-                      [m.library_progress_locator(), change.locator],
-                      [m.library_progress_position(), change.position],
-                      [m.library_progress_add_units(), change.add.join(', ')],
-                      [m.library_progress_remove_units(), change.remove.join(', ')],
-                    ]
-                      .filter(([, value]) => value != null && value !== '')
-                      .map(([label, value]) => (
-                        <div key={label} className="space-y-1">
-                          <dt className="text-muted-foreground">{label}</dt>
-                          <dd className="break-words">{value}</dd>
-                        </div>
-                      ))}
-                  </dl>
-                )}
-              </ListRow>
+              <ContentItem
+                key={change.id}
+                headingLevel={3}
+                title={
+                  change.action
+                    ? stateLabel(change.action === 'complete' ? 'completed' : 'abandoned')
+                    : m.library_progress_change_recorded()
+                }
+                metadata={<RelativeTime value={change.createdAt} />}
+                preview={
+                  change.amount !== null ||
+                  change.locator !== null ||
+                  change.position !== null ||
+                  change.add.length ||
+                  change.remove.length ? (
+                    <dl className="flex min-w-0 flex-wrap gap-x-8 gap-y-3">
+                      {(
+                        [
+                          [m.library_progress_amount(), change.amount],
+                          [m.library_progress_locator(), change.locator],
+                          [m.library_progress_position(), change.position],
+                        ] as const
+                      )
+                        .filter(([, value]) => value != null)
+                        .map(([label, value]) => (
+                          <div key={label} className="min-w-0 max-w-full space-y-1">
+                            <dt className="text-muted-foreground">{label}</dt>
+                            <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{value}</dd>
+                          </div>
+                        ))}
+                      {(
+                        [
+                          [m.library_progress_units_added(), change.add],
+                          [m.library_progress_units_removed(), change.remove],
+                        ] as const
+                      ).map(([label, units]) =>
+                        units.length ? (
+                          <div key={label} className="min-w-0 max-w-full space-y-1">
+                            <dt className="text-muted-foreground">{label}</dt>
+                            <dd>
+                              <ul className="space-y-1">
+                                {units.map((unit) => (
+                                  <li key={unit} className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+                                    {unit}
+                                  </li>
+                                ))}
+                              </ul>
+                            </dd>
+                          </div>
+                        ) : null,
+                      )}
+                    </dl>
+                  ) : null
+                }
+              />
             ))}
           </ol>
         ) : (
@@ -1036,16 +1082,21 @@ function SessionEditor({
           </Exposure>
         ) : null}
       </section>
-      <section role="region" aria-labelledby={unitsHeading} className="space-y-3">
+      <section
+        role="region"
+        aria-labelledby={unitsHeading}
+        aria-describedby={session.mode === 'completed_units' ? structureHint : undefined}
+        className="space-y-3"
+      >
         <h2 id={unitsHeading} className="text-xl font-semibold">
           {m.library_progress_units()}
         </h2>
         {session.units.length ? (
           <ul className="space-y-3">
             {session.units.map((unit) => (
-              <ListRow key={unit} className="py-2">
+              <li key={unit} className="py-2 whitespace-pre-wrap [overflow-wrap:anywhere]">
                 {unit}
-              </ListRow>
+              </li>
             ))}
           </ul>
         ) : (

@@ -14,15 +14,32 @@ import {
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { PageStory, PatternStory, libraryProgressSessionReady, pagePaths, pageReady } from './page';
 
+// UNRUN: story interactions, responsive layout and native recording/authority evidence remain deferred.
 const meta = {
   title: 'Pages/Library/Progress Session',
-  parameters: { layout: 'fullscreen' },
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
+      },
+    },
+  },
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const SignedIn: Story = {
   name: 'Owner',
-  play: libraryProgressSessionReady,
+  play: async (context) => {
+    await libraryProgressSessionReady(context);
+    const history = within(context.canvasElement).getByRole('region', { name: m.library_progress_changes() });
+    expect(
+      within(history).getByRole('heading', { level: 3, name: m.library_progress_change_recorded() }),
+    ).toHaveAttribute('data-content-item-slot', 'title');
+    expect(within(history).getByText('Part 2, chapter 14')).toBeVisible();
+  },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-progress-session']} />,
 };
 
@@ -148,10 +165,174 @@ export const LongContent: Story = {
   name: 'Long change history',
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByText('Progress story change 12');
+    const history = within(canvasElement).getByRole('region', { name: m.library_progress_changes() });
+    expect(within(history).getAllByRole('heading', { level: 3 })).toHaveLength(12);
   },
   render: () => {
     setLibraryProgressStoryMode('detail-long');
     return <PageStory visitor="Signed In" path={pagePaths['library-progress-session']} />;
+  },
+};
+
+const exactLongLocator = `  epubcfi(/6/2[${'original-chapter-and-annotation:'.repeat(7)}])  `;
+const longHistoryPage: ProgressPageData = {
+  ...boundedProfilePage,
+  session: {
+    ...profileSession,
+    mode: 'cursor_position',
+    state: 'active',
+    revision: 2,
+    meaning: 'unknown',
+    recordingState: 'unavailable',
+    subject: {
+      ...profileSession.subject,
+      label: 'A long original reading title with annotations, alternate chapter names and a retained position',
+    },
+    unit: 'historic-cursor-unit-x',
+    amount: null,
+    total: null,
+    locator: exactLongLocator,
+    position: '12.250001',
+    changes: [
+      {
+        id: `${profileSessionId}:2`,
+        revision: 2,
+        createdAt: '2026-10-29T00:00:00.001Z',
+        action: null,
+        amount: null,
+        locator: exactLongLocator,
+        position: '12.250001',
+        add: [],
+        remove: [],
+      },
+    ],
+    changesNext: null,
+    units: [],
+    unitsNext: null,
+  },
+};
+
+export const NarrowOriginalHistory: Story = {
+  name: 'Narrow original cursor history with unknown meaning (bounded view)',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Supplied DTO with unknown meaning and unavailable recording. Native authority and responsive behavior are unverified.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(m.library_progress_meaning_unknown());
+    expect(canvas.getByText(m.library_progress_structure_unverified())).toBeVisible();
+    expect(canvas.getByText(m.library_progress_recording_unavailable())).toBeVisible();
+    expect(canvas.queryByRole('button', { name: m.library_progress_update() })).not.toBeInTheDocument();
+    expect(canvas.queryByRole('progressbar')).not.toBeInTheDocument();
+    const history = canvas.getByRole('region', { name: m.library_progress_changes() });
+    expect(within(history).getByText(exactLongLocator.trim())).toBeVisible();
+    expect(within(history).getByText('12.250001')).toBeVisible();
+    const summary = canvas.getByText(m.library_progress_details());
+    summary.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(summary.closest('details')).toHaveAttribute('open');
+    expect(canvas.getByText('historic-cursor-unit-x')).toBeVisible();
+  },
+  render: () => {
+    setLibraryProgressStoryMode('recorded');
+    return (
+      <PatternStory visitor="Signed In" path={`/library/progress/${profileSessionId}`}>
+        <main className="w-full max-w-4xl space-y-6 p-4">
+          <ProgressSessionPage page={longHistoryPage} />
+        </main>
+      </PatternStory>
+    );
+  },
+};
+
+const completedAmountPage: ProgressPageData = {
+  ...boundedProfilePage,
+  session: {
+    ...boundedProfilePage.session,
+    amount: '2.500000',
+    state: 'completed',
+    revision: 4,
+    completedAt: '2026-10-30T00:00:00.000Z',
+    changes: [
+      {
+        id: `${profileSessionId}:2`,
+        revision: 2,
+        createdAt: '2026-10-29T01:00:00.000Z',
+        action: null,
+        amount: '0.000000',
+        locator: null,
+        position: null,
+        add: [],
+        remove: [],
+      },
+      {
+        id: `${profileSessionId}:3`,
+        revision: 3,
+        createdAt: '2026-10-29T02:00:00.000Z',
+        action: null,
+        amount: '2.500000',
+        locator: null,
+        position: null,
+        add: [],
+        remove: [],
+      },
+      {
+        id: `${profileSessionId}:4`,
+        revision: 4,
+        createdAt: '2026-10-30T00:00:00.000Z',
+        action: 'complete',
+        amount: null,
+        locator: null,
+        position: null,
+        add: [],
+        remove: [],
+      },
+    ],
+  },
+};
+
+export const CompletedAmountHistory: Story = {
+  name: 'Exact amount history and explicit completion (bounded view)',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Supplied DTO with explicit lifecycle completion, independent of the recorded amount. Native recording and authorization are unverified.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const history = await canvas.findByRole('region', { name: m.library_progress_changes() });
+    expect(
+      within(history)
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent),
+    ).toEqual([
+      m.library_progress_change_recorded(),
+      m.library_progress_change_recorded(),
+      m.library_progress_state_completed(),
+    ]);
+    expect(within(history).getByText('0.000000')).toBeVisible();
+    expect(within(history).getByText('2.500000')).toBeVisible();
+    expect(canvas.getByText('2.500000 / 10 segments at acceptance')).toBeVisible();
+    expect(canvas.queryByRole('button', { name: m.library_progress_update() })).not.toBeInTheDocument();
+  },
+  render: () => {
+    setLibraryProgressStoryMode('recorded');
+    return (
+      <PatternStory visitor="Signed In" path={`/library/progress/${profileSessionId}`}>
+        <main className="w-full max-w-4xl space-y-6 p-4">
+          <ProgressSessionPage page={completedAmountPage} />
+        </main>
+      </PatternStory>
+    );
   },
 };
 
@@ -207,6 +388,13 @@ export const SparseHistory: Story = {
         .map((item) => item.textContent),
     ).toEqual(['1', '3']);
     expect(within(units).getByRole('link', { name: m.library_progress_more() })).toBeInTheDocument();
+    const history = canvas.getByRole('region', { name: m.library_progress_changes() });
+    const added = within(history).getByText(m.library_progress_units_added());
+    expect([...added.nextElementSibling!.querySelectorAll('li')].map((item) => item.textContent)).toEqual([
+      '1',
+      '3',
+      '7',
+    ]);
   },
   render: () => manualStory(manualSparseId),
 };
