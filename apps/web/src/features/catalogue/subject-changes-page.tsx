@@ -1,6 +1,7 @@
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { useEffect, useReducer, useRef } from 'react';
+import { useEffect, useId, useReducer, useRef } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { SubjectFrame, ViewHeading } from '../pages/subject-frame';
 import { viewTabLabels } from '../pages/route-support';
 import { languageName } from '../../subject/language';
@@ -25,9 +26,9 @@ type Props = {
   onDetailRetry?: () => void;
 };
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'relative z-10 h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const currentLinkClassName =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
+  'relative z-10 inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 function Failure({ failure, locale }: { failure: ChangesFailure; locale: string }) {
   const o = { locale: locale as never };
@@ -161,6 +162,7 @@ export function ChangeExplanation({ detail, locale }: { detail: ChangeDetail; lo
 
 /** Shared subject frame and controls; no historical payload, actor or raw identifier is rendered. */
 export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelect, onRetry, onDetailRetry }: Props) {
+  const explanationHeadingId = useId();
   const o = { locale: locale as never };
   const busy = !!state.loading;
   const page = state.page;
@@ -220,7 +222,9 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
       {page && (
         <div className="grid min-w-0 gap-8 md:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)]">
           <section className="min-w-0 space-y-4" aria-label={m.changes_revisions({}, o)}>
-            <h2 className="text-xl font-semibold">{m.changes_revisions({}, o)}</h2>
+            <ContentItemHeading level={2} className="text-xl font-semibold">
+              {m.changes_revisions({}, o)}
+            </ContentItemHeading>
             {!page.revisions.length && (
               <p className="text-muted-foreground">
                 {page.next === null ? m.changes_empty({}, o) : m.changes_empty_page({}, o)}
@@ -229,20 +233,22 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
             <ol className="space-y-2">
               {page.revisions.map((row) => (
                 <li key={row.revision}>
-                  <Button
-                    variant={state.selected === row.revision ? 'secondary' : 'ghost'}
-                    className="h-auto min-h-11 w-full min-w-11 justify-start whitespace-normal py-3 text-start [overflow-wrap:anywhere]"
-                    aria-pressed={state.selected === row.revision}
-                    disabled={busy || !onSelect}
-                    onClick={() => onSelect?.(row.revision)}
-                  >
-                    <span className="flex min-w-0 flex-col gap-1">
-                      <span>{m.changes_revision({ revision: String(row.revision) }, o)}</span>
-                      <span className="text-xs font-normal text-muted-foreground">
-                        {revisionKind(row.kind, locale)}
+                  <ContentItemFrame as="div" className="min-w-0">
+                    <Button
+                      variant={state.selected === row.revision ? 'secondary' : 'ghost'}
+                      className={`${actionClassName} w-full justify-start py-3 text-start`}
+                      aria-pressed={state.selected === row.revision}
+                      disabled={busy || !onSelect}
+                      onClick={() => onSelect?.(row.revision)}
+                    >
+                      <span className="flex min-w-0 max-w-full flex-col gap-1">
+                        <span>{m.changes_revision({ revision: String(row.revision) }, o)}</span>
+                        <span className="text-xs font-normal text-muted-foreground">
+                          {revisionKind(row.kind, locale)}
+                        </span>
                       </span>
-                    </span>
-                  </Button>
+                    </Button>
+                  </ContentItemFrame>
                 </li>
               ))}
             </ol>
@@ -254,29 +260,28 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
             {state.loading === 'more' && <p role="status">{m.changes_loading({}, o)}</p>}
           </section>
           {!!page.revisions.length && (
-            <section
-              aria-labelledby="change-explanation-title"
-              className="min-w-0 space-y-4 border-t border-border pt-5 md:border-s md:border-t-0 md:ps-6 md:pt-0"
-            >
-              <h2 id="change-explanation-title" className="text-xl font-semibold">
-                {state.selected
-                  ? m.changes_revision({ revision: String(state.selected) }, o)
-                  : m.changes_explanation({}, o)}
-              </h2>
-              {state.selected === undefined && <p className="text-muted-foreground">{m.changes_choose({}, o)}</p>}
-              {state.loading === 'detail' && <p role="status">{m.changes_detail_loading({}, o)}</p>}
-              {detail && <ChangeExplanation detail={detail} locale={locale} />}
-              {state.detail && state.detail.kind !== 'ready' && (
-                <div className="space-y-3">
-                  <Failure failure={state.detail} locale={locale} />
-                  {onDetailRetry && (
-                    <Button variant="outline" className={actionClassName} disabled={busy} onClick={onDetailRetry}>
-                      {m.changes_retry_detail({}, o)}
-                    </Button>
-                  )}
-                </div>
-              )}
-              {detail && !reading && <p className="text-sm text-muted-foreground">{m.changes_current_notice({}, o)}</p>}
+            <section aria-labelledby={explanationHeadingId} className="min-w-0">
+              <ContentItemFrame as="div" className="min-w-0 space-y-4 p-4 sm:p-5">
+                <ContentItemHeading level={2} id={explanationHeadingId} className="text-xl font-semibold">
+                  {state.selected
+                    ? m.changes_revision({ revision: String(state.selected) }, o)
+                    : m.changes_explanation({}, o)}
+                </ContentItemHeading>
+                {state.selected === undefined && <p className="text-muted-foreground">{m.changes_choose({}, o)}</p>}
+                {state.loading === 'detail' && <p role="status">{m.changes_detail_loading({}, o)}</p>}
+                {detail && <ChangeExplanation detail={detail} locale={locale} />}
+                {state.detail && state.detail.kind !== 'ready' && (
+                  <div className="space-y-3">
+                    <Failure failure={state.detail} locale={locale} />
+                    {onDetailRetry && (
+                      <Button variant="outline" className={actionClassName} disabled={busy} onClick={onDetailRetry}>
+                        {m.changes_retry_detail({}, o)}
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {detail && !reading && <p className="text-sm text-muted-foreground">{m.changes_current_notice({}, o)}</p>}
+              </ContentItemFrame>
             </section>
           )}
         </div>

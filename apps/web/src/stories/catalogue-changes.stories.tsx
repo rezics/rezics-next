@@ -306,3 +306,279 @@ export const LimitedEvidence: Story = {
     expect(canvas.getByRole('link', { name: m.changes_current() }).getAttribute('href')).toContain('/subjects/');
   },
 };
+
+/** UNRUN: supplied bounded native-shaped responses; no backend, SSR or geometry proof is claimed. */
+function IndependentHistoryFamily({ rtl = false }: { rtl?: boolean }) {
+  const locale = getLocale();
+  const fixtures = useMemo(
+    () =>
+      [0, 1].map((index) => {
+        const fixture = catalogueChangesFixture('ready', locale, undefined, (revision) =>
+          Response.json({
+            subject: fixture.id,
+            revision: { revision, kind: revision === 2 ? 'terms' : 'propose', release: fixture.read.subject.release },
+            change:
+              revision === 2
+                ? {
+                    kind: 'terms',
+                    fields: [
+                      { field: 'labels', languages: ['en', 'fr', 'de', 'ja', 'ko', 'zh-Hant', 'zh-Hans', 'es'] },
+                      { field: 'descriptions', languages: ['ja', 'de', 'fr'] },
+                      { field: 'aliases', languages: ['es', 'en', 'ko'] },
+                    ],
+                  }
+                : {
+                    kind: 'candidate',
+                    candidate: '00000000-0000-8000-8000-000000000005',
+                    property: 'schema:datePublished',
+                    context: fixture.read.subject.context,
+                    reading: {
+                      decision: { head: 8, verdict: 'accept', revision: 6 },
+                      selected: true,
+                      rank: 'preferred',
+                    },
+                  },
+          }),
+        );
+        fixture.read.subject.labels[locale] =
+          `${index + 1} · 星の旅 — Édition originale — رحلة طويلة ${'A complete supplied catalogue title '.repeat(8)}`;
+        return fixture;
+      }),
+    [locale],
+  );
+  return (
+    <PatternStory path="/" visitor="Signed Out">
+      <AppShell>
+        <div dir={rtl ? 'rtl' : 'ltr'} className="grid min-w-0 gap-12">
+          {fixtures.map((fixture, index) => (
+            <SubjectChanges key={index} locale={locale} transport={fixture.transport} />
+          ))}
+        </div>
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+// Real browser assertions are authored only. DOM-only tests below do not substitute for them.
+function assertHistoryGeometry(page: HTMLElement) {
+  const document = page.ownerDocument;
+  const contained = (element: HTMLElement) => {
+    const bounds = element.getBoundingClientRect();
+    expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+    expect(bounds.left).toBeGreaterThanOrEqual(-1);
+    expect(bounds.right).toBeLessThanOrEqual(document.documentElement.clientWidth + 1);
+    const walker = document.createTreeWalker(element, 4);
+    while (walker.nextNode()) {
+      if (!walker.currentNode.textContent?.trim()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(walker.currentNode);
+      for (const line of range.getClientRects()) {
+        expect(line.left).toBeGreaterThanOrEqual(bounds.left - 1);
+        expect(line.right).toBeLessThanOrEqual(bounds.right + 1);
+      }
+    }
+  };
+  contained(page);
+  for (const target of [...page.querySelectorAll<HTMLElement>('button, a')].filter(
+    (node) =>
+      (node.tagName === 'BUTTON' && !node.closest('[data-slot="subject-frame"]')) ||
+      node.textContent === m.changes_current(),
+  )) {
+    contained(target);
+    const bounds = target.getBoundingClientRect();
+    expect(bounds.height).toBeGreaterThanOrEqual(44);
+    expect(bounds.width).toBeGreaterThanOrEqual(44);
+  }
+  for (const evidence of page.querySelectorAll<HTMLElement>('section, dl, dt, dd')) contained(evidence);
+}
+
+export const IndependentHistoryPhone: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: two actual history readers, own h2 associations, native keyboard selection, sparse continuation, current versus historical evidence and 44px controls with fully wrapping multilingual text. Supports all launch locales; no native authority or visual result is claimed.',
+      },
+    },
+  },
+  render: () => <IndependentHistoryFamily />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getAllByRole('region', { name: m.changes_revisions() })).toHaveLength(2));
+    const pages = [...canvasElement.querySelectorAll<HTMLElement>('[data-slot="subject-changes"]')];
+    const ids = pages.map((page) => page.querySelector('section[aria-labelledby]')!.getAttribute('aria-labelledby')!);
+    expect(new Set(ids).size).toBe(2);
+    for (const [index, page] of pages.entries()) {
+      const own = within(page);
+      const heading = page.ownerDocument.getElementById(ids[index]!);
+      expect(page.contains(heading)).toBe(true);
+      expect(heading?.tagName).toBe('H2');
+      const current = own.getByRole('link', { name: m.changes_current() });
+      current.focus();
+      await userEvent.tab();
+      const first = own.getByRole('button', { name: new RegExp(m.changes_revision({ revision: '5' })) });
+      expect(first).toHaveFocus();
+      expect(first.matches(':focus-visible')).toBe(true);
+      await userEvent.keyboard('{Enter}');
+      const reading = within(await own.findByRole('region', { name: m.changes_current() }));
+      expect(reading.getByText(m.context_accepted())).toBeVisible();
+      expect(reading.getByText(m.context_selected())).toBeVisible();
+      expect(reading.getByText(new RegExp(m.candidate_rank_preferred()))).toBeVisible();
+      expect(first).toHaveAttribute('aria-pressed', 'true');
+      expect(own.queryByText(m.changes_current_notice())).toBeNull();
+      assertHistoryGeometry(page);
+      const revisions = within(own.getByRole('region', { name: m.changes_revisions() }));
+      await userEvent.click(revisions.getByRole('button', { name: m.changes_more() }));
+      await waitFor(() => expect(revisions.getByRole('button', { name: m.changes_more() })).toBeEnabled());
+      expect(revisions.getAllByRole('listitem')).toHaveLength(2);
+      await userEvent.click(revisions.getByRole('button', { name: m.changes_more() }));
+      const terms = await revisions.findByRole('button', { name: new RegExp(m.changes_revision({ revision: '2' })) });
+      terms.focus();
+      await userEvent.keyboard(' ');
+      const fields = await own.findByLabelText(m.changes_fields());
+      expect(fields.querySelectorAll('dt')).toHaveLength(3);
+      for (const term of fields.querySelectorAll('dt')) {
+        expect(term.nextElementSibling?.tagName).toBe('DD');
+        expect(term.nextElementSibling?.textContent?.length).toBeGreaterThan(0);
+      }
+      expect(revisions.getAllByRole('listitem')).toHaveLength(3);
+      expect(own.getByText(m.changes_current_notice())).toBeVisible();
+      expect(own.queryByRole('region', { name: m.changes_current() })).toBeNull();
+      expect(page.querySelector('section[aria-labelledby]')?.getAttribute('aria-labelledby')).toBe(ids[index]);
+      assertHistoryGeometry(page);
+    }
+  },
+};
+
+export const IndependentHistoryDesktop: Story = {
+  ...IndependentHistoryPhone,
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+};
+
+export const IndependentHistoryRtl: Story = {
+  ...IndependentHistoryPhone,
+  render: () => <IndependentHistoryFamily rtl />,
+};
+
+/** Explicit supplied presentation evidence; the original connected/native witnesses remain unchanged. */
+export const LongRevisionCurrentAndFields: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: full long revision/property evidence, all three terms fields, independent current/historical regions and 44px current links at phone390. Select desktop1280 and any launch locale for the same authored geometry assertions. These supplied snapshots perform no reads.',
+      },
+    },
+  },
+  render: () => {
+    const locale = getLocale();
+    const fixture = catalogueChangesFixture();
+    const revision = 2147483647;
+    const page = {
+      id: fixture.id,
+      title: { text: `星の旅 — رحلة طويلة ${'Complete supplied title '.repeat(12)}`, lang: 'en' },
+      typeLabel: pageText(sourceDefinitions.types[fixture.read.subject.type]?.labels, locale),
+      href: `/${locale}/subjects/${fixture.id}`,
+      revisions: [{ revision, kind: 'terms' }],
+      next: null,
+    };
+    const common = {
+      id: fixture.id,
+      revision,
+      propertyLabel: { text: `A full supplied property label ${'星 Édition رحلة '.repeat(32)}`, lang: 'en' },
+    };
+    return (
+      <PatternStory path="/" visitor="Signed Out">
+        <AppShell>
+          <div dir="rtl" className="grid min-w-0 gap-12">
+            <SubjectChangesPage
+              locale={locale}
+              state={{
+                page,
+                selected: revision,
+                detail: {
+                  kind: 'ready',
+                  detail: {
+                    ...common,
+                    summary: {
+                      kind: 'candidate',
+                      candidate: '00000000-0000-8000-8000-000000000005',
+                      property: 'schema:isbn',
+                      reading: {
+                        decision: { head: 8, verdict: 'accept', revision: 6 },
+                        selected: true,
+                        rank: 'preferred',
+                      },
+                    },
+                  },
+                },
+              }}
+            />
+            <SubjectChangesPage
+              locale={locale}
+              state={{
+                page,
+                selected: revision,
+                detail: {
+                  kind: 'ready',
+                  detail: {
+                    ...common,
+                    summary: {
+                      kind: 'terms',
+                      fields: [
+                        { field: 'labels', languages: ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] },
+                        { field: 'descriptions', languages: ['ja', 'de', 'fr'] },
+                        { field: 'aliases', languages: ['es', 'en', 'ko'] },
+                      ],
+                    },
+                  },
+                },
+              }}
+            />
+          </div>
+        </AppShell>
+      </PatternStory>
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const pages = [...canvasElement.querySelectorAll<HTMLElement>('[data-slot="subject-changes"]')];
+    expect(pages).toHaveLength(2);
+    const ids = pages.map((page) => page.querySelector('section[aria-labelledby]')!.getAttribute('aria-labelledby'));
+    expect(new Set(ids).size).toBe(2);
+    for (const page of pages) {
+      assertHistoryGeometry(page);
+      const current = within(page).getByRole('link', { name: m.changes_current() });
+      current.focus();
+      expect(current).toHaveFocus();
+      expect(current.getAttribute('href')).toContain('/subjects/');
+      expect(page.textContent).toContain('A full supplied property label');
+      expect(
+        within(page).getByRole('heading', { name: m.changes_revision({ revision: '2147483647' }) }),
+      ).toHaveProperty('tagName', 'H2');
+    }
+    const reading = within(within(pages[0]!).getByRole('region', { name: m.changes_current() }));
+    expect(reading.getByText(m.context_selected())).toBeVisible();
+    expect(reading.getByText(new RegExp(m.candidate_rank_preferred()))).toBeVisible();
+    const fields = within(pages[1]!).getByLabelText(m.changes_fields());
+    expect(fields.querySelectorAll('dt')).toHaveLength(3);
+    const labels = [m.changes_name(), m.changes_description(), m.changes_aliases()];
+    for (const [index, term] of [...fields.querySelectorAll('dt')].entries()) {
+      expect(term.textContent).toBe(labels[index]);
+      expect(term.nextElementSibling?.tagName).toBe('DD');
+      expect(term.nextElementSibling).toBeVisible();
+    }
+    expect(within(pages[1]!).getByText(m.changes_current_notice())).toBeVisible();
+  },
+};
+
+export const IndependentHistoryDesktopRtl: Story = {
+  ...IndependentHistoryDesktop,
+  render: () => <IndependentHistoryFamily rtl />,
+};
+
+export const LongRevisionCurrentAndFieldsDesktop: Story = {
+  ...LongRevisionCurrentAndFields,
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+};
