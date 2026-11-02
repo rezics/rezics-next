@@ -118,9 +118,10 @@ function ContributionLifecycleLive({
     }
   }
 
-  async function change(admission:
-    | { kind: 'confirm'; confirmation: { operation: ContributionCommand['operation'] } }
-    | { kind: 'retry'; command: ContributionCommand },
+  async function change(
+    admission:
+      | { kind: 'confirm'; confirmation: { operation: ContributionCommand['operation'] } }
+      | { kind: 'retry'; command: ContributionCommand },
   ) {
     if (!lifetime.active()) return;
     const latest = controls.current;
