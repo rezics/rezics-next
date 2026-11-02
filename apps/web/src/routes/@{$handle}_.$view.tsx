@@ -127,6 +127,7 @@ function AgentViewRoute() {
         title={data.title}
         locale={locale}
         result={data.realms ?? { state: 'unavailable' }}
+        search={searchStr}
         retry={() => void router.invalidate()}
       />
     );

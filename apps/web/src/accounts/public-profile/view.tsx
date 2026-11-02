@@ -28,7 +28,7 @@ export function PublicAccountState({
         <EmptyTitle>{page ? <h1>{m.public_account_heading()}</h1> : m.public_account_heading()}</EmptyTitle>
         <EmptyDescription>{text}</EmptyDescription>
       </EmptyHeader>
-      {retry && (
+      {state === 'unavailable' && retry && (
         <Button variant="outline" onClick={retry}>
           {m.public_account_retry()}
         </Button>
@@ -57,14 +57,24 @@ export function PublicRealmsPage({
   locale,
   result,
   retry,
+  search = '',
 }: {
   handle: string;
   title: string;
   locale: string;
   result: PublicRealms;
   retry?: (() => void) | undefined;
+  search?: string;
 }) {
   const base = accountHref(locale, handle, 'realms');
+  // Keep the current profile's query context; continuations replace only the opaque cursor.
+  const continuationHref = (cursor?: string) => {
+    const params = new URLSearchParams(search);
+    params.delete('cursor');
+    if (cursor) params.set('cursor', cursor);
+    const query = params.toString();
+    return query ? `${base}?${query}` : base;
+  };
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-8 sm:py-10">
       <header className="min-w-0 space-y-2 wrap-anywhere">
@@ -80,7 +90,7 @@ export function PublicRealmsPage({
         <>
           <PublicAccountState state={result.state} retry={retry} />
           {result.state === 'invalid-cursor' && (
-            <a className="text-primary underline" href={base}>
+            <a className="text-primary underline" href={continuationHref()}>
               {m.public_account_start_again()}
             </a>
           )}
@@ -107,7 +117,7 @@ export function PublicRealmsPage({
           {result.next && (
             <a
               className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
-              href={`${base}?cursor=${encodeURIComponent(result.next)}`}
+              href={continuationHref(result.next)}
             >
               {m.public_account_next()}
             </a>

@@ -126,10 +126,29 @@ test('denied, preparing, invalid continuation and unavailable are distinct from 
       title: 'Reader',
       locale: 'en',
       result: { state: 'ready', realms: [], next: 'signed+/=' },
+      search: '?role=owner&cursor=expired&role=member',
     }),
   );
   expect(html).toContain('cursor=signed%2B%2F%3D');
   expect(html).not.toContain('No public Realms to show');
+  expect(html).toContain('role=owner&amp;role=member&amp;cursor=signed%2B%2F%3D');
+  for (const state of ['denied', 'preparing', 'invalid-cursor', 'unavailable'] as const) {
+    const failure = renderToString(
+      createElement(PublicRealmsPage, {
+        handle: 'reader',
+        title: 'Reader',
+        locale: 'en',
+        result: { state },
+        retry: () => {},
+        search: '?role=owner&cursor=expired&role=member&cursor=duplicate',
+      }),
+    );
+    expect(failure.includes('<button')).toBe(state === 'unavailable');
+    if (state === 'invalid-cursor') {
+      expect(failure).toContain('href="/en/@reader/realms?role=owner&amp;role=member"');
+      expect(failure).not.toContain('cursor=');
+    }
+  }
 });
 
 test('composed public pages keep automation visible when operator hydration is unavailable or has no handle', () => {
