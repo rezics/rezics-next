@@ -23,6 +23,8 @@ const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')
 const remoteIds = [id(910), id(911)] as const;
 const author = {
   ...accounts.accounts[0]!,
+  kind: 'actor' as const,
+  state: 'active' as const,
   displayName: 'A reader with a very long name in a conversation about distant planets and patient journeys',
   handle: 'a_long_unbroken_parent_handle_'.repeat(5),
 };

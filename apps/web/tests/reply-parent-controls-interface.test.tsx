@@ -108,6 +108,8 @@ test('reply parent controls keep independent associations, private failures and 
   const click = async (node: HTMLElement) => act(async () => user.click(node));
   const author = {
     ...accounts.accounts[0]!,
+    kind: 'actor' as const,
+    state: 'active' as const,
     displayName: 'A very long visible author name '.repeat(8),
     handle: 'long_unbroken_handle_'.repeat(12),
   };
