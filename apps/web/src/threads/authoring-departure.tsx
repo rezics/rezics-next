@@ -386,7 +386,7 @@ export function AuthoringDepartureBoundary({
   return useContext(DepartureContext) ? (
     children
   ) : (
-    <AuthoringDepartureProvider sessionBound={sessionBound} navigationMessages={navigationMessages}>
+    <AuthoringDepartureProvider sessionBound={sessionBound} {...(navigationMessages ? { navigationMessages } : {})}>
       {children}
     </AuthoringDepartureProvider>
   );
