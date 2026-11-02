@@ -4,8 +4,22 @@ import type { AcceptancePlacement, Brief, TaskKind } from './types.ts';
 import { parseProofMetadata } from './verification.ts';
 
 export type RiskOwnership = { version: number; areas: Record<string, string[]> };
+/**
+ * A worker's prompt is one argument, which Linux limits to 128 KiB: a 127 KB brief failed every launch with E2BIG
+ * (2026-10-29). Briefs link evidence files instead of pasting them. Declared paths share this bound.
+ */
+export const MAX_BRIEF_BYTES = 64 * 1024;
+/** Visited (i, j) cells; wildcard products larger than this stall dispatch. */
+const MAX_PATH_MATCH_STATES = 1_000_000;
+function pathMatchExceeded(): never {
+  throw new Error('path pattern matching exceeded the supported bound; shorten wildcards or split the pattern');
+}
 /** Deliberately small path language: literals, *, ?, and whole-segment **. */
 export function validatePath(pattern: string): void {
+  if (pattern.length > MAX_BRIEF_BYTES)
+    throw new Error(
+      `declared path is ${pattern.length} characters; keep each pattern under ${MAX_BRIEF_BYTES} characters`,
+    );
   if (
     !pattern ||
     isAbsolute(pattern) ||
@@ -17,44 +31,48 @@ export function validatePath(pattern: string): void {
   )
     throw new Error(`invalid declared path: ${pattern}`);
 }
+function overlapReachable(
+  lengthA: number,
+  lengthB: number,
+  expand: (i: number, j: number, push: (ni: number, nj: number) => void) => void,
+): boolean {
+  const width = lengthB + 1;
+  const seen = new Set<number>();
+  const stack = [0];
+  while (stack.length) {
+    const encoded = stack.pop()!;
+    if (seen.has(encoded)) continue;
+    seen.add(encoded);
+    if (seen.size > MAX_PATH_MATCH_STATES) pathMatchExceeded();
+    const i = Math.floor(encoded / width);
+    const j = encoded - i * width;
+    if (i === lengthA && j === lengthB) return true;
+    expand(i, j, (ni, nj) => stack.push(ni * width + nj));
+  }
+  return false;
+}
 function segmentOverlap(a: string, b: string): boolean {
-  const seen = new Set<string>();
-  function walk(i: number, j: number): boolean {
-    const key = `${i}:${j}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    if (i === a.length && j === b.length) return true;
+  return overlapReachable(a.length, b.length, (i, j, push) => {
     const x = a[i],
       y = b[j];
-    if (x === '*' && walk(i + 1, j)) return true;
-    if (y === '*' && walk(i, j + 1)) return true;
-    if (x === undefined || y === undefined) return false;
-    if (x === '*' || x === '?' || y === '*' || y === '?' || x === y)
-      return walk(x === '*' ? i : i + 1, y === '*' ? j : j + 1);
-    return false;
-  }
-  return walk(0, 0);
+    if (x === '*') push(i + 1, j);
+    if (y === '*') push(i, j + 1);
+    if (x === undefined || y === undefined) return;
+    if (x === '*' || x === '?' || y === '*' || y === '?' || x === y) push(x === '*' ? i : i + 1, y === '*' ? j : j + 1);
+  });
 }
 /** Intersect the glob languages rather than testing a glob string as though it were a filename. */
 export function pathsOverlap(a: string, b: string): boolean {
   const left = a.split('/'),
-    right = b.split('/'),
-    seen = new Set<string>();
-  function walk(i: number, j: number): boolean {
-    const key = `${i}:${j}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    if (i === left.length && j === right.length) return true;
+    right = b.split('/');
+  return overlapReachable(left.length, right.length, (i, j, push) => {
     const x = left[i],
       y = right[j];
-    if (x === '**' && walk(i + 1, j)) return true;
-    if (y === '**' && walk(i, j + 1)) return true;
-    if (x === undefined || y === undefined) return false;
-    if ((x === '**' || y === '**' || segmentOverlap(x, y)) && walk(x === '**' ? i : i + 1, y === '**' ? j : j + 1))
-      return true;
-    return false;
-  }
-  return walk(0, 0);
+    if (x === '**') push(i + 1, j);
+    if (y === '**') push(i, j + 1);
+    if (x === undefined || y === undefined) return;
+    if (x === '**' || y === '**' || segmentOverlap(x, y)) push(x === '**' ? i : i + 1, y === '**' ? j : j + 1);
+  });
 }
 export function matchesPath(path: string, patterns: readonly string[]): boolean {
   // A concrete path is a literal pattern; reject metacharacters to avoid granting extra scope.
@@ -266,11 +284,6 @@ export function withStabilizeTarget(markdown: string): string {
   const end = (match.index ?? 0) + match[0].length;
   return `${markdown.slice(0, match.index)}---${newline}${body}${newline}---${markdown.slice(end)}`;
 }
-/**
- * A worker's prompt is one argument, which Linux limits to 128 KiB: a 127 KB brief failed every launch with E2BIG
- * (2026-10-29). Briefs link evidence files instead of pasting them.
- */
-export const MAX_BRIEF_BYTES = 64 * 1024;
 export const BRIEF_KINDS: readonly TaskKind[] = [
   'implementation',
   'interface',

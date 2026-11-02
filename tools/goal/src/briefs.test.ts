@@ -1,5 +1,13 @@
 import { expect, test } from 'bun:test';
-import { controlPlaneReleaseBrief, devProductBrief, MAX_BRIEF_BYTES, parseBrief } from './briefs.ts';
+import {
+  controlPlaneReleaseBrief,
+  devProductBrief,
+  matchesPath,
+  MAX_BRIEF_BYTES,
+  parseBrief,
+  pathsOverlap,
+  validatePath,
+} from './briefs.ts';
 import { markdown } from './test-support.ts';
 
 test('a brief over the size limit is refused with the reason, since the prompt is one launch argument', () => {
@@ -81,4 +89,33 @@ test('untargeted control-plane work is dev work; main targeting is reserved for 
   expect(() => parseBrief(markdown.replace('goal: fixture', 'goal: fixture\ntarget: main'), ownership)).toThrow(
     'only a control-plane brief can target main',
   );
+});
+
+test('Parsing and comparing supported long path patterns completes without stack overflow while preserving path scope semantics.', () => {
+  const long = `src/${'a'.repeat(20_000)}.ts`;
+  const wild = `src/${'a'.repeat(20_000)}*.ts`;
+  const deep = `${'d/'.repeat(10_000)}file.ts`;
+  expect(pathsOverlap(long, long)).toBe(true);
+  expect(pathsOverlap(long, `src/${'b'.repeat(20_000)}.ts`)).toBe(false);
+  expect(pathsOverlap(wild, `src/${'a'.repeat(20_000)}xx.ts`)).toBe(true);
+  expect(pathsOverlap(deep, deep)).toBe(true);
+  expect(pathsOverlap(`${'d/'.repeat(10_000)}**`, deep)).toBe(true);
+  expect(pathsOverlap('src/a*.ts', 'src/*b.ts')).toBe(true);
+  expect(pathsOverlap('src/*.ts', 'src/auth/**')).toBe(false);
+  expect(pathsOverlap('src/**', 'src/auth/token.ts')).toBe(true);
+  expect(pathsOverlap('src/?at.ts', 'src/cat.ts')).toBe(true);
+  expect(matchesPath('src/file.ts', ['src/*.ts'])).toBe(true);
+  expect(matchesPath(long, [long])).toBe(true);
+  expect(() => validatePath('/abs')).toThrow('invalid declared path');
+  expect(() => validatePath('../x')).toThrow('invalid declared path');
+  expect(() => validatePath('a/**b')).toThrow('invalid declared path');
+  expect(() => validatePath('a'.repeat(MAX_BRIEF_BYTES + 1))).toThrow('keep each pattern under');
+  expect(() => pathsOverlap(`${'*a'.repeat(1_500)}x`, `${'*a'.repeat(1_500)}y`)).toThrow('supported bound');
+  expect(parseBrief(markdown.replace('[result.txt]', `[${long}]`), { version: 1, areas: {} }).paths).toEqual([long]);
+  expect(() =>
+    parseBrief(markdown.replace('[result.txt]', `[src/auth/${'a'.repeat(20_000)}.ts]`), {
+      version: 1,
+      areas: { authorization: ['**/auth/**'] },
+    }),
+  ).toThrow('authorization');
 });

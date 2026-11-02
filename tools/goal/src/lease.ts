@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { processIdentity, sameProcess } from './process.ts';
+import { inspectProcessIdentity, processIdentity } from './process.ts';
 import type { ProcessIdentity } from './process.ts';
 
 type Owner = ProcessIdentity & { token: string };
@@ -102,7 +102,10 @@ export function acquireDirectoryLease(directory: string): DirectoryLease {
       }
       if (ownerRead.kind === 'invalid') throw new Error(`Unrecognised lease owner: ${directory}`);
       const owner = ownerRead.owner;
-      if (sameProcess(owner)) throw new LeaseHeldError(`Lease held: ${directory}`);
+      // Unknown visibility throws and leaves the occupant; a missing or reused identity is reclaimed below.
+      const current = inspectProcessIdentity(owner.pid);
+      if (current && current.start === owner.start && current.boot === owner.boot && current.group === owner.group)
+        throw new LeaseHeldError(`Lease held: ${directory}`);
       // Delete only the dead incarnation's file. Concurrent reapers cannot erase a new token.
       try {
         unlinkSync(join(directory, `${owner.token}.json`));

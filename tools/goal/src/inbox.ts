@@ -78,9 +78,13 @@ export class SqliteManagerInbox implements ManagerInbox {
    * An identical delivery within the last hour only increments that row's count and wakes nobody. A quiet delivery
    * (see `quietDelivery`) is read with the next `inbox read` but sends no wakeup.
    */
-  deliver(event: ManagerEvent): void {
-    if (!wakingKinds.has(event.kind)) throw new Error(`Recorded-only event cannot be delivered: ${event.kind}`);
-    if (/[\r\n]/.test(event.summary)) throw new Error('Manager event summary must be one line');
+  deliver(delivered: ManagerEvent): void {
+    if (!wakingKinds.has(delivered.kind)) throw new Error(`Recorded-only event cannot be delivered: ${delivered.kind}`);
+    // A summary is one line. Refusing a multi-line one failed every recovery sweep that settled the same worker result
+    // (2026-11-02), so it is folded instead.
+    const event = /[\r\n]/.test(delivered.summary)
+      ? { ...delivered, summary: delivered.summary.replace(/\s*[\r\n]+\s*/g, ' ') }
+      : delivered;
     const quiet = quietDelivery(event);
     if (!this.insert(event.managerId, event, true, quiet) || quiet) return;
     // The committed row is authoritative. A signal is only a wakeup hint.

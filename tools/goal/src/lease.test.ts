@@ -121,6 +121,32 @@ test('concurrent dispatch processes wait for the lifecycle lease to be released'
   }
 });
 
+test('Lease acquisition distinguishes a dead owner from an unreadable process identity and preserves an unknown owner.', () => {
+  const t = temporaryDirectory();
+  try {
+    const path = join(t.path, 'train.lease');
+    mkdirSync(path);
+    const token = 'owner-token';
+    const file = join(path, `${token}.json`);
+    writeFileSync(file, JSON.stringify({ ...processIdentity()!, pid: 1, token }));
+    const read = fs.readFileSync;
+    const blocked = spyOn(fs, 'readFileSync').mockImplementation(((target: unknown, encoding?: unknown) => {
+      if (String(target) === '/proc/1/stat') throw Object.assign(new Error('inspection denied'), { code: 'EACCES' });
+      return read(target as never, encoding as never);
+    }) as typeof fs.readFileSync);
+    try {
+      expect(() => acquireDirectoryLease(path)).toThrow('visibility unknown');
+      expect(readdirSync(path)).toEqual([`${token}.json`]);
+    } finally {
+      blocked.mockRestore();
+    }
+    writeFileSync(file, JSON.stringify({ pid: 1_000_000_000, start: '1', boot: 'dead', group: 0, token }));
+    acquireDirectoryLease(path).release();
+  } finally {
+    t.close();
+  }
+});
+
 test("Initialization failures preserve their cause and remove only the failed acquisition's own temporary directory.", () => {
   const t = temporaryDirectory();
   try {
