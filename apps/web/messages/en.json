@@ -1,4 +1,8 @@
 {
+  "library_bulk_occurrence_remove_review": "Review removal selection",
+  "library_bulk_occurrence_remove_source": "Source Collection: {title}",
+  "library_bulk_occurrence_remove_selection": "{count} selected occurrences. Preview and explicit confirmation are required before removal.",
+  "library_bulk_occurrence_remove_target": "Occurrence {memberId} · Subject {subjectId}",
   "library_bulk_undo_title": "Undo Library removals",
   "library_bulk_undo_intro": "Choose Undo for one removed entry at a time. Each restore is checked separately.",
   "library_bulk_undo_other_action": "This operation did not remove Library entries.",

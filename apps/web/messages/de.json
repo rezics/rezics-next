@@ -1,4 +1,8 @@
 {
+  "library_bulk_occurrence_remove_review": "Auswahl zum Entfernen prüfen",
+  "library_bulk_occurrence_remove_source": "Quellsammlung: {title}",
+  "library_bulk_occurrence_remove_selection": "{count} ausgewählte Vorkommen. Vor dem Entfernen sind eine Vorschau und eine ausdrückliche Bestätigung erforderlich.",
+  "library_bulk_occurrence_remove_target": "Vorkommen {memberId} · Gegenstand {subjectId}",
   "library_bulk_undo_title": "Bibliotheksentfernungen rückgängig machen",
   "library_bulk_undo_intro": "Wähle jeweils einen entfernten Eintrag zum Wiederherstellen. Jede Wiederherstellung wird einzeln geprüft.",
   "library_bulk_undo_other_action": "Dieser Vorgang hat keine Bibliothekseinträge entfernt.",

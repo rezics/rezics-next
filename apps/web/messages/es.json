@@ -1,4 +1,8 @@
 {
+  "library_bulk_occurrence_remove_review": "Revisar la selección que se eliminará",
+  "library_bulk_occurrence_remove_source": "Colección de origen: {title}",
+  "library_bulk_occurrence_remove_selection": "{count} apariciones seleccionadas. Se requieren una vista previa y una confirmación explícita antes de eliminarlas.",
+  "library_bulk_occurrence_remove_target": "Aparición {memberId} · Tema {subjectId}",
   "library_bulk_undo_title": "Deshacer eliminaciones de la Biblioteca",
   "library_bulk_undo_intro": "Elige Deshacer para una entrada eliminada a la vez. Cada restauración se comprueba por separado.",
   "library_bulk_undo_other_action": "Esta operación no eliminó entradas de la Biblioteca.",

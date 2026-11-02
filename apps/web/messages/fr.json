@@ -1,4 +1,8 @@
 {
+  "library_bulk_occurrence_remove_review": "Vérifier la sélection à retirer",
+  "library_bulk_occurrence_remove_source": "Collection source : {title}",
+  "library_bulk_occurrence_remove_selection": "{count} occurrences sélectionnées. Un aperçu et une confirmation explicite sont nécessaires avant le retrait.",
+  "library_bulk_occurrence_remove_target": "Occurrence {memberId} · Sujet {subjectId}",
   "library_bulk_undo_title": "Annuler des suppressions de la Bibliothèque",
   "library_bulk_undo_intro": "Choisissez une entrée supprimée à restaurer à la fois. Chaque restauration est vérifiée séparément.",
   "library_bulk_undo_other_action": "Cette opération n’a pas supprimé d’entrées de la Bibliothèque.",

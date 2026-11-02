@@ -1,4 +1,8 @@
 {
+  "library_bulk_occurrence_remove_review": "檢查移除選取項目",
+  "library_bulk_occurrence_remove_source": "來源收藏集：{title}",
+  "library_bulk_occurrence_remove_selection": "已選取 {count} 個出現項目。移除前需要預覽與明確確認。",
+  "library_bulk_occurrence_remove_target": "出現項目 {memberId} · 主題 {subjectId}",
   "library_bulk_undo_title": "復原資料庫移除",
   "library_bulk_undo_intro": "每次選擇一個已移除的項目進行復原。每次還原都會個別檢查。",
   "library_bulk_undo_other_action": "此操作未移除資料庫項目。",

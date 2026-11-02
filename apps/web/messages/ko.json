@@ -1,4 +1,8 @@
 {
+  "library_bulk_occurrence_remove_review": "삭제할 선택 항목 검토",
+  "library_bulk_occurrence_remove_source": "원본 컬렉션: {title}",
+  "library_bulk_occurrence_remove_selection": "선택한 항목은 {count}개입니다. 삭제하려면 미리보기와 명시적인 확인이 필요합니다.",
+  "library_bulk_occurrence_remove_target": "항목 {memberId} · 대상 {subjectId}",
   "library_bulk_undo_title": "라이브러리 삭제 실행 취소",
   "library_bulk_undo_intro": "삭제한 항목을 한 번에 하나씩 선택하여 복원하세요. 각 복원은 별도로 확인됩니다.",
   "library_bulk_undo_other_action": "이 작업은 라이브러리 항목을 삭제하지 않았습니다.",

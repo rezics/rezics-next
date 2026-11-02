@@ -43,7 +43,11 @@ test('never adds an unselected duplicate or silently drops an unavailable select
       reason: 'unavailable',
     });
   }
-  expect(captureBulkOccurrenceRemove(collection.collection, [first], new Set())).toEqual({ ok: false, reason: 'empty' });
-  expect(captureBulkOccurrenceRemove(collection.collection, [], new Set(Array.from({ length: 1001 }, (_, i) => `${i}`))))
-    .toEqual({ ok: false, reason: 'limit' });
+  expect(captureBulkOccurrenceRemove(collection.collection, [first], new Set())).toEqual({
+    ok: false,
+    reason: 'empty',
+  });
+  expect(
+    captureBulkOccurrenceRemove(collection.collection, [], new Set(Array.from({ length: 1001 }, (_, i) => `${i}`))),
+  ).toEqual({ ok: false, reason: 'limit' });
 });

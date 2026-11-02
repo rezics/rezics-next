@@ -239,6 +239,8 @@ results support navigation and retries without repeating completed effects. The
 
 Decision: Web bulk add captures only the loaded selected canonical Subjects in first-selection order before destination choice; choosing a destination freezes its identity and revision independently of subsequent list refreshes.
 
+Decision: Web occurrence-removal review captures only loaded selected member IDs in first-selection order, retaining duplicate Subjects and the source Collection independently of later edits.
+
 Web's public download controls admit a detached first-page capture of viewer, native metadata revision and exact
 occurrences, then compare it with current native FULL reads at admission and terminal delivery. Each read uses the
 existing 100-member page bound: two reads examine at most 200 returned members, two Collection headers and at most

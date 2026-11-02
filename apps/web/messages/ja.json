@@ -1,4 +1,8 @@
 {
+  "library_bulk_occurrence_remove_review": "削除する選択項目を確認",
+  "library_bulk_occurrence_remove_source": "元のコレクション：{title}",
+  "library_bulk_occurrence_remove_selection": "選択した出現項目は{count}件です。削除にはプレビューと明示的な確認が必要です。",
+  "library_bulk_occurrence_remove_target": "出現項目 {memberId} · 対象 {subjectId}",
   "library_bulk_undo_title": "ライブラリの削除を元に戻す",
   "library_bulk_undo_intro": "削除した項目を1件ずつ選んで元に戻します。復元は個別に確認されます。",
   "library_bulk_undo_other_action": "この操作ではライブラリの項目は削除されていません。",
