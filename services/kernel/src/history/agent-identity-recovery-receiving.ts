@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { currentCommandResources, hasLiveCommandTransaction, type CommandTransaction } from '../command/command.ts';
-import { reserveIdentityHistoryWork, nativeWork } from './agent-identity-inventory-work.ts';
+import { reserveIdentityHistoryWork, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK } from './agent-identity-inventory-work.ts';
 import { readAgentIdentityRecoveryArtifactInTransaction } from './agent-identity-inventory.ts';
 import type { HistoryArtifact, HistoryBarrier } from './registry.ts';
 
@@ -49,7 +49,7 @@ export async function verifyAgentIdentityRecoveryArtifactReadiness(
   )
     return { state: 'pending', gap: 'agent-identity-recovery-barrier-role-unavailable' };
 
-  await reserveIdentityHistoryWork(resources.pool, nativeWork(100, 100, 36, 24576), {
+  await reserveIdentityHistoryWork(resources.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.recoveryReceiving, {
     deadline: resources.deadline,
   });
   const event = cut.recoveryEvent;

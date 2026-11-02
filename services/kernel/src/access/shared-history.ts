@@ -21,6 +21,7 @@ import {
   identityHistoryCommand,
   reserveIdentityHistoryWork,
   nativeWork,
+  IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK,
   IdentityHistoryWorkUnavailable,
 } from '../history/agent-identity-inventory-work.ts';
 import { lockRecordedAgentIdentityHistory } from '../history/agent-identity-sdk-fence.ts';
@@ -32,6 +33,7 @@ import {
   currentIdentityOriginalTransfer,
   identityOriginalRemainder,
   IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING,
+  IdentityOriginalUnavailable,
   lockSelectedHistoryOriginalPosition,
   type SelectedHistoryPosition,
   recordSelectedHistoryOriginalProgress,
@@ -53,6 +55,8 @@ type Job = {
   scan_locator: Buffer | null;
   phase: 'scan' | 'verify' | 'pending' | 'complete';
   applicable: boolean;
+  registry_digest: string;
+  registry_generation: string | number;
 };
 export type SharedHistoryResult = Readonly<{ state: 'more' | 'pending' | 'complete'; gap: string | null }>;
 const result = (state: SharedHistoryResult['state'], gap: string | null = null): SharedHistoryResult => ({
@@ -274,9 +278,8 @@ export async function advanceSharedHistory(
   // No source checkout survives SDK calls. Permanent native retirement makes either crash cut replayable.
   const { job, work, proof } = deferred;
   if (deferred.identity) {
-    // The installed Source callback creates its own random reservation. It cannot receive
-    // this durable original until its owner supplies the authenticated transfer integration
-    // and all reached child declarations. Never enter it under a fresh allocation here.
+    // The selected original enters the sole private transfer. The independent scheduler
+    // route remains separate; it cannot replenish an original with missing partitions.
     const parent = original ? identityOriginalRemainder(deps, original, jobId) : null;
     if (original && (!parent || parent.source === null || parent.library === null))
       return result('more', IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING);
@@ -301,7 +304,7 @@ export async function advanceSharedHistory(
         );
         if (gap) {
           await identityHistoryCommand(deps.pool, funded, async (tx) => {
-            await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 0));
+            await reserveIdentityHistoryWork(deps.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeWrite, funded);
             await tx.query(
               "UPDATE core.preference_history_job SET next_run=now()+interval '10 seconds' WHERE job_id=$1",
               [jobId],
@@ -312,7 +315,7 @@ export async function advanceSharedHistory(
         const unit = currentAgentIdentityHistoryUnit();
         if (!unit?.stage) return result('more', 'identity-history-current-unit-unavailable');
         return identityHistoryCommand(deps.pool, funded, async (tx) => {
-          await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 4096));
+          await reserveIdentityHistoryWork(deps.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.selectedJob, funded);
           const current = (
             await tx.query<Job>(`SELECT * FROM core.preference_history_job WHERE job_id=$1 FOR UPDATE`, [jobId])
           ).rows[0];
@@ -320,6 +323,9 @@ export async function advanceSharedHistory(
             !current ||
             current.phase !== job.phase ||
             current.scan_partition !== job.scan_partition ||
+            current.verify_partition !== job.verify_partition ||
+            current.registry_digest !== job.registry_digest ||
+            String(current.registry_generation) !== String(job.registry_generation) ||
             current.scan_type !== job.scan_type ||
             !sameLocator(current.scan_locator, job.scan_locator) ||
             current.account_id !== job.account_id ||
@@ -329,7 +335,7 @@ export async function advanceSharedHistory(
             current.barrier_at !== job.barrier_at
           )
             return result('more', 'identity-history-selected-cursor-changed');
-          await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 128));
+          await reserveIdentityHistoryWork(deps.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.selectedBarrier, funded);
           await barrier(tx, current);
           const held = await lockRecordedAgentIdentityHistory(tx, deps.client, unit.stage!, funded);
           if (held.state === 'pending') return result('more', held.gap);
@@ -339,9 +345,10 @@ export async function advanceSharedHistory(
             job.scan_partition,
             decodeLocator('durable-work/v1', work),
             deps.pool,
+            funded,
           );
           if (receivingGap) return result('more', receivingGap);
-          await reserveIdentityHistoryWork(deps.pool, nativeWork(1, 1, 1, 0));
+          await reserveIdentityHistoryWork(deps.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeWrite, funded);
           await scannedArtifact(tx, current, 'durable-work/v1', work, null);
           if (original) await recordSelectedHistoryOriginalProgress(deps, original, jobId, tx);
           // The real Source/domain/fence and receiving locks survive this command's COMMIT.
@@ -349,7 +356,8 @@ export async function advanceSharedHistory(
         });
       });
     } catch (error) {
-      if (error instanceof IdentityHistoryWorkUnavailable) return result('more', error.message);
+      if (error instanceof IdentityHistoryWorkUnavailable || error instanceof IdentityOriginalUnavailable)
+        return result('more', error.message);
       throw error;
     }
   }

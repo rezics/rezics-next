@@ -9,6 +9,7 @@ import {
   AGENT_IDENTITY_SDK_RETIREMENT,
   advanceAgentIdentityConsumerMaintenance,
   currentAgentIdentityHistoryUnit,
+  assertAgentIdentityHistoryUnit,
 } from './agent-identity-retirement.ts';
 import type { AgentIdentityWorkSource } from './agent-identity-source.ts';
 import type { WorkContext } from '../work/registry.ts';
@@ -25,6 +26,9 @@ import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { maintainSdkWorkflowOnce } from '../work/sdk-retirement-fence.ts';
 import {
   identityHistoryCommand,
+  identityHistoryConnection,
+  accountHistoryWork,
+  IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK,
   reserveIdentityHistoryWork,
   nativeWork,
   addNativeWork,
@@ -89,11 +93,19 @@ async function inspect(
     historyDeadline(context, 0);
     // Admit the complete closed inspection before checkout. The eight LIMIT+1 probes
     // and their BEGIN/settings/COMMIT/ROLLBACK envelope are all reached by this call.
-    await reserveIdentityHistoryWork(pool, nativeWork(1, 0, 4, 128), context);
+    await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.snapshot, context);
     for (const table of TABLES)
-      await reserveIdentityHistoryWork(pool, nativeWork(table.limit + 1, 1, 1, (table.limit + 1) * 80), context);
+      await reserveIdentityHistoryWork(
+        pool,
+        accountHistoryWork(table.limit + 1, 1, 1, (table.limit + 1) * 80, 1),
+        context,
+      );
   }
-  return withConnection(pool, async (tx) => {
+  const connect = context
+    ? <T>(body: (tx: import('../command/command.ts').CommandTransaction) => Promise<T>) =>
+        identityHistoryConnection(pool, context, body)
+    : <T>(body: (tx: import('../command/command.ts').CommandTransaction) => Promise<T>) => withConnection(pool, body);
+  return connect(async (tx) => {
     if (context) {
       historyDeadline(context, 0);
       await tx.query('BEGIN READ ONLY');
@@ -165,9 +177,9 @@ async function prepareIdentitySDKWorkRetirement(
   return identityHistoryCommand(pool, context, async (tx) => {
     const held = await lockRecordedAgentIdentityHistory(tx, client, unit.stage!, context);
     if (held.state === 'pending') return held.gap;
-    await reserveIdentityHistoryWork(pool, nativeWork(16, 16, 7, 64));
+    await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.seal);
     await sealHistoryAccount(tx, 0, job.account_route, job.account_id);
-    await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 64));
+    await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeWorkRead);
     const work = (
       await tx.query<{ state: string; owner_ready: boolean; owner: string }>(
         `SELECT state,owner_ready,owner FROM core.history_work WHERE partition_no=0 AND work_id=$1 FOR UPDATE`,
@@ -178,7 +190,7 @@ async function prepareIdentitySDKWorkRetirement(
     if (!work.owner_ready) return 'work-owner-consumer-open';
     const owner = registry.owner('durable-work/v1', work.owner);
     if (!owner) return 'work-owner-unregistered';
-    await reserveIdentityHistoryWork(pool, nativeWork(65, 65, 1, 8192));
+    await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.roleScope);
     const roles = (
       await tx.query(
         `SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator
@@ -205,7 +217,11 @@ async function prepareIdentitySDKWorkRetirement(
     if (work.state !== 'retired') {
       await reserveIdentityHistoryWork(
         pool,
-        addNativeWork(nativeWork(2, 2, 2, 0), AGENT_IDENTITY_HISTORY_GUARD_COST, HISTORY_WORK_INVALIDATION),
+        addNativeWork(
+          IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativePairWrite,
+          AGENT_IDENTITY_HISTORY_GUARD_COST,
+          HISTORY_WORK_INVALIDATION,
+        ),
       );
       await tx.query(
         `UPDATE core.history_work SET state='retired',retired_at=clock_timestamp(),request=NULL,scope=NULL
@@ -228,6 +244,7 @@ async function minimizeIdentitySDKWork(
   context: HistoryReceivingContext,
   maintenance?: Pick<WorkContext, 'env' | 'clock'> & { source: AgentIdentityWorkSource },
 ): Promise<string | null> {
+  assertAgentIdentityHistoryUnit(pool, context, client);
   if (!maintenance || !currentAgentIdentityHistoryUnit()) return AGENT_IDENTITY_SDK_RETIREMENT.gap;
   const advanced = await advanceAgentIdentityConsumerMaintenance(
     { pool, client, env: maintenance.env, clock: maintenance.clock },
@@ -269,7 +286,7 @@ async function minimizeIdentitySDKWork(
     return 'identity-sdk-native-receipt-changed';
   // Exact original supported deletion body, children=false, one funded owner attempt.
   await maintainSdkWorkflowOnce(pool, client, writer.writer, 'delete', context.deadline, (cost) =>
-    reserveIdentityHistoryWork(pool, cost),
+    reserveIdentityHistoryWork(pool, cost, context),
   );
   const after = await readAgentIdentitySDKFence(pool, client, receipt, context);
   if (after.state === 'pending') return after.gap;
@@ -277,12 +294,12 @@ async function minimizeIdentitySDKWork(
   return identityHistoryCommand(pool, context, async (tx) => {
     const held = await lockRecordedAgentIdentityHistory(tx, client, unit.stage!, context);
     if (held.state === 'pending') return held.gap;
-    await reserveIdentityHistoryWork(pool, nativeWork(16, 16, 7, 64));
+    await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.seal);
     await sealHistoryAccount(tx, 0, job.account_route, job.account_id);
     await reserveIdentityHistoryWork(
       pool,
       addNativeWork(
-        nativeWork(2, 2, 2, 0),
+        IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativePairWrite,
         AGENT_IDENTITY_HISTORY_GUARD_COST,
         AGENT_IDENTITY_HISTORY_ABSENCE_COST,
         HISTORY_WORK_INVALIDATION,
@@ -295,7 +312,7 @@ async function minimizeIdentitySDKWork(
     await reserveIdentityHistoryWork(
       pool,
       addNativeWork(
-        nativeWork(4, 4, 4, 0),
+        IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeLocatorWrite,
         AGENT_IDENTITY_HISTORY_GUARD_COST,
         AGENT_IDENTITY_HISTORY_ABSENCE_COST,
         HISTORY_LOCATOR_INVALIDATION,
@@ -328,8 +345,31 @@ export async function minimizeHistoryWork(
     return inspectOperationalWorkRetirement(pool, client, key.workId, operational);
   const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
   const unit = currentAgentIdentityHistoryUnit();
-  await reserveIdentityHistoryWork(pool, nativeWork(4, 4, 3, 16384), unit?.context);
-  const mapping = await withConnection(pool, (tx) => resolveAgentIdentitySDKWork(tx, key.workId));
+  if (unit?.prepaid) {
+    assertAgentIdentityHistoryUnit(pool, unit.context, client);
+    const selected = unit.prepaid.parent.position;
+    if (
+      registry !== unit.prepaid.deps.registry ||
+      job.account_id !== selected.account_id ||
+      job.account_route !== selected.account_route ||
+      job.partition_no !== selected.scan_partition ||
+      barrier.accountId !== selected.barrier_id ||
+      barrier.accountRoute !== selected.account_route ||
+      barrier.version !== selected.barrier_version ||
+      barrier.at !== selected.barrier_at
+    )
+      throw new (await import('../access/identity-original-admission.ts')).IdentityOriginalUnavailable(
+        'identity-history-selected-scope-changed',
+      );
+  }
+  await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.mapping, unit?.context);
+  assertAgentIdentityHistoryUnit(pool, unit?.context, client);
+  const mapping = unit?.prepaid
+    ? await identityHistoryConnection(pool, unit.context, (tx) => resolveAgentIdentitySDKWork(tx, key.workId))
+    : await withConnection(pool, (tx) => resolveAgentIdentitySDKWork(tx, key.workId));
+  assertAgentIdentityHistoryUnit(pool, unit?.context, client);
+  if (unit?.prepaid && (!mapping || registry !== unit.prepaid.deps.registry))
+    return 'identity-history-selected-native-mapping-unavailable';
   const sdkWorkId = mapping?.workflowId ?? key.workId;
   if (mapping?.gap) return mapping.gap;
   if (mapping)

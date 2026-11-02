@@ -6,8 +6,11 @@ import canonicalize from 'canonicalize';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   identityHistoryCommand,
+  identityHistoryConnection,
+  IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK,
   reserveIdentityHistoryWork,
   nativeWork,
+  unpricedIdentityHistoryWork,
   IdentityHistoryWorkUnavailable,
 } from './agent-identity-inventory-work.ts';
 import { existsSync } from 'node:fs';
@@ -23,7 +26,6 @@ import {
   withSingleCommandAttempt,
   type CommandTransaction,
 } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import {
   agentIdentityWorkSourceKey,
   agentIdentitySourceKey,
@@ -47,6 +49,16 @@ import type { HistoryArtifact, HistoryBarrier, HistoryReadiness } from './regist
 import type { AgentIdentityOriginal } from './agent-identity-inventory.ts';
 import { partitionOf } from '../route/route.ts';
 import sourceSelect from './agent-identity-retirement-source.sql';
+import {
+  currentIdentityOriginalTransfer,
+  identityOriginalLibraryWork,
+  identityOriginalRemainder,
+  IdentityOriginalUnavailable,
+  type HistoryOriginalDependencies,
+  type IdentityOriginalSourceContext,
+  type PrepaidAgentIdentityHistoryUnit,
+} from '../access/identity-original-admission.ts';
+import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-source-consumer-maintenance.ts';
 
 // Reuse the integrated producer's opaque work identity across the receiving boundary.
 export type {
@@ -86,6 +98,7 @@ const same = (a: unknown, b: unknown): boolean => canonicalize(a) === canonicali
 const maintenanceCallbacks = new WeakSet<HistoryReceivingContext>();
 
 export const IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE = 'identity-source-maintenance-funding-unavailable';
+export const IDENTITY_SOURCE_PREPAID_MAINTENANCE_UNAVAILABLE = 'identity-source-prepaid-maintenance-not-installed';
 export { IDENTITY_HISTORY_HANDOFF_UNAVAILABLE } from './agent-identity-sdk-fence.ts';
 
 /** Decode only the original native association's closed key. No workflow-name parsing,
@@ -128,7 +141,8 @@ export async function advanceAgentIdentityConsumerMaintenance(
   historyDeadline(context, artifact.partition);
   if (artifact.partition !== 0 || artifact.locator.artifactType !== 'durable-work/v1')
     return 'identity-sdk-receiving-home-mismatch';
-  const active = identityUnits.getStore();
+  assertAgentIdentityHistoryUnit(deps.pool, context, deps.client);
+  const active = currentAgentIdentityHistoryUnit();
   if (active) return advanceInFrame(deps, artifact, barrier, active.context);
   try {
     return await withAgentIdentityHistoryUnit(deps, context, (funded) =>
@@ -140,11 +154,182 @@ export async function advanceAgentIdentityConsumerMaintenance(
   }
 }
 
-type IdentityUnit = { context: HistoryReceivingContext; stage?: AgentIdentityRetirementStage; client?: WorkClient };
+type IdentityUnit = {
+  context: HistoryReceivingContext;
+  stage?: AgentIdentityRetirementStage;
+  client?: WorkClient;
+  active: boolean;
+  prepaid?: Readonly<{
+    deps: HistoryOriginalDependencies;
+    parent: IdentityOriginalSourceContext;
+    owner: Pick<
+      typeof import('../semantic/identity-source-consumer-maintenance.ts'),
+      'isLiveIdentitySourceConsumerMaintenance' | 'identitySourceConsumerLibraryWork'
+    >;
+  }>;
+  failure?: Error;
+};
 const identityUnits = new AsyncLocalStorage<IdentityUnit>();
+const prepaidContexts = new WeakMap<HistoryReceivingContext, IdentityUnit>();
 export function currentAgentIdentityHistoryUnit(): Readonly<IdentityUnit> | undefined {
-  return identityUnits.getStore();
+  const unit = identityUnits.getStore();
+  if (unit && (!unit.active || unit.failure)) throw unit.failure ?? new IdentityHistoryWorkUnavailable();
+  if (unit?.prepaid) {
+    assertPrepaidParent(unit.prepaid.deps, unit.prepaid.parent);
+    if (
+      !unit.prepaid.owner.isLiveIdentitySourceConsumerMaintenance(
+        unit.prepaid.deps.pool,
+        unit.context.identityConsumerWork,
+        unit.context.deadline,
+      ) ||
+      unit.prepaid.owner.identitySourceConsumerLibraryWork(
+        unit.prepaid.deps.pool,
+        unit.context.identityConsumerWork,
+        unit.context.deadline,
+      ) !== unit.prepaid.parent.library
+    )
+      throw new IdentityOriginalUnavailable('identity-history-prepaid-source-context-changed');
+  }
+  return unit;
 }
+
+/** Re-entering poisons the enclosing unit even when the caller catches the refusal. */
+function refuseNestedUnit(): void {
+  const enclosing = identityUnits.getStore();
+  if (!enclosing) return;
+  const error = new IdentityOriginalUnavailable('identity-history-unit-reentered');
+  enclosing.failure ??= error;
+  throw error;
+}
+
+/** Producer operations are the authority. No local brand, environment setting or
+ * comparison with a later database head can reconstruct the original grant. */
+function assertPrepaidParent(deps: HistoryOriginalDependencies, parent: IdentityOriginalSourceContext): void {
+  if (!parent || typeof parent !== 'object')
+    throw new IdentityOriginalUnavailable('identity-history-original-private-grant-unavailable');
+  const ledger = identityOriginalLibraryWork(deps, parent.original, parent.jobId);
+  const root = currentIdentityOriginalTransfer(deps, parent.jobId);
+  if (!root) throw new IdentityOriginalUnavailable('identity-history-original-handle-unavailable');
+  const original = identityOriginalRemainder(deps, root, parent.jobId);
+  if (
+    parent.originalId !== original.originalId ||
+    parent.deadline !== original.deadline ||
+    parent.position !== original.position ||
+    parent.native !== original.source ||
+    parent.library !== ledger ||
+    original.source === null ||
+    original.library === null
+  )
+    throw new IdentityOriginalUnavailable('identity-history-original-private-parent-changed');
+}
+
+/** Validate the exact callback context, actual Pool/client and original lifetime.
+ * A deadline-only native command may inherit this frame; a copied explicit token
+ * context cannot replace the producer callback's object. */
+export function assertAgentIdentityHistoryUnit(
+  pool: Pool,
+  context?: HistoryReceivingContext,
+  client?: WorkClient,
+): void {
+  currentAgentIdentityHistoryUnit();
+  const unit = identityUnits.getStore();
+  const bound = context && prepaidContexts.get(context);
+  if (bound && bound !== unit) throw new IdentityOriginalUnavailable('identity-history-prepaid-callback-ended');
+  if (!unit?.prepaid) return;
+  if (
+    pool !== unit.prepaid.deps.pool ||
+    (client !== undefined && client !== unit.client) ||
+    (context !== undefined &&
+      (context.deadline !== unit.context.deadline ||
+        ('identityConsumerWork' in context && context !== unit.context))) ||
+    !maintenanceCallbacks.has(unit.context)
+  ) {
+    const error = new IdentityOriginalUnavailable('identity-history-prepaid-context-changed');
+    unit.failure ??= error;
+    throw error;
+  }
+}
+
+/** Source's agreed receiving ABI. Loading this callable conveys no grant. The
+ * installed Source owner must authenticate the live parent and keep its existing
+ * maintenance context and exact original Library ledger throughout the callback. */
+type PrepaidSourceMaintenance = <T>(
+  deps: HistoryOriginalDependencies,
+  parent: IdentityOriginalSourceContext,
+  body: (funded: IdentitySourceConsumerMaintenanceContext) => Promise<T>,
+) => Promise<T>;
+const enteredPrepaidParents = new WeakSet<IdentityOriginalSourceContext['original']>();
+
+export const withPrepaidAgentIdentityHistoryUnit: PrepaidAgentIdentityHistoryUnit = async (deps, parent, body) => {
+  refuseNestedUnit();
+  assertPrepaidParent(deps, parent);
+  if (enteredPrepaidParents.has(parent.original))
+    throw new IdentityOriginalUnavailable('identity-history-unit-already-entered');
+  // Failure, missing export and a rejected callback all consume this entry. Accounts'
+  // producer already owns durable admission/transfer; never consume or transfer again.
+  enteredPrepaidParents.add(parent.original);
+  const producer: typeof import('../semantic/identity-source-consumer-maintenance.ts') &
+    Partial<{ withPrepaidIdentitySourceConsumerMaintenance: PrepaidSourceMaintenance }> =
+    await import('../semantic/identity-source-consumer-maintenance.ts');
+  assertPrepaidParent(deps, parent);
+  const descriptor = Object.getOwnPropertyDescriptor(producer, 'withPrepaidIdentitySourceConsumerMaintenance');
+  if (!descriptor || !('value' in descriptor) || typeof descriptor.value !== 'function')
+    throw new IdentityOriginalUnavailable(IDENTITY_SOURCE_PREPAID_MAINTENANCE_UNAVAILABLE);
+  const enter = producer.withPrepaidIdentitySourceConsumerMaintenance!;
+  let delivered = false;
+  let completed = false;
+  let callbackFailure: unknown;
+  let callbackFailed = false;
+  const answer = await enter(deps, parent, async (funded) => {
+    assertPrepaidParent(deps, parent);
+    if (
+      delivered ||
+      !funded ||
+      funded.deadline !== parent.deadline ||
+      !producer.isLiveIdentitySourceConsumerMaintenance(deps.pool, funded.identityConsumerWork, parent.deadline) ||
+      producer.identitySourceConsumerLibraryWork(deps.pool, funded.identityConsumerWork, parent.deadline) !==
+        parent.library
+    ) {
+      callbackFailed = true;
+      callbackFailure = new IdentityOriginalUnavailable('identity-history-prepaid-source-context-changed');
+      throw callbackFailure;
+    }
+    delivered = true;
+    const unit: IdentityUnit = {
+      context: funded,
+      client: deps.client,
+      active: true,
+      prepaid: { deps, parent, owner: producer },
+    };
+    prepaidContexts.set(funded, unit);
+    maintenanceCallbacks.add(funded);
+    return withSingleCommandAttempt(() =>
+      withRequestDeadline(parent.deadline, () =>
+        identityUnits.run(unit, async () => {
+          try {
+            assertAgentIdentityHistoryUnit(deps.pool, funded, deps.client);
+            const value = await body(funded);
+            assertAgentIdentityHistoryUnit(deps.pool, funded, deps.client);
+            completed = true;
+            return value;
+          } catch (error) {
+            callbackFailed = true;
+            callbackFailure = error;
+            throw error;
+          } finally {
+            unit.active = false;
+            maintenanceCallbacks.delete(funded);
+          }
+        }),
+      ),
+    );
+  });
+  assertPrepaidParent(deps, parent);
+  if (callbackFailed) throw callbackFailure;
+  if (!delivered || !completed)
+    throw new IdentityOriginalUnavailable('identity-history-prepaid-source-callback-missing');
+  return answer;
+};
 
 /** The default scheduler enters this AFTER selection releases its checkout. The only
  * Source frame and deadline survive physical cleanup and the final receiving COMMIT. */
@@ -158,7 +343,7 @@ export async function withAgentIdentityHistoryUnit<T>(
   context: HistoryReceivingContext,
   body: (funded: HistoryReceivingContext) => Promise<T>,
 ): Promise<T> {
-  if (identityUnits.getStore()) throw new TypeError('Identity History unit cannot replace its Source frame');
+  if (identityUnits.getStore()?.prepaid) refuseNestedUnit();
   const path = new URL('../semantic/identity-source-consumer-maintenance.ts', import.meta.url);
   if (!existsSync(path)) throw new IdentityHistoryWorkUnavailable();
   const producer: IdentitySourceConsumerMaintenanceModule = await import(path.href);
@@ -168,11 +353,12 @@ export async function withAgentIdentityHistoryUnit<T>(
     return withSingleCommandAttempt(() =>
       withRequestDeadline(funded.deadline, () =>
         identityUnits.run(
-          { context: funded, ...(deps.client === undefined ? {} : { client: deps.client }) },
+          { context: funded, active: true, ...(deps.client === undefined ? {} : { client: deps.client }) },
           async () => {
             try {
               return await body(funded);
             } finally {
+              identityUnits.getStore()!.active = false;
               maintenanceCallbacks.delete(funded);
             }
           },
@@ -194,7 +380,7 @@ async function advanceInFrame(
   funded: HistoryReceivingContext,
 ): Promise<string | null> {
   historyDeadline(funded, artifact.partition);
-  await reserveIdentityHistoryWork(deps.pool, nativeWork(72, 72, 6, 32768), funded);
+  await reserveIdentityHistoryWork(deps.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.receivingBinding, funded);
   const receiving = await identityHistoryCommand(deps.pool, funded, (tx) =>
     readAgentIdentitySDKReceivingBinding(tx, artifact, barrier),
   );
@@ -203,7 +389,11 @@ async function advanceInFrame(
   const receipt = sourceReceipt(source);
   if (!receipt) return 'identity-sdk-source-native-binding-changed';
   const { readAccountIdentitySource } = await import('../access/agent-verification-identity.ts');
-  await reserveIdentityHistoryWork(deps.pool, nativeWork(70, 68, 25, 73984), funded);
+  await reserveIdentityHistoryWork(
+    deps.pool,
+    unpricedIdentityHistoryWork('source-original-native-read', nativeWork(70, 68, 25, 73984)),
+    funded,
+  );
   const native = (
     await runCommand(deps.pool, { partition: source.partition, deadline: funded.deadline }, async (tx) =>
       noEffect(await readAccountIdentitySource(tx, receipt, undefined, true)),
@@ -228,7 +418,11 @@ async function advanceInFrame(
   const { readOriginalAccountAgentIdentity } = await import('../semantic/account-agent-identity-recovery.ts');
   // The original accepted lookup has at most three command attempts and six RR
   // snapshots on unmerge; all SQL/control/failure slots are reserved before entry.
-  await reserveIdentityHistoryWork(deps.pool, nativeWork(86, 80, 59, 205920), funded);
+  await reserveIdentityHistoryWork(
+    deps.pool,
+    unpricedIdentityHistoryWork('source-accepted-original-recovery-read', nativeWork(86, 80, 59, 205920)),
+    funded,
+  );
   const accepted = await readOriginalAccountAgentIdentity(deps.pool, {
     account: receipt.account,
     direction: receipt.kind,
@@ -312,7 +506,12 @@ export async function readAgentIdentityRetirementStage(
 ): Promise<AgentIdentityRetirementStage | null> {
   const fixed = structuredClone(reference);
   historyDeadline(context, fixed.source.partition);
-  if (maintenanceCallbacks.has(context)) await reserveIdentityHistoryWork(pool, nativeWork(73, 71, 26, 82176), context);
+  if (maintenanceCallbacks.has(context))
+    await reserveIdentityHistoryWork(
+      pool,
+      unpricedIdentityHistoryWork('source-original-handoff-read', nativeWork(73, 71, 26, 82176)),
+      context,
+    );
   const handoff = (
     await runCommand(pool, { partition: fixed.source.partition, deadline: context.deadline }, async (tx) =>
       noEffect(await sourceHandoff(tx, fixed)),
@@ -369,7 +568,7 @@ export async function agentIdentityRetirementReadiness(
   const active = currentAgentIdentityHistoryUnit();
   if (active) {
     const { pool } = currentCommandResources(tx);
-    await reserveIdentityHistoryWork(pool, nativeWork(74, 74, 7, 49152), active.context);
+    await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.readiness, active.context);
   }
   const receiving = await readAgentIdentitySDKReceivingBinding(tx, artifact, barrier);
   if (receiving.state === 'pending') return { ready: false, gap: receiving.gap };
@@ -427,8 +626,8 @@ export async function readAgentIdentitySDKRetirementGap(
     );
     return result.state === 'pending' ? result.gap : null;
   }
-  await reserveIdentityHistoryWork(pool, nativeWork(6, 5, 8, 16640), context);
-  return withConnection(pool, async (tx) => {
+  await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.sourceMappingSnapshot, context);
+  return identityHistoryConnection(pool, context, async (tx) => {
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     try {
       await tx.query("SELECT set_config('statement_timeout',$1,true)", [
@@ -474,8 +673,8 @@ export async function readAgentIdentitySDKRetirement(
   const receipt = { kind: fixed.key.direction, account: fixed.key.accountId, receipt: fixed.key.receiptId };
   const sourceKey = agentIdentityWorkSourceKey(receipt);
   historyDeadline(context, 0);
-  await reserveIdentityHistoryWork(pool, nativeWork(7, 6, 8, 33024), context);
-  const saved = await withConnection(pool, async (tx) => {
+  await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.retirementSnapshot, context);
+  const saved = await identityHistoryConnection(pool, context, async (tx) => {
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     try {
       await tx.query("SELECT set_config('statement_timeout',$1,true)", [
@@ -550,3 +749,6 @@ export async function readAgentIdentitySDKRetirement(
   historyDeadline(context, 0);
   return { state: 'received', gap: null, receipt: after.receipt };
 }
+
+// Semantic composes this Accounts-owned subdeclaration with its real reached terms.
+export { IDENTITY_HISTORY_ACCOUNTS_DECLARATION } from './agent-identity-inventory-work.ts';

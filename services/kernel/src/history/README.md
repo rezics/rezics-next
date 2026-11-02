@@ -240,3 +240,191 @@ retained code as an installed prerequisite. Core migration/snapshot live at `db/
 (the repository's current core placement); no `db/core` migration tree is introduced. Native and full verification
 remain deferred. New fixtures preserve expired-transfer, immutable binding, recovery, copied context, owner/restore
 and no-refill refusal oracles; they do not claim an implemented Commerce caller.
+
+## Selected original prepaid identity consumer
+
+`withPrepaidAgentIdentityHistoryUnit` is the Accounts receiver required by the
+installed `withSelectedHistoryOriginalChild`. Its exact type is
+`PrepaidAgentIdentityHistoryUnit` from `access/identity-original-admission.ts`:
+
+```ts
+<T>(
+  deps: HistoryOriginalDependencies & {
+    env: Readonly<Record<string, string | undefined>>;
+    clock: () => Date;
+  },
+  parent: IdentityOriginalSourceContext,
+  body: (funded: IdentitySourceConsumerMaintenanceContext) => Promise<T>,
+) => Promise<T>;
+```
+
+It runs **inside** the sole `withIdentityOriginalSourceTransfer` callback. It neither
+consumes the local original again nor enters another transfer. Producer operations
+validate the actual opaque grant, selected original, job, Pool, WorkClient, registry,
+immutable position, native allocation, exact Library ledger and absolute deadline.
+The fixed runtime Source receiving operand is
+`withPrepaidIdentitySourceConsumerMaintenance(deps, parent, body)` in
+`semantic/identity-source-consumer-maintenance.ts`. A missing data export refuses as
+`identity-source-prepaid-maintenance-not-installed`, before entering configured
+maintenance or child I/O. The independent `withAgentIdentityHistoryUnit` retains its
+existing configured admission and is never a substitute on this route.
+
+The Source callback must deliver its real live maintenance context with the original
+deadline and exact `identityOriginalLibraryWork` ledger. Accounts binds that object to
+its private identity unit and maintenance callback machinery. Reentry poisons the
+outer unit; copied explicit contexts, foreign Pools/clients, callback escape, expiration
+and repeated entry refuse. Callback success and failure invalidate the unit and saved
+query closures. Released read facades carry no native command resources. They release
+their checkout before another home is entered. Query wrappers validate authority
+before and after each await; a separately prepaid ROLLBACK remains usable for cleanup.
+
+`shared-history.ts` forwards this same context into its identity-only final receiving
+branch. It locks and compares the selected phase, both partition cursors, locator,
+account, registry generation/digest and accepted barrier. Final SDK/native currentness,
+receiving and checkpoint writes stay in the same native command, with producer progress
+recorded before COMMIT. This code does not treat a later head as original authority.
+Native source association still uses the actual original command source, independently
+of every retained account role. Existing native inventory, restore, permanent SDK
+generation-2 fence, physical-copy and live-subject checks remain required.
+
+### Known local declaration and composition interface
+
+`IDENTITY_HISTORY_ACCOUNTS_DECLARATION`, exported by `agent-identity-inventory-work.ts`
+and re-exported by `agent-identity-retirement.ts`, publishes per-call Accounts local
+and installed SDK dispatch prices. It is a **subdeclaration**, without a whole-parent
+`work` or nullable successful total. Semantic owns composition of
+`IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION`; Library owns
+`IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION`. Missing terms cannot be filled by
+zero, a configured allowance or the fully spent Accounts local allocation.
+
+All eight axes are explicit. In the local table below, `candidateKeys`,
+`identityMetadataRows` and `witnessKeys` are proven zero: these bodies address Accounts
+native control/serializer rows, not Library candidate enumeration, Semantic metadata
+sweeps or Library witness expansion. The remaining five axes are shown below.
+`engineRequests` is separately zero. Native row/point/statement/byte bounds preserve
+the literal bounded local SQL; each joined indexed relation contributes its own seek.
+A bounded range contributes one empty seek, not one per possible returned row. Scalar
+returns, transaction/settings controls and COMMIT/ROLLBACK contribute no index seek.
+Source's nested native work is excluded and remains a named missing operand.
+
+| Local call body          | nativeRows | nativePoints | statements |  bytes | emptySeeks |
+| ------------------------ | ---------: | -----------: | ---------: | -----: | ---------: |
+| command                  |          3 |            1 |          8 |    256 |          1 |
+| snapshot                 |          1 |            0 |          4 |    128 |          0 |
+| physicalInspection       |        148 |            8 |         12 |  11888 |          8 |
+| mapping                  |          4 |            4 |          3 |  16384 |          4 |
+| receivingBinding         |         72 |           72 |          6 |  32768 |          8 |
+| readiness                |         74 |           74 |          7 |  49152 |         10 |
+| sdkReceiving             |        160 |           80 |          6 | 131072 |          8 |
+| nativeWorkRead           |          1 |            1 |          1 |     64 |          1 |
+| nativeWrite              |          1 |            1 |          1 |      0 |          1 |
+| nativePairWrite          |          2 |            2 |          2 |      0 |          2 |
+| nativeAuthoritySeal      |          3 |            3 |          2 |      0 |          3 |
+| nativeLocatorWrite       |          4 |            4 |          4 |      0 |          4 |
+| nativeGuardProbe         |          1 |            0 |          1 |    256 |          0 |
+| durableReceiving         |         76 |           75 |         13 | 131872 |         10 |
+| releasedDurableReceiving |         76 |           75 |         17 | 132000 |         10 |
+| receivingInsert          |         72 |           71 |          7 |      0 |          7 |
+| roleScope                |         65 |           65 |          1 |   8192 |          1 |
+| selectedJob              |          1 |            1 |          1 |   4096 |          1 |
+| selectedBarrier          |          1 |            1 |          1 |    128 |          1 |
+| selectedProgress         |          1 |            1 |          1 |      0 |          1 |
+| sdkWriterObservation     |          3 |            2 |          1 |   8192 |          2 |
+| sdkFenceObservation      |          1 |            1 |          1 |   8192 |          1 |
+| sdkWriterLock            |          4 |            2 |          4 |   8192 |          2 |
+| nativeInventory          |        202 |          202 |          5 |  65536 |          7 |
+| recoveryInventory        |        135 |          135 |          6 |  32768 |         10 |
+| recoveryAssociation      |          2 |            2 |          1 |    512 |          3 |
+| recoveryReceiving        |        100 |          100 |         36 |  24576 |          3 |
+| seal                     |         16 |           16 |          7 |     64 |          7 |
+| nativeGuardLocal         |         71 |           70 |          5 |  40960 |          6 |
+| nativeAbsence            |          9 |            9 |          9 |      0 |          9 |
+| recordedAuthority        |          1 |            1 |          1 | 122880 |          1 |
+| previousReadiness        |          1 |            1 |          1 | 106496 |          1 |
+| durableReadiness         |          1 |            1 |          1 |  65536 |          1 |
+| sourceMappingSnapshot    |          6 |            5 |          8 |  16640 |          5 |
+| retirementSnapshot       |          7 |            6 |          8 |  33024 |          6 |
+| inventoryReceivingCopy   |          4 |            4 |          3 |   1024 |          4 |
+| sdkObligation            |          1 |            1 |          1 |   1024 |          1 |
+| familyTouch              |         12 |           12 |          4 |      0 |          4 |
+| workInvalidation         |        846 |          846 |        261 |      0 |        326 |
+| workWake                 |        128 |           65 |         65 |      0 |         65 |
+| locatorInvalidation      |       1678 |         1678 |        518 |      0 |        518 |
+| receivingInvalidation    |        845 |          845 |        261 |      0 |        261 |
+
+The aggregate `physicalInspection` includes its envelope; `releasedDurableReceiving`,
+`sourceMappingSnapshot` and `retirementSnapshot` also include theirs. For the other
+local cuts an envelope is additional: native commands reserve BEGIN, settings,
+time, native no-effect fence, COMMIT and failure ROLLBACK; released snapshots reserve
+BEGIN/settings/COMMIT/ROLLBACK. Recovery released snapshots now include that envelope
+as well. Mapping is read initially and again by each receiving binding. Retirement
+has two released binding checks and the writer observation before mutation, then two
+binding checks around each fence observation. Owner readiness repeats per actual
+owner call. Native inventory reads allow three copies and 64 roles plus a refusal
+sentinel per copy; recovery inventory allows two copies with the same role bound.
+Each initial and repeated current-cut check is charged, including absent/rejected cuts.
+Per-copy final receiving/seal/locator/physical checks and each SDK obligation probe are
+additional terms. Physical cleanup inspects eight tables twice, with limits
+`1,1,1,64,8,64,0,0`; each probe reserves its LIMIT+1 rows, bytes and one empty seek.
+Family/invalidation/wakeup terms include the actual native trigger fanout, including
+65 locators and the nine-family touch bound. They are added on every reached write.
+No successful or failed prefix resets the ledger.
+
+The SDK single attempt reserves ROLLBACK before checkout, then BEGIN, settings, native
+writer lock, action and COMMIT. Retirement has one action; deletion has the four
+literal installed deletes, with `children=false`. Its exact dispatch declaration is:
+
+| SDK dispatch             | nativeRows | nativePoints | statements | bytes | emptySeeks |
+| ------------------------ | ---------: | -----------: | ---------: | ----: | ---------: |
+| rollback                 |          0 |            0 |          1 |     0 |          0 |
+| begin                    |          0 |            0 |          1 |     0 |          0 |
+| settings                 |          1 |            0 |          1 |   128 |          0 |
+| lock                     |          4 |            2 |          4 |  8192 |          2 |
+| retire                   |          8 |            5 |          9 | 32768 |          5 |
+| commit                   |          0 |            0 |          1 |     0 |          0 |
+| delete-workflow_input    |          1 |            1 |          1 |     0 |          1 |
+| delete-workflow_output   |          1 |            1 |          1 |     0 |          1 |
+| delete-operation_outputs |         64 |            1 |          1 |     0 |          1 |
+| delete-workflow_status   |         73 |            5 |          5 |     0 |          5 |
+
+These terms follow the installed SDK native writer SQL, including the writer trigger
+and four status FK cascades. Payload/operation tables have independent keys. Actual
+SDK dispatch objects are recognized by identity and checked against these bounds at
+the operation boundary. Copied five-field values and unknown SQL have no eight-axis
+declaration and refuse before dispatch. The known local reservation calls the actual
+`reserveIdentityOriginalSourceWork` once; it does not also debit independent Source
+maintenance. Dispatched, failed, rolled-back and ambiguous work remains spent.
+Library descendants use only the authentic parent's cumulative ledger.
+
+### Missing operands and current refusal boundary
+
+The installed Source module does not export the agreed prepaid receiver or complete
+Source declaration; the installed Library module does not export its complete original
+declaration. Accordingly the actual original admission cannot supply those partitions.
+The known Accounts declaration remains independently available for owner composition.
+Its named missing terms are:
+
+- `SourceHistoryNativeAllReachedCalls`: original/accepted recovery reads, Source
+  staging/custody/handoff and final native verification, including nested native SQL.
+- `LibraryAllReachedCalls`: successful page/current/locked-plan/seal/fence and cleanup,
+  through the exact original ledger. An unavailable page is not successful free work.
+- `SourceHistoryNativeGuard`: nested Source work reached by the History native guard.
+- `RecoveryFinalReceiving`: disjoint local/Source composition of the two serializer
+  current receiving verifiers; its legacy five-field bound does not classify eight axes.
+- `RecoveryReceivingEnrollment`: genuine released Search enrollment and same-home
+  current verification. Canonical-index redrive/release is insufficient.
+- `SDKPhysicalWriterClosure`: independent homes and non-FK participants. SDK deletion,
+  EOF, terminal workflow, ACK or local cleanup cannot discharge these obligations.
+- `NativeCommandDispatchLifetime`: the generic executor takes `(pool, options, body)`
+  and exposes only the body transaction. Its settings/fence/COMMIT use a separate raw
+  client with no original-grant pre/post dispatch hook. Guarding `tx.query` covers only
+  body calls. Accounts therefore refuses a selected prepaid native command as
+  `identity-history-native-command-dispatch-lifetime-unavailable` before its checkout;
+  it does not mutate Pool checkout, cast transactions or alter the generic executor.
+
+The final command body is implemented but cannot dispatch until its native executor
+lifetime interface exists. Missing physical/native enrollment refuses the affected
+final proof as well. No complete Account erasure or all-copy completion is asserted.
+Focused prepaid callback/declaration and authentic selected-original regressions are
+provided in the History and shared-History context tests. Native acceptance remains
+unrun at this source delivery boundary; typechecking does not establish native proof.

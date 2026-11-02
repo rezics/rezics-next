@@ -23,6 +23,7 @@ import type { AgentIdentityRetirementStage } from './agent-identity-retirement.t
 import { encodeLocator } from './locator.ts';
 import { historyDeadline, lockHistoryBarrier, type HistoryReceivingContext } from './receiving.ts';
 import type { HistoryArtifact, HistoryBarrier } from './registry.ts';
+import { unpricedIdentityHistoryWork, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK } from './agent-identity-inventory-work.ts';
 
 /** Published producer vocabulary. Availability is checked on the genuine runtime client;
  * a source declaration does not prove migration coverage or grant source discharge. */
@@ -54,13 +55,7 @@ const same = (a: unknown, b: unknown) => canonicalize(a) === canonicalize(b);
 /** A released check or copied SDK receipt cannot authorize native History readiness. */
 export const IDENTITY_HISTORY_HANDOFF_UNAVAILABLE = 'identity-source-history-durable-handoff-unavailable';
 
-export const AGENT_IDENTITY_SDK_OBSERVATION_COST = Object.freeze({
-  rows: 3,
-  points: 2,
-  statements: 1,
-  bytes: 8192,
-  engineRequests: 0,
-});
+export const AGENT_IDENTITY_SDK_OBSERVATION_COST = IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.sdkWriterObservation;
 export type AgentIdentitySDKWriterObservation = Pending | Readonly<{ state: 'observed'; writer: SdkWriterState }>;
 
 /** Released observation, independently funded in the SAME live Source frame. This never
@@ -71,6 +66,8 @@ export async function readAgentIdentitySDKWriterState(
   workflowId: string,
   context: HistoryReceivingContext,
 ): Promise<AgentIdentitySDKWriterObservation> {
+  const history = await import('./agent-identity-retirement.ts');
+  history.assertAgentIdentityHistoryUnit(pool, context, client);
   historyDeadline(context, 0);
   if (!nativeClient(client)) return pending('identity-sdk-native-client-unavailable');
   // The maintenance owner depends on HTTP/Library construction. Load it only at the
@@ -78,9 +75,15 @@ export async function readAgentIdentitySDKWriterState(
   const { currentIdentitySourceConsumerMaintenance, reserveIdentitySourceConsumerNativeWork } =
     await import('../semantic/identity-source-consumer-maintenance.ts');
   const work = currentIdentitySourceConsumerMaintenance(pool, context.deadline);
-  if (!work || !reserveIdentitySourceConsumerNativeWork(pool, work, AGENT_IDENTITY_SDK_OBSERVATION_COST))
+  if (!work) return pending('identity-sdk-current-fence-funding-unavailable');
+  if (history.currentAgentIdentityHistoryUnit()?.prepaid) {
+    const { reserveIdentityHistoryWork } = await import('./agent-identity-inventory-work.ts');
+    await reserveIdentityHistoryWork(pool, AGENT_IDENTITY_SDK_OBSERVATION_COST, context);
+  } else if (!reserveIdentitySourceConsumerNativeWork(pool, work, AGENT_IDENTITY_SDK_OBSERVATION_COST))
     return pending('identity-sdk-current-fence-funding-unavailable');
+  history.assertAgentIdentityHistoryUnit(pool, context, client);
   const writer = await readSdkWorkflowWriterState(workflowId, client);
+  history.assertAgentIdentityHistoryUnit(pool, context, client);
   historyDeadline(context, 0);
   return writer ? { state: 'observed', writer } : pending('identity-sdk-original-writer-unavailable');
 }
@@ -97,6 +100,8 @@ export async function lockAgentIdentitySDKWriterState(
   phase: 'readiness' | 'closure',
 ): Promise<AgentIdentitySDKWriterObservation> {
   const resources = currentCommandResources(tx);
+  const history = await import('./agent-identity-retirement.ts');
+  history.assertAgentIdentityHistoryUnit(resources.pool, resources, client);
   if (currentCommand(tx).basis !== null) throw new TypeError('Identity SDK fence requires a current native command');
   historyDeadline(resources, currentCommand(tx).partition);
   if (expected.workflowID !== workflowId) return pending('identity-sdk-original-writer-changed');
@@ -105,8 +110,11 @@ export async function lockAgentIdentitySDKWriterState(
   const { currentIdentitySourceConsumerMaintenance, reserveIdentitySourceConsumerNativeWork } =
     await import('../semantic/identity-source-consumer-maintenance.ts');
   const work = currentIdentitySourceConsumerMaintenance(resources.pool, resources.deadline);
-  if (
-    !work ||
+  if (!work) return pending('identity-sdk-current-fence-funding-unavailable');
+  if (history.currentAgentIdentityHistoryUnit()?.prepaid) {
+    const { reserveIdentityHistoryWork } = await import('./agent-identity-inventory-work.ts');
+    await reserveIdentityHistoryWork(resources.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.sdkWriterLock, resources);
+  } else if (
     !reserveIdentitySourceConsumerNativeWork(resources.pool, work, {
       rows: SDK_TRANSACTION_FENCE_COST.rows,
       points: SDK_TRANSACTION_FENCE_COST.points,
@@ -117,7 +125,10 @@ export async function lockAgentIdentitySDKWriterState(
   )
     return pending('identity-sdk-current-fence-funding-unavailable');
   try {
-    return { state: 'observed', writer: await lockSdkWorkflowWriterState(tx, expected, client) };
+    history.assertAgentIdentityHistoryUnit(resources.pool, resources, client);
+    const writer = await lockSdkWorkflowWriterState(tx, expected, client);
+    history.assertAgentIdentityHistoryUnit(resources.pool, resources, client);
+    return { state: 'observed', writer };
   } catch (error) {
     // This is the SDK's specific pre-IO placement refusal, not a SQL error or retry.
     if (error instanceof Error && error.message === 'DBOS writer fence requires the same native transaction pool')
@@ -240,7 +251,7 @@ async function receivingBinding(
   const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
   const { identityHistoryCommand, reserveIdentityHistoryWork, nativeWork } =
     await import('./agent-identity-inventory-work.ts');
-  await reserveIdentityHistoryWork(pool, nativeWork(160, 80, 6, 131072), context);
+  await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.sdkReceiving, context);
   if (owner.currentIdentitySourceConsumerMaintenance(pool, context.deadline)) {
     return identityHistoryCommand(pool, context, (tx) =>
       readAgentIdentitySDKReceivingBinding(
@@ -280,6 +291,8 @@ export async function readAgentIdentitySDKFence(
   receipt: AgentIdentitySDKRetirementReceipt,
   context: HistoryReceivingContext,
 ): Promise<AgentIdentitySDKFenceObservation> {
+  const history = await import('./agent-identity-retirement.ts');
+  history.assertAgentIdentityHistoryUnit(pool, context, client);
   const fixed = structuredClone(receipt);
   if (fixed.sourceGeneration !== fixed.binding.receiver.generation)
     return pending('identity-sdk-retirement-source-fence-changed');
@@ -290,7 +303,10 @@ export async function readAgentIdentitySDKFence(
   historyDeadline(context, 0);
   const owner = await import('../semantic/identity-source-consumer-maintenance.ts');
   const work = owner.currentIdentitySourceConsumerMaintenance(pool, context.deadline);
-  if (
+  if (history.currentAgentIdentityHistoryUnit()?.prepaid) {
+    const { reserveIdentityHistoryWork } = await import('./agent-identity-inventory-work.ts');
+    await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.sdkFenceObservation, context);
+  } else if (
     work &&
     !owner.reserveIdentitySourceConsumerNativeWork(pool, work, {
       rows: 1,
@@ -301,7 +317,9 @@ export async function readAgentIdentitySDKFence(
     })
   )
     return pending('identity-sdk-current-fence-funding-unavailable');
+  history.assertAgentIdentityHistoryUnit(pool, context, client);
   const fence = await readSdkWorkflowRetirement(fixed.binding.workflowId, client);
+  history.assertAgentIdentityHistoryUnit(pool, context, client);
   if (!validFence(fence, fixed.binding.workflowId) || !same(fence, fixed.fence))
     return pending('identity-sdk-native-receipt-changed');
   const after = await receivingBinding(pool, fixed.binding, context);
@@ -332,7 +350,10 @@ export async function retireAgentIdentitySDKWork(
   const { IDENTITY_HISTORY_COMMAND_CONTROL } = await import('./agent-identity-inventory-work.ts');
   await reserveIdentityHistoryWork(
     pool,
-    addNativeWork(nativeWork(71, 71, 19, 82048), IDENTITY_HISTORY_COMMAND_CONTROL),
+    addNativeWork(
+      unpricedIdentityHistoryWork('source-native-retirement-verification', nativeWork(71, 71, 19, 82048)),
+      IDENTITY_HISTORY_COMMAND_CONTROL,
+    ),
     context,
   );
   const check = (
@@ -344,7 +365,7 @@ export async function retireAgentIdentitySDKWork(
   if (!nativeClient(client) || !supportsBoundedSdkMaintenance(client))
     return pending('identity-sdk-bounded-maintenance-not-installed');
   const receiver = await identityHistoryCommand(pool, context, async (tx) => {
-    await reserveIdentityHistoryWork(pool, nativeWork(160, 80, 6, 131072), context);
+    await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.sdkReceiving, context);
     return readAgentIdentitySDKReceivingBinding(
       tx,
       {
@@ -364,7 +385,7 @@ export async function retireAgentIdentitySDKWork(
   const observed = await readAgentIdentitySDKWriterState(pool, client, receiver.binding.workflowId, context);
   if (observed.state === 'pending') return observed;
   const recorded = await identityHistoryCommand(pool, context, async (tx) => {
-    await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 106496), context);
+    await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.previousReadiness, context);
     const saved = (
       await tx.query<{
         history_authority: AgentIdentityHistoryAuthority | null;
@@ -391,7 +412,7 @@ export async function retireAgentIdentitySDKWork(
     const readiness = { binding: held.handoff.binding, writer: held.handoff.writer };
     await reserveIdentityHistoryWork(
       pool,
-      addNativeWork(nativeWork(1, 1, 1, 0), AGENT_IDENTITY_HISTORY_GUARD_COST),
+      addNativeWork(IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeWrite, AGENT_IDENTITY_HISTORY_GUARD_COST),
       context,
     );
     await tx.query(`UPDATE core.agent_identity_work SET history_authority=$2,sdk_readiness=$3 WHERE custody_id=$1`, [
@@ -402,7 +423,7 @@ export async function retireAgentIdentitySDKWork(
     await reserveIdentityHistoryWork(
       pool,
       addNativeWork(
-        nativeWork(2, 2, 2, 0),
+        IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativePairWrite,
         AGENT_IDENTITY_HISTORY_GUARD_COST,
         HISTORY_WORK_INVALIDATION,
         HISTORY_WORK_WAKE,
@@ -418,7 +439,7 @@ export async function retireAgentIdentitySDKWork(
   if (recorded.state === 'pending') return recorded;
   // Read the actual committed readiness after releasing the Source transaction.
   const durable = await identityHistoryCommand(pool, context, async (tx) => {
-    await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 65536), context);
+    await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.durableReadiness, context);
     return (
       await tx.query<{ sdk_readiness: AgentIdentityHistoryReadiness | null }>(
         `SELECT sdk_readiness FROM core.agent_identity_work WHERE custody_id=$1 FOR SHARE`,
@@ -455,7 +476,7 @@ export async function retireAgentIdentitySDKWork(
     };
     await reserveIdentityHistoryWork(
       pool,
-      addNativeWork(nativeWork(3, 3, 2, 0), AGENT_IDENTITY_HISTORY_GUARD_COST),
+      addNativeWork(IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeAuthoritySeal, AGENT_IDENTITY_HISTORY_GUARD_COST),
       context,
     );
     await tx.query(`UPDATE core.agent_identity_work SET sdk_closure=$2,sdk_retirement_receipt=$3 WHERE custody_id=$1`, [
@@ -507,30 +528,32 @@ export async function lockAgentIdentityHistoryHandoff(
   writer: SdkWriterState,
   phase: 'readiness' | 'closure',
 ) {
+  const { assertAgentIdentityHistoryUnit } = await import('./agent-identity-retirement.ts');
+  assertAgentIdentityHistoryUnit(currentCommandResources(tx).pool, currentCommandResources(tx), client);
   const owner =
     (await import('../semantic/identity-source-consumer-custody.ts')) as unknown as Partial<SourceHistoryOwner>;
   if (!owner.lockIdentitySourceHistoryHandoff) return pending('identity-source-history-owner-not-installed');
   if (!nativeClient(client)) return pending('identity-sdk-native-client-unavailable');
-  return owner.lockIdentitySourceHistoryHandoff(tx, stage, binding, writer, phase, client);
+  assertAgentIdentityHistoryUnit(currentCommandResources(tx).pool, currentCommandResources(tx), client);
+  const answer = await owner.lockIdentitySourceHistoryHandoff(tx, stage, binding, writer, phase, client);
+  assertAgentIdentityHistoryUnit(currentCommandResources(tx).pool, currentCommandResources(tx), client);
+  return answer;
 }
 
 // Native check: m(1), partition/domain(2), work(1), bounded roles(65), aggregate(1),
 // barrier(1), original Source wrapper/function(17), SDK current lock(4). Each physical role
 // is charged as a visible key. The outer SELECT/write is charged separately.
-export const AGENT_IDENTITY_HISTORY_GUARD_COST = Object.freeze({
-  rows: 92,
-  points: 87,
-  statements: 11,
-  bytes: 40960,
-  engineRequests: 0,
-});
-export const AGENT_IDENTITY_HISTORY_ABSENCE_COST = Object.freeze({
-  rows: 9,
-  points: 9,
-  statements: 9,
-  bytes: 0,
-  engineRequests: 0,
-});
+export const AGENT_IDENTITY_HISTORY_GUARD_COST = unpricedIdentityHistoryWork(
+  'source-native-history-guard',
+  Object.freeze({
+    rows: 92,
+    points: 87,
+    statements: 11,
+    bytes: 40960,
+    engineRequests: 0,
+  }),
+);
+export const AGENT_IDENTITY_HISTORY_ABSENCE_COST = IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeAbsence;
 
 export async function lockRecordedAgentIdentityHistory(
   tx: CommandTransaction,
@@ -542,7 +565,9 @@ export async function lockRecordedAgentIdentityHistory(
 > {
   const { reserveIdentityHistoryWork, nativeWork, addNativeWork } = await import('./agent-identity-inventory-work.ts');
   const { pool, deadline } = currentCommandResources(tx);
-  await reserveIdentityHistoryWork(pool, nativeWork(1, 1, 1, 122880), { deadline });
+  const { assertAgentIdentityHistoryUnit } = await import('./agent-identity-retirement.ts');
+  assertAgentIdentityHistoryUnit(pool, context, client);
+  await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.recordedAuthority, { deadline });
   const row = (
     await tx.query<{
       history_authority: AgentIdentityHistoryAuthority | null;
@@ -568,9 +593,13 @@ export async function lockRecordedAgentIdentityHistory(
   if (held.state === 'pending') return held;
   if (!same(held.handoff.sourceAuthority, row.history_authority) || !same(held.handoff.writer, row.sdk_closure))
     return pending('identity-history-current-authority-changed');
-  await reserveIdentityHistoryWork(pool, addNativeWork(nativeWork(1, 0, 1, 256), AGENT_IDENTITY_HISTORY_GUARD_COST), {
-    deadline,
-  });
+  await reserveIdentityHistoryWork(
+    pool,
+    addNativeWork(IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeGuardProbe, AGENT_IDENTITY_HISTORY_GUARD_COST),
+    {
+      deadline,
+    },
+  );
   await tx.query(`SELECT core.check_agent_identity_history($1,$2,$3,$4,'closure')`, [
     stage.handoff.custodyId,
     row.sdk_readiness.binding,
