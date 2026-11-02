@@ -110,8 +110,7 @@ test('Recipe recovery retires current authority and keeps the private draft and 
   };
   const click = (scope: HTMLElement, name: string) =>
     act(async () => user.click(within(scope).getByRole('button', { name })));
-  const input = (scope: HTMLElement, name: string) =>
-    within(scope).getByRole('textbox', { name }) as HTMLInputElement;
+  const input = (scope: HTMLElement, name: string) => within(scope).getByRole('textbox', { name }) as HTMLInputElement;
   const replace = (control: HTMLElement, value: string) =>
     act(async () => {
       await user.clear(control);
@@ -190,7 +189,9 @@ test('Recipe recovery retires current authority and keeps the private draft and 
       revision: 1,
     };
     await act(async () => late.resolve(lateResult!));
-    await until(() => !(within(cookTimeDraft).getByRole('button', { name: m.correction_retry() }) as HTMLButtonElement).disabled);
+    await until(
+      () => !(within(cookTimeDraft).getByRole('button', { name: m.correction_retry() }) as HTMLButtonElement).disabled,
+    );
     expect(cookTimeDraft.textContent).not.toContain(m.correction_proposed());
     reads[0]!.resolve({ ok: false, reason: 'concealed' });
     await until(() => host.textContent!.includes(m.catalogue_create_concealed()));
@@ -208,10 +209,14 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     await until(() => loadCount === 4);
     reads[2]!.resolve(initial);
     await until(() => !!within(host).queryByRole('link', { name: m.candidate_view_public() }));
-    expect(within(host).getByRole('link', { name: m.candidate_view_public() }).getAttribute('href')).toContain(recipeId);
+    expect(within(host).getByRole('link', { name: m.candidate_view_public() }).getAttribute('href')).toContain(
+      recipeId,
+    );
     const untouchedHeadingCount = within(host).getAllByRole('heading', { name: untouchedLabel, level: 2 }).length;
     await act(async () => oldCorrect());
-    expect(within(host).getAllByRole('heading', { name: untouchedLabel, level: 2 })).toHaveLength(untouchedHeadingCount);
+    expect(within(host).getAllByRole('heading', { name: untouchedLabel, level: 2 })).toHaveLength(
+      untouchedHeadingCount,
+    );
     expect(input(ingredientDraft, m.correction_value()).value).toBe(privateValue);
     expect(input(ingredientDraft, m.relation_citation()).value).toBe(privateCitation);
     expect(sent).toHaveLength(2);

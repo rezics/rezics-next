@@ -137,9 +137,9 @@ function RecipeEditorLive({
   const [readEpoch, setReadEpoch] = useState(0);
   const readEpochRef = useRef(0);
   const admittedReadEpoch = useRef(0);
-  const retainedRead = useRef<
-    { id: string | undefined; locale: string; generation: number; value: Ready } | undefined
-  >(undefined);
+  const retainedRead = useRef<{ id: string | undefined; locale: string; generation: number; value: Ready } | undefined>(
+    undefined,
+  );
   if (
     retainedRead.current &&
     (retainedRead.current.id !== id ||
@@ -161,9 +161,7 @@ function RecipeEditorLive({
       ? query.data
       : undefined;
   const isReadEpochCurrent = (epoch: number) => epoch === readEpochRef.current;
-  const readUnavailable =
-    query.isError ||
-    (!!query.data && (!query.data.ok || !matchesIdentity(query.data)));
+  const readUnavailable = query.isError || (!!query.data && (!query.data.ok || !matchesIdentity(query.data)));
   const termsId = useId();
   const nextTermId = useRef(1);
   const [terms, setTerms] = useState([{ id: 0, language: locale, label: '', description: '', aliases: '' }]);
@@ -653,7 +651,9 @@ function RecipeEditorLive({
                 }}
                 onOriginal={(original) => {
                   if (!isReadEpochCurrent(readEpoch)) return;
-                  setRows((previous) => previous.map((entry) => (entry.id === row.id ? { ...entry, original } : entry)));
+                  setRows((previous) =>
+                    previous.map((entry) => (entry.id === row.id ? { ...entry, original } : entry)),
+                  );
                 }}
                 onRemove={() => {
                   if (
@@ -1103,8 +1103,8 @@ function RecipeFieldLive({
                           {
                             id: row.statement.value.content,
                             title:
-                              pickText(currentRead?.public?.related[row.statement.value.content]?.labels ?? {}, locale).text ||
-                              m.subject_value_unlabelled({}, o),
+                              pickText(currentRead?.public?.related[row.statement.value.content]?.labels ?? {}, locale)
+                                .text || m.subject_value_unlabelled({}, o),
                             types: [],
                             typeLabel: '',
                             cover: null,
