@@ -216,7 +216,9 @@ export const WithdrawalLostResponse: Story = {
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_change_subject() }));
     await expect(view.queryByText(m.settings_verification_confirm_title())).toBeNull();
     await expect(view.getByRole('combobox')).toHaveValue('');
-    await expect(view.getByRole('textbox', { name: m.settings_verification_statement() })).toHaveValue(pending.statement);
+    await expect(view.getByRole('textbox', { name: m.settings_verification_statement() })).toHaveValue(
+      pending.statement,
+    );
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_withdraw() }));
     await expect(view.queryByText(m.settings_verification_withdrawn())).toBeNull();
     await userEvent.click(view.getByRole('button', { name: m.settings_verification_confirm_withdraw() }));
