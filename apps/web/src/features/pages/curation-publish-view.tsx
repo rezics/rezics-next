@@ -389,9 +389,7 @@ export function CurationPublicationRecovery({
     publication.getSnapshot,
     publication.getSnapshot,
   );
-  const waiting = useSearchRetryWait(
-    result?.ok === false && result.reason === 'rate-limited' ? retryAt : undefined,
-  );
+  const waiting = useSearchRetryWait(result?.ok === false && result.reason === 'rate-limited' ? retryAt : undefined);
   if (!intent && !result) return null;
   const stale = result?.ok === false && result.reason === 'stale';
   const invalid = result?.ok === false && result.reason === 'invalid' && result.phase !== 'activate';
@@ -498,7 +496,12 @@ export function CurationPublicationRecovery({
           {!invalid ? (
             <div className="space-y-2">
               <p className="text-sm">{m.curation_review_retry_help()}</p>
-              <Button variant="outline" className={controlClass} disabled={busy || waiting} onClick={() => void retry()}>
+              <Button
+                variant="outline"
+                className={controlClass}
+                disabled={busy || waiting}
+                onClick={() => void retry()}
+              >
                 {m.curation_retry_original()}
               </Button>
             </div>
