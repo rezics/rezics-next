@@ -46,7 +46,7 @@ function fixture(state: SearchLoaderDeps, labels: Labels): SearchPageData {
     ...(known || mixed ? { typeLabels: { en: 'Book' } } : {}),
     ...(known || mixed ? { conditionMetadata: metadata } : {}),
     condition: state.condition,
-    ranges: state.ranges,
+    ...(state.ranges ? { ranges: state.ranges } : {}),
     selectedFacets: state.facets,
     selectedFacetLabels: known || mixed ? { 'schema:genre': { en: retainedLabel } } : {},
     hitTypes: {},
@@ -131,11 +131,11 @@ function CurrentSelection({ labels, retirement = false }: { labels: Labels; reti
           {settled && <p>Fixture: retired response settled</p>}
         </aside>
       )}
-      <SearchPage query={state.query} cursor={state.cursor} data={{ ...data, ...outcome }} />
+      <SearchPage query={state.query} data={{ ...data, ...outcome }} />
     </AppShell>
   );
 }
-function Journey({ labels, retirement }: { labels: Labels; retirement?: boolean }) {
+function Journey({ labels, retirement = false }: { labels: Labels; retirement?: boolean }) {
   return (
     <PatternStory path={discoverySearchHref(getLocale(), selection(labels))}>
       <CurrentSelection labels={labels} retirement={retirement} />
