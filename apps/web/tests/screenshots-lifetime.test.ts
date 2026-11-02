@@ -457,7 +457,9 @@ test.each(['browser', 'context', 'page'] as const)(
         : target === 'context'
           ? 'context 1 at 1280px acquisition did not settle within 8ms.'
           : 'page 1 at 1280px acquisition did not settle within 8ms.';
-    expect(failure!.message).toContain(`Build directory retained at /fake/.temp/storybook-build-lifetime because ${reason}`);
+    expect(failure!.message).toContain(
+      `Build directory retained at /fake/.temp/storybook-build-lifetime because ${reason}`,
+    );
     expect(base.events.navigations).toEqual([]);
     expect(base.events.removed).toEqual([]);
 
