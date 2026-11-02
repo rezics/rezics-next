@@ -136,3 +136,45 @@ test('missing original physical owner keeps current receiving closure unavailabl
     await f.close();
   }
 }, 120_000);
+
+test('pending receiving registration rejects an incorrect native Source or barrier before conflict handling', async () => {
+  const f = await nativeFixture();
+  try {
+    const deleted = await f.person('receiving-registration-source');
+    expect((await f.delete(deleted)).status).toBe(200);
+    const ports = f.bindings.trustedAccess;
+    const barrier = await ports.readAuthErasureBarrier!(deleted.accountId);
+    if (!barrier) throw new Error('Missing genuine native deletion barrier');
+    const route = f.routeOf(deleted.accountId)!;
+    const partition = Math.floor(route / 16);
+    expect(
+      (await f.kernel.query('SELECT access.initialize_auth_erasure_partition($1) AS ready', [partition])).rows[0]
+        ?.ready,
+    ).toBe(true);
+    await expect(
+      f.kernel.query(
+        `INSERT INTO access.auth_receiving_control(partition_no,source_generation,source_epoch,source_owner)
+         SELECT partition_no,generation,source_epoch+1,source_owner FROM access.auth_erasure_source
+         WHERE partition_no=$1 ON CONFLICT DO NOTHING`,
+        [partition],
+      ),
+    ).rejects.toThrow('Auth receiving registration Source mismatch');
+    expect(await ports.registerAuthReceivingClosure!({ barrier, deadline: Date.now() + 5000 })).toEqual({
+      state: 'pending',
+      reason: 'physical-owner-unavailable',
+    });
+    await expect(
+      f.kernel.query(
+        `INSERT INTO access.auth_receiving_obligation(route,account_id,version,at,partition_no)
+         VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
+        [route, deleted.accountId, barrier.version + 1, barrier.at, partition],
+      ),
+    ).rejects.toThrow('Auth receiving registration barrier mismatch');
+    expect(await ports.registerAuthReceivingClosure!({ barrier, deadline: Date.now() + 5000 })).toEqual({
+      state: 'pending',
+      reason: 'physical-owner-unavailable',
+    });
+  } finally {
+    await f.close();
+  }
+}, 120_000);
