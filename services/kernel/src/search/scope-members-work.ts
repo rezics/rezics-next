@@ -93,9 +93,10 @@ async function query<R extends QueryResultRow>(
       witnessKeys: keys,
       bytes: bytes + Buffer.byteLength(sql) + Buffer.byteLength(JSON.stringify(values)),
     },
-    async () =>
-      (await input.work.tx.query<R>({ text: sql, values, query_timeout: Math.max(1, input.deadline - Date.now()) }))
-        .rows,
+    async () => {
+      const config = { text: sql, values, query_timeout: Math.max(1, input.deadline - Date.now()) };
+      return (await input.work.tx.query<R>(config)).rows;
+    },
   );
 }
 
@@ -145,8 +146,8 @@ export async function readMembersSnapshot(
       fenceQuery.run(input.work.tx, { route: input.work.locator.route, account_id: input.work.locator.ownerAccountId }),
   );
   // Native owner predicates need the writer's real fence, including when their answer is absence.
-  if (!owner[0]) throw new ProblemError('dependency_unavailable');
-  return { native, source, observation, ownerFence: owner[0].generation };
+  if (!owner) throw new ProblemError('dependency_unavailable');
+  return { native, source, observation, ownerFence: owner.generation };
 }
 
 export async function revalidateMembersObservation(
@@ -352,9 +353,11 @@ async function closure(
           locator = { kind: 'label', subjectId: original, labelId: row.labelId };
           break;
         case 3:
+          if (!row.factId || routeOf(row.factId) === null) return null;
           locator = { kind: 'session', subjectId: original, sessionId: row.factId };
           break;
         case 4:
+          if (!row.factId || routeOf(row.factId) === null) return null;
           locator = { kind: 'holding', subjectId: original, copyId: row.factId };
           break;
         default:

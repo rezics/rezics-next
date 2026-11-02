@@ -6,7 +6,7 @@ import { ProblemError } from '../http/problem.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
 
-const zero = (): WorkDimensions => ({
+const zero = (): { -readonly [Axis in keyof WorkDimensions]: number } => ({
   candidateKeys: 0,
   nativeRows: 0,
   identityMetadataRows: 0,

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { admitFilter, parseFilter, type FilterDocument } from '@rezics/filter';
+import type { Pool } from 'pg';
 import { runOperationalTransaction } from '../../src/command/operational.ts';
 import type { WorkAllowance, WorkReceipt } from '../../src/library/collection-source.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
@@ -17,6 +18,7 @@ import {
   type MembersPreparationWorkContext,
 } from '../../src/search/scope-work-context.ts';
 import { membersPreparationRuntime } from '../library/support/members-preparation-runtime.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
 
 type Runtime = Awaited<ReturnType<typeof membersPreparationRuntime>>;
 type Fixture = Awaited<ReturnType<Runtime['fixture']>>;
@@ -78,7 +80,7 @@ function adapter(native: Runtime, work: MembersPreparationWorkContext, deadline:
         throw new Error('Native Members opened public Subject evidence');
       },
     }),
-    evidence: { access: native.kernel.testAccess, work, deadline },
+    evidence: { access: native.kernel.testAccess, routeKey: testRouteKey(), work, deadline },
   });
 }
 
@@ -406,7 +408,7 @@ test('genuine Members admission refuses stale native source, expired episode and
   try {
     const f = await preparedFixture(native);
     const requested = definition('id');
-    const mixed = definition('id', { all: [presence, { type: { in: ['schema:Book'] } }] });
+    const mixed = definition('id', { and: [presence, { type: { in: ['schema:Book'] } }] });
     const mixedLocator = (await f.store.reserve(await native.actor(f.owner), f.collectionId, [mixed])).episodes[0]!
       .locator;
     await step(native, mixedLocator, async (work, deadline) => {
