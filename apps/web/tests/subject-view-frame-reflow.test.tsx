@@ -118,9 +118,11 @@ async function mount({
       }
     />
   );
+  // A browser encodes multilingual paths before the router sees them; memory history does not.
+  const location = new URL(contextHref(`${base}/credits`, realm), 'https://rezics.invalid');
   const router = createRouter({
     routeTree: createRootRoute({ component: () => content }),
-    history: createMemoryHistory({ initialEntries: [contextHref(`${base}/credits`, realm)] }),
+    history: createMemoryHistory({ initialEntries: [location.pathname + location.search] }),
   });
   await router.load();
   try {
