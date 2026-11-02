@@ -356,8 +356,11 @@ test('own-status keeps validated absence on observe and refresh; exact null and 
   await exact.refresh();
   expect(exact.getSnapshot().read.kind).toBe('unavailable');
   expect(
-    createRealmClaimStatus({ realmId }, { kind: 'ready', claimRequest: null, source: { ...source, realmId: key } }, adapter)
-      .getSnapshot().read.kind,
+    createRealmClaimStatus(
+      { realmId },
+      { kind: 'ready', claimRequest: null, source: { ...source, realmId: key } },
+      adapter,
+    ).getSnapshot().read.kind,
   ).toBe('unavailable');
   expect(
     createRealmClaimStatus(
