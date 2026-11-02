@@ -171,11 +171,11 @@ function RecipeEditorLive({
   const [property, setProperty] = useState('');
   const [failure, setFailure] = useState<CreateFailure>();
   const [corrections, setCorrections] = useState<RecipeCorrection[]>([]);
-  const correctionFocus = useRef<string | undefined>(undefined);
+  const validationFocus = useRef<string | undefined>(undefined);
   const workspace = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    const target = correctionFocus.current;
-    correctionFocus.current = undefined;
+    const target = validationFocus.current;
+    validationFocus.current = undefined;
     if (target && workspace.current && lifetime.active())
       focusRecipeCorrection(workspace.current.ownerDocument, target);
   }, [corrections, lifetime]);
@@ -193,7 +193,7 @@ function RecipeEditorLive({
         label: m.catalogue_create_invalid_field({}, o),
         instruction: m.correction_error_uneditable({}, o),
       });
-    correctionFocus.current = errors.find((error) => error.target)?.target;
+    validationFocus.current = errors.find((error) => error.target)?.target;
     setCorrections(errors);
     setFailure(next);
   };
@@ -289,7 +289,18 @@ function RecipeEditorLive({
       }
     | undefined
   >(undefined);
+  const sourceCorrectionFocus = useRef<
+    | {
+        row: string;
+        source: string;
+        epoch: number;
+        active: () => boolean;
+        cancel: () => void;
+      }
+    | undefined
+  >(undefined);
   useLayoutEffect(() => () => additionFocus.current?.cancel(), []);
+  useLayoutEffect(() => () => sourceCorrectionFocus.current?.cancel(), []);
   useLayoutEffect(() => {
     const intent = additionFocus.current;
     if (!intent) return;
@@ -315,6 +326,36 @@ function RecipeEditorLive({
     );
     (control ?? root.querySelector<HTMLElement>('h2'))?.focus();
   });
+  useLayoutEffect(() => {
+    const intent = sourceCorrectionFocus.current;
+    if (!intent) return;
+    const current = fieldAdmission.current;
+    const row = current.rows.find((entry) => entry.id === intent.row);
+    const property = row?.statement.property.id;
+    const admitted =
+      intent.active() &&
+      intent.epoch === readEpochRef.current &&
+      !!current.read &&
+      !!property &&
+      !!row?.source &&
+      row.source.id === intent.source &&
+      current.read.fields.includes(property) &&
+      (current.read.public?.subject.statements[property] ?? []).some((source) => source.id === intent.source) &&
+      rowMatchesCurrentDefinition(row, current.read);
+    intent.cancel();
+    if (!admitted) return;
+    const root = workspace.current?.ownerDocument.getElementById(recipeRowId(termsId, intent.row));
+    if (!root?.isConnected || !workspace.current?.contains(root)) return;
+    const control = [
+      ...root.querySelectorAll<HTMLElement>(
+        'fieldset input, fieldset select, fieldset textarea, fieldset button, fieldset [contenteditable="true"]',
+      ),
+    ].find(
+      (target) =>
+        !target.matches(':disabled, [aria-disabled="true"], [type="hidden"]') && !target.closest('[hidden], [inert]'),
+    );
+    (control ?? root.querySelector<HTMLElement>('h2'))?.focus();
+  }, [rows, read, readEpoch, lifetime]);
   function orientAddition(row: string, opener: HTMLButtonElement, keyboard: boolean) {
     additionFocus.current?.cancel();
     const document = opener.ownerDocument;
@@ -329,6 +370,44 @@ function RecipeEditorLive({
       row,
       active: () =>
         lifetime.active() && isReadEpochCurrent(readEpoch) && opener.isConnected && document.activeElement === opener,
+      cancel,
+    };
+    document.addEventListener('focusin', cancel, true);
+    document.addEventListener('pointerdown', cancel, true);
+    document.defaultView?.addEventListener('blur', cancel);
+  }
+  function orientSourceCorrection(
+    row: string,
+    source: string,
+    epoch: number,
+    opener: HTMLButtonElement,
+    keyboard: boolean,
+  ) {
+    sourceCorrectionFocus.current?.cancel();
+    const document = opener.ownerDocument;
+    if (
+      !keyboard ||
+      !lifetime.active() ||
+      !isReadEpochCurrent(epoch) ||
+      !opener.isConnected ||
+      document.activeElement !== opener
+    )
+      return;
+    const cancel = () => {
+      document.removeEventListener('focusin', cancel, true);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.defaultView?.removeEventListener('blur', cancel);
+      if (sourceCorrectionFocus.current?.row === row) sourceCorrectionFocus.current = undefined;
+    };
+    sourceCorrectionFocus.current = {
+      row,
+      source,
+      epoch,
+      active: () =>
+        lifetime.active() &&
+        isReadEpochCurrent(epoch) &&
+        opener.isConnected &&
+        document.activeElement === opener,
       cancel,
     };
     document.addEventListener('focusin', cancel, true);
@@ -722,19 +801,37 @@ function RecipeEditorLive({
                             variant="outline"
                             className={recipeActionClassName}
                             disabled={rows.some((row) => row.source?.id === source.id)}
-                            onClick={() => {
-                              if (!isReadEpochCurrent(readEpoch)) return;
-                              const definition = read!.release.properties[field];
-                              if (!definition) return;
-                              setRows([
-                                ...rows,
-                                {
-                                  id: crypto.randomUUID(),
-                                  source,
-                                  definition: structuredClone(definition),
-                                  statement: statementInput(source),
-                                },
-                              ]);
+                            onClick={(event) => {
+                              const current = fieldAdmission.current;
+                              if (
+                                !lifetime.active() ||
+                                !isReadEpochCurrent(readEpoch) ||
+                                !current.read ||
+                                current.read !== read ||
+                                !current.read.fields.includes(field) ||
+                                current.rows.some((row) => row.source?.id === source.id)
+                              )
+                                return;
+                              const admittedSource = (current.read.public?.subject.statements[field] ?? []).find(
+                                (statement) => statement.id === source.id,
+                              );
+                              const definition = current.read.release.properties[field];
+                              if (!admittedSource || !definition) return;
+                              const row = {
+                                id: crypto.randomUUID(),
+                                source: admittedSource,
+                                definition: structuredClone(definition),
+                                statement: statementInput(admittedSource),
+                              };
+                              current.rows = [...current.rows, row];
+                              orientSourceCorrection(
+                                row.id,
+                                admittedSource.id,
+                                readEpoch,
+                                event.currentTarget,
+                                event.detail === 0,
+                              );
+                              setRows(current.rows);
                             }}
                           >
                             {m.recipe_correct({}, o)}

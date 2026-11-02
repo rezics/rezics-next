@@ -161,6 +161,7 @@ Removing a populated unsent recipe field confirms locally, including authored te
 A successful refresh that withdraws a selected additional Recipe field identifies the stale choice, returns the chooser to its prompt, preserves entered terms and rows, and keeps Add disabled until a currently admitted field with available single-value capacity is deliberately selected.
 An admitted keyboard Add focuses the first usable control in the exact new Recipe row, with its heading as fallback; repeated properties use row identity, and pointer or refused additions, moved focus, removed targets and retired editors never replay orientation.
 Decision: Recipe keyboard Add language uses the shared specialist handoff to the exact stable term ID's language control, admitted against the same current read and workspace; pointer additions and cancelled or retired intent stay quiet.
+An admitted keyboard Correct focuses the first usable control in the exact source-backed Recipe row, with its heading as fallback; pointer or refused corrections, moved focus, removed targets and retired reads never replay orientation.
 
 ## Correct names and descriptions
 

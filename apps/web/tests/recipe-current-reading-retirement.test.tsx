@@ -65,6 +65,19 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     throw new Error('Recipe fixture creation failed');
   const initial = await fixture.corrections.load();
   if (!initial.ok || !initial.public) throw new Error('Recipe fixture current reading failed');
+  const ingredientField = 'schema:recipeIngredient';
+  const ingredientSource = initial.public.subject.statements[ingredientField]?.[0];
+  if (!ingredientSource) throw new Error('Recipe fixture ingredient assertion is missing');
+  const secondCitation = 'https://cook.example/second-ingredient';
+  const secondSource = structuredClone(ingredientSource);
+  secondSource.id = crypto.randomUUID();
+  const secondCitationPart = secondSource.references
+    .flatMap((reference) => reference.parts)
+    .find((part) => part.property.id === 'schema:url');
+  if (!secondCitationPart || secondCitationPart.value.type !== 'value')
+    throw new Error('Recipe fixture ingredient citation is missing');
+  secondCitationPart.value.content = secondCitation;
+  initial.public.subject.statements[ingredientField] = [ingredientSource, secondSource];
   const deferred = <T,>() => {
     let resolve!: (value: T) => void;
     let reject!: (reason?: unknown) => void;
@@ -152,6 +165,23 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     const ingredientLabel = initial.release.properties[ingredient]!.labels.en!;
     const cookTimeLabel = initial.release.properties[cookTime]!.labels.en!;
     const currentIngredient = section(ingredientLabel);
+    const sourceAssertions = within(currentIngredient).getAllByRole('button', { name: m.recipe_correct() });
+    const secondCorrect = sourceAssertions[1] as HTMLButtonElement;
+    secondCorrect.focus();
+    await act(async () => user.keyboard('{Enter}'));
+    const secondIngredientDraft = section(ingredientLabel, true);
+    const firstUsableControl = [
+      ...secondIngredientDraft.querySelectorAll<HTMLElement>(
+        'fieldset input, fieldset select, fieldset textarea, fieldset button, fieldset [contenteditable="true"]',
+      ),
+    ].find(
+      (control) =>
+        !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') && !control.closest('[hidden], [inert]'),
+    );
+    expect(window.document.activeElement).toBe(firstUsableControl);
+    expect(input(secondIngredientDraft, m.relation_citation()).value).toBe(secondCitation);
+    expect((sourceAssertions[0] as HTMLButtonElement).disabled).toBe(false);
+    expect(secondCorrect.disabled).toBe(true);
     const untouched = initial.fields.find(
       (field) =>
         field !== ingredient &&
@@ -178,6 +208,7 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     });
     await click(currentIngredient, m.recipe_correct());
     const ingredientDraft = section(ingredientLabel, true);
+    expect(ingredientDraft.contains(window.document.activeElement)).toBe(false);
     const privateValue = 'Retained correction, private until reviewed';
     const privateCitation = 'https://example.test/private-recipe-source';
     await replace(input(ingredientDraft, m.correction_value()), privateValue);
@@ -199,6 +230,8 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     expect(within(host).queryByRole('link', { name: m.candidate_view_public() })).toBeNull();
     expect(host.textContent).not.toContain(untouchedLabel);
     expect(ingredientDraft.isConnected).toBe(true);
+    expect(secondIngredientDraft.isConnected).toBe(true);
+    expect(input(secondIngredientDraft, m.relation_citation()).value).toBe(secondCitation);
     expect(input(ingredientDraft, m.correction_value()).value).toBe(privateValue);
     expect(input(ingredientDraft, m.relation_citation()).value).toBe(privateCitation);
     expect(sent).toHaveLength(2);
@@ -219,6 +252,8 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     expect(window.document.activeElement).toBe(outside);
     expect(within(host).queryByRole('link', { name: m.candidate_view_public() })).toBeNull();
     expect(sent).toHaveLength(2);
+    await act(async () => oldCorrect());
+    expect(window.document.activeElement).toBe(outside);
     await act(async () => user.click(readRetry()));
     await until(() => loadCount === 3);
     await until(() => !currentIngredient.isConnected);
