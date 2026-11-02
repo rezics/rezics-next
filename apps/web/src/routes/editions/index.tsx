@@ -19,9 +19,14 @@ export const Route = createFileRoute('/editions/')({
   head: ({ match }) =>
     pageHead({ title: m.creator_editions_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   pendingComponent: () => <CreatorEditionsView page={{ kind: 'loading' }} />,
-  errorComponent: () => <CreatorEditionsView page={{ kind: 'unavailable' }} />,
+  errorComponent: CreatorEditionsErrorRoute,
   component: CreatorEditionsRoute,
 });
+
+function CreatorEditionsErrorRoute() {
+  const { cursor } = Route.useSearch();
+  return <CreatorEditionsView page={{ kind: 'unavailable' }} {...(cursor ? { cursor } : {})} />;
+}
 
 export function CreatorEditionsRoute() {
   const { cursor } = Route.useSearch();

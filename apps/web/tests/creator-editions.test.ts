@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'bun:test';
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { SessionEnv } from '../src/session/client';
@@ -17,7 +18,7 @@ mock.module('@tanstack/react-start/server', () => ({
   setResponseHeader: () => {},
 }));
 const { loadSessionCreatorEditions } = await import('../src/content-editions/creator-editions-read');
-const { CreatorEditionsView } = await import('../src/content-editions/creator-editions-view');
+const { CreatorEditionsView, creatorEditionsHref } = await import('../src/content-editions/creator-editions-view');
 const { isSignedInPath } = await import('../src/session/guard');
 const { localizeHref } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
@@ -103,6 +104,23 @@ test('one exact native page carries current credential, no-store and the unchang
   expect(calls).toHaveLength(1);
 });
 
+test('route transport errors retain the current continuation for retry alongside first-page recovery', async () => {
+  const { Route } = await import('../src/routes/editions/index');
+  const root = createRootRoute();
+  const route = createRoute({
+    getParentRoute: () => root, path: '/editions/', validateSearch: creatorEditionsSearch,
+    loader: () => { throw new Error('Transport failed'); }, errorComponent: Route.options.errorComponent,
+  });
+  const router = createRouter({ routeTree: root.addChildren([route]), history: createMemoryHistory({
+    initialEntries: ['/editions/?cursor=opaque%2F%2B%3D'],
+  }) });
+  await router.load();
+  const html = renderToStaticMarkup(createElement(RouterProvider, { router }));
+  expect(html).toContain(`href="${creatorEditionsHref('opaque/+=')}"`);
+  expect(html).toContain(`href="${creatorEditionsHref()}"`);
+  expect(html).toContain(m.creator_editions_restart());
+});
+
 test('only the native own-account session chooses the account, never a bearer or client owner selector', async () => {
   const calls: Parameters<CreatorEditionsApi['get']>[] = [];
   const caller: CreatorEditionsApi = {
@@ -144,7 +162,7 @@ test('only the native own-account session chooses the account, never a bearer or
   expect(isSignedInPath(`/en/editions/${published.editionId}`)).toBe(false);
 });
 
-test('absent native, current denial, stale continuation and malformed metadata never become empty or actionable', async () => {
+test('unavailable continuations offer retry and first-page recovery while denials, stale results and malformed metadata remain distinct', async () => {
   expect(await load(unavailableCreatorEditionsApi)).toEqual({ kind: 'unavailable' });
   expect(await load(createNativeCreatorEditionsApi())).toEqual({ kind: 'unavailable' });
   for (const [status, kind] of [
@@ -160,6 +178,11 @@ test('absent native, current denial, stale continuation and malformed metadata n
     expect(html).not.toContain(published.editionId);
     expect(html).not.toContain(m.creator_editions_empty());
     expect(html).not.toContain('/creator/offers/new');
+    const recovery = renderToStaticMarkup(createElement(CreatorEditionsView, { page, cursor: 'opaque/+=' }));
+    if (kind === 'unavailable')
+      for (const href of [creatorEditionsHref('opaque/+='), creatorEditionsHref()])
+        expect(recovery).toContain(`href="${href}"`);
+    expect(html.includes(m.creator_editions_restart())).toBe(kind === 'stale');
   }
   for (const editions of [
     [{ ...published, body: 'private body' }],

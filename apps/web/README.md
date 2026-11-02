@@ -48,7 +48,10 @@ The producer remains responsible for current native listing admission and disclo
 declared for this consumer but is not implemented in this checkout yet.
 
 Next, refresh and retry each request one native page. Sparse and empty pages with a continuation retain Next; there is
-no refill, count, per-row read, body fetch or title enrichment. The rows display the native edition reference, state,
+no refill, count, per-row read, body fetch or title enrichment.
+Unavailable continuations retain same-page retry and offer explicit first-page restart through the existing localized
+links; route errors use the current validated cursor, and restarting drops only the cursor before a fresh session-bound read.
+The rows display the native edition reference, state,
 edition version, fixed revision, licence and plain subject identifier. Drafts link to the declared resume destination
 `/editions/new?editionId=…`. Published editions link separately to buyer reading `/editions/{id}` and the declared
 Commerce destination `/creator/offers/new?editionId=…`. The resume consumer and Commerce form own those destination

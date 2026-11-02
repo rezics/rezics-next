@@ -47,14 +47,26 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
             </Button>
           ) : (
             page.kind !== 'loading' && (
-              <Button
-                variant="outline"
-                className="min-h-11"
-                nativeButton={false}
-                render={<a href={page.kind === 'stale' ? creatorEditionsHref() : href} />}
-              >
-                {page.kind === 'stale' ? m.creator_editions_restart() : m.creator_editions_retry()}
-              </Button>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  nativeButton={false}
+                  render={<a href={page.kind === 'stale' ? creatorEditionsHref() : href} />}
+                >
+                  {page.kind === 'stale' ? m.creator_editions_restart() : m.creator_editions_retry()}
+                </Button>
+                {page.kind === 'unavailable' && cursor && (
+                  <Button
+                    variant="ghost"
+                    className="min-h-11"
+                    nativeButton={false}
+                    render={<a href={creatorEditionsHref()} />}
+                  >
+                    {m.creator_editions_restart()}
+                  </Button>
+                )}
+              </div>
             )
           )}
         </div>
