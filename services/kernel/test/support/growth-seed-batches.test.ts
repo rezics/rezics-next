@@ -96,7 +96,15 @@ test('rejects seed targets PostgreSQL would truncate or cannot represent before 
 
   for (const { records, message } of invalidTargets) {
     const database = recordingPool();
-    await expect(seedBulkRows(database.admin, 0, 1, () => 0, () => records)).rejects.toThrow(message);
+    await expect(
+      seedBulkRows(
+        database.admin,
+        0,
+        1,
+        () => 0,
+        () => records,
+      ),
+    ).rejects.toThrow(message);
     expect(database.calls).toEqual([]);
     expect(database.connections()).toBe(0);
   }

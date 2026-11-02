@@ -17,9 +17,7 @@ export function seedTableTarget(name: string): { readonly schema: string; readon
       `Growth seed table target ${describeIdentifier(name)} exceeds PostgreSQL's maximum qualified name length`,
     );
   if (!TABLE_NAME.test(name))
-    throw new TypeError(
-      `Invalid table name ${describeIdentifier(name)}; expected lowercase schema.table identifiers`,
-    );
+    throw new TypeError(`Invalid table name ${describeIdentifier(name)}; expected lowercase schema.table identifiers`);
 
   const separator = name.indexOf('.');
   const schema = name.slice(0, separator);
@@ -46,11 +44,7 @@ function invalidColumn(column: string, table: string, reason: string): never {
 export function validateSeedColumnIdentifier(column: string, table: string): void {
   if (column.length === 0) invalidColumn(column, table, 'PostgreSQL identifiers must not be empty');
   if (column.length > POSTGRES_IDENTIFIER_BYTE_LIMIT)
-    invalidColumn(
-      column,
-      table,
-      `exceeds PostgreSQL's ${POSTGRES_IDENTIFIER_BYTE_LIMIT}-byte UTF-8 identifier limit`,
-    );
+    invalidColumn(column, table, `exceeds PostgreSQL's ${POSTGRES_IDENTIFIER_BYTE_LIMIT}-byte UTF-8 identifier limit`);
 
   let bytes = 0;
   for (let index = 0; index < column.length; index++) {
