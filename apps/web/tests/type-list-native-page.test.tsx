@@ -23,7 +23,9 @@ function renderPage(body: unknown) {
     unlabelled: 'Unlabelled subject',
     reader: { suitability: 'blur' },
     labels: { cover: 'Cover' },
-    sections: new Map([[node, { ok: true, read: { kind: 'search' }, body }]]),
+    sections: new Map([
+      [node, { ok: true, read: { kind: 'search', body: { filter: {}, sort: 'name', limit: 24 } }, body }],
+    ]),
   };
   return renderToString(
     createElement(
