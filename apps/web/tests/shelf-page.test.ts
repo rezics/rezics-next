@@ -914,7 +914,11 @@ test(
   timeout,
 );
 
-test('suite teardown refuses a new Vite startup', async () => {
-  await cleanupSuite();
-  await expect(site()).rejects.toThrow('Site startup requested after suite teardown began');
-}, timeout);
+test(
+  'suite teardown refuses a new Vite startup',
+  async () => {
+    await cleanupSuite();
+    await expect(site()).rejects.toThrow('Site startup requested after suite teardown began');
+  },
+  timeout,
+);
