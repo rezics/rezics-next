@@ -31,6 +31,7 @@ export async function openFollowingSpace(
   const boards = new Map<string, Promise<boolean>>();
   return {
     spaceId,
+    headRevisionId: initial.headRevisionId,
     realmId: initial.realmId,
     containsBoard(boardId: string): Promise<boolean> {
       let result = boards.get(boardId);

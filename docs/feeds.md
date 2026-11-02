@@ -204,6 +204,19 @@ and scoped journey; a point read alone does not establish their population membe
 Decision: Space-selected Home keeps native Following usable and reports Discovery/Continue
 unavailable until their original selected-population producers are ready.
 
+The native structural input is now `openSpaceSubjectPopulation` in
+`content/feed-subject-scope.ts`: the complete current adopted publication-head population
+of the selected Space's current Realm, with indexed Subject keysets and an unconsumed
+lookahead. Its retained observation binds the Space head, Realm head, partition epoch,
+Realm disclosure epoch and native publication generation. Publication-head writes advance
+that generation in their own transaction. Prefix and terminal reads revalidate the
+observation and current Space authority, including empty and Realm-less populations.
+Unrelated Realm growth neither advances that observation nor enters its prefix.
+Decision: retain structural membership separately from public catalogue and eligible-progress
+coverage; activate neither lane until its original Source intersects these complete populations
+before selecting a page. This input alone does not establish Subject disclosure, native kind
+selection, public Search freshness or owner progress readiness.
+
 Home accepts exact `spaceId` and `ratingQuestionId` request selections. Space selection
 uses the existing Following order and examined positions, including sparse continuation;
 Discovery and Continue are omitted as unavailable before reading unselected candidates.
