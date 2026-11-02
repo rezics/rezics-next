@@ -182,20 +182,28 @@ export function currentAgentIdentityHistoryUnit(): Readonly<IdentityUnit> | unde
   const unit = identityUnits.getStore();
   if (unit && (!unit.active || unit.failure)) throw unit.failure ?? new IdentityHistoryWorkUnavailable();
   if (unit?.prepaid) {
-    assertPrepaidParent(unit.prepaid.deps, unit.prepaid.parent);
-    if (
-      !unit.prepaid.owner.isLiveIdentitySourceConsumerMaintenance(
-        unit.prepaid.deps.pool,
-        unit.context.identityConsumerWork,
-        unit.context.deadline,
-      ) ||
-      unit.prepaid.owner.identitySourceConsumerLibraryWork(
-        unit.prepaid.deps.pool,
-        unit.context.identityConsumerWork,
-        unit.context.deadline,
-      ) !== unit.prepaid.parent.library
-    )
-      throw originalUnavailable('identity-history-prepaid-source-context-changed');
+    try {
+      assertPrepaidParent(unit.prepaid.deps, unit.prepaid.parent);
+      if (
+        !unit.prepaid.owner.isLiveIdentitySourceConsumerMaintenance(
+          unit.prepaid.deps.pool,
+          unit.context.identityConsumerWork,
+          unit.context.deadline,
+        ) ||
+        unit.prepaid.owner.identitySourceConsumerLibraryWork(
+          unit.prepaid.deps.pool,
+          unit.context.identityConsumerWork,
+          unit.context.deadline,
+        ) !== unit.prepaid.parent.library
+      )
+        throw originalUnavailable('identity-history-prepaid-source-context-changed');
+    } catch (error) {
+      // Restoring a mutated dependency or clock after catching a refusal cannot
+      // revive this callback. Core's already-held cleanup does not use this guard.
+      unit.failure ??=
+        error instanceof Error ? error : originalUnavailable('identity-history-prepaid-source-context-changed');
+      throw unit.failure;
+    }
   }
   return unit;
 }
@@ -403,11 +411,14 @@ async function advanceInFrame(
     unpricedIdentityHistoryWork('source-original-native-read', nativeWork(70, 68, 25, 73984)),
     funded,
   );
-  const native = (
-    await runCommand(deps.pool, { partition: source.partition, deadline: funded.deadline }, async (tx) =>
-      noEffect(await readAccountIdentitySource(tx, receipt, undefined, true)),
-    )
-  ).value;
+  const readNative = (tx: CommandTransaction) => readAccountIdentitySource(tx, receipt, undefined, true);
+  const native = currentAgentIdentityHistoryUnit()?.prepaid
+    ? await identityHistoryCommand(deps.pool, funded, readNative, source.partition)
+    : (
+        await runCommand(deps.pool, { partition: source.partition, deadline: funded.deadline }, async (tx) =>
+          noEffect(await readNative(tx)),
+        )
+      ).value;
   if (
     native.partition !== source.partition ||
     native.epoch !== source.epoch ||
@@ -521,11 +532,14 @@ export async function readAgentIdentityRetirementStage(
       unpricedIdentityHistoryWork('source-original-handoff-read', nativeWork(73, 71, 26, 82176)),
       context,
     );
-  const handoff = (
-    await runCommand(pool, { partition: fixed.source.partition, deadline: context.deadline }, async (tx) =>
-      noEffect(await sourceHandoff(tx, fixed)),
-    )
-  ).value;
+  const readHandoff = (tx: CommandTransaction) => sourceHandoff(tx, fixed);
+  const handoff = currentAgentIdentityHistoryUnit()?.prepaid
+    ? await identityHistoryCommand(pool, context, readHandoff, fixed.source.partition)
+    : (
+        await runCommand(pool, { partition: fixed.source.partition, deadline: context.deadline }, async (tx) =>
+          noEffect(await readHandoff(tx)),
+        )
+      ).value;
   if (!handoff) return null;
   // Deadline-only callers retain compatible local staging, but cannot dispatch Source.
   // Source itself validates the original live frame, including foreign/ended values.

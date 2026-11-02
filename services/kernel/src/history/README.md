@@ -263,8 +263,8 @@ consumes the local original again nor enters another transfer. The producer modu
 resolved at the prepaid operation boundary to avoid an eager Library/HTTP/command
 construction cycle. Its cached callable namespace is not funding or a cached receipt.
 Producer operations validate the actual opaque grant, selected original, job, Pool,
-WorkClient, registry,
-immutable position, native allocation, exact Library ledger and absolute deadline.
+WorkClient, registry, immutable position, native allocation, exact Library ledger and
+absolute deadline.
 The fixed runtime Source receiving operand is
 `withPrepaidIdentitySourceConsumerMaintenance(deps, parent, body)` in
 `semantic/identity-source-consumer-maintenance.ts`. A missing data export refuses as
@@ -290,6 +290,50 @@ Native source association still uses the actual original command source, indepen
 of every retained account role. Existing native inventory, restore, permanent SDK
 generation-2 fence, physical-copy and live-subject checks remain required.
 
+### Selected native executor binding
+
+`identityHistoryCommand` captures the actual private prepaid unit, its original grant,
+context, Pool, WorkClient, registry and immutable deadline. It calls the installed
+`withCommandDispatchLifetime(pool, deadline, owner, body)` around exactly one genuine
+`runCommand`, under `withSingleCommandAttempt`, returning the native `noEffect` result.
+Core retains construction and association of the native transaction. Accounts creates
+no command transaction, raw-client interceptor or executor replacement.
+
+The synchronous `owner.validate(): void` authenticates that same active unpoisoned unit
+and parent through the real original producer operations on every Core checkpoint.
+`owner.original` is exactly `parent.original`. `owner.reserve(allowance)` validates again,
+requires the actual `COMMAND_DISPATCH_ALLOWANCE` identity and calls
+`reserveIdentityOriginalSourceWork` **once** with `allowance.total.work`. This atomically
+holds effect plus disjoint cleanup before checkout. It never charges `local.command`,
+the old Source counter, or the already-spent original local allowance for that command.
+Core alone dispatches the already-held same-client failure ROLLBACK, even after expiry
+or revocation. Failed COMMIT, failed ROLLBACK and unused cleanup never refill the ledger.
+Body SQL and SDK/Source/Library children remain additional independently priced work.
+
+`IDENTITY_HISTORY_ACCOUNTS_DECLARATION.selectedCommand` is the actual frozen Core export,
+including its component prices, rather than a handwritten replacement. In vector order
+candidateKeys/nativeRows/identityMetadataRows/nativePoints/witnessKeys/statements/bytes/
+emptySeeks, its effect is `0/2/0/1/0/7/169/1`, cleanup is `0/0/0/0/0/1/0/0`, and total is
+`0/2/0/1/0/8/169/1`; every `engineRequests` is zero. Variable timeout strings, bindings
+and bounded projected rows are included; fixed SQL/protocol framing is excluded as
+defined by [Core](../command/README.md#cost-selected-native-no-effect-controls).
+
+Each reached command pays one total, including early pending returns and failures.
+The local retirement route has eight distinct command sites: initial receiver, original
+source, source handoff, native retirement verification, receiver reread, readiness
+recording, durable readiness reread and closure recording. Physical minimization adds
+prepare, current guard and final native recording; two fence observations each repeat
+their before/after receiving commands. Selected final progress or the pending scheduler
+update adds one alternative command. Source-owned scheduling/repeated native inventory
+may add further reached commands; these multiplicities must be composed by Source,
+not inferred as a finite whole-child maximum from the local quote.
+
+Only Core's finite `single-no-effect` profile is supported. The adapter supplies no actor,
+basis, principal, receipt, authorization or custom clock. Events, callbacks, record-source
+sets and agent associations remain refused before unsupported final controls. Empty
+native fence results refuse before unbounded routing projections, writable waits or retry.
+The ordinary independent-maintenance command branch keeps its historical control price.
+
 ### Known local declaration and composition interface
 
 `IDENTITY_HISTORY_ACCOUNTS_DECLARATION`, exported by `agent-identity-inventory-work.ts`
@@ -312,7 +356,7 @@ Source's nested native work is excluded and remains a named missing operand.
 
 | Local call body          | nativeRows | nativePoints | statements |  bytes | emptySeeks |
 | ------------------------ | ---------: | -----------: | ---------: | -----: | ---------: |
-| command                  |          3 |            1 |          8 |    256 |          1 |
+| command (independent)    |          3 |            1 |          8 |    256 |          1 |
 | snapshot                 |          1 |            0 |          4 |    128 |          0 |
 | physicalInspection       |        148 |            8 |         12 |  11888 |          8 |
 | mapping                  |          4 |            4 |          3 |  16384 |          4 |
@@ -357,8 +401,9 @@ Source's nested native work is excluded and remains a named missing operand.
 
 The aggregate `physicalInspection` includes its envelope; `releasedDurableReceiving`,
 `sourceMappingSnapshot` and `retirementSnapshot` also include theirs. For the other
-local cuts an envelope is additional: native commands reserve BEGIN, settings,
-time, native no-effect fence, COMMIT and failure ROLLBACK; released snapshots reserve
+local cuts an envelope is additional: selected native commands reserve the actual
+Core `selectedCommand.total` above; independent commands reserve `local.command`.
+Released snapshots reserve
 BEGIN/settings/COMMIT/ROLLBACK. Recovery released snapshots now include that envelope
 as well. Mapping is read initially and again by each receiving binding. Retirement
 has two released binding checks and the writer observation before mutation, then two
@@ -418,16 +463,15 @@ Its named missing terms are:
   current verification. Canonical-index redrive/release is insufficient.
 - `SDKPhysicalWriterClosure`: independent homes and non-FK participants. SDK deletion,
   EOF, terminal workflow, ACK or local cleanup cannot discharge these obligations.
-- `NativeCommandDispatchLifetime`: the generic executor takes `(pool, options, body)`
-  and exposes only the body transaction. Its settings/fence/COMMIT use a separate raw
-  client with no original-grant pre/post dispatch hook. Guarding `tx.query` covers only
-  body calls. Accounts therefore refuses a selected prepaid native command as
-  `identity-history-native-command-dispatch-lifetime-unavailable` before its checkout;
-  it does not mutate Pool checkout, cast transactions or alter the generic executor.
 
-The final command body is implemented but cannot dispatch until its native executor
-lifetime interface exists. Missing physical/native enrollment refuses the affected
-final proof as well. No complete Account erasure or all-copy completion is asserted.
+The delivered Core lifetime is now bound by the selected adapter and is not a missing
+term. Missing complete partitions still refuse before affected child I/O, and missing
+physical/native enrollment refuses the affected final proof. No complete Account erasure
+or all-copy completion is asserted.
 Focused prepaid callback/declaration and authentic selected-original regressions are
-provided in the History and shared-History context tests. Native acceptance remains
+provided in the History and shared-History context tests. The new native command suite
+exercises the delivered executor binding. The retained older prepaid suite includes a
+historical unconditional-executor-refusal assertion that predates this supported binding;
+it is preserved unchanged under the acceptance-test freeze and needs owner reconciliation.
+Native acceptance remains
 unrun at this source delivery boundary; typechecking does not establish native proof.

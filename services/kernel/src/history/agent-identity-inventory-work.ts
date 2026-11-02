@@ -5,6 +5,7 @@ import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
 import type { HistoryReceivingContext } from './receiving.ts';
 import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-source-consumer-maintenance.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
+import { COMMAND_DISPATCH_ALLOWANCE } from '../command/dispatch-lifetime.ts';
 
 const declarations = new WeakMap<NativeStepWork, WorkDimensions>();
 const missingTerms = new WeakMap<NativeStepWork, string>();
@@ -124,9 +125,11 @@ export async function reserveIdentityHistoryWork(
     throw new IdentityHistoryWorkUnavailable();
 }
 
-// BEGIN, two local settings, time, final setting, native no-effect fence, COMMIT,
-// and the failure ROLLBACK slot. No receipt, authorization, event or callback writes.
+// Retained independent-maintenance envelope. The selected original uses Core's
+// actual executable quote below instead, never both charges for the same command.
 export const IDENTITY_HISTORY_COMMAND_CONTROL = accountHistoryWork(3, 1, 8, 256, 1);
+// Compatibility diagnostic for the stopped, body-only implementation. Core now
+// supplies this lifetime; it is no longer a missing selected-command operand.
 export const IDENTITY_HISTORY_COMMAND_LIFETIME_UNAVAILABLE =
   'identity-history-native-command-dispatch-lifetime-unavailable';
 
@@ -213,6 +216,15 @@ export const IDENTITY_HISTORY_ACCOUNTS_DECLARATION = Object.freeze({
     'emptySeeks',
   ] as const),
   engineRequests: 0,
+  selectedCommand: COMMAND_DISPATCH_ALLOWANCE,
+  // Per invocation of the owning local body; early returns reduce reached sites.
+  // Source's complete schedule/repeats remain a separate missing composition term.
+  selectedCommandCalls: Object.freeze({
+    retirement: 8,
+    physicalMinimization: 3,
+    physicalFenceReceiving: 4, // two fence observations, before/after each
+    selectedContinuation: 1, // pending scheduler update OR final cursor/receiving
+  }),
   local: Object.freeze(
     Object.fromEntries(
       Object.entries(IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK).map(([name, amount]) => [name, declarations.get(amount)!]),
@@ -232,7 +244,8 @@ export const IDENTITY_HISTORY_ACCOUNTS_DECLARATION = Object.freeze({
     sdkRetire: 'at most one single attempt; rollback+begin+settings+lock+retire+commit',
     sdkDelete: 'at most one single attempt; rollback+begin+settings+lock+four deletes+commit',
     physical: 'two inspections; eight LIMIT+1 probes per inspection; limits 1,1,1,64,8,64,0,0',
-    commands: 'one envelope per reached native command; COMMIT and separate ROLLBACK admitted before BEGIN',
+    commands:
+      'one selectedCommand.total per reached selected noEffect command, atomically including disjoint cleanup before checkout; independent commands use local.command instead',
     progress: 'one held selected job/barrier and cursor update, followed by original producer progress control',
   }),
   missingTerms: Object.freeze([
@@ -242,7 +255,6 @@ export const IDENTITY_HISTORY_ACCOUNTS_DECLARATION = Object.freeze({
     'RecoveryFinalReceiving: disjoint local/Source composition of the two serializer current receiving verifiers',
     'RecoveryReceivingEnrollment: released Search owner enrollment and same-home current verification',
     'SDKPhysicalWriterClosure: independent homes and non-FK physical participants',
-    'NativeCommandDispatchLifetime: executor raw-client controls and COMMIT pre/post original-grant hook',
   ]),
 });
 
@@ -307,16 +319,76 @@ export async function identityHistoryCommand<T>(
 ): Promise<T> {
   const history = await import('./agent-identity-retirement.ts');
   history.assertAgentIdentityHistoryUnit(pool, context);
-  if (history.currentAgentIdentityHistoryUnit()?.prepaid) {
-    // runCommand's raw PoolClient is deliberately private. Guarding the body tx
-    // cannot guard its controls/fence/COMMIT; do not claim that partial wrapper is
-    // the missing executor lifetime interface, or open an unguarded command.
-    const { IdentityOriginalUnavailable } = await import('../access/identity-original-admission.ts');
-    throw new IdentityOriginalUnavailable(IDENTITY_HISTORY_COMMAND_LIFETIME_UNAVAILABLE);
-  }
-  await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_COMMAND_CONTROL, context);
+  const unit = history.currentAgentIdentityHistoryUnit();
   const { noEffect, runCommand, withSingleCommandAttempt } = await import('../command/command.ts');
   history.assertAgentIdentityHistoryUnit(pool, context);
+  if (unit?.prepaid) {
+    const prepaid = unit.prepaid;
+    const parent = prepaid.parent;
+    const original = parent.original;
+    const deadline = parent.deadline;
+    const funded = unit.context;
+    const client = unit.client;
+    const deps = prepaid.deps;
+    const registry = deps.registry;
+    const { withCommandDispatchLifetime } = await import('../command/dispatch-lifetime.ts');
+    history.assertAgentIdentityHistoryUnit(pool, context, client);
+    const { IdentityOriginalUnavailable, reserveIdentityOriginalSourceWork } =
+      await import('../access/identity-original-admission.ts');
+    // Core calls this synchronously immediately around every effect/control await,
+    // including its real native COMMIT. Private producer accessors, rather than the
+    // captured references alone, authenticate the same grant on every invocation.
+    const validate = (): void => {
+      history.assertAgentIdentityHistoryUnit(pool, context, client);
+      if (
+        history.currentAgentIdentityHistoryUnit() !== unit ||
+        unit.prepaid !== prepaid ||
+        unit.context !== funded ||
+        unit.client !== client ||
+        prepaid.deps !== deps ||
+        deps.pool !== pool ||
+        deps.client !== client ||
+        deps.registry !== registry ||
+        prepaid.parent !== parent ||
+        parent.original !== original ||
+        parent.deadline !== deadline ||
+        context.deadline !== deadline
+      )
+        throw new IdentityOriginalUnavailable('identity-history-native-command-context-changed');
+    };
+    validate();
+    return withCommandDispatchLifetime(
+      pool,
+      deadline,
+      {
+        original,
+        validate,
+        reserve(allowance) {
+          validate();
+          if (allowance !== COMMAND_DISPATCH_ALLOWANCE)
+            throw new IdentityOriginalUnavailable('identity-history-native-command-allowance-changed');
+          // ONE atomic debit holds both effect and cleanup in the original Source
+          // partition before checkout. No legacy Source/local charge, refund or
+          // post-revocation cleanup reservation. Core owns its same-client ROLLBACK.
+          reserveIdentityOriginalSourceWork(deps, original, parent.jobId, allowance.total.work);
+          validate();
+        },
+      },
+      () =>
+        withSingleCommandAttempt(
+          async () =>
+            (
+              await runCommand(pool, { partition, deadline }, async (tx) => {
+                validate();
+                const answer = await body(tx);
+                validate();
+                return noEffect(answer);
+              })
+            ).value,
+        ),
+    );
+  }
+  await reserveIdentityHistoryWork(pool, IDENTITY_HISTORY_COMMAND_CONTROL, context);
   const answer = await withSingleCommandAttempt(
     async () =>
       (

@@ -346,21 +346,29 @@ export async function retireAgentIdentitySDKWork(
   } = await import('./agent-identity-inventory-work.ts');
   const { maintainSdkWorkflowOnce, supportsBoundedSdkMaintenance } = await import('../work/sdk-retirement-fence.ts');
   // Preserve native source/role refusal before SDK dispatch, including legacy callers.
-  const { verifyAgentIdentityRetirementStage } = await import('./agent-identity-retirement.ts');
+  const { verifyAgentIdentityRetirementStage, currentAgentIdentityHistoryUnit } =
+    await import('./agent-identity-retirement.ts');
   const { IDENTITY_HISTORY_COMMAND_CONTROL } = await import('./agent-identity-inventory-work.ts');
+  const prepaid = !!currentAgentIdentityHistoryUnit()?.prepaid;
+  const verification = unpricedIdentityHistoryWork(
+    'source-native-retirement-verification',
+    nativeWork(71, 71, 19, 82048),
+  );
   await reserveIdentityHistoryWork(
     pool,
-    addNativeWork(
-      unpricedIdentityHistoryWork('source-native-retirement-verification', nativeWork(71, 71, 19, 82048)),
-      IDENTITY_HISTORY_COMMAND_CONTROL,
-    ),
+    prepaid ? verification : addNativeWork(verification, IDENTITY_HISTORY_COMMAND_CONTROL),
     context,
   );
-  const check = (
-    await runCommand(pool, { partition: stage.reference.source.partition, deadline: context.deadline }, async (tx) =>
-      noEffect(await verifyAgentIdentityRetirementStage(tx, stage)),
-    )
-  ).value;
+  const verify = (tx: CommandTransaction) => verifyAgentIdentityRetirementStage(tx, stage);
+  const check = prepaid
+    ? await identityHistoryCommand(pool, context, verify, stage.reference.source.partition)
+    : (
+        await runCommand(
+          pool,
+          { partition: stage.reference.source.partition, deadline: context.deadline },
+          async (tx) => noEffect(await verify(tx)),
+        )
+      ).value;
   if (check.state === 'pending') return check;
   if (!nativeClient(client) || !supportsBoundedSdkMaintenance(client))
     return pending('identity-sdk-bounded-maintenance-not-installed');
