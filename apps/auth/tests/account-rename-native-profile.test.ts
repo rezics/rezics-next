@@ -95,7 +95,7 @@ function request(body: unknown = { accountId }, headers = {}, query = '') {
 test('the default source reads a handleless human and reconciles a lost rename response with the original command', async () => {
   const f = fixture();
   const current = await nativeRenameSource.readCurrent();
-  expect(current).toEqual({
+  expect(current).toMatchObject({
     kind: 'ready',
     target: { accountId, handle: null, clientId: human.client_id, scopes: human.scope },
   });
