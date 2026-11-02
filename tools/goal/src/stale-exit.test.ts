@@ -103,7 +103,7 @@ async function waitingAttempt(h: ReturnType<typeof harness>) {
 test('a resumed launch failure is settled from its appended output, not the prior waiting result', async () => {
   const h = harness(waitingCli);
   try {
-    const { ref } = await waitingAttempt(h);
+    const { task, ref } = await waitingAttempt(h);
     const attempt = h.store.attempt(ref);
     const resumed = await launch(
       h.store,
@@ -161,7 +161,7 @@ test('repeated waiting resume launch failures stop after two retries and alert t
 test('a resumed run with a new exit object settles from that object', async () => {
   const h = harness(successOnResumeCli());
   try {
-    const { task, ref } = await waitingAttempt(h);
+    const { ref } = await waitingAttempt(h);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
     await job.recoverOrphans();
 
