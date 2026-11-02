@@ -130,7 +130,11 @@ describe('Complete readable author bylines', () => {
     const { body, html } = render({
       author: { ...carol, ...poison },
       showAuthor: false,
-      children: <time dateTime={revisedAt} title="Supplied full edit time">Supplied edit label</time>,
+      children: (
+        <time dateTime={revisedAt} title="Supplied full edit time">
+          Supplied edit label
+        </time>
+      ),
     });
     expect(body.querySelector('a, img, [data-slot="avatar"], [title]:not(time)')).toBeNull();
     for (const fragment of [poison.displayName, poison.handle, poison.avatar.media, poison.operatorId])
@@ -147,7 +151,11 @@ describe('Complete readable author bylines', () => {
     for (const size of ['default', 'sm'] as const) {
       const { body } = render({
         size,
-        children: <time dateTime={revisedAt} title="Supplied edit time">Supplied edit label</time>,
+        children: (
+          <time dateTime={revisedAt} title="Supplied edit time">
+            Supplied edit label
+          </time>
+        ),
       });
       const portrait = body.querySelector('[data-slot="avatar"]')!;
       expect(portrait.getAttribute('data-size')).toBe(size);

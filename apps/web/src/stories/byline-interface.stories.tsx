@@ -227,6 +227,9 @@ export const IdentityPrivacy: Story = {
     const hidden = canvasElement.querySelector('[data-hidden-case]')!;
     await expect(hidden.querySelector('a, img, [data-slot="avatar"], [title]:not(time)')).toBeNull();
     await expect(hidden.querySelector('time')).toHaveAttribute('datetime', createdAt);
-    await expect(canvasElement.querySelector('[data-automated-case] a')).toHaveAttribute('href', `/${getLocale()}/@carol`);
+    await expect(canvasElement.querySelector('[data-automated-case] a')).toHaveAttribute(
+      'href',
+      `/${getLocale()}/@carol`,
+    );
   },
 };
