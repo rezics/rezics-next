@@ -80,21 +80,13 @@ function useGuideFocusIntent() {
   return intent;
 }
 
-function armGuideFocusIntent(
-  intent: GuideFocusRef,
-  event: KeyboardEvent<HTMLElement>,
-  scope: string,
-) {
+function armGuideFocusIntent(intent: GuideFocusRef, event: KeyboardEvent<HTMLElement>, scope: string) {
   if (event.defaultPrevented || event.repeat) return;
   if (event.key !== 'Enter' && !(event.key === ' ' && event.currentTarget instanceof HTMLButtonElement)) return;
   intent.current = { opener: event.currentTarget, scope, cancelled: false };
 }
 
-function takeGuideFocusIntent(
-  intent: GuideFocusRef,
-  event: MouseEvent<HTMLElement>,
-  scope: string,
-) {
+function takeGuideFocusIntent(intent: GuideFocusRef, event: MouseEvent<HTMLElement>, scope: string) {
   const current = intent.current;
   if (!current) return undefined;
   if (event.detail !== 0 || current.opener !== event.currentTarget || current.scope !== scope || current.cancelled) {
@@ -117,11 +109,7 @@ function cancelGuideFocusIntentOnBlur(intent: GuideFocusRef, event: FocusEvent<H
   current.cancelled = true;
 }
 
-function finishGuideFocusIntent(
-  intentRef: GuideFocusRef,
-  intent: GuideFocusIntent,
-  target: HTMLElement | null,
-) {
+function finishGuideFocusIntent(intentRef: GuideFocusRef, intent: GuideFocusIntent, target: HTMLElement | null) {
   if (intentRef.current === intent) intentRef.current = undefined;
   if (intent.cancelled) return;
   if (intent.opener.isConnected) {
@@ -402,9 +390,7 @@ function ActiveGuide({
   const section = useRef<HTMLElement>(null);
   const focusIntent = useGuideFocusIntent();
   const handledFocus = useRef<object | undefined>(undefined);
-  const [focusCompletion, setFocusCompletion] = useState<
-    { token: object; intent: GuideFocusIntent } | undefined
-  >();
+  const [focusCompletion, setFocusCompletion] = useState<{ token: object; intent: GuideFocusIntent } | undefined>();
   if (focusIntent.current && focusIntent.current.scope !== key) focusIntent.current = undefined;
   const [search, setSearch] = useState({
     draft: '',
@@ -550,9 +536,9 @@ function ActiveGuide({
     handledFocus.current = completion.token;
     const target =
       intent.action === 'directory'
-        ? section.current?.querySelector<HTMLElement>('[data-guide-recovery]') ??
+        ? (section.current?.querySelector<HTMLElement>('[data-guide-recovery]') ??
           section.current?.querySelector<HTMLElement>('[data-guide-directory]') ??
-          null
+          null)
         : guideRecoveryTarget(section.current);
     finishGuideFocusIntent(focusIntent, intent, target);
   }, [
@@ -658,12 +644,7 @@ function ActiveGuide({
                       runFocusAction(
                         event,
                         'type',
-                        JSON.stringify([
-                          query,
-                          search.cursor ?? null,
-                          entry.typeId,
-                          currentSelection.attempt + 1,
-                        ]),
+                        JSON.stringify([query, search.cursor ?? null, entry.typeId, currentSelection.attempt + 1]),
                         () => {
                           setSearchExactDraft(entry.typeId);
                           setSelection({
@@ -736,12 +717,7 @@ function ActiveGuide({
                 runFocusAction(
                   event,
                   'type',
-                  JSON.stringify([
-                    query,
-                    search.cursor ?? null,
-                    currentSelection.type,
-                    currentSelection.attempt,
-                  ]),
+                  JSON.stringify([query, search.cursor ?? null, currentSelection.type, currentSelection.attempt]),
                   () => typeQuery.refetch(),
                 )
               }

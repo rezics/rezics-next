@@ -120,7 +120,17 @@ async function surface() {
 
 test('paged prefix browsing, exact lookup and selected Type ignore late results from an older query or selection', async () => {
   await mounted(
-    async ({ host, render, act, changeText, DefinitionGuide, definitionGuideFixture, m, definitionText, pointerClick }) => {
+    async ({
+      host,
+      render,
+      act,
+      changeText,
+      DefinitionGuide,
+      definitionGuideFixture,
+      m,
+      definitionText,
+      pointerClick,
+    }) => {
       const fixture = definitionGuideFixture();
       const [bookRead, recipeRead] = await Promise.all([
         fixture.transport.exact('en', 'schema:Book'),
@@ -215,11 +225,15 @@ test('paged prefix browsing, exact lookup and selected Type ignore late results 
       expect(host.textContent).not.toContain('Old result');
 
       await act(async () =>
-        pointerClick([...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Book result'))!),
+        pointerClick(
+          [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Book result'))!,
+        ),
       );
       await render(component);
       await act(async () =>
-        pointerClick([...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Recipe result'))!),
+        pointerClick(
+          [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Recipe result'))!,
+        ),
       );
       await render(component);
       expect(host.querySelector('h2')!.textContent).toBe(
@@ -716,9 +730,7 @@ test('keyboard pinned retries lock one read and preserve a surviving retry or fo
         expect(reads).toBe(ending === 'denied' ? 2 : 1);
         expect(host.querySelector('a')!.getAttribute('href')).toBe(back);
         if (ending === 'field') expect(host.querySelector('code')!.textContent).toBe(fixture.address.release!);
-        expect(fixture.calls.map((call) => call.path)).toEqual([
-          `/v1/definitions/releases/${fixture.address.release}`,
-        ]);
+        expect(fixture.calls.map((call) => call.path)).toEqual([`/v1/definitions/releases/${fixture.address.release}`]);
       },
     );
   }
