@@ -151,9 +151,9 @@ test('kind continuation recovery text follows each instance locale through the s
         </form>,
       ),
     );
-    const more = m.discovery_more_kinds();
+    const more = [m.discovery_more_kinds({}, options.en), m.discovery_more_kinds({}, options['zh-Hans'])];
     await act(async () => {
-      for (const button of [...host.querySelectorAll('button')].filter((value) => value.textContent === more))
+      for (const button of [...host.querySelectorAll('button')].filter((value) => more.includes(value.textContent!)))
         button.click();
     });
     expect(host.textContent).toContain(m.search_reader_results_unavailable({}, options.en));

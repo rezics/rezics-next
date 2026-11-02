@@ -14,6 +14,10 @@ import { useSearchRetryWait } from './search-recovery-retry';
 
 const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useBrowserLayoutEffect;
 
+function messageOptions(locale: string) {
+  return { locale: locales.find((value) => value === locale) ?? 'en' };
+}
+
 /** Registry pages are explicit bounded reads; rows and initial count evidence remain in place. */
 export function DiscoveryKinds({
   initial,
@@ -142,13 +146,14 @@ export function DiscoveryKinds({
       }
     }
   }
+  const options = messageOptions(locale);
   return (
-    <section ref={recoveryRegion} className="space-y-3" aria-label={m.search_result_kinds()} tabIndex={-1}>
-      <h2 className="font-medium">{m.search_result_kinds()}</h2>
-      <p className="text-sm text-muted-foreground">{m.search_result_kinds_help()}</p>
+    <section ref={recoveryRegion} className="space-y-3" aria-label={m.search_result_kinds({}, options)} tabIndex={-1}>
+      <h2 className="font-medium">{m.search_result_kinds({}, options)}</h2>
+      <p className="text-sm text-muted-foreground">{m.search_result_kinds_help({}, options)}</p>
       {chosen.size === 0 && (
         <p role="status" className="text-sm">
-          {m.search_all_kinds()}
+          {m.search_all_kinds({}, options)}
         </p>
       )}
       {[...chosen]
@@ -157,7 +162,7 @@ export function DiscoveryKinds({
           <input key={id} type="hidden" name="kinds" value={id} />
         ))}
       <details open={chosen.size > 0}>
-        <summary className="cursor-pointer text-sm font-medium">{m.search_choose_kinds()}</summary>
+        <summary className="cursor-pointer text-sm font-medium">{m.search_choose_kinds({}, options)}</summary>
         <ul className="space-y-2 pt-3">
           {values.map((kind) => {
             const label = localizedLabel(kind.labels, locale);
@@ -165,12 +170,12 @@ export function DiscoveryKinds({
             const evidence =
               count && 'value' in count
                 ? `${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'}`
-                : m.discovery_count_unavailable();
+                : m.discovery_count_unavailable({}, options);
             return (
               <li key={kind.id}>
                 <Label className="items-start gap-2 text-sm font-normal">
                   <NativeCheckbox
-                    aria-label={m.search_kind_choice({ value: label.text || kind.id })}
+                    aria-label={m.search_kind_choice({ value: label.text || kind.id }, options)}
                     name="kinds"
                     value={kind.id}
                     defaultChecked={chosen.has(kind.id)}
@@ -196,22 +201,20 @@ export function DiscoveryKinds({
       </details>
       {status && (
         <p role={status === 'loading' ? 'status' : 'alert'} className="text-sm text-muted-foreground">
-          {recovery ? searchRecoveryMessage(recovery, locale) : discoveryMessage(status)}
+          {recovery ? searchRecoveryMessage(recovery, locale) : discoveryMessage(status, locale)}
         </p>
       )}
       {waiting && (
-        <p className="text-sm text-muted-foreground">
-          {m.search_recovery_wait({}, { locale: locales.find((value) => value === locale) ?? 'en' })}
-        </p>
+        <p className="text-sm text-muted-foreground">{m.search_recovery_wait({}, options)}</p>
       )}
       {restartable && (
         <>
           <p role="status" className="text-sm text-muted-foreground">
             {stopped
-              ? m.result_kind_window_progress()
+              ? m.result_kind_window_progress({}, options)
               : continuations.limited
-                ? m.result_kind_window_limit()
-                : m.result_kind_window_end()}
+                ? m.result_kind_window_limit({}, options)
+                : m.result_kind_window_end({}, options)}
           </p>
           <Button
             ref={restartButton}
@@ -220,7 +223,7 @@ export function DiscoveryKinds({
             disabled={!hydrated || status === 'loading'}
             onClick={(event) => restart(event.currentTarget)}
           >
-            {m.result_kind_window_restart()}
+            {m.result_kind_window_restart({}, options)}
           </Button>
         </>
       )}
@@ -232,7 +235,7 @@ export function DiscoveryKinds({
           disabled={!hydrated || status === 'loading' || waiting}
           onClick={(event) => void more(event.currentTarget)}
         >
-          {m.discovery_more_kinds()}
+          {m.discovery_more_kinds({}, options)}
         </Button>
       )}
     </section>

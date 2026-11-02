@@ -19,10 +19,11 @@ or listeners. Crossing the compact breakpoint while editing preserves the input 
 
 Result-kind traversal is keyed by the query, locale and initial discovery checkpoint (`as_of`); a changed checkpoint
 starts a fresh traversal. Mixed DiscoveryResults copy (unnamed-account fallback, verified-as text, empty and recovery
-messages, and recovery actions) uses the region's supplied locale; DiscoveryKinds still calls `discoveryMessage`
-without one. Generated Search chrome and invalid-input recovery copy follow the supplied page locale, with English as
-the fallback for an unsupported tag. Global search accepts drafts up to 512 UTF-8 bytes; scoped inputs keep their existing
-256 UTF-16-unit cap, and typeahead keeps its independent 64-code-point prefix bound.
+messages, and recovery actions) uses the region's supplied locale. DiscoveryKinds chrome, labels, progress and failure
+text use the region's supplied locale. Authored Type labels keep their own language. Generated Search chrome and
+invalid-input recovery copy follow the supplied page locale, with English as the fallback for an unsupported tag.
+Global search accepts drafts up to 512 UTF-8 bytes; scoped inputs keep their existing 256 UTF-16-unit cap, and
+typeahead keeps its independent 64-code-point prefix bound.
 
 Header suggestion ownership follows query, locale, the full value of the supplied SearchScope, the active loader and
 session observation; equivalent scope objects retain ownership. Locale, scope or loader changes hide old results
