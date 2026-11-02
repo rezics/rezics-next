@@ -6,6 +6,7 @@ import { loadManagementSession } from '../src/management-operations';
 import { loadSecurity } from '../src/security';
 import { createConsentReview, readConsent, type ConsentReview } from '../src/consent';
 import * as inventory from '../src/security-inventory';
+import * as passkeyBrowser from '../src/passkeys';
 import { SecurityPage } from '../src/routes/security';
 import { m } from '../src/paraglide/messages.js';
 
@@ -96,6 +97,7 @@ for (const [status, phase] of [
     expect((await readConsent(consent.client_id)).ok).toBe(true);
   });
 test('failed passkeys keep sessions usable and offer a read-only reload of the current review', async () => {
+  const supported = spyOn(passkeyBrowser, 'passkeysSupported').mockReturnValue(true);
   const passkeys = spyOn(inventory, 'loadPasskeyInventory').mockResolvedValue({ ok: false });
   try {
     const page = await fixture.open(
@@ -122,5 +124,6 @@ test('failed passkeys keep sessions usable and offer a read-only reload of the c
     expect(page.host.querySelector('#security-sessions-heading')).not.toBeNull();
   } finally {
     passkeys.mockRestore();
+    supported.mockRestore();
   }
 });
