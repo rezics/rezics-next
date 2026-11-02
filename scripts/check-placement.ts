@@ -559,7 +559,9 @@ function classifyCommand(argv: readonly string[], cwd: string, root: string, dep
   if (argv.length === 0 || depth > 4) return { placement: 'remote', reason: 'unknown command' };
   try {
     if (lifecycleSpecFromArgv(argv)) return { placement: 'remote', reason: 'bounded held-child lifecycle probe' };
-  } catch { return { placement: 'remote', reason: 'invalid held-child lifecycle probe' }; }
+  } catch {
+    return { placement: 'remote', reason: 'invalid held-child lifecycle probe' };
+  }
   const command = argv[0]!;
   const args = argv.slice(1);
   const name = executableName(command);

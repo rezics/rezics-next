@@ -7072,29 +7072,57 @@ test('lifecycle control uses the selected host run and recovers idempotently aft
   try {
     const run = randomUUID();
     const gate = {
-      spec: { version: 1 as const, checkId: randomUUID(), taskId: randomUUID(), attempt: 1,
-        sourceCommit: 'a'.repeat(40), sourceTree: 'b'.repeat(40), nonce: 'c'.repeat(64), exitCode: 7 as const, lifetimeMs: 1_000,
-        runtime: { packageManager: 'bun@fixture', version: Bun.version, revision: Bun.revision }, childSha256: 'd'.repeat(64) },
-      physicalRunId: randomUUID(), host: 'real-hostname', remoteRunId: run, child: processIdentity()!,
+      spec: {
+        version: 1 as const,
+        checkId: randomUUID(),
+        taskId: randomUUID(),
+        attempt: 1,
+        sourceCommit: 'a'.repeat(40),
+        sourceTree: 'b'.repeat(40),
+        nonce: 'c'.repeat(64),
+        exitCode: 7 as const,
+        lifetimeMs: 1_000,
+        runtime: { packageManager: 'bun@fixture', version: Bun.version, revision: Bun.revision },
+        childSha256: 'd'.repeat(64),
+      },
+      physicalRunId: randomUUID(),
+      host: 'real-hostname',
+      remoteRunId: run,
+      child: processIdentity()!,
     };
     const request = { version: 1 as const, operation: 'release' as const, gate };
-    const host = { name: 'a', address: 'root@selected.invalid', identity: '/private/key', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 4, processorsPerSlot: 2 };
+    const host = {
+      name: 'a',
+      address: 'root@selected.invalid',
+      identity: '/private/key',
+      memoryMaxGiB: 16,
+      cpuQuotaPercent: 800,
+      slots: 4,
+      processorsPerSlot: 2,
+    };
     const trace = join(directory, 'trace');
     const mode = join(directory, 'mode');
     const ssh = join(directory, 'ssh');
     writeFileSync(mode, 'lost');
-    writeFileSync(ssh, `#!${process.execPath}\nimport{appendFileSync,readFileSync}from'node:fs';
+    writeFileSync(
+      ssh,
+      `#!${process.execPath}\nimport{appendFileSync,readFileSync}from'node:fs';
       if(process.argv.includes('-O'))process.exit(0);
       appendFileSync(${JSON.stringify(trace)},JSON.stringify(process.argv.slice(2))+'\\n');
       if(readFileSync(${JSON.stringify(mode)},'utf8')==='lost')process.exit(255);
-      console.log(JSON.stringify({ack:'same-physical-release'}));\n`, { mode: 0o700 });
+      console.log(JSON.stringify({ack:'same-physical-release'}));\n`,
+      { mode: 0o700 },
+    );
     process.env.PATH = `${directory}:${oldPath}`;
     process.env.XDG_RUNTIME_DIR = directory;
     await expect(transportLifecycleControl(host, run, request)).rejects.toThrow('control transport exited 255');
     expect(readFileSync(trace, 'utf8').trim().split('\n')).toHaveLength(1);
     writeFileSync(mode, 'available');
     expect(JSON.parse(await transportLifecycleControl(host, run, request))).toEqual({ ack: 'same-physical-release' });
-    const commands = readFileSync(trace, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as string[]);
+    const commands = readFileSync(trace, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as string[]);
     expect(commands).toHaveLength(2);
     expect(commands[0]!.at(-1)).toBe(commands[1]!.at(-1));
     expect(commands[0]!.at(-2)).toBe(host.address);
@@ -7107,8 +7135,10 @@ test('lifecycle control uses the selected host run and recovers idempotently aft
     await expect(transportLifecycleControl({ ...host, name: 'foreign' }, run, request)).rejects.toThrow('unapproved');
     expect(readFileSync(trace, 'utf8').trim().split('\n')).toHaveLength(2);
   } finally {
-    if (oldPath === undefined) delete process.env.PATH; else process.env.PATH = oldPath;
-    if (oldRuntimeDirectory === undefined) delete process.env.XDG_RUNTIME_DIR; else process.env.XDG_RUNTIME_DIR = oldRuntimeDirectory;
+    if (oldPath === undefined) delete process.env.PATH;
+    else process.env.PATH = oldPath;
+    if (oldRuntimeDirectory === undefined) delete process.env.XDG_RUNTIME_DIR;
+    else process.env.XDG_RUNTIME_DIR = oldRuntimeDirectory;
     rmSync(directory, { recursive: true, force: true });
   }
 });

@@ -482,21 +482,53 @@ test('setup cleanup needs a positive owned group observation; absent PID or unre
 test('child runtime/gate evidence cannot substitute for controller registration or positive whole-tree custody', async () => {
   const { sameLifecycleGate, validateLifecycleGate } = await import('./check-lifecycle-child.ts');
   const child = processIdentity()!;
-  const gate = { spec: { version: 1 as const, checkId: randomUUID(), taskId: randomUUID(), attempt: 1,
-    sourceCommit: 'a'.repeat(40), sourceTree: 'b'.repeat(40), nonce: 'c'.repeat(64), exitCode: 7 as const, lifetimeMs: 1_000,
-    runtime: { packageManager: 'bun@fixture', version: Bun.version, revision: Bun.revision }, childSha256: 'd'.repeat(64) },
-    physicalRunId: randomUUID(), host: 'fixture', remoteRunId: null, child };
+  const gate = {
+    spec: {
+      version: 1 as const,
+      checkId: randomUUID(),
+      taskId: randomUUID(),
+      attempt: 1,
+      sourceCommit: 'a'.repeat(40),
+      sourceTree: 'b'.repeat(40),
+      nonce: 'c'.repeat(64),
+      exitCode: 7 as const,
+      lifetimeMs: 1_000,
+      runtime: { packageManager: 'bun@fixture', version: Bun.version, revision: Bun.revision },
+      childSha256: 'd'.repeat(64),
+    },
+    physicalRunId: randomUUID(),
+    host: 'fixture',
+    remoteRunId: null,
+    child,
+  };
   expect(validateLifecycleGate(gate)).toEqual(gate);
   expect(sameLifecycleGate({ ...gate, physicalRunId: randomUUID() }, gate)).toBe(false);
   expect(sameLifecycleGate({ ...gate, spec: { ...gate.spec, attempt: 2 } }, gate)).toBe(false);
   expect(sameLifecycleGate({ ...gate, child: { ...child, boot: randomUUID() } }, gate)).toBe(false);
-  expect(sameLifecycleGate({ ...gate, spec: { ...gate.spec, runtime: { ...gate.spec.runtime, revision: '0'.repeat(40) } } }, gate)).toBe(false);
+  expect(
+    sameLifecycleGate(
+      { ...gate, spec: { ...gate.spec, runtime: { ...gate.spec.runtime, revision: '0'.repeat(40) } } },
+      gate,
+    ),
+  ).toBe(false);
   expect(detachedGroupTerminal(child)).toBe(false);
   const { tmpdir } = await import('node:os');
   const root = mkdtempSync(join(tmpdir(), 'rezics-custody-lifecycle-'));
   try {
-    const binding: ControllerProofBindingV1 = { version: 1, token: randomUUID(), goal: 'performance', cwd: root,
-      checkId: gate.spec.checkId, taskId: gate.spec.taskId, attempt: 1, sourceCommit: gate.spec.sourceCommit, sourceTree: gate.spec.sourceTree, argv: ['bun', 'test'] };
+    const binding: ControllerProofBindingV1 = {
+      version: 1,
+      token: randomUUID(),
+      goal: 'performance',
+      cwd: root,
+      checkId: gate.spec.checkId,
+      taskId: gate.spec.taskId,
+      attempt: 1,
+      sourceCommit: gate.spec.sourceCommit,
+      sourceTree: gate.spec.sourceTree,
+      argv: ['bun', 'test'],
+    };
     expect(validControllerProofRegistration(gate, binding)).toBe(false);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -741,12 +741,12 @@ canonical tracked regular file in the captured clean commit/tree. The fixed spec
 
 Request schemas:
 
-| Operation | Request |
-| --- | --- |
-| start | `{binding: ControllerProofBindingV1, observeMs?: number}`; default 5000, range 0..5000 |
-| read | `{binding: ControllerProofBindingV1, physicalRunId: UUID}` |
-| release | `{binding: ControllerProofBindingV1, gate: LifecycleGate, action?: 'release' \| 'cancel'}`; default release |
-| wait | read request plus `timeoutMs?: number`; default 30000, range 0..60000 |
+| Operation | Request                                                                                                     |
+| --------- | ----------------------------------------------------------------------------------------------------------- |
+| start     | `{binding: ControllerProofBindingV1, observeMs?: number}`; default 5000, range 0..5000                      |
+| read      | `{binding: ControllerProofBindingV1, physicalRunId: UUID}`                                                  |
+| release   | `{binding: ControllerProofBindingV1, gate: LifecycleGate, action?: 'release' \| 'cancel'}`; default release |
+| wait      | read request plus `timeoutMs?: number`; default 30000, range 0..60000                                       |
 
 Start returns `{version:1, admission:ControllerProofStartV1, observation:LifecycleProbeResult}`. Runner-ready or
 admission alone is not a running-child observation. Start may return an unavailable observation while ordinary
