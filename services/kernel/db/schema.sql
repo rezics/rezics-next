@@ -629,6 +629,69 @@ END; $$;
 
 
 --
+-- Name: guard_identity_history_allocation(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.guard_identity_history_allocation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE original core.identity_history_original;
+BEGIN
+ IF TG_OP='DELETE' THEN
+   RAISE EXCEPTION 'Original partitions cannot be discarded' USING ERRCODE='23514';
+ END IF;
+ IF TG_OP='INSERT' THEN
+   SELECT * INTO original FROM core.identity_history_original WHERE original_id=NEW.original_id FOR SHARE;
+   IF NOT FOUND OR original.allowance IS DISTINCT FROM NEW.parent_work OR
+      original.spent IS DISTINCT FROM NEW.parent_work OR NOT original.dispatched THEN
+     RAISE EXCEPTION 'Original partitions require committed prepaid admission' USING ERRCODE='23514';
+   END IF;
+ ELSE
+   IF (to_jsonb(NEW)-ARRAY['local_entered','child_entered','child_ended','next_binding']) IS DISTINCT FROM
+      (to_jsonb(OLD)-ARRAY['local_entered','child_entered','child_ended','next_binding']) OR
+      (OLD.local_entered AND NOT NEW.local_entered) OR
+      (OLD.child_entered AND NOT NEW.child_entered) OR
+      (OLD.child_ended AND NOT NEW.child_ended) OR
+      (OLD.next_binding IS NOT NULL AND NEW.next_binding IS DISTINCT FROM OLD.next_binding) THEN
+     RAISE EXCEPTION 'Original partitions cannot refill or reopen' USING ERRCODE='23514';
+   END IF;
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: guard_identity_original_control(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.guard_identity_original_control() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE i integer; mutable text[];
+BEGIN
+ IF TG_OP='DELETE' THEN
+   RAISE EXCEPTION 'Original admission retains unresolved custody' USING ERRCODE='23514';
+ END IF;
+ mutable:=CASE WHEN TG_TABLE_NAME='identity_history_original'
+   THEN ARRAY['spent','dispatched','advanced'] ELSE ARRAY['spent'] END;
+ IF (to_jsonb(NEW)-mutable) IS DISTINCT FROM (to_jsonb(OLD)-mutable) THEN
+   RAISE EXCEPTION 'Original admission identity and ceiling are immutable' USING ERRCODE='23514';
+ END IF;
+ FOR i IN 1..8 LOOP
+   IF NEW.spent[i]<OLD.spent[i] THEN
+     RAISE EXCEPTION 'Original admission cannot refund consumed work' USING ERRCODE='23514';
+   END IF;
+ END LOOP;
+ IF TG_TABLE_NAME='identity_history_original' THEN
+   IF (OLD.dispatched AND NOT NEW.dispatched) OR (OLD.advanced AND NOT NEW.advanced) THEN
+     RAISE EXCEPTION 'Original admission cannot reopen' USING ERRCODE='23514';
+   END IF;
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: history_auth_changed(); Type: FUNCTION; Schema: core; Owner: -
 --
 
@@ -998,6 +1061,302 @@ END; $$;
 
 
 --
+-- Name: identity_original_sum(bigint[], bigint[], bigint[], bigint[]); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.identity_original_sum(a bigint[], b bigint[], c bigint[], d bigint[]) RETURNS bigint[]
+    LANGUAGE sql IMMUTABLE
+    AS $$
+ SELECT array_agg(a[i]+coalesce(b[i],0)+coalesce(c[i],0)+d[i] ORDER BY i)
+ FROM generate_series(1,8) i
+$$;
+
+
+--
+-- Name: identity_original_vector_valid(bigint[]); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.identity_original_vector_valid(v bigint[]) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    AS $$
+ SELECT array_ndims(v)=1 AND array_lower(v,1)=1 AND cardinality(v)=8
+   AND NOT EXISTS(SELECT 1 FROM unnest(v) n WHERE n IS NULL OR n<0 OR n>9007199254740991)
+$$;
+
+
+--
+-- Name: operational_work_custody_guard(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.operational_work_custody_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE id uuid; p integer; own boolean;
+BEGIN
+  IF TG_TABLE_NAME='history_work' THEN
+    IF TG_OP='DELETE' THEN
+      IF OLD.owner='library.members-preparation' THEN
+        RAISE EXCEPTION 'operational History inventory is permanent' USING ERRCODE='23514';
+      END IF;
+      RETURN OLD;
+    END IF;
+    IF NEW.owner IS DISTINCT FROM 'library.members-preparation' AND
+       (TG_OP='INSERT' OR OLD.owner IS DISTINCT FROM 'library.members-preparation') THEN RETURN NEW; END IF;
+    IF TG_OP='UPDATE' AND
+       (to_jsonb(OLD)-ARRAY['state','owner_ready','retired_at','absence_verified']) IS DISTINCT FROM
+       (to_jsonb(NEW)-ARRAY['state','owner_ready','retired_at','absence_verified']) THEN
+      RAISE EXCEPTION 'operational History original inventory is immutable' USING ERRCODE='23514';
+    END IF;
+    id:=NEW.work_id; p:=NEW.partition_no;
+    IF NOT (NEW.state='retired' OR NEW.absence_verified OR NEW.owner_ready) THEN RETURN NEW; END IF;
+  ELSE
+    IF TG_OP='DELETE' THEN
+      IF OLD.artifact_type='durable-work/v1' AND substring(OLD.locator FROM 3 FOR 9)=convert_to('6f70776b-','UTF8') THEN
+        RAISE EXCEPTION 'operational History inventory is permanent' USING ERRCODE='23514';
+      END IF;
+      RETURN OLD;
+    END IF;
+    IF NEW.artifact_type<>'durable-work/v1' THEN RETURN NEW; END IF;
+    -- Namespace selects a probe only; the exact durable records below supply authority.
+    IF substring(NEW.locator FROM 3 FOR 9)<>convert_to('6f70776b-','UTF8') THEN RETURN NEW; END IF;
+    IF TG_TABLE_NAME='history_locator' AND NEW.state<>'minimized' THEN RETURN NEW; END IF;
+    BEGIN id:=convert_from(substring(NEW.locator FROM 3),'UTF8')::uuid;
+    EXCEPTION WHEN invalid_text_representation THEN RETURN NEW; END;
+    p:=NEW.partition_no;
+  END IF;
+  SELECT EXISTS(SELECT 1 FROM core.operational_work_original WHERE partition_no=p AND custody_id=id)
+    OR EXISTS(SELECT 1 FROM core.operational_work_mapping WHERE partition_no=p AND custody_id=id) INTO own;
+  IF own THEN
+    RAISE EXCEPTION 'operational-work-source-currentness-unavailable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END; $$;
+
+
+--
+-- Name: operational_work_head_bound(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.operational_work_head_bound() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NOT EXISTS(SELECT 1 FROM core.operational_work_original o WHERE o.partition_no=NEW.partition_no AND
+      o.custody_id=NEW.custody_id AND o.transaction_id=NEW.transaction_id AND o.workflow_id=NEW.workflow_id AND
+      o.request_digest=NEW.request_digest AND o.deadline=NEW.deadline AND o.source_domain=NEW.domain AND
+      o.source_epoch=NEW.epoch AND o.source_generation=NEW.generation AND o.source_position=NEW.position AND o.sealed) THEN
+    RAISE EXCEPTION 'operational-work-native-position-binding-unavailable' USING ERRCODE='23514';
+  END IF;
+  RETURN NULL;
+END; $$;
+
+
+--
+-- Name: operational_work_head_guard(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.operational_work_head_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE p core.partition; g bigint;
+BEGIN
+  IF TG_OP IN ('DELETE','TRUNCATE') THEN
+    RAISE EXCEPTION 'operational History head is permanent' USING ERRCODE='23514';
+  END IF;
+  IF TG_OP='UPDATE' AND (NEW.partition_no<>OLD.partition_no OR NEW.domain<>OLD.domain OR
+      NEW.position<>OLD.position+1) THEN
+    RAISE EXCEPTION 'operational History head must advance exactly once' USING ERRCODE='23514';
+  END IF;
+  -- INSERT ON CONFLICT executes this BEFORE INSERT with position=1, then BEFORE UPDATE.
+  IF TG_OP='INSERT' AND NEW.position<>1 THEN
+    RAISE EXCEPTION 'operational History head must start at one' USING ERRCODE='23514';
+  END IF;
+  SELECT * INTO p FROM core.partition WHERE partition_no=NEW.partition_no FOR SHARE;
+  SELECT generation INTO g FROM core.history_family_domain WHERE singleton FOR SHARE;
+  IF p.write_state IS DISTINCT FROM 'active' OR p.epoch IS DISTINCT FROM NEW.epoch OR g IS DISTINCT FROM NEW.generation THEN
+    RAISE EXCEPTION 'operational-work-source-restore-fence-changed' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END; $$;
+
+
+--
+-- Name: operational_work_immutable(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.operational_work_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP IN ('DELETE','TRUNCATE') THEN
+    RAISE EXCEPTION 'operational History identity is permanent' USING ERRCODE='23514';
+  END IF;
+  IF TG_TABLE_NAME='operational_work_original' AND NOT OLD.sealed AND NEW.sealed AND
+     (to_jsonb(OLD)-ARRAY['source_epoch','sealed'])=(to_jsonb(NEW)-ARRAY['source_epoch','sealed']) THEN
+    RETURN NEW;
+  END IF;
+  IF OLD IS DISTINCT FROM NEW THEN
+    RAISE EXCEPTION 'operational History identity is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END; $$;
+
+
+--
+-- Name: operational_work_mapping_stamp(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.operational_work_mapping_stamp() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.source_domain='legacy-unpositioned' THEN RETURN NEW; END IF;
+  IF NEW.source->'stamp' IS DISTINCT FROM jsonb_build_object('domain',NEW.source_domain,
+       'partition',NEW.source_partition,'epoch',NEW.source_epoch,'generation',NEW.source_generation::text,
+       'position',NEW.source_position::text) OR
+     NEW.source->>'position' IS DISTINCT FROM NEW.source_position::text OR
+     NEW.source->>'transactionId' IS DISTINCT FROM NEW.source_transaction::text OR
+     NEW.source->>'custodyId' IS DISTINCT FROM NEW.custody_id::text OR
+     NEW.source->>'workflowId' IS DISTINCT FROM NEW.workflow_id OR
+     NEW.source->>'digest' IS DISTINCT FROM encode(NEW.request_digest,'hex') OR
+     NEW.source->>'gap' IS DISTINCT FROM 'operational-work-source-currentness-unavailable' THEN
+    RAISE EXCEPTION 'operational-work-receiving-stamp-binding-changed' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END; $$;
+
+
+--
+-- Name: operational_work_position_binding(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.operational_work_position_binding() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE h core.operational_work_head;
+BEGIN
+  IF NEW.source_domain='legacy-unpositioned' THEN RETURN NEW; END IF;
+  SELECT * INTO h FROM core.operational_work_head WHERE partition_no=NEW.partition_no FOR SHARE;
+  IF h.position IS DISTINCT FROM NEW.source_position OR h.generation IS DISTINCT FROM NEW.source_generation OR
+     h.custody_id IS DISTINCT FROM NEW.custody_id OR h.transaction_id IS DISTINCT FROM NEW.transaction_id OR
+     h.workflow_id IS DISTINCT FROM NEW.workflow_id OR h.request_digest IS DISTINCT FROM NEW.request_digest OR
+     h.deadline IS DISTINCT FROM NEW.deadline THEN
+    RAISE EXCEPTION 'operational-work-native-position-binding-unavailable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END; $$;
+
+
+--
+-- Name: operational_work_require_native_seal(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.operational_work_require_native_seal() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE o core.operational_work_original; h core.operational_work_head; p core.partition; g bigint;
+BEGIN
+  SELECT * INTO STRICT o FROM core.operational_work_original
+    WHERE partition_no=NEW.partition_no AND custody_id=NEW.custody_id;
+  IF NOT o.sealed OR o.source_epoch IS NULL THEN
+    RAISE EXCEPTION 'operational-work-native-commit-fence-unavailable' USING ERRCODE='23514';
+  END IF;
+  IF o.source_domain='legacy-unpositioned' THEN RETURN NULL; END IF;
+  -- Executor already holds partition, family and head in that order. These exact reads verify
+  -- the actual original, not a later head observation relabelled as an original position.
+  SELECT * INTO p FROM core.partition WHERE partition_no=o.partition_no FOR SHARE;
+  SELECT generation INTO g FROM core.history_family_domain WHERE singleton FOR SHARE;
+  SELECT * INTO h FROM core.operational_work_head WHERE partition_no=o.partition_no FOR SHARE;
+  IF p.write_state IS DISTINCT FROM 'active' OR p.epoch IS DISTINCT FROM o.source_epoch OR
+    g IS DISTINCT FROM o.source_generation OR h.epoch IS DISTINCT FROM o.source_epoch OR
+    h.generation IS DISTINCT FROM o.source_generation OR h.position IS DISTINCT FROM o.source_position OR
+    h.custody_id IS DISTINCT FROM o.custody_id OR h.transaction_id IS DISTINCT FROM o.transaction_id OR
+    h.workflow_id IS DISTINCT FROM o.workflow_id OR h.request_digest IS DISTINCT FROM o.request_digest OR
+    h.deadline IS DISTINCT FROM o.deadline OR o.deadline<=floor(extract(epoch FROM clock_timestamp())*1000) THEN
+    RAISE EXCEPTION 'operational-work-native-commit-fence-unavailable' USING ERRCODE='23514';
+  END IF;
+  RETURN NULL;
+END; $$;
+
+
+--
+-- Name: operational_work_role_guard(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.operational_work_role_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE scope jsonb;
+BEGIN
+  IF TG_OP='UPDATE' THEN
+    IF OLD.artifact_type='durable-work/v1' AND substring(OLD.locator FROM 3 FOR 9)=convert_to('6f70776b-','UTF8') AND
+       (OLD.partition_no,OLD.account_route,OLD.account_id,OLD.artifact_type,OLD.locator,OLD.roles,OLD.minimizer_version)
+       IS DISTINCT FROM
+       (NEW.partition_no,NEW.account_route,NEW.account_id,NEW.artifact_type,NEW.locator,NEW.roles,NEW.minimizer_version) THEN
+      RAISE EXCEPTION 'operational History original roles are immutable' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF NEW.artifact_type<>'durable-work/v1' OR substring(NEW.locator FROM 3 FOR 9)<>convert_to('6f70776b-','UTF8') THEN RETURN NEW; END IF;
+  SELECT o.scope INTO scope FROM core.operational_work_original o
+    WHERE o.partition_no=NEW.partition_no AND o.custody_id=convert_from(substring(NEW.locator FROM 3),'UTF8')::uuid FOR SHARE;
+  IF NOT FOUND THEN
+    SELECT m.source->'scope' INTO scope FROM core.operational_work_mapping m
+      WHERE m.partition_no=NEW.partition_no AND m.custody_id=convert_from(substring(NEW.locator FROM 3),'UTF8')::uuid FOR SHARE;
+  END IF;
+  IF scope IS NOT NULL AND NOT EXISTS(
+    SELECT 1 FROM jsonb_to_recordset(scope->'accounts') a("accountRoute" integer,"accountId" uuid,roles integer)
+    WHERE a."accountRoute"=NEW.account_route AND a."accountId"=NEW.account_id AND a.roles=NEW.roles) THEN
+    RAISE EXCEPTION 'operational History original roles differ' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END; $$;
+
+
+--
+-- Name: operational_work_selected_continuation_bound(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.operational_work_selected_continuation_bound() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE parent core.operational_work_selection;
+BEGIN
+  SELECT * INTO parent FROM core.operational_work_selection
+    WHERE partition_no=NEW.partition_no AND workflow_id=NEW.parent_workflow_id AND function_id=NEW.parent_function_id FOR SHARE;
+  IF NOT FOUND OR parent.result->>'kind' IS DISTINCT FROM 'continue' OR
+     parent.result->>'continuation' IS DISTINCT FROM NEW.workflow_id OR
+     (parent.custody_id,parent.route,parent.owner_account_id,parent.collection_id,parent.episode_id) IS DISTINCT FROM
+     (NEW.custody_id,NEW.route,NEW.owner_account_id,NEW.collection_id,NEW.episode_id) THEN
+    RAISE EXCEPTION 'selected continuation lacks atomic parent result' USING ERRCODE='23514';
+  END IF;
+  RETURN NULL;
+END; $$;
+
+
+--
+-- Name: operational_work_selection_guard(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.operational_work_selection_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP IN ('DELETE','TRUNCATE') THEN
+    RAISE EXCEPTION 'selected operational association is permanent' USING ERRCODE='23514';
+  END IF;
+  IF TG_TABLE_NAME='operational_work_selection' THEN
+    IF OLD.result IS NULL AND NEW.result IS NOT NULL AND
+       (to_jsonb(OLD)-'result')=(to_jsonb(NEW)-'result') THEN RETURN NEW; END IF;
+  END IF;
+  IF OLD IS DISTINCT FROM NEW THEN
+    RAISE EXCEPTION 'selected operational association is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END; $$;
+
+
+--
 -- Name: record_history_preserve_copy(); Type: FUNCTION; Schema: core; Owner: -
 --
 
@@ -1318,7 +1677,7 @@ CREATE TABLE core.agent_identity_recovery_inventory (
     source_digest text NOT NULL,
     recovery_epoch integer NOT NULL,
     recovery_position bigint NOT NULL,
-    recovery_transaction_id uuid NOT NULL,
+    recovery_transaction_id uuid CONSTRAINT agent_identity_recovery_invent_recovery_transaction_id_not_null NOT NULL,
     receiver_epoch integer NOT NULL,
     domain_generation bigint NOT NULL,
     generation bigint DEFAULT 1 NOT NULL,
@@ -1326,10 +1685,10 @@ CREATE TABLE core.agent_identity_recovery_inventory (
     conversion_coverage text DEFAULT 'native-receipt-outbox/v1'::text NOT NULL,
     native_writer_state text DEFAULT 'open'::text NOT NULL,
     native_command_kind text NOT NULL,
-    native_principal_kind text NOT NULL,
+    native_principal_kind text CONSTRAINT agent_identity_recovery_inventor_native_principal_kind_not_null NOT NULL,
     native_principal_id uuid NOT NULL,
     native_receipt_key text NOT NULL,
-    native_request_digest bytea NOT NULL,
+    native_request_digest bytea CONSTRAINT agent_identity_recovery_inventor_native_request_digest_not_null NOT NULL,
     expected_accounts jsonb NOT NULL,
     expected_locators bytea[],
     expected_event_types text[],
@@ -1740,6 +2099,306 @@ CREATE TABLE core.history_work (
     CONSTRAINT history_work_scope_check CHECK ((octet_length((scope)::text) <= 16384)),
     CONSTRAINT history_work_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095))),
     CONSTRAINT history_work_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'ready'::text, 'retired'::text])))
+);
+
+
+--
+-- Name: identity_fx_original; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.identity_fx_original (
+    original_id uuid NOT NULL,
+    partition_no integer NOT NULL,
+    epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    event_seq integer NOT NULL,
+    effect text NOT NULL,
+    workflow_id text NOT NULL COLLATE pg_catalog."C",
+    binding jsonb NOT NULL,
+    deadline bigint NOT NULL,
+    allowance bigint[] NOT NULL,
+    spent bigint[] NOT NULL,
+    CONSTRAINT identity_fx_original_allowance_check CHECK (core.identity_original_vector_valid(allowance)),
+    CONSTRAINT identity_fx_original_binding_check CHECK (((jsonb_typeof(binding) = 'object'::text) AND (octet_length((binding)::text) <= 32768))),
+    CONSTRAINT identity_fx_original_check CHECK (((spent[1] <= allowance[1]) AND (spent[2] <= allowance[2]) AND (spent[3] <= allowance[3]) AND (spent[4] <= allowance[4]) AND (spent[5] <= allowance[5]) AND (spent[6] <= allowance[6]) AND (spent[7] <= allowance[7]) AND (spent[8] <= allowance[8]))),
+    CONSTRAINT identity_fx_original_deadline_check CHECK (((deadline >= 1) AND (deadline <= '9007199254740991'::bigint))),
+    CONSTRAINT identity_fx_original_effect_check CHECK ((effect = 'agent_verification_reversal'::text)),
+    CONSTRAINT identity_fx_original_epoch_check CHECK ((epoch > 0)),
+    CONSTRAINT identity_fx_original_event_seq_check CHECK (((event_seq >= 0) AND (event_seq <= 999))),
+    CONSTRAINT identity_fx_original_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_fx_original_position_check CHECK (("position" > 0)),
+    CONSTRAINT identity_fx_original_spent_check CHECK (core.identity_original_vector_valid(spent)),
+    CONSTRAINT identity_fx_original_workflow_id_check CHECK ((octet_length(workflow_id) <= 256))
+);
+
+
+--
+-- Name: identity_fx_receiving; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.identity_fx_receiving (
+    workflow_id text NOT NULL COLLATE pg_catalog."C",
+    original_id uuid NOT NULL,
+    binding jsonb NOT NULL,
+    receiver_epoch integer NOT NULL,
+    receiver_generation bigint NOT NULL,
+    deadline bigint NOT NULL,
+    writer_state text DEFAULT 'pending-physical-owner'::text NOT NULL,
+    allowance bigint[] NOT NULL,
+    spent bigint[] NOT NULL,
+    CONSTRAINT identity_fx_receiving_allowance_check CHECK (core.identity_original_vector_valid(allowance)),
+    CONSTRAINT identity_fx_receiving_binding_check CHECK (((jsonb_typeof(binding) = 'object'::text) AND (octet_length((binding)::text) <= 32768))),
+    CONSTRAINT identity_fx_receiving_check CHECK (((spent[1] <= allowance[1]) AND (spent[2] <= allowance[2]) AND (spent[3] <= allowance[3]) AND (spent[4] <= allowance[4]) AND (spent[5] <= allowance[5]) AND (spent[6] <= allowance[6]) AND (spent[7] <= allowance[7]) AND (spent[8] <= allowance[8]))),
+    CONSTRAINT identity_fx_receiving_deadline_check CHECK (((deadline >= 1) AND (deadline <= '9007199254740991'::bigint))),
+    CONSTRAINT identity_fx_receiving_receiver_epoch_check CHECK ((receiver_epoch > 0)),
+    CONSTRAINT identity_fx_receiving_receiver_generation_check CHECK ((receiver_generation > 0)),
+    CONSTRAINT identity_fx_receiving_spent_check CHECK (core.identity_original_vector_valid(spent)),
+    CONSTRAINT identity_fx_receiving_workflow_id_check CHECK ((octet_length(workflow_id) <= 256)),
+    CONSTRAINT identity_fx_receiving_writer_state_check CHECK ((writer_state = 'pending-physical-owner'::text))
+);
+
+
+--
+-- Name: identity_history_allocation; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.identity_history_allocation (
+    original_id uuid NOT NULL,
+    local_work bigint[] NOT NULL,
+    source_work bigint[],
+    library_work bigint[],
+    transfer_work bigint[] NOT NULL,
+    parent_work bigint[] NOT NULL,
+    local_entered boolean DEFAULT false NOT NULL,
+    child_entered boolean DEFAULT false NOT NULL,
+    child_ended boolean DEFAULT false NOT NULL,
+    next_binding jsonb,
+    CONSTRAINT identity_history_allocation_check CHECK ((parent_work = core.identity_original_sum(local_work, source_work, library_work, transfer_work))),
+    CONSTRAINT identity_history_allocation_check1 CHECK (((NOT child_entered) OR (local_entered AND (source_work IS NOT NULL) AND (library_work IS NOT NULL)))),
+    CONSTRAINT identity_history_allocation_check2 CHECK (((NOT child_ended) OR child_entered)),
+    CONSTRAINT identity_history_allocation_check3 CHECK (((next_binding IS NULL) OR local_entered)),
+    CONSTRAINT identity_history_allocation_library_work_check CHECK (((library_work IS NULL) OR core.identity_original_vector_valid(library_work))),
+    CONSTRAINT identity_history_allocation_local_work_check CHECK (core.identity_original_vector_valid(local_work)),
+    CONSTRAINT identity_history_allocation_next_binding_check CHECK (((next_binding IS NULL) OR ((jsonb_typeof(next_binding) = 'object'::text) AND (octet_length((next_binding)::text) <= 2048)))),
+    CONSTRAINT identity_history_allocation_parent_work_check CHECK (core.identity_original_vector_valid(parent_work)),
+    CONSTRAINT identity_history_allocation_source_work_check CHECK (((source_work IS NULL) OR core.identity_original_vector_valid(source_work))),
+    CONSTRAINT identity_history_allocation_transfer_work_check CHECK (core.identity_original_vector_valid(transfer_work))
+);
+
+
+--
+-- Name: identity_history_original; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.identity_history_original (
+    original_id uuid NOT NULL,
+    ordinal bigint NOT NULL,
+    job_id uuid NOT NULL,
+    binding jsonb NOT NULL,
+    deadline bigint NOT NULL,
+    allowance bigint[] NOT NULL,
+    spent bigint[] NOT NULL,
+    dispatched boolean DEFAULT false NOT NULL,
+    advanced boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_history_original_allowance_check CHECK (core.identity_original_vector_valid(allowance)),
+    CONSTRAINT identity_history_original_binding_check CHECK (((jsonb_typeof(binding) = 'object'::text) AND (octet_length((binding)::text) <= 2048))),
+    CONSTRAINT identity_history_original_check CHECK (((binding ->> 'job_id'::text) = (job_id)::text)),
+    CONSTRAINT identity_history_original_check1 CHECK (((NOT advanced) OR dispatched)),
+    CONSTRAINT identity_history_original_check2 CHECK (((spent[1] <= allowance[1]) AND (spent[2] <= allowance[2]) AND (spent[3] <= allowance[3]) AND (spent[4] <= allowance[4]) AND (spent[5] <= allowance[5]) AND (spent[6] <= allowance[6]) AND (spent[7] <= allowance[7]) AND (spent[8] <= allowance[8]))),
+    CONSTRAINT identity_history_original_deadline_check CHECK (((deadline >= 1) AND (deadline <= '9007199254740991'::bigint))),
+    CONSTRAINT identity_history_original_spent_check CHECK (core.identity_original_vector_valid(spent))
+);
+
+
+--
+-- Name: identity_history_original_ordinal_seq; Type: SEQUENCE; Schema: core; Owner: -
+--
+
+ALTER TABLE core.identity_history_original ALTER COLUMN ordinal ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME core.identity_history_original_ordinal_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: operational_work_episode; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.operational_work_episode (
+    partition_no integer NOT NULL,
+    route integer NOT NULL,
+    owner_account_id uuid NOT NULL,
+    collection_id uuid NOT NULL,
+    episode_id uuid NOT NULL,
+    custody_id uuid NOT NULL,
+    CONSTRAINT operational_work_episode_check CHECK ((((route >= 0) AND (route <= 65535)) AND (partition_no = (route >> 4)))),
+    CONSTRAINT operational_work_episode_check1 CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11)))),
+    CONSTRAINT operational_work_episode_check2 CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT operational_work_episode_check3 CHECK ((route = ((get_byte(uuid_send(episode_id), 10) * 256) + get_byte(uuid_send(episode_id), 11))))
+);
+
+
+--
+-- Name: operational_work_head; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.operational_work_head (
+    partition_no integer NOT NULL,
+    domain text DEFAULT 'operational-work/v1'::text NOT NULL,
+    epoch integer NOT NULL,
+    generation bigint NOT NULL,
+    "position" bigint NOT NULL,
+    custody_id uuid NOT NULL,
+    transaction_id uuid NOT NULL,
+    workflow_id text NOT NULL COLLATE pg_catalog."C",
+    request_digest bytea NOT NULL,
+    deadline bigint NOT NULL,
+    CONSTRAINT operational_work_head_deadline_check CHECK ((deadline > 0)),
+    CONSTRAINT operational_work_head_domain_check CHECK ((domain = 'operational-work/v1'::text)),
+    CONSTRAINT operational_work_head_epoch_check CHECK ((epoch > 0)),
+    CONSTRAINT operational_work_head_generation_check CHECK ((generation > 0)),
+    CONSTRAINT operational_work_head_position_check CHECK (("position" > 0)),
+    CONSTRAINT operational_work_head_request_digest_check CHECK ((octet_length(request_digest) = 32)),
+    CONSTRAINT operational_work_head_workflow_id_check CHECK ((octet_length(workflow_id) <= 256))
+);
+
+
+--
+-- Name: operational_work_mapping; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.operational_work_mapping (
+    partition_no integer DEFAULT 0 NOT NULL,
+    custody_id uuid NOT NULL,
+    workflow_id text NOT NULL COLLATE pg_catalog."C",
+    source_partition integer NOT NULL,
+    source_transaction uuid NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint,
+    log_gap text DEFAULT 'operational-work-original-log-position-unavailable'::text,
+    source_generation bigint NOT NULL,
+    request_digest bytea NOT NULL,
+    source jsonb NOT NULL,
+    receiver_epoch integer NOT NULL,
+    receiver_generation bigint NOT NULL,
+    sdk_writer jsonb NOT NULL,
+    source_domain text DEFAULT 'legacy-unpositioned'::text NOT NULL,
+    CONSTRAINT operational_work_mapping_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT operational_work_mapping_position_domain CHECK ((((source_domain = 'legacy-unpositioned'::text) AND (source_position IS NULL) AND (NOT (log_gap IS DISTINCT FROM 'operational-work-original-log-position-unavailable'::text))) OR ((source_domain = 'operational-work/v1'::text) AND (source_position IS NOT NULL) AND (source_position > 0) AND (log_gap IS NULL)))),
+    CONSTRAINT operational_work_mapping_receiver_epoch_check CHECK ((receiver_epoch > 0)),
+    CONSTRAINT operational_work_mapping_receiver_generation_check CHECK ((receiver_generation > 0)),
+    CONSTRAINT operational_work_mapping_request_digest_check CHECK ((octet_length(request_digest) = 32)),
+    CONSTRAINT operational_work_mapping_sdk_writer_check CHECK ((octet_length((sdk_writer)::text) <= 1024)),
+    CONSTRAINT operational_work_mapping_source_check CHECK ((octet_length((source)::text) <= 278528)),
+    CONSTRAINT operational_work_mapping_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT operational_work_mapping_source_generation_check CHECK ((source_generation > 0)),
+    CONSTRAINT operational_work_mapping_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095))),
+    CONSTRAINT operational_work_mapping_workflow_id_check CHECK ((octet_length(workflow_id) <= 256))
+);
+
+
+--
+-- Name: operational_work_original; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.operational_work_original (
+    partition_no integer NOT NULL,
+    custody_id uuid NOT NULL,
+    transaction_id uuid NOT NULL,
+    workflow_id text NOT NULL COLLATE pg_catalog."C",
+    request_digest bytea NOT NULL,
+    binding jsonb NOT NULL,
+    intent jsonb NOT NULL,
+    scope jsonb NOT NULL,
+    operation_kind text NOT NULL,
+    operation_mode text NOT NULL,
+    operation_accounts jsonb NOT NULL,
+    deadline bigint NOT NULL,
+    source_generation bigint NOT NULL,
+    source_epoch integer,
+    source_position bigint,
+    sealed boolean DEFAULT false NOT NULL,
+    log_gap text DEFAULT 'operational-work-original-log-position-unavailable'::text,
+    creation_captured boolean NOT NULL,
+    sdk_writer jsonb NOT NULL,
+    sdk_creator text,
+    sdk_input_digest bytea NOT NULL,
+    source_domain text DEFAULT 'legacy-unpositioned'::text NOT NULL,
+    CONSTRAINT operational_work_original_binding_check CHECK ((octet_length((binding)::text) <= 262144)),
+    CONSTRAINT operational_work_original_check CHECK (((source_epoch IS NOT NULL) = sealed)),
+    CONSTRAINT operational_work_original_check1 CHECK (((NOT creation_captured) OR (sdk_creator IS NOT NULL))),
+    CONSTRAINT operational_work_original_check2 CHECK ((partition_no = (((binding ->> 'route'::text))::integer >> 4))),
+    CONSTRAINT operational_work_original_check3 CHECK ((operation_accounts = jsonb_build_array((binding ->> 'ownerAccountId'::text)))),
+    CONSTRAINT operational_work_original_deadline_check CHECK ((deadline > 0)),
+    CONSTRAINT operational_work_original_intent_check CHECK ((octet_length((intent)::text) <= 8192)),
+    CONSTRAINT operational_work_original_operation_accounts_check CHECK ((jsonb_array_length(operation_accounts) = 1)),
+    CONSTRAINT operational_work_original_operation_kind_check CHECK ((operation_kind = 'library.membersPreparation'::text)),
+    CONSTRAINT operational_work_original_operation_mode_check CHECK ((operation_mode = 'request'::text)),
+    CONSTRAINT operational_work_original_position_domain CHECK ((((source_domain = 'legacy-unpositioned'::text) AND (source_position IS NULL) AND (NOT (log_gap IS DISTINCT FROM 'operational-work-original-log-position-unavailable'::text))) OR ((source_domain = 'operational-work/v1'::text) AND (source_position IS NOT NULL) AND (source_position > 0) AND (log_gap IS NULL)))),
+    CONSTRAINT operational_work_original_request_digest_check CHECK ((octet_length(request_digest) = 32)),
+    CONSTRAINT operational_work_original_scope_check CHECK (((octet_length((scope)::text) <= 4096) AND ((jsonb_array_length((scope -> 'accounts'::text)) >= 1) AND (jsonb_array_length((scope -> 'accounts'::text)) <= 8)))),
+    CONSTRAINT operational_work_original_sdk_creator_check CHECK ((octet_length(sdk_creator) <= 256)),
+    CONSTRAINT operational_work_original_sdk_input_digest_check CHECK ((octet_length(sdk_input_digest) = 32)),
+    CONSTRAINT operational_work_original_sdk_writer_check CHECK ((octet_length((sdk_writer)::text) <= 1024)),
+    CONSTRAINT operational_work_original_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT operational_work_original_source_generation_check CHECK ((source_generation > 0)),
+    CONSTRAINT operational_work_original_workflow_id_check CHECK ((octet_length(workflow_id) <= 256))
+);
+
+
+--
+-- Name: operational_work_selected_continuation; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.operational_work_selected_continuation (
+    partition_no integer NOT NULL,
+    workflow_id text NOT NULL COLLATE pg_catalog."C",
+    custody_id uuid NOT NULL,
+    parent_workflow_id text CONSTRAINT operational_work_selected_continuat_parent_workflow_id_not_null NOT NULL COLLATE pg_catalog."C",
+    parent_function_id integer CONSTRAINT operational_work_selected_continuat_parent_function_id_not_null NOT NULL,
+    route integer NOT NULL,
+    owner_account_id uuid CONSTRAINT operational_work_selected_continuatio_owner_account_id_not_null NOT NULL,
+    collection_id uuid NOT NULL,
+    episode_id uuid NOT NULL,
+    sdk_input_digest bytea CONSTRAINT operational_work_selected_continuatio_sdk_input_digest_not_null NOT NULL,
+    sdk_creator text NOT NULL,
+    CONSTRAINT operational_work_selected_continuation_sdk_creator_check CHECK ((octet_length(sdk_creator) <= 256)),
+    CONSTRAINT operational_work_selected_continuation_sdk_input_digest_check CHECK ((octet_length(sdk_input_digest) = 32)),
+    CONSTRAINT operational_work_selected_continuation_workflow_id_check CHECK ((octet_length(workflow_id) <= 256))
+);
+
+
+--
+-- Name: operational_work_selection; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.operational_work_selection (
+    partition_no integer NOT NULL,
+    workflow_id text NOT NULL COLLATE pg_catalog."C",
+    function_id integer NOT NULL,
+    custody_id uuid NOT NULL,
+    route integer NOT NULL,
+    owner_account_id uuid NOT NULL,
+    collection_id uuid NOT NULL,
+    episode_id uuid NOT NULL,
+    attempt_generation bigint NOT NULL,
+    restore_generation uuid NOT NULL,
+    deadline bigint NOT NULL,
+    original_digest bytea NOT NULL,
+    selected_tuple jsonb NOT NULL,
+    result jsonb,
+    CONSTRAINT operational_work_selection_attempt_generation_check CHECK ((attempt_generation > 0)),
+    CONSTRAINT operational_work_selection_check CHECK ((((route >= 0) AND (route <= 65535)) AND (partition_no = (route >> 4)))),
+    CONSTRAINT operational_work_selection_deadline_check CHECK ((deadline > 0)),
+    CONSTRAINT operational_work_selection_function_id_check CHECK (((function_id >= 0) AND (function_id <= 63))),
+    CONSTRAINT operational_work_selection_original_digest_check CHECK ((octet_length(original_digest) = 32)),
+    CONSTRAINT operational_work_selection_result_check CHECK (((result IS NULL) OR ((octet_length((result)::text) <= 4096) AND ((result ->> 'kind'::text) = ANY (ARRAY['complete'::text, 'continue'::text, 'failure'::text, 'obsolete'::text]))))),
+    CONSTRAINT operational_work_selection_selected_tuple_check CHECK ((octet_length((selected_tuple)::text) <= 2097152)),
+    CONSTRAINT operational_work_selection_workflow_id_check CHECK ((octet_length(workflow_id) <= 256))
 );
 
 
@@ -2223,6 +2882,150 @@ ALTER TABLE ONLY core.history_work
 
 
 --
+-- Name: identity_fx_original identity_fx_original_partition_no_epoch_position_event_seq__key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.identity_fx_original
+    ADD CONSTRAINT identity_fx_original_partition_no_epoch_position_event_seq__key UNIQUE (partition_no, epoch, "position", event_seq, effect);
+
+
+--
+-- Name: identity_fx_original identity_fx_original_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.identity_fx_original
+    ADD CONSTRAINT identity_fx_original_pkey PRIMARY KEY (original_id);
+
+
+--
+-- Name: identity_fx_original identity_fx_original_workflow_id_key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.identity_fx_original
+    ADD CONSTRAINT identity_fx_original_workflow_id_key UNIQUE (workflow_id);
+
+
+--
+-- Name: identity_fx_receiving identity_fx_receiving_original_id_key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.identity_fx_receiving
+    ADD CONSTRAINT identity_fx_receiving_original_id_key UNIQUE (original_id);
+
+
+--
+-- Name: identity_fx_receiving identity_fx_receiving_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.identity_fx_receiving
+    ADD CONSTRAINT identity_fx_receiving_pkey PRIMARY KEY (workflow_id);
+
+
+--
+-- Name: identity_history_allocation identity_history_allocation_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.identity_history_allocation
+    ADD CONSTRAINT identity_history_allocation_pkey PRIMARY KEY (original_id);
+
+
+--
+-- Name: identity_history_original identity_history_original_ordinal_key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.identity_history_original
+    ADD CONSTRAINT identity_history_original_ordinal_key UNIQUE (ordinal);
+
+
+--
+-- Name: identity_history_original identity_history_original_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.identity_history_original
+    ADD CONSTRAINT identity_history_original_pkey PRIMARY KEY (original_id);
+
+
+--
+-- Name: operational_work_episode operational_work_episode_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_episode
+    ADD CONSTRAINT operational_work_episode_pkey PRIMARY KEY (partition_no, route, owner_account_id, collection_id, episode_id);
+
+
+--
+-- Name: operational_work_head operational_work_head_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_head
+    ADD CONSTRAINT operational_work_head_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: operational_work_mapping operational_work_mapping_partition_no_workflow_id_key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_mapping
+    ADD CONSTRAINT operational_work_mapping_partition_no_workflow_id_key UNIQUE (partition_no, workflow_id);
+
+
+--
+-- Name: operational_work_mapping operational_work_mapping_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_mapping
+    ADD CONSTRAINT operational_work_mapping_pkey PRIMARY KEY (partition_no, custody_id);
+
+
+--
+-- Name: operational_work_original operational_work_original_partition_no_source_epoch_source__key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_original
+    ADD CONSTRAINT operational_work_original_partition_no_source_epoch_source__key UNIQUE (partition_no, source_epoch, source_position);
+
+
+--
+-- Name: operational_work_original operational_work_original_partition_no_transaction_id_key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_original
+    ADD CONSTRAINT operational_work_original_partition_no_transaction_id_key UNIQUE (partition_no, transaction_id);
+
+
+--
+-- Name: operational_work_original operational_work_original_partition_no_workflow_id_key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_original
+    ADD CONSTRAINT operational_work_original_partition_no_workflow_id_key UNIQUE (partition_no, workflow_id);
+
+
+--
+-- Name: operational_work_original operational_work_original_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_original
+    ADD CONSTRAINT operational_work_original_pkey PRIMARY KEY (partition_no, custody_id);
+
+
+--
+-- Name: operational_work_selected_continuation operational_work_selected_continuation_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_selected_continuation
+    ADD CONSTRAINT operational_work_selected_continuation_pkey PRIMARY KEY (partition_no, workflow_id);
+
+
+--
+-- Name: operational_work_selection operational_work_selection_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_selection
+    ADD CONSTRAINT operational_work_selection_pkey PRIMARY KEY (partition_no, workflow_id, function_id);
+
+
+--
 -- Name: outbox outbox_pkey; Type: CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -2437,6 +3240,27 @@ CREATE INDEX history_registry_redrive ON core.preference_history_job USING btree
 --
 
 CREATE INDEX history_work_source ON core.history_work USING btree (source_partition, work_id);
+
+
+--
+-- Name: identity_history_original_job; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX identity_history_original_job ON core.identity_history_original USING btree (job_id, ordinal DESC);
+
+
+--
+-- Name: operational_work_mapping_position; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE UNIQUE INDEX operational_work_mapping_position ON core.operational_work_mapping USING btree (partition_no, source_partition, source_position) WHERE (source_domain = 'operational-work/v1'::text);
+
+
+--
+-- Name: operational_work_original_position; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE UNIQUE INDEX operational_work_original_position ON core.operational_work_original USING btree (partition_no, source_position) WHERE (source_domain = 'operational-work/v1'::text);
 
 
 --
@@ -2834,6 +3658,223 @@ CREATE TRIGGER identity_epoch_prearm_owner_gate BEFORE DELETE OR UPDATE ON core.
 
 
 --
+-- Name: identity_fx_original identity_fx_original_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER identity_fx_original_guard BEFORE DELETE OR UPDATE ON core.identity_fx_original FOR EACH ROW EXECUTE FUNCTION core.guard_identity_original_control();
+
+
+--
+-- Name: identity_fx_receiving identity_fx_receiving_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER identity_fx_receiving_guard BEFORE DELETE OR UPDATE ON core.identity_fx_receiving FOR EACH ROW EXECUTE FUNCTION core.guard_identity_original_control();
+
+
+--
+-- Name: identity_history_allocation identity_history_allocation_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER identity_history_allocation_guard BEFORE INSERT OR DELETE OR UPDATE ON core.identity_history_allocation FOR EACH ROW EXECUTE FUNCTION core.guard_identity_history_allocation();
+
+
+--
+-- Name: identity_history_original identity_history_original_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER identity_history_original_guard BEFORE DELETE OR UPDATE ON core.identity_history_original FOR EACH ROW EXECUTE FUNCTION core.guard_identity_original_control();
+
+
+--
+-- Name: history_work operational_work_custody_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_custody_guard BEFORE INSERT OR DELETE OR UPDATE ON core.history_work FOR EACH ROW EXECUTE FUNCTION core.operational_work_custody_guard();
+
+ALTER TABLE core.history_work ENABLE ALWAYS TRIGGER operational_work_custody_guard;
+
+
+--
+-- Name: operational_work_episode operational_work_episode_immutable; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_episode_immutable BEFORE DELETE OR UPDATE ON core.operational_work_episode FOR EACH ROW EXECUTE FUNCTION core.operational_work_immutable();
+
+ALTER TABLE core.operational_work_episode ENABLE ALWAYS TRIGGER operational_work_episode_immutable;
+
+
+--
+-- Name: operational_work_episode operational_work_episode_no_truncate; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_episode_no_truncate BEFORE TRUNCATE ON core.operational_work_episode FOR EACH STATEMENT EXECUTE FUNCTION core.operational_work_immutable();
+
+ALTER TABLE core.operational_work_episode ENABLE ALWAYS TRIGGER operational_work_episode_no_truncate;
+
+
+--
+-- Name: operational_work_head operational_work_head_bound; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER operational_work_head_bound AFTER INSERT OR UPDATE ON core.operational_work_head DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION core.operational_work_head_bound();
+
+ALTER TABLE core.operational_work_head ENABLE ALWAYS TRIGGER operational_work_head_bound;
+
+
+--
+-- Name: operational_work_head operational_work_head_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_head_guard BEFORE INSERT OR DELETE OR UPDATE ON core.operational_work_head FOR EACH ROW EXECUTE FUNCTION core.operational_work_head_guard();
+
+ALTER TABLE core.operational_work_head ENABLE ALWAYS TRIGGER operational_work_head_guard;
+
+
+--
+-- Name: operational_work_head operational_work_head_no_truncate; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_head_no_truncate BEFORE TRUNCATE ON core.operational_work_head FOR EACH STATEMENT EXECUTE FUNCTION core.operational_work_head_guard();
+
+ALTER TABLE core.operational_work_head ENABLE ALWAYS TRIGGER operational_work_head_no_truncate;
+
+
+--
+-- Name: history_locator operational_work_locator_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_locator_guard BEFORE DELETE OR UPDATE ON core.history_locator FOR EACH ROW EXECUTE FUNCTION core.operational_work_custody_guard();
+
+ALTER TABLE core.history_locator ENABLE ALWAYS TRIGGER operational_work_locator_guard;
+
+
+--
+-- Name: operational_work_mapping operational_work_mapping_immutable; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_mapping_immutable BEFORE DELETE OR UPDATE ON core.operational_work_mapping FOR EACH ROW EXECUTE FUNCTION core.operational_work_immutable();
+
+ALTER TABLE core.operational_work_mapping ENABLE ALWAYS TRIGGER operational_work_mapping_immutable;
+
+
+--
+-- Name: operational_work_mapping operational_work_mapping_no_truncate; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_mapping_no_truncate BEFORE TRUNCATE ON core.operational_work_mapping FOR EACH STATEMENT EXECUTE FUNCTION core.operational_work_immutable();
+
+ALTER TABLE core.operational_work_mapping ENABLE ALWAYS TRIGGER operational_work_mapping_no_truncate;
+
+
+--
+-- Name: operational_work_mapping operational_work_mapping_stamp; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_mapping_stamp BEFORE INSERT ON core.operational_work_mapping FOR EACH ROW EXECUTE FUNCTION core.operational_work_mapping_stamp();
+
+ALTER TABLE core.operational_work_mapping ENABLE ALWAYS TRIGGER operational_work_mapping_stamp;
+
+
+--
+-- Name: operational_work_original operational_work_original_immutable; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_original_immutable BEFORE DELETE OR UPDATE ON core.operational_work_original FOR EACH ROW EXECUTE FUNCTION core.operational_work_immutable();
+
+ALTER TABLE core.operational_work_original ENABLE ALWAYS TRIGGER operational_work_original_immutable;
+
+
+--
+-- Name: operational_work_original operational_work_original_no_truncate; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_original_no_truncate BEFORE TRUNCATE ON core.operational_work_original FOR EACH STATEMENT EXECUTE FUNCTION core.operational_work_immutable();
+
+ALTER TABLE core.operational_work_original ENABLE ALWAYS TRIGGER operational_work_original_no_truncate;
+
+
+--
+-- Name: operational_work_original operational_work_position_binding; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_position_binding BEFORE INSERT ON core.operational_work_original FOR EACH ROW EXECUTE FUNCTION core.operational_work_position_binding();
+
+ALTER TABLE core.operational_work_original ENABLE ALWAYS TRIGGER operational_work_position_binding;
+
+
+--
+-- Name: history_receiving_proof operational_work_receiving_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_receiving_guard BEFORE INSERT ON core.history_receiving_proof FOR EACH ROW EXECUTE FUNCTION core.operational_work_custody_guard();
+
+ALTER TABLE core.history_receiving_proof ENABLE ALWAYS TRIGGER operational_work_receiving_guard;
+
+
+--
+-- Name: operational_work_original operational_work_require_native_seal; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER operational_work_require_native_seal AFTER INSERT ON core.operational_work_original DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION core.operational_work_require_native_seal();
+
+ALTER TABLE core.operational_work_original ENABLE ALWAYS TRIGGER operational_work_require_native_seal;
+
+
+--
+-- Name: history_locator operational_work_role_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_role_guard BEFORE INSERT OR UPDATE ON core.history_locator FOR EACH ROW EXECUTE FUNCTION core.operational_work_role_guard();
+
+ALTER TABLE core.history_locator ENABLE ALWAYS TRIGGER operational_work_role_guard;
+
+
+--
+-- Name: operational_work_selected_continuation operational_work_selected_continuation_bound; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER operational_work_selected_continuation_bound AFTER INSERT ON core.operational_work_selected_continuation DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION core.operational_work_selected_continuation_bound();
+
+ALTER TABLE core.operational_work_selected_continuation ENABLE ALWAYS TRIGGER operational_work_selected_continuation_bound;
+
+
+--
+-- Name: operational_work_selected_continuation operational_work_selected_continuation_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_selected_continuation_guard BEFORE DELETE OR UPDATE ON core.operational_work_selected_continuation FOR EACH ROW EXECUTE FUNCTION core.operational_work_selection_guard();
+
+ALTER TABLE core.operational_work_selected_continuation ENABLE ALWAYS TRIGGER operational_work_selected_continuation_guard;
+
+
+--
+-- Name: operational_work_selected_continuation operational_work_selected_continuation_no_truncate; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_selected_continuation_no_truncate BEFORE TRUNCATE ON core.operational_work_selected_continuation FOR EACH STATEMENT EXECUTE FUNCTION core.operational_work_selection_guard();
+
+ALTER TABLE core.operational_work_selected_continuation ENABLE ALWAYS TRIGGER operational_work_selected_continuation_no_truncate;
+
+
+--
+-- Name: operational_work_selection operational_work_selection_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_selection_guard BEFORE DELETE OR UPDATE ON core.operational_work_selection FOR EACH ROW EXECUTE FUNCTION core.operational_work_selection_guard();
+
+ALTER TABLE core.operational_work_selection ENABLE ALWAYS TRIGGER operational_work_selection_guard;
+
+
+--
+-- Name: operational_work_selection operational_work_selection_no_truncate; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER operational_work_selection_no_truncate BEFORE TRUNCATE ON core.operational_work_selection FOR EACH STATEMENT EXECUTE FUNCTION core.operational_work_selection_guard();
+
+ALTER TABLE core.operational_work_selection ENABLE ALWAYS TRIGGER operational_work_selection_no_truncate;
+
+
+--
 -- Name: consumer_checkpoint public_filter_creation_checkpoint_retained; Type: TRIGGER; Schema: core; Owner: -
 --
 
@@ -3076,6 +4117,78 @@ ALTER TABLE ONLY core.history_work
 
 
 --
+-- Name: identity_history_allocation identity_history_allocation_original_id_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.identity_history_allocation
+    ADD CONSTRAINT identity_history_allocation_original_id_fkey FOREIGN KEY (original_id) REFERENCES core.identity_history_original(original_id);
+
+
+--
+-- Name: operational_work_episode operational_work_episode_partition_no_custody_id_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_episode
+    ADD CONSTRAINT operational_work_episode_partition_no_custody_id_fkey FOREIGN KEY (partition_no, custody_id) REFERENCES core.operational_work_original(partition_no, custody_id);
+
+
+--
+-- Name: operational_work_head operational_work_head_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_head
+    ADD CONSTRAINT operational_work_head_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: operational_work_mapping operational_work_mapping_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_mapping
+    ADD CONSTRAINT operational_work_mapping_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: operational_work_original operational_work_original_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_original
+    ADD CONSTRAINT operational_work_original_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: operational_work_selected_continuation operational_work_selected_con_partition_no_parent_workflow_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_selected_continuation
+    ADD CONSTRAINT operational_work_selected_con_partition_no_parent_workflow_fkey FOREIGN KEY (partition_no, parent_workflow_id, parent_function_id) REFERENCES core.operational_work_selection(partition_no, workflow_id, function_id);
+
+
+--
+-- Name: operational_work_selected_continuation operational_work_selected_continua_partition_no_custody_id_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_selected_continuation
+    ADD CONSTRAINT operational_work_selected_continua_partition_no_custody_id_fkey FOREIGN KEY (partition_no, custody_id) REFERENCES core.operational_work_original(partition_no, custody_id);
+
+
+--
+-- Name: operational_work_selection operational_work_selection_partition_no_custody_id_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_selection
+    ADD CONSTRAINT operational_work_selection_partition_no_custody_id_fkey FOREIGN KEY (partition_no, custody_id) REFERENCES core.operational_work_original(partition_no, custody_id);
+
+
+--
+-- Name: operational_work_selection operational_work_selection_partition_no_route_owner_accoun_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.operational_work_selection
+    ADD CONSTRAINT operational_work_selection_partition_no_route_owner_accoun_fkey FOREIGN KEY (partition_no, route, owner_account_id, collection_id, episode_id) REFERENCES core.operational_work_episode(partition_no, route, owner_account_id, collection_id, episode_id);
+
+
+--
 -- Name: outbox outbox_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -3159,585 +4272,4 @@ ALTER TABLE ONLY editorial.write_basis
 -- PostgreSQL database dump complete
 --
 
-
-
--- Fixed Accounts original controls. These are not an allocation service or a custody ACK.
-CREATE FUNCTION core.identity_original_vector_valid(v bigint[]) RETURNS boolean
- LANGUAGE sql IMMUTABLE AS $$
- SELECT array_ndims(v)=1 AND array_lower(v,1)=1 AND cardinality(v)=8
-   AND NOT EXISTS(SELECT 1 FROM unnest(v) n WHERE n IS NULL OR n<0 OR n>9007199254740991)
-$$;
-
-CREATE TABLE core.identity_history_original (
- original_id uuid PRIMARY KEY,
- ordinal bigint GENERATED ALWAYS AS IDENTITY UNIQUE,
- job_id uuid NOT NULL,
- binding jsonb NOT NULL CHECK(jsonb_typeof(binding)='object' AND octet_length(binding::text)<=2048),
- deadline bigint NOT NULL CHECK(deadline BETWEEN 1 AND 9007199254740991),
- allowance bigint[] NOT NULL CHECK(core.identity_original_vector_valid(allowance)),
- spent bigint[] NOT NULL CHECK(core.identity_original_vector_valid(spent)),
- dispatched boolean NOT NULL DEFAULT false,
- advanced boolean NOT NULL DEFAULT false,
- CHECK(binding->>'job_id'=job_id::text),
- CHECK(NOT advanced OR dispatched),
- CHECK(spent[1]<=allowance[1] AND spent[2]<=allowance[2] AND spent[3]<=allowance[3]
-   AND spent[4]<=allowance[4] AND spent[5]<=allowance[5] AND spent[6]<=allowance[6]
-   AND spent[7]<=allowance[7] AND spent[8]<=allowance[8])
-);
-CREATE INDEX identity_history_original_job ON core.identity_history_original(job_id,ordinal DESC);
-
-CREATE TABLE core.identity_fx_original (
- original_id uuid PRIMARY KEY,
- partition_no integer NOT NULL CHECK(partition_no BETWEEN 0 AND 4095),
- epoch integer NOT NULL CHECK(epoch>0),
- position bigint NOT NULL CHECK(position>0),
- event_seq integer NOT NULL CHECK(event_seq BETWEEN 0 AND 999),
- effect text NOT NULL CHECK(effect='agent_verification_reversal'),
- workflow_id text COLLATE "C" NOT NULL UNIQUE CHECK(octet_length(workflow_id)<=256),
- binding jsonb NOT NULL CHECK(jsonb_typeof(binding)='object' AND octet_length(binding::text)<=32768),
- deadline bigint NOT NULL CHECK(deadline BETWEEN 1 AND 9007199254740991),
- allowance bigint[] NOT NULL CHECK(core.identity_original_vector_valid(allowance)),
- spent bigint[] NOT NULL CHECK(core.identity_original_vector_valid(spent)),
- UNIQUE(partition_no,epoch,position,event_seq,effect),
- CHECK(spent[1]<=allowance[1] AND spent[2]<=allowance[2] AND spent[3]<=allowance[3]
-   AND spent[4]<=allowance[4] AND spent[5]<=allowance[5] AND spent[6]<=allowance[6]
-   AND spent[7]<=allowance[7] AND spent[8]<=allowance[8])
-);
-
--- Receiving is a separate home-zero command after the source checkout has been released.
--- It records the real original, not the reversal child's custody identity.
-CREATE TABLE core.identity_fx_receiving (
- workflow_id text COLLATE "C" PRIMARY KEY CHECK(octet_length(workflow_id)<=256),
- original_id uuid NOT NULL UNIQUE,
- binding jsonb NOT NULL CHECK(jsonb_typeof(binding)='object' AND octet_length(binding::text)<=32768),
- receiver_epoch integer NOT NULL CHECK(receiver_epoch>0),
- receiver_generation bigint NOT NULL CHECK(receiver_generation>0),
- deadline bigint NOT NULL CHECK(deadline BETWEEN 1 AND 9007199254740991),
- writer_state text NOT NULL DEFAULT 'pending-physical-owner' CHECK(writer_state='pending-physical-owner'),
- allowance bigint[] NOT NULL CHECK(core.identity_original_vector_valid(allowance)),
- spent bigint[] NOT NULL CHECK(core.identity_original_vector_valid(spent)),
- CHECK(spent[1]<=allowance[1] AND spent[2]<=allowance[2] AND spent[3]<=allowance[3]
-   AND spent[4]<=allowance[4] AND spent[5]<=allowance[5] AND spent[6]<=allowance[6]
-   AND spent[7]<=allowance[7] AND spent[8]<=allowance[8])
-);
-
-CREATE FUNCTION core.guard_identity_original_control() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE i integer; mutable text[];
-BEGIN
- IF TG_OP='DELETE' THEN
-   RAISE EXCEPTION 'Original admission retains unresolved custody' USING ERRCODE='23514';
- END IF;
- mutable:=CASE WHEN TG_TABLE_NAME='identity_history_original'
-   THEN ARRAY['spent','dispatched','advanced'] ELSE ARRAY['spent'] END;
- IF (to_jsonb(NEW)-mutable) IS DISTINCT FROM (to_jsonb(OLD)-mutable) THEN
-   RAISE EXCEPTION 'Original admission identity and ceiling are immutable' USING ERRCODE='23514';
- END IF;
- FOR i IN 1..8 LOOP
-   IF NEW.spent[i]<OLD.spent[i] THEN
-     RAISE EXCEPTION 'Original admission cannot refund consumed work' USING ERRCODE='23514';
-   END IF;
- END LOOP;
- IF TG_TABLE_NAME='identity_history_original' THEN
-   IF (OLD.dispatched AND NOT NEW.dispatched) OR (OLD.advanced AND NOT NEW.advanced) THEN
-     RAISE EXCEPTION 'Original admission cannot reopen' USING ERRCODE='23514';
-   END IF;
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER identity_history_original_guard BEFORE UPDATE OR DELETE ON core.identity_history_original
- FOR EACH ROW EXECUTE FUNCTION core.guard_identity_original_control();
-CREATE TRIGGER identity_fx_original_guard BEFORE UPDATE OR DELETE ON core.identity_fx_original
- FOR EACH ROW EXECUTE FUNCTION core.guard_identity_original_control();
-CREATE TRIGGER identity_fx_receiving_guard BEFORE UPDATE OR DELETE ON core.identity_fx_receiving
- FOR EACH ROW EXECUTE FUNCTION core.guard_identity_original_control();
-
-
--- Fixed selected-History partitions. An absent child declaration is NULL, never zero.
-CREATE FUNCTION core.identity_original_sum(a bigint[], b bigint[], c bigint[], d bigint[])
-RETURNS bigint[] LANGUAGE sql IMMUTABLE AS $$
- SELECT array_agg(a[i]+coalesce(b[i],0)+coalesce(c[i],0)+d[i] ORDER BY i)
- FROM generate_series(1,8) i
-$$;
-
-CREATE TABLE core.identity_history_allocation (
- original_id uuid PRIMARY KEY REFERENCES core.identity_history_original(original_id),
- local_work bigint[] NOT NULL CHECK(core.identity_original_vector_valid(local_work)),
- source_work bigint[] CHECK(source_work IS NULL OR core.identity_original_vector_valid(source_work)),
- library_work bigint[] CHECK(library_work IS NULL OR core.identity_original_vector_valid(library_work)),
- transfer_work bigint[] NOT NULL CHECK(core.identity_original_vector_valid(transfer_work)),
- parent_work bigint[] NOT NULL CHECK(core.identity_original_vector_valid(parent_work)),
- local_entered boolean NOT NULL DEFAULT false,
- child_entered boolean NOT NULL DEFAULT false,
- child_ended boolean NOT NULL DEFAULT false,
- next_binding jsonb CHECK(next_binding IS NULL OR
-   (jsonb_typeof(next_binding)='object' AND octet_length(next_binding::text)<=2048)),
- CHECK(parent_work=core.identity_original_sum(local_work,source_work,library_work,transfer_work)),
- CHECK(NOT child_entered OR (local_entered AND source_work IS NOT NULL AND library_work IS NOT NULL)),
- CHECK(NOT child_ended OR child_entered),
- CHECK(next_binding IS NULL OR local_entered)
-);
-
-CREATE FUNCTION core.guard_identity_history_allocation() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE original core.identity_history_original;
-BEGIN
- IF TG_OP='DELETE' THEN
-   RAISE EXCEPTION 'Original partitions cannot be discarded' USING ERRCODE='23514';
- END IF;
- IF TG_OP='INSERT' THEN
-   SELECT * INTO original FROM core.identity_history_original WHERE original_id=NEW.original_id FOR SHARE;
-   IF NOT FOUND OR original.allowance IS DISTINCT FROM NEW.parent_work OR
-      original.spent IS DISTINCT FROM NEW.parent_work OR NOT original.dispatched THEN
-     RAISE EXCEPTION 'Original partitions require committed prepaid admission' USING ERRCODE='23514';
-   END IF;
- ELSE
-   IF (to_jsonb(NEW)-ARRAY['local_entered','child_entered','child_ended','next_binding']) IS DISTINCT FROM
-      (to_jsonb(OLD)-ARRAY['local_entered','child_entered','child_ended','next_binding']) OR
-      (OLD.local_entered AND NOT NEW.local_entered) OR
-      (OLD.child_entered AND NOT NEW.child_entered) OR
-      (OLD.child_ended AND NOT NEW.child_ended) OR
-      (OLD.next_binding IS NOT NULL AND NEW.next_binding IS DISTINCT FROM OLD.next_binding) THEN
-     RAISE EXCEPTION 'Original partitions cannot refill or reopen' USING ERRCODE='23514';
-   END IF;
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER identity_history_allocation_guard BEFORE INSERT OR UPDATE OR DELETE ON core.identity_history_allocation
- FOR EACH ROW EXECUTE FUNCTION core.guard_identity_history_allocation();
-
--- Operational Members History original and receiving mapping.
--- The installed log requires an event at every position. Operational registration records an
--- authentic same-transaction association, with the unavailable original log position explicit.
-CREATE TABLE core.operational_work_original (
-  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
-  custody_id uuid NOT NULL,
-  transaction_id uuid NOT NULL,
-  workflow_id text COLLATE "C" NOT NULL CHECK(octet_length(workflow_id)<=256),
-  request_digest bytea NOT NULL CHECK(octet_length(request_digest)=32),
-  binding jsonb NOT NULL CHECK(octet_length(binding::text)<=262144),
-  intent jsonb NOT NULL CHECK(octet_length(intent::text)<=8192),
-  scope jsonb NOT NULL CHECK(octet_length(scope::text)<=4096 AND jsonb_array_length(scope->'accounts') BETWEEN 1 AND 8),
-  operation_kind text NOT NULL CHECK(operation_kind='library.membersPreparation'),
-  operation_mode text NOT NULL CHECK(operation_mode='request'),
-  operation_accounts jsonb NOT NULL CHECK(jsonb_array_length(operation_accounts)=1),
-  deadline bigint NOT NULL CHECK(deadline>0),
-  source_generation bigint NOT NULL CHECK(source_generation>0),
-  source_epoch integer CHECK(source_epoch>0),
-  source_position bigint CHECK(source_position IS NULL),
-  sealed boolean NOT NULL DEFAULT false,
-  log_gap text NOT NULL DEFAULT 'operational-work-original-log-position-unavailable'
-    CHECK(log_gap='operational-work-original-log-position-unavailable'),
-  creation_captured boolean NOT NULL,
-  sdk_writer jsonb NOT NULL CHECK(octet_length(sdk_writer::text)<=1024),
-  sdk_creator text CHECK(octet_length(sdk_creator)<=256),
-  sdk_input_digest bytea NOT NULL CHECK(octet_length(sdk_input_digest)=32),
-  PRIMARY KEY(partition_no,custody_id),
-  UNIQUE(partition_no,workflow_id),
-  UNIQUE(partition_no,transaction_id),
-  UNIQUE(partition_no,source_epoch,source_position),
-  CHECK((source_epoch IS NOT NULL)=sealed),
-  CHECK(source_position IS NULL),
-  CHECK(NOT creation_captured OR sdk_creator IS NOT NULL),
-  CHECK(partition_no=((binding->>'route')::integer >> 4)),
-  CHECK(operation_accounts=jsonb_build_array(binding->>'ownerAccountId'))
-);
-CREATE TABLE core.operational_work_episode (
-  partition_no integer NOT NULL,
-  route integer NOT NULL CHECK(route BETWEEN 0 AND 65535 AND partition_no=(route >> 4)),
-  owner_account_id uuid NOT NULL,
-  collection_id uuid NOT NULL,
-  episode_id uuid NOT NULL,
-  custody_id uuid NOT NULL,
-  PRIMARY KEY(partition_no,route,owner_account_id,collection_id,episode_id),
-  FOREIGN KEY(partition_no,custody_id) REFERENCES core.operational_work_original(partition_no,custody_id),
-  CHECK(route=get_byte(uuid_send(owner_account_id),10)*256+get_byte(uuid_send(owner_account_id),11)),
-  CHECK(route=get_byte(uuid_send(collection_id),10)*256+get_byte(uuid_send(collection_id),11)),
-  CHECK(route=get_byte(uuid_send(episode_id),10)*256+get_byte(uuid_send(episode_id),11))
-);
--- The receiving home owns this inventory independently. No cross-home FK or identity-owned row.
-CREATE TABLE core.operational_work_mapping (
-  partition_no integer NOT NULL DEFAULT 0 REFERENCES core.partition(partition_no) CHECK(partition_no=0),
-  custody_id uuid NOT NULL,
-  workflow_id text COLLATE "C" NOT NULL CHECK(octet_length(workflow_id)<=256),
-  source_partition integer NOT NULL CHECK(source_partition BETWEEN 0 AND 4095),
-  source_transaction uuid NOT NULL,
-  source_epoch integer NOT NULL CHECK(source_epoch>0),
-  source_position bigint CHECK(source_position IS NULL),
-  log_gap text NOT NULL DEFAULT 'operational-work-original-log-position-unavailable'
-    CHECK(log_gap='operational-work-original-log-position-unavailable'),
-  source_generation bigint NOT NULL CHECK(source_generation>0),
-  request_digest bytea NOT NULL CHECK(octet_length(request_digest)=32),
-  source jsonb NOT NULL CHECK(octet_length(source::text)<=278528),
-  receiver_epoch integer NOT NULL CHECK(receiver_epoch>0),
-  receiver_generation bigint NOT NULL CHECK(receiver_generation>0),
-  sdk_writer jsonb NOT NULL CHECK(octet_length(sdk_writer::text)<=1024),
-  PRIMARY KEY(partition_no,custody_id),
-  UNIQUE(partition_no,workflow_id)
-);
-
-CREATE FUNCTION core.operational_work_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP IN ('DELETE','TRUNCATE') THEN
-    RAISE EXCEPTION 'operational History identity is permanent' USING ERRCODE='23514';
-  END IF;
-  IF TG_TABLE_NAME='operational_work_original' AND NOT OLD.sealed AND NEW.sealed AND
-     (to_jsonb(OLD)-ARRAY['source_epoch','sealed'])=(to_jsonb(NEW)-ARRAY['source_epoch','sealed']) THEN
-    RETURN NEW;
-  END IF;
-  IF OLD IS DISTINCT FROM NEW THEN
-    RAISE EXCEPTION 'operational History identity is immutable' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END; $$;
-CREATE TRIGGER operational_work_original_immutable BEFORE UPDATE OR DELETE ON core.operational_work_original
-  FOR EACH ROW EXECUTE FUNCTION core.operational_work_immutable();
-CREATE TRIGGER operational_work_episode_immutable BEFORE UPDATE OR DELETE ON core.operational_work_episode
-  FOR EACH ROW EXECUTE FUNCTION core.operational_work_immutable();
-CREATE TRIGGER operational_work_mapping_immutable BEFORE UPDATE OR DELETE ON core.operational_work_mapping
-  FOR EACH ROW EXECUTE FUNCTION core.operational_work_immutable();
-CREATE TRIGGER operational_work_original_no_truncate BEFORE TRUNCATE ON core.operational_work_original
-  FOR EACH STATEMENT EXECUTE FUNCTION core.operational_work_immutable();
-CREATE TRIGGER operational_work_episode_no_truncate BEFORE TRUNCATE ON core.operational_work_episode
-  FOR EACH STATEMENT EXECUTE FUNCTION core.operational_work_immutable();
-CREATE TRIGGER operational_work_mapping_no_truncate BEFORE TRUNCATE ON core.operational_work_mapping
-  FOR EACH STATEMENT EXECUTE FUNCTION core.operational_work_immutable();
-
-CREATE FUNCTION core.operational_work_require_native_seal() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE o core.operational_work_original;
-BEGIN
-  -- Deferred INSERT sees the row sealed by the executor, not the unsealed trigger NEW value.
-  SELECT * INTO STRICT o FROM core.operational_work_original
-    WHERE partition_no=NEW.partition_no AND custody_id=NEW.custody_id;
-  IF NOT o.sealed OR o.source_epoch IS NULL THEN
-    RAISE EXCEPTION 'operational-work-native-commit-fence-unavailable' USING ERRCODE='23514';
-  END IF;
-  RETURN NULL;
-END; $$;
-CREATE CONSTRAINT TRIGGER operational_work_require_native_seal AFTER INSERT ON core.operational_work_original
-  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION core.operational_work_require_native_seal();
-
-CREATE FUNCTION core.operational_work_role_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE scope jsonb;
-BEGIN
-  IF TG_OP='UPDATE' THEN
-    IF OLD.artifact_type='durable-work/v1' AND substring(OLD.locator FROM 3 FOR 9)=convert_to('6f70776b-','UTF8') AND
-       (OLD.partition_no,OLD.account_route,OLD.account_id,OLD.artifact_type,OLD.locator,OLD.roles,OLD.minimizer_version)
-       IS DISTINCT FROM
-       (NEW.partition_no,NEW.account_route,NEW.account_id,NEW.artifact_type,NEW.locator,NEW.roles,NEW.minimizer_version) THEN
-      RAISE EXCEPTION 'operational History original roles are immutable' USING ERRCODE='23514';
-    END IF;
-    RETURN NEW;
-  END IF;
-  IF NEW.artifact_type<>'durable-work/v1' OR substring(NEW.locator FROM 3 FOR 9)<>convert_to('6f70776b-','UTF8') THEN RETURN NEW; END IF;
-  SELECT o.scope INTO scope FROM core.operational_work_original o
-    WHERE o.partition_no=NEW.partition_no AND o.custody_id=convert_from(substring(NEW.locator FROM 3),'UTF8')::uuid FOR SHARE;
-  IF NOT FOUND THEN
-    SELECT m.source->'scope' INTO scope FROM core.operational_work_mapping m
-      WHERE m.partition_no=NEW.partition_no AND m.custody_id=convert_from(substring(NEW.locator FROM 3),'UTF8')::uuid FOR SHARE;
-  END IF;
-  IF scope IS NOT NULL AND NOT EXISTS(
-    SELECT 1 FROM jsonb_to_recordset(scope->'accounts') a("accountRoute" integer,"accountId" uuid,roles integer)
-    WHERE a."accountRoute"=NEW.account_route AND a."accountId"=NEW.account_id AND a.roles=NEW.roles) THEN
-    RAISE EXCEPTION 'operational History original roles differ' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END; $$;
-CREATE TRIGGER operational_work_role_guard BEFORE INSERT OR UPDATE ON core.history_locator
-  FOR EACH ROW EXECUTE FUNCTION core.operational_work_role_guard();
-
--- Generic History cannot mistake an absent SDK UUID row for absence of a mapped named workflow.
--- These controls remain closed until the independent Source/final receiving owner operand exists.
-CREATE FUNCTION core.operational_work_custody_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE id uuid; p integer; own boolean;
-BEGIN
-  IF TG_TABLE_NAME='history_work' THEN
-    IF TG_OP='DELETE' THEN
-      IF OLD.owner='library.members-preparation' THEN
-        RAISE EXCEPTION 'operational History inventory is permanent' USING ERRCODE='23514';
-      END IF;
-      RETURN OLD;
-    END IF;
-    IF NEW.owner IS DISTINCT FROM 'library.members-preparation' AND
-       (TG_OP='INSERT' OR OLD.owner IS DISTINCT FROM 'library.members-preparation') THEN RETURN NEW; END IF;
-    IF TG_OP='UPDATE' AND
-       (to_jsonb(OLD)-ARRAY['state','owner_ready','retired_at','absence_verified']) IS DISTINCT FROM
-       (to_jsonb(NEW)-ARRAY['state','owner_ready','retired_at','absence_verified']) THEN
-      RAISE EXCEPTION 'operational History original inventory is immutable' USING ERRCODE='23514';
-    END IF;
-    id:=NEW.work_id; p:=NEW.partition_no;
-    IF NOT (NEW.state='retired' OR NEW.absence_verified OR NEW.owner_ready) THEN RETURN NEW; END IF;
-  ELSE
-    IF TG_OP='DELETE' THEN
-      IF OLD.artifact_type='durable-work/v1' AND substring(OLD.locator FROM 3 FOR 9)=convert_to('6f70776b-','UTF8') THEN
-        RAISE EXCEPTION 'operational History inventory is permanent' USING ERRCODE='23514';
-      END IF;
-      RETURN OLD;
-    END IF;
-    IF NEW.artifact_type<>'durable-work/v1' THEN RETURN NEW; END IF;
-    -- Namespace selects a probe only; the exact durable records below supply authority.
-    IF substring(NEW.locator FROM 3 FOR 9)<>convert_to('6f70776b-','UTF8') THEN RETURN NEW; END IF;
-    IF TG_TABLE_NAME='history_locator' AND NEW.state<>'minimized' THEN RETURN NEW; END IF;
-    BEGIN id:=convert_from(substring(NEW.locator FROM 3),'UTF8')::uuid;
-    EXCEPTION WHEN invalid_text_representation THEN RETURN NEW; END;
-    p:=NEW.partition_no;
-  END IF;
-  SELECT EXISTS(SELECT 1 FROM core.operational_work_original WHERE partition_no=p AND custody_id=id)
-    OR EXISTS(SELECT 1 FROM core.operational_work_mapping WHERE partition_no=p AND custody_id=id) INTO own;
-  IF own THEN
-    RAISE EXCEPTION 'operational-work-source-currentness-unavailable' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END; $$;
-CREATE TRIGGER operational_work_custody_guard BEFORE INSERT OR UPDATE OR DELETE ON core.history_work
-  FOR EACH ROW EXECUTE FUNCTION core.operational_work_custody_guard();
-CREATE TRIGGER operational_work_locator_guard BEFORE UPDATE OR DELETE ON core.history_locator
-  FOR EACH ROW EXECUTE FUNCTION core.operational_work_custody_guard();
-CREATE TRIGGER operational_work_receiving_guard BEFORE INSERT ON core.history_receiving_proof
-  FOR EACH ROW EXECUTE FUNCTION core.operational_work_custody_guard();
-ALTER TABLE core.operational_work_original ENABLE ALWAYS TRIGGER operational_work_original_immutable;
-ALTER TABLE core.operational_work_episode ENABLE ALWAYS TRIGGER operational_work_episode_immutable;
-ALTER TABLE core.operational_work_mapping ENABLE ALWAYS TRIGGER operational_work_mapping_immutable;
-ALTER TABLE core.operational_work_original ENABLE ALWAYS TRIGGER operational_work_original_no_truncate;
-ALTER TABLE core.operational_work_episode ENABLE ALWAYS TRIGGER operational_work_episode_no_truncate;
-ALTER TABLE core.operational_work_mapping ENABLE ALWAYS TRIGGER operational_work_mapping_no_truncate;
-ALTER TABLE core.history_work ENABLE ALWAYS TRIGGER operational_work_custody_guard;
-ALTER TABLE core.history_locator ENABLE ALWAYS TRIGGER operational_work_role_guard;
-ALTER TABLE core.history_locator ENABLE ALWAYS TRIGGER operational_work_locator_guard;
-ALTER TABLE core.history_receiving_proof ENABLE ALWAYS TRIGGER operational_work_receiving_guard;
-
--- Operational Work transactional positions (independent of canonical events).
--- A distinct transactional domain. The canonical partition/event head is never advanced.
--- Installed nullable originals remain legacy-unpositioned, permanently and without backfill.
-DO $$
-DECLARE c record;
-BEGIN
-  FOR c IN SELECT conrelid::regclass AS tbl,conname FROM pg_constraint
-    WHERE conrelid IN ('core.operational_work_original'::regclass,'core.operational_work_mapping'::regclass)
-      AND contype='c' AND (pg_get_constraintdef(oid) LIKE '%source_position IS NULL%'
-        OR pg_get_constraintdef(oid) LIKE '%log_gap%')
-  LOOP EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I',c.tbl,c.conname); END LOOP;
-END; $$;
-ALTER TABLE core.operational_work_original
-  ADD COLUMN source_domain text NOT NULL DEFAULT 'legacy-unpositioned',
-  ALTER COLUMN log_gap DROP NOT NULL;
-ALTER TABLE core.operational_work_mapping
-  ADD COLUMN source_domain text NOT NULL DEFAULT 'legacy-unpositioned',
-  ALTER COLUMN log_gap DROP NOT NULL;
-ALTER TABLE core.operational_work_original ADD CONSTRAINT operational_work_original_position_domain CHECK(
-  (source_domain='legacy-unpositioned' AND source_position IS NULL AND
-    log_gap IS NOT DISTINCT FROM 'operational-work-original-log-position-unavailable') OR
-  (source_domain='operational-work/v1' AND source_position IS NOT NULL AND source_position>0 AND log_gap IS NULL));
-ALTER TABLE core.operational_work_mapping ADD CONSTRAINT operational_work_mapping_position_domain CHECK(
-  (source_domain='legacy-unpositioned' AND source_position IS NULL AND
-    log_gap IS NOT DISTINCT FROM 'operational-work-original-log-position-unavailable') OR
-  (source_domain='operational-work/v1' AND source_position IS NOT NULL AND source_position>0 AND log_gap IS NULL));
-CREATE UNIQUE INDEX operational_work_original_position ON core.operational_work_original(partition_no,source_position)
-  WHERE source_domain='operational-work/v1';
-CREATE UNIQUE INDEX operational_work_mapping_position ON core.operational_work_mapping(partition_no,source_partition,source_position)
-  WHERE source_domain='operational-work/v1';
-
--- One permanent row per native source partition. This is a locked transactional counter,
--- never a sequence, an independently committed allocation or a canonical event Stamp.
-CREATE TABLE core.operational_work_head (
-  partition_no integer PRIMARY KEY REFERENCES core.partition(partition_no),
-  domain text NOT NULL DEFAULT 'operational-work/v1' CHECK(domain='operational-work/v1'),
-  epoch integer NOT NULL CHECK(epoch>0),
-  generation bigint NOT NULL CHECK(generation>0),
-  position bigint NOT NULL CHECK(position>0),
-  custody_id uuid NOT NULL,
-  transaction_id uuid NOT NULL,
-  workflow_id text COLLATE "C" NOT NULL CHECK(octet_length(workflow_id)<=256),
-  request_digest bytea NOT NULL CHECK(octet_length(request_digest)=32),
-  deadline bigint NOT NULL CHECK(deadline>0)
-);
-CREATE FUNCTION core.operational_work_head_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE p core.partition; g bigint;
-BEGIN
-  IF TG_OP IN ('DELETE','TRUNCATE') THEN
-    RAISE EXCEPTION 'operational History head is permanent' USING ERRCODE='23514';
-  END IF;
-  IF TG_OP='UPDATE' AND (NEW.partition_no<>OLD.partition_no OR NEW.domain<>OLD.domain OR
-      NEW.position<>OLD.position+1) THEN
-    RAISE EXCEPTION 'operational History head must advance exactly once' USING ERRCODE='23514';
-  END IF;
-  -- INSERT ON CONFLICT executes this BEFORE INSERT with position=1, then BEFORE UPDATE.
-  IF TG_OP='INSERT' AND NEW.position<>1 THEN
-    RAISE EXCEPTION 'operational History head must start at one' USING ERRCODE='23514';
-  END IF;
-  SELECT * INTO p FROM core.partition WHERE partition_no=NEW.partition_no FOR SHARE;
-  SELECT generation INTO g FROM core.history_family_domain WHERE singleton FOR SHARE;
-  IF p.write_state IS DISTINCT FROM 'active' OR p.epoch IS DISTINCT FROM NEW.epoch OR g IS DISTINCT FROM NEW.generation THEN
-    RAISE EXCEPTION 'operational-work-source-restore-fence-changed' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END; $$;
-CREATE TRIGGER operational_work_head_guard BEFORE INSERT OR UPDATE OR DELETE ON core.operational_work_head
-  FOR EACH ROW EXECUTE FUNCTION core.operational_work_head_guard();
-CREATE TRIGGER operational_work_head_no_truncate BEFORE TRUNCATE ON core.operational_work_head
-  FOR EACH STATEMENT EXECUTE FUNCTION core.operational_work_head_guard();
-ALTER TABLE core.operational_work_head ENABLE ALWAYS TRIGGER operational_work_head_guard;
-ALTER TABLE core.operational_work_head ENABLE ALWAYS TRIGGER operational_work_head_no_truncate;
-
-CREATE FUNCTION core.operational_work_position_binding() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE h core.operational_work_head;
-BEGIN
-  IF NEW.source_domain='legacy-unpositioned' THEN RETURN NEW; END IF;
-  SELECT * INTO h FROM core.operational_work_head WHERE partition_no=NEW.partition_no FOR SHARE;
-  IF h.position IS DISTINCT FROM NEW.source_position OR h.generation IS DISTINCT FROM NEW.source_generation OR
-     h.custody_id IS DISTINCT FROM NEW.custody_id OR h.transaction_id IS DISTINCT FROM NEW.transaction_id OR
-     h.workflow_id IS DISTINCT FROM NEW.workflow_id OR h.request_digest IS DISTINCT FROM NEW.request_digest OR
-     h.deadline IS DISTINCT FROM NEW.deadline THEN
-    RAISE EXCEPTION 'operational-work-native-position-binding-unavailable' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END; $$;
-CREATE TRIGGER operational_work_position_binding BEFORE INSERT ON core.operational_work_original
-  FOR EACH ROW EXECUTE FUNCTION core.operational_work_position_binding();
-ALTER TABLE core.operational_work_original ENABLE ALWAYS TRIGGER operational_work_position_binding;
-
-CREATE OR REPLACE FUNCTION core.operational_work_require_native_seal() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE o core.operational_work_original; h core.operational_work_head; p core.partition; g bigint;
-BEGIN
-  SELECT * INTO STRICT o FROM core.operational_work_original
-    WHERE partition_no=NEW.partition_no AND custody_id=NEW.custody_id;
-  IF NOT o.sealed OR o.source_epoch IS NULL THEN
-    RAISE EXCEPTION 'operational-work-native-commit-fence-unavailable' USING ERRCODE='23514';
-  END IF;
-  IF o.source_domain='legacy-unpositioned' THEN RETURN NULL; END IF;
-  -- Executor already holds partition, family and head in that order. These exact reads verify
-  -- the actual original, not a later head observation relabelled as an original position.
-  SELECT * INTO p FROM core.partition WHERE partition_no=o.partition_no FOR SHARE;
-  SELECT generation INTO g FROM core.history_family_domain WHERE singleton FOR SHARE;
-  SELECT * INTO h FROM core.operational_work_head WHERE partition_no=o.partition_no FOR SHARE;
-  IF p.write_state IS DISTINCT FROM 'active' OR p.epoch IS DISTINCT FROM o.source_epoch OR
-    g IS DISTINCT FROM o.source_generation OR h.epoch IS DISTINCT FROM o.source_epoch OR
-    h.generation IS DISTINCT FROM o.source_generation OR h.position IS DISTINCT FROM o.source_position OR
-    h.custody_id IS DISTINCT FROM o.custody_id OR h.transaction_id IS DISTINCT FROM o.transaction_id OR
-    h.workflow_id IS DISTINCT FROM o.workflow_id OR h.request_digest IS DISTINCT FROM o.request_digest OR
-    h.deadline IS DISTINCT FROM o.deadline OR o.deadline<=floor(extract(epoch FROM clock_timestamp())*1000) THEN
-    RAISE EXCEPTION 'operational-work-native-commit-fence-unavailable' USING ERRCODE='23514';
-  END IF;
-  RETURN NULL;
-END; $$;
--- A counter allocation cannot commit without its exact sealed original, even if an escaped
--- caller catches a failed SDK/registration statement or attempts an unused direct allocation.
-CREATE FUNCTION core.operational_work_head_bound() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF NOT EXISTS(SELECT 1 FROM core.operational_work_original o WHERE o.partition_no=NEW.partition_no AND
-      o.custody_id=NEW.custody_id AND o.transaction_id=NEW.transaction_id AND o.workflow_id=NEW.workflow_id AND
-      o.request_digest=NEW.request_digest AND o.deadline=NEW.deadline AND o.source_domain=NEW.domain AND
-      o.source_epoch=NEW.epoch AND o.source_generation=NEW.generation AND o.source_position=NEW.position AND o.sealed) THEN
-    RAISE EXCEPTION 'operational-work-native-position-binding-unavailable' USING ERRCODE='23514';
-  END IF;
-  RETURN NULL;
-END; $$;
-CREATE CONSTRAINT TRIGGER operational_work_head_bound AFTER INSERT OR UPDATE ON core.operational_work_head
-  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION core.operational_work_head_bound();
-ALTER TABLE core.operational_work_original ENABLE ALWAYS TRIGGER operational_work_require_native_seal;
-ALTER TABLE core.operational_work_head ENABLE ALWAYS TRIGGER operational_work_head_bound;
-
--- Receiver checks only its local immutable projection. There is no cross-home source query
--- or FK here: the released, private committed resolver supplies the source binding.
-CREATE FUNCTION core.operational_work_mapping_stamp() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF NEW.source_domain='legacy-unpositioned' THEN RETURN NEW; END IF;
-  IF NEW.source->'stamp' IS DISTINCT FROM jsonb_build_object('domain',NEW.source_domain,
-       'partition',NEW.source_partition,'epoch',NEW.source_epoch,'generation',NEW.source_generation::text,
-       'position',NEW.source_position::text) OR
-     NEW.source->>'position' IS DISTINCT FROM NEW.source_position::text OR
-     NEW.source->>'transactionId' IS DISTINCT FROM NEW.source_transaction::text OR
-     NEW.source->>'custodyId' IS DISTINCT FROM NEW.custody_id::text OR
-     NEW.source->>'workflowId' IS DISTINCT FROM NEW.workflow_id OR
-     NEW.source->>'digest' IS DISTINCT FROM encode(NEW.request_digest,'hex') OR
-     NEW.source->>'gap' IS DISTINCT FROM 'operational-work-source-currentness-unavailable' THEN
-    RAISE EXCEPTION 'operational-work-receiving-stamp-binding-changed' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END; $$;
-CREATE TRIGGER operational_work_mapping_stamp BEFORE INSERT ON core.operational_work_mapping
-  FOR EACH ROW EXECUTE FUNCTION core.operational_work_mapping_stamp();
-ALTER TABLE core.operational_work_mapping ENABLE ALWAYS TRIGGER operational_work_mapping_stamp;
--- Existing immutable role, SDK/native retirement and receiving guards deliberately remain closed.
-
-
--- Selected operational invocation associations.
--- Accounts selected invocation associations. SDK execution ownership remains SDK-owned.
-CREATE TABLE core.operational_work_selection (
-  partition_no integer NOT NULL,
-  workflow_id text COLLATE "C" NOT NULL CHECK(octet_length(workflow_id)<=256),
-  function_id integer NOT NULL CHECK(function_id BETWEEN 0 AND 63),
-  custody_id uuid NOT NULL,
-  route integer NOT NULL CHECK(route BETWEEN 0 AND 65535 AND partition_no=(route >> 4)),
-  owner_account_id uuid NOT NULL,
-  collection_id uuid NOT NULL,
-  episode_id uuid NOT NULL,
-  attempt_generation bigint NOT NULL CHECK(attempt_generation>0),
-  restore_generation uuid NOT NULL,
-  deadline bigint NOT NULL CHECK(deadline>0),
-  original_digest bytea NOT NULL CHECK(octet_length(original_digest)=32),
-  selected_tuple jsonb NOT NULL CHECK(octet_length(selected_tuple::text)<=2097152),
-  result jsonb CHECK(result IS NULL OR (octet_length(result::text)<=4096 AND result->>'kind' IN ('complete','continue','failure','obsolete'))),
-  PRIMARY KEY(partition_no,workflow_id,function_id),
-  FOREIGN KEY(partition_no,custody_id) REFERENCES core.operational_work_original(partition_no,custody_id),
-  FOREIGN KEY(partition_no,route,owner_account_id,collection_id,episode_id)
-    REFERENCES core.operational_work_episode(partition_no,route,owner_account_id,collection_id,episode_id)
-);
-CREATE TABLE core.operational_work_selected_continuation (
-  partition_no integer NOT NULL,
-  workflow_id text COLLATE "C" NOT NULL CHECK(octet_length(workflow_id)<=256),
-  custody_id uuid NOT NULL,
-  parent_workflow_id text COLLATE "C" NOT NULL,
-  parent_function_id integer NOT NULL,
-  route integer NOT NULL,
-  owner_account_id uuid NOT NULL,
-  collection_id uuid NOT NULL,
-  episode_id uuid NOT NULL,
-  sdk_input_digest bytea NOT NULL CHECK(octet_length(sdk_input_digest)=32),
-  sdk_creator text NOT NULL CHECK(octet_length(sdk_creator)<=256),
-  PRIMARY KEY(partition_no,workflow_id),
-  FOREIGN KEY(partition_no,parent_workflow_id,parent_function_id)
-    REFERENCES core.operational_work_selection(partition_no,workflow_id,function_id),
-  FOREIGN KEY(partition_no,custody_id) REFERENCES core.operational_work_original(partition_no,custody_id)
-);
-CREATE FUNCTION core.operational_work_selection_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP IN ('DELETE','TRUNCATE') THEN
-    RAISE EXCEPTION 'selected operational association is permanent' USING ERRCODE='23514';
-  END IF;
-  IF TG_TABLE_NAME='operational_work_selection' THEN
-    IF OLD.result IS NULL AND NEW.result IS NOT NULL AND
-       (to_jsonb(OLD)-'result')=(to_jsonb(NEW)-'result') THEN RETURN NEW; END IF;
-  END IF;
-  IF OLD IS DISTINCT FROM NEW THEN
-    RAISE EXCEPTION 'selected operational association is immutable' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END; $$;
-CREATE TRIGGER operational_work_selection_guard BEFORE UPDATE OR DELETE ON core.operational_work_selection
-  FOR EACH ROW EXECUTE FUNCTION core.operational_work_selection_guard();
-CREATE TRIGGER operational_work_selection_no_truncate BEFORE TRUNCATE ON core.operational_work_selection
-  FOR EACH STATEMENT EXECUTE FUNCTION core.operational_work_selection_guard();
-CREATE TRIGGER operational_work_selected_continuation_guard BEFORE UPDATE OR DELETE ON core.operational_work_selected_continuation
-  FOR EACH ROW EXECUTE FUNCTION core.operational_work_selection_guard();
-CREATE TRIGGER operational_work_selected_continuation_no_truncate BEFORE TRUNCATE ON core.operational_work_selected_continuation
-  FOR EACH STATEMENT EXECUTE FUNCTION core.operational_work_selection_guard();
-CREATE FUNCTION core.operational_work_selected_continuation_bound() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE parent core.operational_work_selection;
-BEGIN
-  SELECT * INTO parent FROM core.operational_work_selection
-    WHERE partition_no=NEW.partition_no AND workflow_id=NEW.parent_workflow_id AND function_id=NEW.parent_function_id FOR SHARE;
-  IF NOT FOUND OR parent.result->>'kind' IS DISTINCT FROM 'continue' OR
-     parent.result->>'continuation' IS DISTINCT FROM NEW.workflow_id OR
-     (parent.custody_id,parent.route,parent.owner_account_id,parent.collection_id,parent.episode_id) IS DISTINCT FROM
-     (NEW.custody_id,NEW.route,NEW.owner_account_id,NEW.collection_id,NEW.episode_id) THEN
-    RAISE EXCEPTION 'selected continuation lacks atomic parent result' USING ERRCODE='23514';
-  END IF;
-  RETURN NULL;
-END; $$;
-CREATE CONSTRAINT TRIGGER operational_work_selected_continuation_bound AFTER INSERT ON core.operational_work_selected_continuation
-  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION core.operational_work_selected_continuation_bound();
-ALTER TABLE core.operational_work_selection ENABLE ALWAYS TRIGGER operational_work_selection_guard;
-ALTER TABLE core.operational_work_selection ENABLE ALWAYS TRIGGER operational_work_selection_no_truncate;
-ALTER TABLE core.operational_work_selected_continuation ENABLE ALWAYS TRIGGER operational_work_selected_continuation_guard;
-ALTER TABLE core.operational_work_selected_continuation ENABLE ALWAYS TRIGGER operational_work_selected_continuation_no_truncate;
-ALTER TABLE core.operational_work_selected_continuation ENABLE ALWAYS TRIGGER operational_work_selected_continuation_bound;
 

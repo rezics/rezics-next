@@ -24,6 +24,33 @@ CREATE SCHEMA search;
 
 
 --
+-- Name: advance_public_filter_coverage_preparation(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.advance_public_filter_coverage_preparation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (NEW.partition_no,NEW.registration,NEW.bootstrap,NEW.definition,NEW.consumer,NEW.generation)
+     IS DISTINCT FROM
+     (OLD.partition_no,OLD.registration,OLD.bootstrap,OLD.definition,OLD.consumer,OLD.generation)
+  THEN
+    RAISE EXCEPTION 'Original coverage preparation binding is immutable' USING ERRCODE = '23514';
+  END IF;
+  IF NEW IS DISTINCT FROM OLD AND
+    (NEW.after_home <> OLD.after_home + 1 OR NOT EXISTS (
+      SELECT 1 FROM search.public_filter_coverage_baseline b
+      WHERE (b.partition_no,b.registration,b.bootstrap,b.source_home)=
+        (OLD.partition_no,OLD.registration,OLD.bootstrap,OLD.after_home)
+        AND b.predecessor=OLD.root AND b.root=NEW.root))
+  THEN
+    RAISE EXCEPTION 'Coverage preparation requires its original contiguous receipt' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: enroll_retained_copy(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -51,6 +78,21 @@ BEGIN
       FROM search.public_filter_registration r
       WHERE (r.partition_no,r.id)=(NEW.partition_no,NEW.registration)
         AND (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target);
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: retain_public_filter_coverage_baseline(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.retain_public_filter_coverage_baseline() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW IS DISTINCT FROM OLD THEN
+    RAISE EXCEPTION 'Original coverage baseline is immutable' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
 END $$;
@@ -366,8 +408,8 @@ CREATE TABLE search.identity_writer (
     visible_position bigint,
     repair_locator text,
     repair_action text,
-    repair_account text,
     repair_receipt text,
+    repair_account text,
     CONSTRAINT identity_writer_check CHECK (((writer_transaction_id IS NULL) = (writer_position IS NULL))),
     CONSTRAINT identity_writer_check1 CHECK (((writer_token IS NULL) OR (writer_transaction_id IS NOT NULL))),
     CONSTRAINT identity_writer_check2 CHECK (((settled_transaction_id IS NULL) = (settled_position IS NULL))),
@@ -382,8 +424,8 @@ CREATE TABLE search.identity_writer (
     CONSTRAINT identity_writer_owner_epoch_check CHECK ((owner_epoch > 0)),
     CONSTRAINT identity_writer_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT identity_writer_physical_target_check CHECK (((octet_length(physical_target) >= 1) AND (octet_length(physical_target) <= 255))),
-    CONSTRAINT identity_writer_repair_action_check CHECK ((octet_length(repair_action) <= 1048576)),
     CONSTRAINT identity_writer_repair_account_check CHECK ((octet_length(repair_account) <= 65536)),
+    CONSTRAINT identity_writer_repair_action_check CHECK ((octet_length(repair_action) <= 1048576)),
     CONSTRAINT identity_writer_repair_locator_check CHECK ((octet_length(repair_locator) <= 8192)),
     CONSTRAINT identity_writer_repair_receipt_check CHECK ((octet_length(repair_receipt) <= 1048576)),
     CONSTRAINT identity_writer_settled_position_check CHECK ((settled_position > 0)),
@@ -515,6 +557,95 @@ CREATE TABLE search.index_prefix_control (
 
 
 --
+-- Name: public_filter_coverage_baseline; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_coverage_baseline (
+    partition_no integer NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    bootstrap uuid NOT NULL,
+    source_home integer NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    creation_position bigint NOT NULL,
+    native_enqueue_revision bigint CONSTRAINT public_filter_coverage_baselin_native_enqueue_revision_not_null NOT NULL,
+    native_revision bigint,
+    native_claim_revision bigint,
+    receipt text NOT NULL,
+    predecessor text NOT NULL,
+    root text NOT NULL,
+    CONSTRAINT public_filter_coverage_baseline_check CHECK (((native_revision IS NULL) = (native_claim_revision IS NULL))),
+    CONSTRAINT public_filter_coverage_baseline_check1 CHECK (((native_revision IS NULL) OR ((native_revision > 0) AND (native_claim_revision > 0)))),
+    CONSTRAINT public_filter_coverage_baseline_creation_position_check CHECK ((creation_position >= 0)),
+    CONSTRAINT public_filter_coverage_baseline_native_enqueue_revision_check CHECK ((native_enqueue_revision >= 0)),
+    CONSTRAINT public_filter_coverage_baseline_predecessor_check CHECK ((predecessor ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT public_filter_coverage_baseline_receipt_check CHECK ((receipt ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT public_filter_coverage_baseline_root_check CHECK ((root ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT public_filter_coverage_baseline_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT public_filter_coverage_baseline_source_home_check CHECK (((source_home >= 0) AND (source_home <= 4095))),
+    CONSTRAINT public_filter_coverage_baseline_source_position_check CHECK ((source_position >= 0))
+);
+
+
+--
+-- Name: public_filter_coverage_home; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_coverage_home (
+    partition_no integer NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    source_home integer NOT NULL,
+    source_epoch integer NOT NULL,
+    relevant_position bigint NOT NULL,
+    acknowledged_position bigint DEFAULT 0 NOT NULL,
+    native_enqueue_revision bigint DEFAULT 0 NOT NULL,
+    native_revision bigint,
+    native_claim_revision bigint,
+    acknowledged_native_revision bigint,
+    acknowledged_native_claim_revision bigint,
+    last_change_generation bigint NOT NULL,
+    behind boolean DEFAULT true NOT NULL,
+    acknowledged_native_enqueue bigint DEFAULT 0 CONSTRAINT public_filter_coverage_home_acknowledged_native_enqueu_not_null NOT NULL,
+    baseline_bootstrap uuid,
+    acknowledged_baseline uuid,
+    acknowledged_observation text,
+    acknowledged_execution text,
+    acknowledged_settlement text,
+    CONSTRAINT public_filter_coverage_ack_receipt CHECK ((((acknowledged_observation IS NULL) = (acknowledged_execution IS NULL)) AND ((acknowledged_execution IS NULL) = (acknowledged_settlement IS NULL)) AND ((acknowledged_settlement IS NULL) OR (acknowledged_baseline IS NOT NULL)))),
+    CONSTRAINT public_filter_coverage_home_ack_prefix CHECK ((behind OR ((baseline_bootstrap IS NOT NULL) AND (acknowledged_baseline IS NOT NULL) AND (acknowledged_baseline = baseline_bootstrap) AND (acknowledged_position >= relevant_position) AND (acknowledged_native_enqueue >= native_enqueue_revision) AND ((native_revision IS NULL) OR ((acknowledged_native_revision IS NOT NULL) AND (acknowledged_native_revision >= native_revision))) AND ((native_claim_revision IS NULL) OR ((acknowledged_native_claim_revision IS NOT NULL) AND (acknowledged_native_claim_revision >= native_claim_revision)))))),
+    CONSTRAINT public_filter_coverage_home_acknowledged_execution_check CHECK (((octet_length(acknowledged_execution) >= 1) AND (octet_length(acknowledged_execution) <= 4096))),
+    CONSTRAINT public_filter_coverage_home_acknowledged_native_enqueue_check CHECK ((acknowledged_native_enqueue >= 0)),
+    CONSTRAINT public_filter_coverage_home_acknowledged_observation_check CHECK (((octet_length(acknowledged_observation) >= 1) AND (octet_length(acknowledged_observation) <= 4096))),
+    CONSTRAINT public_filter_coverage_home_acknowledged_position_check CHECK ((acknowledged_position >= 0)),
+    CONSTRAINT public_filter_coverage_home_acknowledged_settlement_check CHECK (((octet_length(acknowledged_settlement) >= 1) AND (octet_length(acknowledged_settlement) <= 4096))),
+    CONSTRAINT public_filter_coverage_home_last_change_generation_check CHECK ((last_change_generation >= 0)),
+    CONSTRAINT public_filter_coverage_home_native_enqueue_revision_check CHECK ((native_enqueue_revision >= 0)),
+    CONSTRAINT public_filter_coverage_home_relevant_position_check CHECK ((relevant_position >= 0)),
+    CONSTRAINT public_filter_coverage_home_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT public_filter_coverage_home_source_home_check CHECK (((source_home >= 0) AND (source_home <= 4095)))
+);
+
+
+--
+-- Name: public_filter_coverage_preparation; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_coverage_preparation (
+    partition_no integer NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    bootstrap uuid NOT NULL,
+    definition uuid NOT NULL,
+    consumer text NOT NULL,
+    generation bigint NOT NULL,
+    after_home integer DEFAULT 0 NOT NULL,
+    root text NOT NULL,
+    CONSTRAINT public_filter_coverage_preparation_after_home_check CHECK (((after_home >= 0) AND (after_home <= 4096))),
+    CONSTRAINT public_filter_coverage_preparation_generation_check CHECK ((generation >= 0)),
+    CONSTRAINT public_filter_coverage_preparation_root_check CHECK ((root ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
 -- Name: public_filter_execution; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -616,8 +747,10 @@ CREATE TABLE search.public_filter_registration (
     state text NOT NULL,
     consumer_work text,
     consumer_bootstrap text,
+    coverage_generation bigint DEFAULT 0 NOT NULL,
     CONSTRAINT public_filter_registration_consumer_check CHECK ((octet_length(consumer) <= 8192)),
     CONSTRAINT public_filter_registration_consumer_work_check CHECK ((octet_length(consumer_work) <= 1048576)),
+    CONSTRAINT public_filter_registration_coverage_generation_check CHECK ((coverage_generation >= 0)),
     CONSTRAINT public_filter_registration_definition_check CHECK ((octet_length(definition) <= 1048576)),
     CONSTRAINT public_filter_registration_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT public_filter_registration_state_check CHECK ((state = ANY (ARRAY['active'::text, 'retired'::text])))
@@ -1004,6 +1137,30 @@ ALTER TABLE ONLY search.index_prefix_control
 
 
 --
+-- Name: public_filter_coverage_baseline public_filter_coverage_baseline_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_coverage_baseline
+    ADD CONSTRAINT public_filter_coverage_baseline_pkey PRIMARY KEY (partition_no, registration, bootstrap, source_home);
+
+
+--
+-- Name: public_filter_coverage_home public_filter_coverage_home_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_coverage_home
+    ADD CONSTRAINT public_filter_coverage_home_pkey PRIMARY KEY (partition_no, registration, source_home);
+
+
+--
+-- Name: public_filter_coverage_preparation public_filter_coverage_preparation_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_coverage_preparation
+    ADD CONSTRAINT public_filter_coverage_preparation_pkey PRIMARY KEY (partition_no, registration, bootstrap);
+
+
+--
 -- Name: public_filter_execution public_filter_execution_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -1212,6 +1369,20 @@ CREATE INDEX index_home_coverage_retire ON search.index_home_coverage USING btre
 
 
 --
+-- Name: public_filter_coverage_behind; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_coverage_behind ON search.public_filter_coverage_home USING btree (partition_no, registration, source_home) WHERE behind;
+
+
+--
+-- Name: public_filter_coverage_changed; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_coverage_changed ON search.public_filter_coverage_home USING btree (partition_no, registration, last_change_generation, source_home);
+
+
+--
 -- Name: public_filter_observation_bootstrap; Type: INDEX; Schema: search; Owner: -
 --
 
@@ -1380,6 +1551,20 @@ CREATE TRIGGER erasure_enroll_registration AFTER INSERT ON search.public_filter_
 
 
 --
+-- Name: public_filter_coverage_baseline public_filter_coverage_baseline_immutable; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_coverage_baseline_immutable BEFORE UPDATE ON search.public_filter_coverage_baseline FOR EACH ROW EXECUTE FUNCTION search.retain_public_filter_coverage_baseline();
+
+
+--
+-- Name: public_filter_coverage_preparation public_filter_coverage_preparation_contiguous; Type: TRIGGER; Schema: search; Owner: -
+--
+
+CREATE TRIGGER public_filter_coverage_preparation_contiguous BEFORE UPDATE ON search.public_filter_coverage_preparation FOR EACH ROW EXECUTE FUNCTION search.advance_public_filter_coverage_preparation();
+
+
+--
 -- Name: facet_stage facet_stage_partition_no_definition_generation_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -1401,6 +1586,38 @@ ALTER TABLE ONLY search.facet_value
 
 ALTER TABLE ONLY search.index_incarnation
     ADD CONSTRAINT index_incarnation_partition_no_prefix_fkey FOREIGN KEY (partition_no, prefix) REFERENCES search.index_prefix_control(partition_no, prefix);
+
+
+--
+-- Name: public_filter_coverage_baseline public_filter_coverage_baseline_partition_no_registration_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_coverage_baseline
+    ADD CONSTRAINT public_filter_coverage_baseline_partition_no_registration_fkey FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration(partition_no, id);
+
+
+--
+-- Name: public_filter_coverage_home public_filter_coverage_home_baseline; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_coverage_home
+    ADD CONSTRAINT public_filter_coverage_home_baseline FOREIGN KEY (partition_no, registration, baseline_bootstrap, source_home) REFERENCES search.public_filter_coverage_baseline(partition_no, registration, bootstrap, source_home);
+
+
+--
+-- Name: public_filter_coverage_home public_filter_coverage_home_partition_no_registration_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_coverage_home
+    ADD CONSTRAINT public_filter_coverage_home_partition_no_registration_fkey FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration(partition_no, id);
+
+
+--
+-- Name: public_filter_coverage_preparation public_filter_coverage_preparati_partition_no_registration_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_coverage_preparation
+    ADD CONSTRAINT public_filter_coverage_preparati_partition_no_registration_fkey FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration(partition_no, id);
 
 
 --
@@ -1483,138 +1700,8 @@ ALTER TABLE ONLY search.trending_member
     ADD CONSTRAINT trending_member_route_term_key_fkey FOREIGN KEY (route, term_key) REFERENCES search.trending_term(route, term_key) ON DELETE CASCADE;
 
 
-ALTER TABLE search.public_filter_registration
-  ADD COLUMN coverage_generation bigint NOT NULL DEFAULT 0 CHECK (coverage_generation >= 0);
-CREATE TABLE search.public_filter_coverage_home (
-  partition_no integer NOT NULL,
-  registration text COLLATE "C" NOT NULL,
-  source_home integer NOT NULL CHECK (source_home BETWEEN 0 AND 4095),
-  source_epoch integer NOT NULL CHECK (source_epoch > 0),
-  relevant_position bigint NOT NULL CHECK (relevant_position >= 0),
-  acknowledged_position bigint NOT NULL DEFAULT 0 CHECK (acknowledged_position >= 0),
-  native_enqueue_revision bigint NOT NULL DEFAULT 0 CHECK (native_enqueue_revision >= 0),
-  native_revision bigint,
-  native_claim_revision bigint,
-  acknowledged_native_revision bigint,
-  acknowledged_native_claim_revision bigint,
-  last_change_generation bigint NOT NULL CHECK (last_change_generation > 0),
-  behind boolean NOT NULL DEFAULT true,
-  PRIMARY KEY (partition_no,registration,source_home),
-  FOREIGN KEY (partition_no,registration) REFERENCES search.public_filter_registration(partition_no,id)
-);
-CREATE INDEX public_filter_coverage_behind ON search.public_filter_coverage_home
-  USING btree(partition_no,registration,source_home) WHERE behind;
-CREATE INDEX public_filter_coverage_changed ON search.public_filter_coverage_home
-  USING btree(partition_no,registration,last_change_generation,source_home);
-
-
 --
 -- PostgreSQL database dump complete
 --
 
 
-
--- Receiver copies of original owner receipts, not current permission or ACKs.
-CREATE TABLE search.public_filter_coverage_baseline (
-  partition_no integer NOT NULL,
-  registration text COLLATE "C" NOT NULL,
-  bootstrap uuid NOT NULL,
-  source_home integer NOT NULL CHECK (source_home BETWEEN 0 AND 4095),
-  source_epoch integer NOT NULL CHECK (source_epoch > 0),
-  source_position bigint NOT NULL CHECK (source_position >= 0),
-  creation_position bigint NOT NULL CHECK (creation_position >= 0),
-  native_enqueue_revision bigint NOT NULL CHECK (native_enqueue_revision >= 0),
-  native_revision bigint,
-  native_claim_revision bigint,
-  receipt text NOT NULL CHECK (receipt ~ '^[0-9a-f]{64}$'),
-  predecessor text NOT NULL CHECK (predecessor ~ '^[0-9a-f]{64}$'),
-  root text NOT NULL CHECK (root ~ '^[0-9a-f]{64}$'),
-  PRIMARY KEY (partition_no,registration,bootstrap,source_home),
-  FOREIGN KEY (partition_no,registration) REFERENCES search.public_filter_registration(partition_no,id),
-  CHECK ((native_revision IS NULL) = (native_claim_revision IS NULL)),
-  CHECK (native_revision IS NULL OR (native_revision > 0 AND native_claim_revision > 0))
-);
-CREATE TABLE search.public_filter_coverage_preparation (
-  partition_no integer NOT NULL,
-  registration text COLLATE "C" NOT NULL,
-  bootstrap uuid NOT NULL,
-  definition uuid NOT NULL,
-  consumer text NOT NULL,
-  generation bigint NOT NULL CHECK (generation >= 0),
-  after_home integer NOT NULL DEFAULT 0 CHECK (after_home BETWEEN 0 AND 4096),
-  root text NOT NULL CHECK (root ~ '^[0-9a-f]{64}$'),
-  PRIMARY KEY (partition_no,registration,bootstrap),
-  FOREIGN KEY (partition_no,registration) REFERENCES search.public_filter_registration(partition_no,id)
-);
-
-
--- Generation zero describes an original enrollment, never an applied change.
-ALTER TABLE search.public_filter_coverage_home
-  DROP CONSTRAINT public_filter_coverage_home_last_change_generation_check,
-  ADD CONSTRAINT public_filter_coverage_home_last_change_generation_check CHECK(last_change_generation >= 0),
-  ADD COLUMN acknowledged_native_enqueue bigint NOT NULL DEFAULT 0 CHECK(acknowledged_native_enqueue >= 0);
-
-CREATE FUNCTION search.retain_public_filter_coverage_baseline() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  IF NEW IS DISTINCT FROM OLD THEN
-    RAISE EXCEPTION 'Original coverage baseline is immutable' USING ERRCODE = '23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER public_filter_coverage_baseline_immutable
-  BEFORE UPDATE ON search.public_filter_coverage_baseline
-  FOR EACH ROW EXECUTE FUNCTION search.retain_public_filter_coverage_baseline();
-
-CREATE FUNCTION search.advance_public_filter_coverage_preparation() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  IF (NEW.partition_no,NEW.registration,NEW.bootstrap,NEW.definition,NEW.consumer,NEW.generation)
-     IS DISTINCT FROM
-     (OLD.partition_no,OLD.registration,OLD.bootstrap,OLD.definition,OLD.consumer,OLD.generation)
-  THEN
-    RAISE EXCEPTION 'Original coverage preparation binding is immutable' USING ERRCODE = '23514';
-  END IF;
-  IF NEW IS DISTINCT FROM OLD AND
-    (NEW.after_home <> OLD.after_home + 1 OR NOT EXISTS (
-      SELECT 1 FROM search.public_filter_coverage_baseline b
-      WHERE (b.partition_no,b.registration,b.bootstrap,b.source_home)=
-        (OLD.partition_no,OLD.registration,OLD.bootstrap,OLD.after_home)
-        AND b.predecessor=OLD.root AND b.root=NEW.root))
-  THEN
-    RAISE EXCEPTION 'Coverage preparation requires its original contiguous receipt' USING ERRCODE = '23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER public_filter_coverage_preparation_contiguous
-  BEFORE UPDATE ON search.public_filter_coverage_preparation
-  FOR EACH ROW EXECUTE FUNCTION search.advance_public_filter_coverage_preparation();
-
--- An original baseline is independently owed even when another observation of
--- the same definition previously repaired this native home.
-ALTER TABLE search.public_filter_coverage_home
-  ADD COLUMN baseline_bootstrap uuid,
-  ADD COLUMN acknowledged_baseline uuid,
-  ADD CONSTRAINT public_filter_coverage_home_baseline FOREIGN KEY
-    (partition_no,registration,baseline_bootstrap,source_home)
-    REFERENCES search.public_filter_coverage_baseline(partition_no,registration,bootstrap,source_home),
-  ADD CONSTRAINT public_filter_coverage_home_ack_prefix CHECK (
-    behind OR (
-      baseline_bootstrap IS NOT NULL AND acknowledged_baseline IS NOT NULL
-      AND acknowledged_baseline=baseline_bootstrap
-      AND acknowledged_position>=relevant_position
-      AND acknowledged_native_enqueue>=native_enqueue_revision
-      AND (native_revision IS NULL OR (
-        acknowledged_native_revision IS NOT NULL AND acknowledged_native_revision>=native_revision))
-      AND (native_claim_revision IS NULL OR (
-        acknowledged_native_claim_revision IS NOT NULL AND acknowledged_native_claim_revision>=native_claim_revision))
-    ));
-
-ALTER TABLE search.public_filter_coverage_home
-  ADD COLUMN acknowledged_observation text CHECK (octet_length(acknowledged_observation) BETWEEN 1 AND 4096),
-  ADD COLUMN acknowledged_execution text CHECK (octet_length(acknowledged_execution) BETWEEN 1 AND 4096),
-  ADD COLUMN acknowledged_settlement text CHECK (octet_length(acknowledged_settlement) BETWEEN 1 AND 4096),
-  ADD CONSTRAINT public_filter_coverage_ack_receipt CHECK
-    ((acknowledged_observation IS NULL)=(acknowledged_execution IS NULL) AND
-     (acknowledged_execution IS NULL)=(acknowledged_settlement IS NULL) AND
-     (acknowledged_settlement IS NULL OR acknowledged_baseline IS NOT NULL));

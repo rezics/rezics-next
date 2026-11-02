@@ -669,6 +669,157 @@ END; $$;
 
 
 --
+-- Name: auth_receiving_closure_insert_guard(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.auth_receiving_closure_insert_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE s access.auth_erasure_source; b access.auth_receiving_control; original_receipt uuid;
+BEGIN
+ SELECT source.* INTO s FROM core.partition p JOIN access.auth_erasure_source source USING(partition_no)
+ WHERE p.partition_no=NEW.route/16 AND p.write_state='active' AND source.initialized
+ AND octet_length(source.source_owner)<=256
+ AND p.epoch=source.source_epoch AND p.node=source.source_owner FOR SHARE OF p,source;
+ IF NOT FOUND THEN
+  RAISE EXCEPTION 'Auth current receiving closure unavailable' USING ERRCODE='23514';
+ END IF;
+ SELECT * INTO b FROM access.auth_receiving_control WHERE partition_no=NEW.route/16 AND state='active'
+ AND source_generation=s.generation AND source_epoch=s.source_epoch AND source_owner=s.source_owner
+ AND revision=NEW.control_revision
+ AND (requested_restore IS NULL OR requested_restore=restore_generation) FOR SHARE;
+ IF NOT FOUND THEN
+  RAISE EXCEPTION 'Auth current receiving closure unavailable' USING ERRCODE='23514';
+ END IF;
+ SELECT original.receipt_id INTO original_receipt FROM access.account account
+ JOIN access.erasure e USING(route,account_id)
+ JOIN access.auth_erasure_obligation original USING(route,account_id)
+ WHERE account.route=NEW.route AND account.account_id=NEW.account_id AND account.state='deleted' AND account.authn_fenced
+ AND original.minimum_authn_epoch IS NOT NULL AND account.minimum_authn_epoch>=original.minimum_authn_epoch
+ AND e.version=NEW.version AND e.at=NEW.at AND original.version=e.version AND original.at=e.at
+ FOR SHARE OF account,e,original;
+ IF NOT FOUND OR NEW.source_receipt_id IS DISTINCT FROM original_receipt OR NEW.continuation_id IS NULL
+    OR NEW.published_xid<>pg_current_xact_id() THEN
+  RAISE EXCEPTION 'Auth receiving source receipt mismatch' USING ERRCODE='23514';
+ END IF;
+ PERFORM 1 FROM access.auth_receiving_obligation o JOIN access.auth_history_proof h USING(route,account_id)
+ WHERE o.route=NEW.route AND o.account_id=NEW.account_id AND o.partition_no=NEW.route/16
+ AND o.version=NEW.version AND o.at=NEW.at AND o.custody_revision=b.revision
+ AND o.physical_closure=NEW.physical_closure AND o.receiving_closure=NEW.receiving_closure
+ AND h.phase='native-consumed' AND h.version=NEW.version AND h.at=NEW.at
+ AND h.continuation_id=NEW.continuation_id AND h.receipt_id=NEW.source_receipt_id FOR SHARE OF o,h;
+ IF NOT FOUND THEN
+  RAISE EXCEPTION 'Auth receiving custody unavailable' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_receiving_control_guard(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.auth_receiving_control_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Auth receiving control is permanent'; END IF;
+ IF TG_OP='INSERT' THEN
+  IF NEW.state<>'owner-unavailable' OR NEW.revision<>1 OR NEW.database_identity IS NOT NULL
+    OR NEW.receiving_incarnation IS NOT NULL OR NEW.restore_generation IS NOT NULL
+    OR NEW.owner_installation IS NOT NULL OR NEW.writer_fence IS NOT NULL THEN
+   RAISE EXCEPTION 'Auth receiving registration cannot install physical ownership';
+  END IF;
+ ELSE
+  IF (NEW.partition_no,NEW.source_generation,NEW.source_epoch,NEW.source_owner)
+    IS DISTINCT FROM (OLD.partition_no,OLD.source_generation,OLD.source_epoch,OLD.source_owner)
+    OR NEW.revision<>OLD.revision+1 THEN
+   RAISE EXCEPTION 'Auth receiving transition must preserve Source and advance its fence';
+  END IF;
+  -- No original physical-owner installation ABI exists here. Invalidation is
+  -- implemented; activation must be integrated by the original owner, replacing
+  -- this refusal with its genuine owner-record validation, never a session flag.
+  IF NEW.state='active' THEN
+   RAISE EXCEPTION 'Auth original physical-owner installation unavailable';
+  END IF;
+  IF (NEW.database_identity,NEW.receiving_incarnation,NEW.restore_generation,NEW.owner_installation,NEW.writer_fence)
+   IS DISTINCT FROM (OLD.database_identity,OLD.receiving_incarnation,OLD.restore_generation,OLD.owner_installation,OLD.writer_fence) THEN
+   RAISE EXCEPTION 'Auth invalidation cannot install physical ownership';
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_receiving_control_source_guard(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.auth_receiving_control_source_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ PERFORM 1 FROM core.partition p JOIN access.auth_erasure_source s USING(partition_no)
+ WHERE p.partition_no=NEW.partition_no AND p.write_state='active' AND s.initialized
+ AND octet_length(s.source_owner)<=256 AND p.epoch=s.source_epoch AND p.node=s.source_owner
+ AND s.generation=NEW.source_generation AND s.source_epoch=NEW.source_epoch AND s.source_owner=NEW.source_owner
+ FOR SHARE OF p,s;
+ IF NOT FOUND THEN
+  RAISE EXCEPTION 'Auth receiving registration Source mismatch' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_receiving_obligation_guard(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.auth_receiving_obligation_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Auth receiving obligation is permanent'; END IF;
+ IF TG_OP='INSERT' THEN
+  IF NEW.custody_revision IS NOT NULL OR NEW.physical_closure IS NOT NULL OR NEW.receiving_closure IS NOT NULL THEN
+   RAISE EXCEPTION 'Auth receiving registration cannot assert physical custody';
+  END IF;
+ ELSE
+  IF (NEW.route,NEW.account_id,NEW.version,NEW.at,NEW.partition_no)
+   IS DISTINCT FROM (OLD.route,OLD.account_id,OLD.version,OLD.at,OLD.partition_no) THEN
+   RAISE EXCEPTION 'Auth receiving obligation root is immutable';
+  END IF;
+  IF (NEW.custody_revision,NEW.physical_closure,NEW.receiving_closure)
+   IS DISTINCT FROM (OLD.custody_revision,OLD.physical_closure,OLD.receiving_closure) THEN
+   RAISE EXCEPTION 'Auth original physical receiving custody operation unavailable';
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_receiving_obligation_root_guard(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.auth_receiving_obligation_root_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ PERFORM 1 FROM access.account a JOIN access.erasure e USING(route,account_id)
+ JOIN access.auth_erasure_obligation o USING(route,account_id)
+ WHERE a.route=NEW.route AND a.account_id=NEW.account_id AND NEW.partition_no=NEW.route/16
+ AND a.state='deleted' AND a.authn_fenced AND o.minimum_authn_epoch IS NOT NULL
+ AND a.minimum_authn_epoch>=o.minimum_authn_epoch AND e.version=NEW.version AND e.at=NEW.at
+ AND o.version=e.version AND o.at=e.at FOR SHARE OF a,e,o;
+ IF NOT FOUND THEN
+  RAISE EXCEPTION 'Auth receiving registration barrier mismatch' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+
+
+--
 -- Name: capture_auth_erasure_obligation(integer, uuid, boolean); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -1285,6 +1436,27 @@ $$;
 
 
 --
+-- Name: guard_auth_receiving_witness(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_auth_receiving_witness() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE root access.erasure; current_closure jsonb;
+BEGIN
+ SELECT * INTO root FROM access.erasure WHERE route=OLD.route AND account_id=OLD.account_id;
+ IF NOT FOUND THEN
+  RAISE EXCEPTION 'Auth current receiving closure unavailable' USING ERRCODE='23514';
+ END IF;
+ current_closure:=access.lock_current_auth_receiving_closure(OLD.route,OLD.account_id,root.version,root.at);
+ IF current_closure IS NULL OR current_closure->>'sourceReceiptId' IS DISTINCT FROM OLD.receipt_id::text THEN
+  RAISE EXCEPTION 'Auth current receiving closure unavailable' USING ERRCODE='23514';
+ END IF;
+ RETURN OLD;
+END $$;
+
+
+--
 -- Name: guard_erasure(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -1701,6 +1873,51 @@ BEGIN
  END IF;
  RETURN source;
 END; $$;
+
+
+--
+-- Name: lock_current_auth_receiving_closure(integer, uuid, integer, timestamp with time zone); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.lock_current_auth_receiving_closure(r integer, a uuid, v integer, t timestamp with time zone) RETURNS jsonb
+    LANGUAGE plpgsql
+    AS $$
+DECLARE s access.auth_erasure_source; b access.auth_receiving_control; result jsonb; native_receipt uuid;
+BEGIN
+ SELECT source.* INTO s FROM core.partition p JOIN access.auth_erasure_source source USING(partition_no)
+ WHERE p.partition_no=r/16 AND p.write_state='active' AND source.initialized
+ AND octet_length(source.source_owner)<=256
+ AND p.epoch=source.source_epoch AND p.node=source.source_owner FOR SHARE OF p,source;
+ IF NOT FOUND THEN RETURN NULL; END IF;
+ SELECT * INTO b FROM access.auth_receiving_control WHERE partition_no=r/16 AND state='active'
+ AND source_generation=s.generation AND source_epoch=s.source_epoch AND source_owner=s.source_owner
+ AND (requested_restore IS NULL OR requested_restore=restore_generation) FOR SHARE;
+ IF NOT FOUND THEN RETURN NULL; END IF;
+ SELECT original.receipt_id INTO native_receipt FROM access.account account JOIN access.erasure e USING(route,account_id)
+ JOIN access.auth_erasure_obligation original USING(route,account_id)
+ WHERE account.route=r AND account.account_id=a AND account.state='deleted' AND account.authn_fenced
+ AND original.minimum_authn_epoch IS NOT NULL AND account.minimum_authn_epoch>=original.minimum_authn_epoch
+ AND e.version=v AND e.at=t AND original.version=v AND original.at=t FOR SHARE OF account,e,original;
+ IF NOT FOUND THEN RETURN NULL; END IF;
+ SELECT jsonb_build_object('barrier',jsonb_build_object('accountId',a,'version',v,'at',t::text),'binding',jsonb_build_object(
+   'partition',b.partition_no,'sourceGeneration',b.source_generation,'sourceEpoch',b.source_epoch,
+   'sourceOwner',b.source_owner,'controlRevision',b.revision::text,'databaseIdentity',b.database_identity,
+   'receivingIncarnation',b.receiving_incarnation,'restoreGeneration',b.restore_generation,
+   'ownerInstallation',b.owner_installation,'writerFence',b.writer_fence),
+   'nativeObligationId',c.native_obligation_id::text,'closureReceiptId',c.closure_receipt_id,
+   'continuationId',c.continuation_id,'sourceReceiptId',c.source_receipt_id) INTO result
+ FROM access.auth_receiving_obligation o JOIN access.auth_receiving_closure c USING(route,account_id)
+ JOIN access.auth_history_proof h ON h.route=c.route AND h.account_id=c.account_id
+ AND h.phase='native-consumed' AND h.version=c.version AND h.at=c.at
+ AND h.continuation_id=c.continuation_id AND h.receipt_id=c.source_receipt_id
+ WHERE o.route=r AND o.account_id=a AND o.partition_no=r/16 AND o.version=v AND o.at=t
+ AND c.source_receipt_id=native_receipt
+ AND c.version=v AND c.at=t AND c.control_revision=b.revision AND o.custody_revision=b.revision
+ AND c.physical_closure=o.physical_closure AND c.receiving_closure=o.receiving_closure
+ FOR SHARE OF o,c,h;
+ IF octet_length(result::text)>1024 THEN RETURN NULL; END IF;
+ RETURN result;
+END $$;
 
 
 --
@@ -2591,6 +2808,79 @@ CREATE TABLE access.auth_history_proof (
     CONSTRAINT auth_history_proof_phase_check CHECK ((phase = ANY (ARRAY['native-consumed'::text, 'copies-erased'::text]))),
     CONSTRAINT auth_history_proof_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT auth_history_proof_version_check CHECK ((version > 0))
+);
+
+
+--
+-- Name: auth_receiving_closure; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.auth_receiving_closure (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    control_revision bigint NOT NULL,
+    version integer NOT NULL,
+    at timestamp with time zone NOT NULL,
+    native_obligation_id bigint NOT NULL,
+    closure_receipt_id uuid NOT NULL,
+    physical_closure text NOT NULL,
+    receiving_closure text NOT NULL,
+    published_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    continuation_id uuid,
+    source_receipt_id uuid,
+    CONSTRAINT auth_receiving_closure_native_obligation_id_check CHECK ((native_obligation_id > 0)),
+    CONSTRAINT auth_receiving_closure_source_pair CHECK ((((continuation_id IS NULL) AND (source_receipt_id IS NULL)) OR ((continuation_id IS NOT NULL) AND (source_receipt_id IS NOT NULL))))
+);
+
+
+--
+-- Name: auth_receiving_control; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.auth_receiving_control (
+    partition_no integer NOT NULL,
+    source_generation uuid NOT NULL,
+    source_epoch integer NOT NULL,
+    source_owner text NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    state text DEFAULT 'owner-unavailable'::text NOT NULL,
+    requested_restore text,
+    database_identity text,
+    receiving_incarnation text,
+    restore_generation text,
+    owner_installation text,
+    writer_fence text,
+    CONSTRAINT auth_receiving_control_check CHECK (((state <> 'active'::text) OR ((database_identity IS NOT NULL) AND (receiving_incarnation IS NOT NULL) AND (restore_generation IS NOT NULL) AND (owner_installation IS NOT NULL) AND (writer_fence IS NOT NULL) AND ((requested_restore IS NULL) OR (requested_restore = restore_generation))))),
+    CONSTRAINT auth_receiving_control_database_identity_check CHECK (((octet_length(database_identity) >= 1) AND (octet_length(database_identity) <= 256))),
+    CONSTRAINT auth_receiving_control_owner_installation_check CHECK (((octet_length(owner_installation) >= 1) AND (octet_length(owner_installation) <= 256))),
+    CONSTRAINT auth_receiving_control_receiving_incarnation_check CHECK (((octet_length(receiving_incarnation) >= 1) AND (octet_length(receiving_incarnation) <= 256))),
+    CONSTRAINT auth_receiving_control_requested_restore_check CHECK (((octet_length(requested_restore) >= 1) AND (octet_length(requested_restore) <= 1024))),
+    CONSTRAINT auth_receiving_control_restore_generation_check CHECK (((octet_length(restore_generation) >= 1) AND (octet_length(restore_generation) <= 256))),
+    CONSTRAINT auth_receiving_control_revision_check CHECK ((revision > 0)),
+    CONSTRAINT auth_receiving_control_state_check CHECK ((state = ANY (ARRAY['owner-unavailable'::text, 'active'::text, 'quarantined'::text]))),
+    CONSTRAINT auth_receiving_control_writer_fence_check CHECK (((octet_length(writer_fence) >= 1) AND (octet_length(writer_fence) <= 256)))
+);
+
+
+--
+-- Name: auth_receiving_obligation; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.auth_receiving_obligation (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    version integer NOT NULL,
+    at timestamp with time zone NOT NULL,
+    partition_no integer NOT NULL,
+    custody_revision bigint,
+    physical_closure text,
+    receiving_closure text,
+    CONSTRAINT auth_receiving_custody_complete CHECK ((((custody_revision IS NULL) AND (physical_closure IS NULL) AND (receiving_closure IS NULL)) OR ((custody_revision IS NOT NULL) AND (custody_revision > 0) AND (physical_closure IS NOT NULL) AND (receiving_closure IS NOT NULL)))),
+    CONSTRAINT auth_receiving_obligation_check CHECK ((partition_no = (route / 16))),
+    CONSTRAINT auth_receiving_obligation_check1 CHECK ((((custody_revision IS NULL) AND (physical_closure IS NULL) AND (receiving_closure IS NULL)) OR ((custody_revision > 0) AND (physical_closure IS NOT NULL) AND (receiving_closure IS NOT NULL)))),
+    CONSTRAINT auth_receiving_obligation_physical_closure_check CHECK (((octet_length(physical_closure) >= 1) AND (octet_length(physical_closure) <= 256))),
+    CONSTRAINT auth_receiving_obligation_receiving_closure_check CHECK (((octet_length(receiving_closure) >= 1) AND (octet_length(receiving_closure) <= 256))),
+    CONSTRAINT auth_receiving_obligation_version_check CHECK ((version > 0))
 );
 
 
@@ -3828,6 +4118,30 @@ ALTER TABLE ONLY access.auth_erasure_source
 
 ALTER TABLE ONLY access.auth_history_proof
     ADD CONSTRAINT auth_history_proof_pkey PRIMARY KEY (route, account_id, phase);
+
+
+--
+-- Name: auth_receiving_closure auth_receiving_closure_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_receiving_closure
+    ADD CONSTRAINT auth_receiving_closure_pkey PRIMARY KEY (route, account_id, control_revision);
+
+
+--
+-- Name: auth_receiving_control auth_receiving_control_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_receiving_control
+    ADD CONSTRAINT auth_receiving_control_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: auth_receiving_obligation auth_receiving_obligation_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_receiving_obligation
+    ADD CONSTRAINT auth_receiving_obligation_pkey PRIMARY KEY (route, account_id);
 
 
 --
@@ -5378,6 +5692,55 @@ CREATE TRIGGER auth_history_proof_immutable BEFORE DELETE OR UPDATE ON access.au
 
 
 --
+-- Name: auth_receiving_closure auth_receiving_closure_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_receiving_closure_immutable BEFORE DELETE OR UPDATE ON access.auth_receiving_closure FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_immutable();
+
+
+--
+-- Name: auth_receiving_closure auth_receiving_closure_insert_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_receiving_closure_insert_guard BEFORE INSERT ON access.auth_receiving_closure FOR EACH ROW EXECUTE FUNCTION access.auth_receiving_closure_insert_guard();
+
+
+--
+-- Name: auth_receiving_control auth_receiving_control_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_receiving_control_guard BEFORE INSERT OR DELETE OR UPDATE ON access.auth_receiving_control FOR EACH ROW EXECUTE FUNCTION access.auth_receiving_control_guard();
+
+
+--
+-- Name: auth_receiving_control auth_receiving_control_source_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_receiving_control_source_guard BEFORE INSERT ON access.auth_receiving_control FOR EACH ROW EXECUTE FUNCTION access.auth_receiving_control_source_guard();
+
+
+--
+-- Name: auth_receiving_obligation auth_receiving_obligation_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_receiving_obligation_guard BEFORE INSERT OR DELETE OR UPDATE ON access.auth_receiving_obligation FOR EACH ROW EXECUTE FUNCTION access.auth_receiving_obligation_guard();
+
+
+--
+-- Name: auth_receiving_obligation auth_receiving_obligation_root_guard; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_receiving_obligation_root_guard BEFORE INSERT ON access.auth_receiving_obligation FOR EACH ROW EXECUTE FUNCTION access.auth_receiving_obligation_root_guard();
+
+
+--
+-- Name: lifecycle_fence_receipt auth_receiving_witness; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER auth_receiving_witness BEFORE DELETE ON access.lifecycle_fence_receipt FOR EACH ROW EXECUTE FUNCTION access.guard_auth_receiving_witness();
+
+
+--
 -- Name: committed_continuation_completion committed_continuation_completion_immutable; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -5768,6 +6131,38 @@ ALTER TABLE ONLY access.auth_history_proof
 
 
 --
+-- Name: auth_receiving_closure auth_receiving_closure_route_account_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_receiving_closure
+    ADD CONSTRAINT auth_receiving_closure_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.auth_receiving_obligation(route, account_id);
+
+
+--
+-- Name: auth_receiving_control auth_receiving_control_partition_no_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_receiving_control
+    ADD CONSTRAINT auth_receiving_control_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES access.auth_erasure_source(partition_no);
+
+
+--
+-- Name: auth_receiving_obligation auth_receiving_obligation_partition_no_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_receiving_obligation
+    ADD CONSTRAINT auth_receiving_obligation_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES access.auth_receiving_control(partition_no);
+
+
+--
+-- Name: auth_receiving_obligation auth_receiving_obligation_route_account_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.auth_receiving_obligation
+    ADD CONSTRAINT auth_receiving_obligation_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.erasure(route, account_id);
+
+
+--
 -- Name: committed_continuation committed_continuation_route_account_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -5860,300 +6255,3 @@ ALTER TABLE ONLY access.operator_fence_page
 --
 
 
-
--- Independent Source-home receiving control. Installation creates no physical
--- identity and backfills no historical Auth publication. Only the original
--- physical owner can populate installation/custody references; that owner ABI
--- is not installed by this migration or exposed as a service setter.
-CREATE TABLE access.auth_receiving_control (
- partition_no integer PRIMARY KEY REFERENCES access.auth_erasure_source,
- source_generation uuid NOT NULL,
- source_epoch integer NOT NULL,
- source_owner text NOT NULL,
- revision bigint NOT NULL DEFAULT 1 CHECK(revision>0),
- state text NOT NULL DEFAULT 'owner-unavailable' CHECK(state IN ('owner-unavailable','active','quarantined')),
- requested_restore text CHECK(octet_length(requested_restore) BETWEEN 1 AND 1024),
- database_identity text CHECK(octet_length(database_identity) BETWEEN 1 AND 256),
- receiving_incarnation text CHECK(octet_length(receiving_incarnation) BETWEEN 1 AND 256),
- restore_generation text CHECK(octet_length(restore_generation) BETWEEN 1 AND 256),
- owner_installation text CHECK(octet_length(owner_installation) BETWEEN 1 AND 256),
- writer_fence text CHECK(octet_length(writer_fence) BETWEEN 1 AND 256),
- CHECK(state<>'active' OR (database_identity IS NOT NULL AND receiving_incarnation IS NOT NULL
-  AND restore_generation IS NOT NULL AND owner_installation IS NOT NULL AND writer_fence IS NOT NULL
-  AND (requested_restore IS NULL OR requested_restore=restore_generation)))
-);
-CREATE TABLE access.auth_receiving_obligation (
- route integer NOT NULL,
- account_id uuid NOT NULL,
- version integer NOT NULL CHECK(version>0),
- at timestamptz NOT NULL,
- partition_no integer NOT NULL REFERENCES access.auth_receiving_control,
- -- These must be actual receiver-bound custody references. Registration leaves
- -- them unknown; SDK state, Source enrollment and local EOF cannot populate them.
- custody_revision bigint,
- physical_closure text CHECK(octet_length(physical_closure) BETWEEN 1 AND 256),
- receiving_closure text CHECK(octet_length(receiving_closure) BETWEEN 1 AND 256),
- PRIMARY KEY(route,account_id),
- FOREIGN KEY(route,account_id) REFERENCES access.erasure(route,account_id),
- CHECK(partition_no=route/16),
- CHECK((custody_revision IS NULL AND physical_closure IS NULL AND receiving_closure IS NULL)
-  OR (custody_revision>0 AND physical_closure IS NOT NULL AND receiving_closure IS NOT NULL))
-);
-CREATE TABLE access.auth_receiving_closure (
- route integer NOT NULL,
- account_id uuid NOT NULL,
- control_revision bigint NOT NULL,
- version integer NOT NULL,
- at timestamptz NOT NULL,
- native_obligation_id bigint NOT NULL CHECK(native_obligation_id>0),
- closure_receipt_id uuid NOT NULL,
- physical_closure text NOT NULL,
- receiving_closure text NOT NULL,
- published_xid xid8 NOT NULL DEFAULT pg_current_xact_id(),
- PRIMARY KEY(route,account_id,control_revision),
- FOREIGN KEY(route,account_id) REFERENCES access.auth_receiving_obligation
-);
-CREATE TRIGGER auth_receiving_closure_immutable BEFORE UPDATE OR DELETE ON access.auth_receiving_closure
- FOR EACH ROW EXECUTE FUNCTION access.auth_erasure_immutable();
-CREATE FUNCTION access.auth_receiving_control_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Auth receiving control is permanent'; END IF;
- IF TG_OP='INSERT' THEN
-  IF NEW.state<>'owner-unavailable' OR NEW.revision<>1 OR NEW.database_identity IS NOT NULL
-    OR NEW.receiving_incarnation IS NOT NULL OR NEW.restore_generation IS NOT NULL
-    OR NEW.owner_installation IS NOT NULL OR NEW.writer_fence IS NOT NULL THEN
-   RAISE EXCEPTION 'Auth receiving registration cannot install physical ownership';
-  END IF;
- ELSE
-  IF (NEW.partition_no,NEW.source_generation,NEW.source_epoch,NEW.source_owner)
-    IS DISTINCT FROM (OLD.partition_no,OLD.source_generation,OLD.source_epoch,OLD.source_owner)
-    OR NEW.revision<>OLD.revision+1 THEN
-   RAISE EXCEPTION 'Auth receiving transition must preserve Source and advance its fence';
-  END IF;
-  -- No original physical-owner installation ABI exists here. Invalidation is
-  -- implemented; activation must be integrated by the original owner, replacing
-  -- this refusal with its genuine owner-record validation, never a session flag.
-  IF NEW.state='active' THEN
-   RAISE EXCEPTION 'Auth original physical-owner installation unavailable';
-  END IF;
-  IF (NEW.database_identity,NEW.receiving_incarnation,NEW.restore_generation,NEW.owner_installation,NEW.writer_fence)
-   IS DISTINCT FROM (OLD.database_identity,OLD.receiving_incarnation,OLD.restore_generation,OLD.owner_installation,OLD.writer_fence) THEN
-   RAISE EXCEPTION 'Auth invalidation cannot install physical ownership';
-  END IF;
- END IF;
- RETURN NEW;
-END $$;
-CREATE TRIGGER auth_receiving_control_guard BEFORE INSERT OR UPDATE OR DELETE ON access.auth_receiving_control
- FOR EACH ROW EXECUTE FUNCTION access.auth_receiving_control_guard();
-CREATE FUNCTION access.auth_receiving_obligation_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Auth receiving obligation is permanent'; END IF;
- IF TG_OP='INSERT' THEN
-  IF NEW.custody_revision IS NOT NULL OR NEW.physical_closure IS NOT NULL OR NEW.receiving_closure IS NOT NULL THEN
-   RAISE EXCEPTION 'Auth receiving registration cannot assert physical custody';
-  END IF;
- ELSE
-  IF (NEW.route,NEW.account_id,NEW.version,NEW.at,NEW.partition_no)
-   IS DISTINCT FROM (OLD.route,OLD.account_id,OLD.version,OLD.at,OLD.partition_no) THEN
-   RAISE EXCEPTION 'Auth receiving obligation root is immutable';
-  END IF;
-  IF (NEW.custody_revision,NEW.physical_closure,NEW.receiving_closure)
-   IS DISTINCT FROM (OLD.custody_revision,OLD.physical_closure,OLD.receiving_closure) THEN
-   RAISE EXCEPTION 'Auth original physical receiving custody operation unavailable';
-  END IF;
- END IF;
- RETURN NEW;
-END $$;
-CREATE TRIGGER auth_receiving_obligation_guard BEFORE INSERT OR UPDATE OR DELETE ON access.auth_receiving_obligation
- FOR EACH ROW EXECUTE FUNCTION access.auth_receiving_obligation_guard();
-
--- Bind the actual accepted Auth source. Legacy receipts remain historical: no
--- guessed source, receiver or custody data is backfilled into immutable rows.
-ALTER TABLE access.auth_receiving_closure ADD COLUMN continuation_id uuid;
-ALTER TABLE access.auth_receiving_closure ADD COLUMN source_receipt_id uuid;
-ALTER TABLE access.auth_receiving_closure ADD CONSTRAINT auth_receiving_closure_source_pair
- CHECK((continuation_id IS NULL AND source_receipt_id IS NULL)
-    OR (continuation_id IS NOT NULL AND source_receipt_id IS NOT NULL));
--- Explicit non-null custody revision prevents SQL UNKNOWN accepting a partial
--- tuple. The original owner operation is still required to install any custody.
-ALTER TABLE access.auth_receiving_obligation ADD CONSTRAINT auth_receiving_custody_complete
- CHECK((custody_revision IS NULL AND physical_closure IS NULL AND receiving_closure IS NULL)
-    OR (custody_revision IS NOT NULL AND custody_revision>0
-      AND physical_closure IS NOT NULL AND receiving_closure IS NOT NULL));
-
--- Same-home current receiving authority. Every read is an exact key; locks
--- survive the caller's destructive COMMIT. No Auth database is consulted.
-CREATE FUNCTION access.lock_current_auth_receiving_closure(r integer,a uuid,v integer,t timestamptz)
-RETURNS jsonb LANGUAGE plpgsql AS $$
-DECLARE s access.auth_erasure_source; b access.auth_receiving_control; result jsonb;
-BEGIN
- SELECT source.* INTO s FROM core.partition p JOIN access.auth_erasure_source source USING(partition_no)
- WHERE p.partition_no=r/16 AND p.write_state='active' AND source.initialized
- AND octet_length(source.source_owner)<=256
- AND p.epoch=source.source_epoch AND p.node=source.source_owner FOR SHARE OF p,source;
- IF NOT FOUND THEN RETURN NULL; END IF;
- SELECT * INTO b FROM access.auth_receiving_control WHERE partition_no=r/16 AND state='active'
- AND source_generation=s.generation AND source_epoch=s.source_epoch AND source_owner=s.source_owner
- AND (requested_restore IS NULL OR requested_restore=restore_generation) FOR SHARE;
- IF NOT FOUND THEN RETURN NULL; END IF;
- PERFORM 1 FROM access.account account JOIN access.erasure e USING(route,account_id)
- JOIN access.auth_erasure_obligation original USING(route,account_id)
- WHERE account.route=r AND account.account_id=a AND account.state='deleted' AND account.authn_fenced
- AND original.minimum_authn_epoch IS NOT NULL AND account.minimum_authn_epoch>=original.minimum_authn_epoch
- AND e.version=v AND e.at=t AND original.version=v AND original.at=t FOR SHARE OF account,e,original;
- IF NOT FOUND THEN RETURN NULL; END IF;
- SELECT jsonb_build_object('barrier',jsonb_build_object('accountId',a,'version',v,'at',t::text),'binding',jsonb_build_object(
-   'partition',b.partition_no,'sourceGeneration',b.source_generation,'sourceEpoch',b.source_epoch,
-   'sourceOwner',b.source_owner,'controlRevision',b.revision::text,'databaseIdentity',b.database_identity,
-   'receivingIncarnation',b.receiving_incarnation,'restoreGeneration',b.restore_generation,
-   'ownerInstallation',b.owner_installation,'writerFence',b.writer_fence),
-   'nativeObligationId',c.native_obligation_id::text,'closureReceiptId',c.closure_receipt_id,
-   'continuationId',c.continuation_id,'sourceReceiptId',c.source_receipt_id) INTO result
- FROM access.auth_receiving_obligation o JOIN access.auth_receiving_closure c USING(route,account_id)
- JOIN access.auth_history_proof h ON h.route=c.route AND h.account_id=c.account_id
- AND h.phase='native-consumed' AND h.version=c.version AND h.at=c.at
- AND h.continuation_id=c.continuation_id AND h.receipt_id=c.source_receipt_id
- WHERE o.route=r AND o.account_id=a AND o.partition_no=r/16 AND o.version=v AND o.at=t
- AND c.version=v AND c.at=t AND c.control_revision=b.revision AND o.custody_revision=b.revision
- AND c.physical_closure=o.physical_closure AND c.receiving_closure=o.receiving_closure
- FOR SHARE OF o,c,h;
- IF octet_length(result::text)>1024 THEN RETURN NULL; END IF;
- RETURN result;
-END $$;
-
--- Native deletion cannot retire a held Auth witness using the early source
--- transfer alone, including callers outside the TypeScript page engine.
-CREATE FUNCTION access.guard_auth_receiving_witness() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE root access.erasure; current_closure jsonb;
-BEGIN
- SELECT * INTO root FROM access.erasure WHERE route=OLD.route AND account_id=OLD.account_id;
- IF NOT FOUND THEN
-  RAISE EXCEPTION 'Auth current receiving closure unavailable' USING ERRCODE='23514';
- END IF;
- current_closure:=access.lock_current_auth_receiving_closure(OLD.route,OLD.account_id,root.version,root.at);
- IF current_closure IS NULL OR current_closure->>'sourceReceiptId' IS DISTINCT FROM OLD.receipt_id::text THEN
-  RAISE EXCEPTION 'Auth current receiving closure unavailable' USING ERRCODE='23514';
- END IF;
- RETURN OLD;
-END $$;
-CREATE TRIGGER auth_receiving_witness BEFORE DELETE ON access.lifecycle_fence_receipt
- FOR EACH ROW EXECUTE FUNCTION access.guard_auth_receiving_witness();
-
-
-CREATE OR REPLACE FUNCTION access.lock_current_auth_receiving_closure(r integer,a uuid,v integer,t timestamptz)
-RETURNS jsonb LANGUAGE plpgsql AS $$
-DECLARE s access.auth_erasure_source; b access.auth_receiving_control; result jsonb; native_receipt uuid;
-BEGIN
- SELECT source.* INTO s FROM core.partition p JOIN access.auth_erasure_source source USING(partition_no)
- WHERE p.partition_no=r/16 AND p.write_state='active' AND source.initialized
- AND octet_length(source.source_owner)<=256
- AND p.epoch=source.source_epoch AND p.node=source.source_owner FOR SHARE OF p,source;
- IF NOT FOUND THEN RETURN NULL; END IF;
- SELECT * INTO b FROM access.auth_receiving_control WHERE partition_no=r/16 AND state='active'
- AND source_generation=s.generation AND source_epoch=s.source_epoch AND source_owner=s.source_owner
- AND (requested_restore IS NULL OR requested_restore=restore_generation) FOR SHARE;
- IF NOT FOUND THEN RETURN NULL; END IF;
- SELECT original.receipt_id INTO native_receipt FROM access.account account JOIN access.erasure e USING(route,account_id)
- JOIN access.auth_erasure_obligation original USING(route,account_id)
- WHERE account.route=r AND account.account_id=a AND account.state='deleted' AND account.authn_fenced
- AND original.minimum_authn_epoch IS NOT NULL AND account.minimum_authn_epoch>=original.minimum_authn_epoch
- AND e.version=v AND e.at=t AND original.version=v AND original.at=t FOR SHARE OF account,e,original;
- IF NOT FOUND THEN RETURN NULL; END IF;
- SELECT jsonb_build_object('barrier',jsonb_build_object('accountId',a,'version',v,'at',t::text),'binding',jsonb_build_object(
-   'partition',b.partition_no,'sourceGeneration',b.source_generation,'sourceEpoch',b.source_epoch,
-   'sourceOwner',b.source_owner,'controlRevision',b.revision::text,'databaseIdentity',b.database_identity,
-   'receivingIncarnation',b.receiving_incarnation,'restoreGeneration',b.restore_generation,
-   'ownerInstallation',b.owner_installation,'writerFence',b.writer_fence),
-   'nativeObligationId',c.native_obligation_id::text,'closureReceiptId',c.closure_receipt_id,
-   'continuationId',c.continuation_id,'sourceReceiptId',c.source_receipt_id) INTO result
- FROM access.auth_receiving_obligation o JOIN access.auth_receiving_closure c USING(route,account_id)
- JOIN access.auth_history_proof h ON h.route=c.route AND h.account_id=c.account_id
- AND h.phase='native-consumed' AND h.version=c.version AND h.at=c.at
- AND h.continuation_id=c.continuation_id AND h.receipt_id=c.source_receipt_id
- WHERE o.route=r AND o.account_id=a AND o.partition_no=r/16 AND o.version=v AND o.at=t
- AND c.source_receipt_id=native_receipt
- AND c.version=v AND c.at=t AND c.control_revision=b.revision AND o.custody_revision=b.revision
- AND c.physical_closure=o.physical_closure AND c.receiving_closure=o.receiving_closure
- FOR SHARE OF o,c,h;
- IF octet_length(result::text)>1024 THEN RETURN NULL; END IF;
- RETURN result;
-END $$;
-
-
--- INSERT must validate the same native binding and original source as current
--- readers. Immutability alone only prevents later mutation of an invalid row.
-CREATE FUNCTION access.auth_receiving_closure_insert_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE s access.auth_erasure_source; b access.auth_receiving_control; original_receipt uuid;
-BEGIN
- SELECT source.* INTO s FROM core.partition p JOIN access.auth_erasure_source source USING(partition_no)
- WHERE p.partition_no=NEW.route/16 AND p.write_state='active' AND source.initialized
- AND octet_length(source.source_owner)<=256
- AND p.epoch=source.source_epoch AND p.node=source.source_owner FOR SHARE OF p,source;
- IF NOT FOUND THEN
-  RAISE EXCEPTION 'Auth current receiving closure unavailable' USING ERRCODE='23514';
- END IF;
- SELECT * INTO b FROM access.auth_receiving_control WHERE partition_no=NEW.route/16 AND state='active'
- AND source_generation=s.generation AND source_epoch=s.source_epoch AND source_owner=s.source_owner
- AND revision=NEW.control_revision
- AND (requested_restore IS NULL OR requested_restore=restore_generation) FOR SHARE;
- IF NOT FOUND THEN
-  RAISE EXCEPTION 'Auth current receiving closure unavailable' USING ERRCODE='23514';
- END IF;
- SELECT original.receipt_id INTO original_receipt FROM access.account account
- JOIN access.erasure e USING(route,account_id)
- JOIN access.auth_erasure_obligation original USING(route,account_id)
- WHERE account.route=NEW.route AND account.account_id=NEW.account_id AND account.state='deleted' AND account.authn_fenced
- AND original.minimum_authn_epoch IS NOT NULL AND account.minimum_authn_epoch>=original.minimum_authn_epoch
- AND e.version=NEW.version AND e.at=NEW.at AND original.version=e.version AND original.at=e.at
- FOR SHARE OF account,e,original;
- IF NOT FOUND OR NEW.source_receipt_id IS DISTINCT FROM original_receipt OR NEW.continuation_id IS NULL
-    OR NEW.published_xid<>pg_current_xact_id() THEN
-  RAISE EXCEPTION 'Auth receiving source receipt mismatch' USING ERRCODE='23514';
- END IF;
- PERFORM 1 FROM access.auth_receiving_obligation o JOIN access.auth_history_proof h USING(route,account_id)
- WHERE o.route=NEW.route AND o.account_id=NEW.account_id AND o.partition_no=NEW.route/16
- AND o.version=NEW.version AND o.at=NEW.at AND o.custody_revision=b.revision
- AND o.physical_closure=NEW.physical_closure AND o.receiving_closure=NEW.receiving_closure
- AND h.phase='native-consumed' AND h.version=NEW.version AND h.at=NEW.at
- AND h.continuation_id=NEW.continuation_id AND h.receipt_id=NEW.source_receipt_id FOR SHARE OF o,h;
- IF NOT FOUND THEN
-  RAISE EXCEPTION 'Auth receiving custody unavailable' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END $$;
-CREATE TRIGGER auth_receiving_closure_insert_guard BEFORE INSERT ON access.auth_receiving_closure
- FOR EACH ROW EXECUTE FUNCTION access.auth_receiving_closure_insert_guard();
-
--- Pending registration carries no physical authority, but its immutable Source
--- and barrier must still come from the native originals. Validate INSERT too,
--- including ON CONFLICT attempts, before a bad tuple can poison the permanent key.
-CREATE FUNCTION access.auth_receiving_control_source_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- PERFORM 1 FROM core.partition p JOIN access.auth_erasure_source s USING(partition_no)
- WHERE p.partition_no=NEW.partition_no AND p.write_state='active' AND s.initialized
- AND octet_length(s.source_owner)<=256 AND p.epoch=s.source_epoch AND p.node=s.source_owner
- AND s.generation=NEW.source_generation AND s.source_epoch=NEW.source_epoch AND s.source_owner=NEW.source_owner
- FOR SHARE OF p,s;
- IF NOT FOUND THEN
-  RAISE EXCEPTION 'Auth receiving registration Source mismatch' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END $$;
-CREATE TRIGGER auth_receiving_control_source_guard BEFORE INSERT ON access.auth_receiving_control
- FOR EACH ROW EXECUTE FUNCTION access.auth_receiving_control_source_guard();
-
-CREATE FUNCTION access.auth_receiving_obligation_root_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- PERFORM 1 FROM access.account a JOIN access.erasure e USING(route,account_id)
- JOIN access.auth_erasure_obligation o USING(route,account_id)
- WHERE a.route=NEW.route AND a.account_id=NEW.account_id AND NEW.partition_no=NEW.route/16
- AND a.state='deleted' AND a.authn_fenced AND o.minimum_authn_epoch IS NOT NULL
- AND a.minimum_authn_epoch>=o.minimum_authn_epoch AND e.version=NEW.version AND e.at=NEW.at
- AND o.version=e.version AND o.at=e.at FOR SHARE OF a,e,o;
- IF NOT FOUND THEN
-  RAISE EXCEPTION 'Auth receiving registration barrier mismatch' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END $$;
-CREATE TRIGGER auth_receiving_obligation_root_guard BEFORE INSERT ON access.auth_receiving_obligation
- FOR EACH ROW EXECUTE FUNCTION access.auth_receiving_obligation_root_guard();

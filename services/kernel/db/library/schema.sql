@@ -153,6 +153,171 @@ END; $$;
 
 
 --
+-- Name: check_public_output_binding_commit(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.check_public_output_binding_commit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT EXISTS (
+  SELECT 1 FROM library.native_public_output_binding b
+  JOIN semantic.identity_epoch_native_commit n ON n.partition_no=b.partition_no
+   AND n.transaction_id=b.accepted_transaction_id AND n.epoch=b.owner_epoch AND n.position=b.accepted_position
+  JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch AND p.position=n.position
+  JOIN core.outbox o ON o.partition_no=n.partition_no AND o.position=n.position AND o.event_seq=0 AND o.epoch=n.epoch
+  JOIN library.collection s ON s.route=b.route AND s.collection_id=b.collection_id
+  JOIN library.collection_source_output_publication r ON r.route=b.route AND r.collection_id=b.collection_id
+   AND r.generation=b.output_generation
+  JOIN editorial.write_basis w ON w.partition_no=r.partition_no AND w.transaction_id=r.transaction_id
+  JOIN library.collection_source_output g ON g.route=r.route AND g.collection_id=r.collection_id AND g.generation=r.generation
+  JOIN library.collection_source_output_head h ON h.route=g.route AND h.collection_id=g.collection_id AND h.generation=g.generation
+  JOIN library.native_source_fence f ON f.route=s.route AND f.kind='collection' AND f.owner_id=s.collection_id
+  JOIN access.account a ON a.route=s.route AND a.account_id=s.curator_account_id
+  JOIN library.native_public_output_receiving e ON e.partition_no=b.partition_no AND e.capture_id=b.capture_id
+  JOIN library.native_public_output_hold k ON k.partition_no=b.partition_no AND k.hold_id=b.hold_id
+  WHERE b.partition_no=NEW.partition_no AND b.capture_id=NEW.capture_id
+   AND b.native_xid=pg_current_xact_id() AND b.xmin=n.xmin AND n.xmin=o.xmin
+   AND n.purpose='identity-public-output-capture' AND p.write_state='active' AND p.moved_to IS NULL
+   AND s.state='active' AND s.visibility<>'private' AND s.membership_kind='dynamic'
+   AND a.state='active' AND NOT a.authn_fenced AND s.curator_account_id=r.account_id AND g.account_id=r.account_id
+   AND b.incarnation=r.incarnation AND r.incarnation=s.collection_id::text || ':' || extract(epoch FROM s.created_at)::text
+   AND r.transaction_id=b.activation_transaction_id AND w.position=b.activation_position
+   AND w.epoch=b.owner_epoch AND w.principal_kind='account' AND r.xmin=w.xmin AND r.xmin=g.xmin AND r.xmin=h.xmin
+   AND r.native_xid<>pg_current_xact_id() AND r.source_generation=b.activation_source_generation
+   AND s.source_generation=r.source_generation AND h.source_generation=r.source_generation
+   AND g.source_generation+1=r.source_generation AND g.state='complete' AND g.expected_members=r.expected_members
+   AND g.written_members=r.expected_members AND g.member_count=r.expected_members AND g.member_fence=r.member_fence
+   AND f.generation=r.collection_fence AND k.native_xid=pg_current_xact_id() AND k.role='predecessor'
+   AND k.consumed_by IS NULL AND e.state='open' AND e.receiving_epoch=b.receiving_epoch
+   AND b.payload->>'captureId'=b.capture_id::text AND b.payload->>'holdId'=b.hold_id::text
+   AND b.payload->>'definitionDigest'=b.definition_digest AND b.payload->>'bindingDigest'=b.binding_digest
+   AND b.payload->'accepted'=jsonb_build_object('partition',b.partition_no,'epoch',b.owner_epoch,
+     'position',b.accepted_position::text,'transactionId',b.accepted_transaction_id::text)
+   AND b.payload->'tuple'->'identity'=jsonb_build_object('scope','public_output','route',b.route,
+     'collectionId',b.collection_id::text,'incarnation',b.incarnation,'generation',r.source_generation::text,
+     'ownerEpoch',b.owner_epoch,'receivingEpoch',b.receiving_epoch::text,'effectKey',b.effect_key,
+     'outputGeneration',b.output_generation::text,'activation',jsonb_build_object(
+       'transactionId',b.activation_transaction_id::text,'position',b.activation_position::text,
+       'sourceGeneration',b.activation_source_generation::text))
+   AND b.payload->'tuple'->'publication'=jsonb_build_object('generation',r.generation::text,
+     'transactionId',r.transaction_id::text,'position',w.position::text,'nativeXid',r.native_xid::text,
+     'sourceGeneration',r.source_generation::text,'memberFence',r.member_fence::text,'members',r.expected_members::text)
+   AND b.payload->'tuple'->'observation'=jsonb_build_object('partition',b.partition_no,'epoch',b.owner_epoch,
+     'position',(b.accepted_position-1)::text)
+ ) THEN RAISE EXCEPTION 'native_public_output_binding_requires_semantic_same_command_capture'; END IF;
+ RETURN NULL;
+END; $$;
+
+
+--
+-- Name: check_public_output_semantic_binding(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.check_public_output_semantic_binding() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM semantic.identity_public_output_accepted a
+  JOIN library.native_public_output_binding b USING(partition_no,capture_id)
+  WHERE a.partition_no=NEW.partition_no AND a.capture_id=NEW.capture_id
+   AND a.hold_id=b.hold_id AND a.binding_digest=b.binding_digest AND a.definition_digest=b.definition_digest
+   AND a.binding=b.payload AND a.transaction_id=b.accepted_transaction_id
+   AND a.native_epoch=b.owner_epoch AND a.native_position=b.accepted_position
+   AND a.xmin=b.xmin AND b.native_xid=pg_current_xact_id())
+ THEN RAISE EXCEPTION 'native_public_output_requires_same_command_semantic_acceptance'; END IF;
+ RETURN NULL;
+END $$;
+
+
+--
+-- Name: check_public_output_semantic_disposition(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.check_public_output_semantic_disposition() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM semantic.identity_public_output_stage s
+  JOIN semantic.identity_public_output_disposition d USING(partition_no,capture_id,hold_id,binding_digest,kind,native_epoch,native_position,transaction_id)
+  JOIN semantic.identity_public_output_transition t USING(partition_no,capture_id,kind,native_epoch,native_position,transaction_id)
+  WHERE s.partition_no=NEW.partition_no AND s.capture_id=NEW.capture_id AND s.hold_id=NEW.hold_id
+   AND s.binding_digest=NEW.binding_digest AND s.kind=NEW.kind AND s.purpose=NEW.purpose
+   AND (s.native_epoch,s.native_position,s.transaction_id)=(NEW.epoch,NEW.position,NEW.transaction_id)
+   AND s.native_xid=NEW.native_xid AND s.native_xid=pg_current_xact_id() AND s.xmin=d.xmin AND s.xmin=t.xmin
+   AND s.successor_hold_id IS NOT DISTINCT FROM NEW.successor_hold_id
+   AND s.cancellation_epoch IS NOT DISTINCT FROM NEW.cancellation_epoch
+   AND t.successor_hold_id IS NOT DISTINCT FROM s.successor_hold_id)
+ THEN RAISE EXCEPTION 'native_public_output_requires_same_command_semantic_disposition'; END IF;
+ RETURN NULL;
+END $$;
+
+
+--
+-- Name: check_public_output_successor(integer, uuid); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.check_public_output_successor(p integer, h uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT EXISTS (SELECT 1 FROM library.native_public_output_transition t
+   JOIN library.native_public_output_hold k ON k.partition_no=t.partition_no AND k.hold_id=t.successor_hold_id
+   WHERE k.partition_no=p AND k.hold_id=h AND t.kind='applied' AND t.native_xid=pg_current_xact_id()
+    AND k.native_xid=t.native_xid AND k.xmin=t.xmin)
+ THEN RAISE EXCEPTION 'native_public_output_successor_requires_transfer'; END IF;
+END; $$;
+
+
+--
+-- Name: check_public_output_successor_commit(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.check_public_output_successor_commit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NEW.role='successor' THEN
+  PERFORM library.check_public_output_successor(NEW.partition_no,NEW.hold_id);
+ END IF;
+ RETURN NULL;
+END; $$;
+
+
+--
+-- Name: check_public_output_transition_commit(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.check_public_output_transition_commit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE selected_partition integer; selected_capture uuid;
+BEGIN
+ selected_partition:=NEW.partition_no; selected_capture:=NEW.capture_id;
+ IF NOT EXISTS (
+  SELECT 1 FROM library.native_public_output_binding b
+  JOIN library.native_public_output_transition t ON t.partition_no=b.partition_no AND t.hold_id=b.hold_id
+  JOIN semantic.identity_epoch_native_commit n ON n.partition_no=t.partition_no AND n.transaction_id=t.transaction_id
+   AND n.epoch=t.epoch AND n.position=t.position AND n.purpose=t.purpose
+  JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch AND p.position=n.position
+  JOIN core.outbox o ON o.partition_no=n.partition_no AND o.position=n.position AND o.event_seq=0 AND o.epoch=n.epoch
+  JOIN library.native_public_output_hold h ON h.partition_no=t.partition_no AND h.hold_id=t.hold_id
+  JOIN library.native_public_output_receiving e ON e.partition_no=b.partition_no AND e.capture_id=b.capture_id
+  LEFT JOIN library.native_public_output_hold k ON k.partition_no=t.partition_no AND k.hold_id=t.successor_hold_id
+  WHERE b.partition_no=selected_partition AND b.capture_id=selected_capture AND t.binding_digest=b.binding_digest
+   AND n.xmin=t.xmin AND n.xmin=o.xmin AND t.native_xid=pg_current_xact_id()
+   AND p.write_state='active' AND p.moved_to IS NULL AND n.epoch=b.owner_epoch
+   AND h.role='predecessor' AND h.consumed_by=t.transaction_id
+   AND e.state=t.kind AND e.receiving_epoch=b.receiving_epoch+1 AND e.transaction_id=t.transaction_id
+   AND ((t.kind='cancelled' AND t.cancellation_epoch=e.receiving_epoch)
+     OR (t.kind='applied' AND k.role='successor' AND k.capture_id=b.capture_id AND k.consumed_by IS NULL
+       AND k.transaction_id=t.transaction_id AND k.native_xid=t.native_xid AND k.xmin=t.xmin))
+ ) THEN RAISE EXCEPTION 'native_public_output_transition_requires_same_command_disposition'; END IF;
+ RETURN NULL;
+END; $$;
+
+
+--
 -- Name: check_publication_episode_commit(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -199,6 +364,104 @@ BEGIN
   ) THEN RAISE EXCEPTION 'collection_publication_uncommitted'; END IF;
   RETURN NULL;
 END; $$;
+
+
+--
+-- Name: collection_kind_original_cancel(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.collection_kind_original_cancel() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='DELETE' OR NEW.invalidated
+     OR NEW.enrollment_generation IS DISTINCT FROM OLD.enrollment_generation
+     OR NEW.restore_generation IS DISTINCT FROM OLD.restore_generation THEN
+    UPDATE library.collection_kind_audience_origin SET cancelled=true
+    WHERE route=OLD.route AND origin_id=OLD.origin_id
+      AND owner_account_id=OLD.owner_account_id AND collection_id=OLD.collection_id
+      AND preparation_id=OLD.preparation_id;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
+-- Name: collection_kind_original_immutable(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.collection_kind_original_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (to_jsonb(NEW)-'cancelled') IS DISTINCT FROM (to_jsonb(OLD)-'cancelled')
+     OR (OLD.cancelled AND NOT NEW.cancelled) THEN
+    RAISE EXCEPTION 'Collection Kind original association is immutable';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: collection_kind_raw_input_commit(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.collection_kind_raw_input_commit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE value jsonb := NEW.body::jsonb;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM library.collection_kind_audience_origin original
+    JOIN library.collection_kind_observation observation
+      ON (observation.route,observation.collection_id,observation.audience)=
+         (original.route,original.collection_id,original.audience)
+    JOIN library.collection_kind_consent_consumer consumer
+      ON (consumer.route,consumer.reference_id)=(original.route,value->'enrollment'->>'reference')
+    JOIN library.collection collection
+      ON (collection.route,collection.collection_id,collection.curator_account_id)=
+         (original.route,original.collection_id,original.owner_account_id)
+    WHERE original.route=NEW.route AND original.origin_id=NEW.origin_id
+      AND original.preparation_id=NEW.preparation_id AND NOT original.cancelled
+      AND original.expires_at>clock_timestamp()
+      AND original.deadline_at>extract(epoch FROM clock_timestamp())*1000
+      AND observation.generation=NEW.preparation_id AND observation.version=NEW.observation_version
+      AND observation.capture=original.source_capture AND NOT observation.complete
+      AND collection.state='active' AND collection.presentation_kind IS NULL
+      AND collection.source_generation=original.source_generation
+      AND consumer.origin_id=NEW.origin_id AND consumer.preparation_id=NEW.preparation_id
+      AND NOT consumer.invalidated AND consumer.source_generation=original.source_generation
+      AND consumer.source_capture=original.source_capture
+      AND consumer.enrollment_generation::text=value->'enrollment'->>'generation'
+      AND consumer.restore_generation::text=value->'enrollment'->>'restore'
+      AND consumer.catalogue_root=value->'enrollment'->>'catalogue'
+      AND original.original_digest=value->'original'->>'digest'
+      AND original.formula_digest=value->'original'->>'formula'
+      AND original.audience=value->'original'->>'audience'
+      AND original.origin_id=value->'original'->>'id'
+      AND original.source_capture=value->'source'->>'capture'
+      AND NEW.preparation_id::text=value->'preparation'->>'id'
+      AND NEW.observation_version::text=value->'preparation'->>'version'
+      AND NEW.predecessor IS NOT DISTINCT FROM value->'preparation'->>'predecessor'
+  ) THEN RAISE EXCEPTION 'Collection Kind raw input commit is stale' USING ERRCODE='40001'; END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
+-- Name: collection_kind_raw_input_immutable(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.collection_kind_raw_input_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Collection Kind raw input is immutable';
+END;
+$$;
 
 
 --
@@ -354,6 +617,98 @@ $$;
 
 
 --
+-- Name: guard_collection_order_capture(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_collection_order_capture() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (NEW.route,NEW.collection_id,NEW.repair_id,NEW.admitted_count,NEW.original_minimum,NEW.lower_key,NEW.upper_key,
+      NEW.admitted_revision,NEW.admitted_source_generation,NEW.admitted_order_epoch)
+     IS DISTINCT FROM
+     (OLD.route,OLD.collection_id,OLD.repair_id,OLD.admitted_count,OLD.original_minimum,OLD.lower_key,OLD.upper_key,
+      OLD.admitted_revision,OLD.admitted_source_generation,OLD.admitted_order_epoch)
+     OR NEW.processed < OLD.processed OR NEW.step < OLD.step
+     OR (OLD.state <> 'active' AND NEW.state <> OLD.state) THEN
+    RAISE EXCEPTION 'Collection order capture is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: guard_collection_order_member(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_collection_order_member() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  owner_route integer;
+  owner_id uuid;
+  curator uuid;
+  parent_state text;
+  repair library.collection_order_repair%ROWTYPE;
+  terminal boolean;
+BEGIN
+  IF TG_OP='INSERT' THEN owner_route:=NEW.route; owner_id:=NEW.collection_id;
+  ELSE owner_route:=OLD.route; owner_id:=OLD.collection_id; END IF;
+  SELECT curator_account_id,state INTO curator,parent_state FROM library.collection
+    WHERE route=owner_route AND collection_id=owner_id FOR UPDATE;
+  SELECT * INTO repair FROM library.collection_order_repair
+    WHERE route=owner_route AND collection_id=owner_id AND state='active';
+  IF FOUND THEN
+    SELECT state <> 'active' OR authn_fenced INTO terminal FROM access.account
+      WHERE route=get_byte(uuid_send(curator),10)*256+get_byte(uuid_send(curator),11) AND account_id=curator;
+    IF parent_state <> 'active' OR curator IS NULL OR COALESCE(terminal,true) THEN
+      UPDATE library.collection_order_repair SET state='cancelled' WHERE route=owner_route AND collection_id=owner_id;
+    ELSIF repair.writer_xid IS DISTINCT FROM pg_current_xact_id() THEN
+      RAISE EXCEPTION 'Collection order repair in progress' USING ERRCODE='40001';
+    END IF;
+  END IF;
+  IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END;
+$$;
+
+
+--
+-- Name: guard_collection_order_parent(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_collection_order_parent() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  repair library.collection_order_repair%ROWTYPE;
+  terminal boolean;
+BEGIN
+  SELECT * INTO repair FROM library.collection_order_repair
+    WHERE route=OLD.route AND collection_id=OLD.collection_id AND state='active';
+  IF FOUND THEN
+    SELECT state <> 'active' OR authn_fenced INTO terminal FROM access.account
+      WHERE route=get_byte(uuid_send(OLD.curator_account_id),10)*256+get_byte(uuid_send(OLD.curator_account_id),11)
+        AND account_id=OLD.curator_account_id;
+    IF TG_OP='DELETE' THEN
+      UPDATE library.collection_order_repair SET state='cancelled' WHERE route=OLD.route AND collection_id=OLD.collection_id;
+    ELSIF NEW.state <> 'active' OR NEW.curator_account_id IS DISTINCT FROM OLD.curator_account_id OR COALESCE(terminal,true) THEN
+      UPDATE library.collection_order_repair SET state='cancelled' WHERE route=OLD.route AND collection_id=OLD.collection_id;
+    ELSIF (NEW.member_count,NEW.revision,NEW.source_generation,NEW.order_epoch)
+       IS DISTINCT FROM (OLD.member_count,OLD.revision,OLD.source_generation,OLD.order_epoch)
+       AND (repair.writer_xid IS DISTINCT FROM pg_current_xact_id()
+         OR NEW.member_count <> repair.admitted_count
+         OR (NEW.revision,NEW.source_generation,NEW.order_epoch) IS DISTINCT FROM
+            (repair.expected_revision,repair.expected_source_generation,repair.expected_order_epoch)) THEN
+      RAISE EXCEPTION 'Collection order repair in progress' USING ERRCODE='40001';
+    END IF;
+  END IF;
+  IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END;
+$$;
+
+
+--
 -- Name: guard_follow_target_type(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -367,6 +722,18 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+
+--
+-- Name: guard_identity_scope_evidence(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_identity_scope_evidence() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Native identity Source evidence remains retained until real control handoff';
+END; $$;
 
 
 --
@@ -414,6 +781,47 @@ END; $$;
 
 
 --
+-- Name: guard_public_output_hold(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_public_output_hold() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'native_public_output_hold_immutable'; END IF;
+ IF TG_OP='UPDATE' AND (
+   (to_jsonb(NEW)-'consumed_by') IS DISTINCT FROM (to_jsonb(OLD)-'consumed_by')
+   OR OLD.consumed_by IS NOT NULL OR NEW.consumed_by IS NULL OR OLD.role='successor'
+ ) THEN RAISE EXCEPTION 'native_public_output_hold_immutable'; END IF;
+ IF TG_OP='INSERT' AND (NEW.consumed_by IS NOT NULL OR NOT EXISTS (
+  SELECT 1 FROM library.native_public_output_binding b WHERE b.partition_no=NEW.partition_no AND b.capture_id=NEW.capture_id
+   AND (b.route,b.collection_id,b.incarnation,b.output_generation,b.activation_transaction_id,b.activation_position,b.activation_source_generation)
+     =(NEW.route,NEW.collection_id,NEW.incarnation,NEW.output_generation,NEW.activation_transaction_id,NEW.activation_position,NEW.activation_source_generation)
+   AND ((NEW.role='predecessor' AND NEW.hold_id=b.hold_id AND NEW.transaction_id=b.accepted_transaction_id)
+     OR (NEW.role='successor' AND NEW.hold_id<>b.hold_id))
+ )) THEN RAISE EXCEPTION 'native_public_output_hold_binding'; END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: guard_public_output_receiving(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_public_output_receiving() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'native_public_output_receiving_immutable'; END IF;
+ IF TG_OP='UPDATE' AND (
+  (NEW.partition_no,NEW.capture_id) IS DISTINCT FROM (OLD.partition_no,OLD.capture_id)
+  OR OLD.state<>'open' OR NEW.state='open' OR NEW.receiving_epoch<>OLD.receiving_epoch+1 OR NEW.transaction_id IS NULL
+ ) THEN RAISE EXCEPTION 'native_public_output_receiving_fenced'; END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: guard_retained_collection(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -451,6 +859,45 @@ BEGIN
   IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
 END;
 $$;
+
+
+--
+-- Name: guard_retained_public_output(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_retained_public_output() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE item record; step integer; retained boolean;
+BEGIN
+ FOR step IN 1..2 LOOP
+  IF step=1 THEN
+   IF TG_OP='INSERT' THEN CONTINUE; END IF;
+   item:=OLD;
+  ELSE
+   IF TG_OP='DELETE' THEN CONTINUE; END IF;
+   item:=NEW;
+  END IF;
+  PERFORM 1 FROM library.collection WHERE route=item.route AND collection_id=item.collection_id FOR UPDATE;
+  -- Every real admission advances this Core row. An older REPEATABLE READ writer therefore
+  -- serializes or fails rather than overlooking a hold inserted after its snapshot began.
+  PERFORM 1 FROM core.partition WHERE partition_no=item.route >> 4 FOR SHARE;
+  IF TG_TABLE_NAME='collection' THEN
+   IF TG_OP='UPDATE' AND (NEW.route,NEW.collection_id,NEW.created_at,NEW.curator_account_id)
+     IS NOT DISTINCT FROM (OLD.route,OLD.collection_id,OLD.created_at,OLD.curator_account_id)
+     AND NOT (OLD.state='deleted' AND NEW.state='active') THEN CONTINUE; END IF;
+   SELECT EXISTS(SELECT 1 FROM library.native_public_output_hold
+     WHERE route=item.route AND collection_id=item.collection_id AND consumed_by IS NULL LIMIT 1) INTO retained;
+  ELSE
+   SELECT EXISTS(SELECT 1 FROM library.native_public_output_hold
+     WHERE route=item.route AND collection_id=item.collection_id AND output_generation=item.generation
+       AND consumed_by IS NULL LIMIT 1) INTO retained;
+  END IF;
+  IF retained THEN RAISE EXCEPTION 'native_public_output_retained'; END IF;
+ END LOOP;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ RETURN NEW;
+END; $$;
 
 
 --
@@ -1143,7 +1590,7 @@ END),
     CONSTRAINT collection_deletion_pair CHECK (((deleted_at IS NULL) = (purge_after IS NULL))),
     CONSTRAINT collection_deletion_window CHECK ((purge_after = (deleted_at + '720:00:00'::interval))),
     CONSTRAINT collection_description_check CHECK (((description IS NULL) OR (char_length(description) <= 2000))),
-    CONSTRAINT collection_member_count_check CHECK (((member_count >= 0) AND (member_count <= 5000))),
+    CONSTRAINT collection_member_count_check CHECK ((member_count >= 0)),
     CONSTRAINT collection_membership_kind_check CHECK ((membership_kind = ANY (ARRAY['curated'::text, 'dynamic'::text]))),
     CONSTRAINT collection_order_epoch_check CHECK ((order_epoch >= 0)),
     CONSTRAINT collection_revision_check CHECK ((revision >= 1)),
@@ -1153,6 +1600,89 @@ END),
     CONSTRAINT collection_state_check CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text]))),
     CONSTRAINT collection_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
     CONSTRAINT collection_visibility_check CHECK ((visibility = ANY (ARRAY['private'::text, 'unlisted'::text, 'public'::text])))
+);
+
+
+--
+-- Name: collection_kind_audience_origin; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_kind_audience_origin (
+    route integer NOT NULL,
+    origin_id text NOT NULL,
+    owner_account_id uuid NOT NULL,
+    collection_id uuid NOT NULL,
+    preparation_id uuid NOT NULL,
+    audience text NOT NULL,
+    original_digest text NOT NULL,
+    formula_digest text NOT NULL,
+    source_generation bigint NOT NULL,
+    source_capture text NOT NULL,
+    origin_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    deadline_at bigint NOT NULL,
+    cancelled boolean DEFAULT false NOT NULL,
+    CONSTRAINT collection_kind_audience_origin_audience_check CHECK (((octet_length(audience) >= 1) AND (octet_length(audience) <= 256))),
+    CONSTRAINT collection_kind_audience_origin_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT collection_kind_audience_origin_check1 CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11)))),
+    CONSTRAINT collection_kind_audience_origin_deadline_at_check CHECK ((deadline_at > 0)),
+    CONSTRAINT collection_kind_audience_origin_formula_digest_check CHECK ((formula_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT collection_kind_audience_origin_origin_id_check CHECK (((octet_length(origin_id) >= 1) AND (octet_length(origin_id) <= 255))),
+    CONSTRAINT collection_kind_audience_origin_original_digest_check CHECK ((original_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT collection_kind_audience_origin_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT collection_kind_audience_origin_source_capture_check CHECK (((octet_length(source_capture) >= 1) AND (octet_length(source_capture) <= 4096))),
+    CONSTRAINT collection_kind_audience_origin_source_generation_check CHECK ((source_generation >= 0))
+);
+
+
+--
+-- Name: collection_kind_consent_consumer; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_kind_consent_consumer (
+    route integer NOT NULL,
+    reference_id text NOT NULL,
+    owner_account_id uuid NOT NULL,
+    collection_id uuid NOT NULL,
+    preparation_id uuid NOT NULL,
+    origin_id text NOT NULL,
+    source_generation bigint NOT NULL,
+    capture_generation uuid NOT NULL,
+    source_capture text NOT NULL,
+    enrollment_generation uuid NOT NULL,
+    catalogue_root text NOT NULL,
+    restore_generation bigint DEFAULT 0 NOT NULL,
+    invalidated boolean DEFAULT false NOT NULL,
+    last_transition_id text,
+    CONSTRAINT collection_kind_consent_consumer_catalogue_root_check CHECK (((octet_length(catalogue_root) >= 1) AND (octet_length(catalogue_root) <= 128))),
+    CONSTRAINT collection_kind_consent_consumer_check CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11)))),
+    CONSTRAINT collection_kind_consent_consumer_check1 CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT collection_kind_consent_consumer_last_transition_id_check CHECK (((last_transition_id IS NULL) OR ((octet_length(last_transition_id) >= 1) AND (octet_length(last_transition_id) <= 255)))),
+    CONSTRAINT collection_kind_consent_consumer_origin_id_check CHECK (((octet_length(origin_id) >= 1) AND (octet_length(origin_id) <= 255))),
+    CONSTRAINT collection_kind_consent_consumer_reference_id_check CHECK (((octet_length(reference_id) >= 1) AND (octet_length(reference_id) <= 255))),
+    CONSTRAINT collection_kind_consent_consumer_restore_generation_check CHECK ((restore_generation >= 0)),
+    CONSTRAINT collection_kind_consent_consumer_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT collection_kind_consent_consumer_source_capture_check CHECK (((octet_length(source_capture) >= 1) AND (octet_length(source_capture) <= 4096))),
+    CONSTRAINT collection_kind_consent_consumer_source_generation_check CHECK ((source_generation >= 0))
+);
+
+
+--
+-- Name: collection_kind_consent_transition; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_kind_consent_transition (
+    route integer NOT NULL,
+    reference_id text NOT NULL,
+    transition_id text NOT NULL,
+    enrollment_generation uuid CONSTRAINT collection_kind_consent_transiti_enrollment_generation_not_null NOT NULL,
+    restore_generation bigint NOT NULL,
+    receipt_reference text NOT NULL,
+    status text NOT NULL,
+    CONSTRAINT collection_kind_consent_transition_receipt_reference_check CHECK (((octet_length(receipt_reference) >= 1) AND (octet_length(receipt_reference) <= 255))),
+    CONSTRAINT collection_kind_consent_transition_restore_generation_check CHECK ((restore_generation >= 0)),
+    CONSTRAINT collection_kind_consent_transition_status_check CHECK ((status = 'committed'::text)),
+    CONSTRAINT collection_kind_consent_transition_transition_id_check CHECK (((octet_length(transition_id) >= 1) AND (octet_length(transition_id) <= 255)))
 );
 
 
@@ -1197,6 +1727,26 @@ CREATE TABLE library.collection_kind_observation (
     CONSTRAINT collection_kind_observation_frontier_check CHECK (((octet_length(frontier) >= 1) AND (octet_length(frontier) <= 4096))),
     CONSTRAINT collection_kind_observation_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT collection_kind_observation_version_check CHECK ((version >= 0))
+);
+
+
+--
+-- Name: collection_kind_raw_input; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_kind_raw_input (
+    route integer NOT NULL,
+    origin_id text NOT NULL,
+    preparation_id uuid NOT NULL,
+    observation_version bigint NOT NULL,
+    input_id text NOT NULL,
+    predecessor text,
+    body text NOT NULL,
+    native_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    CONSTRAINT collection_kind_raw_input_body_check CHECK (((octet_length(body) >= 1) AND (octet_length(body) <= 4096))),
+    CONSTRAINT collection_kind_raw_input_input_id_check CHECK ((input_id ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT collection_kind_raw_input_observation_version_check CHECK ((observation_version >= 0)),
+    CONSTRAINT collection_kind_raw_input_predecessor_check CHECK ((predecessor ~ '^sha256:[0-9a-f]{64}$'::text))
 );
 
 
@@ -1270,6 +1820,44 @@ CREATE TABLE library.collection_member (
     CONSTRAINT collection_member_retention_check CHECK ((((deletion_id IS NULL) AND (deletion_revision IS NULL) AND (deleted_at IS NULL) AND (purge_after IS NULL) AND (added_at IS NOT NULL)) OR ((deletion_id IS NOT NULL) AND (deletion_revision IS NOT NULL) AND (deleted_at IS NOT NULL) AND (purge_after IS NOT NULL) AND (added_at IS NOT NULL)) OR ((deletion_id IS NOT NULL) AND (deletion_revision IS NULL) AND (deleted_at IS NULL) AND (purge_after IS NULL) AND (added_at IS NULL) AND (note IS NULL)))),
     CONSTRAINT collection_member_revision_check CHECK ((member_revision >= 1)),
     CONSTRAINT collection_member_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: collection_order_repair; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_order_repair (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    repair_id uuid NOT NULL,
+    admitted_count integer NOT NULL,
+    original_minimum text NOT NULL COLLATE pg_catalog."C",
+    lower_key text NOT NULL COLLATE pg_catalog."C",
+    upper_key text NOT NULL COLLATE pg_catalog."C",
+    admitted_revision integer NOT NULL,
+    admitted_source_generation bigint NOT NULL,
+    admitted_order_epoch integer NOT NULL,
+    expected_revision integer NOT NULL,
+    expected_source_generation bigint NOT NULL,
+    expected_order_epoch integer NOT NULL,
+    processed integer DEFAULT 0 NOT NULL,
+    step integer DEFAULT 0 NOT NULL,
+    after_key text COLLATE pg_catalog."C",
+    after_member_id uuid,
+    state text DEFAULT 'active'::text NOT NULL,
+    writer_xid xid8,
+    CONSTRAINT collection_order_repair_admitted_count_check CHECK ((admitted_count > 0)),
+    CONSTRAINT collection_order_repair_check CHECK (((processed >= 0) AND (processed <= admitted_count))),
+    CONSTRAINT collection_order_repair_check1 CHECK (((lower_key < upper_key) AND (upper_key < original_minimum))),
+    CONSTRAINT collection_order_repair_check2 CHECK (((after_key IS NULL) = (after_member_id IS NULL))),
+    CONSTRAINT collection_order_repair_check3 CHECK ((route = ((get_byte(uuid_send(repair_id), 10) * 256) + get_byte(uuid_send(repair_id), 11)))),
+    CONSTRAINT collection_order_repair_lower_key_check CHECK (((octet_length(lower_key) >= 1) AND (octet_length(lower_key) <= 48))),
+    CONSTRAINT collection_order_repair_original_minimum_check CHECK (((octet_length(original_minimum) >= 1) AND (octet_length(original_minimum) <= 48))),
+    CONSTRAINT collection_order_repair_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT collection_order_repair_state_check CHECK ((state = ANY (ARRAY['active'::text, 'complete'::text, 'cancelled'::text]))),
+    CONSTRAINT collection_order_repair_step_check CHECK ((step >= 0)),
+    CONSTRAINT collection_order_repair_upper_key_check CHECK (((octet_length(upper_key) >= 1) AND (octet_length(upper_key) <= 48)))
 );
 
 
@@ -1920,6 +2508,90 @@ CREATE TABLE library.identity_epoch_source_basis (
 
 
 --
+-- Name: identity_scope_effect; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.identity_scope_effect (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    plan_key text NOT NULL,
+    effect_key text NOT NULL COLLATE pg_catalog."C",
+    disposition text NOT NULL COLLATE pg_catalog."C",
+    original uuid NOT NULL,
+    operation jsonb NOT NULL,
+    CONSTRAINT identity_scope_effect_disposition_check CHECK ((disposition = ANY (ARRAY['OLD'::text, 'NEW'::text, 'first-apply'::text, 'handoff'::text]))),
+    CONSTRAINT identity_scope_effect_effect_key_check CHECK (((octet_length(effect_key) >= 1) AND (octet_length(effect_key) <= 256))),
+    CONSTRAINT identity_scope_effect_operation_check CHECK ((octet_length((operation)::text) <= 4096))
+);
+
+
+--
+-- Name: identity_scope_plan; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.identity_scope_plan (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    plan_key text NOT NULL,
+    account_id uuid NOT NULL,
+    source_identity jsonb NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    scope text NOT NULL COLLATE pg_catalog."C",
+    generation uuid NOT NULL,
+    capture_id uuid NOT NULL,
+    capture_frontier jsonb NOT NULL,
+    collection_fence bigint NOT NULL,
+    account_fence bigint NOT NULL,
+    job_transaction_id uuid NOT NULL,
+    scope_digest text NOT NULL,
+    job_writer_fence jsonb NOT NULL,
+    phase text NOT NULL,
+    driver text NOT NULL,
+    after_subject uuid,
+    after_fact uuid,
+    version bigint DEFAULT 0 NOT NULL,
+    state text DEFAULT 'building'::text NOT NULL,
+    old_head uuid,
+    old_state jsonb,
+    frontier jsonb NOT NULL,
+    seal_transaction_id uuid,
+    CONSTRAINT identity_scope_plan_capture_frontier_check CHECK ((octet_length((capture_frontier)::text) <= 2048)),
+    CONSTRAINT identity_scope_plan_check CHECK (((after_subject IS NULL) = (after_fact IS NULL))),
+    CONSTRAINT identity_scope_plan_check1 CHECK (((state <> 'sealed'::text) OR (seal_transaction_id IS NOT NULL))),
+    CONSTRAINT identity_scope_plan_check2 CHECK (((state <> 'sealed'::text) OR ((driver = 'done'::text) AND (phase = 'raw'::text)))),
+    CONSTRAINT identity_scope_plan_driver_check CHECK ((driver = ANY (ARRAY['member'::text, 'entry'::text, 'label'::text, 'session'::text, 'copy'::text, 'output'::text, 'done'::text]))),
+    CONSTRAINT identity_scope_plan_frontier_check CHECK ((octet_length((frontier)::text) <= 2048)),
+    CONSTRAINT identity_scope_plan_job_epoch_check CHECK ((job_epoch > 0)),
+    CONSTRAINT identity_scope_plan_job_writer_fence_check CHECK ((octet_length((job_writer_fence)::text) <= 2048)),
+    CONSTRAINT identity_scope_plan_phase_check CHECK ((phase = ANY (ARRAY['old-references'::text, 'old-ready'::text, 'old-working'::text, 'raw'::text]))),
+    CONSTRAINT identity_scope_plan_plan_key_check CHECK ((octet_length(plan_key) = 64)),
+    CONSTRAINT identity_scope_plan_scope_check CHECK (((octet_length(scope) >= 1) AND (octet_length(scope) <= 256))),
+    CONSTRAINT identity_scope_plan_source_identity_check CHECK ((octet_length((source_identity)::text) <= 2048)),
+    CONSTRAINT identity_scope_plan_state_check CHECK ((state = ANY (ARRAY['building'::text, 'sealed'::text, 'invalidated'::text]))),
+    CONSTRAINT identity_scope_plan_version_check CHECK ((version >= 0))
+);
+
+
+--
+-- Name: identity_scope_seal; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.identity_scope_seal (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    plan_key text NOT NULL,
+    generation uuid NOT NULL,
+    version bigint NOT NULL,
+    frontier jsonb NOT NULL,
+    capture_frontier jsonb NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_scope_seal_capture_frontier_check CHECK ((octet_length((capture_frontier)::text) <= 2048)),
+    CONSTRAINT identity_scope_seal_frontier_check CHECK ((octet_length((frontier)::text) <= 2048))
+);
+
+
+--
 -- Name: label_assignment; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -1944,6 +2616,108 @@ CREATE TABLE library.label_assignment (
     CONSTRAINT label_assignment_revision_check CHECK ((revision >= 1)),
     CONSTRAINT label_assignment_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT label_assignment_slot_range CHECK (((slot_no IS NULL) OR ((slot_no >= 0) AND (slot_no <= 31))))
+);
+
+
+--
+-- Name: native_public_output_binding; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.native_public_output_binding (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED NOT NULL,
+    capture_id uuid NOT NULL,
+    hold_id uuid NOT NULL,
+    incarnation text NOT NULL,
+    output_generation uuid NOT NULL,
+    activation_transaction_id uuid NOT NULL,
+    activation_position bigint NOT NULL,
+    activation_source_generation bigint CONSTRAINT native_public_output_bindin_activation_source_generati_not_null NOT NULL,
+    owner_epoch integer NOT NULL,
+    accepted_position bigint NOT NULL,
+    accepted_transaction_id uuid NOT NULL,
+    native_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    receiving_epoch bigint NOT NULL,
+    effect_key text NOT NULL,
+    definition_digest text NOT NULL,
+    binding_digest text NOT NULL,
+    payload jsonb NOT NULL,
+    CONSTRAINT native_public_output_binding_accepted_position_check CHECK ((accepted_position > 0)),
+    CONSTRAINT native_public_output_binding_activation_position_check CHECK ((activation_position > 0)),
+    CONSTRAINT native_public_output_binding_activation_source_generation_check CHECK ((activation_source_generation > 0)),
+    CONSTRAINT native_public_output_binding_binding_digest_check CHECK ((binding_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT native_public_output_binding_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT native_public_output_binding_definition_digest_check CHECK ((definition_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT native_public_output_binding_effect_key_check CHECK ((length(effect_key) = 64)),
+    CONSTRAINT native_public_output_binding_incarnation_check CHECK (((octet_length(incarnation) >= 1) AND (octet_length(incarnation) <= 128))),
+    CONSTRAINT native_public_output_binding_payload_check CHECK ((octet_length((payload)::text) <= 4096)),
+    CONSTRAINT native_public_output_binding_receiving_epoch_check CHECK ((receiving_epoch = 1)),
+    CONSTRAINT native_public_output_binding_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: native_public_output_hold; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.native_public_output_hold (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    hold_id uuid NOT NULL,
+    role text NOT NULL,
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    incarnation text NOT NULL,
+    output_generation uuid NOT NULL,
+    activation_transaction_id uuid NOT NULL,
+    activation_position bigint NOT NULL,
+    activation_source_generation bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    native_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    consumed_by uuid,
+    CONSTRAINT native_public_output_hold_role_check CHECK ((role = ANY (ARRAY['predecessor'::text, 'successor'::text])))
+);
+
+
+--
+-- Name: native_public_output_receiving; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.native_public_output_receiving (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    receiving_epoch bigint NOT NULL,
+    state text NOT NULL,
+    transaction_id uuid,
+    CONSTRAINT native_public_output_receiving_receiving_epoch_check CHECK ((receiving_epoch > 0)),
+    CONSTRAINT native_public_output_receiving_state_check CHECK ((state = ANY (ARRAY['open'::text, 'applied'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: native_public_output_transition; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.native_public_output_transition (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    hold_id uuid NOT NULL,
+    binding_digest text NOT NULL,
+    kind text NOT NULL,
+    successor_hold_id uuid,
+    cancellation_epoch bigint,
+    epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    purpose text NOT NULL,
+    native_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    payload jsonb NOT NULL,
+    CONSTRAINT native_public_output_transition_check CHECK ((((kind = 'applied'::text) AND (successor_hold_id IS NOT NULL) AND (successor_hold_id <> hold_id) AND (cancellation_epoch IS NULL) AND (purpose = 'identity-public-output-applied'::text)) OR ((kind = 'cancelled'::text) AND (successor_hold_id IS NULL) AND (cancellation_epoch > 1) AND (purpose = 'identity-public-output-cancelled'::text)))),
+    CONSTRAINT native_public_output_transition_kind_check CHECK ((kind = ANY (ARRAY['applied'::text, 'cancelled'::text]))),
+    CONSTRAINT native_public_output_transition_payload_check CHECK ((octet_length((payload)::text) <= 8192)),
+    CONSTRAINT native_public_output_transition_position_check CHECK (("position" > 0)),
+    CONSTRAINT native_public_output_transition_purpose_check CHECK ((purpose = ANY (ARRAY['identity-public-output-applied'::text, 'identity-public-output-cancelled'::text])))
 );
 
 
@@ -2944,6 +3718,46 @@ ALTER TABLE ONLY library.canonical_source_state
 
 
 --
+-- Name: collection_kind_audience_origin collection_kind_audience_origi_route_collection_id_audience_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_audience_origin
+    ADD CONSTRAINT collection_kind_audience_origi_route_collection_id_audience_key UNIQUE (route, collection_id, audience);
+
+
+--
+-- Name: collection_kind_audience_origin collection_kind_audience_origin_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_audience_origin
+    ADD CONSTRAINT collection_kind_audience_origin_pkey PRIMARY KEY (route, origin_id);
+
+
+--
+-- Name: collection_kind_consent_consumer collection_kind_consent_consu_route_owner_account_id_collec_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_consent_consumer
+    ADD CONSTRAINT collection_kind_consent_consu_route_owner_account_id_collec_key UNIQUE (route, owner_account_id, collection_id, preparation_id, origin_id);
+
+
+--
+-- Name: collection_kind_consent_consumer collection_kind_consent_consumer_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_consent_consumer
+    ADD CONSTRAINT collection_kind_consent_consumer_pkey PRIMARY KEY (route, reference_id);
+
+
+--
+-- Name: collection_kind_consent_transition collection_kind_consent_transition_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_consent_transition
+    ADD CONSTRAINT collection_kind_consent_transition_pkey PRIMARY KEY (route, reference_id, transition_id);
+
+
+--
 -- Name: collection_kind_count collection_kind_count_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -2957,6 +3771,22 @@ ALTER TABLE ONLY library.collection_kind_count
 
 ALTER TABLE ONLY library.collection_kind_observation
     ADD CONSTRAINT collection_kind_observation_pkey PRIMARY KEY (route, collection_id, audience);
+
+
+--
+-- Name: collection_kind_raw_input collection_kind_raw_input_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_raw_input
+    ADD CONSTRAINT collection_kind_raw_input_pkey PRIMARY KEY (route, origin_id, observation_version);
+
+
+--
+-- Name: collection_kind_raw_input collection_kind_raw_input_route_input_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_raw_input
+    ADD CONSTRAINT collection_kind_raw_input_route_input_id_key UNIQUE (route, input_id);
 
 
 --
@@ -2997,6 +3827,22 @@ ALTER TABLE ONLY library.collection_member
 
 ALTER TABLE ONLY library.collection_member
     ADD CONSTRAINT collection_member_pkey PRIMARY KEY (route, collection_id, member_id);
+
+
+--
+-- Name: collection_order_repair collection_order_repair_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_order_repair
+    ADD CONSTRAINT collection_order_repair_pkey PRIMARY KEY (route, collection_id);
+
+
+--
+-- Name: collection_order_repair collection_order_repair_route_repair_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_order_repair
+    ADD CONSTRAINT collection_order_repair_route_repair_id_key UNIQUE (route, repair_id);
 
 
 --
@@ -3288,6 +4134,30 @@ ALTER TABLE ONLY library.identity_epoch_source_basis
 
 
 --
+-- Name: identity_scope_effect identity_scope_effect_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_effect
+    ADD CONSTRAINT identity_scope_effect_pkey PRIMARY KEY (route, collection_id, plan_key, effect_key, disposition);
+
+
+--
+-- Name: identity_scope_plan identity_scope_plan_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_plan
+    ADD CONSTRAINT identity_scope_plan_pkey PRIMARY KEY (route, collection_id, plan_key);
+
+
+--
+-- Name: identity_scope_seal identity_scope_seal_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_seal
+    ADD CONSTRAINT identity_scope_seal_pkey PRIMARY KEY (route, collection_id, plan_key, version);
+
+
+--
 -- Name: label_assignment label_assignment_identity; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -3301,6 +4171,62 @@ ALTER TABLE ONLY library.label_assignment
 
 ALTER TABLE ONLY library.label_assignment
     ADD CONSTRAINT label_assignment_pkey PRIMARY KEY (route, account_id, subject_id, label_id);
+
+
+--
+-- Name: native_public_output_binding native_public_output_binding_partition_no_hold_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_binding
+    ADD CONSTRAINT native_public_output_binding_partition_no_hold_id_key UNIQUE (partition_no, hold_id);
+
+
+--
+-- Name: native_public_output_binding native_public_output_binding_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_binding
+    ADD CONSTRAINT native_public_output_binding_pkey PRIMARY KEY (partition_no, capture_id);
+
+
+--
+-- Name: native_public_output_binding native_public_output_binding_route_collection_id_effect_key_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_binding
+    ADD CONSTRAINT native_public_output_binding_route_collection_id_effect_key_key UNIQUE (route, collection_id, effect_key);
+
+
+--
+-- Name: native_public_output_hold native_public_output_hold_partition_no_capture_id_role_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_hold
+    ADD CONSTRAINT native_public_output_hold_partition_no_capture_id_role_key UNIQUE (partition_no, capture_id, role);
+
+
+--
+-- Name: native_public_output_hold native_public_output_hold_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_hold
+    ADD CONSTRAINT native_public_output_hold_pkey PRIMARY KEY (partition_no, hold_id);
+
+
+--
+-- Name: native_public_output_receiving native_public_output_receiving_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_receiving
+    ADD CONSTRAINT native_public_output_receiving_pkey PRIMARY KEY (partition_no, capture_id);
+
+
+--
+-- Name: native_public_output_transition native_public_output_transition_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_transition
+    ADD CONSTRAINT native_public_output_transition_pkey PRIMARY KEY (partition_no, hold_id);
 
 
 --
@@ -3720,6 +4646,20 @@ CREATE UNIQUE INDEX bulk_target_subject ON library.bulk_target USING btree (rout
 
 
 --
+-- Name: canonical_source_identity_old_fact; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX canonical_source_identity_old_fact ON library.canonical_source_fact USING btree (route, collection_id, generation, basis_digest, driver, stored_subject_id, fact_id);
+
+
+--
+-- Name: canonical_source_identity_raw; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX canonical_source_identity_raw ON library.canonical_source_reference USING btree (route, collection_id, generation, driver, stored_subject_id, fact_id);
+
+
+--
 -- Name: canonical_source_working; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -3773,6 +4713,41 @@ CREATE INDEX collection_deletion_due ON library.collection USING btree (route, p
 --
 
 CREATE INDEX collection_deletion_pending_legacy ON library.collection USING btree (route, collection_id) WHERE ((state = 'deleted'::text) AND (deleted_at IS NULL));
+
+
+--
+-- Name: collection_kind_audience_origin_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_audience_origin_owner ON library.collection_kind_audience_origin USING btree (route, owner_account_id, collection_id, preparation_id);
+
+
+--
+-- Name: collection_kind_consent_consumer_episode; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_consent_consumer_episode ON library.collection_kind_consent_consumer USING btree (route, owner_account_id, collection_id, preparation_id, reference_id);
+
+
+--
+-- Name: collection_kind_consent_consumer_erasure; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_consent_consumer_erasure ON library.collection_kind_consent_consumer USING btree (route, owner_account_id, reference_id);
+
+
+--
+-- Name: collection_kind_consent_consumer_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_consent_consumer_owner ON library.collection_kind_consent_consumer USING btree (route, owner_account_id, collection_id, preparation_id);
+
+
+--
+-- Name: collection_kind_consent_transition_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_consent_transition_pending ON library.collection_kind_consent_transition USING btree (route, reference_id, transition_id) WHERE (status <> 'committed'::text);
 
 
 --
@@ -4119,6 +5094,13 @@ CREATE INDEX follow_account_page ON library.follow USING btree (route, account_i
 
 
 --
+-- Name: follow_activity_recipients; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_activity_recipients ON library.follow_count_support USING btree (route, target_type, target_id, account_id) WHERE (support > 0);
+
+
+--
 -- Name: follow_count_account_pending; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -4196,6 +5178,34 @@ CREATE INDEX identity_epoch_source_basis_owner ON library.identity_epoch_source_
 
 
 --
+-- Name: identity_scope_plan_capture; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_scope_plan_capture ON library.identity_scope_plan USING btree (route, capture_id, collection_id, plan_key);
+
+
+--
+-- Name: identity_scope_plan_generation; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_scope_plan_generation ON library.identity_scope_plan USING btree (route, collection_id, generation);
+
+
+--
+-- Name: identity_scope_plan_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_scope_plan_owner ON library.identity_scope_plan USING btree (route, account_id, collection_id, plan_key);
+
+
+--
+-- Name: identity_scope_plan_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_scope_plan_pending ON library.identity_scope_plan USING btree (route, job_id, job_epoch, collection_id, plan_key) WHERE (state = 'building'::text);
+
+
+--
 -- Name: label_assignment_owner_label; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -4224,6 +5234,20 @@ CREATE INDEX label_assignment_reserved_source ON library.label_assignment USING 
 
 
 --
+-- Name: native_public_output_retained; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX native_public_output_retained ON library.native_public_output_hold USING btree (route, collection_id, output_generation, incarnation, activation_transaction_id, activation_position, activation_source_generation) WHERE (consumed_by IS NULL);
+
+
+--
+-- Name: native_public_output_successor; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX native_public_output_successor ON library.native_public_output_transition USING btree (partition_no, successor_hold_id) WHERE (successor_hold_id IS NOT NULL);
+
+
+--
 -- Name: native_source_capture_account; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -4235,6 +5259,13 @@ CREATE INDEX native_source_capture_account ON library.native_source_capture USIN
 --
 
 CREATE INDEX native_source_capture_collection ON library.native_source_capture USING btree (route, collection_id, capture_id);
+
+
+--
+-- Name: native_source_capture_identity; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX native_source_capture_identity ON library.native_source_capture USING btree (route, collection_id, account_id, incarnation, generation, scope, owner_epoch, receiving_epoch, effect_key, collection_fence, account_fence, capture_id);
 
 
 --
@@ -4497,6 +5528,34 @@ CREATE INDEX type_preparation_request ON library.type_preparation_header USING b
 
 
 --
+-- Name: collection_kind_consent_consumer collection_kind_original_cancel; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_kind_original_cancel AFTER DELETE OR UPDATE ON library.collection_kind_consent_consumer FOR EACH ROW EXECUTE FUNCTION library.collection_kind_original_cancel();
+
+
+--
+-- Name: collection_kind_audience_origin collection_kind_original_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_kind_original_immutable BEFORE UPDATE ON library.collection_kind_audience_origin FOR EACH ROW EXECUTE FUNCTION library.collection_kind_original_immutable();
+
+
+--
+-- Name: collection_kind_raw_input collection_kind_raw_input_commit; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER collection_kind_raw_input_commit AFTER INSERT ON library.collection_kind_raw_input DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.collection_kind_raw_input_commit();
+
+
+--
+-- Name: collection_kind_raw_input collection_kind_raw_input_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_kind_raw_input_immutable BEFORE UPDATE ON library.collection_kind_raw_input FOR EACH ROW EXECUTE FUNCTION library.collection_kind_raw_input_immutable();
+
+
+--
 -- Name: collection collection_listing_public_history_guard; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -4515,6 +5574,27 @@ CREATE TRIGGER collection_member_retained_immutable BEFORE INSERT OR DELETE OR U
 --
 
 CREATE TRIGGER collection_membership_kind_immutable BEFORE UPDATE OF membership_kind ON library.collection FOR EACH ROW EXECUTE FUNCTION library.guard_collection_membership_kind();
+
+
+--
+-- Name: collection_order_repair collection_order_capture; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_order_capture BEFORE UPDATE ON library.collection_order_repair FOR EACH ROW EXECUTE FUNCTION library.guard_collection_order_capture();
+
+
+--
+-- Name: collection_member collection_order_member; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_order_member BEFORE INSERT OR DELETE OR UPDATE ON library.collection_member FOR EACH ROW EXECUTE FUNCTION library.guard_collection_order_member();
+
+
+--
+-- Name: collection collection_order_parent; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_order_parent BEFORE DELETE OR UPDATE ON library.collection FOR EACH ROW EXECUTE FUNCTION library.guard_collection_order_parent();
 
 
 --
@@ -4644,6 +5724,20 @@ CREATE TRIGGER follow_target_type_immutable BEFORE UPDATE OF target_type ON libr
 
 
 --
+-- Name: identity_scope_effect identity_scope_effect_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER identity_scope_effect_immutable BEFORE DELETE OR UPDATE ON library.identity_scope_effect FOR EACH ROW EXECUTE FUNCTION library.guard_identity_scope_evidence();
+
+
+--
+-- Name: identity_scope_seal identity_scope_seal_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER identity_scope_seal_immutable BEFORE DELETE OR UPDATE ON library.identity_scope_seal FOR EACH ROW EXECUTE FUNCTION library.guard_identity_scope_evidence();
+
+
+--
 -- Name: label_assignment label_assignment_fact_source_delete; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -4662,6 +5756,111 @@ CREATE TRIGGER label_assignment_fact_source_rows AFTER INSERT ON library.label_a
 --
 
 CREATE TRIGGER label_assignment_fact_source_update AFTER UPDATE ON library.label_assignment FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: native_public_output_binding native_public_output_binding_commit; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_binding_commit AFTER INSERT ON library.native_public_output_binding DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_binding_commit();
+
+
+--
+-- Name: native_public_output_binding native_public_output_binding_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_binding_immutable BEFORE DELETE OR UPDATE ON library.native_public_output_binding FOR EACH ROW EXECUTE FUNCTION library.guard_native_source_receipt();
+
+
+--
+-- Name: collection native_public_output_collection_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_collection_guard BEFORE INSERT OR DELETE OR UPDATE ON library.collection FOR EACH ROW EXECUTE FUNCTION library.guard_retained_public_output();
+
+
+--
+-- Name: collection_source_output native_public_output_header_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_header_guard BEFORE INSERT OR DELETE OR UPDATE ON library.collection_source_output FOR EACH ROW EXECUTE FUNCTION library.guard_retained_public_output();
+
+
+--
+-- Name: native_public_output_hold native_public_output_hold_consumed; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_hold_consumed AFTER UPDATE ON library.native_public_output_hold DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_transition_commit();
+
+
+--
+-- Name: native_public_output_hold native_public_output_hold_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_hold_guard BEFORE INSERT OR DELETE OR UPDATE ON library.native_public_output_hold FOR EACH ROW EXECUTE FUNCTION library.guard_public_output_hold();
+
+
+--
+-- Name: collection_source_output_member native_public_output_member_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_member_guard BEFORE INSERT OR DELETE OR UPDATE ON library.collection_source_output_member FOR EACH ROW EXECUTE FUNCTION library.guard_retained_public_output();
+
+
+--
+-- Name: collection_source_output_publication native_public_output_publication_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_publication_guard BEFORE INSERT OR DELETE OR UPDATE ON library.collection_source_output_publication FOR EACH ROW EXECUTE FUNCTION library.guard_retained_public_output();
+
+
+--
+-- Name: native_public_output_receiving native_public_output_receiving_closed; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_receiving_closed AFTER UPDATE ON library.native_public_output_receiving DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_transition_commit();
+
+
+--
+-- Name: native_public_output_receiving native_public_output_receiving_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_receiving_guard BEFORE DELETE OR UPDATE ON library.native_public_output_receiving FOR EACH ROW EXECUTE FUNCTION library.guard_public_output_receiving();
+
+
+--
+-- Name: native_public_output_binding native_public_output_semantic_binding; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_semantic_binding AFTER INSERT ON library.native_public_output_binding DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_semantic_binding();
+
+
+--
+-- Name: native_public_output_transition native_public_output_semantic_disposition; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_semantic_disposition AFTER INSERT ON library.native_public_output_transition DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_semantic_disposition();
+
+
+--
+-- Name: native_public_output_hold native_public_output_successor_commit; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_successor_commit AFTER INSERT ON library.native_public_output_hold DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_successor_commit();
+
+
+--
+-- Name: native_public_output_transition native_public_output_transition_commit; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_transition_commit AFTER INSERT ON library.native_public_output_transition DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_transition_commit();
+
+
+--
+-- Name: native_public_output_transition native_public_output_transition_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_transition_immutable BEFORE DELETE OR UPDATE ON library.native_public_output_transition FOR EACH ROW EXECUTE FUNCTION library.guard_native_source_receipt();
 
 
 --
@@ -5022,11 +6221,43 @@ ALTER TABLE ONLY library.canonical_source_state
 
 
 --
+-- Name: collection_kind_audience_origin collection_kind_audience_orig_route_collection_id_audience_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_audience_origin
+    ADD CONSTRAINT collection_kind_audience_orig_route_collection_id_audience_fkey FOREIGN KEY (route, collection_id, audience) REFERENCES library.collection_kind_observation(route, collection_id, audience) ON DELETE CASCADE;
+
+
+--
+-- Name: collection_kind_consent_transition collection_kind_consent_transition_route_reference_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_consent_transition
+    ADD CONSTRAINT collection_kind_consent_transition_route_reference_id_fkey FOREIGN KEY (route, reference_id) REFERENCES library.collection_kind_consent_consumer(route, reference_id) ON DELETE CASCADE;
+
+
+--
+-- Name: collection_kind_raw_input collection_kind_raw_input_route_origin_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_raw_input
+    ADD CONSTRAINT collection_kind_raw_input_route_origin_id_fkey FOREIGN KEY (route, origin_id) REFERENCES library.collection_kind_audience_origin(route, origin_id) ON DELETE CASCADE;
+
+
+--
 -- Name: collection_member collection_member_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
 --
 
 ALTER TABLE ONLY library.collection_member
     ADD CONSTRAINT collection_member_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+
+
+--
+-- Name: collection_order_repair collection_order_repair_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_order_repair
+    ADD CONSTRAINT collection_order_repair_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id) ON DELETE CASCADE;
 
 
 --
@@ -5134,11 +6365,115 @@ ALTER TABLE ONLY library.follow_count_terminal_source
 
 
 --
+-- Name: identity_scope_effect identity_scope_effect_route_collection_id_plan_key_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_effect
+    ADD CONSTRAINT identity_scope_effect_route_collection_id_plan_key_fkey FOREIGN KEY (route, collection_id, plan_key) REFERENCES library.identity_scope_plan(route, collection_id, plan_key);
+
+
+--
+-- Name: identity_scope_plan identity_scope_plan_route_capture_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_plan
+    ADD CONSTRAINT identity_scope_plan_route_capture_id_fkey FOREIGN KEY (route, capture_id) REFERENCES library.native_source_capture(route, capture_id);
+
+
+--
+-- Name: identity_scope_plan identity_scope_plan_route_collection_id_generation_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_plan
+    ADD CONSTRAINT identity_scope_plan_route_collection_id_generation_fkey FOREIGN KEY (route, collection_id, generation) REFERENCES library.canonical_source_generation(route, collection_id, generation);
+
+
+--
+-- Name: identity_scope_plan identity_scope_plan_route_collection_id_old_head_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_plan
+    ADD CONSTRAINT identity_scope_plan_route_collection_id_old_head_fkey FOREIGN KEY (route, collection_id, old_head) REFERENCES library.canonical_source_generation(route, collection_id, generation);
+
+
+--
+-- Name: identity_scope_seal identity_scope_seal_route_collection_id_plan_key_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_seal
+    ADD CONSTRAINT identity_scope_seal_route_collection_id_plan_key_fkey FOREIGN KEY (route, collection_id, plan_key) REFERENCES library.identity_scope_plan(route, collection_id, plan_key);
+
+
+--
 -- Name: label_assignment label_assignment_route_account_id_label_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
 --
 
 ALTER TABLE ONLY library.label_assignment
     ADD CONSTRAINT label_assignment_route_account_id_label_id_fkey FOREIGN KEY (route, account_id, label_id) REFERENCES library.personal_label(route, account_id, label_id);
+
+
+--
+-- Name: native_public_output_binding native_public_output_binding_partition_no_accepted_transac_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_binding
+    ADD CONSTRAINT native_public_output_binding_partition_no_accepted_transac_fkey FOREIGN KEY (partition_no, accepted_transaction_id, owner_epoch, accepted_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: native_public_output_hold native_public_output_consumption; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_hold
+    ADD CONSTRAINT native_public_output_consumption FOREIGN KEY (partition_no, consumed_by) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: native_public_output_hold native_public_output_hold_partition_no_capture_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_hold
+    ADD CONSTRAINT native_public_output_hold_partition_no_capture_id_fkey FOREIGN KEY (partition_no, capture_id) REFERENCES library.native_public_output_binding(partition_no, capture_id);
+
+
+--
+-- Name: native_public_output_receiving native_public_output_receiving_partition_no_capture_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_receiving
+    ADD CONSTRAINT native_public_output_receiving_partition_no_capture_id_fkey FOREIGN KEY (partition_no, capture_id) REFERENCES library.native_public_output_binding(partition_no, capture_id);
+
+
+--
+-- Name: native_public_output_transition native_public_output_transiti_partition_no_successor_hold__fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_transition
+    ADD CONSTRAINT native_public_output_transiti_partition_no_successor_hold__fkey FOREIGN KEY (partition_no, successor_hold_id) REFERENCES library.native_public_output_hold(partition_no, hold_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: native_public_output_transition native_public_output_transiti_partition_no_transaction_id__fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_transition
+    ADD CONSTRAINT native_public_output_transiti_partition_no_transaction_id__fkey FOREIGN KEY (partition_no, transaction_id, epoch, "position") REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: native_public_output_transition native_public_output_transition_partition_no_capture_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_transition
+    ADD CONSTRAINT native_public_output_transition_partition_no_capture_id_fkey FOREIGN KEY (partition_no, capture_id) REFERENCES library.native_public_output_binding(partition_no, capture_id);
+
+
+--
+-- Name: native_public_output_transition native_public_output_transition_partition_no_hold_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_transition
+    ADD CONSTRAINT native_public_output_transition_partition_no_hold_id_fkey FOREIGN KEY (partition_no, hold_id) REFERENCES library.native_public_output_hold(partition_no, hold_id);
 
 
 --
@@ -5224,282 +6559,5 @@ ALTER TABLE ONLY library.type_preparation_slot
 --
 -- PostgreSQL database dump complete
 --
-
-
-
-
--- Native identity scope enrollment and retained seals.
--- The manifest IS the native plan. No receiving outcome or count establishes its seal.
-CREATE TABLE library.identity_scope_plan (
-  route integer NOT NULL,
-  collection_id uuid NOT NULL,
-  plan_key text NOT NULL CHECK (octet_length(plan_key)=64),
-  account_id uuid NOT NULL,
-  source_identity jsonb NOT NULL CHECK (octet_length(source_identity::text)<=2048),
-  job_id uuid NOT NULL,
-  job_epoch bigint NOT NULL CHECK (job_epoch>0),
-  scope text COLLATE "C" NOT NULL CHECK (octet_length(scope) BETWEEN 1 AND 256),
-  generation uuid NOT NULL,
-  capture_id uuid NOT NULL,
-  capture_frontier jsonb NOT NULL CHECK (octet_length(capture_frontier::text)<=2048),
-  collection_fence bigint NOT NULL,
-  account_fence bigint NOT NULL,
-  job_transaction_id uuid NOT NULL,
-  scope_digest text NOT NULL,
-  job_writer_fence jsonb NOT NULL CHECK(octet_length(job_writer_fence::text)<=2048),
-  phase text NOT NULL CHECK(phase IN ('old-references','old-ready','old-working','raw')),
-  driver text NOT NULL CHECK (driver IN ('member','entry','label','session','copy','output','done')),
-  after_subject uuid,
-  after_fact uuid,
-  version bigint NOT NULL DEFAULT 0 CHECK (version>=0),
-  state text NOT NULL DEFAULT 'building' CHECK (state IN ('building','sealed','invalidated')),
-  old_head uuid,
-  old_state jsonb,
-  frontier jsonb NOT NULL CHECK (octet_length(frontier::text)<=2048),
-  seal_transaction_id uuid,
-  PRIMARY KEY(route,collection_id,plan_key),
-  FOREIGN KEY(route,capture_id) REFERENCES library.native_source_capture(route,capture_id),
-  FOREIGN KEY(route,collection_id,generation) REFERENCES library.canonical_source_generation(route,collection_id,generation),
-  FOREIGN KEY(route,collection_id,old_head) REFERENCES library.canonical_source_generation(route,collection_id,generation),
-  CHECK ((after_subject IS NULL)=(after_fact IS NULL)),
-  CHECK (state<>'sealed' OR seal_transaction_id IS NOT NULL),
-  CHECK (state<>'sealed' OR (driver='done' AND phase='raw'))
-);
-CREATE UNIQUE INDEX identity_scope_plan_generation ON library.identity_scope_plan(route,collection_id,generation);
-CREATE INDEX identity_scope_plan_owner ON library.identity_scope_plan(route,account_id,collection_id,plan_key);
-CREATE INDEX identity_scope_plan_capture ON library.identity_scope_plan(route,capture_id,collection_id,plan_key);
-CREATE INDEX identity_scope_plan_pending ON library.identity_scope_plan(route,job_id,job_epoch,collection_id,plan_key) WHERE state='building';
-CREATE TABLE library.identity_scope_effect (
-  route integer NOT NULL,
-  collection_id uuid NOT NULL,
-  plan_key text NOT NULL,
-  effect_key text COLLATE "C" NOT NULL CHECK(octet_length(effect_key) BETWEEN 1 AND 256),
-  disposition text COLLATE "C" NOT NULL CHECK(disposition IN ('OLD','NEW','first-apply','handoff')),
-  original uuid NOT NULL,
-  -- Full native operation key retained and compared on digest collision. No user fact payload.
-  operation jsonb NOT NULL CHECK(octet_length(operation::text)<=4096),
-  PRIMARY KEY(route,collection_id,plan_key,effect_key,disposition),
-  FOREIGN KEY(route,collection_id,plan_key) REFERENCES library.identity_scope_plan(route,collection_id,plan_key)
-);
--- Completion lookup cannot walk unfinished or old captures behind the current native writer fence.
-CREATE INDEX native_source_capture_identity ON library.native_source_capture
- (route,collection_id,account_id,incarnation,generation,scope,owner_epoch,receiving_epoch,effect_key,collection_fence,account_fence,capture_id);
-
-CREATE TABLE library.identity_scope_seal (
-  route integer NOT NULL,
-  collection_id uuid NOT NULL,
-  plan_key text NOT NULL,
-  generation uuid NOT NULL,
-  version bigint NOT NULL,
-  frontier jsonb NOT NULL CHECK(octet_length(frontier::text)<=2048),
-  capture_frontier jsonb NOT NULL CHECK(octet_length(capture_frontier::text)<=2048),
-  transaction_id uuid NOT NULL,
-  PRIMARY KEY(route,collection_id,plan_key,version),
-  FOREIGN KEY(route,collection_id,plan_key) REFERENCES library.identity_scope_plan(route,collection_id,plan_key)
-);
-CREATE FUNCTION library.guard_identity_scope_evidence() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  RAISE EXCEPTION 'Native identity Source evidence remains retained until real control handoff';
-END; $$;
-CREATE TRIGGER identity_scope_effect_immutable BEFORE UPDATE OR DELETE ON library.identity_scope_effect
-  FOR EACH ROW EXECUTE FUNCTION library.guard_identity_scope_evidence();
-CREATE TRIGGER identity_scope_seal_immutable BEFORE UPDATE OR DELETE ON library.identity_scope_seal
-  FOR EACH ROW EXECUTE FUNCTION library.guard_identity_scope_evidence();
-
-CREATE INDEX canonical_source_identity_raw ON library.canonical_source_reference
- (route,collection_id,generation,driver,stored_subject_id,fact_id);
-CREATE INDEX canonical_source_identity_old_fact ON library.canonical_source_fact
- (route,collection_id,generation,basis_digest,driver,stored_subject_id,fact_id);
-
-CREATE TABLE library.collection_kind_consent_consumer (
-  route integer NOT NULL,
-  reference_id text NOT NULL,
-  owner_account_id uuid NOT NULL,
-  collection_id uuid NOT NULL,
-  preparation_id uuid NOT NULL,
-  origin_id text NOT NULL,
-  source_generation bigint NOT NULL,
-  capture_generation uuid NOT NULL,
-  source_capture text NOT NULL,
-  enrollment_generation uuid NOT NULL,
-  catalogue_root text NOT NULL,
-  restore_generation bigint NOT NULL DEFAULT 0,
-  invalidated boolean NOT NULL DEFAULT false,
-  last_transition_id text,
-  PRIMARY KEY (route, reference_id),
-  UNIQUE (route, owner_account_id, collection_id, preparation_id, origin_id),
-  CHECK (route BETWEEN 0 AND 65535),
-  CHECK (route = (get_byte(uuid_send(owner_account_id), 10) * 256 + get_byte(uuid_send(owner_account_id), 11))),
-  CHECK (route = (get_byte(uuid_send(collection_id), 10) * 256 + get_byte(uuid_send(collection_id), 11))),
-  CHECK (octet_length(reference_id) BETWEEN 1 AND 255),
-  CHECK (octet_length(origin_id) BETWEEN 1 AND 255),
-  CHECK (octet_length(source_capture) BETWEEN 1 AND 4096),
-  CHECK (octet_length(catalogue_root) BETWEEN 1 AND 128),
-  CHECK (source_generation >= 0),
-  CHECK (restore_generation >= 0),
-  CHECK (last_transition_id IS NULL OR octet_length(last_transition_id) BETWEEN 1 AND 255)
-);
-
-CREATE TABLE library.collection_kind_consent_transition (
-  route integer NOT NULL,
-  reference_id text NOT NULL,
-  transition_id text NOT NULL,
-  enrollment_generation uuid NOT NULL,
-  restore_generation bigint NOT NULL,
-  receipt_reference text NOT NULL,
-  status text NOT NULL,
-  PRIMARY KEY (route, reference_id, transition_id),
-  FOREIGN KEY (route, reference_id)
-    REFERENCES library.collection_kind_consent_consumer(route, reference_id) ON DELETE CASCADE,
-  CHECK (octet_length(transition_id) BETWEEN 1 AND 255),
-  CHECK (octet_length(receipt_reference) BETWEEN 1 AND 255),
-  CHECK (restore_generation >= 0),
-  CHECK (status IN ('committed'))
-);
-
-CREATE INDEX collection_kind_consent_consumer_owner
-  ON library.collection_kind_consent_consumer(route, owner_account_id, collection_id, preparation_id);
-
-CREATE INDEX collection_kind_consent_transition_pending
-  ON library.collection_kind_consent_transition(route, reference_id, transition_id)
-  WHERE status <> 'committed';
-
--- Account erasure pages the owned receiving references in exact native-key order.
-CREATE INDEX collection_kind_consent_consumer_erasure
-  ON library.collection_kind_consent_consumer(route, owner_account_id, reference_id);
-
-
-CREATE INDEX collection_kind_consent_consumer_episode
-  ON library.collection_kind_consent_consumer(route,owner_account_id,collection_id,preparation_id,reference_id);
--- Private original associations expire with the actual first request. They confer no read authority.
-CREATE TABLE library.collection_kind_audience_origin (
-  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
-  origin_id text NOT NULL CHECK (octet_length(origin_id) BETWEEN 1 AND 255),
-  owner_account_id uuid NOT NULL,
-  collection_id uuid NOT NULL,
-  preparation_id uuid NOT NULL,
-  audience text NOT NULL CHECK (octet_length(audience) BETWEEN 1 AND 256),
-  original_digest text NOT NULL CHECK (original_digest ~ '^sha256:[0-9a-f]{64}$'),
-  formula_digest text NOT NULL CHECK (formula_digest ~ '^sha256:[0-9a-f]{64}$'),
-  source_generation bigint NOT NULL CHECK (source_generation >= 0),
-  source_capture text NOT NULL CHECK (octet_length(source_capture) BETWEEN 1 AND 4096),
-  origin_at timestamptz NOT NULL,
-  expires_at timestamptz NOT NULL,
-  deadline_at bigint NOT NULL CHECK (deadline_at > 0),
-  cancelled boolean NOT NULL DEFAULT false,
-  PRIMARY KEY (route,origin_id),
-  UNIQUE (route,collection_id,audience),
-  FOREIGN KEY (route,collection_id,audience)
-    REFERENCES library.collection_kind_observation(route,collection_id,audience) ON DELETE CASCADE,
-  CHECK (route=get_byte(uuid_send(collection_id),10)*256+get_byte(uuid_send(collection_id),11)),
-  CHECK (route=get_byte(uuid_send(owner_account_id),10)*256+get_byte(uuid_send(owner_account_id),11))
-);
--- Account erasure already removes observations by their owner, cascading these controls.
-CREATE INDEX collection_kind_audience_origin_owner
-  ON library.collection_kind_audience_origin(route,owner_account_id,collection_id,preparation_id);
-
-CREATE FUNCTION library.collection_kind_original_immutable() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  IF (to_jsonb(NEW)-'cancelled') IS DISTINCT FROM (to_jsonb(OLD)-'cancelled')
-     OR (OLD.cancelled AND NOT NEW.cancelled) THEN
-    RAISE EXCEPTION 'Collection Kind original association is immutable';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-CREATE TRIGGER collection_kind_original_immutable
-BEFORE UPDATE ON library.collection_kind_audience_origin
-FOR EACH ROW EXECUTE FUNCTION library.collection_kind_original_immutable();
-
-CREATE FUNCTION library.collection_kind_original_cancel() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP='DELETE' OR NEW.invalidated
-     OR NEW.enrollment_generation IS DISTINCT FROM OLD.enrollment_generation
-     OR NEW.restore_generation IS DISTINCT FROM OLD.restore_generation THEN
-    UPDATE library.collection_kind_audience_origin SET cancelled=true
-    WHERE route=OLD.route AND origin_id=OLD.origin_id
-      AND owner_account_id=OLD.owner_account_id AND collection_id=OLD.collection_id
-      AND preparation_id=OLD.preparation_id;
-  END IF;
-  RETURN NULL;
-END;
-$$;
-CREATE TRIGGER collection_kind_original_cancel
-AFTER UPDATE OR DELETE ON library.collection_kind_consent_consumer
-FOR EACH ROW EXECUTE FUNCTION library.collection_kind_original_cancel();
-
-
--- At most one outstanding interval and its immediate predecessor per original.
--- No Type, permission, winner or identity-repair assertion is stored here.
-CREATE TABLE library.collection_kind_raw_input (
-  route integer NOT NULL,
-  origin_id text NOT NULL,
-  preparation_id uuid NOT NULL,
-  observation_version bigint NOT NULL CHECK (observation_version >= 0),
-  input_id text NOT NULL CHECK (input_id ~ '^sha256:[0-9a-f]{64}$'),
-  predecessor text CHECK (predecessor ~ '^sha256:[0-9a-f]{64}$'),
-  body text NOT NULL CHECK (octet_length(body) BETWEEN 1 AND 4096),
-  native_xid xid8 NOT NULL DEFAULT pg_current_xact_id(),
-  PRIMARY KEY (route,origin_id,observation_version),
-  UNIQUE (route,input_id),
-  FOREIGN KEY (route,origin_id) REFERENCES library.collection_kind_audience_origin(route,origin_id) ON DELETE CASCADE
-);
-CREATE FUNCTION library.collection_kind_raw_input_immutable() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  RAISE EXCEPTION 'Collection Kind raw input is immutable';
-END;
-$$;
-CREATE TRIGGER collection_kind_raw_input_immutable BEFORE UPDATE ON library.collection_kind_raw_input
-FOR EACH ROW EXECUTE FUNCTION library.collection_kind_raw_input_immutable();
-
-
--- Validate on the actual commit boundary, after any awaited caller work. The
--- original/consent/Source locks taken by admission remain held until this runs.
-CREATE FUNCTION library.collection_kind_raw_input_commit() RETURNS trigger
-LANGUAGE plpgsql AS $$
-DECLARE value jsonb := NEW.body::jsonb;
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM library.collection_kind_audience_origin original
-    JOIN library.collection_kind_observation observation
-      ON (observation.route,observation.collection_id,observation.audience)=
-         (original.route,original.collection_id,original.audience)
-    JOIN library.collection_kind_consent_consumer consumer
-      ON (consumer.route,consumer.reference_id)=(original.route,value->'enrollment'->>'reference')
-    JOIN library.collection collection
-      ON (collection.route,collection.collection_id,collection.curator_account_id)=
-         (original.route,original.collection_id,original.owner_account_id)
-    WHERE original.route=NEW.route AND original.origin_id=NEW.origin_id
-      AND original.preparation_id=NEW.preparation_id AND NOT original.cancelled
-      AND original.expires_at>clock_timestamp()
-      AND original.deadline_at>extract(epoch FROM clock_timestamp())*1000
-      AND observation.generation=NEW.preparation_id AND observation.version=NEW.observation_version
-      AND observation.capture=original.source_capture AND NOT observation.complete
-      AND collection.state='active' AND collection.presentation_kind IS NULL
-      AND collection.source_generation=original.source_generation
-      AND consumer.origin_id=NEW.origin_id AND consumer.preparation_id=NEW.preparation_id
-      AND NOT consumer.invalidated AND consumer.source_generation=original.source_generation
-      AND consumer.source_capture=original.source_capture
-      AND consumer.enrollment_generation::text=value->'enrollment'->>'generation'
-      AND consumer.restore_generation::text=value->'enrollment'->>'restore'
-      AND consumer.catalogue_root=value->'enrollment'->>'catalogue'
-      AND original.original_digest=value->'original'->>'digest'
-      AND original.formula_digest=value->'original'->>'formula'
-      AND original.audience=value->'original'->>'audience'
-      AND original.origin_id=value->'original'->>'id'
-      AND original.source_capture=value->'source'->>'capture'
-      AND NEW.preparation_id::text=value->'preparation'->>'id'
-      AND NEW.observation_version::text=value->'preparation'->>'version'
-      AND NEW.predecessor IS NOT DISTINCT FROM value->'preparation'->>'predecessor'
-  ) THEN RAISE EXCEPTION 'Collection Kind raw input commit is stale' USING ERRCODE='40001'; END IF;
-  RETURN NULL;
-END;
-$$;
-CREATE CONSTRAINT TRIGGER collection_kind_raw_input_commit
-AFTER INSERT ON library.collection_kind_raw_input DEFERRABLE INITIALLY DEFERRED
-FOR EACH ROW EXECUTE FUNCTION library.collection_kind_raw_input_commit();
 
 

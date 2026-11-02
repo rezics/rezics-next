@@ -851,6 +851,7 @@ CREATE FUNCTION semantic.capture_identity_epoch_key(r integer, id uuid) RETURNS 
     AS $$
 DECLARE owned boolean;
 BEGIN
+ PERFORM semantic.guard_identity_terminal_closure_key(r,id);
  PERFORM 1 FROM semantic.identity_epoch_dirty WHERE route=r AND original=id FOR UPDATE;
  owned:=semantic.identity_epoch_mapping_owns(r,id);
  IF (EXISTS(SELECT 1 FROM semantic.identity_epoch_admission_source_hold
@@ -860,8 +861,6 @@ BEGIN
  INSERT INTO semantic.identity_epoch_dirty(route,original) VALUES(r,id)
  ON CONFLICT(route,original) DO UPDATE SET revision=semantic.identity_epoch_dirty.revision+1;
  IF owned THEN
-   -- These writes are already described by the immutable page intent. They do
-   -- not create an uncaptured legacy source change or invalidate its bootstrap.
    UPDATE semantic.identity_epoch_dirty SET captured_revision=revision WHERE route=r AND original=id;
    RETURN;
  END IF;
@@ -1361,6 +1360,21 @@ END; $$;
 
 
 --
+-- Name: catalogue_work_valid(bigint[], bigint[]); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.catalogue_work_valid(admitted bigint[], spent bigint[]) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+ SELECT array_ndims(admitted)=1 AND array_lower(admitted,1)=1 AND array_length(admitted,1)=8
+ AND array_ndims(spent)=1 AND array_lower(spent,1)=1 AND array_length(spent,1)=8
+ AND NOT EXISTS (SELECT 1 FROM generate_series(1,8) n
+  WHERE admitted[n] IS NULL OR spent[n] IS NULL OR spent[n]<0 OR admitted[n]<spent[n]
+   OR admitted[n]>9007199254740991)
+$$;
+
+
+--
 -- Name: close_identity_epoch_admission(integer, uuid, bigint, text); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -1471,6 +1485,35 @@ $$;
 
 
 --
+-- Name: enqueue_account_public_filter(integer, bigint, bigint); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.enqueue_account_public_filter(home integer, account_revision bigint, claim_revision bigint) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE owner integer;
+BEGIN
+  SELECT epoch INTO owner FROM core.partition
+    WHERE partition_no=home AND write_state='active';
+  IF owner IS NULL THEN RAISE EXCEPTION 'Account public-filter owner is unavailable'; END IF;
+  PERFORM 1 FROM semantic.public_filter_privacy_head WHERE partition_no=home FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Account public-filter Source head is missing'; END IF;
+  INSERT INTO semantic.public_filter_privacy_pending
+    (partition_no,input_key,owner_epoch,first_position,through_position,enqueue_revision,
+     native_revision,native_claim_revision,native_transaction)
+  VALUES (home,'["domain","accounts"]',owner,NULL,NULL,1,
+    account_revision,claim_revision,pg_current_xact_id())
+  ON CONFLICT (partition_no,input_key) DO UPDATE SET
+    owner_epoch=EXCLUDED.owner_epoch,
+    enqueue_revision=semantic.public_filter_privacy_pending.enqueue_revision+1,
+    native_revision=EXCLUDED.native_revision,
+    native_claim_revision=EXCLUDED.native_claim_revision,
+    native_transaction=EXCLUDED.native_transaction,
+    live=true;
+END $$;
+
+
+--
 -- Name: enroll_context_role_provenance(integer, bigint, uuid, uuid, uuid, text, text, text, uuid, uuid); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -1548,6 +1591,27 @@ BEGIN
  VALUES(p_route,p_occurrence,c.erasure_key,p_side,p_grant_transaction,p_source_transaction,native_tx,native_epoch,native_position);
  RETURN QUERY SELECT 'enrolled'::text,c.erasure_key;
 END; $$;
+
+
+--
+-- Name: enroll_public_output_consumer(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.enroll_public_output_consumer() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_WHEN='BEFORE' THEN
+  PERFORM 1 FROM semantic.identity_public_output_gate WHERE partition_no=NEW.partition_no
+   AND capture_id=NEW.capture_id AND state='open' FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'public_output_consumer_fenced'; END IF;
+ ELSE
+  UPDATE semantic.identity_public_output_gate SET enrolled_count=enrolled_count+1
+   WHERE partition_no=NEW.partition_no AND capture_id=NEW.capture_id AND state='open';
+  IF NOT FOUND THEN RAISE EXCEPTION 'public_output_consumer_fenced'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
 
 
 --
@@ -1747,9 +1811,16 @@ CREATE FUNCTION semantic.guard_identity_prearm_owner() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
- IF (TG_OP='DELETE' OR (NEW.epoch,NEW.write_state) IS DISTINCT FROM (OLD.epoch,OLD.write_state))
- AND (EXISTS(SELECT 1 FROM semantic.identity_epoch_control WHERE partition_no=OLD.partition_no AND prepare_job IS NOT NULL)
- OR EXISTS(SELECT 1 FROM semantic.identity_epoch_admission_source_hold WHERE partition_no=OLD.partition_no AND NOT closed))
+ -- The executor advances position on every commit. That path performs no
+ -- directory/dependency IO and cannot change the actual owner incarnation.
+ IF TG_OP='UPDATE' AND (NEW.node,NEW.epoch,NEW.write_state,NEW.moved_to)
+   IS NOT DISTINCT FROM (OLD.node,OLD.epoch,OLD.write_state,OLD.moved_to) THEN RETURN NEW; END IF;
+ IF EXISTS(SELECT 1 FROM semantic.identity_epoch_control WHERE partition_no=OLD.partition_no AND prepare_job IS NOT NULL)
+ OR EXISTS(SELECT 1 FROM semantic.identity_epoch_admission_source_hold WHERE partition_no=OLD.partition_no AND NOT closed)
+ OR EXISTS(SELECT 1 FROM semantic.identity_epoch_bootstrap_row WHERE partition_no=OLD.partition_no)
+ OR EXISTS(SELECT 1 FROM semantic.identity_epoch_mapping WHERE route BETWEEN OLD.partition_no*16 AND OLD.partition_no*16+15
+   AND (closure_state<>'legacy' OR closure_successor_ticket IS NOT NULL))
+ OR EXISTS(SELECT 1 FROM semantic.identity_epoch_group WHERE partition_no=OLD.partition_no AND closure_claim IS NOT NULL)
  THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
  RETURN NEW;
@@ -1841,6 +1912,115 @@ BEGIN
   END IF;
  END LOOP;
  IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END $$;
+
+
+--
+-- Name: guard_identity_terminal_closure_key(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_identity_terminal_closure_key(r integer, id uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE m semantic.identity_epoch_mapping;
+BEGIN
+ SELECT * INTO m FROM semantic.identity_epoch_mapping WHERE route=r AND original=id FOR UPDATE;
+ IF NOT FOUND OR m.closure_state='legacy' THEN RETURN; END IF;
+ IF m.closure_successor_ticket IS NOT NULL OR
+    m.closure_state IN ('exporting','installed','active') OR
+    (m.closure_state='withdrawn' AND m.closure_mutation_xid IS DISTINCT FROM pg_current_xact_id()::text)
+ THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+END; $$;
+
+
+--
+-- Name: guard_public_output_fresh_write(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_public_output_fresh_write() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE a record; p semantic.identity_public_output_progress;
+BEGIN
+ SELECT partition_no,capture_id,scope_key,hold_id INTO STRICT a FROM semantic.identity_public_output_accepted
+ WHERE (partition_no,capture_id)=(NEW.partition_no,NEW.capture_id);
+ IF EXISTS(SELECT 1 FROM semantic.identity_public_output_fence f
+ WHERE (f.partition_no,f.capture_id)=(NEW.partition_no,NEW.capture_id)) OR NOT EXISTS(
+ SELECT 1 FROM semantic.identity_scope_summary s WHERE s.partition_no=a.partition_no AND s.source_key=a.scope_key
+ AND s.scope_id=a.capture_id::text AND s.registration=a.hold_id AND s.capture_id=a.capture_id
+ AND s.revision=1 AND s.active=0 AND s.state IN ('capturing','ready'))
+ THEN RAISE EXCEPTION 'public_output_capture_not_fresh' USING ERRCODE='23514'; END IF;
+ SELECT * INTO STRICT p FROM semantic.identity_public_output_progress
+ WHERE (partition_no,capture_id)=(NEW.partition_no,NEW.capture_id);
+ IF TG_TABLE_NAME='identity_public_output_seal' THEN
+  IF NOT p.exhausted OR p.pending IS NOT NULL OR
+  (NEW.version,NEW.manifest_digest,NEW.raw_count,NEW.canonical_count)
+  IS DISTINCT FROM (p.version,p.manifest_digest,p.raw_count,p.canonical_count)
+  THEN RAISE EXCEPTION 'public_output_seal_not_exhausted_manifest' USING ERRCODE='23514'; END IF;
+ ELSIF TG_TABLE_NAME='identity_public_output_page' THEN
+  IF p.exhausted OR p.pending IS NULL OR NEW.version<>p.version+1 OR NEW.predecessor<>p.manifest_digest
+  OR (NEW.body-'receipts')<>p.pending OR jsonb_array_length(NEW.body->'rows')>8
+  OR jsonb_array_length(NEW.body->'cuts')>16
+  OR jsonb_array_length(NEW.body->'cuts')<>jsonb_array_length(NEW.body->'receipts')
+  THEN RAISE EXCEPTION 'public_output_page_not_exact_plan' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: guard_public_output_gate(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_public_output_gate() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' OR (NEW.partition_no,NEW.capture_id,NEW.original_epoch) IS DISTINCT FROM
+   (OLD.partition_no,OLD.capture_id,OLD.original_epoch) OR OLD.state<>'open'
+   OR (NEW.state='open' AND NEW.enrolled_count<>OLD.enrolled_count+1)
+   OR (NEW.state<>'open' AND NEW.enrolled_count<>OLD.enrolled_count)
+ THEN RAISE EXCEPTION 'public_output_enrollment_cannot_reopen'; END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: guard_public_output_progress(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_public_output_progress() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' OR (NEW.partition_no,NEW.capture_id) IS DISTINCT FROM (OLD.partition_no,OLD.capture_id)
+ OR NEW.version<OLD.version OR NEW.version>OLD.version+1 OR NEW.raw_count<OLD.raw_count
+ OR NEW.canonical_count<OLD.canonical_count OR (OLD.exhausted AND NOT NEW.exhausted)
+ OR NEW.closure_after<OLD.closure_after OR NEW.closure_after>NEW.version+(CASE WHEN NEW.pending IS NULL THEN 0 ELSE 1 END)
+ OR (NEW.closure_after>OLD.closure_after AND NEW.closure_after<>OLD.closure_after+1)
+ THEN RAISE EXCEPTION 'public_output_progress_cannot_reset' USING ERRCODE='23514'; END IF;
+ IF (NEW.version,NEW.after_key,NEW.exhausted,NEW.manifest_digest,NEW.raw_count,NEW.canonical_count,NEW.pending)
+ IS DISTINCT FROM (OLD.version,OLD.after_key,OLD.exhausted,OLD.manifest_digest,OLD.raw_count,OLD.canonical_count,OLD.pending)
+ AND EXISTS(SELECT 1 FROM semantic.identity_public_output_fence f
+ WHERE (f.partition_no,f.capture_id)=(NEW.partition_no,NEW.capture_id))
+ THEN RAISE EXCEPTION 'public_output_capture_fenced' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: guard_public_output_slot(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_public_output_slot() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' OR (NEW.partition_no,NEW.capture_partition,NEW.capture_id,NEW.original,NEW.generation,NEW.terminal)
+ IS DISTINCT FROM (OLD.partition_no,OLD.capture_partition,OLD.capture_id,OLD.original,OLD.generation,OLD.terminal)
+ OR (OLD.released AND NOT NEW.released)
+ THEN RAISE EXCEPTION 'public_output_subject_send_cannot_reopen' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
 END $$;
 
 
@@ -1986,6 +2166,19 @@ BEGIN
  )$q$ INTO matched USING p_home,p_custody,p_sequence,p_reference,p_generation,p_tx;
  RETURN matched;
 END $_$;
+
+
+--
+-- Name: immutable_kind_type_evidence_body(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.immutable_kind_type_evidence_body() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Kind Type dependency bodies are immutable';
+END;
+$$;
 
 
 --
@@ -2770,6 +2963,163 @@ END; $$;
 
 
 --
+-- Name: retain_public_filter_baseline_seal(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.retain_public_filter_baseline_seal() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF OLD.coverage_generation IS NOT NULL AND
+    NEW.coverage_generation IS DISTINCT FROM OLD.coverage_generation THEN
+    RAISE EXCEPTION 'Original covered generation is immutable' USING ERRCODE = '23514';
+  END IF;
+  IF OLD.coverage_sealed AND
+    (NEW.coverage_after,NEW.coverage_root,NEW.coverage_sealed,NEW.account_after)
+    IS DISTINCT FROM
+    (OLD.coverage_after,OLD.coverage_root,OLD.coverage_sealed,OLD.account_after)
+  THEN
+    RAISE EXCEPTION 'Original public-filter baseline seal is immutable' USING ERRCODE = '23514';
+  END IF;
+  IF (NEW.coverage_after,NEW.coverage_root,NEW.coverage_sealed)
+    IS DISTINCT FROM (OLD.coverage_after,OLD.coverage_root,OLD.coverage_sealed)
+    AND NOT (OLD.coverage_generation IS NULL AND NEW.coverage_after=0 AND NOT NEW.coverage_sealed)
+    AND (NEW.coverage_after<>OLD.coverage_after+1 OR NEW.account_after<>NEW.coverage_after OR NOT EXISTS (
+      SELECT 1 FROM search.public_filter_coverage_preparation c
+      WHERE c.partition_no=NEW.partition_no AND c.bootstrap=NEW.bootstrap
+        AND c.definition=NEW.read_definition AND c.generation=NEW.coverage_generation
+        AND c.after_home=NEW.coverage_after AND c.root=NEW.coverage_root))
+  THEN
+    RAISE EXCEPTION 'Source seal requires its native contiguous coverage preparation' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: retain_public_filter_creation_checkpoint(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.retain_public_filter_creation_checkpoint() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE original semantic.public_filter_home_enrollment;
+BEGIN
+  IF OLD.consumer !~ '^public_filter_[0-9a-f]{32}$' THEN
+    IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+  END IF;
+  SELECT * INTO original FROM semantic.public_filter_home_enrollment
+    WHERE (partition_no,bootstrap)=
+      (OLD.partition_no,substring(OLD.consumer FROM 15)::uuid)
+      AND creation_consumer=OLD.consumer;
+  IF NOT FOUND THEN
+    IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+  END IF;
+  IF TG_OP='DELETE' OR
+    (NEW.partition_no,NEW.consumer,NEW.epoch,NEW.position)
+      IS DISTINCT FROM (OLD.partition_no,OLD.consumer,OLD.epoch,OLD.position) THEN
+    RAISE EXCEPTION 'Original public-filter creation pin is still retained'
+      USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $_$;
+
+
+--
+-- Name: retain_public_filter_home_receipt(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.retain_public_filter_home_receipt() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF OLD.receipt IS NOT NULL AND NEW IS DISTINCT FROM OLD THEN
+    RAISE EXCEPTION 'Original public-filter home receipt is immutable' USING ERRCODE = '23514';
+  END IF;
+  IF NEW.receipt IS NOT NULL AND
+    (NOT NEW.complete OR NEW.creation_position IS NULL OR NEW.native_enqueue_revision IS NULL OR NEW.key_digest IS NULL)
+  THEN
+    RAISE EXCEPTION 'Incomplete public-filter home receipt' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: retain_public_filter_repair_ack(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.retain_public_filter_repair_ack() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (OLD.verified_home IS NOT NULL AND NEW.verified_home IS DISTINCT FROM OLD.verified_home)
+    OR NEW.ack_after<OLD.ack_after OR NEW.ack_after>OLD.ack_after+1
+    OR (NEW.ack_after<>OLD.ack_after AND
+      (NOT OLD.complete OR OLD.verified_root IS NULL OR OLD.verified_next IS NOT NULL)) THEN
+    RAISE EXCEPTION 'Original repair window and contiguous ACK progress cannot be replaced'
+      USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: retain_public_filter_repair_verification(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.retain_public_filter_repair_verification() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE parent semantic.public_filter_repair_step;
+BEGIN
+  IF TG_OP='DELETE' THEN
+    RAISE EXCEPTION 'Original public-filter repair pages are immutable' USING ERRCODE='23514';
+  END IF;
+  IF (NEW.partition_no,NEW.bootstrap,NEW.execution,NEW.step,NEW.predecessor,NEW.state,
+      NEW.complete,NEW.input_limit,NEW.receipt_protocol,NEW.repair_locator_digests)
+    IS DISTINCT FROM
+     (OLD.partition_no,OLD.bootstrap,OLD.execution,OLD.step,OLD.predecessor,OLD.state,
+      OLD.complete,OLD.input_limit,OLD.receipt_protocol,OLD.repair_locator_digests) OR
+    (OLD.verified_root IS NOT NULL AND
+      (NEW.verified_binding,NEW.verified_root,NEW.verified_ordinal)
+      IS DISTINCT FROM (OLD.verified_binding,OLD.verified_root,OLD.verified_ordinal)) OR
+    (OLD.verified_next IS NOT NULL AND NEW.verified_next IS DISTINCT FROM OLD.verified_next) OR
+    (OLD.complete AND NEW.verified_next IS NOT NULL)
+  THEN
+    RAISE EXCEPTION 'Original public-filter repair evidence is immutable' USING ERRCODE='23514';
+  END IF;
+  IF NEW.verified_root IS NOT NULL AND OLD.verified_root IS NULL THEN
+    IF NEW.predecessor IS NULL THEN
+      IF NEW.verified_ordinal<>1 THEN
+        RAISE EXCEPTION 'Repair verification must begin at its original root' USING ERRCODE='23514';
+      END IF;
+    ELSE
+      SELECT complete,verified_root,verified_binding,verified_next,verified_ordinal
+      INTO parent.complete,parent.verified_root,parent.verified_binding,parent.verified_next,parent.verified_ordinal
+      FROM semantic.public_filter_repair_step
+      WHERE (partition_no,bootstrap,execution,step)=
+        (NEW.partition_no,NEW.bootstrap,NEW.execution,NEW.predecessor);
+      IF NOT FOUND OR parent.complete OR parent.verified_root IS NULL OR
+        parent.verified_binding IS DISTINCT FROM NEW.verified_binding OR
+        parent.verified_next IS DISTINCT FROM NEW.step OR
+        NEW.verified_ordinal<>parent.verified_ordinal+1 THEN
+        RAISE EXCEPTION 'Repair verification requires its contiguous original predecessor'
+          USING ERRCODE='23514';
+      END IF;
+    END IF;
+  END IF;
+  IF NEW.verified_next IS NOT NULL AND OLD.verified_next IS NULL AND NOT EXISTS (
+    SELECT 1 FROM semantic.public_filter_repair_step s
+    WHERE (s.partition_no,s.bootstrap,s.execution,s.step,s.predecessor)=
+      (NEW.partition_no,NEW.bootstrap,NEW.execution,NEW.verified_next,NEW.step)) THEN
+    RAISE EXCEPTION 'Repair verification cannot branch or skip an original page' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: seal_record_source_set(integer, uuid, integer); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -2829,206 +3179,6 @@ BEGIN
  UPDATE semantic.record_source_set SET sealed=true,members=n,digest=calculated
  WHERE partition_no=p_home AND transaction_id=p_tx;
 END; $_$;
-
-
---
--- Name: subject_page_bootstrap_population(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.subject_page_bootstrap_population() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF NEW.visible>0 AND (TG_OP='INSERT' OR OLD.visible=0) THEN
-    UPDATE semantic.subject_page_bootstrap
-    SET version=version+1, source_key=NULL, state='pending', available_at=now(), worker=NULL, lease_until=NULL
-    WHERE partition_no=NEW.partition_no AND state='done';
-  END IF;
-  RETURN NEW;
-END $$;
-
-
---
--- Name: subject_page_valid_witnesses(jsonb); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.subject_page_valid_witnesses(value jsonb) RETURNS boolean
-    LANGUAGE sql IMMUTABLE STRICT
-    AS $$
-  SELECT jsonb_typeof(value) = 'array' AND jsonb_array_length(value) <= 8
-    AND (SELECT count(*) = count(DISTINCT (entry->>'kind', entry->>'key'))
-         AND coalesce(bool_and(coalesce(entry->>'kind' IN ('fact','cover','relation')
-             AND jsonb_typeof(entry->'key') = 'string', false)), true)
-         FROM jsonb_array_elements(value) entry)
-$$;
-
-
---
--- Name: subject_page_work_home_changed(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.subject_page_work_home_changed() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE home integer; delta integer;
-BEGIN
-  IF TG_TABLE_NAME='subject_page_bootstrap' THEN home := NEW.partition_no; ELSE home := NEW.route >> 4; END IF;
-  delta := CASE WHEN NEW.state<>'done' THEN 1 ELSE 0 END;
-  IF TG_OP='UPDATE' THEN delta := delta-CASE WHEN OLD.state<>'done' THEN 1 ELSE 0 END; END IF;
-  IF delta<>0 THEN UPDATE semantic.subject_page_work_home SET pending=pending+delta WHERE partition_no=home; END IF;
-  RETURN NEW;
-END $$;
-
-
---
--- Name: validate_context_role_enrollment(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.validate_context_role_enrollment() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
- IF NOT EXISTS(SELECT 1 FROM editorial.write_basis b JOIN core.partition p USING(partition_no)
-   WHERE b.partition_no=NEW.route/16 AND b.transaction_id=NEW.enrollment_transaction
-     AND b.epoch=NEW.epoch AND b.position=NEW.position AND p.epoch=b.epoch
-     AND p.position=b.position AND p.write_state='active' AND b.xmin::text=pg_current_xact_id()::text)
- OR NOT EXISTS(SELECT 1 FROM editorial.write_basis b
-   WHERE b.partition_no=NEW.route/16 AND b.transaction_id=NEW.source_transaction)
- OR (NEW.grant_transaction IS NOT NULL AND NOT EXISTS(SELECT 1 FROM editorial.write_basis b
-   WHERE b.partition_no=NEW.route/16 AND b.transaction_id=NEW.grant_transaction)) THEN
-  RAISE EXCEPTION 'Context role enrollment lacks native same-home command provenance' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END; $$;
-
-
---
--- Name: validate_erasure_source_commit(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.validate_erasure_source_commit() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
- IF NOT EXISTS(SELECT 1 FROM editorial.write_basis b
-   WHERE b.partition_no=NEW.partition_no AND b.transaction_id=NEW.transaction_id
-     AND b.epoch=NEW.epoch AND b.position=NEW.position AND b.xmin::text=pg_current_xact_id()::text) THEN
-  RAISE EXCEPTION 'Semantic Source receipt lacks same-command native custody' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END; $$;
-
-
---
--- Name: validate_identity_binding_consumer_birth(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.validate_identity_binding_consumer_birth() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
- IF TG_OP='UPDATE' AND NEW.generation=OLD.generation THEN RETURN NEW; END IF;
- IF NEW.consumer_undo_generation IS NOT NULL AND NOT EXISTS(
-  SELECT 1 FROM semantic.identity_epoch_receipt_claim c
-  JOIN semantic.identity_epoch_receipt_claim_commit k USING(partition_no,receipt_key,generation)
-  JOIN semantic.identity_epoch_native_commit n ON n.partition_no=k.partition_no
-   AND n.transaction_id=k.transaction_id AND n.purpose='admission' AND n.xmin=k.xmin AND n.xmin=c.xmin
-  WHERE c.partition_no=NEW.partition_no AND c.receipt_key=NEW.receipt_key AND c.generation=NEW.generation
-   AND c.transaction_id=n.transaction_id AND n.transaction_id=NEW.consumer_undo_transaction_id
-   AND c.xmin=pg_current_xact_id()::xid AND NEW.consumer_undo_generation=0
- ) THEN RAISE EXCEPTION 'identity_consumer_birth_not_native'; END IF;
- RETURN NEW;
-END $$;
-
-
---
--- Name: validate_identity_scope_consumer_fence(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.validate_identity_scope_consumer_fence() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
- IF NOT EXISTS (
-  SELECT 1 FROM semantic.identity_scope_summary s
-  JOIN semantic.identity_scope_attempt a USING(partition_no,source_key,scope_id,registration)
-  JOIN semantic.identity_scope_completion c USING(partition_no,source_key,scope_id,registration,job_id,job_epoch)
-  JOIN semantic.identity_epoch_native_commit n ON n.partition_no=s.partition_no
-   AND n.transaction_id=NEW.transaction_id AND n.epoch=NEW.native_epoch
-   AND n.position=NEW.native_position AND n.purpose='identity-scope-finish'
-  JOIN semantic.identity_scope_consumer_fence f ON f.partition_no=NEW.partition_no
-   AND f.source_key=NEW.source_key AND f.scope_id=NEW.scope_id AND f.registration=NEW.registration
-   AND f.job_id=NEW.job_id AND f.job_epoch=NEW.job_epoch AND f.xmin=n.xmin
-  JOIN semantic.identity_epoch_native_commit completed ON completed.partition_no=a.partition_no
-   AND completed.transaction_id=a.transaction_id AND completed.purpose='identity-scope-finish'
-   AND completed.xmin=a.xmin AND completed.xmin=c.xmin
-   AND completed.epoch=n.epoch AND completed.position<n.position
-  JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch
-   AND p.position>=n.position AND p.write_state='active' AND p.moved_to IS NULL
-  WHERE s.partition_no=NEW.partition_no AND s.source_key=NEW.source_key AND s.scope_id=NEW.scope_id
-   AND s.registration=NEW.registration AND s.capture_id=NEW.capture_id
-   AND s.source->>'kind'='library' AND s.source->'identity'->>'scope'<>'public_output'
-   AND (s.source->'identity'->>'ownerEpoch')::integer=n.epoch
-   AND s.capture->>'kind'='library' AND s.scan_complete AND s.frontier->>'driver'='done'
-   AND s.active=0 AND s.state IN ('ready','repair') AND a.state='finished' AND c.complete
-   AND a.job_id=NEW.job_id AND a.job_epoch=NEW.job_epoch AND a.attempt=NEW.attempt
-   AND c.capture_id=NEW.capture_id AND c.attempt=NEW.attempt
-   AND c.source_generation=NEW.source_generation AND c.version=NEW.completion_version
-   AND c.seal IS NOT NULL
- ) THEN RAISE EXCEPTION 'identity_scope_consumer_fence_not_native' USING ERRCODE='23514'; END IF;
- RETURN NEW;
-END $$;
-
-
---
--- Name: validate_public_filter_repair_advance(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.validate_public_filter_repair_advance() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF NEW.transaction_id IS NULL OR NEW.native_xid IS DISTINCT FROM pg_current_xact_id()
-    OR NOT EXISTS (
-      SELECT 1 FROM core.partition p
-      WHERE p.partition_no = NEW.partition_no AND p.epoch = NEW.owner_epoch
-        AND p.position = NEW.position AND p.write_state = 'active'
-        AND p.xmin = pg_current_xact_id()::xid
-    ) OR NOT EXISTS (
-      SELECT 1 FROM core.outbox e
-      WHERE e.partition_no = NEW.partition_no AND e.position = NEW.position
-        AND e.epoch = NEW.owner_epoch AND e.event_seq = 0 AND e.event_count = 1
-        AND e.type = 'com.rezics.semantic.public-source.advanced.v1'
-        AND e.subject = NEW.subject_id::text
-        AND e.data = jsonb_build_object('id',NEW.subject_id::text,
-          'bootstrap',NEW.bootstrap::text,'execution',NEW.execution)
-        AND e.xmin = pg_current_xact_id()::xid
-    ) THEN
-    RAISE EXCEPTION 'Public Source advancement lacks original same-command native custody'
-      USING ERRCODE = '23514';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-
---
--- Name: validate_record_deletion_commit(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.validate_record_deletion_commit() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
- IF TG_OP='UPDATE' AND NEW.deletion_generation=OLD.deletion_generation THEN RETURN NEW; END IF;
- INSERT INTO semantic.record_retention_commit(route,subject_id,candidate_id,deletion_generation,
-   transaction_id,epoch,position,deleted_at,purge_after)
- SELECT NEW.route,NEW.subject_id,NEW.candidate_id,NEW.deletion_generation,b.transaction_id,b.epoch,b.position,
-   NEW.deleted_at,NEW.purge_after FROM editorial.write_basis b WHERE b.partition_no=NEW.route/16
-   AND b.transaction_id=NEW.deletion_transaction_id AND b.xmin=pg_current_xact_id()::xid;
- IF NOT FOUND THEN RAISE EXCEPTION 'record_deletion_requires_same_native_commit'; END IF;
- RETURN NEW;
-END; $$;
 
 
 --
@@ -3257,6 +3407,362 @@ BEGIN
   RETURN true;
 END;
 $$;
+
+
+--
+-- Name: subject_page_bootstrap_population(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_page_bootstrap_population() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.visible>0 AND (TG_OP='INSERT' OR OLD.visible=0) THEN
+    UPDATE semantic.subject_page_bootstrap
+    SET version=version+1, source_key=NULL, state='pending', available_at=now(), worker=NULL, lease_until=NULL
+    WHERE partition_no=NEW.partition_no AND state='done';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: subject_page_valid_witnesses(jsonb); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_page_valid_witnesses(value jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+  SELECT jsonb_typeof(value) = 'array' AND jsonb_array_length(value) <= 8
+    AND (SELECT count(*) = count(DISTINCT (entry->>'kind', entry->>'key'))
+         AND coalesce(bool_and(coalesce(entry->>'kind' IN ('fact','cover','relation')
+             AND jsonb_typeof(entry->'key') = 'string', false)), true)
+         FROM jsonb_array_elements(value) entry)
+$$;
+
+
+--
+-- Name: subject_page_work_home_changed(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_page_work_home_changed() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE home integer; delta integer;
+BEGIN
+  IF TG_TABLE_NAME='subject_page_bootstrap' THEN home := NEW.partition_no; ELSE home := NEW.route >> 4; END IF;
+  delta := CASE WHEN NEW.state<>'done' THEN 1 ELSE 0 END;
+  IF TG_OP='UPDATE' THEN delta := delta-CASE WHEN OLD.state<>'done' THEN 1 ELSE 0 END; END IF;
+  IF delta<>0 THEN UPDATE semantic.subject_page_work_home SET pending=pending+delta WHERE partition_no=home; END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: validate_context_role_enrollment(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_context_role_enrollment() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM editorial.write_basis b JOIN core.partition p USING(partition_no)
+   WHERE b.partition_no=NEW.route/16 AND b.transaction_id=NEW.enrollment_transaction
+     AND b.epoch=NEW.epoch AND b.position=NEW.position AND p.epoch=b.epoch
+     AND p.position=b.position AND p.write_state='active' AND b.xmin::text=pg_current_xact_id()::text)
+ OR NOT EXISTS(SELECT 1 FROM editorial.write_basis b
+   WHERE b.partition_no=NEW.route/16 AND b.transaction_id=NEW.source_transaction)
+ OR (NEW.grant_transaction IS NOT NULL AND NOT EXISTS(SELECT 1 FROM editorial.write_basis b
+   WHERE b.partition_no=NEW.route/16 AND b.transaction_id=NEW.grant_transaction)) THEN
+  RAISE EXCEPTION 'Context role enrollment lacks native same-home command provenance' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: validate_erasure_source_commit(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_erasure_source_commit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM editorial.write_basis b
+   WHERE b.partition_no=NEW.partition_no AND b.transaction_id=NEW.transaction_id
+     AND b.epoch=NEW.epoch AND b.position=NEW.position AND b.xmin::text=pg_current_xact_id()::text) THEN
+  RAISE EXCEPTION 'Semantic Source receipt lacks same-command native custody' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: validate_identity_binding_consumer_birth(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_identity_binding_consumer_birth() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='UPDATE' AND NEW.generation=OLD.generation THEN RETURN NEW; END IF;
+ IF NEW.consumer_undo_generation IS NOT NULL AND NOT EXISTS(
+  SELECT 1 FROM semantic.identity_epoch_receipt_claim c
+  JOIN semantic.identity_epoch_receipt_claim_commit k USING(partition_no,receipt_key,generation)
+  JOIN semantic.identity_epoch_native_commit n ON n.partition_no=k.partition_no
+   AND n.transaction_id=k.transaction_id AND n.purpose='admission' AND n.xmin=k.xmin AND n.xmin=c.xmin
+  WHERE c.partition_no=NEW.partition_no AND c.receipt_key=NEW.receipt_key AND c.generation=NEW.generation
+   AND c.transaction_id=n.transaction_id AND n.transaction_id=NEW.consumer_undo_transaction_id
+   AND c.xmin=pg_current_xact_id()::xid AND NEW.consumer_undo_generation=0
+ ) THEN RAISE EXCEPTION 'identity_consumer_birth_not_native'; END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: validate_identity_scope_consumer_fence(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_identity_scope_consumer_fence() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT EXISTS (
+  SELECT 1 FROM semantic.identity_scope_summary s
+  JOIN semantic.identity_scope_attempt a USING(partition_no,source_key,scope_id,registration)
+  JOIN semantic.identity_scope_completion c USING(partition_no,source_key,scope_id,registration,job_id,job_epoch)
+  JOIN semantic.identity_epoch_native_commit n ON n.partition_no=s.partition_no
+   AND n.transaction_id=NEW.transaction_id AND n.epoch=NEW.native_epoch
+   AND n.position=NEW.native_position AND n.purpose='identity-scope-finish'
+  JOIN semantic.identity_scope_consumer_fence f ON f.partition_no=NEW.partition_no
+   AND f.source_key=NEW.source_key AND f.scope_id=NEW.scope_id AND f.registration=NEW.registration
+   AND f.job_id=NEW.job_id AND f.job_epoch=NEW.job_epoch AND f.xmin=n.xmin
+  JOIN semantic.identity_epoch_native_commit completed ON completed.partition_no=a.partition_no
+   AND completed.transaction_id=a.transaction_id AND completed.purpose='identity-scope-finish'
+   AND completed.xmin=a.xmin AND completed.xmin=c.xmin
+   AND completed.epoch=n.epoch AND completed.position<n.position
+  JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch
+   AND p.position>=n.position AND p.write_state='active' AND p.moved_to IS NULL
+  WHERE s.partition_no=NEW.partition_no AND s.source_key=NEW.source_key AND s.scope_id=NEW.scope_id
+   AND s.registration=NEW.registration AND s.capture_id=NEW.capture_id
+   AND s.source->>'kind'='library' AND s.source->'identity'->>'scope'<>'public_output'
+   AND (s.source->'identity'->>'ownerEpoch')::integer=n.epoch
+   AND s.capture->>'kind'='library' AND s.scan_complete AND s.frontier->>'driver'='done'
+   AND s.active=0 AND s.state IN ('ready','repair') AND a.state='finished' AND c.complete
+   AND a.job_id=NEW.job_id AND a.job_epoch=NEW.job_epoch AND a.attempt=NEW.attempt
+   AND c.capture_id=NEW.capture_id AND c.attempt=NEW.attempt
+   AND c.source_generation=NEW.source_generation AND c.version=NEW.completion_version
+   AND c.seal IS NOT NULL
+ ) THEN RAISE EXCEPTION 'identity_scope_consumer_fence_not_native' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: validate_public_filter_creation_pin(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_public_filter_creation_pin() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.complete AND (TG_OP='INSERT' OR OLD.receipt IS NULL) AND
+    (NEW.creation_consumer IS DISTINCT FROM 'public_filter_' || replace(NEW.bootstrap::text,'-','')
+      OR NOT EXISTS (
+        SELECT 1 FROM core.consumer_checkpoint c
+        WHERE c.partition_no=NEW.partition_no AND c.consumer=NEW.creation_consumer
+          AND c.position<=NEW.creation_position
+          AND (c.epoch IS NULL OR c.epoch=NEW.owner_epoch))) THEN
+    RAISE EXCEPTION 'Original public-filter baseline requires its creation retention pin'
+      USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: validate_public_filter_repair_advance(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_public_filter_repair_advance() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.transaction_id IS NULL OR NEW.native_xid IS DISTINCT FROM pg_current_xact_id()
+    OR NOT EXISTS (
+      SELECT 1 FROM core.partition p
+      WHERE p.partition_no = NEW.partition_no AND p.epoch = NEW.owner_epoch
+        AND p.position = NEW.position AND p.write_state = 'active'
+        AND p.xmin = pg_current_xact_id()::xid
+    ) OR NOT EXISTS (
+      SELECT 1 FROM core.outbox e
+      WHERE e.partition_no = NEW.partition_no AND e.position = NEW.position
+        AND e.epoch = NEW.owner_epoch AND e.event_seq = 0 AND e.event_count = 1
+        AND e.type = 'com.rezics.semantic.public-source.advanced.v1'
+        AND e.subject = NEW.subject_id::text
+        AND e.data = jsonb_build_object('id',NEW.subject_id::text,
+          'bootstrap',NEW.bootstrap::text,'execution',NEW.execution)
+        AND e.xmin = pg_current_xact_id()::xid
+    ) THEN
+    RAISE EXCEPTION 'Public Source advancement lacks original same-command native custody'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: validate_public_output_accepted_binding(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_public_output_accepted_binding() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT EXISTS (SELECT 1 FROM library.native_public_output_binding b
+  JOIN semantic.identity_public_output_gate g ON g.partition_no=b.partition_no AND g.capture_id=b.capture_id
+  WHERE b.partition_no=NEW.partition_no AND b.capture_id=NEW.capture_id AND b.hold_id=NEW.hold_id
+   AND b.payload=NEW.binding AND b.binding_digest=NEW.binding_digest AND b.definition_digest=NEW.definition_digest
+   AND b.xmin=pg_current_xact_id()::text::xid AND b.native_xid=pg_current_xact_id() AND g.xmin=b.xmin
+   AND g.original_epoch=b.receiving_epoch AND g.receiving_epoch=b.receiving_epoch AND g.state='open' AND g.enrolled_count=0)
+ THEN RAISE EXCEPTION 'public_output_accepted_requires_native_binding_and_gate'; END IF;
+ RETURN NULL;
+END $$;
+
+
+--
+-- Name: validate_public_output_gate_close(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_public_output_gate_close() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NEW.state='open' THEN RETURN NULL; END IF;
+ IF NOT EXISTS(SELECT 1 FROM semantic.identity_public_output_fence f
+  JOIN semantic.identity_epoch_native_commit n ON n.partition_no=f.partition_no AND n.transaction_id=f.transaction_id
+   AND n.epoch=f.native_epoch AND n.position=f.native_position
+  JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch AND p.position=n.position
+  JOIN core.outbox o ON o.partition_no=n.partition_no AND o.epoch=n.epoch AND o.position=n.position AND o.event_seq=0
+  JOIN semantic.identity_public_output_gate g ON g.partition_no=f.partition_no AND g.capture_id=f.capture_id
+  WHERE g.partition_no=NEW.partition_no AND g.capture_id=NEW.capture_id AND g.state=f.kind
+   AND g.native_epoch=f.native_epoch AND g.native_position=f.native_position AND g.transaction_id=f.transaction_id
+   AND g.xmin=f.xmin AND g.xmin=n.xmin AND n.xmin=o.xmin AND g.native_xid=pg_current_xact_id()
+   AND g.receiving_epoch=g.original_epoch+1 AND p.write_state='active' AND p.moved_to IS NULL
+   AND n.purpose=CASE f.kind WHEN 'applied' THEN 'identity-public-output-applied' ELSE 'identity-public-output-cancelled' END
+   AND o.type='com.rezics.semantic.public-output.capture.v1')
+ THEN RAISE EXCEPTION 'public_output_gate_requires_native_fence'; END IF;
+ RETURN NULL;
+END $$;
+
+
+--
+-- Name: validate_public_output_gate_origin(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_public_output_gate_origin() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM semantic.identity_public_output_accepted a
+  JOIN library.native_public_output_binding b USING(partition_no,capture_id)
+  JOIN semantic.identity_public_output_gate g USING(partition_no,capture_id)
+  WHERE a.partition_no=NEW.partition_no AND a.capture_id=NEW.capture_id
+   AND a.xmin=b.xmin AND a.xmin=g.xmin AND b.native_xid=pg_current_xact_id()
+   AND g.state='open' AND g.original_epoch=b.receiving_epoch AND g.receiving_epoch=b.receiving_epoch AND g.enrolled_count=0)
+ THEN RAISE EXCEPTION 'public_output_gate_requires_original_acceptance'; END IF;
+ RETURN NULL;
+END $$;
+
+
+--
+-- Name: validate_public_output_native(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_public_output_native() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE expected text;
+BEGIN
+ expected:=CASE TG_TABLE_NAME WHEN 'identity_public_output_subject_cut' THEN 'identity-scope-enrollment'
+  WHEN 'identity_public_output_subject_release' THEN 'identity-scope-directory-release'
+  WHEN 'identity_public_output_fence' THEN 'identity-public-output-' || (to_jsonb(NEW)->>'kind')
+  WHEN 'identity_public_output_disposition' THEN 'identity-public-output-' || (to_jsonb(NEW)->>'kind')
+  WHEN 'identity_public_output_transition' THEN 'identity-public-output-' || (to_jsonb(NEW)->>'kind')
+  WHEN 'identity_public_output_stage' THEN 'identity-public-output-' || (to_jsonb(NEW)->>'kind')
+  ELSE 'identity-public-output-capture' END;
+ IF NOT EXISTS (SELECT 1 FROM semantic.identity_epoch_native_commit n
+  JOIN core.partition p ON p.partition_no=n.partition_no AND p.epoch=n.epoch AND p.position=n.position
+  JOIN core.outbox o ON o.partition_no=n.partition_no AND o.epoch=n.epoch AND o.position=n.position AND o.event_seq=0
+  WHERE (n.partition_no,n.transaction_id,n.epoch,n.position)=
+   (NEW.partition_no,NEW.transaction_id,NEW.native_epoch,NEW.native_position)
+   AND n.purpose=expected AND n.xmin=pg_current_xact_id()::text::xid AND o.xmin=n.xmin
+   AND p.write_state='active' AND p.moved_to IS NULL AND o.type='com.rezics.semantic.public-output.capture.v1')
+ THEN RAISE EXCEPTION 'public_output_capture_not_native' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: validate_public_output_transition(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_public_output_transition() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT EXISTS (SELECT 1 FROM semantic.identity_public_output_stage s
+  JOIN semantic.identity_public_output_disposition d USING(partition_no,capture_id,hold_id,binding_digest,kind,native_epoch,native_position,transaction_id)
+  JOIN semantic.identity_public_output_transition t USING(partition_no,capture_id,kind,native_epoch,native_position,transaction_id)
+  JOIN semantic.identity_public_output_accepted a USING(partition_no,capture_id)
+  JOIN semantic.identity_public_output_gate g USING(partition_no,capture_id)
+  JOIN library.native_public_output_transition nt ON nt.partition_no=s.partition_no AND nt.capture_id=s.capture_id
+   AND nt.hold_id=s.hold_id AND nt.binding_digest=s.binding_digest AND nt.transaction_id=s.transaction_id
+   AND nt.epoch=s.native_epoch AND nt.position=s.native_position AND nt.kind=s.kind AND nt.purpose=s.purpose
+  JOIN library.native_public_output_hold h ON h.partition_no=s.partition_no AND h.hold_id=s.hold_id
+  JOIN library.native_public_output_receiving r ON r.partition_no=s.partition_no AND r.capture_id=s.capture_id
+  LEFT JOIN library.native_public_output_hold k ON k.partition_no=s.partition_no AND k.hold_id=s.successor_hold_id
+  LEFT JOIN semantic.identity_public_output_seal seal ON seal.partition_no=s.partition_no AND seal.capture_id=s.capture_id
+  JOIN semantic.identity_public_output_progress progress ON progress.partition_no=s.partition_no AND progress.capture_id=s.capture_id
+  WHERE s.partition_no=NEW.partition_no AND s.capture_id=NEW.capture_id AND s.native_xid=pg_current_xact_id()
+   AND s.xmin=d.xmin AND s.xmin=t.xmin AND s.xmin=nt.xmin AND nt.native_xid=s.native_xid
+   AND a.hold_id=s.hold_id AND a.binding_digest=s.binding_digest AND a.native_epoch=s.native_epoch
+   AND s.original_receiving_epoch=(a.binding->'tuple'->'identity'->>'receivingEpoch')::bigint
+   AND g.state=s.kind AND g.enrolled_count=0 AND g.receiving_epoch=s.original_receiving_epoch+1
+   AND r.state=s.kind AND r.receiving_epoch=g.receiving_epoch AND r.transaction_id=s.transaction_id
+   AND h.role='predecessor' AND h.consumed_by=s.transaction_id AND h.xmin=s.xmin
+   AND t.successor_hold_id IS NOT DISTINCT FROM s.successor_hold_id
+   AND nt.successor_hold_id IS NOT DISTINCT FROM s.successor_hold_id
+   AND d.manifest_digest IS NOT DISTINCT FROM s.manifest_digest AND d.seal_transaction_id IS NOT DISTINCT FROM s.seal_transaction_id
+   AND ((s.kind='applied' AND k.role='successor' AND k.capture_id=s.capture_id AND k.consumed_by IS NULL
+     AND k.transaction_id=s.transaction_id AND k.native_xid=s.native_xid AND k.xmin=s.xmin
+     AND seal.manifest_digest=s.manifest_digest AND seal.transaction_id=s.seal_transaction_id)
+    OR (s.kind='cancelled' AND nt.cancellation_epoch=s.cancellation_epoch
+      AND s.cancellation_epoch=g.receiving_epoch
+      AND progress.closure_after>=progress.version+CASE WHEN progress.pending IS NULL THEN 0 ELSE 1 END)))
+ THEN RAISE EXCEPTION 'public_output_disposition_without_atomic_transition' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: validate_record_deletion_commit(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_record_deletion_commit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='UPDATE' AND NEW.deletion_generation=OLD.deletion_generation THEN RETURN NEW; END IF;
+ INSERT INTO semantic.record_retention_commit(route,subject_id,candidate_id,deletion_generation,
+   transaction_id,epoch,position,deleted_at,purge_after)
+ SELECT NEW.route,NEW.subject_id,NEW.candidate_id,NEW.deletion_generation,b.transaction_id,b.epoch,b.position,
+   NEW.deleted_at,NEW.purge_after FROM editorial.write_basis b WHERE b.partition_no=NEW.route/16
+   AND b.transaction_id=NEW.deletion_transaction_id AND b.xmin=pg_current_xact_id()::xid;
+ IF NOT FOUND THEN RAISE EXCEPTION 'record_deletion_requires_same_native_commit'; END IF;
+ RETURN NEW;
+END; $$;
 
 
 --
@@ -3525,34 +4031,6 @@ CREATE TABLE semantic.contribution_lifecycle (
 
 
 --
--- Name: fact; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.fact (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    slot_id uuid NOT NULL,
-    log_seq integer NOT NULL,
-    operation text NOT NULL,
-    kind text NOT NULL,
-    language text,
-    property text,
-    statement_id uuid,
-    body jsonb NOT NULL,
-    recorded_transaction_id uuid NOT NULL,
-    release text,
-    relation boolean DEFAULT false NOT NULL,
-    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
-    CONSTRAINT fact_check CHECK ((((operation = 'expand'::text) AND (kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NULL) AND (body = '{}'::jsonb)) OR ((operation <> 'expand'::text) AND (((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text])) AND (language IS NOT NULL) AND (property IS NULL) AND (statement_id IS NULL)) OR ((kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NOT NULL)))))),
-    CONSTRAINT fact_kind_check CHECK ((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text, 'statement'::text]))),
-    CONSTRAINT fact_log_seq_check CHECK ((((log_seq >= 1) AND (log_seq <= 33)) AND ((log_seq <> 33) OR (operation = 'expand'::text)))),
-    CONSTRAINT fact_operation_check CHECK ((operation = ANY (ARRAY['assert'::text, 'retract'::text, 'expand'::text]))),
-    CONSTRAINT fact_release_check CHECK ((((kind = 'statement'::text) AND (operation = 'assert'::text)) = (release IS NOT NULL))),
-    CONSTRAINT fact_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
-);
-
-
---
 -- Name: term_head; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -3610,6 +4088,35 @@ CREATE TABLE semantic.definition_activation (
 
 
 --
+-- Name: definition_catalogue_activation; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_activation (
+    route integer NOT NULL,
+    root_digest text NOT NULL,
+    activation_id uuid NOT NULL,
+    previous_root text,
+    expected_head integer NOT NULL,
+    state text DEFAULT 'ready'::text NOT NULL,
+    closed_generation bigint,
+    closed_sequence bigint,
+    staged_sequence bigint DEFAULT 0 NOT NULL,
+    recorded_transaction_id uuid CONSTRAINT definition_catalogue_activatio_recorded_transaction_id_not_null NOT NULL,
+    native_position bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT definition_catalogue_activation_check CHECK (((previous_root IS NULL) OR (previous_root <> root_digest))),
+    CONSTRAINT definition_catalogue_activation_check1 CHECK (((closed_sequence IS NULL) OR ((closed_sequence >= 0) AND (staged_sequence <= closed_sequence)))),
+    CONSTRAINT definition_catalogue_activation_check2 CHECK (((state <> ALL (ARRAY['ready'::text, 'closing'::text])) OR (staged_sequence = 0))),
+    CONSTRAINT definition_catalogue_activation_check3 CHECK ((((state = ANY (ARRAY['ready'::text, 'closing'::text])) AND (closed_generation IS NULL) AND (closed_sequence IS NULL)) OR ((state = ANY (ARRAY['invalidating'::text, 'active'::text])) AND (closed_generation IS NOT NULL) AND (closed_sequence IS NOT NULL)))),
+    CONSTRAINT definition_catalogue_activation_closed_generation_check CHECK (((closed_generation IS NULL) OR (closed_generation >= 0))),
+    CONSTRAINT definition_catalogue_activation_expected_head_check CHECK ((expected_head >= 0)),
+    CONSTRAINT definition_catalogue_activation_native_position_check CHECK ((native_position >= 0)),
+    CONSTRAINT definition_catalogue_activation_route_check CHECK ((route = 0)),
+    CONSTRAINT definition_catalogue_activation_staged_sequence_check CHECK ((staged_sequence >= 0)),
+    CONSTRAINT definition_catalogue_activation_state_check CHECK ((state = ANY (ARRAY['ready'::text, 'closing'::text, 'invalidating'::text, 'active'::text])))
+);
+
+
+--
 -- Name: definition_catalogue_artifact; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -3648,6 +4155,87 @@ CREATE TABLE semantic.definition_catalogue_build (
     CONSTRAINT definition_catalogue_build_phase_check CHECK ((phase = ANY (ARRAY['node'::text, 'release'::text, 'declaration'::text]))),
     CONSTRAINT definition_catalogue_build_route_check CHECK ((route = 0)),
     CONSTRAINT definition_catalogue_build_state_check CHECK ((state = ANY (ARRAY['building'::text, 'incomplete'::text, 'refused'::text, 'ready'::text])))
+);
+
+
+--
+-- Name: definition_catalogue_consumer; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_consumer (
+    route integer NOT NULL,
+    root_digest text NOT NULL,
+    id text NOT NULL,
+    sequence bigint NOT NULL,
+    enrollment_generation bigint NOT NULL,
+    consumer bytea NOT NULL,
+    provenance bytea NOT NULL,
+    dependency bytea NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    invalidated_generation bigint,
+    invalidation_receipt bytea,
+    owner_generation text,
+    restore_generation text,
+    CONSTRAINT definition_catalogue_consumer_check CHECK ((((state = 'invalidated'::text) AND (invalidated_generation IS NOT NULL) AND (invalidation_receipt IS NOT NULL) AND (owner_generation IS NOT NULL) AND (restore_generation IS NOT NULL)) OR ((state <> 'invalidated'::text) AND (invalidated_generation IS NULL) AND (invalidation_receipt IS NULL)))),
+    CONSTRAINT definition_catalogue_consumer_consumer_check CHECK ((octet_length(consumer) <= 8192)),
+    CONSTRAINT definition_catalogue_consumer_dependency_check CHECK (((octet_length(dependency) >= 1) AND (octet_length(dependency) <= 65536))),
+    CONSTRAINT definition_catalogue_consumer_enrollment_generation_check CHECK ((enrollment_generation > 0)),
+    CONSTRAINT definition_catalogue_consumer_invalidation_receipt_check CHECK (((octet_length(invalidation_receipt) >= 1) AND (octet_length(invalidation_receipt) <= 8192))),
+    CONSTRAINT definition_catalogue_consumer_provenance_check CHECK (((octet_length(provenance) >= 1) AND (octet_length(provenance) <= 8192))),
+    CONSTRAINT definition_catalogue_consumer_route_check CHECK ((route = 0)),
+    CONSTRAINT definition_catalogue_consumer_sequence_check CHECK ((sequence > 0)),
+    CONSTRAINT definition_catalogue_consumer_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'bound'::text, 'negative'::text, 'in_flight'::text, 'uncertain'::text, 'invalidated'::text])))
+);
+
+
+--
+-- Name: definition_catalogue_enrollment; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_enrollment (
+    route integer NOT NULL,
+    root_digest text NOT NULL,
+    protocol integer NOT NULL,
+    state text NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    last_sequence bigint DEFAULT 0 NOT NULL,
+    closed_generation bigint,
+    closed_sequence bigint,
+    recorded_transaction_id uuid CONSTRAINT definition_catalogue_enrollmen_recorded_transaction_id_not_null NOT NULL,
+    CONSTRAINT definition_catalogue_enrollment_check CHECK ((((protocol = 0) AND (state = 'unproven'::text)) OR ((protocol = 1) AND (state = ANY (ARRAY['open'::text, 'closed'::text]))))),
+    CONSTRAINT definition_catalogue_enrollment_check1 CHECK ((((state = 'closed'::text) AND (closed_generation IS NOT NULL) AND (closed_sequence IS NOT NULL) AND (closed_generation = generation) AND (closed_sequence = last_sequence)) OR ((state <> 'closed'::text) AND (closed_generation IS NULL) AND (closed_sequence IS NULL)))),
+    CONSTRAINT definition_catalogue_enrollment_generation_check CHECK ((generation > 0)),
+    CONSTRAINT definition_catalogue_enrollment_last_sequence_check CHECK ((last_sequence >= 0)),
+    CONSTRAINT definition_catalogue_enrollment_protocol_check CHECK ((protocol = ANY (ARRAY[0, 1]))),
+    CONSTRAINT definition_catalogue_enrollment_route_check CHECK ((route = 0)),
+    CONSTRAINT definition_catalogue_enrollment_state_check CHECK ((state = ANY (ARRAY['unproven'::text, 'open'::text, 'closed'::text])))
+);
+
+
+--
+-- Name: definition_catalogue_frontier; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_frontier (
+    route integer NOT NULL,
+    root_digest text NOT NULL,
+    slot integer NOT NULL,
+    consumer_id text NOT NULL,
+    sequence bigint NOT NULL,
+    closed_generation bigint NOT NULL,
+    consumer bytea NOT NULL,
+    provenance bytea NOT NULL,
+    dependency bytea NOT NULL,
+    enrollment_generation bigint NOT NULL,
+    consumer_state text NOT NULL,
+    consumer_root text NOT NULL,
+    CONSTRAINT definition_catalogue_frontier_consumer_check CHECK ((octet_length(consumer) <= 8192)),
+    CONSTRAINT definition_catalogue_frontier_consumer_state_check CHECK ((consumer_state = ANY (ARRAY['pending'::text, 'bound'::text, 'negative'::text, 'in_flight'::text, 'uncertain'::text]))),
+    CONSTRAINT definition_catalogue_frontier_dependency_check CHECK (((octet_length(dependency) >= 1) AND (octet_length(dependency) <= 65536))),
+    CONSTRAINT definition_catalogue_frontier_enrollment_generation_check CHECK ((enrollment_generation > 0)),
+    CONSTRAINT definition_catalogue_frontier_provenance_check CHECK (((octet_length(provenance) >= 1) AND (octet_length(provenance) <= 8192))),
+    CONSTRAINT definition_catalogue_frontier_route_check CHECK ((route = 0)),
+    CONSTRAINT definition_catalogue_frontier_slot_check CHECK (((slot >= 1) AND (slot <= 100)))
 );
 
 
@@ -3733,6 +4321,81 @@ CREATE TABLE semantic.definition_catalogue_member (
 
 
 --
+-- Name: definition_catalogue_original; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_original (
+    route integer NOT NULL,
+    original_key text NOT NULL,
+    owner text NOT NULL,
+    root_digest text NOT NULL,
+    phase text NOT NULL,
+    origin text NOT NULL,
+    input_digest bytea NOT NULL,
+    episode uuid NOT NULL,
+    deadline_ms bigint NOT NULL,
+    admitted bigint[] NOT NULL,
+    spent bigint[] DEFAULT ARRAY[(0)::bigint, (0)::bigint, (0)::bigint, (0)::bigint, (0)::bigint, (0)::bigint, (0)::bigint, (0)::bigint] NOT NULL,
+    "position" bigint NOT NULL,
+    state text DEFAULT 'admitted'::text NOT NULL,
+    dispatch_transaction_id uuid,
+    terminal_transaction_id uuid,
+    result_digest bytea,
+    CONSTRAINT definition_catalogue_original_check CHECK (semantic.catalogue_work_valid(admitted, spent)),
+    CONSTRAINT definition_catalogue_original_check1 CHECK (((state = 'admitted'::text) OR (spent = admitted))),
+    CONSTRAINT definition_catalogue_original_check2 CHECK (((state = 'admitted'::text) = (dispatch_transaction_id IS NULL))),
+    CONSTRAINT definition_catalogue_original_check3 CHECK (((state = 'terminal'::text) = (terminal_transaction_id IS NOT NULL))),
+    CONSTRAINT definition_catalogue_original_check4 CHECK (((state = 'terminal'::text) = (result_digest IS NOT NULL))),
+    CONSTRAINT definition_catalogue_original_deadline_ms_check CHECK (((deadline_ms > 0) AND (deadline_ms <= '9007199254740991'::bigint))),
+    CONSTRAINT definition_catalogue_original_input_digest_check CHECK ((octet_length(input_digest) = 32)),
+    CONSTRAINT definition_catalogue_original_origin_check CHECK ((origin = ANY (ARRAY['command'::text, 'build'::text, 'activation'::text]))),
+    CONSTRAINT definition_catalogue_original_original_key_check CHECK ((original_key ~ '^[a-f0-9]{64}$'::text)),
+    CONSTRAINT definition_catalogue_original_owner_check CHECK ((owner = 'semantic.catalogue'::text)),
+    CONSTRAINT definition_catalogue_original_phase_check CHECK ((phase = ANY (ARRAY['artifact'::text, 'build'::text, 'step'::text, 'activate'::text, 'activation-step'::text]))),
+    CONSTRAINT definition_catalogue_original_position_check CHECK (("position" >= 0)),
+    CONSTRAINT definition_catalogue_original_result_digest_check CHECK ((octet_length(result_digest) = 32)),
+    CONSTRAINT definition_catalogue_original_root_digest_check CHECK ((root_digest ~ '^sha256:[a-f0-9]{64}$'::text)),
+    CONSTRAINT definition_catalogue_original_route_check CHECK ((route = 0)),
+    CONSTRAINT definition_catalogue_original_state_check CHECK ((state = ANY (ARRAY['admitted'::text, 'spent'::text, 'terminal'::text])))
+);
+
+
+--
+-- Name: definition_catalogue_position; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_position (
+    route integer NOT NULL,
+    root_digest text NOT NULL,
+    phase text NOT NULL,
+    native_position bigint NOT NULL,
+    original_key text NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT definition_catalogue_position_native_position_check CHECK ((native_position >= 0)),
+    CONSTRAINT definition_catalogue_position_phase_check CHECK ((phase = ANY (ARRAY['build'::text, 'activation'::text]))),
+    CONSTRAINT definition_catalogue_position_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: definition_catalogue_retirement; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_retirement (
+    route integer NOT NULL,
+    root_digest text NOT NULL,
+    phase text DEFAULT 'captures'::text NOT NULL,
+    after_sequence bigint DEFAULT 0 NOT NULL,
+    after_original text DEFAULT ''::text NOT NULL,
+    recorded_transaction_id uuid CONSTRAINT definition_catalogue_retiremen_recorded_transaction_id_not_null NOT NULL,
+    CONSTRAINT definition_catalogue_retirement_after_original_check CHECK ((octet_length(after_original) <= 64)),
+    CONSTRAINT definition_catalogue_retirement_after_sequence_check CHECK ((after_sequence >= 0)),
+    CONSTRAINT definition_catalogue_retirement_phase_check CHECK ((phase = ANY (ARRAY['captures'::text, 'consumers'::text, 'tickets'::text, 'positions'::text, 'terminal'::text]))),
+    CONSTRAINT definition_catalogue_retirement_route_check CHECK ((route = 0))
+);
+
+
+--
 -- Name: definition_catalogue_task; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -3764,6 +4427,27 @@ ALTER TABLE semantic.definition_catalogue_task ALTER COLUMN task_id ADD GENERATE
     NO MINVALUE
     NO MAXVALUE
     CACHE 1
+);
+
+
+--
+-- Name: definition_catalogue_ticket; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_ticket (
+    route integer NOT NULL,
+    original_key text NOT NULL,
+    slot integer NOT NULL,
+    kind text NOT NULL,
+    allowance bigint[] NOT NULL,
+    state text DEFAULT 'admitted'::text NOT NULL,
+    dispatch_transaction_id uuid,
+    CONSTRAINT definition_catalogue_ticket_allowance_check CHECK (semantic.catalogue_work_valid(allowance, ARRAY[(0)::bigint, (0)::bigint, (0)::bigint, (0)::bigint, (0)::bigint, (0)::bigint, (0)::bigint, (0)::bigint])),
+    CONSTRAINT definition_catalogue_ticket_check CHECK (((state = 'spent'::text) = (dispatch_transaction_id IS NOT NULL))),
+    CONSTRAINT definition_catalogue_ticket_kind_check CHECK ((kind = ANY (ARRAY['bootstrap'::text, 'authorization'::text, 'framework'::text, 'body'::text, 'observations'::text, 'lifecycle'::text, 'cleanup'::text]))),
+    CONSTRAINT definition_catalogue_ticket_route_check CHECK ((route = 0)),
+    CONSTRAINT definition_catalogue_ticket_slot_check CHECK (((slot >= 1) AND (slot <= 7))),
+    CONSTRAINT definition_catalogue_ticket_state_check CHECK ((state = ANY (ARRAY['admitted'::text, 'spent'::text])))
 );
 
 
@@ -4394,6 +5078,12 @@ CREATE TABLE semantic.identity_epoch_bootstrap_home (
     sealed_transaction_id uuid,
     sealed_epoch integer,
     sealed_position bigint,
+    closure_after_route integer DEFAULT '-1'::integer NOT NULL,
+    closure_after_original uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    closure_ticket_after_route integer DEFAULT '-1'::integer CONSTRAINT identity_epoch_bootstrap_ho_closure_ticket_after_route_not_null NOT NULL,
+    closure_ticket_after_original uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid CONSTRAINT identity_epoch_bootstrap_ho_closure_ticket_after_origi_not_null NOT NULL,
+    closure_cancel_after_route integer DEFAULT '-1'::integer CONSTRAINT identity_epoch_bootstrap_ho_closure_cancel_after_route_not_null NOT NULL,
+    closure_cancel_after_original uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid CONSTRAINT identity_epoch_bootstrap_ho_closure_cancel_after_origi_not_null NOT NULL,
     CONSTRAINT identity_epoch_bootstrap_home_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT identity_epoch_bootstrap_home_phase_check CHECK ((phase = ANY (ARRAY['subjects'::text, 'members'::text, 'dirty'::text, 'member-dirty'::text])))
 );
@@ -4410,6 +5100,7 @@ CREATE TABLE semantic.identity_epoch_bootstrap_page (
     phase text NOT NULL,
     caught_up boolean DEFAULT false NOT NULL,
     acknowledged boolean DEFAULT false NOT NULL,
+    closure_page_reservation uuid,
     CONSTRAINT identity_epoch_bootstrap_page_phase_check CHECK ((phase = ANY (ARRAY['subjects'::text, 'members'::text, 'dirty'::text, 'member-dirty'::text])))
 );
 
@@ -4427,7 +5118,9 @@ CREATE TABLE semantic.identity_epoch_bootstrap_row (
     source_revision bigint NOT NULL,
     present boolean NOT NULL,
     previous_partition integer,
-    previous_terminal uuid
+    previous_terminal uuid,
+    closure_enrollment uuid DEFAULT gen_random_uuid() NOT NULL,
+    closure_complete boolean DEFAULT false NOT NULL
 );
 
 
@@ -4540,6 +5233,14 @@ CREATE TABLE semantic.identity_epoch_group (
     published_epoch bigint DEFAULT 1 NOT NULL,
     pending_job uuid,
     pending_epoch bigint,
+    closure_incarnation uuid DEFAULT gen_random_uuid() NOT NULL,
+    closure_state text DEFAULT 'open'::text NOT NULL,
+    closure_claim uuid,
+    closure_after uuid,
+    closure_close_transaction uuid,
+    closure_seal_transaction uuid,
+    closure_cleanup_complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_epoch_group_closure_state_check CHECK ((closure_state = ANY (ARRAY['open'::text, 'closing'::text, 'drained'::text]))),
     CONSTRAINT identity_epoch_group_observed_count_check CHECK ((observed_count >= 0))
 );
 
@@ -4668,7 +5369,30 @@ CREATE TABLE semantic.identity_epoch_mapping (
     source_revision bigint DEFAULT 0 NOT NULL,
     owner_epoch integer DEFAULT 1 NOT NULL,
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    closure_state text DEFAULT 'legacy'::text NOT NULL,
+    closure_enrollment uuid,
+    closure_generation uuid,
+    closure_incarnation uuid,
+    closure_immediate uuid,
+    closure_export_transaction uuid,
+    closure_hold_transaction uuid,
+    closure_hold_xid text,
+    closure_registration_transaction uuid,
+    closure_install_transaction uuid,
+    closure_install_xid text,
+    closure_ack_transaction uuid,
+    closure_ack_xid text,
+    closure_source_reservation uuid,
+    closure_claim uuid,
+    closure_withdraw_transaction uuid,
+    closure_withdraw_xid text,
+    closure_successor_ticket uuid,
+    closure_successor_original uuid,
+    closure_ticket_reservation uuid,
+    closure_mutation_xid text,
+    closure_cancelled_successor boolean DEFAULT false NOT NULL,
     CONSTRAINT identity_epoch_mapping_check CHECK ((route = ((get_byte(uuid_send(original), 10) * 256) + get_byte(uuid_send(original), 11)))),
+    CONSTRAINT identity_epoch_mapping_closure_state_check CHECK ((closure_state = ANY (ARRAY['legacy'::text, 'exporting'::text, 'installed'::text, 'active'::text, 'withdrawn'::text]))),
     CONSTRAINT identity_epoch_mapping_epoch_check CHECK ((epoch >= 0)),
     CONSTRAINT identity_epoch_mapping_origin_check CHECK ((origin = ANY (ARRAY['creation'::text, 'published'::text]))),
     CONSTRAINT identity_epoch_mapping_route_check CHECK (((route >= 0) AND (route <= 65535)))
@@ -4717,6 +5441,9 @@ CREATE TABLE semantic.identity_epoch_mapping_generation (
     generation uuid NOT NULL,
     terminal uuid NOT NULL,
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    closure_copies integer DEFAULT 0 NOT NULL,
+    closure_source_pool boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_epoch_mapping_generation_closure_copies_check CHECK (((closure_copies >= 0) AND (closure_copies <= 4096))),
     CONSTRAINT identity_epoch_mapping_generation_slot_check CHECK (((slot >= 0) AND (slot <= 3)))
 );
 
@@ -4839,7 +5566,7 @@ CREATE TABLE semantic.identity_epoch_native_commit (
     "position" bigint NOT NULL,
     purpose text NOT NULL,
     CONSTRAINT identity_epoch_native_commit_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK ((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text, 'identity-prearm'::text, 'identity-prearm-cancel'::text, 'identity-scope-registration'::text, 'identity-scope-enrollment'::text, 'identity-scope-preparation'::text, 'identity-scope-cancellation'::text, 'identity-public-capture'::text, 'identity-scope-finish'::text, 'identity-scope-retirement'::text, 'identity-scope-directory-release'::text, 'identity-prearm-release'::text])))
+    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK (((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text, 'identity-prearm'::text, 'identity-prearm-cancel'::text, 'identity-scope-registration'::text, 'identity-scope-enrollment'::text, 'identity-scope-preparation'::text, 'identity-scope-cancellation'::text, 'identity-public-capture'::text, 'identity-scope-finish'::text, 'identity-scope-retirement'::text, 'identity-scope-directory-release'::text, 'identity-prearm-release'::text])) OR (purpose = 'identity-public-output-capture'::text) OR (purpose = ANY (ARRAY['identity-public-output-applied'::text, 'identity-public-output-cancelled'::text]))))
 );
 
 
@@ -4854,7 +5581,23 @@ CREATE TABLE semantic.identity_epoch_original (
     source_partition integer NOT NULL,
     source_generation bigint NOT NULL,
     present boolean NOT NULL,
-    generation uuid NOT NULL
+    generation uuid NOT NULL,
+    closure_state text DEFAULT 'legacy'::text NOT NULL,
+    closure_enrollment uuid,
+    closure_incarnation uuid,
+    closure_source_revision bigint,
+    closure_source_epoch integer,
+    closure_export_transaction uuid,
+    closure_registration_transaction uuid,
+    closure_registration_xid text,
+    closure_install_transaction uuid,
+    closure_disposition_transaction uuid,
+    closure_release_transaction uuid,
+    closure_disposition_epoch integer,
+    closure_disposition_position bigint,
+    closure_claim uuid,
+    closure_reservation uuid,
+    CONSTRAINT identity_epoch_original_closure_state_check CHECK ((closure_state = ANY (ARRAY['legacy'::text, 'preparing'::text, 'installed'::text, 'withdrawn'::text])))
 );
 
 
@@ -5396,6 +6139,314 @@ CREATE TABLE semantic.identity_public_dirty (
 
 
 --
+-- Name: identity_public_output_accepted; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_accepted (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    hold_id uuid NOT NULL,
+    binding_digest text NOT NULL,
+    definition_digest text NOT NULL,
+    binding jsonb NOT NULL,
+    definition jsonb NOT NULL,
+    scope_key text NOT NULL,
+    reservation_id text NOT NULL,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_public_output_accepted_binding_check CHECK ((octet_length((binding)::text) <= 16384)),
+    CONSTRAINT identity_public_output_accepted_definition_check CHECK ((octet_length((definition)::text) <= 2097152)),
+    CONSTRAINT identity_public_output_accepted_native_epoch_check CHECK ((native_epoch > 0)),
+    CONSTRAINT identity_public_output_accepted_native_position_check CHECK ((native_position > 0)),
+    CONSTRAINT identity_public_output_accepted_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_public_output_accepted_reservation_id_check CHECK ((octet_length(reservation_id) <= 256)),
+    CONSTRAINT identity_public_output_accepted_scope_key_check CHECK ((scope_key ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
+-- Name: identity_public_output_consumer; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_consumer (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    consumer_id uuid NOT NULL,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_public_output_consumer_native_epoch_check CHECK ((native_epoch > 0)),
+    CONSTRAINT identity_public_output_consumer_native_position_check CHECK ((native_position > 0)),
+    CONSTRAINT identity_public_output_consumer_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: identity_public_output_disposition; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_disposition (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    hold_id uuid NOT NULL,
+    binding_digest text NOT NULL,
+    kind text NOT NULL,
+    manifest_digest text,
+    seal_transaction_id uuid,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_public_output_disposition_kind_check CHECK ((kind = ANY (ARRAY['applied'::text, 'cancelled'::text]))),
+    CONSTRAINT identity_public_output_disposition_native_epoch_check CHECK ((native_epoch > 0)),
+    CONSTRAINT identity_public_output_disposition_native_position_check CHECK ((native_position > 0)),
+    CONSTRAINT identity_public_output_disposition_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: identity_public_output_fence; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_fence (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    kind text NOT NULL,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_public_output_fence_kind_check CHECK ((kind = ANY (ARRAY['applied'::text, 'cancelled'::text]))),
+    CONSTRAINT identity_public_output_fence_native_epoch_check CHECK ((native_epoch > 0)),
+    CONSTRAINT identity_public_output_fence_native_position_check CHECK ((native_position > 0)),
+    CONSTRAINT identity_public_output_fence_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: identity_public_output_gate; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_gate (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    original_epoch bigint NOT NULL,
+    receiving_epoch bigint NOT NULL,
+    enrolled_count bigint DEFAULT 0 NOT NULL,
+    state text DEFAULT 'open'::text NOT NULL,
+    native_epoch integer,
+    native_position bigint,
+    transaction_id uuid,
+    native_xid xid8,
+    CONSTRAINT identity_public_output_gate_check CHECK ((((state = 'open'::text) AND (receiving_epoch = original_epoch) AND (transaction_id IS NULL) AND (native_epoch IS NULL) AND (native_position IS NULL) AND (native_xid IS NULL)) OR ((state <> 'open'::text) AND (receiving_epoch = (original_epoch + 1)) AND (transaction_id IS NOT NULL) AND (native_epoch IS NOT NULL) AND (native_position > 0) AND (native_xid IS NOT NULL)))),
+    CONSTRAINT identity_public_output_gate_enrolled_count_check CHECK ((enrolled_count >= 0)),
+    CONSTRAINT identity_public_output_gate_original_epoch_check CHECK ((original_epoch > 0)),
+    CONSTRAINT identity_public_output_gate_state_check CHECK ((state = ANY (ARRAY['open'::text, 'applied'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: identity_public_output_member; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_member (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    terminal uuid NOT NULL,
+    CONSTRAINT identity_public_output_member_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: identity_public_output_original; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_original (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    original uuid NOT NULL,
+    terminal uuid NOT NULL,
+    mapping_epoch bigint NOT NULL,
+    CONSTRAINT identity_public_output_original_mapping_epoch_check CHECK ((mapping_epoch > 0)),
+    CONSTRAINT identity_public_output_original_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: identity_public_output_page; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_page (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    version bigint NOT NULL,
+    predecessor text NOT NULL,
+    manifest_digest text NOT NULL,
+    body jsonb NOT NULL,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_public_output_page_body_check CHECK ((octet_length((body)::text) <= 65536)),
+    CONSTRAINT identity_public_output_page_native_epoch_check CHECK ((native_epoch > 0)),
+    CONSTRAINT identity_public_output_page_native_position_check CHECK ((native_position > 0)),
+    CONSTRAINT identity_public_output_page_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_public_output_page_version_check CHECK ((version > 0))
+);
+
+
+--
+-- Name: identity_public_output_progress; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_progress (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    version bigint DEFAULT 0 NOT NULL,
+    after_key jsonb,
+    exhausted boolean DEFAULT false NOT NULL,
+    manifest_digest text NOT NULL,
+    raw_count bigint DEFAULT 0 NOT NULL,
+    canonical_count bigint DEFAULT 0 NOT NULL,
+    pending jsonb,
+    closure_after bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT identity_public_output_progress_canonical_count_check CHECK ((canonical_count >= 0)),
+    CONSTRAINT identity_public_output_progress_closure_after_check CHECK ((closure_after >= 0)),
+    CONSTRAINT identity_public_output_progress_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_public_output_progress_pending_check CHECK ((octet_length((pending)::text) <= 65536)),
+    CONSTRAINT identity_public_output_progress_raw_count_check CHECK ((raw_count >= 0)),
+    CONSTRAINT identity_public_output_progress_version_check CHECK ((version >= 0))
+);
+
+
+--
+-- Name: identity_public_output_seal; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_seal (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    manifest_digest text NOT NULL,
+    version bigint NOT NULL,
+    raw_count bigint NOT NULL,
+    canonical_count bigint NOT NULL,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_public_output_seal_canonical_count_check CHECK ((canonical_count >= 0)),
+    CONSTRAINT identity_public_output_seal_native_epoch_check CHECK ((native_epoch > 0)),
+    CONSTRAINT identity_public_output_seal_native_position_check CHECK ((native_position > 0)),
+    CONSTRAINT identity_public_output_seal_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_public_output_seal_raw_count_check CHECK ((raw_count >= 0)),
+    CONSTRAINT identity_public_output_seal_version_check CHECK ((version >= 0))
+);
+
+
+--
+-- Name: identity_public_output_stage; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_stage (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    hold_id uuid NOT NULL,
+    binding_digest text NOT NULL,
+    original_receiving_epoch bigint NOT NULL,
+    kind text NOT NULL,
+    purpose text NOT NULL,
+    successor_hold_id uuid,
+    cancellation_epoch bigint,
+    manifest_digest text,
+    seal_transaction_id uuid,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    native_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    CONSTRAINT identity_public_output_stage_check CHECK ((((kind = 'applied'::text) AND (purpose = 'identity-public-output-applied'::text) AND (successor_hold_id IS NOT NULL) AND (successor_hold_id <> hold_id) AND (cancellation_epoch IS NULL) AND (manifest_digest IS NOT NULL) AND (manifest_digest ~ '^[0-9a-f]{64}$'::text) AND (seal_transaction_id IS NOT NULL)) OR ((kind = 'cancelled'::text) AND (purpose = 'identity-public-output-cancelled'::text) AND (successor_hold_id IS NULL) AND (cancellation_epoch IS NOT NULL) AND (cancellation_epoch = (original_receiving_epoch + 1)) AND (manifest_digest IS NULL) AND (seal_transaction_id IS NULL)))),
+    CONSTRAINT identity_public_output_stage_kind_check CHECK ((kind = ANY (ARRAY['applied'::text, 'cancelled'::text]))),
+    CONSTRAINT identity_public_output_stage_native_position_check CHECK ((native_position > 0)),
+    CONSTRAINT identity_public_output_stage_original_receiving_epoch_check CHECK ((original_receiving_epoch > 0))
+);
+
+
+--
+-- Name: identity_public_output_subject_cut; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_subject_cut (
+    partition_no integer NOT NULL,
+    capture_partition integer NOT NULL,
+    capture_id uuid NOT NULL,
+    original uuid NOT NULL,
+    generation uuid NOT NULL,
+    terminal uuid NOT NULL,
+    mapping_epoch bigint NOT NULL,
+    scope_key text NOT NULL,
+    registration uuid NOT NULL,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_public_output_subject_cut_mapping_epoch_check CHECK ((mapping_epoch > 0)),
+    CONSTRAINT identity_public_output_subject_cut_native_epoch_check CHECK ((native_epoch > 0)),
+    CONSTRAINT identity_public_output_subject_cut_native_position_check CHECK ((native_position > 0)),
+    CONSTRAINT identity_public_output_subject_cut_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: identity_public_output_subject_release; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_subject_release (
+    partition_no integer NOT NULL,
+    capture_partition integer CONSTRAINT identity_public_output_subject_relea_capture_partition_not_null NOT NULL,
+    capture_id uuid NOT NULL,
+    original uuid NOT NULL,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_public_output_subject_release_native_epoch_check CHECK ((native_epoch > 0)),
+    CONSTRAINT identity_public_output_subject_release_native_position_check CHECK ((native_position > 0)),
+    CONSTRAINT identity_public_output_subject_release_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: identity_public_output_subject_slot; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_subject_slot (
+    partition_no integer NOT NULL,
+    capture_partition integer NOT NULL,
+    capture_id uuid NOT NULL,
+    original uuid NOT NULL,
+    generation uuid NOT NULL,
+    terminal uuid NOT NULL,
+    released boolean NOT NULL,
+    CONSTRAINT identity_public_output_subject_slot_capture_partition_check CHECK (((capture_partition >= 0) AND (capture_partition <= 4095))),
+    CONSTRAINT identity_public_output_subject_slot_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: identity_public_output_transition; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_output_transition (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    kind text NOT NULL,
+    successor_hold_id uuid,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_public_output_transition_check CHECK (((kind = 'applied'::text) = (successor_hold_id IS NOT NULL))),
+    CONSTRAINT identity_public_output_transition_kind_check CHECK ((kind = ANY (ARRAY['applied'::text, 'cancelled'::text]))),
+    CONSTRAINT identity_public_output_transition_native_epoch_check CHECK ((native_epoch > 0)),
+    CONSTRAINT identity_public_output_transition_native_position_check CHECK ((native_position > 0)),
+    CONSTRAINT identity_public_output_transition_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
 -- Name: identity_public_writer; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -5555,6 +6606,45 @@ CREATE TABLE semantic.identity_scope_inverse (
 
 
 --
+-- Name: identity_scope_native_association; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_scope_native_association (
+    partition_no integer NOT NULL,
+    source_key text NOT NULL,
+    scope_id text NOT NULL,
+    registration uuid NOT NULL,
+    capture_id uuid NOT NULL,
+    revision bigint NOT NULL,
+    phase text NOT NULL,
+    scan_complete boolean NOT NULL,
+    job_id uuid,
+    job_epoch bigint,
+    attempt jsonb,
+    completion_version bigint,
+    source jsonb NOT NULL,
+    transaction_id uuid NOT NULL,
+    epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    purpose text NOT NULL,
+    CONSTRAINT identity_scope_native_association_attempt_check CHECK ((octet_length((attempt)::text) <= 1024)),
+    CONSTRAINT identity_scope_native_association_check CHECK (((job_id IS NULL) = (job_epoch IS NULL))),
+    CONSTRAINT identity_scope_native_association_check1 CHECK (((phase <> 'finish'::text) OR ((job_id IS NOT NULL) AND (attempt IS NOT NULL) AND (completion_version IS NOT NULL)))),
+    CONSTRAINT identity_scope_native_association_completion_version_check CHECK ((completion_version > 0)),
+    CONSTRAINT identity_scope_native_association_epoch_check CHECK ((epoch > 0)),
+    CONSTRAINT identity_scope_native_association_job_epoch_check CHECK ((job_epoch > 0)),
+    CONSTRAINT identity_scope_native_association_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_scope_native_association_phase_check CHECK ((phase = ANY (ARRAY['registration'::text, 'capture'::text, 'enrollment'::text, 'ready'::text, 'progress'::text, 'finish'::text]))),
+    CONSTRAINT identity_scope_native_association_position_check CHECK (("position" > 0)),
+    CONSTRAINT identity_scope_native_association_purpose_check CHECK ((purpose = ANY (ARRAY['identity-scope-registration'::text, 'identity-scope-enrollment'::text, 'identity-scope-finish'::text]))),
+    CONSTRAINT identity_scope_native_association_revision_check CHECK ((revision > 0)),
+    CONSTRAINT identity_scope_native_association_scope_id_check CHECK (((octet_length(scope_id) >= 1) AND (octet_length(scope_id) <= 256))),
+    CONSTRAINT identity_scope_native_association_source_check CHECK ((octet_length((source)::text) <= 4096)),
+    CONSTRAINT identity_scope_native_association_source_key_check CHECK (((octet_length(source_key) >= 1) AND (octet_length(source_key) <= 256)))
+);
+
+
+--
 -- Name: identity_scope_prearm_receipt; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -5586,35 +6676,6 @@ CREATE TABLE semantic.identity_scope_repair_cursor (
     scope_id text DEFAULT ''::text NOT NULL,
     CONSTRAINT identity_scope_repair_cursor_next_home_check CHECK (((next_home >= 0) AND (next_home <= 4095))),
     CONSTRAINT identity_scope_repair_cursor_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
-);
-
-
---
--- Name: identity_scope_native_association; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.identity_scope_native_association (
-    partition_no integer NOT NULL CHECK (partition_no BETWEEN 0 AND 4095),
-    source_key text NOT NULL CHECK (octet_length(source_key) BETWEEN 1 AND 256),
-    scope_id text NOT NULL CHECK (octet_length(scope_id) BETWEEN 1 AND 256),
-    registration uuid NOT NULL,
-    capture_id uuid NOT NULL,
-    revision bigint NOT NULL CHECK (revision > 0),
-    phase text NOT NULL CHECK (phase IN ('registration','capture','enrollment','ready','progress','finish')),
-    scan_complete boolean NOT NULL,
-    job_id uuid,
-    job_epoch bigint CHECK (job_epoch > 0),
-    attempt jsonb CHECK (octet_length(attempt::text) <= 1024),
-    completion_version bigint CHECK (completion_version > 0),
-    CHECK ((job_id IS NULL) = (job_epoch IS NULL)),
-    CHECK (phase <> 'finish' OR (job_id IS NOT NULL AND attempt IS NOT NULL AND completion_version IS NOT NULL)),
-    source jsonb NOT NULL CHECK (octet_length(source::text) <= 4096),
-    transaction_id uuid NOT NULL,
-    epoch integer NOT NULL CHECK (epoch > 0),
-    position bigint NOT NULL CHECK (position > 0),
-    purpose text NOT NULL CHECK (purpose IN ('identity-scope-registration','identity-scope-enrollment','identity-scope-finish')),
-    PRIMARY KEY (partition_no,source_key,scope_id,registration,capture_id,revision,phase),
-    FOREIGN KEY (partition_no,transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no,transaction_id)
 );
 
 
@@ -5724,6 +6785,30 @@ CREATE TABLE semantic.kind_type_anchor_fence (
     CONSTRAINT kind_type_anchor_fence_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT kind_type_anchor_fence_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT kind_type_anchor_fence_version_check CHECK ((version >= 0))
+);
+
+
+--
+-- Name: kind_type_evidence_body; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.kind_type_evidence_body (
+    route integer NOT NULL,
+    owner_account_id uuid NOT NULL,
+    collection_id uuid NOT NULL,
+    preparation_id uuid NOT NULL,
+    evidence_id uuid NOT NULL,
+    binding jsonb NOT NULL,
+    body jsonb NOT NULL,
+    progress jsonb NOT NULL,
+    producer_transaction text NOT NULL,
+    CONSTRAINT kind_type_evidence_body_binding_check CHECK (((jsonb_typeof(binding) = 'object'::text) AND (octet_length((binding)::text) <= 16384))),
+    CONSTRAINT kind_type_evidence_body_body_check CHECK (((jsonb_typeof(body) = 'object'::text) AND (octet_length((body)::text) <= 16384))),
+    CONSTRAINT kind_type_evidence_body_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT kind_type_evidence_body_check1 CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11)))),
+    CONSTRAINT kind_type_evidence_body_producer_transaction_check CHECK ((producer_transaction ~ '^[0-9]{1,20}$'::text)),
+    CONSTRAINT kind_type_evidence_body_progress_check CHECK (((jsonb_typeof(progress) = 'object'::text) AND (octet_length((progress)::text) <= 4096))),
+    CONSTRAINT kind_type_evidence_body_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -5935,8 +7020,16 @@ CREATE TABLE semantic.public_filter_bootstrap (
     state text NOT NULL,
     account_after integer DEFAULT 0 NOT NULL,
     queried text,
+    coverage_generation bigint,
+    coverage_after integer DEFAULT 0 NOT NULL,
+    coverage_root text,
+    coverage_sealed boolean DEFAULT false NOT NULL,
     CONSTRAINT public_filter_bootstrap_account_after_check CHECK (((account_after >= 0) AND (account_after <= 4096))),
+    CONSTRAINT public_filter_bootstrap_complete_coverage CHECK (((NOT coverage_sealed) OR ((coverage_after = 4096) AND (coverage_generation IS NOT NULL) AND (coverage_root IS NOT NULL)))),
     CONSTRAINT public_filter_bootstrap_consumer_check CHECK ((octet_length(consumer) <= 16384)),
+    CONSTRAINT public_filter_bootstrap_coverage_after_check CHECK (((coverage_after >= 0) AND (coverage_after <= 4096))),
+    CONSTRAINT public_filter_bootstrap_coverage_generation_check CHECK ((coverage_generation >= 0)),
+    CONSTRAINT public_filter_bootstrap_coverage_root_check CHECK ((coverage_root ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT public_filter_bootstrap_owner_epoch_check CHECK ((owner_epoch > 0)),
     CONSTRAINT public_filter_bootstrap_snapshot_kind_check CHECK ((snapshot_kind = ANY (ARRAY['pit'::text, 'prepared'::text]))),
     CONSTRAINT public_filter_bootstrap_state_check CHECK ((state = ANY (ARRAY['capturing'::text, 'begun'::text, 'adopted'::text, 'aborting'::text, 'aborted'::text])))
@@ -5962,13 +7055,59 @@ CREATE TABLE semantic.public_filter_bootstrap_account (
 
 
 --
+-- Name: public_filter_home_enrollment; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_home_enrollment (
+    partition_no integer NOT NULL,
+    bootstrap uuid NOT NULL,
+    registration_partition integer NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    read_definition uuid NOT NULL,
+    owner_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    native_revision bigint,
+    native_claim_revision bigint,
+    key_after text COLLATE pg_catalog."C",
+    complete boolean DEFAULT false NOT NULL,
+    creation_position bigint,
+    native_enqueue_revision bigint,
+    key_digest text,
+    receipt text,
+    creation_consumer text,
+    CONSTRAINT public_filter_home_enrollment_check CHECK (((native_revision IS NULL) = (native_claim_revision IS NULL))),
+    CONSTRAINT public_filter_home_enrollment_creation_consumer_check CHECK ((creation_consumer ~ '^public_filter_[0-9a-f]{32}$'::text)),
+    CONSTRAINT public_filter_home_enrollment_creation_position_check CHECK ((creation_position >= 0)),
+    CONSTRAINT public_filter_home_enrollment_key_digest_check CHECK ((key_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT public_filter_home_enrollment_native_enqueue_revision_check CHECK ((native_enqueue_revision >= 0)),
+    CONSTRAINT public_filter_home_enrollment_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT public_filter_home_enrollment_receipt_check CHECK ((receipt ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT public_filter_home_enrollment_registration_partition_check CHECK (((registration_partition >= 0) AND (registration_partition <= 4095))),
+    CONSTRAINT public_filter_home_enrollment_source_position_check CHECK ((source_position >= 0))
+);
+
+
+--
+-- Name: public_filter_key_enrollment; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_key_enrollment (
+    partition_no integer NOT NULL,
+    input_key text NOT NULL COLLATE pg_catalog."C",
+    registration_partition integer NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    bootstrap uuid NOT NULL
+);
+
+
+--
 -- Name: public_filter_privacy_head; Type: TABLE; Schema: semantic; Owner: -
 --
 
 CREATE TABLE semantic.public_filter_privacy_head (
     partition_no integer NOT NULL,
-    position bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT public_filter_privacy_head_position_check CHECK ((position >= 0))
+    "position" bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT public_filter_privacy_head_position_check CHECK (("position" >= 0))
 );
 
 
@@ -5979,17 +7118,135 @@ CREATE TABLE semantic.public_filter_privacy_head (
 CREATE TABLE semantic.public_filter_privacy_log (
     partition_no integer NOT NULL,
     owner_epoch integer NOT NULL,
-    position bigint NOT NULL,
+    "position" bigint NOT NULL,
     transaction_id uuid NOT NULL,
     cause text NOT NULL,
     affected jsonb NOT NULL,
     impacts jsonb NOT NULL,
     recorded_at timestamp with time zone NOT NULL,
-    CONSTRAINT public_filter_privacy_log_epoch_check CHECK ((owner_epoch > 0)),
-    CONSTRAINT public_filter_privacy_log_position_check CHECK ((position > 0)),
-    CONSTRAINT public_filter_privacy_log_cause_check CHECK ((cause = ANY (ARRAY['subject'::text, 'candidate'::text, 'selection'::text, 'sourceTuple'::text, 'consent'::text, 'collection'::text, 'realm'::text, 'board'::text]))),
     CONSTRAINT public_filter_privacy_log_affected_check CHECK ((jsonb_typeof(affected) = 'array'::text)),
-    CONSTRAINT public_filter_privacy_log_impacts_check CHECK ((jsonb_typeof(impacts) = 'array'::text))
+    CONSTRAINT public_filter_privacy_log_cause_check CHECK ((cause = ANY (ARRAY['subject'::text, 'candidate'::text, 'selection'::text, 'sourceTuple'::text, 'consent'::text, 'collection'::text, 'realm'::text, 'board'::text]))),
+    CONSTRAINT public_filter_privacy_log_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT public_filter_privacy_log_impacts_check CHECK ((jsonb_typeof(impacts) = 'array'::text)),
+    CONSTRAINT public_filter_privacy_log_position_check CHECK (("position" > 0))
+);
+
+
+--
+-- Name: public_filter_privacy_pending; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_privacy_pending (
+    partition_no integer NOT NULL,
+    input_key text NOT NULL COLLATE pg_catalog."C",
+    owner_epoch integer NOT NULL,
+    first_position bigint,
+    through_position bigint,
+    enqueue_revision bigint NOT NULL,
+    captured_through bigint,
+    captured_revision bigint,
+    captured_epoch integer,
+    fanout_frontier text,
+    live boolean DEFAULT true NOT NULL,
+    next_first_position bigint,
+    native_captured_enqueue bigint,
+    native_captured_epoch integer,
+    native_revision bigint,
+    native_claim_revision bigint,
+    native_transaction xid8,
+    captured_native_revision bigint,
+    captured_native_claim_revision bigint,
+    CONSTRAINT public_filter_pending_native_domain CHECK ((((input_key = '["domain","accounts"]'::text) AND (first_position IS NULL) AND (through_position IS NULL) AND (native_revision IS NOT NULL) AND (native_revision > 0) AND (native_claim_revision IS NOT NULL) AND (native_claim_revision > 0) AND (native_transaction IS NOT NULL)) OR ((input_key <> '["domain","accounts"]'::text) AND (first_position IS NOT NULL) AND (through_position IS NOT NULL) AND (native_revision IS NULL) AND (native_claim_revision IS NULL) AND (native_transaction IS NULL)))),
+    CONSTRAINT public_filter_privacy_pending_check CHECK ((through_position >= first_position)),
+    CONSTRAINT public_filter_privacy_pending_check1 CHECK (((captured_through IS NULL) = (captured_revision IS NULL))),
+    CONSTRAINT public_filter_privacy_pending_check2 CHECK (((captured_through IS NULL) = (captured_epoch IS NULL))),
+    CONSTRAINT public_filter_privacy_pending_check3 CHECK (((captured_through IS NULL) OR (((captured_through >= first_position) AND (captured_through <= through_position)) AND (captured_revision > 0) AND (captured_revision <= enqueue_revision) AND (captured_epoch > 0)))),
+    CONSTRAINT public_filter_privacy_pending_enqueue_revision_check CHECK ((enqueue_revision > 0)),
+    CONSTRAINT public_filter_privacy_pending_first_position_check CHECK ((first_position > 0)),
+    CONSTRAINT public_filter_privacy_pending_owner_epoch_check CHECK ((owner_epoch > 0))
+);
+
+
+--
+-- Name: public_filter_privacy_subject; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_privacy_subject (
+    partition_no integer NOT NULL,
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    owner_epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    CONSTRAINT public_filter_privacy_subject_check CHECK (((route >= (partition_no * 16)) AND (route < ((partition_no + 1) * 16)))),
+    CONSTRAINT public_filter_privacy_subject_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT public_filter_privacy_subject_position_check CHECK (("position" > 0))
+);
+
+
+--
+-- Name: public_filter_projection_build; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_projection_build (
+    partition_no integer NOT NULL,
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    meaning_digest text NOT NULL,
+    meaning_type text NOT NULL,
+    build_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    owner_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    privacy_position bigint NOT NULL,
+    terminal_id uuid NOT NULL,
+    subject_revision integer NOT NULL,
+    security_revision bigint NOT NULL,
+    current_release text NOT NULL,
+    CONSTRAINT public_filter_projection_build_check CHECK (((route >= (partition_no * 16)) AND (route < ((partition_no + 1) * 16)))),
+    CONSTRAINT public_filter_projection_build_generation_check CHECK ((generation > 0)),
+    CONSTRAINT public_filter_projection_build_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT public_filter_projection_build_privacy_position_check CHECK ((privacy_position >= 0)),
+    CONSTRAINT public_filter_projection_build_security_revision_check CHECK ((security_revision >= 0)),
+    CONSTRAINT public_filter_projection_build_source_position_check CHECK ((source_position >= 0)),
+    CONSTRAINT public_filter_projection_build_subject_revision_check CHECK ((subject_revision > 0))
+);
+
+
+--
+-- Name: public_filter_projection_head; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_projection_head (
+    build_id uuid NOT NULL,
+    partition_no integer NOT NULL,
+    owner_epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    CONSTRAINT public_filter_projection_head_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT public_filter_projection_head_position_check CHECK (("position" >= 0))
+);
+
+
+--
+-- Name: public_filter_projection_replay; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_projection_replay (
+    partition_no integer DEFAULT 0 NOT NULL,
+    bootstrap uuid NOT NULL,
+    execution text NOT NULL,
+    predecessor text NOT NULL,
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    request_digest text NOT NULL,
+    page_data text NOT NULL,
+    page_digest text NOT NULL,
+    CONSTRAINT public_filter_projection_replay_check CHECK (((route >= (partition_no * 16)) AND (route < ((partition_no + 1) * 16)))),
+    CONSTRAINT public_filter_projection_replay_execution_check CHECK (((octet_length(execution) >= 1) AND (octet_length(execution) <= 4096))),
+    CONSTRAINT public_filter_projection_replay_page_digest_check CHECK ((page_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT public_filter_projection_replay_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT public_filter_projection_replay_predecessor_check CHECK (((predecessor = ''::text) OR (predecessor ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text))),
+    CONSTRAINT public_filter_projection_replay_request_digest_check CHECK ((request_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT public_filter_projection_replay_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -6049,11 +7306,25 @@ CREATE TABLE semantic.public_filter_repair_step (
     input_limit integer,
     receipt_protocol integer,
     repair_locator_digests bytea,
+    verified_binding text,
+    verified_root text,
+    verified_ordinal bigint,
+    verified_next uuid,
+    verified_home integer,
+    ack_after integer DEFAULT 0 NOT NULL,
+    CONSTRAINT public_filter_repair_ack_proof CHECK (((ack_after = 0) OR (complete AND (verified_root IS NOT NULL) AND (verified_next IS NULL)))),
+    CONSTRAINT public_filter_repair_home_proof CHECK (((verified_home IS NULL) OR ((verified_root IS NOT NULL) AND (NOT complete)))),
+    CONSTRAINT public_filter_repair_locator_digests_bound CHECK (((repair_locator_digests IS NULL) OR ((input_limit IS NOT NULL) AND (octet_length(repair_locator_digests) <= 8192) AND (mod(octet_length(repair_locator_digests), 32) = 0) AND ((octet_length(repair_locator_digests) / 32) <= input_limit)))),
+    CONSTRAINT public_filter_repair_step_ack_after_check CHECK (((ack_after >= 0) AND (ack_after <= 4096))),
     CONSTRAINT public_filter_repair_step_input_limit_check CHECK (((input_limit >= 1) AND (input_limit <= 256))),
     CONSTRAINT public_filter_repair_step_provenance CHECK (((input_limit IS NULL) = (receipt_protocol IS NULL))),
     CONSTRAINT public_filter_repair_step_receipt_protocol_check CHECK ((receipt_protocol = 1)),
-    CONSTRAINT public_filter_repair_locator_digests_bound CHECK (((repair_locator_digests IS NULL) OR ((input_limit IS NOT NULL) AND (octet_length(repair_locator_digests) <= 8192) AND (mod(octet_length(repair_locator_digests), 32) = 0) AND ((octet_length(repair_locator_digests) / 32) <= input_limit)))),
-    CONSTRAINT public_filter_repair_step_state_check CHECK ((octet_length(state) <= 16384))
+    CONSTRAINT public_filter_repair_step_state_check CHECK ((octet_length(state) <= 16384)),
+    CONSTRAINT public_filter_repair_step_verified_binding_check CHECK ((verified_binding ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT public_filter_repair_step_verified_home_check CHECK (((verified_home >= 0) AND (verified_home <= 4095))),
+    CONSTRAINT public_filter_repair_step_verified_ordinal_check CHECK ((verified_ordinal > 0)),
+    CONSTRAINT public_filter_repair_step_verified_root_check CHECK ((verified_root ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT public_filter_repair_verified_fields CHECK ((((verified_binding IS NULL) = (verified_root IS NULL)) AND ((verified_binding IS NULL) = (verified_ordinal IS NULL)) AND ((verified_next IS NULL) OR (verified_root IS NOT NULL))))
 );
 
 
@@ -7033,6 +8304,22 @@ ALTER TABLE ONLY semantic.definition_activation
 
 
 --
+-- Name: definition_catalogue_activation definition_catalogue_activation_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_activation
+    ADD CONSTRAINT definition_catalogue_activation_pkey PRIMARY KEY (route, root_digest);
+
+
+--
+-- Name: definition_catalogue_activation definition_catalogue_activation_route_activation_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_activation
+    ADD CONSTRAINT definition_catalogue_activation_route_activation_id_key UNIQUE (route, activation_id);
+
+
+--
 -- Name: definition_catalogue_artifact definition_catalogue_artifact_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -7046,6 +8333,54 @@ ALTER TABLE ONLY semantic.definition_catalogue_artifact
 
 ALTER TABLE ONLY semantic.definition_catalogue_build
     ADD CONSTRAINT definition_catalogue_build_pkey PRIMARY KEY (route, root_digest);
+
+
+--
+-- Name: definition_catalogue_consumer definition_catalogue_consumer_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_consumer
+    ADD CONSTRAINT definition_catalogue_consumer_pkey PRIMARY KEY (route, root_digest, id);
+
+
+--
+-- Name: definition_catalogue_consumer definition_catalogue_consumer_route_root_digest_sequence_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_consumer
+    ADD CONSTRAINT definition_catalogue_consumer_route_root_digest_sequence_key UNIQUE (route, root_digest, sequence);
+
+
+--
+-- Name: definition_catalogue_enrollment definition_catalogue_enrollme_route_root_digest_closed_gene_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_enrollment
+    ADD CONSTRAINT definition_catalogue_enrollme_route_root_digest_closed_gene_key UNIQUE (route, root_digest, closed_generation);
+
+
+--
+-- Name: definition_catalogue_enrollment definition_catalogue_enrollment_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_enrollment
+    ADD CONSTRAINT definition_catalogue_enrollment_pkey PRIMARY KEY (route, root_digest);
+
+
+--
+-- Name: definition_catalogue_frontier definition_catalogue_frontier_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_frontier
+    ADD CONSTRAINT definition_catalogue_frontier_pkey PRIMARY KEY (route, root_digest, slot);
+
+
+--
+-- Name: definition_catalogue_frontier definition_catalogue_frontier_route_root_digest_consumer_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_frontier
+    ADD CONSTRAINT definition_catalogue_frontier_route_root_digest_consumer_id_key UNIQUE (route, root_digest, consumer_id);
 
 
 --
@@ -7097,11 +8432,51 @@ ALTER TABLE ONLY semantic.definition_catalogue_member
 
 
 --
+-- Name: definition_catalogue_original definition_catalogue_original_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_original
+    ADD CONSTRAINT definition_catalogue_original_pkey PRIMARY KEY (route, original_key);
+
+
+--
+-- Name: definition_catalogue_position definition_catalogue_position_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_position
+    ADD CONSTRAINT definition_catalogue_position_pkey PRIMARY KEY (route, root_digest, phase, native_position);
+
+
+--
+-- Name: definition_catalogue_retirement definition_catalogue_retirement_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_retirement
+    ADD CONSTRAINT definition_catalogue_retirement_pkey PRIMARY KEY (route, root_digest);
+
+
+--
 -- Name: definition_catalogue_task definition_catalogue_task_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.definition_catalogue_task
     ADD CONSTRAINT definition_catalogue_task_pkey PRIMARY KEY (route, root_digest, task_id);
+
+
+--
+-- Name: definition_catalogue_ticket definition_catalogue_ticket_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_ticket
+    ADD CONSTRAINT definition_catalogue_ticket_pkey PRIMARY KEY (route, original_key, slot);
+
+
+--
+-- Name: definition_catalogue_ticket definition_catalogue_ticket_route_original_key_kind_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_ticket
+    ADD CONSTRAINT definition_catalogue_ticket_route_original_key_kind_key UNIQUE (route, original_key, kind);
 
 
 --
@@ -7929,6 +9304,126 @@ ALTER TABLE ONLY semantic.identity_public_dirty
 
 
 --
+-- Name: identity_public_output_accepted identity_public_output_accepted_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_accepted
+    ADD CONSTRAINT identity_public_output_accepted_pkey PRIMARY KEY (partition_no, capture_id);
+
+
+--
+-- Name: identity_public_output_consumer identity_public_output_consumer_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_consumer
+    ADD CONSTRAINT identity_public_output_consumer_pkey PRIMARY KEY (partition_no, capture_id, consumer_id);
+
+
+--
+-- Name: identity_public_output_disposition identity_public_output_disposition_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_disposition
+    ADD CONSTRAINT identity_public_output_disposition_pkey PRIMARY KEY (partition_no, capture_id);
+
+
+--
+-- Name: identity_public_output_fence identity_public_output_fence_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_fence
+    ADD CONSTRAINT identity_public_output_fence_pkey PRIMARY KEY (partition_no, capture_id);
+
+
+--
+-- Name: identity_public_output_gate identity_public_output_gate_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_gate
+    ADD CONSTRAINT identity_public_output_gate_pkey PRIMARY KEY (partition_no, capture_id);
+
+
+--
+-- Name: identity_public_output_member identity_public_output_member_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_member
+    ADD CONSTRAINT identity_public_output_member_pkey PRIMARY KEY (partition_no, capture_id, terminal);
+
+
+--
+-- Name: identity_public_output_original identity_public_output_original_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_original
+    ADD CONSTRAINT identity_public_output_original_pkey PRIMARY KEY (partition_no, capture_id, original);
+
+
+--
+-- Name: identity_public_output_page identity_public_output_page_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_page
+    ADD CONSTRAINT identity_public_output_page_pkey PRIMARY KEY (partition_no, capture_id, version);
+
+
+--
+-- Name: identity_public_output_progress identity_public_output_progress_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_progress
+    ADD CONSTRAINT identity_public_output_progress_pkey PRIMARY KEY (partition_no, capture_id);
+
+
+--
+-- Name: identity_public_output_seal identity_public_output_seal_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_seal
+    ADD CONSTRAINT identity_public_output_seal_pkey PRIMARY KEY (partition_no, capture_id);
+
+
+--
+-- Name: identity_public_output_stage identity_public_output_stage_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_stage
+    ADD CONSTRAINT identity_public_output_stage_pkey PRIMARY KEY (partition_no, capture_id);
+
+
+--
+-- Name: identity_public_output_subject_cut identity_public_output_subject_cut_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_subject_cut
+    ADD CONSTRAINT identity_public_output_subject_cut_pkey PRIMARY KEY (partition_no, capture_partition, capture_id, original);
+
+
+--
+-- Name: identity_public_output_subject_release identity_public_output_subject_release_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_subject_release
+    ADD CONSTRAINT identity_public_output_subject_release_pkey PRIMARY KEY (partition_no, capture_partition, capture_id, original);
+
+
+--
+-- Name: identity_public_output_subject_slot identity_public_output_subject_slot_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_subject_slot
+    ADD CONSTRAINT identity_public_output_subject_slot_pkey PRIMARY KEY (partition_no, capture_partition, capture_id, original);
+
+
+--
+-- Name: identity_public_output_transition identity_public_output_transition_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_transition
+    ADD CONSTRAINT identity_public_output_transition_pkey PRIMARY KEY (partition_no, capture_id);
+
+
+--
 -- Name: identity_public_writer identity_public_writer_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -7993,6 +9488,14 @@ ALTER TABLE ONLY semantic.identity_scope_inverse
 
 
 --
+-- Name: identity_scope_native_association identity_scope_native_association_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_scope_native_association
+    ADD CONSTRAINT identity_scope_native_association_pkey PRIMARY KEY (partition_no, source_key, scope_id, registration, capture_id, revision, phase);
+
+
+--
 -- Name: identity_scope_prearm_receipt identity_scope_prearm_receipt_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -8046,6 +9549,14 @@ ALTER TABLE ONLY semantic.inbound_link
 
 ALTER TABLE ONLY semantic.kind_type_anchor_fence
     ADD CONSTRAINT kind_type_anchor_fence_pkey PRIMARY KEY (route, subject_id);
+
+
+--
+-- Name: kind_type_evidence_body kind_type_evidence_body_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.kind_type_evidence_body
+    ADD CONSTRAINT kind_type_evidence_body_pkey PRIMARY KEY (route, owner_account_id, collection_id, preparation_id, evidence_id);
 
 
 --
@@ -8145,11 +9656,35 @@ ALTER TABLE ONLY semantic.public_filter_bootstrap
 
 
 --
+-- Name: public_filter_home_enrollment public_filter_home_enrollment_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_home_enrollment
+    ADD CONSTRAINT public_filter_home_enrollment_pkey PRIMARY KEY (partition_no, bootstrap);
+
+
+--
+-- Name: public_filter_key_enrollment public_filter_key_enrollment_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_key_enrollment
+    ADD CONSTRAINT public_filter_key_enrollment_pkey PRIMARY KEY (partition_no, input_key, registration_partition, registration, bootstrap);
+
+
+--
 -- Name: public_filter_privacy_head public_filter_privacy_head_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.public_filter_privacy_head
     ADD CONSTRAINT public_filter_privacy_head_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: public_filter_privacy_log public_filter_privacy_log_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_privacy_log
+    ADD CONSTRAINT public_filter_privacy_log_pkey PRIMARY KEY (partition_no, "position");
 
 
 --
@@ -8161,11 +9696,51 @@ ALTER TABLE ONLY semantic.public_filter_privacy_log
 
 
 --
--- Name: public_filter_privacy_log public_filter_privacy_log_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+-- Name: public_filter_privacy_pending public_filter_privacy_pending_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
-ALTER TABLE ONLY semantic.public_filter_privacy_log
-    ADD CONSTRAINT public_filter_privacy_log_pkey PRIMARY KEY (partition_no, position);
+ALTER TABLE ONLY semantic.public_filter_privacy_pending
+    ADD CONSTRAINT public_filter_privacy_pending_pkey PRIMARY KEY (partition_no, input_key);
+
+
+--
+-- Name: public_filter_privacy_subject public_filter_privacy_subject_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_privacy_subject
+    ADD CONSTRAINT public_filter_privacy_subject_pkey PRIMARY KEY (partition_no, subject_id);
+
+
+--
+-- Name: public_filter_projection_build public_filter_projection_build_build_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_projection_build
+    ADD CONSTRAINT public_filter_projection_build_build_id_key UNIQUE (build_id);
+
+
+--
+-- Name: public_filter_projection_build public_filter_projection_build_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_projection_build
+    ADD CONSTRAINT public_filter_projection_build_pkey PRIMARY KEY (partition_no, subject_id);
+
+
+--
+-- Name: public_filter_projection_head public_filter_projection_head_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_projection_head
+    ADD CONSTRAINT public_filter_projection_head_pkey PRIMARY KEY (build_id, partition_no);
+
+
+--
+-- Name: public_filter_projection_replay public_filter_projection_replay_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_projection_replay
+    ADD CONSTRAINT public_filter_projection_replay_pkey PRIMARY KEY (partition_no, bootstrap, execution, predecessor, route, subject_id, request_digest);
 
 
 --
@@ -8807,10 +10382,52 @@ CREATE UNIQUE INDEX definition_activation_erasure_key ON semantic.definition_act
 
 
 --
+-- Name: definition_catalogue_activation_head; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX definition_catalogue_activation_head ON semantic.definition_catalogue_activation USING btree (route, expected_head);
+
+
+--
+-- Name: definition_catalogue_activation_previous; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX definition_catalogue_activation_previous ON semantic.definition_catalogue_activation USING btree (route, previous_root, root_digest);
+
+
+--
 -- Name: definition_catalogue_candidates; Type: INDEX; Schema: semantic; Owner: -
 --
 
 CREATE INDEX definition_catalogue_candidates ON semantic.definition_catalogue_kind USING btree (route, root_digest, exact_type_key, precedence DESC, ordinal) WHERE eligible;
+
+
+--
+-- Name: definition_catalogue_consumer_invalidated; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX definition_catalogue_consumer_invalidated ON semantic.definition_catalogue_consumer USING btree (route, root_digest, sequence) WHERE (state = 'invalidated'::text);
+
+
+--
+-- Name: definition_catalogue_consumer_unresolved; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX definition_catalogue_consumer_unresolved ON semantic.definition_catalogue_consumer USING btree (route, root_digest, sequence) WHERE (state <> 'invalidated'::text);
+
+
+--
+-- Name: definition_catalogue_frontier_consumer; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX definition_catalogue_frontier_consumer ON semantic.definition_catalogue_frontier USING btree (route, consumer_id, root_digest);
+
+
+--
+-- Name: definition_catalogue_frontier_reverse; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX definition_catalogue_frontier_reverse ON semantic.definition_catalogue_frontier USING btree (route, consumer_root, consumer_id, slot);
 
 
 --
@@ -8828,10 +10445,38 @@ CREATE UNIQUE INDEX definition_catalogue_node_once ON semantic.definition_catalo
 
 
 --
+-- Name: definition_catalogue_original_root; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX definition_catalogue_original_root ON semantic.definition_catalogue_original USING btree (route, root_digest, original_key);
+
+
+--
+-- Name: definition_catalogue_original_terminal; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX definition_catalogue_original_terminal ON semantic.definition_catalogue_original USING btree (route, root_digest, original_key) WHERE (state = 'terminal'::text);
+
+
+--
+-- Name: definition_catalogue_original_unsettled; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX definition_catalogue_original_unsettled ON semantic.definition_catalogue_original USING btree (route, root_digest, original_key) WHERE (state <> 'terminal'::text);
+
+
+--
 -- Name: definition_catalogue_pending; Type: INDEX; Schema: semantic; Owner: -
 --
 
 CREATE INDEX definition_catalogue_pending ON semantic.definition_catalogue_task USING btree (route, root_digest, kind, task_id) WHERE (NOT done);
+
+
+--
+-- Name: definition_catalogue_position_original; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX definition_catalogue_position_original ON semantic.definition_catalogue_position USING btree (route, original_key, root_digest, phase, native_position);
 
 
 --
@@ -9360,6 +11005,55 @@ CREATE INDEX identity_scope_repair_pending ON semantic.identity_scope_summary US
 
 
 --
+-- Name: identity_terminal_closure_cancelled; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_terminal_closure_cancelled ON semantic.identity_epoch_mapping USING btree (route, original) WHERE closure_cancelled_successor;
+
+
+--
+-- Name: identity_terminal_closure_cleanup; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_terminal_closure_cleanup ON semantic.identity_epoch_group USING btree (partition_no, terminal) WHERE ((closure_state = ANY (ARRAY['closing'::text, 'drained'::text])) AND (NOT closure_cleanup_complete));
+
+
+--
+-- Name: identity_terminal_closure_directory; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_terminal_closure_directory ON semantic.identity_epoch_original USING btree (partition_no, terminal, generation, original) INCLUDE (closure_state, closure_enrollment);
+
+
+--
+-- Name: identity_terminal_closure_owner; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_terminal_closure_owner ON semantic.identity_epoch_mapping USING btree (route, closure_state) WHERE (closure_state <> 'legacy'::text);
+
+
+--
+-- Name: identity_terminal_closure_pending; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_terminal_closure_pending ON semantic.identity_epoch_mapping USING btree (route, original) WHERE (closure_state = ANY (ARRAY['exporting'::text, 'installed'::text]));
+
+
+--
+-- Name: identity_terminal_closure_successor; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_terminal_closure_successor ON semantic.identity_epoch_mapping USING btree (route, original) WHERE (closure_successor_ticket IS NOT NULL);
+
+
+--
+-- Name: identity_terminal_closure_unreleased; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_terminal_closure_unreleased ON semantic.identity_epoch_original USING btree (partition_no, terminal, generation, original) WHERE ((closure_state = 'withdrawn'::text) AND (closure_release_transaction IS NULL));
+
+
+--
 -- Name: inbound_link_all_present; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -9500,10 +11194,38 @@ CREATE UNIQUE INDEX public_filter_bootstrap_capture ON semantic.public_filter_bo
 
 
 --
+-- Name: public_filter_privacy_pending_home; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX public_filter_privacy_pending_home ON semantic.public_filter_privacy_pending USING btree (partition_no, input_key) WHERE live;
+
+
+--
+-- Name: public_filter_privacy_pending_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX public_filter_privacy_pending_key ON semantic.public_filter_privacy_pending USING btree (input_key, partition_no) WHERE live;
+
+
+--
 -- Name: public_filter_repair_root; Type: INDEX; Schema: semantic; Owner: -
 --
 
 CREATE UNIQUE INDEX public_filter_repair_root ON semantic.public_filter_repair_step USING btree (partition_no, bootstrap, execution) WHERE (predecessor IS NULL);
+
+
+--
+-- Name: public_filter_repair_verified_home; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX public_filter_repair_verified_home ON semantic.public_filter_repair_step USING btree (partition_no, bootstrap, execution, verified_home) WHERE (verified_home IS NOT NULL);
+
+
+--
+-- Name: public_filter_repair_verified_tip; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX public_filter_repair_verified_tip ON semantic.public_filter_repair_step USING btree (partition_no, bootstrap, execution) WHERE ((verified_root IS NOT NULL) AND (verified_next IS NULL));
 
 
 --
@@ -11070,6 +12792,363 @@ CREATE TRIGGER identity_prearm_release_fence AFTER INSERT OR DELETE OR UPDATE ON
 
 
 --
+-- Name: identity_public_output_accepted identity_public_output_accepted_binding; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_accepted_binding AFTER INSERT ON semantic.identity_public_output_accepted DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_accepted_binding();
+
+
+--
+-- Name: identity_public_output_accepted identity_public_output_accepted_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_accepted_immutable BEFORE DELETE OR UPDATE ON semantic.identity_public_output_accepted FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_accepted identity_public_output_accepted_native; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_accepted_native AFTER INSERT ON semantic.identity_public_output_accepted DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_native();
+
+
+--
+-- Name: identity_public_output_accepted identity_public_output_accepted_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_accepted_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_accepted FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_consumer identity_public_output_consumer_count; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_consumer_count AFTER INSERT ON semantic.identity_public_output_consumer FOR EACH ROW EXECUTE FUNCTION semantic.enroll_public_output_consumer();
+
+
+--
+-- Name: identity_public_output_consumer identity_public_output_consumer_fresh; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_consumer_fresh BEFORE INSERT ON semantic.identity_public_output_consumer FOR EACH ROW EXECUTE FUNCTION semantic.guard_public_output_fresh_write();
+
+
+--
+-- Name: identity_public_output_consumer identity_public_output_consumer_gate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_consumer_gate BEFORE INSERT ON semantic.identity_public_output_consumer FOR EACH ROW EXECUTE FUNCTION semantic.enroll_public_output_consumer();
+
+
+--
+-- Name: identity_public_output_consumer identity_public_output_consumer_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_consumer_immutable BEFORE DELETE OR UPDATE ON semantic.identity_public_output_consumer FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_consumer identity_public_output_consumer_native; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_consumer_native AFTER INSERT ON semantic.identity_public_output_consumer DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_native();
+
+
+--
+-- Name: identity_public_output_consumer identity_public_output_consumer_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_consumer_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_consumer FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_disposition identity_public_output_disposition_atomic; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_disposition_atomic AFTER INSERT ON semantic.identity_public_output_disposition DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_transition();
+
+
+--
+-- Name: identity_public_output_disposition identity_public_output_disposition_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_disposition_immutable BEFORE DELETE OR UPDATE ON semantic.identity_public_output_disposition FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_disposition identity_public_output_disposition_native; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_disposition_native AFTER INSERT ON semantic.identity_public_output_disposition DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_native();
+
+
+--
+-- Name: identity_public_output_disposition identity_public_output_disposition_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_disposition_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_disposition FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_fence identity_public_output_fence_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_fence_immutable BEFORE DELETE OR UPDATE ON semantic.identity_public_output_fence FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_fence identity_public_output_fence_native; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_fence_native AFTER INSERT ON semantic.identity_public_output_fence DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_native();
+
+
+--
+-- Name: identity_public_output_fence identity_public_output_fence_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_fence_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_fence FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_gate identity_public_output_gate_closed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_gate_closed AFTER UPDATE ON semantic.identity_public_output_gate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_gate_close();
+
+
+--
+-- Name: identity_public_output_gate identity_public_output_gate_monotone; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_gate_monotone BEFORE DELETE OR UPDATE ON semantic.identity_public_output_gate FOR EACH ROW EXECUTE FUNCTION semantic.guard_public_output_gate();
+
+
+--
+-- Name: identity_public_output_gate identity_public_output_gate_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_gate_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_gate FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_gate identity_public_output_gate_origin; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_gate_origin AFTER INSERT ON semantic.identity_public_output_gate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_gate_origin();
+
+
+--
+-- Name: identity_public_output_member identity_public_output_member_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_member_immutable BEFORE DELETE OR UPDATE ON semantic.identity_public_output_member FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_member identity_public_output_member_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_member_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_member FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_original identity_public_output_original_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_original_immutable BEFORE DELETE OR UPDATE ON semantic.identity_public_output_original FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_original identity_public_output_original_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_original_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_original FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_page identity_public_output_page_fresh; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_page_fresh BEFORE INSERT ON semantic.identity_public_output_page FOR EACH ROW EXECUTE FUNCTION semantic.guard_public_output_fresh_write();
+
+
+--
+-- Name: identity_public_output_page identity_public_output_page_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_page_immutable BEFORE DELETE OR UPDATE ON semantic.identity_public_output_page FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_page identity_public_output_page_native; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_page_native AFTER INSERT ON semantic.identity_public_output_page DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_native();
+
+
+--
+-- Name: identity_public_output_page identity_public_output_page_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_page_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_page FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_progress identity_public_output_progress_monotone; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_progress_monotone BEFORE DELETE OR UPDATE ON semantic.identity_public_output_progress FOR EACH ROW EXECUTE FUNCTION semantic.guard_public_output_progress();
+
+
+--
+-- Name: identity_public_output_progress identity_public_output_progress_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_progress_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_progress FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_seal identity_public_output_seal_fresh; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_seal_fresh BEFORE INSERT ON semantic.identity_public_output_seal FOR EACH ROW EXECUTE FUNCTION semantic.guard_public_output_fresh_write();
+
+
+--
+-- Name: identity_public_output_seal identity_public_output_seal_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_seal_immutable BEFORE DELETE OR UPDATE ON semantic.identity_public_output_seal FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_seal identity_public_output_seal_native; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_seal_native AFTER INSERT ON semantic.identity_public_output_seal DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_native();
+
+
+--
+-- Name: identity_public_output_seal identity_public_output_seal_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_seal_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_seal FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_stage identity_public_output_stage_atomic; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_stage_atomic AFTER INSERT ON semantic.identity_public_output_stage DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_transition();
+
+
+--
+-- Name: identity_public_output_stage identity_public_output_stage_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_stage_immutable BEFORE DELETE OR UPDATE ON semantic.identity_public_output_stage FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_stage identity_public_output_stage_native; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_stage_native AFTER INSERT ON semantic.identity_public_output_stage DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_native();
+
+
+--
+-- Name: identity_public_output_stage identity_public_output_stage_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_stage_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_stage FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_subject_cut identity_public_output_subject_cut_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_subject_cut_immutable BEFORE DELETE OR UPDATE ON semantic.identity_public_output_subject_cut FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_subject_cut identity_public_output_subject_cut_native; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_subject_cut_native AFTER INSERT ON semantic.identity_public_output_subject_cut DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_native();
+
+
+--
+-- Name: identity_public_output_subject_cut identity_public_output_subject_cut_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_subject_cut_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_subject_cut FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_subject_release identity_public_output_subject_release_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_subject_release_immutable BEFORE DELETE OR UPDATE ON semantic.identity_public_output_subject_release FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_subject_release identity_public_output_subject_release_native; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_subject_release_native AFTER INSERT ON semantic.identity_public_output_subject_release DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_native();
+
+
+--
+-- Name: identity_public_output_subject_release identity_public_output_subject_release_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_subject_release_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_subject_release FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_subject_slot identity_public_output_subject_slot_monotone; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_subject_slot_monotone BEFORE DELETE OR UPDATE ON semantic.identity_public_output_subject_slot FOR EACH ROW EXECUTE FUNCTION semantic.guard_public_output_slot();
+
+
+--
+-- Name: identity_public_output_subject_slot identity_public_output_subject_slot_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_subject_slot_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_subject_slot FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_transition identity_public_output_transition_atomic; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_transition_atomic AFTER INSERT ON semantic.identity_public_output_transition DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_transition();
+
+
+--
+-- Name: identity_public_output_transition identity_public_output_transition_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_transition_immutable BEFORE DELETE OR UPDATE ON semantic.identity_public_output_transition FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_public_output_transition identity_public_output_transition_native; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_public_output_transition_native AFTER INSERT ON semantic.identity_public_output_transition DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_output_native();
+
+
+--
+-- Name: identity_public_output_transition identity_public_output_transition_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_output_transition_no_truncate BEFORE TRUNCATE ON semantic.identity_public_output_transition FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
 -- Name: subject identity_public_writer; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -11144,6 +13223,13 @@ CREATE TRIGGER identity_scope_consumer_summary_guard BEFORE INSERT OR DELETE OR 
 --
 
 CREATE TRIGGER identity_source_consumer_binding_fence AFTER INSERT ON semantic.identity_epoch_source_consumer_terminal FOR EACH ROW EXECUTE FUNCTION semantic.bind_identity_source_consumer_terminal();
+
+
+--
+-- Name: kind_type_evidence_body immutable_kind_type_evidence_body; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER immutable_kind_type_evidence_body BEFORE UPDATE ON semantic.kind_type_evidence_body FOR EACH ROW EXECUTE FUNCTION semantic.immutable_kind_type_evidence_body();
 
 
 --
@@ -11231,6 +13317,34 @@ CREATE CONSTRAINT TRIGGER provider_review_queue_capture AFTER INSERT OR UPDATE O
 
 
 --
+-- Name: public_filter_bootstrap public_filter_bootstrap_baseline_seal; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_bootstrap_baseline_seal BEFORE UPDATE ON semantic.public_filter_bootstrap FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_baseline_seal();
+
+
+--
+-- Name: public_filter_home_enrollment public_filter_home_creation_pin; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_home_creation_pin BEFORE INSERT OR UPDATE ON semantic.public_filter_home_enrollment FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_filter_creation_pin();
+
+
+--
+-- Name: public_filter_home_enrollment public_filter_home_receipt_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_home_receipt_immutable BEFORE UPDATE ON semantic.public_filter_home_enrollment FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_home_receipt();
+
+
+--
+-- Name: public_filter_repair_step public_filter_repair_ack_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_repair_ack_immutable BEFORE UPDATE ON semantic.public_filter_repair_step FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_repair_ack();
+
+
+--
 -- Name: public_filter_repair_advance public_filter_repair_advance_commit; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -11248,7 +13362,7 @@ CREATE TRIGGER public_filter_repair_advance_immutable BEFORE DELETE OR UPDATE ON
 -- Name: public_filter_repair_step public_filter_repair_step_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
-CREATE TRIGGER public_filter_repair_step_immutable BEFORE DELETE OR UPDATE ON semantic.public_filter_repair_step FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+CREATE TRIGGER public_filter_repair_step_immutable BEFORE DELETE OR UPDATE ON semantic.public_filter_repair_step FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_repair_verification();
 
 
 --
@@ -11615,6 +13729,54 @@ ALTER TABLE ONLY semantic.definition_activation
 
 
 --
+-- Name: definition_catalogue_activation definition_catalogue_activation_route_root_digest_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_activation
+    ADD CONSTRAINT definition_catalogue_activation_route_root_digest_fkey FOREIGN KEY (route, root_digest) REFERENCES semantic.definition_catalogue_enrollment(route, root_digest);
+
+
+--
+-- Name: definition_catalogue_consumer definition_catalogue_consumer_route_root_digest_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_consumer
+    ADD CONSTRAINT definition_catalogue_consumer_route_root_digest_fkey FOREIGN KEY (route, root_digest) REFERENCES semantic.definition_catalogue_enrollment(route, root_digest);
+
+
+--
+-- Name: definition_catalogue_consumer definition_catalogue_consumer_route_root_digest_invalidate_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_consumer
+    ADD CONSTRAINT definition_catalogue_consumer_route_root_digest_invalidate_fkey FOREIGN KEY (route, root_digest, invalidated_generation) REFERENCES semantic.definition_catalogue_enrollment(route, root_digest, closed_generation);
+
+
+--
+-- Name: definition_catalogue_enrollment definition_catalogue_enrollment_route_root_digest_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_enrollment
+    ADD CONSTRAINT definition_catalogue_enrollment_route_root_digest_fkey FOREIGN KEY (route, root_digest) REFERENCES semantic.definition_catalogue_build(route, root_digest);
+
+
+--
+-- Name: definition_catalogue_frontier definition_catalogue_frontier_route_consumer_root_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_frontier
+    ADD CONSTRAINT definition_catalogue_frontier_route_consumer_root_fkey FOREIGN KEY (route, consumer_root) REFERENCES semantic.definition_catalogue_enrollment(route, root_digest);
+
+
+--
+-- Name: definition_catalogue_frontier definition_catalogue_frontier_route_root_digest_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_frontier
+    ADD CONSTRAINT definition_catalogue_frontier_route_root_digest_fkey FOREIGN KEY (route, root_digest) REFERENCES semantic.definition_catalogue_activation(route, root_digest);
+
+
+--
 -- Name: definition_catalogue_label definition_catalogue_label_route_root_digest_ordinal_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -11623,11 +13785,43 @@ ALTER TABLE ONLY semantic.definition_catalogue_label
 
 
 --
+-- Name: definition_catalogue_position definition_catalogue_position_route_original_key_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_position
+    ADD CONSTRAINT definition_catalogue_position_route_original_key_fkey FOREIGN KEY (route, original_key) REFERENCES semantic.definition_catalogue_original(route, original_key);
+
+
+--
+-- Name: definition_catalogue_position definition_catalogue_position_route_root_digest_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_position
+    ADD CONSTRAINT definition_catalogue_position_route_root_digest_fkey FOREIGN KEY (route, root_digest) REFERENCES semantic.definition_catalogue_enrollment(route, root_digest);
+
+
+--
+-- Name: definition_catalogue_retirement definition_catalogue_retirement_route_root_digest_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_retirement
+    ADD CONSTRAINT definition_catalogue_retirement_route_root_digest_fkey FOREIGN KEY (route, root_digest) REFERENCES semantic.definition_catalogue_enrollment(route, root_digest);
+
+
+--
 -- Name: definition_catalogue_task definition_catalogue_task_route_root_digest_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.definition_catalogue_task
     ADD CONSTRAINT definition_catalogue_task_route_root_digest_fkey FOREIGN KEY (route, root_digest) REFERENCES semantic.definition_catalogue_build(route, root_digest);
+
+
+--
+-- Name: definition_catalogue_ticket definition_catalogue_ticket_route_original_key_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_ticket
+    ADD CONSTRAINT definition_catalogue_ticket_route_original_key_fkey FOREIGN KEY (route, original_key) REFERENCES semantic.definition_catalogue_original(route, original_key);
 
 
 --
@@ -12119,6 +14313,126 @@ ALTER TABLE ONLY semantic.identity_epoch_prearm_directory
 
 
 --
+-- Name: identity_public_output_accepted identity_public_output_accept_partition_no_transaction_id__fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_accepted
+    ADD CONSTRAINT identity_public_output_accept_partition_no_transaction_id__fkey FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: identity_public_output_consumer identity_public_output_consum_partition_no_transaction_id__fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_consumer
+    ADD CONSTRAINT identity_public_output_consum_partition_no_transaction_id__fkey FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: identity_public_output_disposition identity_public_output_dispos_partition_no_transaction_id__fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_disposition
+    ADD CONSTRAINT identity_public_output_dispos_partition_no_transaction_id__fkey FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: identity_public_output_fence identity_public_output_fence_partition_no_transaction_id_n_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_fence
+    ADD CONSTRAINT identity_public_output_fence_partition_no_transaction_id_n_fkey FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: identity_public_output_gate identity_public_output_gate_partition_no_capture_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_gate
+    ADD CONSTRAINT identity_public_output_gate_partition_no_capture_id_fkey FOREIGN KEY (partition_no, capture_id) REFERENCES semantic.identity_public_output_accepted(partition_no, capture_id);
+
+
+--
+-- Name: identity_public_output_page identity_public_output_page_partition_no_capture_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_page
+    ADD CONSTRAINT identity_public_output_page_partition_no_capture_id_fkey FOREIGN KEY (partition_no, capture_id) REFERENCES semantic.identity_public_output_accepted(partition_no, capture_id);
+
+
+--
+-- Name: identity_public_output_page identity_public_output_page_partition_no_transaction_id_na_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_page
+    ADD CONSTRAINT identity_public_output_page_partition_no_transaction_id_na_fkey FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: identity_public_output_progress identity_public_output_progress_partition_no_capture_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_progress
+    ADD CONSTRAINT identity_public_output_progress_partition_no_capture_id_fkey FOREIGN KEY (partition_no, capture_id) REFERENCES semantic.identity_public_output_accepted(partition_no, capture_id);
+
+
+--
+-- Name: identity_public_output_seal identity_public_output_seal_partition_no_capture_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_seal
+    ADD CONSTRAINT identity_public_output_seal_partition_no_capture_id_fkey FOREIGN KEY (partition_no, capture_id) REFERENCES semantic.identity_public_output_accepted(partition_no, capture_id);
+
+
+--
+-- Name: identity_public_output_seal identity_public_output_seal_partition_no_transaction_id_na_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_seal
+    ADD CONSTRAINT identity_public_output_seal_partition_no_transaction_id_na_fkey FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: identity_public_output_stage identity_public_output_stage_partition_no_capture_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_stage
+    ADD CONSTRAINT identity_public_output_stage_partition_no_capture_id_fkey FOREIGN KEY (partition_no, capture_id) REFERENCES semantic.identity_public_output_accepted(partition_no, capture_id);
+
+
+--
+-- Name: identity_public_output_stage identity_public_output_stage_partition_no_transaction_id_n_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_stage
+    ADD CONSTRAINT identity_public_output_stage_partition_no_transaction_id_n_fkey FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: identity_public_output_subject_release identity_public_output_subje_partition_no_transaction_id__fkey1; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_subject_release
+    ADD CONSTRAINT identity_public_output_subje_partition_no_transaction_id__fkey1 FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: identity_public_output_subject_cut identity_public_output_subjec_partition_no_transaction_id__fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_subject_cut
+    ADD CONSTRAINT identity_public_output_subjec_partition_no_transaction_id__fkey FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: identity_public_output_transition identity_public_output_transi_partition_no_transaction_id__fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_output_transition
+    ADD CONSTRAINT identity_public_output_transi_partition_no_transaction_id__fkey FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
 -- Name: identity_scope_consumer_fence identity_scope_consumer_fence_partition_no_source_key_scop_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -12132,6 +14446,14 @@ ALTER TABLE ONLY semantic.identity_scope_consumer_fence
 
 ALTER TABLE ONLY semantic.identity_scope_consumer_fence
     ADD CONSTRAINT identity_scope_consumer_fence_partition_no_transaction_id__fkey FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position");
+
+
+--
+-- Name: identity_scope_native_association identity_scope_native_associat_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_scope_native_association
+    ADD CONSTRAINT identity_scope_native_associat_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
 
 
 --
@@ -12167,6 +14489,30 @@ ALTER TABLE ONLY semantic.public_filter_bootstrap_account
 
 
 --
+-- Name: public_filter_bootstrap public_filter_bootstrap_partition_no_read_definition_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_bootstrap
+    ADD CONSTRAINT public_filter_bootstrap_partition_no_read_definition_fkey FOREIGN KEY (partition_no, read_definition) REFERENCES semantic.public_filter_read_definition(partition_no, read_definition);
+
+
+--
+-- Name: public_filter_home_enrollment public_filter_home_enrollment_partition_no_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_home_enrollment
+    ADD CONSTRAINT public_filter_home_enrollment_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: public_filter_key_enrollment public_filter_key_enrollment_partition_no_bootstrap_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_key_enrollment
+    ADD CONSTRAINT public_filter_key_enrollment_partition_no_bootstrap_fkey FOREIGN KEY (partition_no, bootstrap) REFERENCES semantic.public_filter_home_enrollment(partition_no, bootstrap);
+
+
+--
 -- Name: public_filter_privacy_head public_filter_privacy_head_partition_no_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -12183,11 +14529,67 @@ ALTER TABLE ONLY semantic.public_filter_privacy_log
 
 
 --
--- Name: public_filter_bootstrap public_filter_bootstrap_partition_no_read_definition_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+-- Name: public_filter_privacy_pending public_filter_privacy_pending_partition_no_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
-ALTER TABLE ONLY semantic.public_filter_bootstrap
-    ADD CONSTRAINT public_filter_bootstrap_partition_no_read_definition_fkey FOREIGN KEY (partition_no, read_definition) REFERENCES semantic.public_filter_read_definition(partition_no, read_definition);
+ALTER TABLE ONLY semantic.public_filter_privacy_pending
+    ADD CONSTRAINT public_filter_privacy_pending_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES semantic.public_filter_privacy_head(partition_no);
+
+
+--
+-- Name: public_filter_privacy_subject public_filter_privacy_subject_partition_no_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_privacy_subject
+    ADD CONSTRAINT public_filter_privacy_subject_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES semantic.public_filter_privacy_head(partition_no);
+
+
+--
+-- Name: public_filter_projection_build public_filter_projection_build_partition_no_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_projection_build
+    ADD CONSTRAINT public_filter_projection_build_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: public_filter_projection_build public_filter_projection_build_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_projection_build
+    ADD CONSTRAINT public_filter_projection_build_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: public_filter_projection_head public_filter_projection_head_build_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_projection_head
+    ADD CONSTRAINT public_filter_projection_head_build_id_fkey FOREIGN KEY (build_id) REFERENCES semantic.public_filter_projection_build(build_id) ON DELETE CASCADE;
+
+
+--
+-- Name: public_filter_projection_head public_filter_projection_head_partition_no_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_projection_head
+    ADD CONSTRAINT public_filter_projection_head_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: public_filter_projection_replay public_filter_projection_replay_partition_no_bootstrap_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_projection_replay
+    ADD CONSTRAINT public_filter_projection_replay_partition_no_bootstrap_fkey FOREIGN KEY (partition_no, bootstrap) REFERENCES semantic.public_filter_bootstrap(partition_no, bootstrap) ON DELETE CASCADE;
+
+
+--
+-- Name: public_filter_projection_replay public_filter_projection_replay_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_projection_replay
+    ADD CONSTRAINT public_filter_projection_replay_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
 
 
 --
@@ -12220,6 +14622,14 @@ ALTER TABLE ONLY semantic.public_filter_repair_step
 
 ALTER TABLE ONLY semantic.public_filter_repair_step
     ADD CONSTRAINT public_filter_repair_step_partition_no_bootstrap_fkey FOREIGN KEY (partition_no, bootstrap) REFERENCES semantic.public_filter_bootstrap(partition_no, bootstrap);
+
+
+--
+-- Name: public_filter_repair_step public_filter_repair_verified_successor; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_repair_step
+    ADD CONSTRAINT public_filter_repair_verified_successor FOREIGN KEY (partition_no, bootstrap, execution, verified_next) REFERENCES semantic.public_filter_repair_step(partition_no, bootstrap, execution, step);
 
 
 --
@@ -12374,436 +14784,8 @@ ALTER TABLE ONLY semantic.term_head
     ADD CONSTRAINT term_head_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
 
 
--- A live key/home interval is a barrier until native reverse-enrolment maintenance
--- adopts its real receipts. It is neither a permission nor a replacement log.
-CREATE TABLE semantic.public_filter_privacy_pending (
-  partition_no integer NOT NULL REFERENCES semantic.public_filter_privacy_head(partition_no),
-  input_key text COLLATE "C" NOT NULL,
-  owner_epoch integer NOT NULL CHECK (owner_epoch > 0),
-  first_position bigint NOT NULL CHECK (first_position > 0),
-  through_position bigint NOT NULL,
-  enqueue_revision bigint NOT NULL CHECK (enqueue_revision > 0),
-  captured_through bigint,
-  captured_revision bigint,
-  captured_epoch integer,
-  fanout_frontier text,
-  PRIMARY KEY (partition_no, input_key),
-  CHECK (through_position >= first_position),
-  CHECK ((captured_through IS NULL) = (captured_revision IS NULL)),
-  CHECK ((captured_through IS NULL) = (captured_epoch IS NULL)),
-  CHECK (captured_through IS NULL OR
-    (captured_through BETWEEN first_position AND through_position AND
-     captured_revision > 0 AND captured_revision <= enqueue_revision AND captured_epoch > 0))
-);
-CREATE INDEX public_filter_privacy_pending_key
-  ON semantic.public_filter_privacy_pending USING btree (input_key, partition_no);
-
--- Survives retirement of pending routing work. Missing means unknown, never a
--- fabricated zero subject version. This contains no selected values or allow bit.
-CREATE TABLE semantic.public_filter_privacy_subject (
-  partition_no integer NOT NULL REFERENCES semantic.public_filter_privacy_head(partition_no),
-  route integer NOT NULL CHECK (route >= partition_no * 16 AND route < (partition_no + 1) * 16),
-  subject_id uuid NOT NULL,
-  owner_epoch integer NOT NULL CHECK (owner_epoch > 0),
-  position bigint NOT NULL CHECK (position > 0),
-  PRIMARY KEY (partition_no, subject_id)
-);
-
-
--- Account tuples remain in their native domain. Neither revision is a Semantic
--- privacy-log position. Queue revisions order this coalesced key under its home lock.
-ALTER TABLE semantic.public_filter_privacy_pending
-  ALTER COLUMN first_position DROP NOT NULL,
-  ALTER COLUMN through_position DROP NOT NULL,
-  ADD COLUMN live boolean NOT NULL DEFAULT true,
-  ADD COLUMN next_first_position bigint,
-  ADD COLUMN native_captured_enqueue bigint,
-  ADD COLUMN native_captured_epoch integer,
-  ADD COLUMN native_revision bigint,
-  ADD COLUMN native_claim_revision bigint,
-  ADD COLUMN native_transaction xid8,
-  ADD COLUMN captured_native_revision bigint,
-  ADD COLUMN captured_native_claim_revision bigint,
-  ADD CONSTRAINT public_filter_pending_native_domain CHECK (
-    (input_key = '["domain","accounts"]' AND first_position IS NULL AND through_position IS NULL
-      AND native_revision IS NOT NULL AND native_revision > 0
-      AND native_claim_revision IS NOT NULL AND native_claim_revision > 0
-      AND native_transaction IS NOT NULL)
-    OR (input_key <> '["domain","accounts"]' AND first_position IS NOT NULL AND through_position IS NOT NULL
-      AND native_revision IS NULL AND native_claim_revision IS NULL AND native_transaction IS NULL)
-  );
-
-DROP INDEX semantic.public_filter_privacy_pending_key;
-CREATE INDEX public_filter_privacy_pending_home ON semantic.public_filter_privacy_pending
-  USING btree(partition_no,input_key) WHERE live;
-CREATE INDEX public_filter_privacy_pending_key ON semantic.public_filter_privacy_pending
-  USING btree(input_key,partition_no) WHERE live;
-
--- Enrollment and its original baseline live in the actual writer home. Repeated
--- preparation reads this original row, never restamps it from a newer owner head.
-CREATE TABLE semantic.public_filter_home_enrollment (
-  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
-  bootstrap uuid NOT NULL,
-  registration_partition integer NOT NULL CHECK (registration_partition BETWEEN 0 AND 4095),
-  registration text COLLATE "C" NOT NULL,
-  read_definition uuid NOT NULL,
-  owner_epoch integer NOT NULL CHECK (owner_epoch > 0),
-  source_position bigint NOT NULL CHECK (source_position >= 0),
-  native_revision bigint,
-  native_claim_revision bigint,
-  key_after text COLLATE "C",
-  complete boolean NOT NULL DEFAULT false,
-  PRIMARY KEY (partition_no, bootstrap),
-  CHECK ((native_revision IS NULL) = (native_claim_revision IS NULL))
-);
-CREATE TABLE semantic.public_filter_key_enrollment (
-  partition_no integer NOT NULL,
-  input_key text COLLATE "C" NOT NULL,
-  registration_partition integer NOT NULL,
-  registration text COLLATE "C" NOT NULL,
-  bootstrap uuid NOT NULL,
-  PRIMARY KEY (partition_no, input_key, registration_partition, registration, bootstrap),
-  FOREIGN KEY (partition_no, bootstrap)
-    REFERENCES semantic.public_filter_home_enrollment(partition_no, bootstrap)
-);
-
--- All Account/claim origins call this from their authoritative transaction after
--- taking population then Source-head locks. It never opens a foreign home.
-CREATE FUNCTION semantic.enqueue_account_public_filter(
-  home integer, account_revision bigint, claim_revision bigint
-) RETURNS void LANGUAGE plpgsql AS $$
-DECLARE owner integer;
-BEGIN
-  SELECT epoch INTO owner FROM core.partition
-    WHERE partition_no=home AND write_state='active';
-  IF owner IS NULL THEN RAISE EXCEPTION 'Account public-filter owner is unavailable'; END IF;
-  PERFORM 1 FROM semantic.public_filter_privacy_head WHERE partition_no=home FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Account public-filter Source head is missing'; END IF;
-  INSERT INTO semantic.public_filter_privacy_pending
-    (partition_no,input_key,owner_epoch,first_position,through_position,enqueue_revision,
-     native_revision,native_claim_revision,native_transaction)
-  VALUES (home,'["domain","accounts"]',owner,NULL,NULL,1,
-    account_revision,claim_revision,pg_current_xact_id())
-  ON CONFLICT (partition_no,input_key) DO UPDATE SET
-    owner_epoch=EXCLUDED.owner_epoch,
-    enqueue_revision=semantic.public_filter_privacy_pending.enqueue_revision+1,
-    native_revision=EXCLUDED.native_revision,
-    native_claim_revision=EXCLUDED.native_claim_revision,
-    native_transaction=EXCLUDED.native_transaction,
-    live=true;
-END $$;
-
 --
 -- PostgreSQL database dump complete
 --
 
 
-
--- Nullable original provenance intentionally leaves earlier rows unverifiable.
-ALTER TABLE semantic.public_filter_repair_advance
-  ADD COLUMN transaction_id uuid,
-  ADD COLUMN native_xid xid8,
-  ADD CONSTRAINT public_filter_repair_advance_provenance CHECK
-    ((transaction_id IS NULL) = (native_xid IS NULL));
-ALTER TABLE semantic.public_filter_repair_step
-  ADD COLUMN input_limit integer CHECK(input_limit BETWEEN 1 AND 256),
-  ADD COLUMN receipt_protocol integer CHECK(receipt_protocol = 1),
-  ADD CONSTRAINT public_filter_repair_step_provenance CHECK
-    ((input_limit IS NULL) = (receipt_protocol IS NULL)),
-  ADD CONSTRAINT public_filter_repair_predecessor FOREIGN KEY
-    (partition_no,bootstrap,execution,predecessor)
-    REFERENCES semantic.public_filter_repair_step(partition_no,bootstrap,execution,step);
-
-CREATE FUNCTION semantic.validate_public_filter_repair_advance() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  IF NEW.transaction_id IS NULL OR NEW.native_xid IS DISTINCT FROM pg_current_xact_id()
-    OR NOT EXISTS (
-      SELECT 1 FROM core.partition p
-      WHERE p.partition_no = NEW.partition_no AND p.epoch = NEW.owner_epoch
-        AND p.position = NEW.position AND p.write_state = 'active'
-        AND p.xmin = pg_current_xact_id()::xid
-    ) OR NOT EXISTS (
-      SELECT 1 FROM core.outbox e
-      WHERE e.partition_no = NEW.partition_no AND e.position = NEW.position
-        AND e.epoch = NEW.owner_epoch AND e.event_seq = 0 AND e.event_count = 1
-        AND e.type = 'com.rezics.semantic.public-source.advanced.v1'
-        AND e.subject = NEW.subject_id::text
-        AND e.data = jsonb_build_object('id',NEW.subject_id::text,
-          'bootstrap',NEW.bootstrap::text,'execution',NEW.execution)
-        AND e.xmin = pg_current_xact_id()::xid
-    ) THEN
-    RAISE EXCEPTION 'Public Source advancement lacks original same-command native custody'
-      USING ERRCODE = '23514';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-CREATE CONSTRAINT TRIGGER public_filter_repair_advance_commit
-  AFTER INSERT ON semantic.public_filter_repair_advance
-  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
-  EXECUTE FUNCTION semantic.validate_public_filter_repair_advance();
-CREATE TRIGGER public_filter_repair_advance_immutable
-  BEFORE UPDATE OR DELETE ON semantic.public_filter_repair_advance
-  FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
-CREATE TRIGGER public_filter_repair_step_immutable
-  BEFORE UPDATE OR DELETE ON semantic.public_filter_repair_step
-  FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
-
-
--- Keep only bounded ordered SHA-256 locators; old rows remain explicitly unverifiable.
-ALTER TABLE semantic.public_filter_repair_step
-  ADD COLUMN repair_locator_digests bytea,
-  ADD CONSTRAINT public_filter_repair_locator_digests_bound CHECK
-    (repair_locator_digests IS NULL OR
-      (input_limit IS NOT NULL AND octet_length(repair_locator_digests) <= 8192
-        AND mod(octet_length(repair_locator_digests),32) = 0
-        AND octet_length(repair_locator_digests) / 32 <= input_limit));
-
-
--- Original owner receipts are immutable after sealing. Older enrollment rows
--- deliberately remain unsealed: their missing creation/change bridge is unknown.
-ALTER TABLE semantic.public_filter_home_enrollment
-  ADD COLUMN creation_position bigint CHECK (creation_position >= 0),
-  ADD COLUMN native_enqueue_revision bigint CHECK (native_enqueue_revision >= 0),
-  ADD COLUMN key_digest text CHECK (key_digest ~ '^[0-9a-f]{64}$'),
-  ADD COLUMN receipt text CHECK (receipt ~ '^[0-9a-f]{64}$');
-
-ALTER TABLE semantic.public_filter_bootstrap
-  ADD COLUMN coverage_generation bigint CHECK (coverage_generation >= 0),
-  ADD COLUMN coverage_after integer NOT NULL DEFAULT 0 CHECK (coverage_after BETWEEN 0 AND 4096),
-  ADD COLUMN coverage_root text CHECK (coverage_root ~ '^[0-9a-f]{64}$'),
-  ADD COLUMN coverage_sealed boolean NOT NULL DEFAULT false,
-  ADD CONSTRAINT public_filter_bootstrap_complete_coverage CHECK
-    (NOT coverage_sealed OR (coverage_after = 4096 AND coverage_generation IS NOT NULL AND coverage_root IS NOT NULL));
-
-CREATE FUNCTION semantic.retain_public_filter_home_receipt() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  IF OLD.receipt IS NOT NULL AND NEW IS DISTINCT FROM OLD THEN
-    RAISE EXCEPTION 'Original public-filter home receipt is immutable' USING ERRCODE = '23514';
-  END IF;
-  IF NEW.receipt IS NOT NULL AND
-    (NOT NEW.complete OR NEW.creation_position IS NULL OR NEW.native_enqueue_revision IS NULL OR NEW.key_digest IS NULL)
-  THEN
-    RAISE EXCEPTION 'Incomplete public-filter home receipt' USING ERRCODE = '23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER public_filter_home_receipt_immutable
-  BEFORE UPDATE ON semantic.public_filter_home_enrollment
-  FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_home_receipt();
-
-
-CREATE FUNCTION semantic.retain_public_filter_baseline_seal() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  IF OLD.coverage_generation IS NOT NULL AND
-    NEW.coverage_generation IS DISTINCT FROM OLD.coverage_generation THEN
-    RAISE EXCEPTION 'Original covered generation is immutable' USING ERRCODE = '23514';
-  END IF;
-  IF OLD.coverage_sealed AND
-    (NEW.coverage_after,NEW.coverage_root,NEW.coverage_sealed,NEW.account_after)
-    IS DISTINCT FROM
-    (OLD.coverage_after,OLD.coverage_root,OLD.coverage_sealed,OLD.account_after)
-  THEN
-    RAISE EXCEPTION 'Original public-filter baseline seal is immutable' USING ERRCODE = '23514';
-  END IF;
-  IF (NEW.coverage_after,NEW.coverage_root,NEW.coverage_sealed)
-    IS DISTINCT FROM (OLD.coverage_after,OLD.coverage_root,OLD.coverage_sealed)
-    AND NOT (OLD.coverage_generation IS NULL AND NEW.coverage_after=0 AND NOT NEW.coverage_sealed)
-    AND (NEW.coverage_after<>OLD.coverage_after+1 OR NEW.account_after<>NEW.coverage_after OR NOT EXISTS (
-      SELECT 1 FROM search.public_filter_coverage_preparation c
-      WHERE c.partition_no=NEW.partition_no AND c.bootstrap=NEW.bootstrap
-        AND c.definition=NEW.read_definition AND c.generation=NEW.coverage_generation
-        AND c.after_home=NEW.coverage_after AND c.root=NEW.coverage_root))
-  THEN
-    RAISE EXCEPTION 'Source seal requires its native contiguous coverage preparation' USING ERRCODE = '23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER public_filter_bootstrap_baseline_seal
-  BEFORE UPDATE ON semantic.public_filter_bootstrap
-  FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_baseline_seal();
-
--- Creation retention is installed before a home baseline is admitted. Legacy
--- receipts remain immutable and deliberately lack this additional authority.
-ALTER TABLE semantic.public_filter_home_enrollment
-  ADD COLUMN creation_consumer text CHECK (creation_consumer ~ '^public_filter_[0-9a-f]{32}$');
-
-CREATE FUNCTION semantic.validate_public_filter_creation_pin() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  IF NEW.complete AND (TG_OP='INSERT' OR OLD.receipt IS NULL) AND
-    (NEW.creation_consumer IS DISTINCT FROM 'public_filter_' || replace(NEW.bootstrap::text,'-','')
-      OR NOT EXISTS (
-        SELECT 1 FROM core.consumer_checkpoint c
-        WHERE c.partition_no=NEW.partition_no AND c.consumer=NEW.creation_consumer
-          AND c.position<=NEW.creation_position
-          AND (c.epoch IS NULL OR c.epoch=NEW.owner_epoch))) THEN
-    RAISE EXCEPTION 'Original public-filter baseline requires its creation retention pin'
-      USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER public_filter_home_creation_pin
-  BEFORE INSERT OR UPDATE ON semantic.public_filter_home_enrollment
-  FOR EACH ROW EXECUTE FUNCTION semantic.validate_public_filter_creation_pin();
-
--- Native verifier progress belongs to the original immutable repair pages. Payloads
--- remain immutable; a verified prefix can only acquire its exact next successor.
-ALTER TABLE semantic.public_filter_repair_step
-  ADD COLUMN verified_binding text CHECK (verified_binding ~ '^[0-9a-f]{64}$'),
-  ADD COLUMN verified_root text CHECK (verified_root ~ '^[0-9a-f]{64}$'),
-  ADD COLUMN verified_ordinal bigint CHECK (verified_ordinal > 0),
-  ADD COLUMN verified_next uuid,
-  ADD CONSTRAINT public_filter_repair_verified_fields CHECK
-    ((verified_binding IS NULL) = (verified_root IS NULL) AND
-     (verified_binding IS NULL) = (verified_ordinal IS NULL) AND
-     (verified_next IS NULL OR verified_root IS NOT NULL)),
-  ADD CONSTRAINT public_filter_repair_verified_successor FOREIGN KEY
-    (partition_no,bootstrap,execution,verified_next)
-    REFERENCES semantic.public_filter_repair_step(partition_no,bootstrap,execution,step);
-CREATE UNIQUE INDEX public_filter_repair_verified_tip
-  ON semantic.public_filter_repair_step (partition_no,bootstrap,execution)
-  WHERE verified_root IS NOT NULL AND verified_next IS NULL;
-
-CREATE FUNCTION semantic.retain_public_filter_repair_verification() RETURNS trigger
-LANGUAGE plpgsql AS $$
-DECLARE parent semantic.public_filter_repair_step;
-BEGIN
-  IF TG_OP='DELETE' THEN
-    RAISE EXCEPTION 'Original public-filter repair pages are immutable' USING ERRCODE='23514';
-  END IF;
-  IF (NEW.partition_no,NEW.bootstrap,NEW.execution,NEW.step,NEW.predecessor,NEW.state,
-      NEW.complete,NEW.input_limit,NEW.receipt_protocol,NEW.repair_locator_digests)
-    IS DISTINCT FROM
-     (OLD.partition_no,OLD.bootstrap,OLD.execution,OLD.step,OLD.predecessor,OLD.state,
-      OLD.complete,OLD.input_limit,OLD.receipt_protocol,OLD.repair_locator_digests) OR
-    (OLD.verified_root IS NOT NULL AND
-      (NEW.verified_binding,NEW.verified_root,NEW.verified_ordinal)
-      IS DISTINCT FROM (OLD.verified_binding,OLD.verified_root,OLD.verified_ordinal)) OR
-    (OLD.verified_next IS NOT NULL AND NEW.verified_next IS DISTINCT FROM OLD.verified_next) OR
-    (OLD.complete AND NEW.verified_next IS NOT NULL)
-  THEN
-    RAISE EXCEPTION 'Original public-filter repair evidence is immutable' USING ERRCODE='23514';
-  END IF;
-  IF NEW.verified_root IS NOT NULL AND OLD.verified_root IS NULL THEN
-    IF NEW.predecessor IS NULL THEN
-      IF NEW.verified_ordinal<>1 THEN
-        RAISE EXCEPTION 'Repair verification must begin at its original root' USING ERRCODE='23514';
-      END IF;
-    ELSE
-      SELECT complete,verified_root,verified_binding,verified_next,verified_ordinal
-      INTO parent.complete,parent.verified_root,parent.verified_binding,parent.verified_next,parent.verified_ordinal
-      FROM semantic.public_filter_repair_step
-      WHERE (partition_no,bootstrap,execution,step)=
-        (NEW.partition_no,NEW.bootstrap,NEW.execution,NEW.predecessor);
-      IF NOT FOUND OR parent.complete OR parent.verified_root IS NULL OR
-        parent.verified_binding IS DISTINCT FROM NEW.verified_binding OR
-        parent.verified_next IS DISTINCT FROM NEW.step OR
-        NEW.verified_ordinal<>parent.verified_ordinal+1 THEN
-        RAISE EXCEPTION 'Repair verification requires its contiguous original predecessor'
-          USING ERRCODE='23514';
-      END IF;
-    END IF;
-  END IF;
-  IF NEW.verified_next IS NOT NULL AND OLD.verified_next IS NULL AND NOT EXISTS (
-    SELECT 1 FROM semantic.public_filter_repair_step s
-    WHERE (s.partition_no,s.bootstrap,s.execution,s.step,s.predecessor)=
-      (NEW.partition_no,NEW.bootstrap,NEW.execution,NEW.verified_next,NEW.step)) THEN
-    RAISE EXCEPTION 'Repair verification cannot branch or skip an original page' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END $$;
-DROP TRIGGER public_filter_repair_step_immutable ON semantic.public_filter_repair_step;
-CREATE TRIGGER public_filter_repair_step_immutable
-  BEFORE UPDATE OR DELETE ON semantic.public_filter_repair_step
-  FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_repair_verification();
-
--- A verified original window continues to depend on its original outbox pin.
--- Checkpoint delivery must not advance or remove that pin independently of the
--- Source's enrollment, users and captured obligations. Other consumers keep
--- their ordinary checkpoint behavior.
-CREATE FUNCTION semantic.retain_public_filter_creation_checkpoint() RETURNS trigger
-LANGUAGE plpgsql AS $$
-DECLARE original semantic.public_filter_home_enrollment;
-BEGIN
-  IF OLD.consumer !~ '^public_filter_[0-9a-f]{32}$' THEN
-    IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
-  END IF;
-  SELECT * INTO original FROM semantic.public_filter_home_enrollment
-    WHERE (partition_no,bootstrap)=
-      (OLD.partition_no,substring(OLD.consumer FROM 15)::uuid)
-      AND creation_consumer=OLD.consumer;
-  IF NOT FOUND THEN
-    IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
-  END IF;
-  IF TG_OP='DELETE' OR
-    (NEW.partition_no,NEW.consumer,NEW.epoch,NEW.position)
-      IS DISTINCT FROM (OLD.partition_no,OLD.consumer,OLD.epoch,OLD.position) THEN
-    RAISE EXCEPTION 'Original public-filter creation pin is still retained'
-      USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER public_filter_creation_checkpoint_retained
-  BEFORE UPDATE OR DELETE ON core.consumer_checkpoint
-  FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_creation_checkpoint();
-
--- Proof and funded ACK progress extend the original immutable repair authority.
-ALTER TABLE semantic.public_filter_repair_step
-  ADD COLUMN verified_home integer CHECK (verified_home BETWEEN 0 AND 4095),
-  ADD COLUMN ack_after integer NOT NULL DEFAULT 0 CHECK (ack_after BETWEEN 0 AND 4096),
-  ADD CONSTRAINT public_filter_repair_home_proof CHECK
-    (verified_home IS NULL OR (verified_root IS NOT NULL AND NOT complete)),
-  ADD CONSTRAINT public_filter_repair_ack_proof CHECK
-    (ack_after=0 OR (complete AND verified_root IS NOT NULL AND verified_next IS NULL));
-CREATE UNIQUE INDEX public_filter_repair_verified_home
-  ON semantic.public_filter_repair_step (partition_no,bootstrap,execution,verified_home)
-  WHERE verified_home IS NOT NULL;
-
-CREATE FUNCTION semantic.retain_public_filter_repair_ack() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  IF (OLD.verified_home IS NOT NULL AND NEW.verified_home IS DISTINCT FROM OLD.verified_home)
-    OR NEW.ack_after<OLD.ack_after OR NEW.ack_after>OLD.ack_after+1
-    OR (NEW.ack_after<>OLD.ack_after AND
-      (NOT OLD.complete OR OLD.verified_root IS NULL OR OLD.verified_next IS NOT NULL)) THEN
-    RAISE EXCEPTION 'Original repair window and contiguous ACK progress cannot be replaced'
-      USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER public_filter_repair_ack_immutable
-  BEFORE UPDATE ON semantic.public_filter_repair_step
-  FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_repair_ack();
-
--- Native Kind Type retained dependency bodies.
--- Immutable dependency bodies are not audience/admission/currentness evidence.
--- One record retains one raw original and terminal; duplicate canonical supports
--- retain distinct raw keys. No population vector or second frontier is stored.
-CREATE TABLE semantic.kind_type_evidence_body (
-  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
-  owner_account_id uuid NOT NULL,
-  collection_id uuid NOT NULL,
-  preparation_id uuid NOT NULL,
-  evidence_id uuid NOT NULL,
-  binding jsonb NOT NULL CHECK (jsonb_typeof(binding) = 'object' AND octet_length(binding::text) <= 16384),
-  body jsonb NOT NULL CHECK (jsonb_typeof(body) = 'object' AND octet_length(body::text) <= 16384),
-  progress jsonb NOT NULL CHECK (jsonb_typeof(progress) = 'object' AND octet_length(progress::text) <= 4096),
-  producer_transaction text NOT NULL CHECK (producer_transaction ~ '^[0-9]{1,20}$'),
-  PRIMARY KEY (route, owner_account_id, collection_id, preparation_id, evidence_id),
-  CHECK (route = get_byte(uuid_send(collection_id), 10) * 256 + get_byte(uuid_send(collection_id), 11)),
-  CHECK (route = get_byte(uuid_send(owner_account_id), 10) * 256 + get_byte(uuid_send(owner_account_id), 11))
-);
-
-CREATE FUNCTION semantic.immutable_kind_type_evidence_body() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  RAISE EXCEPTION 'Kind Type dependency bodies are immutable';
-END;
-$$;
-CREATE TRIGGER immutable_kind_type_evidence_body
-  BEFORE UPDATE ON semantic.kind_type_evidence_body
-  FOR EACH ROW EXECUTE FUNCTION semantic.immutable_kind_type_evidence_body();
