@@ -77,7 +77,11 @@ test('a server that left its group is stopped by its working directory, and proc
     const bootFile = join(proc, 'sys/kernel/random/boot_id');
     mkdirSync(join(proc, 'sys/kernel/random'), { recursive: true });
     writeFileSync(bootFile, server.boot);
-    for (const [identity, cwd] of [[server, inside], [stubborn, inside], [elsewhere, outside]] as const) {
+    for (const [identity, cwd] of [
+      [server, inside],
+      [stubborn, inside],
+      [elsewhere, outside],
+    ] as const) {
       const entry = join(proc, String(identity.pid));
       mkdirSync(entry);
       symlinkSync(cwd, join(entry, 'cwd'));
