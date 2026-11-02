@@ -1,10 +1,10 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
 import { Buffer } from 'node:buffer';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import type { Database } from 'bun:sqlite';
 import { join, sep } from 'node:path';
-import { sweepBacklog } from './backlog.ts';
+import type { BacklogSweep } from './backlog.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerStore } from './store.ts';
@@ -13,9 +13,12 @@ import { temporaryDirectory } from './test-support.ts';
 const NOW = Date.UTC(2026, 10, 2, 12, 0);
 const GROWTH_SCENARIO =
   'backlog growth tracks indexed history, input-proportional directory entries, and dispatch/cancellation caps';
+let activeDirectoryProbe: { root: string; metrics: Metrics } | undefined;
+let restoreDirectoryObserver: (() => void) | undefined;
+afterAll(() => restoreDirectoryObserver?.());
 
 test('the approved backlog Cost derivation names the exact native growth scenario', () => {
-  const citation = `tools/goal/src/backlog-growth.test.ts: \`${GROWTH_SCENARIO}\``;
+  const citation = `\`tools/goal/src/backlog-growth.test.ts\`: \`${GROWTH_SCENARIO}\``;
   const delivery = readFileSync(join(import.meta.dir, '../README.md'), 'utf8');
   const performance = readFileSync(join(import.meta.dir, '../../../docs/goals/performance.capabilities.md'), 'utf8');
   expect(delivery).toContain(citation);
@@ -123,22 +126,29 @@ function observeJson(metrics: Metrics): () => void {
 }
 
 function observeDirectories(root: string, metrics: Metrics): () => void {
-  const builtinFs = createRequire(import.meta.url)('node:fs') as {
-    readdirSync: (...args: unknown[]) => unknown[];
-  };
-  const original = builtinFs.readdirSync.bind(builtinFs);
-  builtinFs.readdirSync = (...args) => {
-    const path = String(args[0]);
-    const inBacklog = path === root || path.startsWith(`${root}${sep}`);
-    if (inBacklog) metrics.directoryEnumerations += 1;
-    const entries = original(...args);
-    if (inBacklog) metrics.directoryEntriesReturned += entries.length;
-    return entries;
-  };
-  syncBuiltinESMExports();
-  return () => {
-    builtinFs.readdirSync = original;
+  if (!restoreDirectoryObserver) {
+    const builtinFs = createRequire(import.meta.url)('node:fs') as {
+      readdirSync: (...args: unknown[]) => unknown[];
+    };
+    const original = builtinFs.readdirSync.bind(builtinFs);
+    builtinFs.readdirSync = (...args) => {
+      const probe = activeDirectoryProbe;
+      const path = String(args[0]);
+      const inBacklog = probe && (path === probe.root || path.startsWith(`${probe.root}${sep}`));
+      if (inBacklog) probe.metrics.directoryEnumerations += 1;
+      const entries = original(...args);
+      if (inBacklog) probe.metrics.directoryEntriesReturned += entries.length;
+      return entries;
+    };
     syncBuiltinESMExports();
+    restoreDirectoryObserver = () => {
+      builtinFs.readdirSync = original;
+      syncBuiltinESMExports();
+    };
+  }
+  activeDirectoryProbe = { root, metrics };
+  return () => {
+    activeDirectoryProbe = undefined;
   };
 }
 
@@ -219,9 +229,10 @@ async function run(input: Input) {
   const restoreDatabase = observeDatabase(db, metrics);
   const restoreJson = observeJson(metrics);
   const restoreDirectories = observeDirectories(backlog, metrics);
-  const sweeps: Awaited<ReturnType<typeof sweepBacklog>>[] = [];
+  const sweeps: BacklogSweep[] = [];
   let firstMetrics: Metrics | undefined;
   try {
+    const { sweepBacklog } = await import('./backlog.ts');
     for (let index = 0; index <= (input.sweeps ?? 0); index += 1) {
       sweeps.push(await sweepBacklog(runtime));
       if (index === 0) firstMetrics = { ...metrics };
