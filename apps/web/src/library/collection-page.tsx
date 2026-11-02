@@ -259,6 +259,27 @@ type BoundaryMove = {
   refusal?: string;
 };
 
+/** Members read recovery shares the active editor's fence, but never starts a writer. */
+export function CollectionMembersStatus({ state, retrying, disabled, onRetry }: {
+  state: NonNullable<EditableCollectionPage['memberState']>;
+  retrying: boolean;
+  disabled: boolean;
+  onRetry: () => void;
+}) {
+  if (state === 'ready') return null;
+  return (
+    <div className="space-y-3" aria-busy={retrying}>
+      <p role={state === 'preparing' ? 'status' : 'alert'}>
+        {state === 'preparing' ? m.library_dynamic_preparing() :
+          state === 'unavailable' ? m.library_dynamic_unavailable() : m.error_message()}
+      </p>
+      <Button type="button" variant="outline" disabled={disabled || retrying} onClick={onRetry}>
+        {m.library_collection_reload()}
+      </Button>
+    </div>
+  );
+}
+
 type CollectionPageProps = {
   page: EditableCollectionPage;
   queryKey: readonly unknown[];
@@ -337,6 +358,8 @@ function CollectionPageLifetime({
   const commandCredentials = useRef(new Map<string, string>());
   const [editing, setEditing] = useState(false);
   const [saveConfirmed, setSaveConfirmed] = useState(false);
+  const [readingMembers, setReadingMembers] = useState(false);
+  const membersReadActive = useRef(false);
   const [adding, setAdding] = useState(false);
   const [moveChoice, setMoveChoice] = useState<CollectionMoveChoice | null>(null);
   const [transfer, setTransfer] = useState<(CollectionMoveChoice & { memberIds: string[] }) | null>(null);
@@ -475,15 +498,24 @@ function CollectionPageLifetime({
   }
 
   async function reloadFromControl() {
-    if (!isCurrent()) return;
-    const request = startRequest();
-    if (!request) return;
+    if (!isCurrent() || pending || draftFrozen || editing || membersReadActive.current) return;
+    const context = currentBoundaryContext.current;
+    membersReadActive.current = true;
+    setReadingMembers(true);
+    setFailure('');
     try {
-      await reloadCollection();
+      const refreshed = await refreshPage();
+      // A newer status or writer result owns the page; this old read cannot replace it.
+      if (!isCurrent() || currentBoundaryContext.current !== context) return;
+      if (refreshed.id !== page.id) throw new Error('Collection response changed address');
+      queryClient.setQueryData(queryKey, refreshed);
+      await router.invalidate();
     } catch {
-      if (isCurrent()) setFailure(m.error_message());
+      if (isCurrent() && currentBoundaryContext.current === context) setFailure(m.error_message());
     } finally {
-      finishRequest(request);
+      membersReadActive.current = false;
+      // Settle physical progress even when admission is temporarily unavailable.
+      if (admission.retained()) setReadingMembers(false);
     }
   }
 
@@ -1335,7 +1367,7 @@ function CollectionPageLifetime({
           {...(page.filterIgnored === undefined ? {} : { ignored: page.filterIgnored })}
           {...(page.filterStatus === undefined ? {} : { status: page.filterStatus })}
           {...(page.filterType === undefined ? {} : { filterType: page.filterType })}
-          empty={(editing ? members : page.members).length === 0 && (page.memberState ?? 'ready') === 'ready'}
+          empty={(editing ? members : page.filteredMembers ?? page.members).length === 0 && (page.memberState ?? 'ready') === 'ready'}
           unavailable={page.memberState === 'unavailable'}
           emptyLabel={m.library_collection_empty()}
         />
@@ -1419,30 +1451,15 @@ function CollectionPageLifetime({
               ) : null}
             </div>
           ) : null}
-          {page.memberState === 'preparing' ? (
-            <div className="space-y-3">
-              <p role="status">{m.library_dynamic_preparing()}</p>
-              <Button type="button" variant="outline" onClick={() => void reloadFromControl()}>
-                {m.library_collection_reload()}
-              </Button>
-            </div>
-          ) : null}
-          {page.memberState === 'unavailable' ? (
-            <div className="space-y-3">
-              <p role="alert">{m.library_dynamic_unavailable()}</p>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={pending || draftFrozen}
-                onClick={() => void reloadFromControl()}
-              >
-                {m.library_collection_reload()}
-              </Button>
-            </div>
-          ) : null}
+          <CollectionMembersStatus
+            state={page.memberState ?? 'ready'}
+            retrying={readingMembers}
+            disabled={pending || draftFrozen || editing || readingMembers}
+            onRetry={() => void reloadFromControl()}
+          />
           {!editing ? (
-            <CollectionReadMembers
-              members={page.memberState === 'preparing' || page.memberState === 'unavailable' ? [] : page.members}
+            <CollectionReadMembers<ReadMember>
+              members={(page.memberState ?? 'ready') !== 'ready' ? [] : page.filteredMembers ?? page.members}
               layout={layout}
               presentationKind={page.presentationKind}
               typeRatios={page.typeRatios}

@@ -1,3 +1,6 @@
+import purgeMembersPreparation from './erasure-owned-members-preparation.sql';
+import purgeMembersPreparationResult from './erasure-owned-members-preparation-result.sql';
+import purgeMembersPreparationOwner from './erasure-owned-members-preparation-owner.sql';
 import purgeCollectionKindRetired from './collection-kind-erase-retired.sql';
 import purgeCollectionKindObservation from './collection-kind-erase-observation.sql';
 import purgeCollectionKindCount from './collection-kind-erase-count.sql';
@@ -32,6 +35,9 @@ import purgeBulkTarget from './erasure-owned-bulk-target.sql';
 
 /** Fixed producer inventory, in child-before-parent order; heads are last. */
 export const ownedQueries: {
+  readonly members_preparation_result: typeof purgeMembersPreparationResult;
+  readonly members_preparation: typeof purgeMembersPreparation;
+  readonly members_preparation_owner: typeof purgeMembersPreparationOwner;
   readonly collection_kind_retired: typeof purgeCollectionKindRetired;
   readonly collection_kind_observation: typeof purgeCollectionKindObservation;
   readonly collection_kind_count: typeof purgeCollectionKindCount;
@@ -64,6 +70,9 @@ export const ownedQueries: {
   readonly type_preparation_header: typeof purgeTypePreparationHeader;
   readonly bulk_target: typeof purgeBulkTarget;
 } = {
+  members_preparation_result: purgeMembersPreparationResult,
+  members_preparation: purgeMembersPreparation,
+  members_preparation_owner: purgeMembersPreparationOwner,
   collection_kind_retired: purgeCollectionKindRetired,
   collection_kind_observation: purgeCollectionKindObservation,
   collection_kind_count: purgeCollectionKindCount,

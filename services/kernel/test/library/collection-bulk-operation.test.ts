@@ -155,6 +155,10 @@ test('current authority loss prevents another effect and result disclosure', asy
   const command = {
     source: stored.operation.initiator.operation,
     sourceDigest: stored.operation.sourceDigest,
+    identity: {
+      clientId: stored.operation.initiator.actor.clientId,
+      requestedBy: stored.operation.initiator.actor.requestedBy,
+    },
     target: { ...stored.row.target, operationId: id, ordinal: stored.row.ordinal },
     receipt: stored.row.receipt,
     identity: {

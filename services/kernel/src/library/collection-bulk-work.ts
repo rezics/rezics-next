@@ -149,6 +149,10 @@ export async function runCollectionBulkPage(deps: Dependencies, input: Collectio
     const command: TargetCommand = {
       source: operation.initiator.operation,
       sourceDigest: operation.sourceDigest,
+      identity: {
+        clientId: operation.initiator.actor.clientId,
+        requestedBy: operation.initiator.actor.requestedBy,
+      },
       target,
       receipt: row.receipt,
       identity: {

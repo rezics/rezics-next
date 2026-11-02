@@ -385,7 +385,11 @@ Let `s` be the output slots of one read (`1 ≤ s ≤ 100`), `R` the distinct re
    rows, blocks and statements by series. The adopted bound has no active-XID term, so growth on this axis fails
    the bound; this is not a new allowance or a concurrency requirement for layouts independent of active XIDs.
 
-4. **Preparation.** Each durable step has these ceilings:
+4. **Preparation.** Each durable step has these ceilings. For Members, approved C3 treats the 16 statements
+   as the Members-owned body allowance, with constant History registration/receiving and all executor, Access,
+   transfer, retry and cleanup costs charged separately to one finite prepaid parent. See the
+   [owning composition](../services/kernel/src/library/members-preparation-contract.md#approved-c3-composition).
+   This does not grant a refill, second payer or omitted work:
 
    | Unit                                             | Per-step ceiling      |
    | ------------------------------------------------ | --------------------- |

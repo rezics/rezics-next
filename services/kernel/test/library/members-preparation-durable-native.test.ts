@@ -1,3 +1,6 @@
+import { ProblemError } from '../../src/http/problem.ts';
+import { startErasureWorker } from './support/erasure-worker.ts';
+import drainResults from '../../src/library/members-preparation-results-drain.sql';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
@@ -218,4 +221,83 @@ test('a reconstructed service recovers the exact committed definition only durin
   const expiry = new Date(header.last_read_at).getTime() + 24 * 60 * 60 * 1000;
   expect(await read(locator, () => new Date(expiry))).toBeNull();
   expect((await native.rows(fixture.owner))[0]).toMatchObject({ state: 'live', episode_id: locator.episodeId });
+});
+
+test('an undeclared C3 parent refuses a real owner before committing any episode, original or SDK intent', async () => {
+  const fixture = await native.fixture();
+  const before = await native.domain();
+  let refusal: unknown;
+  try {
+    await fixture.store.reserve(fixture.actor, fixture.collectionId, [definition()], { runtime: true });
+  } catch (error) {
+    refusal = error;
+  }
+  expect(refusal).toBeInstanceOf(ProblemError);
+  if (!(refusal instanceof ProblemError)) throw new Error('Missing bounded native refusal');
+  expect(refusal.code).toBe('dependency_unavailable');
+  expect(refusal.message).toContain('whole-members-reservation-cost-unavailable');
+  expect(await native.rows(fixture.owner)).toEqual([]);
+  expect(await native.domain()).toEqual(before);
+  const retained = await native.db.admin.query(
+    `SELECT
+    (SELECT count(*) FROM library.members_preparation_owner WHERE owner_account_id=$1) AS owners,
+    (SELECT count(*) FROM core.operational_work_original WHERE binding->>'ownerAccountId'=$1::text) AS originals,
+    (SELECT count(*) FROM dbos.workflow_status WHERE workflow_uuid LIKE $2) AS intents`,
+    [fixture.owner.accountId, `library:members-preparation:%:${fixture.owner.accountId}:%`],
+  );
+  expect(retained.rows).toEqual([{ owners: '0', originals: '0', intents: '0' }]);
+});
+
+test('the actual default consumer rejects an unassociated locator through selected native provenance', async () => {
+  const fixture = await native.fixture();
+  const locator = native.locator(fixture.owner, fixture.collectionId);
+  const workflowID = `library:members-preparation:${locator.route}:${locator.ownerAccountId}:${locator.episodeId}`;
+  // A genuine SDK enqueue is deliberately insufficient: no request original or native episode was reserved.
+  const handle = await native.workClient.enqueue(
+    { workflowName: 'library.membersPreparation', queueName: 'workflows', workflowID },
+    {
+      accounts: [locator.ownerAccountId],
+      route: locator.route,
+      episodes: [{ collectionId: locator.collectionId, episodeId: locator.episodeId }],
+      cleanup: [],
+    },
+  );
+  const worker = await startErasureWorker(native.db.url, native.workClient);
+  try {
+    await expect(handle.getResult({ pollingIntervalMs: 10 })).rejects.toThrow('selected-runtime-original-unavailable');
+    expect(await native.rows(fixture.owner)).toEqual([]);
+    const selections = await native.db.admin.query(
+      'SELECT result FROM core.operational_work_selection WHERE partition_no=$1 AND workflow_id=$2',
+      [locator.route >> 4, workflowID],
+    );
+    expect(selections.rows).toEqual([]);
+  } finally {
+    await worker.close();
+  }
+});
+
+test('bounded retirement also drains retained candidates without runtime positions', async () => {
+  const f = await native.fixture();
+  const key = native.locator(f.owner, f.collectionId);
+  await native.db.admin.query(
+    `INSERT INTO library.members_preparation
+      (route,owner_account_id,collection_id,episode_id,canonical_basis,basis_digest,state,last_read_at,
+       workflow_id,reserved_incarnation,reserved_generation)
+      VALUES ($1,$2,$3,$4,'[]',decode(repeat('00',32),'hex'),'retired',now(),'retained','retained','0')`,
+    [key.route,key.ownerAccountId,key.collectionId,key.episodeId],
+  );
+  const subjects = Array.from({ length: 101 }, () => native.locator(f.owner, f.collectionId).episodeId);
+  await native.db.admin.query(
+    `INSERT INTO library.members_preparation_result
+      (route,owner_account_id,collection_id,episode_id,subject_id,sort_key)
+      SELECT $1,$2,$3,$4,id,id::text FROM unnest($5::uuid[]) id`,
+    [key.route,key.ownerAccountId,key.collectionId,key.episodeId,subjects],
+  );
+  const args = { route:key.route, owner_account_id:key.ownerAccountId, collection_id:key.collectionId, episode_id:key.episodeId };
+  const first = await drainResults.run(native.db.admin, args);
+  const last = await drainResults.run(native.db.admin, args);
+  expect(first).toHaveLength(100);
+  expect(last).toHaveLength(1);
+  expect(new Set([...first,...last].map(row => row.subjectId))).toEqual(new Set(subjects));
+  expect(await drainResults.run(native.db.admin, args)).toEqual([]);
 });

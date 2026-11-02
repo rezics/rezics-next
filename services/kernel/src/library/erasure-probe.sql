@@ -45,11 +45,17 @@ probe AS (
     EXISTS (SELECT 1 FROM library.type_preparation_header WHERE route = input.route AND account_id = input.account_id) AS type_preparation_header,
     EXISTS (SELECT 1 FROM library.type_preparation_progress WHERE route = input.route AND account_id = input.account_id) AS type_preparation_progress,
     EXISTS (SELECT 1 FROM library.type_preparation_slot WHERE route = input.route AND account_id = input.account_id) AS type_preparation_slot
+    ,EXISTS (SELECT 1 FROM library.members_preparation_owner WHERE route = input.route AND owner_account_id = input.account_id) AS members_preparation_owner
+    ,EXISTS (SELECT 1 FROM library.members_preparation WHERE route = input.route AND owner_account_id = input.account_id) AS members_preparation
+    ,EXISTS (SELECT 1 FROM library.members_preparation_result WHERE route = input.route AND owner_account_id = input.account_id) AS members_preparation_result
   FROM input
 )
 SELECT stores.store
 FROM probe
 CROSS JOIN LATERAL (VALUES
+  (members_preparation_owner, 'members_preparation_owner'::text),
+  (members_preparation, 'members_preparation'::text),
+  (members_preparation_result, 'members_preparation_result'::text),
   (collection_publication_operation, 'collection_publication_operation'::text),
   (collection_publication_operation, 'collection_publication_source'::text),
   (collection_publication_operation, 'collection_publication_episode'::text),

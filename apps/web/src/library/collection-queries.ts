@@ -266,10 +266,15 @@ export function viewerCollectionPageQuery(
   lifetime?: string,
 ) {
   const input = { id, ...(cursor ? { cursor } : {}), ...(search ? { search } : {}) };
-  return queryOptions({
+  return queryOptions<CollectionPageResult>({
     ...personalRead,
     enabled: personalRead.enabled && Boolean(viewerId),
     retry: false,
+    refetchInterval: (query) => {
+      const page = query.state.data;
+      return !query.state.error && page && !('preparing' in page) && page.memberState === 'preparing' && isCurrent()
+        ? page.retryAfterMs ?? 1000 : false;
+    },
     queryKey: readQueryKey(
       ['collection-page', id, cursor ?? null, search ?? null, viewerId, lifetime ?? null],
       'session',
