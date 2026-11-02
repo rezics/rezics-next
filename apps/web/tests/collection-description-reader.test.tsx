@@ -12,15 +12,27 @@ test('description disclosure preserves exact text and keyboard focus, and only o
   let resize = () => {};
   Object.defineProperties(window.HTMLElement.prototype, {
     clientHeight: { configurable: true, get: () => 96 },
-    scrollHeight: { configurable: true, get() { return narrow && this.textContent.length > 100 ? 400 : 24; } },
+    scrollHeight: {
+      configurable: true,
+      get() {
+        return narrow && this.textContent.length > 100 ? 400 : 24;
+      },
+    },
   });
   const globals = {
-    window, document: window.document, navigator: window.navigator,
-    HTMLElement: window.HTMLElement, Element: window.Element, Node: window.Node,
-    Event: window.Event, MouseEvent: window.MouseEvent,
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    Event: window.Event,
+    MouseEvent: window.MouseEvent,
     IS_REACT_ACT_ENVIRONMENT: true,
     ResizeObserver: class {
-      constructor(callback: () => void) { resize = callback; }
+      constructor(callback: () => void) {
+        resize = callback;
+      }
       observe() {}
       disconnect() {}
     },
@@ -28,13 +40,16 @@ test('description disclosure preserves exact text and keyboard focus, and only o
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  const { default: userEvent } = await import(createRequire(require.resolve('storybook/test')).resolve('@testing-library/user-event'));
+  const { default: userEvent } = await import(
+    createRequire(require.resolve('storybook/test')).resolve('@testing-library/user-event')
+  );
   const user = userEvent.setup({ document: window.document });
   const { createRoot } = await import('react-dom/client');
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const show = (description: string | null) => act(async () => root.render(<CollectionDescriptionReader description={description} />));
+  const show = (description: string | null) =>
+    act(async () => root.render(<CollectionDescriptionReader description={description} />));
   try {
     const description = `  Intro\n\n\t<script>literal text</script>\n${'界'.repeat(19950)}  `;
     await show(description);
