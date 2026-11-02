@@ -11,7 +11,7 @@ export type ConditionEditFocusHost = {
 
 export type ConditionEditFocusTarget = {
   pointer: string;
-  nodeKey?: number;
+  nodeKey?: number | undefined;
   source: EventTarget | null;
 };
 
@@ -49,7 +49,7 @@ export function conditionDraftNodeAt(
 export function conditionEditFocusRegion(
   editor: HTMLElement,
   pointer: string,
-  nodeKey?: number,
+  nodeKey?: number | undefined,
 ): HTMLElement | undefined {
   const match = Array.from(editor.querySelectorAll<HTMLElement>('[data-condition-pointer]')).find(
     (element) => element.dataset.conditionPointer === pointer,
