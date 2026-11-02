@@ -11,13 +11,49 @@ import { m } from '../../../paraglide/messages.js';
 import { AppShell } from '../../../shell/shell';
 import { threadHref } from '../../../threads/thread-href';
 import { PatternStory } from '../../page';
-import { profilePage } from './fixtures';
+import { clippedContributionPage, contributionPage, contributionLongTitle, type ContributionView } from './fixtures';
 
-function Example({ mode = 'recorded' }: { mode?: 'recorded' | 'fallbacks' | 'discussion' }) {
-  const page = profilePage();
+function Example({
+  mode = 'recorded',
+  view,
+}: {
+  mode?:
+    | 'recorded'
+    | 'fallbacks'
+    | 'discussion'
+    | 'clipped'
+    | 'clipped-discussion'
+    | 'empty'
+    | 'missing'
+    | 'denied'
+    | 'unavailable'
+    | 'expired'
+    | 'continued';
+  view?: ContributionView;
+}) {
+  const page = mode === 'clipped' || mode === 'clipped-discussion' ? clippedContributionPage() : contributionPage(view);
   for (const result of Object.values(page.reads)) {
     if (!isRecord(result.body)) continue;
     const { posts, threads, collections } = result.body;
+    if (['empty', 'missing', 'denied', 'unavailable', 'expired', 'continued'].includes(mode)) {
+      const field = Array.isArray(posts)
+        ? 'posts'
+        : Array.isArray(threads)
+          ? 'threads'
+          : Array.isArray(collections)
+            ? 'collections'
+            : null;
+      if (field) {
+        if (mode === 'missing') result.body = {};
+        else if (mode === 'denied' || mode === 'unavailable' || mode === 'expired') {
+          result.status = mode === 'denied' ? 403 : mode === 'expired' ? 400 : 503;
+          result.body = {};
+        } else {
+          result.body[field] = [];
+          result.body.next = mode === 'continued' ? 'signed+/=next' : null;
+        }
+      }
+    }
     if (mode === 'fallbacks') {
       if (Array.isArray(posts) && isRecord(posts[0]) && isRecord(posts[0].thread)) posts[0].thread.title = '';
       if (Array.isArray(threads)) {
@@ -40,8 +76,10 @@ function Example({ mode = 'recorded' }: { mode?: 'recorded' | 'fallbacks' | 'dis
           threads[1].firstPost.body = threadPosts.posts[2]!.body;
       }
     }
+    if (mode === 'clipped-discussion' && Array.isArray(threads))
+      for (const thread of threads) if (isRecord(thread)) thread.kind = 'discussion';
   }
-  if (mode === 'discussion') {
+  if (mode === 'discussion' || mode === 'clipped-discussion') {
     for (const node of page.document.content) if (node.type === 'AccountThreads') node.props.threadKind = 'discussion';
   }
   const locale = getLocale();
@@ -244,5 +282,161 @@ export const DiscussionAndIndependentExcerpts: Story = {
       await expect(revealed.closest('.document-spoiler-revealed')).toHaveFocus();
       await expect(contributionRows(canvasElement, slot)).toHaveLength(rows.length);
     }
+  },
+};
+
+async function independentClippedExcerpts(canvasElement: HTMLElement, threadSlot: string) {
+  await contributionsReady(canvasElement);
+  for (const slot of ['account-posts', threadSlot]) {
+    const rows = contributionRows(canvasElement, slot);
+    const row = rows[0]!;
+    const source =
+      slot === 'account-posts' ? recording.reads.r11.body.posts[0]!.thread : recording.reads.r12.body.threads[0]!;
+    const primary = await titleDestination(
+      row,
+      contributionLongTitle,
+      `/${encodeURIComponent(getLocale())}${threadHref({ id: source.id, title: contributionLongTitle })}`,
+    );
+    const excerpt = row.querySelector<HTMLElement>('[data-slot="excerpt"]')!;
+    await expect(excerpt).toHaveClass('max-h-40', 'overflow-hidden');
+    await expect(excerpt.scrollHeight).toBeGreaterThan(excerpt.clientHeight);
+    await expect(excerpt.closest('[data-slot="list-row-control"]')).toBeNull();
+    await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+    const paragraph = excerpt.querySelector('p')!;
+    const reference = within(excerpt).getByRole('link', { name: 'The asteroid' });
+    await expect(getComputedStyle(reference).position).toBe('relative');
+    await expect(getComputedStyle(reference).zIndex).toBe('10');
+    await expect(primary.contains(reference)).toBe(false);
+    primary.focus();
+    await userEvent.tab();
+    await expect(reference).toHaveFocus();
+    const openReference = fn((event: Event) => event.preventDefault());
+    reference.addEventListener('click', openReference);
+    try {
+      await userEvent.keyboard('{Enter}');
+      await userEvent.pointer([
+        { keys: '[TouchA>]', target: reference },
+        { keys: '[/TouchA]', target: reference },
+      ]);
+      await expect(openReference).toHaveBeenCalledTimes(2);
+    } finally {
+      reference.removeEventListener('click', openReference);
+    }
+    // Hit-test the rendered paragraph, since clicking its DOM node would bypass the stretched anchor.
+    paragraph.scrollIntoView({ block: 'center' });
+    const box = paragraph.getBoundingClientRect();
+    const point = { x: box.left + Math.min(8, box.width / 2), y: box.top + Math.min(8, box.height / 2) };
+    const target = document.elementFromPoint(point.x, point.y)!;
+    await expect(target.closest('a')).toBe(primary);
+    const openThread = fn((event: Event) => event.preventDefault());
+    primary.addEventListener('click', openThread);
+    try {
+      await userEvent.click(target);
+      await userEvent.pointer([
+        { keys: '[TouchA>]', target },
+        { keys: '[/TouchA]', target },
+      ]);
+      await expect(openThread).toHaveBeenCalledTimes(2);
+    } finally {
+      primary.removeEventListener('click', openThread);
+    }
+    const reveal = within(rows[1]!).getByRole('button', { name: m.thread_reveal_spoiler() });
+    await expect(reveal.closest('[data-slot="list-row-control"]')).toBeNull();
+    await expect(getComputedStyle(reveal).zIndex).toBe('10');
+    reveal.focus();
+    await userEvent.keyboard(' ');
+    const revealed = within(rows[1]!).getByText('The rose was unique').closest('.document-spoiler-revealed');
+    await expect(revealed).toHaveFocus();
+    await expect(revealed).toBeVisible();
+  }
+}
+
+export const ClippedNativeControls: Story = {
+  args: { mode: 'clipped' },
+  play: async ({ canvasElement }) => independentClippedExcerpts(canvasElement, 'account-reviews'),
+};
+
+export const ClippedDiscussionControls: Story = {
+  args: { mode: 'clipped-discussion' },
+  play: async ({ canvasElement }) => independentClippedExcerpts(canvasElement, 'account-threads'),
+};
+
+export const DedicatedEmpty: Story = {
+  args: { mode: 'empty', view: 'posts' },
+  play: async ({ canvasElement }) => {
+    await contributionsReady(canvasElement);
+    const section = canvasElement.querySelector<HTMLElement>('[data-slot="account-posts"]')!;
+    await expect(within(section).getByText(m.agent_empty())).toBeVisible();
+    await expect(section.querySelector('[data-slot="see-all"], [data-slot="continuation"]')).toBeNull();
+  },
+};
+
+export const DedicatedMissing: Story = {
+  args: { mode: 'missing', view: 'reviews' },
+  play: async ({ canvasElement }) => {
+    await contributionsReady(canvasElement);
+    const section = canvasElement.querySelector<HTMLElement>('[data-slot="account-reviews"]')!;
+    await expect(section).toHaveAttribute('data-state', 'failed');
+    await expect(within(section).getByRole('status')).toHaveTextContent(m.subject_section_failed());
+    await expect(within(section).getByRole('link', { name: m.subject_section_retry() })).toHaveAttribute('href', '');
+    await expect(within(section).queryByText(m.agent_empty())).toBeNull();
+  },
+};
+
+export const DedicatedDenied: Story = {
+  args: { mode: 'denied', view: 'collections' },
+  play: async ({ canvasElement }) => {
+    await contributionsReady(canvasElement);
+    const section = canvasElement.querySelector<HTMLElement>('[data-slot="account-collections"]')!;
+    await expect(within(section).getByRole('status')).toHaveTextContent(m.public_account_denied());
+    await expect(within(section).queryByRole('link')).toBeNull();
+  },
+};
+
+export const DedicatedUnavailable: Story = {
+  args: { mode: 'unavailable', view: 'posts' },
+  play: async ({ canvasElement }) => {
+    await contributionsReady(canvasElement);
+    const section = canvasElement.querySelector<HTMLElement>('[data-slot="account-posts"]')!;
+    await expect(within(section).getByRole('alert')).toHaveTextContent(m.public_account_unavailable());
+    await expect(within(section).getByRole('link', { name: m.public_account_retry() })).toHaveAttribute('href', '');
+  },
+};
+
+export const DedicatedExpired: Story = {
+  args: { mode: 'expired', view: 'reviews' },
+  play: async ({ canvasElement }) => {
+    await contributionsReady(canvasElement);
+    const section = canvasElement.querySelector<HTMLElement>('[data-slot="account-reviews"]')!;
+    await expect(within(section).getByRole('status')).toHaveTextContent(m.public_account_cursor_expired());
+    await expect(within(section).getByRole('link', { name: m.public_account_start_again() })).toHaveAttribute(
+      'href',
+      `/${encodeURIComponent(getLocale())}/@mira/reviews`,
+    );
+  },
+};
+
+export const DedicatedSparseContinuation: Story = {
+  args: { mode: 'continued', view: 'collections' },
+  play: async ({ canvasElement }) => {
+    await contributionsReady(canvasElement);
+    await expect(contributionRows(canvasElement, 'account-collections')).toHaveLength(0);
+    const section = canvasElement.querySelector<HTMLElement>('[data-slot="account-collections"]')!;
+    await expect(within(section).getByRole('link', { name: m.threads_next_page() })).toHaveAttribute(
+      'href',
+      '?cursor=signed%2B%2F%3Dnext',
+    );
+    await expect(within(section).queryByText(m.agent_empty())).toBeNull();
+  },
+};
+
+export const WithheldCollectionContinuation: Story = {
+  args: { mode: 'continued', view: 'collections' },
+  parameters: { admitted: [] },
+  play: async ({ canvasElement }) => {
+    await contributionsReady(canvasElement);
+    const section = canvasElement.querySelector<HTMLElement>('[data-slot="account-collections"]')!;
+    await expect(within(section).queryByRole('link')).toBeNull();
+    await expect(within(section).queryByText(m.agent_empty())).toBeNull();
   },
 };

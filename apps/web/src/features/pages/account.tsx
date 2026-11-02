@@ -3,7 +3,6 @@ import { readFailure } from '../../accounts/public-profile/read';
 import { useOperation } from '../../kernel/exposure';
 import { Cover } from '@rezics/ui/cover';
 import { ContentItem } from '@rezics/ui/content-item';
-import { ListRowControl } from '@rezics/ui/list-row';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import type { ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
@@ -225,18 +224,37 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
   if (!viewIsPublic(value.profile, spec.view)) return null;
   const id = String(props.id);
   const title = spec.title(value.locale);
-  if (!section.ok)
+  const options = { locale: value.locale as never };
+  const view = viewHref(value, spec.view);
+  const canOpenView = spec.kind !== 'accountCollections' || collectionPagesAdmitted;
+  if (!section.ok) {
+    const failure = readFailure(section.status ?? 503);
     return (
-      <section data-slot={spec.slot} className={sectionClass}>
-        <h2 className="text-2xl font-semibold">{title}</h2>
-        <PublicAccountState state={readFailure(section.status ?? 503)} />
+      <section data-slot={spec.slot} aria-labelledby={`${id}-title`} className={sectionClass}>
+        <h2 id={`${id}-title`} className="text-2xl font-semibold">
+          {title}
+        </h2>
+        <PublicAccountState state={failure} />
+        {failure === 'invalid-cursor' ? (
+          canOpenView && view ? (
+            <a data-slot="restart" href={view} className={`${linkClass} inline-flex min-h-11 items-center`}>
+              {m.public_account_start_again({}, options)}
+            </a>
+          ) : null
+        ) : failure !== 'denied' ? (
+          <a data-slot="retry" href="" className={`${linkClass} inline-flex min-h-11 items-center`}>
+            {m.public_account_retry({}, options)}
+          </a>
+        ) : null}
       </section>
     );
+  }
   if (section.read.kind !== spec.kind) return <Failed slot={spec.slot} id={id} title={title} locale={value.locale} />;
   const listed = spec.items(section.body);
   if (!Array.isArray(listed)) return <Failed slot={spec.slot} id={id} title={title} locale={value.locale} />;
   const limit = typeof props.limit === 'number' ? props.limit : listed.length;
-  const items = listed.filter(isRecord).slice(0, limit);
+  const rows = listed.filter(isRecord);
+  const items = rows.slice(0, limit);
   const next = typeof section.body.next === 'string' && section.body.next ? section.body.next : null;
   const paged = props.paged === true;
   const list = (
@@ -270,7 +288,7 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
             data-slot="continuation"
             rel="next"
             href={`?cursor=${encodeURIComponent(next)}`}
-            className={`${linkClass} ${linkColor} text-sm font-medium hover:underline`}
+            className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center text-sm font-medium hover:underline`}
           >
             {m.threads_next_page({}, { locale: value.locale as never })}
           </a>
@@ -278,15 +296,15 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
       </section>
     );
   }
-  if (items.length === 0) return null;
+  if (items.length === 0 && (!next || !canOpenView)) return null;
   return (
     <Preview
       slot={spec.slot}
       id={id}
       title={title}
-      count={next === null ? { value: items.length, relation: 'exact' } : undefined}
-      more={next !== null}
-      href={viewHref(value, spec.view)}
+      count={next === null ? { value: rows.length, relation: 'exact' } : undefined}
+      more={next !== null || rows.length > items.length}
+      href={canOpenView ? view : null}
       locale={value.locale}
     >
       {list}
@@ -340,11 +358,7 @@ export function AccountPosts(props: Record<string, unknown>) {
               href={href}
               headingLevel={3}
               metadata={when ? <Quiet>{when}</Quiet> : null}
-              preview={
-                <ListRowControl>
-                  <Excerpt body={post.body} value={value} />
-                </ListRowControl>
-              }
+              preview={<Excerpt body={post.body} value={value} />}
             />
           );
         },
@@ -381,11 +395,7 @@ export function AccountThreads(props: Record<string, unknown>) {
               href={href}
               headingLevel={3}
               metadata={when ? <Quiet>{when}</Quiet> : null}
-              preview={
-                <ListRowControl>
-                  <Excerpt body={first?.body} value={value} />
-                </ListRowControl>
-              }
+              preview={<Excerpt body={first?.body} value={value} />}
             />
           );
         },
