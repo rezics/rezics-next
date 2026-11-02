@@ -7,6 +7,7 @@ import {
   sumFinite,
 } from './growth-numeric.ts';
 import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
+import { classifyGrowthSql } from './growth-sql-kind.ts';
 
 export type Capture = {
   readonly statements: readonly string[];
@@ -80,9 +81,7 @@ const rowScans = new Set([
 ]);
 
 export function isControlStatement(text: string): boolean {
-  return /^\s*(?:BEGIN|START\s+TRANSACTION|COMMIT|END|ABORT|ROLLBACK|SAVEPOINT|RELEASE|SET\s+LOCAL|SET\s+TRANSACTION)\b/i.test(
-    text,
-  );
+  return classifyGrowthSql(text) !== 'statement';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -25,13 +25,13 @@ import {
 import {
   catalogStatementBound,
   costOf,
-  isControlStatement,
   medianCost,
   withoutCatalogTexts,
   type Capture,
   type CatalogClassification,
   type Cost,
 } from './growth-cost.ts';
+import { classifyGrowthSql } from './growth-sql-kind.ts';
 import { classifySeries, type SeriesClassification, type SeriesInterval, type SeriesPoint } from './growth-model.ts';
 import { GROWTH_BASELINE } from './growth-baseline.ts';
 import { GROWTH_UNCERTAINTY } from './growth-uncertainty.ts';
@@ -158,35 +158,36 @@ function attemptRecords(capture: Capture, occurrences: StatementOccurrences): At
   const backends = capture.statementBackends;
   if (!backends || backends.length !== capture.statements.length)
     throw new TypeError('attempts require captures with backend attribution');
-  const active = new Map<number, number[]>();
+  const active = new Map<number, { readonly occurrences: number[]; statements: number }>();
   const records: AttemptRecord[] = [];
   for (const occurrence of occurrences.statements) {
     const backend = occurrence.backend;
     if (backend === undefined) throw new TypeError('attempts require a backend PID for every statement');
     const text = capture.statements[occurrence.index]!;
-    if (/^\s*(?:BEGIN|START\s+TRANSACTION)\b/i.test(text)) {
+    const kind = classifyGrowthSql(text);
+    if (kind === 'begin') {
       if (active.has(backend))
         throw new TypeError(`backend ${backend} began a transaction before ending its previous attempt`);
-      active.set(backend, [occurrence.index]);
+      active.set(backend, { occurrences: [occurrence.index], statements: 0 });
       continue;
     }
     const attempt = active.get(backend);
     if (!attempt) continue;
-    attempt.push(occurrence.index);
-    if (/^\s*(?:COMMIT|END|ABORT|ROLLBACK(?!\s+(?:WORK\s+|TRANSACTION\s+)?TO\b))\b/i.test(text)) {
-      const sqlstate = attempt
+    attempt.occurrences.push(occurrence.index);
+    if (kind === 'statement') attempt.statements++;
+    if (kind === 'commit' || kind === 'rollback') {
+      const sqlstate = attempt.occurrences
         .map((index) => capture.statementErrors?.[index] ?? null)
         .find((code) => code === '40001' || code === '40P01');
       if (
         !sqlstate &&
-        (/^\s*(?:ROLLBACK|ABORT)\b/i.test(text) || attempt.some((index) => capture.statementErrors?.[index]))
+        (kind === 'rollback' || attempt.occurrences.some((index) => capture.statementErrors?.[index]))
       )
         throw new TypeError(
           `backend ${backend}: transaction ended without a commit or retry SQLSTATE (40001 or 40P01)`,
         );
       const outcome: AttemptOutcome = sqlstate ? `aborted:${sqlstate}` : 'committed';
-      const statements = attempt.filter((index) => !isControlStatement(capture.statements[index]!)).length;
-      records.push({ backend, outcome, statements, occurrences: [...attempt] });
+      records.push({ backend, outcome, statements: attempt.statements, occurrences: [...attempt.occurrences] });
       active.delete(backend);
     }
   }

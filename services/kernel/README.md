@@ -201,6 +201,9 @@ A no-op or refusal reads the marker and writes no receipt, grant, fence or event
 native index buffers are `O(log R)`. Role expansion is bounded by the explicit action data at composition and
 creates no per-action governance rows. There is no account scan or cross-partition transaction.
 
+Growth SQL control classification skips leading whitespace and nested comments, rejects empty or comment-only entries
+and unterminated comments in the command prefix, and keeps `ROLLBACK TO [WORK|TRANSACTION]` inside the current attempt.
+
 The shared 1x/8x/64x growth checks grow accounts, community contexts, same-Global unrelated grants, unrelated
 receipts, same-account receipt history and outbox history at fixed actions. Warm native attempts use 5 statements
 for first installation and 3 for no-op/refusal; cold exact CLI processes use 9 and 5 respectively, including Reylo's
