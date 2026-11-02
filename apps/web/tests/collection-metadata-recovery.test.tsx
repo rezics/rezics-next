@@ -157,6 +157,14 @@ test('Cancel isolates metadata/notes; uncertain retry keeps identity; failed con
     expect(update).not.toHaveBeenCalled();
     await begin();
     await change();
+    await settle(() => members.onNoteChange!(initial.members[0]!.id, '😀'.repeat(1001)));
+    await submit();
+    expect(update).not.toHaveBeenCalled(); // A late note must prevent the earlier metadata write.
+    expect(title().value).toBe('Draft');
+    expect(title().disabled).toBe(false);
+    expect(host.querySelector<HTMLTextAreaElement>('[id^="collection-member-note-"]')!.value).toBe('😀'.repeat(1001));
+    expect(host.querySelector('[aria-invalid="true"]')).not.toBeNull();
+    await settle(() => members.onNoteChange!(initial.members[0]!.id, 'Draft note'));
     update.mockRejectedValueOnce(new Error('transport')).mockResolvedValueOnce({ ok: false, reason: 'conflict' });
     await submit();
     expect(title().value).toBe('Draft');

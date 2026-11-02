@@ -205,6 +205,23 @@ async function withForm(run: (page: Awaited<ReturnType<typeof mountForm>>) => Pr
 }
 
 describe('Curated Collection creation preserves exact uncertain intent and isolates observed current viewer lifetimes', () => {
+  test('invalid title creates no intent and correcting to the scalar boundary keeps raw text', async () => {
+    await withForm(async (page) => {
+      await page.render();
+      await page.fill('😀'.repeat(201));
+      const key = page.key();
+      await page.submit();
+      expect(page.calls).toHaveLength(0);
+      expect(page.key()).toBe(key);
+      expect(page.title().getAttribute('aria-invalid')).toBe('true');
+      const title = ' ' + '😀'.repeat(199);
+      await page.fill(title);
+      await page.submit();
+      expect(page.calls[0]!.data.title).toBe(title);
+      await page.settle(0, success);
+    });
+  });
+
   test('viewer replacement retires private drafts and every late completion while the replacement can create', async () => {
     for (const result of staleResults)
       await withForm(async (page) => {
@@ -340,7 +357,7 @@ describe('Curated Collection creation preserves exact uncertain intent and isola
       expect(page.serverHtml).not.toContain('<form');
       expect(page.hydrationErrors).toEqual([]);
       expect(page.title().required).toBe(true);
-      expect(page.title().maxLength).toBe(512);
+      expect(page.title().hasAttribute('maxlength')).toBe(false);
       expect(page.description().rows).toBe(4);
       expect(page.action().disabled).toBe(true);
       await page.submit();

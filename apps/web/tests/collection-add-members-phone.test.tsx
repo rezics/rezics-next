@@ -311,8 +311,13 @@ test('actual selected subject, note, error and footer preserve full text and cor
     await ui.choose();
     const note = ui.note();
     expect(ui.host.querySelector('label')!.htmlFor).toBe(note.id);
-    expect(note.maxLength).toBe(20_000);
+    expect(note.hasAttribute('maxlength')).toBe(false);
     expect(ui.host.querySelector('summary')!.classList.contains('min-h-11')).toBe(true);
+    await ui.changeNote('😀'.repeat(1001));
+    await ui.click();
+    expect(ui.calls).toHaveLength(0);
+    expect(note.getAttribute('aria-invalid')).toBe('true');
+    expect(note.value).toBe('😀'.repeat(1001));
     await ui.changeNote(exactNote);
     expect(note.value).toBe(exactNote);
     await ui.click();

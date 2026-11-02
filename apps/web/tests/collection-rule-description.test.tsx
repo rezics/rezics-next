@@ -125,9 +125,9 @@ test('creating with a valid multiline description sends the exact paragraphs, bo
   });
   try {
     const control = ui.labelled(m.library_collection_description());
-    expect(control.maxLength).toBe(20000);
+    expect(control.hasAttribute('maxlength')).toBe(false);
     expect(ui.window.document.getElementById(control.getAttribute('aria-describedby')!)!.textContent).toBe(
-      m.library_rule_description_limit(),
+      m.library_collection_text_input_description_help(),
     );
     await ui.fill(m.library_collection_title(), 'Private reading');
     await ui.fill(m.library_collection_description(), paragraphs);
@@ -156,6 +156,27 @@ test('Stay after recoverable create refusal keeps the multiline draft; confirmed
     expect(calls[1]!.description).toBe(paragraphs);
     expect(ui.host.textContent).toContain(m.library_rule_saved());
     expect(ui.labelled(m.library_collection_description()).closest('fieldset')?.disabled).toBe(true);
+  } finally {
+    await ui.close();
+  }
+});
+
+test('new rule corrects native text before capture and accepts raw scalar boundaries', async () => {
+  const calls: RuleWrite[] = [];
+  const ui = await mount(async (value) => {
+    calls.push(value);
+    return { ok: false, reason: 'invalid' };
+  });
+  try {
+    await ui.fill(m.library_collection_title(), '😀'.repeat(201));
+    await ui.submit();
+    expect(calls).toHaveLength(0);
+    expect(ui.labelled(m.library_collection_title()).getAttribute('aria-invalid')).toBe('true');
+    const title = ' ' + '😀'.repeat(199), description = '\n' + '😀'.repeat(1999);
+    await ui.fill(m.library_collection_title(), title);
+    await ui.fill(m.library_collection_description(), description);
+    await ui.submit();
+    expect(calls[0]).toMatchObject({ title, description });
   } finally {
     await ui.close();
   }
