@@ -224,7 +224,7 @@ function history(actor: string): Population {
 }
 
 test(
-  title,
+  'Account operation transport stays within its bound as account and approval history grows',
   async () => {
     const database = testDatabase();
     const db = await openGrowthDatabase(database.url);

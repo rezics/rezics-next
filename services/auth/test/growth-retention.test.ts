@@ -60,23 +60,28 @@ async function seed(growth: GrowthDatabase, kind: 'full' | 'short', scale: numbe
     SELECT workflow_uuid,decode('00','hex'),'{}'::jsonb FROM auth_dbos.workflow_status`);
 }
 
-for (const kind of ['full', 'short'] as const) {
-  test(`a ${kind} Auth retention batch stays constant as workflow and request history grow`, async () => {
-    const report = await checkGrowth(db, {
-      name: `${kind} Auth workflow retention batch`,
-      scales: [256, 1024, 4096],
-      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-      grow: (growth, scale) => seed(growth, kind, scale),
-      async operation(_growth, _scale, repetition) {
-        const at = kind === 'full' ? now : new Date(now.getTime() + (repetition % 6) + 1);
-        expect(await runWorkflowRetentionBatch(30, client, at)).toBe(kind === 'full' ? 1000 : 10);
-      },
-    });
-    const first = report.samples[0]!.cost;
-    expect(first.rows).toBeGreaterThan(0);
-    for (const sample of report.samples.slice(1)) {
-      expect(sample.cost.rows).toBe(first.rows);
-      expect(sample.cost.statements).toBe(first.statements);
-    }
-  }, 180000);
+async function runRetentionGrowth(kind: 'full' | 'short') {
+  const report = await checkGrowth(db, {
+    name: `${kind} Auth workflow retention batch`,
+    scales: [256, 1024, 4096],
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: (growth, scale) => seed(growth, kind, scale),
+    async operation(_growth, _scale, repetition) {
+      const at = kind === 'full' ? now : new Date(now.getTime() + (repetition % 6) + 1);
+      expect(await runWorkflowRetentionBatch(30, client, at)).toBe(kind === 'full' ? 1000 : 10);
+    },
+  });
+  const first = report.samples[0]!.cost;
+  expect(first.rows).toBeGreaterThan(0);
+  for (const sample of report.samples.slice(1)) {
+    expect(sample.cost.rows).toBe(first.rows);
+    expect(sample.cost.statements).toBe(first.statements);
+  }
 }
+
+test('a full Auth retention batch stays constant as workflow and request history grow', async () => {
+  await runRetentionGrowth('full');
+}, 180000);
+test('a short Auth retention batch stays constant as workflow and request history grow', async () => {
+  await runRetentionGrowth('short');
+}, 180000);

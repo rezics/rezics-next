@@ -499,36 +499,35 @@ if (child) {
     }
   }, 240000);
 
-  for (const [kind, title] of [
-    [
-      'maintenance',
-      'Maintenance tick with due consent erasure stays within its bound as consent and session history grows',
-    ],
-    ['website', 'Website maintenance sweep stays within its bound as protocol state history grows'],
-  ]) {
-    test(
-      title!,
-      async () => {
-        const fixture = testDatabase();
-        try {
-          const process = Bun.spawn([Bun.which('bun')!, import.meta.path, `--revoke-maintenance-child=${kind}`], {
-            env: { ...globalThis.process.env, REVOKE_MAINTENANCE_DATABASE_URL: fixture.url },
-            stdout: 'pipe',
-            stderr: 'pipe',
-          });
-          const [output, errors, code] = await Promise.all([
-            new Response(process.stdout).text(),
-            new Response(process.stderr).text(),
-            process.exited,
-          ]);
-          console.log(output);
-          if (errors) console.error(errors);
-          expect(code).toBe(0);
-        } finally {
-          fixture.close();
-        }
-      },
-      360000,
-    );
+  async function runMaintenanceGrowth(kind: 'maintenance' | 'website') {
+    const fixture = testDatabase();
+    try {
+      const process = Bun.spawn([Bun.which('bun')!, import.meta.path, `--revoke-maintenance-child=${kind}`], {
+        env: { ...globalThis.process.env, REVOKE_MAINTENANCE_DATABASE_URL: fixture.url },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const [output, errors, code] = await Promise.all([
+        new Response(process.stdout).text(),
+        new Response(process.stderr).text(),
+        process.exited,
+      ]);
+      console.log(output);
+      if (errors) console.error(errors);
+      expect(code).toBe(0);
+    } finally {
+      fixture.close();
+    }
   }
+
+  test(
+    'Maintenance tick with due consent erasure stays within its bound as consent and session history grows',
+    async () => runMaintenanceGrowth('maintenance'),
+    360000,
+  );
+  test(
+    'Website maintenance sweep stays within its bound as protocol state history grows',
+    async () => runMaintenanceGrowth('website'),
+    360000,
+  );
 }
