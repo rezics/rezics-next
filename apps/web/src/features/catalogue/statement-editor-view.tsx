@@ -123,9 +123,7 @@ function StatementEditorNavigation({
     return () => window.removeEventListener('beforeunload', beforeUnload);
   }, [protect]);
 
-  return router ? (
-    <RouterStatementDeparture pending={pending} protect={protect} fallbackFocus={fallbackFocus} />
-  ) : null;
+  return router ? <RouterStatementDeparture pending={pending} protect={protect} fallbackFocus={fallbackFocus} /> : null;
 }
 
 function RouterStatementDeparture({

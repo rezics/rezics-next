@@ -10,5 +10,9 @@ export function statementDraftChanged(original: StatementInput | null, draft: St
 function stable(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stable);
   if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(Reflect.get(value, key))]));
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, stable(Reflect.get(value, key))]),
+  );
 }

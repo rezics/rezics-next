@@ -26,9 +26,7 @@ test('the correction BFF accepts a native statement object rather than a selecte
   expect(command).toEqual(original);
 });
 
-test(
-  'statement draft comparison covers values, entity selections, qualifiers, and citation metadata as one correction',
-  () => {
+test('statement draft comparison covers values, entity selections, qualifiers, and citation metadata as one correction', () => {
   const original: StatementInput = {
     property: { id: 'schema:datePublished' },
     value: { type: 'value', content: { time: '+1943-04-06T00:00:00Z', precision: 11 } },
@@ -66,5 +64,4 @@ test(
     edit(draft);
     expect(statementDraftChanged(original, draft)).toBe(true);
   }
-  },
-);
+});

@@ -62,11 +62,9 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
   function Surface() {
     const [node, setNode] = useState<ReactNode>(null);
     show = (next) => setNode(() => next);
-    return showSearchLink ? (
-      createElement('div', null, createElement(Link, { to: '/search' }, 'Search destination'), node)
-    ) : (
-      node
-    );
+    return showSearchLink
+      ? createElement('div', null, createElement(Link, { to: '/search' }, 'Search destination'), node)
+      : node;
   }
   const rootRoute = createRootRoute({ component: Outlet });
   const editorRoute = createRoute({ getParentRoute: () => rootRoute, path: '/edit', component: Surface });
