@@ -87,6 +87,7 @@ export async function containerGrowthFixture() {
     selected: { space: Community['space']; realm?: Community['realm'] },
     axis: Axis,
     operation: () => Promise<unknown>,
+    additionalGrowth?: (scale: number, previous: number) => Promise<void>,
   ) {
     const route = routeOf(selected.space.spaceId)!;
     const actor = owner.actor.accountId;
@@ -228,6 +229,7 @@ export async function containerGrowthFixture() {
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(_database, scale, previous) {
         await seed(db, population, { from: previous, to: scale });
+        await additionalGrowth?.(scale, previous);
         // Count persisted data and fence the selected heads independently of the seed loop.
         const count = await db.admin.query<{ count: number }>(
           axis === 'history'
