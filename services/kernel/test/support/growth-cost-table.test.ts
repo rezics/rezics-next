@@ -150,6 +150,45 @@ test('a citation of a missing file or of a name the file does not contain is ref
   }
 });
 
+test('a citation must match a declared test title rather than source text', () => {
+  const f = fixture();
+  try {
+    writeTestFile(
+      f,
+      f.testRoot,
+      'titles.test.ts',
+      [
+        '// test("comment-only title", () => {});',
+        'const unrelated = "string-only title";',
+        'const unrelatedTemplate = `template-only ${mode} title remains bounded`;',
+        'test.skip("skipped title", () => {});',
+        'test.serial(`generated check for ${mode} at every supported scale`, () => {});',
+      ].join('\n'),
+    );
+    const readmePath = writeReadme(
+      f,
+      'declared-titles',
+      costReadme([
+        '| Comment row | one request | constant work | `titles.test.ts`: “comment-only title” |',
+        '| String row | one request | constant work | `titles.test.ts`: “string-only title” |',
+        '| Template row | one request | constant work | `titles.test.ts`: “template-only other title remains bounded” |',
+        '| Skipped row | one request | constant work | `titles.test.ts`: “skipped title” |',
+        '| Declared generated row | one request | constant work | `titles.test.ts`: “generated check for parallel at every supported scale” |',
+      ]),
+    );
+
+    const problems = costTableProblems(readmePath, f.options).join('\n');
+    expect(problems).toContain('comment-only title');
+    expect(problems).toContain('string-only title');
+    expect(problems).toContain('template-only other title remains bounded');
+    expect(problems).toContain('skipped title');
+    expect(problems).toContain('was not found in a declared test');
+    expect(problems).not.toContain('Declared generated row');
+  } finally {
+    f.cleanup();
+  }
+});
+
 test('a generated check title is found from its template', () => {
   const f = fixture();
   try {

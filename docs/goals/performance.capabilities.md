@@ -137,6 +137,7 @@ exists. Include denied/empty/deep paths, replay and bounded resumable progress. 
 the following files remain frozen; these obligation names do not rename or replace them.
 The Cost-table verifier's frozen cases include `a Cost table whose every row cites an existing check passes` and
 `a citation of a missing file or of a name the file does not contain is refused and named`.
+Cost citations resolve only to active `test`/`it` declarations with literal or supported template-literal titles; comments, unrelated strings, skipped tests and unresolved dynamic titles do not count.
 
 **Native acceptance commands:** run `bun run --cwd services/kernel check test/support/growth-cost-table.test.ts`
 for Cost citation validation. For each inventory row below, join its directory and each filename to form

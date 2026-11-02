@@ -9,6 +9,7 @@ type TableRow = { cells: string[]; line: number };
 type CostTable = { rows: TableRow[] };
 type TemplatePattern = { fixedParts: string[] };
 type TemplateScan = { pattern: TemplatePattern; end: number };
+type GrowthCheckTitle = { kind: 'literal'; value: string } | { kind: 'template'; value: TemplatePattern };
 
 const COST_HEADER = ['Operation', 'Touches', 'Bound', 'Growth check'];
 const TABLE_CONTEXT = '<table>';
@@ -265,9 +266,10 @@ function checkProblems(check: string, options: CostTableOptions): string[] {
       continue;
     }
 
+    const titles = scanGrowthCheckTitles(source);
     for (const name of citation.names) {
-      if (!source.includes(name) && !templatePatternsMatch(source, name)) {
-        problems.push(`growth check name "${name}" was not found in "${citation.path}"`);
+      if (!titles.some((title) => growthCheckTitleMatches(title, name))) {
+        problems.push(`growth check name "${name}" was not found in a declared test in "${citation.path}"`);
       }
     }
   }
@@ -344,12 +346,8 @@ function findClosingBacktick(value: string, start: number): number {
   return -1;
 }
 
-function templatePatternsMatch(source: string, name: string): boolean {
-  return scanTemplatePatterns(source).some((template) => patternMatches(template, name));
-}
-
-function scanTemplatePatterns(source: string): TemplatePattern[] {
-  const patterns: TemplatePattern[] = [];
+function scanGrowthCheckTitles(source: string): GrowthCheckTitle[] {
+  const titles: GrowthCheckTitle[] = [];
   let cursor = 0;
   while (cursor < source.length) {
     const character = source[cursor];
@@ -360,17 +358,152 @@ function scanTemplatePatterns(source: string): TemplatePattern[] {
     } else if (character === "'" || character === '"') {
       cursor = skipQuotedString(source, cursor, character);
     } else if (character === '`') {
-      const parsed = parseTemplate(source, cursor, patterns);
+      const parsed = parseTemplate(source, cursor, []);
       if (!parsed) cursor++;
-      else {
-        patterns.push(parsed.pattern);
-        cursor = parsed.end;
+      else cursor = parsed.end;
+    } else if (isIdentifierStart(character)) {
+      const start = cursor;
+      cursor++;
+      while (isIdentifierPart(source[cursor])) cursor++;
+      const identifier = source.slice(start, cursor);
+      if ((identifier === 'test' || identifier === 'it') && !isPropertyReference(source, start)) {
+        const parsed = parseGrowthCheckTitle(source, cursor);
+        if (parsed) {
+          titles.push(parsed.title);
+          cursor = parsed.end;
+        }
       }
     } else {
       cursor++;
     }
   }
-  return patterns;
+  return titles;
+}
+
+function parseGrowthCheckTitle(
+  source: string,
+  start: number,
+): { title: GrowthCheckTitle; end: number } | undefined {
+  let cursor = skipTrivia(source, start);
+  const modifiers: string[] = [];
+  while (source[cursor] === '.') {
+    cursor = skipTrivia(source, cursor + 1);
+    if (!isIdentifierStart(source[cursor])) return undefined;
+    const modifierStart = cursor++;
+    while (isIdentifierPart(source[cursor])) cursor++;
+    modifiers.push(source.slice(modifierStart, cursor));
+    cursor = skipTrivia(source, cursor);
+  }
+  if (modifiers.some((modifier) => modifier === 'skip' || modifier === 'todo') || source[cursor] !== '(') {
+    return undefined;
+  }
+
+  cursor = skipTrivia(source, cursor + 1);
+  if (source[cursor] === "'" || source[cursor] === '"') {
+    const parsed = readQuotedTitle(source, cursor);
+    return parsed && isCompleteTitleArgument(source, parsed.end)
+      ? { title: { kind: 'literal', value: parsed.value }, end: parsed.end }
+      : undefined;
+  }
+  if (source[cursor] === '`') {
+    const parsed = parseTemplate(source, cursor, []);
+    if (!parsed || !isCompleteTitleArgument(source, parsed.end)) return undefined;
+    const title =
+      parsed.pattern.fixedParts.length === 1
+        ? { kind: 'literal' as const, value: parsed.pattern.fixedParts[0]! }
+        : { kind: 'template' as const, value: parsed.pattern };
+    return { title, end: parsed.end };
+  }
+  return undefined;
+}
+
+function isCompleteTitleArgument(source: string, end: number): boolean {
+  const next = skipTrivia(source, end);
+  return source[next] === ',' || source[next] === ')';
+}
+
+function readQuotedTitle(source: string, start: number): { value: string; end: number } | undefined {
+  const quote = source[start]!;
+  let value = '';
+  let cursor = start + 1;
+  while (cursor < source.length) {
+    const character = source[cursor]!;
+    if (character === quote) return { value, end: cursor + 1 };
+    if (character === '\n' || character === '\r') return undefined;
+    if (character !== '\\') {
+      value += character;
+      cursor++;
+      continue;
+    }
+
+    const escaped = source[cursor + 1];
+    if (escaped === undefined) return undefined;
+    if (escaped === '\n') {
+      cursor += 2;
+      continue;
+    }
+    if (escaped === '\r') {
+      cursor += source[cursor + 2] === '\n' ? 3 : 2;
+      continue;
+    }
+    const parsed = readQuotedEscape(source, cursor + 1);
+    if (!parsed) return undefined;
+    value += parsed.value;
+    cursor = parsed.end;
+  }
+  return undefined;
+}
+
+function readQuotedEscape(source: string, start: number): { value: string; end: number } | undefined {
+  const escaped = source[start]!;
+  if (escaped === 'x') {
+    const digits = source.slice(start + 1, start + 3);
+    return /^[\da-f]{2}$/i.test(digits)
+      ? { value: String.fromCharCode(Number.parseInt(digits, 16)), end: start + 3 }
+      : undefined;
+  }
+  if (escaped === 'u') {
+    if (source[start + 1] === '{') {
+      const close = source.indexOf('}', start + 2);
+      const digits = close < 0 ? '' : source.slice(start + 2, close);
+      const point = Number.parseInt(digits, 16);
+      return /^[\da-f]{1,6}$/i.test(digits) && point <= 0x10ffff
+        ? { value: String.fromCodePoint(point), end: close + 1 }
+        : undefined;
+    }
+    const digits = source.slice(start + 1, start + 5);
+    return /^[\da-f]{4}$/i.test(digits)
+      ? { value: String.fromCharCode(Number.parseInt(digits, 16)), end: start + 5 }
+      : undefined;
+  }
+  return { value: decodeTemplateEscape(escaped), end: start + 1 };
+}
+
+function growthCheckTitleMatches(title: GrowthCheckTitle, name: string): boolean {
+  return title.kind === 'literal' ? title.value === name : patternMatches(title.value, name);
+}
+
+function isPropertyReference(source: string, start: number): boolean {
+  return source[start - 1] === '.' || (source[start - 1] === '?' && source[start - 2] === '.');
+}
+
+function isIdentifierStart(character: string | undefined): boolean {
+  return character !== undefined && /[A-Za-z_$]/.test(character);
+}
+
+function isIdentifierPart(character: string | undefined): boolean {
+  return character !== undefined && /[A-Za-z0-9_$]/.test(character);
+}
+
+function skipTrivia(source: string, start: number): number {
+  let cursor = start;
+  while (cursor < source.length) {
+    if (/\s/.test(source[cursor]!)) cursor++;
+    else if (source[cursor] === '/' && source[cursor + 1] === '/') cursor = skipLineComment(source, cursor + 2);
+    else if (source[cursor] === '/' && source[cursor + 1] === '*') cursor = skipBlockComment(source, cursor + 2);
+    else break;
+  }
+  return cursor;
 }
 
 function parseTemplate(source: string, start: number, nested: TemplatePattern[]): TemplateScan | undefined {
