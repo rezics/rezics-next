@@ -1,7 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import * as v from 'valibot';
-import { loadRealmDiscovery } from '../community/realm-discovery/source';
+import { isValidRealmDiscoveryPage, loadRealmDiscovery } from '../community/realm-discovery/source';
 import type { RealmDiscoverySort, RealmDiscoveryState } from '../community/realm-discovery';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SearchLoaderDeps } from './search-params';
@@ -69,7 +69,24 @@ export type RealmDiscoveryWindow = Readonly<{
 
 export const REALM_DISCOVERY_PAGE_SIZE = 20;
 
-export function createRealmDiscoveryWindow(state: RealmDiscoveryState): RealmDiscoveryWindow {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** A typed reader can still be injected by another caller, so admit its full runtime state. */
+export function isAdmittedRealmDiscoveryState(value: unknown): value is RealmDiscoveryState {
+  if (!isRecord(value)) return false;
+  if (value.kind === 'ready') {
+    const { kind: _kind, ...page } = value;
+    return Object.keys(value).length === 3 && isValidRealmDiscoveryPage(page);
+  }
+  return (
+    (value.kind === 'loading' || value.kind === 'unavailable' || value.kind === 'closed') &&
+    Object.keys(value).length === 1
+  );
+}
+
+export function createRealmDiscoveryWindow(state: unknown): RealmDiscoveryWindow {
   return reduceRealmDiscovery(
     {
       state: { kind: 'loading' },
@@ -84,8 +101,17 @@ export function createRealmDiscoveryWindow(state: RealmDiscoveryState): RealmDis
 /** Successful pages replace the finite window; pending and failed requests retain the accepted window. */
 export function reduceRealmDiscovery(
   previous: RealmDiscoveryWindow,
-  incoming: RealmDiscoveryState,
+  incoming: unknown,
 ): RealmDiscoveryWindow {
+  if (!isAdmittedRealmDiscoveryState(incoming)) {
+    if (previous.state.kind === 'ready') return requireRealmDiscoveryRestart(previous);
+    return {
+      state: previous.state.kind === 'closed' ? previous.state : { kind: 'unavailable' },
+      pending: false,
+      retry: previous.state.kind !== 'closed',
+      restart: false,
+    };
+  }
   if (incoming.kind !== 'ready') {
     if (incoming.kind === 'loading')
       return {
@@ -102,12 +128,7 @@ export function reduceRealmDiscovery(
       restart: false,
     };
   }
-  return {
-    state: { ...incoming, realms: incoming.realms.slice(0, REALM_DISCOVERY_PAGE_SIZE) },
-    pending: false,
-    retry: false,
-    restart: false,
-  };
+  return { state: incoming, pending: false, retry: false, restart: false };
 }
 
 /** A broken continuation keeps the last accepted rows visible and turns Retry into a first-page restart. */

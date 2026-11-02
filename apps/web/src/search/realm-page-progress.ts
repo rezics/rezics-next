@@ -1,6 +1,7 @@
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import {
   createRealmDiscoveryWindow,
+  isAdmittedRealmDiscoveryState,
   reduceRealmDiscovery,
   requireRealmDiscoveryRestart,
   type RealmDiscoveryPage,
@@ -56,7 +57,7 @@ export function advanceRealmPageProgress(
 
 export type RealmPageReader = (
   input: Readonly<{ cursor?: string; signal: AbortSignal }>,
-) => Promise<RealmDiscoveryPage>;
+) => Promise<unknown>;
 
 /** Shared explicit-page controller for Search and header Realm browsing. */
 export function createRealmPageProgress(input: {
@@ -68,8 +69,8 @@ export function createRealmPageProgress(input: {
     ? createRealmDiscoveryWindow(input.initial)
     : createRealmDiscoveryWindow({ kind: 'loading' });
   let progress = initialRealmPageProgress();
-  if (input.initial?.kind === 'ready') {
-    const next = advanceRealmPageProgress(progress, undefined, input.initial.next);
+  if (input.initial?.kind === 'ready' && window.state.kind === 'ready') {
+    const next = advanceRealmPageProgress(progress, undefined, window.state.next);
     if (next) progress = next;
     else window = requireRealmDiscoveryRestart(window);
   }
@@ -78,7 +79,7 @@ export function createRealmPageProgress(input: {
   let disposed = false;
   let started = false;
 
-  const update = (page: RealmDiscoveryPage | { kind: 'loading' }) => {
+  const update = (page: unknown) => {
     window = reduceRealmDiscovery(window, page);
     input.publish(window);
   };
@@ -94,7 +95,7 @@ export function createRealmPageProgress(input: {
     try {
       const page = await input.read({ ...(cursor !== undefined ? { cursor } : {}), signal: controller.signal });
       if (disposed || controller.signal.aborted) return;
-      if (page.kind === 'ready') {
+      if (isAdmittedRealmDiscoveryState(page) && page.kind === 'ready') {
         const next = advanceRealmPageProgress(progress, cursor, page.next);
         if (!next) {
           window = requireRealmDiscoveryRestart(window);

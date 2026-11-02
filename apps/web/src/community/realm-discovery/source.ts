@@ -7,6 +7,7 @@ import type { RealmDiscoverySort, RealmDiscoveryState } from './index';
 const id = v.pipe(v.string(), v.uuid());
 const dimension = v.pipe(v.number(), v.safeInteger(), v.minValue(1));
 const coordinate = v.pipe(v.number(), v.minValue(0), v.maxValue(1));
+const cursor = v.pipe(v.string(), v.minLength(1), v.maxLength(4096));
 const image = v.strictObject({
   id,
   containerId: id,
@@ -55,13 +56,18 @@ const page = v.strictObject({
     ),
     v.maxLength(20),
   ),
-  next: v.nullable(v.string()),
+  next: v.nullable(cursor),
 });
 const query = v.strictObject({
   sort: v.picklist(['popular', 'trending']),
-  cursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
+  cursor: v.optional(cursor),
   limit: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100))),
 });
+
+/** Search uses Content's complete page contract before admitting an injected reader result. */
+export function isValidRealmDiscoveryPage(value: unknown): boolean {
+  return v.safeParse(page, value).success;
+}
 
 /** One native bounded page. The server owns anonymous disclosure, ranking windows and final source guards. */
 export async function loadRealmDiscovery(

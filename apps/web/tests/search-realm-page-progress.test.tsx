@@ -20,8 +20,8 @@ import { m } from '../src/paraglide/messages.js';
 type Page = Exclude<RealmDiscoveryState, { kind: 'loading' }>;
 const cursor = 'signed +/= continuation';
 const card = (name: string): RealmDiscoveryCard => ({
-  realmId: name,
-  spaceId: `${name}-space`,
+  realmId: '01a1a000-0000-7000-8000-000000000002',
+  spaceId: '01a1a000-0000-7000-8000-000000000001',
   name,
   description: '',
   avatar: null,
@@ -54,7 +54,7 @@ test('More replaces the visible page, preserves it while pending or failed, and 
       if (calls.length === 1)
         return {
           kind: 'ready',
-          realms: Array.from({ length: 24 }, (_, index) => card(`first-${index}`)),
+          realms: Array.from({ length: 20 }, (_, index) => card(`first-${index}`)),
           next: cursor,
         };
       if (calls.length === 2) return failure.promise;
