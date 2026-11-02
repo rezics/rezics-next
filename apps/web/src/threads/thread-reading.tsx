@@ -16,16 +16,17 @@ import {
   type ComponentProps,
   type ReactNode,
 } from 'react';
+import { useLocation } from '@tanstack/react-router';
 import type { ThreadReadingPost } from '../routes/threads/$id_.$slug';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { PageAuthors } from '../identity/read';
 import type { SessionState } from '../session/state';
+import { readReplyParent } from './reads';
 import { rememberThreadSlug, threadLocation } from './thread-href';
 import type { ThreadSubject } from './subjects';
 import type { LoadedThreadPage, ThreadPost } from './thread-page';
 import type { readThreadPersonal } from './reads';
-import { readReplyParent } from './reads';
 import { ReplyParentReader } from './reply-context';
 import { replyToThread } from './actions';
 import { csrfHeaders, draftFetch } from './composer';
@@ -40,6 +41,33 @@ export type ThreadReadingPage = LoadedThreadPage & {
   now: string;
 };
 export type ThreadReadingPersonal = Awaited<ReturnType<typeof readThreadPersonal>> & { idempotencyKey: string };
+
+export function focusThreadPostLocation(
+  hash: string,
+  threadId: string,
+  posts: ThreadPost[],
+  list: HTMLOListElement | null,
+  pageCurrent: boolean,
+  isPageCallbackCurrent?: () => boolean,
+) {
+  if (!pageCurrent || isPageCallbackCurrent?.() === false) return;
+  const fragment = hash.replace(/^#/, '');
+  if (!fragment.startsWith('post-')) return;
+  const id = fragment.slice('post-'.length);
+  if (!posts.some((post) => post.id === id && post.availability === 'available')) return;
+  if (
+    !list ||
+    list.id !== `thread-${threadId}` ||
+    list.hasAttribute('inert') ||
+    list.getAttribute('aria-hidden') === 'true'
+  )
+    return;
+  const HTMLElementConstructor = list.ownerDocument.defaultView?.HTMLElement;
+  const target = Array.from(list.children).find((item) => item.id === fragment);
+  if (!HTMLElementConstructor || !(target instanceof HTMLElementConstructor)) return;
+  target.scrollIntoView({ block: 'start' });
+  target.focus({ preventScroll: true });
+}
 
 /** Remove obsolete page disclosure while keeping each keyed post component mounted for local drafts. */
 function redactThreadReadingPage(page: ThreadReadingPage): ThreadReadingPage {
@@ -153,6 +181,7 @@ export function ThreadReading({
   onPostIdsChange?: (ids: string[]) => void;
   authorErasure?: Omit<ComponentProps<typeof AuthorErasureEntry>, 'threadId'>;
 }) {
+  const location = useLocation();
   const [reading, setReading] = useState({ source: sourcePage, page: sourcePage, redacted: false });
   // Replace the complete disclosure together, including bylines, media, placement and title.
   let page: ThreadReadingPage;
@@ -177,6 +206,20 @@ export function ThreadReading({
     now,
     documentMedia,
   } = page;
+  const postList = useRef<HTMLOListElement>(null);
+  const permalinkPage = useRef({ posts: posts.posts, threadId: thread.id, pageCurrent, isPageCallbackCurrent });
+  permalinkPage.current = { posts: posts.posts, threadId: thread.id, pageCurrent, isPageCallbackCurrent };
+  useEffect(() => {
+    const current = permalinkPage.current;
+    focusThreadPostLocation(
+      location.hash,
+      current.threadId,
+      current.posts,
+      postList.current,
+      current.pageCurrent,
+      current.isPageCallbackCurrent,
+    );
+  }, [location]);
   const displayTitle = thread.title;
   function setPosts(update: (posts: ThreadReadingPage['posts']) => ThreadReadingPage['posts']) {
     setReading((current) => ({ ...current, page: { ...current.page, posts: update(current.page.posts) } }));
@@ -335,6 +378,7 @@ export function ThreadReading({
             {posts.posts.length ? (
               <ol
                 id={`thread-${thread.id}`}
+                ref={postList}
                 aria-hidden={!pageCurrent}
                 inert={!pageCurrent}
                 className={pageCurrent ? 'space-y-3 scroll-mt-24' : 'invisible space-y-3 scroll-mt-24'}

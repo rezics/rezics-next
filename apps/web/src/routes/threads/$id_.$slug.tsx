@@ -285,11 +285,8 @@ export function ThreadPage() {
   }, [page.posts, callbackRevision, caller?.connectionTicket]);
 
   useEffect(() => {
-    if (!isCallbackCurrent()) return;
-    const hash = window.location.hash.slice(1);
-    if (hash.startsWith('post-')) document.getElementById(hash)?.scrollIntoView();
-    else if (!hash) window.scrollTo(0, 0);
-  }, [id, location.hash, page.posts, callbackRevision]);
+    if (isCallbackCurrent() && !location.hash.replace(/^#/, '')) window.scrollTo(0, 0);
+  }, [location]);
 
   async function refreshThreadQueries() {
     if (!isCallbackCurrent()) throw new ThreadPageCallerRetired();

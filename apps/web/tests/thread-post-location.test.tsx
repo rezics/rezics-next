@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'bun:test';
+import { createRequire } from 'node:module';
 import { createKernelClient } from '@rezics/client';
 import { fromPlainText } from '@rezics/document';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -10,7 +11,7 @@ import thread from '../src/kernel/recorded/thread.json';
 import recorded from '../src/kernel/recorded/thread-posts.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { ThreadReading } = await import('../src/threads/thread-reading');
+const { ThreadReading, focusThreadPostLocation } = await import('../src/threads/thread-reading');
 const { ThreadReadingHeader, ThreadReadingPost } = await import('../src/routes/threads/$id_.$slug');
 const target = {
   ...recorded.posts[0]!,
@@ -142,5 +143,39 @@ test('canonical redirects retain a linked post and fragment before any downstrea
     expect(url.searchParams.get('post')).toBe(target.id);
     expect(url.searchParams.get('cursor')).toBe(cursor);
     expect(url.hash).toBe(`#post-${target.id}`);
+  }
+});
+
+test('a rendered admitted permalink focuses its visible boundary and rejects stale or withheld targets', async () => {
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window();
+  const scrolls: { element: Element; block?: ScrollLogicalPosition }[] = [];
+  window.HTMLElement.prototype.scrollIntoView = function (options) {
+    scrolls.push({ element: this, block: options?.block });
+  };
+  try {
+    const { client } = native('available');
+    const page = await loadThreadPage(client, request, {}, input, verification, 'anonymous');
+    const host = window.document.createElement('main');
+    host.innerHTML = await render(page);
+    window.document.body.append(host);
+    const boundary = host.querySelector<HTMLElement>(`#post-${target.id}`)!;
+    const list = host.querySelector<HTMLOListElement>(`#thread-${thread.thread.id}`)!;
+    focusThreadPostLocation(`#post-${target.id}`, thread.thread.id, page.posts.posts, list, true);
+    expect(boundary.tabIndex).toBe(-1);
+    expect(boundary.className).toContain('scroll-mt-24');
+    expect(window.document.activeElement).toBe(boundary);
+    expect(scrolls).toEqual([{ element: boundary, block: 'start' }]);
+
+    const interruption = window.document.createElement('button');
+    window.document.body.append(interruption);
+    interruption.focus();
+    focusThreadPostLocation(`#post-${target.id}`, thread.thread.id, page.posts.posts, list, false);
+    focusThreadPostLocation(`#post-${target.id}`, thread.thread.id, [], list, true);
+    expect(window.document.activeElement).toBe(interruption);
+    expect(scrolls).toEqual([{ element: boundary, block: 'start' }]);
+  } finally {
+    await window.happyDOM.abort();
   }
 });
