@@ -27,6 +27,8 @@ Run dispatch from a checkout of this repository after configuring local pools an
 must have main checked out. Workers commit on their assigned branches, do not rebase and never edit frozen acceptance
 files; when a contract changes a behaviour an existing test asserts, the worker updates that test. They do not merge either, except that a product worker integrating into dev in its own worktree merges or
 cherry-picks a branch or commit its contract names explicitly.
+If initial dispatch preparation fails before a task is registered, Goal removes the worktree and branch it created when
+Git confirms ownership, preserves the original error, and names any artifact retained for recovery.
 The controller rebases detached candidates onto the integration branch (by default `dev`), checks scope and
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.

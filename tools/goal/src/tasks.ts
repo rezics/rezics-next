@@ -42,6 +42,7 @@ import { webModule, WorkspaceController } from './workspace.ts';
 import { captureLaunchContext } from './launch-context.ts';
 import { toolIncidentRetryAllowed } from './tool-incidents.ts';
 import { dependencyInstallationMatches, installShared } from './shared-dependencies.ts';
+import { prepareInitialDispatch } from './dispatch-preparation.ts';
 import {
   authenticatedManager,
   applyPriorityTransition,
@@ -507,10 +508,17 @@ export class WorkerTasks {
       const files = parseFrozenFiles(brief.markdown, brief.paths);
       mkdirSync(dirname(worktree), { recursive: true });
       mkdirSync(dirname(briefPath), { recursive: true });
-      writeFileSync(briefPath, brief.markdown, { flag: 'wx' });
-      git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base]);
-      if (brief.kind !== 'verification') installWorktreeDependencies(worktree);
-      const frozen = commitFrozenFiles(worktree, files, this.settings.formatCommand);
+      const frozen = prepareInitialDispatch({
+        briefPath,
+        briefText: brief.markdown,
+        branch,
+        worktree,
+        createWorktree: () => git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base]),
+        ...(brief.kind !== 'verification' ? { installDependencies: () => installWorktreeDependencies(worktree) } : {}),
+        freezeFiles: () => commitFrozenFiles(worktree, files, this.settings.formatCommand),
+        removeWorktree: () => git(this.settings.mainCheckout, ['worktree', 'remove', '--force', worktree]),
+        deleteBranch: () => git(this.settings.mainCheckout, ['branch', '-D', branch]),
+      });
       const created = this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
       const held = created.state === 'ready' && brief.after.length > 0 && !this.dependenciesMet(created);
       this.store.updateTask({ taskId: id, attempt: 0 }, (current) => {
