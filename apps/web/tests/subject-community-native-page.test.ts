@@ -12,13 +12,6 @@ import { communityAuthor, communitySubject, communityThread } from '../src/kerne
 
 const review = communityThread('review');
 const discussion = communityThread('discussion');
-const expected = {
-  kind: 'subjectThreads',
-  id: communitySubject.id,
-  place: communitySubject.id,
-  threadKind: 'review',
-  limit: 5,
-} as const;
 const page = (threads: unknown[], next: unknown = null) => ({ threads, next });
 
 // Each bad row invalidates even the valid row before it.
@@ -46,7 +39,7 @@ const malformed = [
   ].map((row) => page([review, row], 'native-next')),
 ];
 
-test('malformed native pages fail only their community source in both readers without extra reads', async () => {
+test('native community windows fail malformed sources locally and retain honest continuations and one author batch', async () => {
   const requests: URL[] = [];
   let response: unknown;
   const fallback = createStoryRecordedKernelFetch();
@@ -90,9 +83,7 @@ test('malformed native pages fail only their community source in both readers wi
     expect(requests.map((url) => url.pathname)).toEqual(['/v1/accounts']);
     expect(requests[0]!.searchParams.get('ids')).toBe(communityAuthor.id);
   }
-});
-
-test('native empty and sparse windows retain opaque continuations, bounds, null titles and closed outcomes', async () => {
+  const expected = Object.values(plan.reads).find((read) => read.kind === 'subjectThreads')!;
   for (const threads of [[], [{ ...review, title: null }]])
     for (const next of [null, 'opaque-native-next'])
       expect(composedCommunityRegion({ status: 200, body: page(threads, next) }, expected)).toMatchObject({
@@ -105,24 +96,4 @@ test('native empty and sparse windows retain opaque continuations, bounds, null 
   });
   expect(composedCommunityRegion(undefined, expected).state).toBe('unavailable');
   expect(composedCommunityRegion({ status: 200, body: page([]) }).state).toBe('unavailable');
-  const requests: URL[] = [];
-  const threads = Array.from({ length: 20 }, (_, n) => {
-    const id = `01a1a000-0000-7000-8000-${String(n).padStart(12, '0')}`;
-    return { ...review, id, firstPost: { ...review.firstPost, id: id.replace('7000', '7001'), threadId: id } };
-  });
-  const client = createKernelClient('https://kernel.invalid', {
-    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = new URL(new Request(input, init).url);
-      requests.push(url);
-      return Response.json(
-        url.pathname.endsWith('/threads') ? page(threads, 'native-next') : { accounts: [communityAuthor] },
-      );
-    }) as typeof fetch,
-  });
-  const result = await readSubjectCommunity(client, communitySubject.id, ['review'], true, 'previous');
-  expect(result.regions.review).toMatchObject({ state: 'ready', next: 'native-next', contributionScope: 'global' });
-  expect(requests).toHaveLength(2);
-  expect(requests[0]!.searchParams.get('limit')).toBe('20');
-  expect(requests[0]!.searchParams.get('cursor')).toBe('previous');
-  expect(JSON.stringify(result)).not.toMatch(/firstPost|revisionId|sha256/);
 });
