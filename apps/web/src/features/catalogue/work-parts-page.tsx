@@ -1,6 +1,6 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -16,6 +16,7 @@ import { subjectHref } from '../../subject/subject-href';
 import type { RelationTransport, RelationDraft, RelationSlot } from '../../subject/relation-candidates';
 import { m } from '../../paraglide/messages.js';
 import { RelationEditor } from './relation-editor';
+import { useConsentFocus } from './statement-consent-focus';
 import { partCorrection, type WorkPartsRead, type PartStream, type PartRow } from './work-parts';
 
 export type WorkPartsTransport = {
@@ -77,13 +78,13 @@ function WorkPartsPageLive({
   const [page, setPage] = useState<Extract<WorkPartsRead, { ok: true }>>();
   const [failure, setFailure] = useState<Extract<WorkPartsRead, { ok: false }>>();
   const [busy, setBusy] = useState(false);
-  const [focusRevision, setFocusRevision] = useState(0);
   const [drafts, setDrafts] = useState<OpenDraft[]>([]);
   const nextDraftInstance = useRef(0);
   const focusAfterOpen = useRef<OpeningFocus | undefined>(undefined);
   useLayoutEffect(() => () => focusAfterOpen.current?.cancel(), []);
   const focusAfterClose = useRef<HTMLElement | undefined>(undefined);
-  const focusAfterRead = useRef<'slice' | 'failure' | undefined>(undefined);
+  const readFocus = useConsentFocus();
+  const readSequence = useRef(0);
   const sliceStatus = useRef<HTMLParagraphElement>(null);
   const readFailure = useRef<HTMLParagraphElement>(null);
   const [part, setPart] = useState<EntityPickerSubject[]>([]);
@@ -103,25 +104,36 @@ function WorkPartsPageLive({
   const sliceRevision = useRef(0);
   // Slice controls retire separately from independently opened corrections.
   const slice = useCatalogueLifetime(JSON.stringify([stream?.key, cursor.current, sliceRevision.current]), lifetime);
-  useLayoutEffect(() => {
-    const target = focusAfterRead.current;
-    focusAfterRead.current = undefined;
-    if (!target || !lifetime.active() || !slice.active()) return;
-    const element = target === 'slice' ? sliceStatus.current : readFailure.current;
-    if (element?.isConnected && !element.closest('[hidden]')) element.focus();
-  }, [focusRevision]);
   const title = pickText(read?.public.subject.labels ?? {}, locale);
-  function focusRead(target: 'slice' | 'failure') {
-    focusAfterRead.current = target;
-    setFocusRevision((revision) => revision + 1);
-  }
-  async function load(key = stream?.key, next?: string, moveFocus = false) {
+  async function load(key = stream?.key, next?: string, event?: MouseEvent<HTMLButtonElement>) {
     if (!slice.active()) return;
+    // A new read action cancels orientation even when the transport is already busy.
+    readFocus.cancel();
     if (running.current) return;
     if (key !== stream?.key || next !== cursor.current) {
       slice.retire();
       sliceRevision.current++;
     }
+    const sequence = ++readSequence.current;
+    const revision = sliceRevision.current;
+    const opener = event?.currentTarget;
+    let complete = false;
+    let outcome: 'slice' | 'failure' = 'slice';
+    readFocus.begin(
+      event,
+      // The requesting slice can retire at start; the resulting slice owns completion.
+      () => lifetime.active() && readSequence.current === sequence && sliceRevision.current === revision,
+      () => {
+        const survives =
+          opener?.isConnected &&
+          !opener.disabled &&
+          !opener.closest('[hidden], [inert], [aria-hidden="true"]');
+        if (survives) return opener;
+        const boundary = outcome === 'slice' ? sliceStatus.current : readFailure.current;
+        return boundary?.closest('[hidden]') ? null : boundary;
+      },
+      () => complete,
+    );
     running.current = true;
     setBusy(true);
     try {
@@ -132,8 +144,8 @@ function WorkPartsPageLive({
       );
       if (!lifetime.active()) return;
       if (!value.ok) {
+        outcome = 'failure';
         setFailure(value);
-        if (moveFocus) focusRead('failure');
         return;
       }
       setPage(value);
@@ -141,13 +153,13 @@ function WorkPartsPageLive({
       cursor.current = next;
       setFailure(undefined);
       setPart([]);
-      if (moveFocus) focusRead('slice');
     } catch {
       if (!lifetime.active()) return;
+      outcome = 'failure';
       setFailure({ ok: false, reason: 'unavailable' });
-      if (moveFocus) focusRead('failure');
     } finally {
       if (!lifetime.active()) return;
+      complete = true;
       running.current = false;
       setBusy(false);
     }
@@ -261,7 +273,11 @@ function WorkPartsPageLive({
             >
               {title.text || m.subject_value_unlabelled({}, o)}
             </a>
-            {!read.streams.length && <p>{m.work_parts_no_stream({}, o)}</p>}
+            {!read.streams.length && (
+              <p ref={sliceStatus} role="status" tabIndex={-1}>
+                {m.work_parts_no_stream({}, o)}
+              </p>
+            )}
             {stream && (
               <>
                 <Field>
@@ -422,7 +438,7 @@ function WorkPartsPageLive({
                       className={actionClassName}
                       variant="outline"
                       disabled={busy}
-                      onClick={() => void load(stream.key, read.next ?? undefined, true)}
+                      onClick={(event) => void load(stream.key, read.next ?? undefined, event)}
                     >
                       {m.work_parts_more({}, o)}
                     </Button>
@@ -431,7 +447,7 @@ function WorkPartsPageLive({
                     className={actionClassName}
                     variant="outline"
                     disabled={busy}
-                    onClick={() => void load(stream.key, undefined, true)}
+                    onClick={(event) => void load(stream.key, undefined, event)}
                   >
                     {m.work_parts_restart({}, o)}
                   </Button>
@@ -504,7 +520,7 @@ function WorkPartsPageLive({
           className={actionClassName}
           variant="outline"
           disabled={busy}
-          onClick={() => void load(stream?.key, cursor.current, true)}
+          onClick={(event) => void load(stream?.key, cursor.current, event)}
         >
           {m.candidate_reload({}, o)}
         </Button>

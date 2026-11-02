@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, createElement as h } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { WorkPartsRead } from '../src/features/catalogue/work-parts';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -74,6 +75,11 @@ test('Work Parts orients only current keyboard openings, closes independent draf
       labels: { ...first.labels, ...next.labels },
       next: null,
     };
+    let pendingRead: Promise<WorkPartsRead> | undefined;
+    const transport = {
+      ...fixture.transport,
+      read: (...args: Parameters<typeof fixture.transport.read>) => pendingRead ?? fixture.transport.read(...args),
+    };
     await act(async () =>
       root.render(
         h(
@@ -84,7 +90,7 @@ test('Work Parts orients only current keyboard openings, closes independent draf
             locale: 'en',
             initial,
             search: fixture.search,
-            transport: fixture.transport,
+            transport,
           }),
         ),
       ),
@@ -183,6 +189,21 @@ test('Work Parts orients only current keyboard openings, closes independent draf
     expect(posts()).toHaveLength(1);
     const sealed = posts()[0]!;
     expect(sealed.authorization).toBe('Bearer contributor');
+    let finishRead!: (value: WorkPartsRead) => void;
+    pendingRead = new Promise((resolve) => { finishRead = resolve; });
+    const reload = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (item) => item.textContent?.trim() === m.candidate_reload(),
+    )!;
+    await activate(reload);
+    siblingPosition!.focus();
+    await input(siblingPosition!, '56');
+    await act(async () => finishRead(initial));
+    pendingRead = undefined;
+    expect(host.ownerDocument.activeElement).toBe(siblingPosition);
+    expect(editors()[0]).toBe(sibling);
+    expect(siblingPosition!.value).toBe('56');
+    expect(freshPosition.value).toBe('72');
+    expect(posts()).toHaveLength(1);
     await click(m.relation_propose(), reopened);
     await until(() => posts().length === 2);
     expect(posts()[1]).toMatchObject({ authorization: sealed.authorization, key: sealed.key, body: sealed.body });

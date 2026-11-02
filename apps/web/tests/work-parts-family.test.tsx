@@ -227,7 +227,7 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
     button(m.work_parts_restart(), panels[0]).focus();
     await click(m.work_parts_restart(), panels[0]);
     await until(() => panels[0]!.querySelector('li h2')?.textContent === 'Volume Two');
-    expect(host.ownerDocument.activeElement).toBe(sliceStatus);
+    expect(host.ownerDocument.activeElement).toBe(button(m.work_parts_restart(), panels[0]));
     expect(left.calls.at(-1)!.query).not.toHaveProperty('cursor');
     expect(position.value).toBe('3');
     expect(right.calls).toHaveLength(0);
@@ -247,7 +247,6 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
         return recovery.transport.read(key, cursor, session);
       },
     });
-    const retryStatus = host.querySelector<HTMLElement>('p[role="status"]')!;
     button(m.work_parts_more()).focus();
     await click(m.work_parts_more());
     await until(() => !!host.querySelector('[role="alert"]'));
@@ -255,11 +254,42 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
     button(m.candidate_reload()).focus();
     await click(m.candidate_reload());
     await until(() => host.querySelector('article')!.getAttribute('aria-busy') === 'false');
-    expect(host.ownerDocument.activeElement).toBe(retryStatus);
+    expect(host.ownerDocument.activeElement).toBe(button(m.candidate_reload()));
     expect(attempted).toEqual([
       [seed.stream!.key, seed.next, seed.session],
       [seed.stream!.key, undefined, seed.session],
     ]);
+
+    for (const interaction of ['pointer activation', 'away/back', 'pointer', 'Tab', 'blur', 'replacement', 'empty', 'no-stream', 'throw']) {
+      let finish!: (value: WorkPartsRead) => void;
+      let reject!: () => void;
+      await show(recovery, seed, 'en', {
+        ...recovery.transport,
+        read: () => new Promise((resolve, fail) => { finish = resolve; reject = () => fail(new Error('read failed')); }),
+      });
+      const opener = button(m.work_parts_more());
+      opener.focus();
+      await act(async () => opener.dispatchEvent(new window.MouseEvent('click', {
+        bubbles: true, detail: interaction === 'pointer activation' ? 1 : 0,
+      })));
+      const document = host.ownerDocument;
+      await act(async () => {
+        if (interaction === 'away/back') { button(m.candidate_reload()).focus(); opener.focus(); }
+        if (interaction === 'pointer') document.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+        if (interaction === 'Tab') document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+        if (interaction === 'blur') window.dispatchEvent(new window.Event('blur'));
+        if (interaction === 'replacement') queuedClick(button(m.candidate_reload()))();
+      });
+      const focused = document.activeElement;
+      await act(async () => interaction === 'throw' ? reject() : finish({
+        ...seed, rows: [], next: null,
+        ...(interaction === 'no-stream' ? { streams: [], stream: undefined } : {}),
+      }));
+      expect(document.activeElement).toBe(
+        interaction === 'throw' ? host.querySelector('[role="alert"]') :
+        interaction === 'empty' || interaction === 'no-stream' ? host.querySelector('p[role="status"]') : focused,
+      );
+    }
 
     // Full reading data is supplied, including content not admitted for editing by current definitions.
     const rich = workPartsFixture();
