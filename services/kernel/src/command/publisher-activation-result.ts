@@ -34,7 +34,7 @@ function record(value: unknown, names: readonly string[]): Record<string, unknow
   return snapshot;
 }
 
-function inputSnapshot(input: ActivationInput): ActivationInput {
+export function publisherActivationInput(input: ActivationInput): ActivationInput {
   const value = record(input, ['format', 'root', 'episode', 'position', 'deadline', 'phase', 'activationId']);
   // Bound primitives before the foreign canonical encoder sees them.
   if (
@@ -67,12 +67,12 @@ function resultSnapshot(input: ActivationInput, result: ActivationResult): Activ
   return { phase: 'activation-step', progress: progress as ActivationResult['progress'] };
 }
 
-/** Representation only: no transaction, admission, ticket, noEffect authority or
- * committed proof is created here. The native producer must atomically bind these
- * bytes to its admitted original, spent ticket and actual partition fence.
+/** Representation only: no transaction, noEffect authority or committed proof is
+ * created here. The native producer atomically binds these bytes to its operation
+ * and actual partition fence.
  * Semantic's representation costs remain a separate owner operand. */
 export function preparePublisherActivationResult(input: ActivationInput, result: ActivationResult) {
-  const selected = inputSnapshot(input);
+  const selected = publisherActivationInput(input);
   const selection = catalogueMechanicalSelection(selected);
   const bytes = encodeCatalogueMechanicalResult(selected, resultSnapshot(selected, result));
   return Object.freeze({
@@ -89,7 +89,7 @@ export function decodePublisherActivationResult(
   input: ActivationInput,
   association: Readonly<{ originalKey: string; inputDigest: string; resultDigest: string; bytes: Uint8Array }>,
 ): ActivationResult {
-  const selected = inputSnapshot(input);
+  const selected = publisherActivationInput(input);
   const selection = catalogueMechanicalSelection(selected);
   const stored = record(association, ['originalKey', 'inputDigest', 'resultDigest', 'bytes']);
   if (

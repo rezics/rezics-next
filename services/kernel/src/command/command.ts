@@ -15,6 +15,7 @@ import { AccessUnavailableError, classifyUnavailability, CommandUnavailableError
 export { CommandUnavailableError } from '../access/unavailable.ts';
 import fenceStatement from './fence.sql';
 import noEffectFenceStatement from './no-effect-fence.sql';
+import { claimPublisherCoordination } from './publisher-coordination.ts';
 import readReceipt from './read-receipt.sql';
 import readOwnCompletion from './read-own-completion.sql';
 import readTime from './time.sql';
@@ -578,15 +579,17 @@ export async function runCommand<T>(
 ): Promise<CommandOutcome<T>> {
   commandPhase('command_overhead');
   const dispatch = claimCommandDispatchLifetime(pool, input);
+  const publisher = claimPublisherCoordination(pool, input);
   let succeeded = false;
   try {
     if (dispatch) await dispatch.prepare();
-    const result = await executeCommand(pool, input, body, dispatch);
+    const result = await executeCommand(pool, input, body, dispatch, publisher);
     dispatch?.checkpoint();
     succeeded = true;
     return result;
   } finally {
     dispatch?.finish(succeeded);
+    publisher?.finish();
     commandPhase('request_completion');
   }
 }
@@ -596,9 +599,12 @@ async function executeCommand<T>(
   input: LegacyCommandOptions | PrincipalCommandInput,
   body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
   dispatch?: CommandDispatchLifetime,
+  publisher?: ReturnType<typeof claimPublisherCoordination>,
 ): Promise<CommandOutcome<T>> {
   const options = normalizeOptions(input);
   dispatch?.assertOptions(pool, options);
+  if (publisher && (dispatch || options.authorization || options.principal || options.receipt || options.basis))
+    throw new TypeError('Publisher coordination is a receipt-free mechanical command');
   const { partition } = options;
   if (options.receipt) assertReceipt(options.receipt);
   if (!Number.isInteger(partition) || partition < 0 || partition > 4095) throw new RangeError('Invalid partition');
@@ -652,6 +658,14 @@ async function executeCommand<T>(
         commandPhase('transaction_body');
         if (!dispatch) await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
         const tx: CommandTransaction = { query: client.query.bind(client) };
+        if (publisher) {
+          const query = tx.query;
+          tx.query = new Proxy(query, {
+            apply(target, receiver, args) {
+              return publisher.query(() => Reflect.apply(target, receiver, args));
+            },
+          });
+        }
         dispatch?.bindQuery(tx, client);
         if (receiptKeys) bindReceiptKeys(tx, receiptKeys);
         const callbackState: CallbackState = { active: true, callbacks: [] };
@@ -716,6 +730,14 @@ async function executeCommand<T>(
             }
           }
           if (mode === 'receipt-only') throw authorization!.denied();
+          if (publisher) {
+            const replay = await publisher.lookup(client);
+            if (replay) {
+              publisher.assertLive();
+              await client.query('COMMIT');
+              return replay as CommandOutcome<T>;
+            }
+          }
           if (receiptInput)
             nativeReceipts.set(
               tx,
@@ -728,16 +750,21 @@ async function executeCommand<T>(
             );
           const rawResponse = dispatch
             ? await dispatch.body(() => body(tx, { transactionId, time: time! }))
-            : await body(tx, { transactionId, time });
+            : publisher
+              ? await publisher.body(() => body(tx, { transactionId, time: time! }))
+              : await body(tx, { transactionId, time });
           const response = dispatch ? dispatch.response(rawResponse, noEffectResults.has(rawResponse)) : rawResponse;
           const noEffect = response.events.length === 0 && noEffectResults.has(response);
-          if (response.events.length === 0 && !noEffect) throw new TypeError('A command must emit at least one event');
+          if (publisher && (noEffect || response.events.length))
+            throw new TypeError('Publisher coordination changes require an eventless coordination fence');
+          if (response.events.length === 0 && !noEffect && !publisher)
+            throw new TypeError('A command must emit at least one event');
           if (response.events.length > MAX_COMMAND_EVENTS)
             throw new TooManyEventsError(partition, response.events.length);
-          if (dispatch) {
-            dispatch.checkpoint();
+          if (dispatch || publisher) {
+            dispatch?.checkpoint();
             if (
-              (!noEffect && !dispatch.admitsEvents()) ||
+              (dispatch && !noEffect && !dispatch.admitsEvents()) ||
               callbackState.callbacks.length ||
               commandRecordSources(tx).length ||
               hasCommandRecordSourceSet(tx) ||
@@ -843,6 +870,12 @@ async function executeCommand<T>(
           if (dispatch)
             await dispatch.control('finalize', () => finalizeCommandRecordSources(tx, BigInt(row[0]!.position)));
           else await finalizeCommandRecordSources(tx, BigInt(row[0]!.position));
+          if (publisher) {
+            await publisher.store(client, {
+              epoch: row[0]!.epoch, position: row[0]!.position, transactionId,
+            }, value);
+            publisher.assertLive();
+          }
           await measureCommandPhase('commit', () =>
             dispatch ? dispatch.control('commit', () => client.query('COMMIT')) : client.query('COMMIT'),
           );

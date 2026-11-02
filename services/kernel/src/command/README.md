@@ -372,25 +372,67 @@ not physical/private Accounts History authority. Accounts must adapt its genuine
 Source scheduling/maxima, whole-original Source/Library prices, receiving and physical writer closure remain their
 owners' operands, unavailable rather than zero when absent. No History consumer is converted by this producer.
 
-### Publisher activation result representation
+### Publisher activation coordination and recovery
 
-[Publisher activation results](publisher-activation-result.ts) snapshot the closed `activation-step` input
-and progress descriptors before calling Semantic's canonical mechanical encoder. They bind the selected
-original key, immutable input digest and result digest, and validate copied canonical bytes against all three.
-Getters, proxies, serializers, other phases, other activation identities and extra properties refuse before
-foreign execution. These are representation helpers only; they install no native transaction authority and
-cannot establish admission, ticket spending, a fence or committed completion.
+[Publisher coordination](publisher-coordination.ts) exports `runPublisherActivation(pool,
+{ input, bodyWork, deadline?, clock? }, body)`, `resolvePublisherActivation(pool, input, deadline)` and
+`cleanupPublisherResults(pool, deadline, limit?)`. These use the existing native executor, private transaction
+association, absolute deadlines and rollback. One invocation makes one attempt; contention may be scheduled again
+with the same immutable input. There are no runtime prices, funding records or receiving gates.
 
-The base provides neither the publisher executor association nor its durable result resolver described by the
-requested activation extension. Semantic's [mechanical receiving representation](../semantic/definition-catalogue-native-contract.md#mechanical-receiving-representation)
-and actual `advanceCatalogueActivation` write root closure, activation state/cuts and staged frontier rows with
-no events. Those writes require a distinct coordination fence and cannot use `noEffect`. A complete profile
-still needs separately declared Core controls, retained result storage, resolution and prepaid cleanup, plus
-Semantic's foreign body and canonical representation operands. These helpers quote none of those missing terms.
-Ordinary execution and the refusing Semantic admission boundary retain their current behavior.
+Semantic owns the `activation-step` input and result and the bounded body. Core snapshots that input before
+checkout, then inserts/locks its exact operation row before calling the body. The canonical original key binds
+root/phase/activation/position; the input digest also binds episode and original deadline. A changed binding
+refuses before effects. Concurrent processes serialize at this primary key; an uncommitted locator is no proof.
+The body receives the actual `currentCommand` transaction and must await its queries. `bodyWork` declares finite
+owner-derived dimensions; Core enforces its statement count and lifetime. Row/fanout/byte bounds remain structural
+owner obligations. `publisherCommandWork(bodyWork)` adds the static Core components; Semantic's canonical
+representation and bounded body constants are additional operands, never inferred to be zero.
 
-Decision: Prepare bounded activation result representation as a separate Core seam while the missing publisher
-association and resolver are implemented; representation bytes never confer admission or commit authority.
+The canonical [activation result](publisher-activation-result.ts), its digest and actual fence metadata commit
+in `core.publisher_operation` in the same serializable transaction as the body. The coordination branch advances
+the partition fence with an empty outbox input: it creates neither an event nor a receipt/write basis, and never
+claims `noEffect`. Ordinary authorization, receipts and event validation keep their existing paths. The mechanical
+API grants no public authorization or publication authority. It accepts only canonical Semantic activation results,
+refuses callbacks and History associations, and cannot finalize publication on behalf of Semantic.
+
+A matching row returns the exact canonical result and original transaction metadata without invoking the body.
+The resolver reads committed database evidence, returning `committed`, `conflicting` or `uncertain`; absent or
+minimized evidence stays uncertain. A fresh resolution deadline does not alter the immutable input deadline.
+A failed/lost COMMIT response still throws; a later lookup establishes completion. Canonical caller buffers and
+precommit transaction IDs confer no completion authority. Semantic's existing scheduler/checkpoint wrapper does
+not yet pass the immutable canonical input; this exported body callback is the minimal local integration contract,
+with phase/body binding still owned by Semantic.
+
+Static Core costs below use the existing eight work dimensions. Candidate keys, identity rows and witness keys
+are zero; PostgreSQL MVCC/index maintenance stays within the engine boundary. Each exact key costs O(log H),
+independent of unrelated operations. Bytes conservatively include SQL, scalar parameters and bytea hex transport.
+
+| Component | Rows | Points | Statements | Bytes | Empty seeks |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Controls, including rollback | 2 | 1 | 9 | 8192 | 1 |
+| Association insert/lock/store | 4 | 8 | 3 | 147456 | 2 |
+| Resolution lookup | 1 | 1 | 1 | 135168 | 1 |
+| Cleanup batch, at most 100 | 200 | 300 | 1 | 32768 | 1 |
+
+Controls cover checkout/release (zero SQL), the executor's two BEGIN dispatches, lock timeout, initial/final
+statement timeout, scalar authoritative time, one partition fence, absent-source finalization (zero SQL), COMMIT
+and one same-client ROLLBACK including a failed COMMIT. Association bounds cover one INSERT plus its partition FK,
+one locked PK lookup and one result UPDATE, including PK and retention-index work. At most 65,536 canonical result
+bytes are stored per operation; lookup and storage carry at most twice that in bytea wire form plus fixed overhead.
+Replay uses a subset of association/controls. Resolution adds its lookup to controls; cleanup adds its batch to
+controls. No retry/second checkout or foreign body is included in those constants.
+
+Results are retained until 30 days after the immutable input deadline. The partial retention index selects at most
+100 expired payloads by `(partition_no, retain_until, original_key)` and minimizes them in one native coordination
+transaction. The selection reads at most 100 rows and updates at most 100; points include selection, exact UPDATE
+and removal from the partial index. The immutable binding, result digest and fence metadata remain as a tombstone,
+so minimization cannot turn an old retry into another effect. Tombstones are retained indefinitely; total retained
+identities grow with completed operations, while every lookup and cleanup unit stays bounded.
+
+Decision: Use a same-transaction operation row and canonical activation snapshot; retain an immutable tombstone
+after bounded result minimization so cleanup cannot repeat an effect. Semantic supplies finite body work and phase
+behavior through the native Core API.
 
 ## Selected Source native consumer fence dispatch
 
