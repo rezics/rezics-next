@@ -31,6 +31,7 @@ export function ValueExplanationPage({
   onReload,
   onRetry,
   reloadFromFirstPage = false,
+  focusResultVersion = 0,
 }: {
   result?: ValueRead | undefined;
   locale: string;
@@ -39,13 +40,21 @@ export function ValueExplanationPage({
   onReload?: () => void;
   onRetry?: (() => void) | undefined;
   reloadFromFirstPage?: boolean;
+  focusResultVersion?: number | undefined;
 }) {
   const headingId = useId();
+  const explanationHeading = useRef<HTMLHeadingElement>(null);
+  const lastFocusedResult = useRef(0);
   const o = { locale: locale as never };
   const page = result?.kind === 'ready' ? result.page : undefined;
   const statement = page?.statement;
   const competition = page?.competition;
   const change = page?.change;
+  useEffect(() => {
+    if (!focusResultVersion || focusResultVersion <= lastFocusedResult.current || busy || !result) return;
+    lastFocusedResult.current = focusResultVersion;
+    explanationHeading.current?.focus();
+  }, [busy, focusResultVersion, result]);
   return (
     <article
       className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6 whitespace-normal [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_pre]:max-w-full [&_pre]:whitespace-pre-wrap"
@@ -68,7 +77,12 @@ export function ValueExplanationPage({
           )}
         </div>
       )}
-      <ViewHeading label={m.value_why({}, o)} headingClassName="font-sans" />
+      <ViewHeading
+        label={m.value_why({}, o)}
+        headingRef={explanationHeading}
+        headingTabIndex={focusResultVersion ? -1 : undefined}
+        headingClassName="font-sans focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      />
       {!result ? (
         <p role="status">{m.candidate_loading({}, o)}</p>
       ) : result.kind !== 'ready' ? (
@@ -368,12 +382,13 @@ function ValueEpisode({
   const [busy, setBusy] = useState(false);
   const session = useRef<string | undefined>(initial?.kind === 'ready' ? initial.session : undefined);
   const [cursor, setCursor] = useState<string | undefined>();
+  const [focusResultVersion, setFocusResultVersion] = useState(0);
   const [retry, setRetry] = useState<PageRequest | undefined>(() =>
     unavailable(initial) ? { cursor: undefined, session: session.current } : undefined,
   );
   const running = useRef(false);
   const generation = useRef(0);
-  async function load(request: PageRequest = { cursor: undefined, session: session.current }) {
+  async function load(request: PageRequest = { cursor: undefined, session: session.current }, focusResult = false) {
     if (!work.active() || running.current) return;
     running.current = true;
     const version = ++generation.current;
@@ -395,6 +410,7 @@ function ValueEpisode({
     setResult(next);
     setBusy(false);
     running.current = false;
+    if (focusResult) setFocusResultVersion((version) => version + 1);
   }
   useEffect(() => {
     if (!initial) void load();
@@ -411,8 +427,9 @@ function ValueEpisode({
       result={work.active() ? result : undefined}
       locale={locale}
       busy={busy}
+      focusResultVersion={focusResultVersion}
       onMore={(cursor) => {
-        if (offered === generation.current) void load({ cursor, session: session.current });
+        if (offered === generation.current) void load({ cursor, session: session.current }, true);
       }}
       onReload={() => {
         if (offered === generation.current) void load();
@@ -420,7 +437,7 @@ function ValueEpisode({
       onRetry={
         retry
           ? () => {
-              if (offered === generation.current) void load(retry);
+              if (offered === generation.current) void load(retry, true);
             }
           : undefined
       }

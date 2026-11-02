@@ -1,4 +1,4 @@
-import { createContext, useContext, type ComponentProps, type ReactNode } from 'react';
+import { createContext, useContext, type ComponentProps, type ReactNode, type Ref } from 'react';
 import { cn } from '@rezics/ui/utils';
 
 export type StreamHeadingLevel = 1 | 2;
@@ -22,14 +22,20 @@ export function ViewHeading({
   label,
   count,
   headingClassName,
+  headingRef,
+  headingTabIndex,
 }: {
   label: string;
   count?: ReactNode;
   headingClassName?: string;
+  headingRef?: Ref<HTMLHeadingElement> | undefined;
+  headingTabIndex?: number | undefined;
 }) {
   return (
     <div data-slot="view-heading" className="flex min-w-0 max-w-full flex-wrap items-baseline gap-x-3 gap-y-1">
       <h1
+        ref={headingRef}
+        tabIndex={headingTabIndex}
         className={cn(
           'min-w-0 max-w-full font-sans text-3xl font-semibold tracking-tight wrap-anywhere text-balance sm:text-4xl',
           headingClassName,

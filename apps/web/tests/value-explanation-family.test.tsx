@@ -31,6 +31,8 @@ test('selected-value evidence has independent family sections, complete supplied
   setLocale('en', { reload: false });
   const container = window.document.createElement('main') as HTMLElement;
   window.document.body.append(container);
+  const focusSentinel = window.document.createElement('button');
+  window.document.body.append(focusSentinel);
   const root = createRoot(container);
   const render = async (children: ReactNode) => {
     await act(async () => root.render(h(ConnectedStory, { storyId: 'value-evidence-family' }, children)));
@@ -396,13 +398,16 @@ test('selected-value evidence has independent family sections, complete supplied
     };
     await render(h(ValueExplanation, { locale: 'en', transport, initial: first }));
     expect(calls).toHaveLength(0);
+    expect(window.document.activeElement).not.toBe(container.querySelector('h1'));
     const complete = async () => {
       await act(async () => {
         release!();
       });
     };
     for (const cursor of [valueCursor, valueLastCursor]) {
-      await act(async () => button(container, m.value_more()).click());
+      const more = button(container, m.value_more());
+      more.focus();
+      await act(async () => more.click());
       expect(calls.at(-1)).toEqual({ cursor, session: 'value-session' });
       expect(container.querySelector('article')?.getAttribute('aria-busy')).toBe('true');
       expect(text(container)).not.toContain('9780156012195');
@@ -410,6 +415,8 @@ test('selected-value evidence has independent family sections, complete supplied
       await act(async () => button(container, m.value_restart()).click());
       expect(calls).toHaveLength(cursor === valueCursor ? 1 : 2);
       await complete();
+      expect(window.document.activeElement).toBe(container.querySelector('h1'));
+      expect((container.querySelector('h1') as HTMLHeadingElement).tabIndex).toBe(-1);
       privateAbsent();
     }
     expect(text(container)).toContain(m.value_accepted());
@@ -443,12 +450,17 @@ test('selected-value evidence has independent family sections, complete supplied
     await render(h(ValueExplanation, { locale: 'en', transport: recover, initial: { ...first } }));
     await act(async () => button(container, m.value_more()).click());
     await resolve(await native.transport(valueCursor, 'value-session'));
-    await act(async () => button(container, m.value_more()).click());
+    const finalMore = button(container, m.value_more());
+    finalMore.focus();
+    await act(async () => finalMore.click());
     expect(text(container)).not.toContain('9780156012195');
     await resolve({ kind: 'unavailable' });
+    expect(window.document.activeElement).toBe(container.querySelector('h1'));
     expect(container.querySelector('details,section,nav')).toBeNull();
     expect(requests).toHaveLength(2);
-    await act(async () => button(container, m.value_retry()).click());
+    const retry = button(container, m.value_retry());
+    retry.focus();
+    await act(async () => retry.click());
     expect(requests.at(-1)).toEqual({ cursor: valueLastCursor, session: 'value-session' });
     expect(button(container, m.value_restart()).disabled).toBe(true);
     if (first.kind !== 'ready') throw new Error('Expected first page');
@@ -460,9 +472,13 @@ test('selected-value evidence has independent family sections, complete supplied
         competition: { kind: 'unavailable' },
       },
     });
-    await act(async () => button(container, m.value_retry()).click());
+    expect(window.document.activeElement).toBe(container.querySelector('h1'));
+    const retryAgain = button(container, m.value_retry());
+    retryAgain.focus();
+    await act(async () => retryAgain.click());
     expect(requests.at(-1)).toEqual({ cursor: valueLastCursor, session: 'refreshed-session' });
     await resolve(await native.transport(valueLastCursor, 'refreshed-session'));
+    expect(window.document.activeElement).toBe(container.querySelector('h1'));
     expect(text(container)).toContain(m.value_accepted());
     expect(requests.map(({ cursor }) => cursor)).toEqual([
       valueCursor,
@@ -497,14 +513,17 @@ test('selected-value evidence has independent family sections, complete supplied
       );
       const current = container.innerHTML;
       expect(text(container)).not.toContain('9780156012195');
+      focusSentinel.focus();
       await resolve(await native.transport(valueLastCursor, 'value-session'));
       expect(container.innerHTML).toBe(current);
+      expect(window.document.activeElement).toBe(focusSentinel);
       expect([...container.querySelectorAll('button')].some((node) => node.textContent === m.value_retry())).toBe(
         false,
       );
       if (changed !== 'initial') {
         expect(requests.at(-1)).toEqual({ cursor: undefined, session: undefined });
         await resolve({ kind: 'denied' });
+        expect(window.document.activeElement).toBe(focusSentinel);
       }
       expect(container.querySelector('details,section,nav')).toBeNull();
     }
@@ -513,12 +532,16 @@ test('selected-value evidence has independent family sections, complete supplied
     const replacement = (cursor?: string, session?: string) => recover(cursor, session);
     await render(h(ValueExplanation, { locale: 'en', transport: replacement }));
     expect(requests.at(-1)).toEqual({ cursor: undefined, session: undefined });
+    focusSentinel.focus();
     await resolve(first);
     expect(text(container)).not.toContain('9780156012195');
+    expect(window.document.activeElement).toBe(focusSentinel);
     await resolve({ kind: 'denied' });
+    expect(window.document.activeElement).toBe(focusSentinel);
     expect(container.querySelector('details,section,nav')).toBeNull();
   } finally {
     await act(async () => root.unmount());
+    focusSentinel.remove();
     await window.happyDOM.abort();
     for (const [key, descriptor] of saved) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
