@@ -182,6 +182,15 @@ export const CompleteHierarchy: Story = {
     for (const section of sections) {
       await expect(within(section as HTMLElement).getByRole('heading', { level: 2 })).toBeVisible();
       await expect(section.querySelector('details, [hidden], button button, a button')).toBeNull();
+      for (const control of section.querySelectorAll('button')) {
+        const bounds = control.getBoundingClientRect();
+        await expect(bounds.height).toBeGreaterThanOrEqual(44);
+        await expect(bounds.width).toBeGreaterThanOrEqual(44);
+        if (!control.disabled) {
+          control.focus();
+          await expect(control).toHaveFocus();
+        }
+      }
     }
     await expect(canvasElement.innerHTML).not.toContain('WITHHELD_NATIVE_DETAIL');
     await expect(first.queryByRole('link')).toBeNull();
@@ -246,8 +255,34 @@ export const CompleteHierarchy: Story = {
 
 export const LongTextAndRtl: Story = {
   render: () => (
-    <div dir="rtl" className="[&_button]:text-xl [&_p]:text-xl [&_[data-slot=badge]]:text-xl">
+    <div
+      data-testid="long-text-surface"
+      dir="rtl"
+      className="[&_button]:text-xl [&_p]:text-xl [&_[data-slot=badge]]:text-xl"
+    >
       <MembershipFamily />
     </div>
   ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const surface = canvas.getByTestId('long-text-surface');
+    for (const width of [390, 1280]) {
+      surface.style.width = `${width}px`;
+      for (const direction of ['ltr', 'rtl']) {
+        surface.dir = direction;
+        await expect(canvas.getByText(longMemberLabel, { exact: true })).toBeVisible();
+        for (const section of surface.querySelectorAll<HTMLElement>('section[aria-labelledby]')) {
+          for (const text of section.querySelectorAll<HTMLElement>('p, [data-slot="badge"], button'))
+            await expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth);
+          for (const control of section.querySelectorAll('button')) {
+            const bounds = control.getBoundingClientRect();
+            await expect(bounds.height).toBeGreaterThanOrEqual(44);
+            await expect(bounds.width).toBeGreaterThanOrEqual(44);
+          }
+        }
+      }
+    }
+    surface.style.removeProperty('width');
+    surface.dir = 'rtl';
+  },
 };

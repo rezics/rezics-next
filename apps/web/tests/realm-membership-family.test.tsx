@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement, type ComponentProps } from 'react';
+import { act, type ComponentProps } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { RealmParticipationView } from '../src/community/realm-participation';
 import { RealmLeaveRecovery } from '../src/community/realm-leave-recovery.tsx';
@@ -84,7 +84,7 @@ test('Complete Realm membership and leave recovery hierarchy', () => {
     expect(html).toContain(outcome === 'closed' ? m.realm_change_closed() : m.realm_change_failed());
     expect(html).not.toContain('WITHHELD_NATIVE_DETAIL');
     expect(html).not.toContain('private-owner');
-    expect(html).not.toContain(m.realm_state_member());
+    expect(html).not.toContain('data-slot="badge"');
     expect(html).not.toContain(`>${m.realm_leave()}</button>`);
     expect(html.includes(m.realm_membership_retry())).toBe(outcome === 'refused');
     expect(membership({ state: 'pending', refresh: 'checking', problem })).toContain(m.realm_membership_loading());
