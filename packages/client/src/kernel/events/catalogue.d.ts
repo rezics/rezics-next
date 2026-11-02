@@ -1335,6 +1335,12 @@ declare const productEventTypes: {
     readonly 'com.rezics.content.report.evidence-erased.v1': Type.TObject<{
         reportId: Type.TString;
     }>;
+    readonly 'com.rezics.library.bulk.confirmed.v1': Type.TObject<{
+        operationId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.bulk.changed.v1': Type.TObject<{
+        operationId: Type.TString;
+    }>;
     readonly 'com.rezics.library.collection.order-repair.advanced.v1': Type.TObject<{
         collectionId: Type.TString;
         repairId: Type.TString;

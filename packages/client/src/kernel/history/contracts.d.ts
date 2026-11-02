@@ -273,6 +273,8 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
         kind: 'non-personal';
         roles: readonly [];
     }>;
+    'com.rezics.library.bulk.confirmed.v1': EventClassification;
+    'com.rezics.library.bulk.changed.v1': EventClassification;
     'com.rezics.library.account-facts.purged.v1': EventClassification;
     'com.rezics.library.collection.deleted.v1': EventClassification;
     'com.rezics.library.collection.listing.changed.v1': EventClassification;
