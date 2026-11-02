@@ -3,6 +3,7 @@ import { fork } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { ProblemError } from '../../src/http/problem.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -10,6 +11,8 @@ import { subjectSource } from '../../src/semantic/search-source.ts';
 import type { SubjectDocument } from '../../src/search/document.ts';
 import { subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
+import { subjectConsumer } from '../../src/search/runner.ts';
+import { createSearchService } from '../../src/search/service.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { createOutcomeRpc } from './support/outcome-rpc.ts';
@@ -26,6 +29,14 @@ async function eventually(observe: () => Promise<boolean>) {
     if (Date.now() >= deadline) throw new Error('Real worker did not converge within 60 seconds');
     await Bun.sleep(100);
   }
+}
+
+async function checkpointed(pool: pg.Pool, prefix: string, generation: number, subjectId: string) {
+  const row = await pool.query<{ position: string }>(
+    'SELECT position::text AS position FROM core.consumer_checkpoint WHERE consumer=$1 AND partition_no=$2',
+    [subjectConsumer(prefix, generation), partitionOf(routeOf(subjectId)!)],
+  );
+  return row.rows[0] !== undefined && BigInt(row.rows[0].position) > 0n;
 }
 
 function childFixture() {
@@ -208,14 +219,22 @@ test('only search pauses: real semantic witnesses and source events converge, th
       .id as string;
     const book = (await post('/v1/subjects', { type: 'schema:Book', labels: { en: 'Paused search book' } })).subject
       .id as string;
+    const other = (await post('/v1/subjects', { type: 'schema:Book', labels: { en: 'Paused search other' } })).subject
+      .id as string;
     const search = createOpenSearch(endpoint!);
-    async function indexed() {
+    async function indexed(id: string) {
       const { body } = await search.request<{
         hits: { hits: { _id: string; _source: SubjectDocument }[] };
-      }>('POST', `/${subjectAlias(fixture.prefix)}/_search`, { query: { ids: { values: [book] } } });
+      }>('POST', `/${subjectAlias(fixture.prefix)}/_search`, { query: { ids: { values: [id] } } });
       return body.hits.hits;
     }
-    await eventually(async () => (await indexed()).some((hit) => hit._id === book));
+    await eventually(async () => {
+      const books = await Promise.all([indexed(book), indexed(other)]);
+      return books[0]!.some((hit) => hit._id === book) && books[1]!.some((hit) => hit._id === other);
+    });
+    const generation = (await subjectGenerations(search, fixture.prefix)).active;
+    if (generation === null) throw new Error('Active generation is missing after real indexing');
+    await eventually(async () => checkpointed(pool, fixture.prefix, generation, book));
     await fixture.rpc.request('indexing', { state: 'paused' });
     await fixture.rpc.request('indexing', { state: 'paused' });
     await expect(fixture.rpc.request('rebuild')).rejects.toThrow('paused');
@@ -266,25 +285,47 @@ test('only search pauses: real semantic witnesses and source events converge, th
           true
       );
     });
-    expect((await indexed())[0]!._source.statements).not.toContain(`schema:author=${target}`);
+    expect((await indexed(book))[0]!._source.statements).not.toContain(`schema:author=${target}`);
     const paused = await fixture.rpc.request<WorkerStats>('stats');
     expect(paused.searchStarterInvocations).toBe(1);
     await fixture.rpc.request('indexing', { state: 'running' });
     await fixture.rpc.request('indexing', { state: 'running' });
-    await eventually(async () =>
-      (await indexed()).some((hit) => hit._id === book && hit._source.statements.includes(`schema:author=${target}`)),
-    );
+    await eventually(async () => {
+      const hits = await indexed(book);
+      return hits.some((hit) => hit._id === book && hit._source.statements.includes(`schema:author=${target}`));
+    });
     const resumed = await fixture.rpc.request<WorkerStats>('stats');
     expect(resumed.searchStarterInvocations).toBe(2);
     expect(resumed.registeredModules).toEqual(paused.registeredModules);
     expect(resumed.registrationCounts).toEqual(paused.registrationCounts);
     expect(resumed.startedServices).toEqual({ ...paused.startedServices, search: 2 });
+    const reader = createSearchService({
+      pool,
+      client: search,
+      prefix: fixture.prefix,
+      source,
+      cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) },
+    });
+    const page = await reader.search('anonymous', { sort: 'id', limit: 1 });
+    expect(page.subjects).toHaveLength(1);
+    expect(page.next).toBeString();
+    const cursor = page.next!;
     const old = await subjectGenerations(search, fixture.prefix);
     const rebuilt = await fixture.rpc.request<{ generation: number }>('rebuild');
     expect(rebuilt.generation).not.toBe(old.active);
     expect((await subjectGenerations(search, fixture.prefix)).active).toBe(rebuilt.generation);
     const alias = await search.request<Record<string, unknown>>('GET', `/_alias/${subjectAlias(fixture.prefix)}`);
     expect(Object.keys(alias.body)).toEqual([subjectIndexName(fixture.prefix, rebuilt.generation)]);
+    await eventually(async () => checkpointed(pool, fixture.prefix, rebuilt.generation, book));
+    const stale = await reader.search('anonymous', { sort: 'id', limit: 1, cursor }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(stale).toBeInstanceOf(ProblemError);
+    expect((stale as ProblemError).code).toBe('search_restart_required');
+    const restarted = await reader.search('anonymous', { sort: 'id', limit: 1 });
+    expect(restarted.subjects).toHaveLength(1);
+    expect(restarted.next).toBeString();
   });
 }, 240_000);
 
@@ -344,3 +385,34 @@ test('invalid startup configuration rejects init, never reports ready, and still
     await expect(fixture.init()).rejects.toThrow('already');
   });
 }, 180_000);
+
+test('one real worker fixture drains without stopping another owned worker', async () => {
+  const first = childFixture();
+  const second = childFixture();
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+  const search = createOpenSearch(endpoint!);
+  try {
+    assertDefaults(await first.init());
+    assertDefaults(await second.init());
+    await first.close();
+    expect(
+      (await pool.query('SELECT pid FROM pg_stat_activity WHERE application_name=$1', [first.identity])).rows,
+    ).toHaveLength(0);
+    assertDefaults(await second.rpc.request<WorkerStats>('stats'));
+    await second.close();
+    expect(
+      (await pool.query('SELECT pid FROM pg_stat_activity WHERE application_name=$1', [second.identity])).rows,
+    ).toHaveLength(0);
+  } finally {
+    await Promise.allSettled([first.close(), second.close()]);
+    try {
+      for (const fixture of [first, second]) {
+        const state = await subjectGenerations(search, fixture.prefix);
+        for (const generation of state.generations)
+          await search.request('DELETE', `/${subjectIndexName(fixture.prefix, generation)}`);
+      }
+    } finally {
+      await pool.end();
+    }
+  }
+}, 240_000);
