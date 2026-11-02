@@ -9,14 +9,21 @@ function value(input: unknown): string | undefined {
   return input === undefined ? undefined : typeof input === 'string' ? input : `\0${JSON.stringify(input)}`;
 }
 export function progressIndexAddress(input: unknown): ProgressIndexAddress {
-  const source = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+  const source = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
   return { subjectId: value(source.subjectId), cursor: value(source.cursor) };
 }
 export function progressSessionAddress(input: unknown): ProgressSessionAddress {
-  const source = input && typeof input === 'object' ? input as Record<string, unknown> : {};
-  return { id: value(source.id) ?? '', changes: value(source.changes), units: value(source.units), logs: value(source.logs) };
+  const source = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+  return {
+    id: value(source.id) ?? '',
+    changes: value(source.changes),
+    units: value(source.units),
+    logs: value(source.logs),
+  };
 }
-export function progressAddressIssue(address: ProgressIndexAddress | ProgressSessionAddress): ProgressAddressField | undefined {
+export function progressAddressIssue(
+  address: ProgressIndexAddress | ProgressSessionAddress,
+): ProgressAddressField | undefined {
   const id = 'id' in address ? 'id' : 'subjectId';
   const identifier = address[id as keyof typeof address];
   if (identifier !== undefined && !progressAddressId.test(identifier)) return id;
@@ -27,10 +34,16 @@ export function progressAddressIssue(address: ProgressIndexAddress | ProgressSes
   return undefined;
 }
 export class ProgressAddressError extends Error {
-  constructor(public field: ProgressAddressField) { super('Invalid Progress address'); }
+  constructor(public field: ProgressAddressField) {
+    super('Invalid Progress address');
+  }
 }
 /** A correction changes exactly one operand, retaining every other requested position. */
-export function correctProgressAddress<T extends ProgressIndexAddress | ProgressSessionAddress>(address: T, field: ProgressAddressField, replacement?: string): T {
+export function correctProgressAddress<T extends ProgressIndexAddress | ProgressSessionAddress>(
+  address: T,
+  field: ProgressAddressField,
+  replacement?: string,
+): T {
   const next = { ...address };
   if (replacement === undefined) delete (next as Record<string, unknown>)[field];
   else (next as Record<string, unknown>)[field] = replacement;

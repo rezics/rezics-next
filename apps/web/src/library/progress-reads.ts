@@ -368,7 +368,13 @@ function writeHeaders(authorization: string, key: string): { 'idempotency-key': 
 
 function readAddressData<T>(result: LibraryCall, field: ProgressAddressField): T {
   const problem = callBody(result.error);
-  if (callStatus(result) === 400 && typeof problem === 'object' && problem !== null && 'code' in problem && problem.code === 'invalid_cursor')
+  if (
+    callStatus(result) === 400 &&
+    typeof problem === 'object' &&
+    problem !== null &&
+    'code' in problem &&
+    problem.code === 'invalid_cursor'
+  )
     throw new ProgressAddressError(field);
   return readData<T>(result);
 }
@@ -491,10 +497,16 @@ export async function loadProgressIndex(
   try {
     page = await load(input.cursor);
   } catch (error) {
-    if (error instanceof ProgressAddressError || isNotFound(error)) return {
-      signedIn: true, subjectId, addressIssue: error instanceof ProgressAddressError ? error.field : 'subjectId',
-      selectedSubject: null, sessions: [], next: null, idempotencyKey,
-    };
+    if (error instanceof ProgressAddressError || isNotFound(error))
+      return {
+        signedIn: true,
+        subjectId,
+        addressIssue: error instanceof ProgressAddressError ? error.field : 'subjectId',
+        selectedSubject: null,
+        sessions: [],
+        next: null,
+        idempotencyKey,
+      };
     if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
     page = await load();
   }

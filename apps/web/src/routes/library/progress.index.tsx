@@ -20,6 +20,11 @@ export const Route = createFileRoute('/library/progress/')({
   head: ({ match }) =>
     pageHead({ title: m.library_progress_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: function ProgressIndexRoute() {
-    return <CurrentViewerProgressIndexPage loader={Route.useLoaderData()} requested={progressIndexAddress(useLocation().search)} />;
+    return (
+      <CurrentViewerProgressIndexPage
+        loader={Route.useLoaderData()}
+        requested={progressIndexAddress(useLocation().search)}
+      />
+    );
   },
 });

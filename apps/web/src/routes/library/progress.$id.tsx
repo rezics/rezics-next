@@ -44,8 +44,10 @@ export const Route = createFileRoute('/library/progress/$id')({
     }
     const address = progressSessionAddress({ ...requested.search, id: requestedId });
     const issue = progressAddressIssue(address);
-    const pending = requestedId !== id || (['changes', 'units', 'logs'] as const).some((key) => address[key] !== search[key]);
-    if (issue || pending) return <ProgressAddressCorrection address={address} issue={issue} pending={!issue && pending} />;
+    const pending =
+      requestedId !== id || (['changes', 'units', 'logs'] as const).some((key) => address[key] !== search[key]);
+    if (issue || pending)
+      return <ProgressAddressCorrection address={address} issue={issue} pending={!issue && pending} />;
     if (loaded.state === 'invalid') return <ProgressAddressCorrection address={address} issue={loaded.issue} />;
     return <CurrentProgressDetail loaded={loaded} address={{ id, ...search }} />;
   },

@@ -1,4 +1,9 @@
-import { progressSessionAddress, progressAddressIssue, ProgressAddressError, type ProgressAddressField } from './progress-address';
+import {
+  progressSessionAddress,
+  progressAddressIssue,
+  ProgressAddressError,
+  type ProgressAddressField,
+} from './progress-address';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -38,11 +43,14 @@ export const readProgressDetail = createServerFn({ method: 'GET' })
     const client = kernelClient();
     const sessionEnv = env as Partial<SessionEnv>;
     let results;
-    try { results = await Promise.all([
-      loadProgressSession(client, progressRequest, sessionEnv, data),
-      loadMyPublishedLogs(client, logsRequest, sessionEnv, data.logs ? { cursor: data.logs } : {}),
-    ]); } catch (error) {
-      if (error instanceof ProgressAddressError) return { state: 'invalid', viewer: null, address: data, issue: error.field };
+    try {
+      results = await Promise.all([
+        loadProgressSession(client, progressRequest, sessionEnv, data),
+        loadMyPublishedLogs(client, logsRequest, sessionEnv, data.logs ? { cursor: data.logs } : {}),
+      ]);
+    } catch (error) {
+      if (error instanceof ProgressAddressError)
+        return { state: 'invalid', viewer: null, address: data, issue: error.field };
       throw error;
     }
     const [progress, logs] = results;

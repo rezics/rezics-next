@@ -376,7 +376,13 @@ export function ProgressIndexPage({
     }
   }
 
-  if (page.addressIssue) return <ProgressAddressCorrection address={{ subjectId: page.subjectId, ...(cursor === undefined || cursor === null ? {} : { cursor }) }} issue={page.addressIssue} />;
+  if (page.addressIssue)
+    return (
+      <ProgressAddressCorrection
+        address={{ subjectId: page.subjectId, ...(cursor === undefined || cursor === null ? {} : { cursor }) }}
+        issue={page.addressIssue}
+      />
+    );
   const ratio = rowRatio(sessions.map((session) => session.subject));
   return (
     <article className="max-w-4xl space-y-10 text-foreground">
@@ -397,7 +403,11 @@ export function ProgressIndexPage({
           </ol>
         ) : (
           <p className="text-muted-foreground">
-            {cursor || page.next ? m.library_progress_page_empty() : page.subjectId ? m.library_progress_empty() : m.library_progress_address_choose()}
+            {cursor || page.next
+              ? m.library_progress_page_empty()
+              : page.subjectId
+                ? m.library_progress_empty()
+                : m.library_progress_address_choose()}
           </p>
         )}
         {cursor || page.next ? (
