@@ -210,6 +210,41 @@ test('Relation window replaces pages, retries transport, stops cycles and bounds
     await accept(page(['Terminal'], null));
     expect(status()).toContain(': 1. End of this list.');
     expect(restart()).toBeNull();
+
+    // A reused node cannot replace the visible stream under its old heading.
+    for (const change of [
+      { kind: 'relations' as const },
+      { property: 'schema:illustrator' },
+      { id: realm },
+      { filter: realm },
+      { type: 'schema:Person' },
+    ]) {
+      await replace(page(['Original'], 'original'));
+      await click();
+      const next = page(['Changed'], 'changed');
+      if (!next.ok) throw new Error('Expected successful fixture');
+      const before = held.length;
+      const previousInvalidations = invalidations;
+      await accept({ ...next, read: { ...next.read, ...change } as typeof next.read });
+      expect(host.querySelector('h2')?.textContent).toBe('Credits');
+      expect(rows()).toHaveLength(0);
+      expect(host.querySelector('[role="alert"]')?.textContent).toContain('changed');
+      expect(more()).toBeNull();
+      expect(new URL(restart().href).searchParams.has('cursor')).toBe(false);
+      expect(invalidations).toBe(previousInvalidations + 1);
+      expect(held).toHaveLength(before);
+    }
+
+    await replace(page(['Old'], 'old'));
+    await click();
+    const stale = held.at(-1)!;
+    await replace(page(['Replacement'], 'replacement'));
+    const previousInvalidations = invalidations;
+    stale.resolve({ ok: true, read: { kind: 'relations', id: realm, property: 'schema:author', limit: 12 }, body: {} });
+    await flush();
+    expect(rows()).toEqual([expect.stringContaining('Replacement')]);
+    expect(status()).toBe('');
+    expect(invalidations).toBe(previousInvalidations);
   } finally {
     await act(async () => root.unmount());
     client.clear();

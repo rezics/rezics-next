@@ -17,6 +17,7 @@ import {
   type Section,
 } from './overview';
 import { loadRelationGroup, relationGroupKey, type RelationGroupRequest } from './relation-stream-query';
+import { sameRelationStream } from './relation-stream-descriptor';
 import {
   advanceRelationProgress,
   relationCursor,
@@ -478,7 +479,7 @@ function StreamState({
       queryKey = relationGroupKey(request, incarnation);
       ownedKey = JSON.stringify(queryKey);
       owner.queries.set(ownedKey, { client: queryClient, key: queryKey });
-      const next = await queryClient.fetchQuery({
+      const result = await queryClient.fetchQuery({
         queryKey,
         staleTime: 0,
         gcTime: 0,
@@ -491,6 +492,10 @@ function StreamState({
         },
       });
       if (!owner.current(generation)) return;
+      const next: Section =
+        result.ok && (!section.ok || !sameRelationStream(section.read, result.read))
+          ? { ok: false, status: 409 }
+          : result;
       if (next.ok && owner.expectedReader !== null) {
         const nextObjects = privateReadingObjects(next);
         if (!claimPrivateReading(nextObjects, owner)) {
