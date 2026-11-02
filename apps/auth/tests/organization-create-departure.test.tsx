@@ -1,6 +1,10 @@
 import { expect, spyOn, test } from 'bun:test';
 import {
-  createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterContextProvider,
 } from '@tanstack/react-router';
 import { creationFixture, approval, button, dom, fill, flush, open, send, session } from './creation-page-fixture';
 import { NewOrganizationPage } from '../src/routes/organizations.new';
@@ -16,9 +20,16 @@ async function setup() {
     createRoute({ getParentRoute: () => root, path: '/security' }),
   ]);
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/organizations/new'] }) });
-  const view = (value = initial) => <RouterContextProvider router={router}><NewOrganizationPage initial={value} /></RouterContextProvider>;
+  const view = (value = initial) => (
+    <RouterContextProvider router={router}>
+      <NewOrganizationPage initial={value} />
+    </RouterContextProvider>
+  );
   const page = await open(view(), body);
-  const navigate = () => flush(() => { void router.navigate({ to: '/security' }); });
+  const navigate = () =>
+    flush(() => {
+      void router.navigate({ to: '/security' });
+    });
   const unload = () => {
     const event = new dom.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(event as unknown as Event);
@@ -86,5 +97,7 @@ test('step-up continuation and completed destination bypass departure warnings',
     expect(page.unload()).toBe(false);
     await page.navigate();
     expect(page.router.history.location.pathname).toBe('/security');
-  } finally { assign.mockRestore(); }
+  } finally {
+    assign.mockRestore();
+  }
 });

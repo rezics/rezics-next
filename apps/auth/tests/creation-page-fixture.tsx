@@ -1,7 +1,6 @@
 import { afterAll, afterEach, beforeAll } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
-export { fill, button, session } from '../src/stories/accounts-operations/story';
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
 );
@@ -18,6 +17,8 @@ for (const [key, value] of Object.entries(globals)) {
   previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
   Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
 }
+// Load DOM-aware UI modules only after installing the browser fixture.
+export const { fill, button, session } = await import('../src/stories/accounts-operations/story');
 const { createRoot } = await import('react-dom/client');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 overwriteGetLocale(() => 'en');

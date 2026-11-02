@@ -3,8 +3,13 @@ import { AuthButton as Button } from '../button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import {
-  AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { useCallback, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -43,7 +48,11 @@ export const Route = createFileRoute('/organizations/new')({
 });
 
 // Keep the router adapter local; isolated page fixtures do not require a router.
-function OrganizationDeparture({ shouldWarn, leave, focus }: {
+function OrganizationDeparture({
+  shouldWarn,
+  leave,
+  focus,
+}: {
   shouldWarn: () => boolean;
   leave: () => void;
   focus: () => void;
@@ -57,19 +66,33 @@ function OrganizationDeparture({ shouldWarn, leave, focus }: {
     if (blocker.status === 'blocked') blocker.reset();
   };
   return (
-    <AlertDialog open={blocker.status === 'blocked'} onOpenChange={(open) => { if (!open) stay(); }}>
-      <AlertDialogContent finalFocus={() => { focus(); return false; }}>
+    <AlertDialog
+      open={blocker.status === 'blocked'}
+      onOpenChange={(open) => {
+        if (!open) stay();
+      }}
+    >
+      <AlertDialogContent
+        finalFocus={() => {
+          focus();
+          return false;
+        }}
+      >
         <AlertDialogTitle>{m.auth_organization_departure_heading()}</AlertDialogTitle>
         <AlertDialogDescription>
           {m.auth_organization_departure_description()} {m.auth_account_operation_leave_notice()}
         </AlertDialogDescription>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={stay}>{m.auth_organization_departure_stay()}</AlertDialogCancel>
-          <AlertDialogAction onClick={() => {
-            if (blocker.status !== 'blocked') return;
-            leave();
-            blocker.proceed();
-          }}>{m.auth_organization_departure_leave()}</AlertDialogAction>
+          <AlertDialogAction
+            onClick={() => {
+              if (blocker.status !== 'blocked') return;
+              leave();
+              blocker.proceed();
+            }}
+          >
+            {m.auth_organization_departure_leave()}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -97,6 +120,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   const alert = useRef<HTMLDivElement>(null);
   const router = useRouter({ warn: false });
   const bypassDeparture = useRef(false);
+  const authority = useRef<Extract<AccountSessionResult, { kind: 'ready' }> | null>(null);
   const review = useRef({ handle, protect: false });
   review.current = {
     handle,
@@ -132,6 +156,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     const current = {};
     lifetime.current = current;
     bypassDeparture.current = false;
+    authority.current = null;
     submitting.current = false;
     setPending(false);
     setLoadState('loading');
@@ -141,7 +166,9 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     const retire = () => {
       lifetime.current = null;
     };
-    const leaveDocument = () => { if (lifetime.current === current) depart(); };
+    const leaveDocument = () => {
+      if (lifetime.current === current) depart();
+    };
     const restore = (event: PageTransitionEvent) => {
       if (event.persisted) setReload((value) => value + 1);
     };
@@ -168,6 +195,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
           storePendingOrganizationHandle(pendingOperation.operation.handle);
         } else setHandle(readPendingOrganizationHandle());
         setUnknown(Boolean(pendingOperation));
+        authority.current = result;
         setAccountId(result.accountId);
         setReturned(Boolean(pendingOperation));
         const expected = accountOperationProfile('organization');
@@ -229,13 +257,26 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     const current = lifetime.current;
     let continuation = JSON.stringify(pendingState);
     const draft = readPendingOrganizationHandle();
-    const isCurrent = () =>
-      lifetime.current === current &&
-      JSON.stringify(pendingAccountOperationStepUpState()) === continuation &&
-      readPendingOrganizationHandle() === draft;
+    const isCurrent = () => {
+      if (lifetime.current !== current) return false;
+      if (
+        JSON.stringify(pendingAccountOperationStepUpState()) === continuation &&
+        readPendingOrganizationHandle() === draft
+      )
+        return true;
+      lifetime.current = null;
+      setLoadState('failure');
+      setLoadMessage(m.auth_account_operation_failure());
+      return false;
+    };
     const before = await loadAccountSession();
     if (!isCurrent()) return;
-    if (before.kind !== 'ready' || before.accountId !== accountId) {
+    if (
+      before.kind !== 'ready' ||
+      before.accountId !== accountId ||
+      before.clientId !== authority.current?.clientId ||
+      JSON.stringify(before.scopes) !== JSON.stringify(authority.current?.scopes)
+    ) {
       lifetime.current = null;
       setLoadState(before.kind === 'signed-out' ? 'signed-out' : 'failure');
       setLoadMessage(m.auth_account_operation_failure());
@@ -296,7 +337,6 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     if (result.reason === 'platform-closed' || result.reason === 'denied') {
       clearPendingAccountOperationStepUp();
       setUnknown(false);
-      if (result.reason === 'denied') bypassDeparture.current = true;
     }
     if (result.reason === 'platform-closed') {
       setMessage(m.auth_organization_not_open());
@@ -371,7 +411,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
 
   return (
     <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
-        {departure}
+      {departure}
       <form className="auth-login-form" method="post" action="/account-operations/approve" noValidate onSubmit={submit}>
         <p>{m.auth_organization_explanation()}</p>
         {returned ? (
