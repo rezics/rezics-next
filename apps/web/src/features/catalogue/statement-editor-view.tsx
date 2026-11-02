@@ -610,6 +610,8 @@ export function StatementFields({
     kind: StatementRemovalKind;
     trigger: HTMLButtonElement;
   } | null>(null);
+  const pendingRemovalRef = useRef<typeof pendingRemoval>(null);
+  useLayoutEffect(() => () => (pendingRemovalRef.current = null), []);
   useLayoutEffect(() => {
     const target = removalFocus.current;
     removalFocus.current = null;
@@ -633,6 +635,21 @@ export function StatementFields({
     }
     return entry;
   }
+  function holderExists(decision: NonNullable<typeof pendingRemoval>) {
+    if (decision.kind === 'qualifier')
+      return (draft.qualifiers ?? []).some((part) => identity(part).key === decision.key && identity(part).added);
+    if (decision.kind === 'reference')
+      return draft.references.some((reference) => identity(reference).key === decision.key && identity(reference).added);
+    return draft.references.some((reference) =>
+      reference.parts.some((part) => identity(part).key === decision.key && identity(part).added),
+    );
+  }
+  useLayoutEffect(() => {
+    const decision = pendingRemovalRef.current;
+    if (!decision || holderExists(decision)) return;
+    pendingRemovalRef.current = null;
+    if (pendingRemoval === decision) setPendingRemoval(null);
+  });
   function addition<T extends object>(value: T, event: MouseEvent<HTMLButtonElement>): T {
     const entry = identity(value, true);
     additionFocus.current?.cancel();
@@ -687,8 +704,18 @@ export function StatementFields({
   function meaningful(part: SnakInput) {
     return part.value.type !== 'value' || hasContent(part.value.content);
   }
-  function removeCurrent(key: number, button: HTMLButtonElement, kind: StatementRemovalKind) {
+  function removeCurrent(
+    key: number,
+    button: HTMLButtonElement,
+    kind: StatementRemovalKind,
+    decision?: NonNullable<typeof pendingRemoval>,
+  ) {
     if (!lifetime.active() || !button.isConnected || button.matches(':disabled')) return;
+    if (decision && pendingRemovalRef.current !== decision) return;
+    if (decision || pendingRemovalRef.current?.key === key) {
+      pendingRemovalRef.current = null;
+      setPendingRemoval(null);
+    }
     let next: StatementInput | undefined;
     if (kind === 'qualifier') {
       const parts = draft.qualifiers ?? [];
@@ -720,14 +747,10 @@ export function StatementFields({
         break;
       }
     }
-    if (!next) {
-      setPendingRemoval((pending) => (pending?.key === key ? null : pending));
-      return;
-    }
+    if (!next) return;
     // Wait for removal to re-enable Add reference when the draft was at its group limit.
     // Stable keys keep surviving custom controls and unfinished selections mounted.
     removalFocus.current = removalTarget(button, kind) ?? null;
-    setPendingRemoval((pending) => (pending?.key === key ? null : pending));
     change(next);
   }
   function remove(button: HTMLButtonElement, holder: object, kind: StatementRemovalKind) {
@@ -738,18 +761,22 @@ export function StatementFields({
       kind === 'reference'
         ? (holder as { parts: SnakInput[] }).parts.some(meaningful)
         : meaningful(holder as SnakInput);
-    if (requiresChoice) setPendingRemoval({ key: entry.key, kind, trigger: button });
-    else removeCurrent(entry.key, button, kind);
+    if (requiresChoice) {
+      const decision = { key: entry.key, kind, trigger: button };
+      pendingRemovalRef.current = decision;
+      setPendingRemoval(decision);
+    } else removeCurrent(entry.key, button, kind);
   }
-  function cancelRemoval(key: number) {
-    const pending = pendingRemoval;
-    if (pending?.key !== key) return;
+  function cancelRemoval(decision: NonNullable<typeof pendingRemoval>) {
+    if (pendingRemovalRef.current !== decision) return;
+    pendingRemovalRef.current = null;
     setPendingRemoval(null);
-    if (lifetime.active() && pending.trigger.isConnected && !pending.trigger.matches(':disabled'))
-      pending.trigger.focus();
+    if (lifetime.active() && decision.trigger.isConnected && !decision.trigger.matches(':disabled'))
+      decision.trigger.focus();
   }
   function choice(key: number, kind: StatementRemovalKind) {
-    if (pendingRemoval?.key !== key || pendingRemoval.kind !== kind) return null;
+    const decision = pendingRemoval;
+    if (decision?.key !== key || decision.kind !== kind) return null;
     const action =
       kind === 'qualifier'
         ? m.correction_remove_qualifier({}, o)
@@ -766,7 +793,7 @@ export function StatementFields({
           if (event.key !== 'Escape') return;
           event.preventDefault();
           event.stopPropagation();
-          cancelRemoval(key);
+          cancelRemoval(decision);
         }}
       >
         <p>{title}</p>
@@ -776,7 +803,7 @@ export function StatementFields({
             className={actionClassName}
             type="button"
             variant="outline"
-            onClick={() => cancelRemoval(key)}
+            onClick={() => cancelRemoval(decision)}
           >
             {m.candidate_cancel({}, o)}
           </Button>
@@ -784,7 +811,7 @@ export function StatementFields({
             className={actionClassName}
             type="button"
             variant="destructive"
-            onClick={() => removeCurrent(key, pendingRemoval.trigger, kind)}
+            onClick={() => removeCurrent(key, decision.trigger, kind, decision)}
           >
             {m.contribution_confirm({}, o)}
           </Button>
