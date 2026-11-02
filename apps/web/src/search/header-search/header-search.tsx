@@ -57,11 +57,11 @@ type HeaderSuggestionOwner = {
 function sameHeaderSuggestionOwner(a: HeaderSuggestionOwner | null, b: HeaderSuggestionOwner): boolean {
   return Boolean(
     a &&
-      a.sessionKey === b.sessionKey &&
-      a.locale === b.locale &&
-      a.query === b.query &&
-      a.scopeKey === b.scopeKey &&
-      a.loader === b.loader,
+    a.sessionKey === b.sessionKey &&
+    a.locale === b.locale &&
+    a.query === b.query &&
+    a.scopeKey === b.scopeKey &&
+    a.loader === b.loader,
   );
 }
 
@@ -542,8 +542,7 @@ function HeaderSearchController({
     requestState.suggestions === 'ready' &&
     Boolean(requestState.result);
   const suggestionsCurrent = sameHeaderSuggestionOwner(suggestionsOwner.current, owner);
-  const resultCurrent =
-    sameHeaderSuggestionOwner(resultOwner.current, owner) && !resultsRetired.current;
+  const resultCurrent = sameHeaderSuggestionOwner(resultOwner.current, owner) && !resultsRetired.current;
   const visibleState: HeaderSearchState =
     sessionMatches && suggestionsCurrent
       ? {

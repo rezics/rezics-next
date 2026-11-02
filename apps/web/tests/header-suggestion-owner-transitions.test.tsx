@@ -45,9 +45,7 @@ async function mountSearch() {
     Node: window.Node,
     IS_REACT_ACT_ENVIRONMENT: true,
   };
-  const previous = new Map(
-    Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
-  );
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, value });
 
@@ -72,7 +70,14 @@ async function mountSearch() {
     reject: (error: unknown) => void;
   }[] = [];
   const visits: string[] = [];
-  const history = { entries: [], persistence: 'memory', sync: 'local-only', remember() {}, remove() {}, retry() {} } as const;
+  const history = {
+    entries: [],
+    persistence: 'memory',
+    sync: 'local-only',
+    remember() {},
+    remove() {},
+    retry() {},
+  } as const;
 
   function loader(producer: string): HeaderSuggestionLoader {
     return (query, locale, signal, scope) =>
