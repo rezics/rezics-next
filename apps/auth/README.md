@@ -238,6 +238,8 @@ retaining the initiating human and any original uncertainty identity.
 
 ## Create organization
 
+Decision: protect nonblank handles and unresolved creation in memory with Stay/Leave and a browser unload warning; confirmed departure discards only unsent local review, while caller replacement or permission loss immediately releases the guard.
+
 `/organizations/new` reads the current session and asks for one handle. An unavailable initial read offers Retry without discarding the saved draft. It applies the same claim rule and
 lowercase normalization as sign-up. Creation uses one operation key for the
 approve and execute requests. The `organizations` gate is checked by Auth; a closed gate keeps the handle and shows a

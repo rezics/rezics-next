@@ -1,8 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { AuthButton as Button } from '../button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
+} from '@rezics/ui/shadcn/alert-dialog';
+import { useCallback, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { ErrorAlert } from '../alert';
@@ -38,6 +42,40 @@ export const Route = createFileRoute('/organizations/new')({
   component: NewOrganizationPage,
 });
 
+// Keep the router adapter local; isolated page fixtures do not require a router.
+function OrganizationDeparture({ shouldWarn, leave, focus }: {
+  shouldWarn: () => boolean;
+  leave: () => void;
+  focus: () => void;
+}) {
+  const blocker = useBlocker({ shouldBlockFn: shouldWarn, enableBeforeUnload: false, withResolver: true });
+  useLayoutEffect(() => {
+    // Completion or loss of caller authority must release an already open prompt.
+    if (blocker.status === 'blocked' && !shouldWarn()) blocker.proceed();
+  });
+  const stay = () => {
+    if (blocker.status === 'blocked') blocker.reset();
+  };
+  return (
+    <AlertDialog open={blocker.status === 'blocked'} onOpenChange={(open) => { if (!open) stay(); }}>
+      <AlertDialogContent finalFocus={() => { focus(); return false; }}>
+        <AlertDialogTitle>{m.auth_organization_departure_heading()}</AlertDialogTitle>
+        <AlertDialogDescription>
+          {m.auth_organization_departure_description()} {m.auth_account_operation_leave_notice()}
+        </AlertDialogDescription>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={stay}>{m.auth_organization_departure_stay()}</AlertDialogCancel>
+          <AlertDialogAction onClick={() => {
+            if (blocker.status !== 'blocked') return;
+            leave();
+            blocker.proceed();
+          }}>{m.auth_organization_departure_leave()}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export function NewOrganizationPage({ initial }: { initial?: AccountSessionResult } = {}) {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [accountId, setAccountId] = useState('');
@@ -57,10 +95,43 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   const [reload, setReload] = useState(0);
   const handleInput = useRef<HTMLInputElement>(null);
   const alert = useRef<HTMLDivElement>(null);
+  const router = useRouter({ warn: false });
+  const bypassDeparture = useRef(false);
+  const review = useRef({ handle, protect: false });
+  review.current = {
+    handle,
+    protect: loadState === 'ready' && !createdHandle && Boolean(handle.trim() || pending || unknown),
+  };
+  const shouldWarn = useCallback(
+    () => Boolean(lifetime.current) && !bypassDeparture.current && review.current.protect,
+    [],
+  );
+  const depart = useCallback(() => {
+    // Retire first: an approval or execution response can no longer affect this review.
+    lifetime.current = null;
+    bypassDeparture.current = true;
+    // A retained command, including one whose outcome is unknown, keeps its exact identity.
+    if (pendingAccountOperationStepUpState().kind !== 'absent') return;
+    if (readPendingOrganizationHandle() === review.current.handle) storePendingOrganizationHandle('');
+  }, []);
+  const departure = router ? (
+    <OrganizationDeparture shouldWarn={shouldWarn} leave={depart} focus={() => handleInput.current?.focus()} />
+  ) : null;
+
+  useLayoutEffect(() => {
+    const unload = (event: BeforeUnloadEvent) => {
+      if (!shouldWarn()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', unload);
+    return () => window.removeEventListener('beforeunload', unload);
+  }, [shouldWarn]);
 
   useLayoutEffect(() => {
     const current = {};
     lifetime.current = current;
+    bypassDeparture.current = false;
     submitting.current = false;
     setPending(false);
     setLoadState('loading');
@@ -70,10 +141,11 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     const retire = () => {
       lifetime.current = null;
     };
+    const leaveDocument = () => { if (lifetime.current === current) depart(); };
     const restore = (event: PageTransitionEvent) => {
       if (event.persisted) setReload((value) => value + 1);
     };
-    window.addEventListener('pagehide', retire);
+    window.addEventListener('pagehide', leaveDocument);
     window.addEventListener('pageshow', restore);
     void (initial && reload === 0 ? Promise.resolve(initial) : loadAccountSession()).then((result) => {
       if (lifetime.current !== current) return;
@@ -114,10 +186,10 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     });
     return () => {
       retire();
-      window.removeEventListener('pagehide', retire);
+      window.removeEventListener('pagehide', leaveDocument);
       window.removeEventListener('pageshow', restore);
     };
-  }, [initial, reload]);
+  }, [initial, reload, depart]);
 
   useLayoutEffect(() => {
     if (handleError) handleInput.current?.focus();
@@ -164,7 +236,9 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     const before = await loadAccountSession();
     if (!isCurrent()) return;
     if (before.kind !== 'ready' || before.accountId !== accountId) {
-      setMessage(m.auth_account_operation_failure());
+      lifetime.current = null;
+      setLoadState(before.kind === 'signed-out' ? 'signed-out' : 'failure');
+      setLoadMessage(m.auth_account_operation_failure());
       submitting.current = false;
       setPending(false);
       return;
@@ -188,7 +262,9 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       after.clientId !== before.clientId ||
       JSON.stringify(after.scopes) !== JSON.stringify(before.scopes)
     ) {
-      setMessage(m.auth_account_operation_failure());
+      lifetime.current = null;
+      setLoadState(after.kind === 'signed-out' ? 'signed-out' : 'failure');
+      setLoadMessage(m.auth_account_operation_failure());
       submitting.current = false;
       setPending(false);
       return;
@@ -211,6 +287,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
         setPending(false);
         return;
       }
+      bypassDeparture.current = true;
       window.location.assign(accountOperationStepUpUrl('organization'));
       return;
     }
@@ -219,6 +296,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     if (result.reason === 'platform-closed' || result.reason === 'denied') {
       clearPendingAccountOperationStepUp();
       setUnknown(false);
+      if (result.reason === 'denied') bypassDeparture.current = true;
     }
     if (result.reason === 'platform-closed') {
       setMessage(m.auth_organization_not_open());
@@ -246,6 +324,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   if (loadState === 'signed-out')
     return (
       <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
+        {departure}
         <div className="auth-login-form">
           <p>{m.auth_account_operation_sign_in_required()}</p>
           <a href="/login">{m.auth_security_sign_in()}</a>
@@ -256,6 +335,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   if (loadState === 'failure')
     return (
       <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
+        {departure}
         <ErrorAlert>{loadMessage}</ErrorAlert>
         <Button type="button" onClick={() => setReload((value) => value + 1)}>
           {m.auth_account_delete_retry()}
@@ -266,6 +346,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   if (loadState === 'loading')
     return (
       <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
+        {departure}
         <p role="status">{m.auth_inventory_loading()}</p>
       </AuthPage>
     );
@@ -273,6 +354,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   if (createdHandle)
     return (
       <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
+        {departure}
         <div className="auth-account-operation-success" role="status">
           <p>{m.auth_organization_created({ handle: createdHandle })}</p>
           {membershipId(createdAccountId) ? (
@@ -289,6 +371,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
 
   return (
     <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
+        {departure}
       <form className="auth-login-form" method="post" action="/account-operations/approve" noValidate onSubmit={submit}>
         <p>{m.auth_organization_explanation()}</p>
         {returned ? (
