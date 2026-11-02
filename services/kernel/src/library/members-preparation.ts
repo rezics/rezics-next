@@ -126,14 +126,7 @@ function prepareBasis(ownerAccountId: string, collectionId: string, input: Prepa
       throw unsupported();
     const release = structuredClone(input.release.value) as FilterRelease;
     const filter = admitFilter(parseFilter(input.filter), release, { owner: true });
-    const basis = canonicalize([
-      BASIS_VERSION,
-      ownerAccountId,
-      collectionId,
-      filter,
-      input.sort,
-      input.release.digest,
-    ]);
+    const basis = canonicalize([BASIS_VERSION, ownerAccountId, collectionId, filter, input.sort, input.release.digest]);
     if (!basis || Buffer.byteLength(basis) > 196_608) throw unsupported();
     return Object.freeze({
       basis,
@@ -327,8 +320,7 @@ export function createMembersPreparation(config: {
           for (const row of matches) {
             const basis = byBasis.get(Buffer.from(row.basis_digest).toString('hex'));
             if (!basis) throw unsupported();
-            if (row.canonical_basis !== row.requested_basis || row.canonical_basis !== basis.basis)
-              throw unsupported();
+            if (row.canonical_basis !== row.requested_basis || row.canonical_basis !== basis.basis) throw unsupported();
             found.set(Buffer.from(row.basis_digest).toString('hex'), row);
           }
 
@@ -351,7 +343,14 @@ export function createMembersPreparation(config: {
               )
             ).rows;
             if (lru.length !== need) throw new ProblemError('dependency_unavailable');
-            cleanups.push(...(await retireHeaders(tx, route, actor.accountId, lru.map((row) => row.episode_id))));
+            cleanups.push(
+              ...(await retireHeaders(
+                tx,
+                route,
+                actor.accountId,
+                lru.map((row) => row.episode_id),
+              )),
+            );
             liveCount -= need;
           }
 
@@ -436,11 +435,7 @@ export function createMembersPreparation(config: {
     },
 
     async touch(actor, locator, options = {}) {
-      if (
-        actor.kind !== 'account' ||
-        !validLocator(locator) ||
-        locator.ownerAccountId !== actor.accountId
-      )
+      if (actor.kind !== 'account' || !validLocator(locator) || locator.ownerAccountId !== actor.accountId)
         return false;
       const identity = principalCommandIdentity(actor);
       if (identity.principal.kind !== 'account') return false;
