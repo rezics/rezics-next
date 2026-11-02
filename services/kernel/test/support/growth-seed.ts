@@ -107,6 +107,7 @@ export async function seed(target: SeedTarget, population: Population, range: Se
         }
         const records = population.rows!(placementValue);
         const encoded = Object.create(null) as Record<string, readonly Row[]>;
+        const byteBudget = { byteArrayBytes: 0 };
         for (const [name, rows] of Object.entries(records)) {
           if (!TABLE_NAME.test(name)) {
             encoded[name] = rows;
@@ -115,7 +116,7 @@ export async function seed(target: SeedTarget, population: Population, range: Se
           encoded[name] = rows.map((row) => {
             const rowNumber = (rowNumbers.get(name) ?? 0) + 1;
             rowNumbers.set(name, rowNumber);
-            return encodeSeedRow(row, name, rowNumber, Object.keys(row), encoder);
+            return encodeSeedRow(row, name, rowNumber, Object.keys(row), encoder, byteBudget);
           });
         }
         return encoded;

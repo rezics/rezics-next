@@ -1,5 +1,8 @@
+import { SEED_BATCH_BYTE_LIMIT } from './growth-seed-batches.ts';
+
 export const MAX_SEED_VALUE_DEPTH = 64;
 export const MAX_SEED_VALUE_NODES_PER_BATCH = 100_000;
+export const MAX_SEED_VALUE_BYTE_ARRAY_BYTES_PER_ORDINAL = Math.floor((SEED_BATCH_BYTE_LIMIT - 5) / 2);
 
 export type SeedValueLocation = {
   readonly table: string;
@@ -8,7 +11,12 @@ export type SeedValueLocation = {
   readonly column: string;
 };
 
-export type SeedValueEncoder = (value: unknown, location: SeedValueLocation) => unknown;
+export type SeedValueByteBudget = { byteArrayBytes: number };
+export type SeedValueEncoder = (
+  value: unknown,
+  location: SeedValueLocation,
+  byteBudget?: SeedValueByteBudget,
+) => unknown;
 export type SeedRow = Readonly<Record<string, unknown>>;
 
 function fail(location: SeedValueLocation, path: string, reason: string): never {
@@ -36,6 +44,7 @@ export function createSeedValueEncoder(): SeedValueEncoder {
     depth: number,
     path: string,
     ancestors: WeakSet<object>,
+    byteBudget: SeedValueByteBudget,
   ): unknown => {
     visited++;
     if (visited > MAX_SEED_VALUE_NODES_PER_BATCH)
@@ -58,6 +67,13 @@ export function createSeedValueEncoder(): SeedValueEncoder {
       return Date.prototype.toISOString.call(value);
     }
     if (value instanceof Uint8Array) {
+      if (value.byteLength > MAX_SEED_VALUE_BYTE_ARRAY_BYTES_PER_ORDINAL - byteBudget.byteArrayBytes)
+        return fail(
+          location,
+          path,
+          `byte arrays exceed ${MAX_SEED_VALUE_BYTE_ARRAY_BYTES_PER_ORDINAL} bytes per ordinal`,
+        );
+      byteBudget.byteArrayBytes += value.byteLength;
       let hex = '';
       for (let index = 0; index < value.length; index++) hex += value[index]!.toString(16).padStart(2, '0');
       return `\\x${hex}`;
@@ -82,7 +98,7 @@ export function createSeedValueEncoder(): SeedValueEncoder {
           const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
           if (!descriptor) return fail(location, itemPath, 'sparse arrays are not supported');
           if (!('value' in descriptor)) return fail(location, itemPath, 'accessor properties are not supported');
-          result.push(encode(descriptor.value, location, depth + 1, itemPath, ancestors));
+          result.push(encode(descriptor.value, location, depth + 1, itemPath, ancestors, byteBudget));
         }
         return result;
       }
@@ -96,7 +112,7 @@ export function createSeedValueEncoder(): SeedValueEncoder {
         const descriptor = Object.getOwnPropertyDescriptor(value, key);
         if (!descriptor || !descriptor.enumerable) continue;
         if (!('value' in descriptor)) return fail(location, propertyPath(path, key), 'accessor properties are not supported');
-        result[key] = encode(descriptor.value, location, depth + 1, propertyPath(path, key), ancestors);
+        result[key] = encode(descriptor.value, location, depth + 1, propertyPath(path, key), ancestors, byteBudget);
       }
       return result;
     } finally {
@@ -104,7 +120,8 @@ export function createSeedValueEncoder(): SeedValueEncoder {
     }
   };
 
-  return (value, location) => encode(value, location, 0, '$', new WeakSet());
+  return (value, location, byteBudget = { byteArrayBytes: 0 }) =>
+    encode(value, location, 0, '$', new WeakSet(), byteBudget);
 }
 
 export function encodeSeedRow(
@@ -113,6 +130,7 @@ export function encodeSeedRow(
   rowNumber: number,
   columns: readonly string[],
   encode: SeedValueEncoder,
+  byteBudget: SeedValueByteBudget = { byteArrayBytes: 0 },
 ): SeedRow {
   if (Object.getOwnPropertySymbols(row).length)
     return fail({ table, row: rowNumber, column: '<symbol>' }, '$', 'symbol-keyed columns are not supported');
@@ -123,7 +141,7 @@ export function encodeSeedRow(
     const descriptor = Object.getOwnPropertyDescriptor(row, column);
     if (!descriptor || !descriptor.enumerable) return fail(location, '$', 'column must be an enumerable data property');
     if (!('value' in descriptor)) return fail(location, '$', 'accessor properties are not supported');
-    result[column] = encode(descriptor.value, location);
+    result[column] = encode(descriptor.value, location, byteBudget);
   }
   return result;
 }

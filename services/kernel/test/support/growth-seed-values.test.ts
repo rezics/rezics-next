@@ -3,6 +3,7 @@ import { seed, type Population } from './growth-seed.ts';
 import {
   createSeedValueEncoder,
   encodeSeedRow,
+  MAX_SEED_VALUE_BYTE_ARRAY_BYTES_PER_ORDINAL,
   MAX_SEED_VALUE_DEPTH,
   MAX_SEED_VALUE_NODES_PER_BATCH,
 } from './growth-seed-values.ts';
@@ -75,6 +76,15 @@ test('rejects cycles before opening the affected seed batch', async () => {
   };
   await expect(seed({ pool: {} as never, admin }, deepPopulation, { from: 0, to: 1 })).rejects.toThrow(
     /table public\.seed_values, row 1, column "payload".*depth 64/,
+  );
+  const bytesPerRow = Math.ceil(MAX_SEED_VALUE_BYTE_ARRAY_BYTES_PER_ORDINAL / 2);
+  const oversizedByteRows = Array.from({ length: 2 }, () => ({ payload: new Uint8Array(bytesPerRow) }));
+  const byteLimitedPopulation: Population = {
+    ...population,
+    rows: () => ({ [table]: oversizedByteRows }),
+  };
+  await expect(seed({ pool: {} as never, admin }, byteLimitedPopulation, { from: 0, to: 1 })).rejects.toThrow(
+    /table public\.seed_values, row 2, column "payload".*byte arrays exceed 524,285 bytes per ordinal/,
   );
   expect(connections).toBe(0);
 });
