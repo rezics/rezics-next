@@ -24,6 +24,8 @@ test('Overview previews keep bounded native rows, truthful counts and independen
     DocumentFragment: window.DocumentFragment,
     MutationObserver: window.MutationObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -162,9 +164,9 @@ test('Overview previews keep bounded native rows, truthful counts and independen
     expect(section('complete').querySelector('a')).toBeNull();
     for (const link of host.querySelectorAll<HTMLAnchorElement>('[data-slot="see-all"]')) assertAction(link);
     expect(editions.querySelector('h2')?.classList.contains('[overflow-wrap:anywhere]')).toBe(true);
-    await user.tab();
+    await act(async () => user.tab());
     expect(window.document.activeElement).toBe(more('editions'));
-    await user.keyboard('{Enter}');
+    await act(async () => user.keyboard('{Enter}'));
     expect(navigations).toEqual([expected]);
 
     await show({ status: 503, body: {} }, { status: 403, body: {} });
@@ -185,7 +187,7 @@ test('Overview previews keep bounded native rows, truthful counts and independen
       expect(retry.getAttribute('aria-describedby')).toBe(`${id}-title ${id}-status`);
       expect(within(failed).getByRole('status').id).toBe(`${id}-status`);
       retry.focus();
-      await user.keyboard('{Enter}');
+      await act(async () => user.keyboard('{Enter}'));
     }
     expect(navigations.slice(1)).toEqual(['', '']);
     // A new supplied page response restores only the failed regions; the reload itself remains native.
