@@ -284,11 +284,11 @@ function NodeEditor({
           ? m.condition_not()
           : 'saved' in value
             ? m.condition_saved_filter_label({ id: value.saved })
-          : 'type' in value
-            ? m.search_type()
-            : 'statement' in value
-              ? m.condition_statement()
-              : m.condition_leaf();
+            : 'type' in value
+              ? m.search_type()
+              : 'statement' in value
+                ? m.condition_statement()
+                : m.condition_leaf();
   const extensionLeaf = context.extension?.render(value, onChange);
   const name = (labels: Record<string, string> | undefined, fallback: string) =>
     localizedLabel(labels ?? {}, context.locale).text || fallback;
@@ -658,9 +658,7 @@ function NodeEditor({
           onSelect={(id) => context.selectSavedFilter(path, id, 'replace')}
         />
       )}
-      {'owner' in value && !extensionLeaf && (
-        <p className="text-sm text-muted-foreground">{m.condition_retained()}</p>
-      )}
+      {'owner' in value && !extensionLeaf && <p className="text-sm text-muted-foreground">{m.condition_retained()}</p>}
       {pendingPropertyChange && (
         <dialog
           ref={propertyChangeDialog}

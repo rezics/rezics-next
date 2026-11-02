@@ -29,9 +29,9 @@ test('released references append and replace only their addressed tree nodes whi
   expect(appended).toEqual({
     and: [thing, { or: [{ saved: 'things/one' }, { not: thing }, { saved: 'things/two' }] }],
   });
-  expect(
-    editSavedFilterTree(appended!, ['and', 1, 'or', 0], 'things/two', 'replace', admits),
-  ).toEqual({ and: [thing, { or: [{ saved: 'things/two' }, { not: thing }, { saved: 'things/two' }] }] });
+  expect(editSavedFilterTree(appended!, ['and', 1, 'or', 0], 'things/two', 'replace', admits)).toEqual({
+    and: [thing, { or: [{ saved: 'things/two' }, { not: thing }, { saved: 'things/two' }] }],
+  });
 });
 
 test('saved edits require full-tree expansion admission, including leaf limits, NOT rules and cycles', () => {
