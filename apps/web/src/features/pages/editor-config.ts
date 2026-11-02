@@ -314,13 +314,7 @@ function transformValue(
     const result = { ...(value as Record<string, unknown>) };
     for (const [prop, propSchema] of Object.entries(schemaProperties(schema))) {
       if (Object.hasOwn(result, prop)) {
-        result[prop] = transformValue(
-          result[prop],
-          propSchema,
-          direction,
-          [...path, prop],
-          localizedValues,
-        );
+        result[prop] = transformValue(result[prop], propSchema, direction, [...path, prop], localizedValues);
       }
     }
     return result;
