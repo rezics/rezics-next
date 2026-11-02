@@ -284,6 +284,8 @@
   "auth_security_unknown_device": "Unknown device",
   "auth_signup_conflict": "We could not create this account. Sign in or recover access.",
   "auth_signup_created": "Your account was created. Sign in to continue.",
+  "auth_signup_departure_description": "Your entered details will be cleared. Leaving cannot undo an account creation already submitted.",
+  "auth_signup_departure_heading": "Leave account registration?",
   "auth_signup_denied": "Check the handle, email, password and verification, then try again.",
   "auth_signup_email": "Email",
   "auth_signup_handle": "Handle",

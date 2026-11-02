@@ -714,6 +714,9 @@ test('default signup success still sends the original signup and signin protocol
     ).toBe(true);
     expect(api.resets).toHaveLength(0);
     expect(navigations).toHaveLength(1);
+    const unload = new dom.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload as unknown as Event);
+    expect(unload.defaultPrevented).toBe(false);
     const target = new URL(navigations[0]!);
     expect(target.origin).toBe('https://auth.test');
     expect(target.pathname).toBe('/authorize');
@@ -912,6 +915,9 @@ test('created accounts keep sign-in failure feedback and finish through login wi
       await flush(() => api.widgets[0]!.options.callback('signup-token'));
       await page.submit();
       expect(paths).toEqual(['/signup', '/signin']);
+      const unload = new dom.Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(unload as unknown as Event);
+      expect(unload.defaultPrevented).toBe(false);
       const alert = page.ui.host.querySelector('[role="alert"]')!;
       expect(alert).not.toBeNull();
       expect(document.activeElement).toBe(alert);
@@ -984,8 +990,13 @@ for (const stage of ['creation', 'sign-in'])
             expect(page.ui.host.querySelector('form')).toBeNull();
           }
           if (boundary === 'unmount') await page.ui.close();
-          else if (boundary === 'replace') await flush(() => page.router.history.replace('/signup?state=new'));
-          else
+          else if (boundary === 'replace') {
+            await flush(() => page.router.history.replace('/signup?state=new'));
+            if (stage === 'creation')
+              await flush(() =>
+                document.querySelector<HTMLButtonElement>('[data-slot="alert-dialog-action"]')!.click(),
+              );
+          } else
             await flush(() => {
               window.dispatchEvent(new dom.Event('pagehide') as unknown as Event);
               window.dispatchEvent(Object.assign(new dom.Event('pageshow'), { persisted: true }) as unknown as Event);

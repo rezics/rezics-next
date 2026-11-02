@@ -284,6 +284,8 @@
   "auth_security_unknown_device": "未知设备",
   "auth_signup_conflict": "无法创建此账户。请登录或恢复访问。",
   "auth_signup_created": "账户已创建。请登录以继续。",
+  "auth_signup_departure_description": "已输入的内容将被清除。离开页面无法撤销已经提交的账号创建。",
+  "auth_signup_departure_heading": "离开账号注册？",
   "auth_signup_denied": "请检查用户名、邮箱、密码和验证后再试。",
   "auth_signup_email": "电子邮箱",
   "auth_signup_handle": "用户名",

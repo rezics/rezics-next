@@ -284,6 +284,8 @@
   "auth_security_unknown_device": "Appareil inconnu",
   "auth_signup_conflict": "Nous n’avons pas pu créer ce compte. Connectez-vous ou récupérez l’accès.",
   "auth_signup_created": "Votre compte a été créé. Connectez-vous pour continuer.",
+  "auth_signup_departure_description": "Les informations saisies seront effacées. Quitter ne peut pas annuler une création de compte déjà envoyée.",
+  "auth_signup_departure_heading": "Quitter l’inscription ?",
   "auth_signup_denied": "Vérifiez l’identifiant, l’adresse e-mail, le mot de passe et la vérification, puis réessayez.",
   "auth_signup_email": "Adresse e-mail",
   "auth_signup_handle": "Identifiant",

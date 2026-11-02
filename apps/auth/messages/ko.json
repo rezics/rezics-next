@@ -284,6 +284,8 @@
   "auth_security_unknown_device": "알 수 없는 기기",
   "auth_signup_conflict": "이 계정을 만들 수 없습니다. 로그인하거나 접근을 복구하세요.",
   "auth_signup_created": "계정이 생성되었습니다. 계속하려면 로그인하세요.",
+  "auth_signup_departure_description": "입력한 내용이 지워집니다. 페이지를 나가도 이미 제출한 계정 생성은 취소되지 않습니다.",
+  "auth_signup_departure_heading": "계정 등록을 나가시겠어요?",
   "auth_signup_denied": "핸들, 이메일, 비밀번호와 확인을 점검한 뒤 다시 시도해 주세요.",
   "auth_signup_email": "이메일",
   "auth_signup_handle": "핸들",

@@ -284,6 +284,8 @@
   "auth_security_unknown_device": "Unbekanntes Gerät",
   "auth_signup_conflict": "Dieses Konto konnte nicht erstellt werden. Melde dich an oder stelle den Zugang wieder her.",
   "auth_signup_created": "Dein Konto wurde erstellt. Melde dich an, um fortzufahren.",
+  "auth_signup_departure_description": "Deine eingegebenen Daten werden gelöscht. Eine bereits abgesendete Kontoerstellung wird durch das Verlassen nicht rückgängig gemacht.",
+  "auth_signup_departure_heading": "Registrierung verlassen?",
   "auth_signup_denied": "Prüfe Nutzername, E-Mail-Adresse, Passwort und die Überprüfung, und versuche es erneut.",
   "auth_signup_email": "E-Mail-Adresse",
   "auth_signup_handle": "Nutzername",

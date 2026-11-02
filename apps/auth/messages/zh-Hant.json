@@ -284,6 +284,8 @@
   "auth_security_unknown_device": "未知裝置",
   "auth_signup_conflict": "無法建立此帳戶。請登入或恢復存取。",
   "auth_signup_created": "帳戶已建立。請登入以繼續。",
+  "auth_signup_departure_description": "已輸入的內容將被清除。離開頁面無法撤銷已送出的帳號建立。",
+  "auth_signup_departure_heading": "離開帳號註冊？",
   "auth_signup_denied": "請檢查使用者名稱、電子郵件、密碼和驗證後再試。",
   "auth_signup_email": "電子郵件",
   "auth_signup_handle": "使用者名稱",

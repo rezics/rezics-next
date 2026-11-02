@@ -1,8 +1,17 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router';
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { AuthButton as Button } from '../button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@rezics/ui/shadcn/alert-dialog';
 import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -28,6 +37,56 @@ export const Route = createFileRoute('/signup')({
 });
 
 type SignupJourney = { active: boolean; sequence: number; query: string };
+
+// Keep the router adapter with the form: Stay never replaces its journey or submission key.
+function SignupDeparture({
+  shouldWarn,
+  leave,
+  focus,
+}: {
+  shouldWarn: () => boolean;
+  leave: () => void;
+  focus: () => void;
+}) {
+  const blocker = useBlocker({ shouldBlockFn: shouldWarn, enableBeforeUnload: false, withResolver: true });
+  useLayoutEffect(() => {
+    // Creation finishes this draft even if the subsequent sign-in fails.
+    if (blocker.status === 'blocked' && !shouldWarn()) blocker.proceed();
+  });
+  const stay = () => {
+    if (blocker.status === 'blocked') blocker.reset();
+  };
+  return (
+    <AlertDialog
+      open={blocker.status === 'blocked'}
+      onOpenChange={(open) => {
+        if (!open) stay();
+      }}
+    >
+      <AlertDialogContent
+        finalFocus={() => {
+          focus();
+          return false;
+        }}
+      >
+        <AlertDialogTitle>{m.auth_signup_departure_heading()}</AlertDialogTitle>
+        <AlertDialogDescription>{m.auth_signup_departure_description()}</AlertDialogDescription>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={stay}>{m.auth_organization_departure_stay()}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (blocker.status !== 'blocked') return;
+              leave();
+              blocker.proceed();
+            }}
+          >
+            {m.auth_organization_departure_leave()}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 function SignupPage() {
   const { history } = useRouter();
@@ -65,6 +124,7 @@ function SignupPage() {
 }
 
 function SignupForm({ journey }: { journey: SignupJourney }) {
+  const { history } = useRouter();
   const { siteKey, scriptUrl } = Route.useLoaderData();
   const { query } = journey;
   const key = useRef(createSignupKey());
@@ -84,6 +144,49 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
   const [message, setMessage] = useState('');
   const [conflict, setConflict] = useState(false);
   const emailInput = useRef<HTMLInputElement>(null);
+  const form = useRef<HTMLFormElement>(null);
+  const protectedDraft = useRef(false);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  protectedDraft.current = !created && Boolean(handle.trim() || email.trim() || password || pending);
+  const shouldWarn = useCallback(() => {
+    const warn = journey.active && protectedDraft.current;
+    if (warn && !document.activeElement?.closest('[role="alertdialog"]'))
+      returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return warn;
+  }, [journey]);
+  const retire = useCallback(() => {
+    // Only browser continuations are retired; a dispatched creation can still finish on the server.
+    journey.active = false;
+    protectedDraft.current = false;
+    form.current?.querySelectorAll('input').forEach((input) => {
+      input.value = '';
+    });
+  }, [journey]);
+  const leave = () => {
+    retire();
+    setHandle('');
+    setEmail('');
+    setPassword('');
+  };
+  useLayoutEffect(() => {
+    const unload = (event: BeforeUnloadEvent) => {
+      if (!shouldWarn()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', unload);
+    window.addEventListener('pagehide', leave);
+    return () => {
+      retire();
+      window.removeEventListener('beforeunload', unload);
+      window.removeEventListener('pagehide', leave);
+    };
+  }, [retire, shouldWarn]);
+  function follow(event: MouseEvent<HTMLAnchorElement>) {
+    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    history.push(event.currentTarget.getAttribute('href')!);
+  }
 
   useLayoutEffect(() => {
     if (handleError) document.getElementById(handleId)?.focus();
@@ -131,6 +234,7 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
     });
     if (!journey.active) return;
     if (submission.ok) {
+      protectedDraft.current = false;
       setCreated(true);
       setPassword('');
       // Creation is final for this journey. A login failure only offers existing login/recovery routes.
@@ -164,6 +268,15 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
 
   return (
     <AuthPage heading={m.auth_signup_heading()}>
+      <SignupDeparture
+        shouldWarn={shouldWarn}
+        leave={leave}
+        focus={() => {
+          const previous = returnFocus.current;
+          if (previous?.isConnected && previous !== document.body) previous.focus();
+          else document.getElementById(handleId)?.focus();
+        }}
+      />
       {created ? (
         <div className="auth-login-form" aria-busy={pending}>
           <p role="status">{m.auth_signup_created()}</p>
@@ -173,12 +286,16 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
             </ErrorAlert>
           ) : null}
           <nav className="auth-signup-links" aria-label={m.auth_signup_sign_in()}>
-            <a href={`/login${query}`}>{m.auth_signup_sign_in()}</a>
-            <a href={`/recovery${query}`}>{m.auth_signup_recovery()}</a>
+            <a href={`/login${query}`} onClick={follow}>
+              {m.auth_signup_sign_in()}
+            </a>
+            <a href={`/recovery${query}`} onClick={follow}>
+              {m.auth_signup_recovery()}
+            </a>
           </nav>
         </div>
       ) : (
-        <form className="auth-login-form" method="post" action="/signup" noValidate onSubmit={submit}>
+        <form ref={form} className="auth-login-form" method="post" action="/signup" noValidate onSubmit={submit}>
           <Field data-invalid={Boolean(handleError)}>
             <FieldLabel htmlFor={handleId}>{m.auth_signup_handle()}</FieldLabel>
             <Input
@@ -270,8 +387,12 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
               <p>{message}</p>
               {conflict ? (
                 <nav className="auth-signup-links" aria-label={m.auth_signup_conflict()}>
-                  <a href={`/login${query}`}>{m.auth_signup_sign_in()}</a>
-                  <a href={`/recovery${query}`}>{m.auth_signup_recovery()}</a>
+                  <a href={`/login${query}`} onClick={follow}>
+                    {m.auth_signup_sign_in()}
+                  </a>
+                  <a href={`/recovery${query}`} onClick={follow}>
+                    {m.auth_signup_recovery()}
+                  </a>
                 </nav>
               ) : null}
             </ErrorAlert>
@@ -283,7 +404,9 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
       )}
       {!created ? (
         <nav className="auth-login-links" aria-label={m.auth_signup_sign_in()}>
-          <a href={`/login${query}`}>{m.auth_signup_sign_in()}</a>
+          <a href={`/login${query}`} onClick={follow}>
+            {m.auth_signup_sign_in()}
+          </a>
         </nav>
       ) : null}
     </AuthPage>

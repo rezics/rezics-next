@@ -93,6 +93,8 @@ private inputs are cleared, and the page signs in once with `POST /signin`, resu
 If sign-in fails, the creation confirmation and sign-in/recovery links retain the original query; retrying sign-in
 uses the existing login page and never repeats creation. `src/sign-in.ts` supplies the shared sign-in result and
 validated destination helpers (there is no separate login-attempt helper in this base).
+Decision: nonblank handle/email, any password or a pending creation prompts Stay/Leave; Stay preserves input, validation and the same key, while creation completion releases the warning even during subsequent sign-in.
+Reload/close warns only for that unfinished work; Leave clears in-memory details and retires browser continuations without undoing a dispatched creation.
 Departure or history replacement retires pending browser continuations before the next stage or navigation;
 it cannot undo a server write. A cached-document return starts an empty fresh form without automatically retrying
 creation or sign-in. An uncertain creation is retried only by explicit submission with the existing key and a fresh

@@ -284,6 +284,8 @@
   "auth_security_unknown_device": "Dispositivo desconocido",
   "auth_signup_conflict": "No pudimos crear esta cuenta. Inicia sesión o recupera el acceso.",
   "auth_signup_created": "Tu cuenta se ha creado. Inicia sesión para continuar.",
+  "auth_signup_departure_description": "Se borrarán los datos que has introducido. Salir no revierte una creación de cuenta ya enviada.",
+  "auth_signup_departure_heading": "¿Salir del registro?",
   "auth_signup_denied": "Revisa el nombre de usuario, el correo, la contraseña y la verificación, y vuelve a intentarlo.",
   "auth_signup_email": "Correo electrónico",
   "auth_signup_handle": "Nombre de usuario",

@@ -284,6 +284,8 @@
   "auth_security_unknown_device": "不明なデバイス",
   "auth_signup_conflict": "このアカウントを作成できませんでした。ログインするか、アクセスを復旧してください。",
   "auth_signup_created": "アカウントが作成されました。ログインして続行してください。",
+  "auth_signup_departure_description": "入力した内容は消去されます。すでに送信したアカウント作成は、ページを離れても取り消せません。",
+  "auth_signup_departure_heading": "アカウント登録を終了しますか？",
   "auth_signup_denied": "ハンドル、メールアドレス、パスワード、確認を見直して、もう一度お試しください。",
   "auth_signup_email": "メールアドレス",
   "auth_signup_handle": "ハンドル",
