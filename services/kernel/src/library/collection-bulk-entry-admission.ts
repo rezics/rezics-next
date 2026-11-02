@@ -7,7 +7,7 @@ import { bulkAdmissionSchema } from './bulk-schemas.ts';
 import { BULK_ADMISSION_BODY_BYTES, BULK_MAX_SELECTION_IDS } from './bulk-limits.ts';
 import { LibraryNotFoundError } from './command-support.ts';
 import { resolveSubject, type ResolvedSubject, type SubjectAnchorDependencies } from './subject-anchor.ts';
-import type { BulkAdmission, SubjectTarget } from './bulk-contract.ts';
+import type { BulkAdmission } from './bulk-contract.ts';
 import type { CollectionBulkTarget } from './collection-bulk-store.ts';
 
 export type ExplicitLibraryRemoval = Extract<BulkAdmission, { action: 'remove_from_library' }> & {
@@ -79,7 +79,7 @@ export async function captureLibraryRemovalTargets(
     [route, owner.accountId, subjects.map(({ subjectId }) => subjectId)],
   );
   const entries = new Map(rows.rows.map((entry) => [entry.subjectId, entry]));
-  return subjects.map((subject): SubjectTarget => {
+  return subjects.map((subject): CollectionBulkTarget => {
     const entry = entries.get(subject.subjectId);
     if (!entry) {
       return {

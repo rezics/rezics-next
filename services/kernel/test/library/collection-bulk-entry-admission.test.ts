@@ -69,7 +69,7 @@ test('explicit canonical subjects create an inert preview with native present an
   expect(manifest.map(({ target }) => target.subjectId)).toEqual([tracked.subjectId, absent]);
   expect(manifest[0]!.target.expected).toEqual({
     kind: 'present',
-    incarnation: tracked.incarnationId,
+    incarnation: tracked.incarnationId!,
     revision: tracked.revision,
     admissionSequence: String(presentRow.owner_write_seq),
   });
