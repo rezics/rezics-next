@@ -1,6 +1,7 @@
 import { platformRegistry, profileDigest, validateProfile, type PresentationProfile } from '@rezics/composition';
 import type { CurationFailure, PublishInput, PublishResult } from './curate';
 import type { CurationAdmissionLease } from './curation-reader-admission';
+import { admitPublicationRetry, publicationRetryAt } from './curation-retry-admission';
 
 export type ActiveCuration = { ok: true; reader: string; profile: PresentationProfile; digest: string; head: number };
 export type PublicationRead = ActiveCuration | CurationFailure | { ok: false; reason: 'signed-out' };
@@ -16,6 +17,7 @@ export type PublicationState = {
   active: ActiveCuration | null;
   readFailure: Exclude<PublicationRead, { ok: true }> | null;
   busy: boolean;
+  retryAt?: number;
 };
 
 export type CurationPublicationVisit = {
@@ -92,7 +94,7 @@ export class CurationPublication {
       busy: false,
       active: null,
       readFailure: null,
-      ...(this.state.intent ? {} : { result: null }),
+      ...(this.state.intent ? {} : { result: null, retryAt: undefined }),
     });
     return visit;
   }
@@ -162,7 +164,7 @@ export class CurationPublication {
       expectedHead,
       keys: { publish: this.key(), activate: this.key() },
     });
-    this.update({ intent, result: null, active: null, readFailure: null });
+    this.update({ intent, result: null, active: null, readFailure: null, retryAt: undefined });
     return this.retry(expectedIncarnation);
   }
 
@@ -173,6 +175,7 @@ export class CurationPublication {
       !intent ||
       intent.reader !== this.reader ||
       busy ||
+      !admitPublicationRetry(this.state.retryAt) ||
       (this.state.result?.ok === false &&
         this.state.result.reason === 'invalid' &&
         this.state.result.phase !== 'activate')
@@ -195,7 +198,10 @@ export class CurationPublication {
     }
     if (!current()) return null;
     this.operation = null;
-    this.update({ result });
+    this.update({
+      result,
+      retryAt: !result.ok && result.reason === 'rate-limited' ? publicationRetryAt(result.retryAfter) : undefined,
+    });
     if (!result.ok && result.reason === 'stale') await this.readActive(incarnation, transport);
     if (!current()) return null;
     this.update({ busy: false, ...(result.ok ? { intent: null, active: null } : {}) });
@@ -249,7 +255,7 @@ export class CurationPublication {
     )
       return null;
     const reviewed = { ...active, profile: choice === 'keep' ? profile : active.profile };
-    this.update({ intent: null, result: null, active: null, readFailure: null });
+    this.update({ intent: null, result: null, active: null, readFailure: null, retryAt: undefined });
     return reviewed;
   }
 
@@ -266,7 +272,7 @@ export class CurationPublication {
     // Keep the original refusal and its profile until the revised draft is locally valid.
     if (validateProfile(platformRegistry, profile).length) return null;
     if (this.state.intent && profileDigest(profile) === profileDigest(this.state.intent.profile)) return null;
-    this.update({ intent: null, result: null });
+    this.update({ intent: null, result: null, retryAt: undefined });
     return this.start(profile, expectedHead, expectedIncarnation);
   }
 }

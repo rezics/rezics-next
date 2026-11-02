@@ -12,6 +12,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime';
+import { useSearchRetryWait } from '../../search/search-recovery-retry';
 import {
   CurationPublication,
   type ActiveCuration,
@@ -383,10 +384,13 @@ export function CurationPublicationRecovery({
       mounted.current = false;
     };
   }, [publication]);
-  const { intent, result, active, readFailure, busy } = useSyncExternalStore(
+  const { intent, result, active, readFailure, busy, retryAt } = useSyncExternalStore(
     publication.subscribe,
     publication.getSnapshot,
     publication.getSnapshot,
+  );
+  const waiting = useSearchRetryWait(
+    result?.ok === false && result.reason === 'rate-limited' ? retryAt : undefined,
   );
   if (!intent && !result) return null;
   const stale = result?.ok === false && result.reason === 'stale';
@@ -494,7 +498,7 @@ export function CurationPublicationRecovery({
           {!invalid ? (
             <div className="space-y-2">
               <p className="text-sm">{m.curation_review_retry_help()}</p>
-              <Button variant="outline" className={controlClass} disabled={busy} onClick={() => void retry()}>
+              <Button variant="outline" className={controlClass} disabled={busy || waiting} onClick={() => void retry()}>
                 {m.curation_retry_original()}
               </Button>
             </div>
