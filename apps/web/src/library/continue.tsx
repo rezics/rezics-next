@@ -96,42 +96,44 @@ export function ContinueRow({
   return (
     <>
       {heading ? <SectionHeading>{m.home_continue_heading()}</SectionHeading> : null}
-      <div ref={rowHost} className="relative">
+      <div ref={rowHost} className="min-w-0 space-y-2">
         <CoverRow ratio={ratio} label={m.home_continue_heading()} density={density}>
           {cards}
         </CoverRow>
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon-sm"
-          aria-label={m.home_continue_previous()}
-          aria-hidden={!canScrollBack}
-          data-available={canScrollBack}
-          tabIndex={canScrollBack ? 0 : -1}
-          disabled={!canScrollBack}
-          onClick={() =>
-            rowHost.current?.querySelector('[data-slot="cover-row"]')?.scrollBy({ left: -240, behavior: 'smooth' })
-          }
-          className="pointer-fine:flex pointer-coarse:hidden absolute top-1/2 left-1 z-20 hidden -translate-y-1/2 shadow-md data-[available=false]:hidden"
-        >
-          <ChevronLeft aria-hidden />
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon-sm"
-          aria-label={m.home_continue_next()}
-          aria-hidden={!canScrollForward}
-          data-available={canScrollForward}
-          tabIndex={canScrollForward ? 0 : -1}
-          disabled={!canScrollForward}
-          onClick={() =>
-            rowHost.current?.querySelector('[data-slot="cover-row"]')?.scrollBy({ left: 240, behavior: 'smooth' })
-          }
-          className="pointer-fine:flex pointer-coarse:hidden absolute top-1/2 right-1 z-20 hidden -translate-y-1/2 shadow-md data-[available=false]:hidden"
-        >
-          <ChevronRight aria-hidden />
-        </Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon-sm"
+            aria-label={m.home_continue_previous()}
+            aria-hidden={!canScrollBack}
+            data-available={canScrollBack}
+            tabIndex={canScrollBack ? 0 : -1}
+            disabled={!canScrollBack}
+            onClick={() =>
+              rowHost.current?.querySelector('[data-slot="cover-row"]')?.scrollBy({ left: -240, behavior: 'smooth' })
+            }
+            className="pointer-fine:flex pointer-coarse:hidden hidden size-11 min-h-11 min-w-11 shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[available=false]:hidden"
+          >
+            <ChevronLeft aria-hidden />
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon-sm"
+            aria-label={m.home_continue_next()}
+            aria-hidden={!canScrollForward}
+            data-available={canScrollForward}
+            tabIndex={canScrollForward ? 0 : -1}
+            disabled={!canScrollForward}
+            onClick={() =>
+              rowHost.current?.querySelector('[data-slot="cover-row"]')?.scrollBy({ left: 240, behavior: 'smooth' })
+            }
+            className="pointer-fine:flex pointer-coarse:hidden hidden size-11 min-h-11 min-w-11 shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[available=false]:hidden"
+          >
+            <ChevronRight aria-hidden />
+          </Button>
+        </div>
       </div>
     </>
   );
@@ -234,11 +236,16 @@ export function ContinueSection({
             ? m.library_continue_denied({}, options)
             : m.library_continue_unavailable({}, options);
   return (
-    <section aria-label={title} data-continue-state={result.state} className="min-w-0 space-y-4">
+    <section aria-label={title} data-continue-state={result.state} className="min-w-0 max-w-full space-y-4">
       {!destination ? (
-        <div className="flex items-baseline justify-between gap-4">
-          <SectionHeading>{title}</SectionHeading>
-          <a href={`/${locale}/library/continue`} className="text-sm text-primary underline-offset-4 hover:underline">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+          <div className="min-w-0 flex-1 basis-48 wrap-anywhere">
+            <SectionHeading>{title}</SectionHeading>
+          </div>
+          <a
+            href={`/${locale}/library/continue`}
+            className="inline-flex min-h-11 min-w-0 max-w-full items-center rounded-sm px-2 py-2 text-sm whitespace-normal text-primary underline-offset-4 wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             {m.library_more({}, options)}
           </a>
         </div>
@@ -246,12 +253,24 @@ export function ContinueSection({
       {result.state === 'loaded' && result.entries.length > 0 ? (
         <ContinueRow entries={result.entries} locale={locale} density={density} heading={false} />
       ) : (
-        <div className="rounded-lg border border-border p-6 sm:p-8" aria-busy={busy || result.state === 'unknown'}>
-          <p role={result.state === 'unavailable' ? 'alert' : 'status'} className="text-sm text-muted-foreground">
+        <div
+          className="min-w-0 rounded-lg border border-border p-6 sm:p-8"
+          aria-busy={busy || result.state === 'unknown'}
+        >
+          <p
+            role={result.state === 'unavailable' ? 'alert' : 'status'}
+            className="text-sm leading-relaxed wrap-anywhere text-muted-foreground"
+          >
             {message}
           </p>
           {onRetry && (result.state === 'unavailable' || result.state === 'preparing') ? (
-            <Button type="button" variant="outline" className="mt-4" disabled={busy} onClick={onRetry}>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4 h-auto min-h-11 max-w-full px-3 py-2 text-start whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              disabled={busy}
+              onClick={onRetry}
+            >
               {m.library_follow_retry({}, options)}
             </Button>
           ) : null}
@@ -260,7 +279,7 @@ export function ContinueSection({
       {destination && result.state === 'loaded' && result.next ? (
         <a
           href={`/${locale}/library/continue?cursor=${encodeURIComponent(result.next)}`}
-          className="text-sm text-primary underline-offset-4 hover:underline"
+          className="inline-flex min-h-11 min-w-0 max-w-full items-center rounded-sm px-2 py-2 text-sm whitespace-normal text-primary underline-offset-4 wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {m.library_next_page({}, options)}
         </a>
