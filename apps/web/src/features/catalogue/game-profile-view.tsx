@@ -70,13 +70,6 @@ function GameProfileLive({
   });
   const [readingRevision, setReadingRevision] = useState(0);
   const readingRevisionRef = useRef(0);
-  const refreshExisting = (expectedRevision: number): Promise<void> => {
-    if (!lifetime.active() || readingRevisionRef.current !== expectedRevision) return Promise.resolve();
-    const nextRevision = expectedRevision + 1;
-    readingRevisionRef.current = nextRevision;
-    setReadingRevision(nextRevision);
-    return query.refetch({ cancelRefetch: false }).then(() => undefined);
-  };
   const [drafts, setDrafts] = useState<Record<string, { key: string; statement: StatementInput }[]>>({});
   const [observed, setObserved] = useState(query.data);
   const [lastReading, setLastReading] = useState<Extract<GameRead, { ok: true }> | undefined>(
@@ -100,6 +93,9 @@ function GameProfileLive({
   creationUnavailable.current = !id && (!read || !read.ok);
   const creationResult = useRef<HTMLDivElement>(null);
   const creationFailure = useRef<HTMLDivElement>(null);
+  const existingResult = useRef<HTMLElement>(null);
+  const existingFailure = useRef<HTMLElement>(null);
+  const [, setFocusSettlement] = useState(0);
   // Reuse the editor's retirement boundary; session observations also retire local retry intent.
   const recovery = useMemo(() => ({ pending: false, dispose: () => {} }), [lifetime.generation, id, locale, session]);
   const currentRecovery = useRef(recovery);
@@ -117,17 +113,72 @@ function GameProfileLive({
     const current = intent.owner === recovery && lifetime.active();
     recovery.dispose();
     if (!current || (document.activeElement !== intent.opener && document.activeElement !== document.body)) return;
+    let openerVisible = intent.opener.isConnected && !intent.opener.disabled;
+    for (let node: HTMLElement | null = intent.opener; openerVisible && node; node = node.parentElement) {
+      const style = document.defaultView?.getComputedStyle(node);
+      if (
+        node.hidden ||
+        node.hasAttribute('inert') ||
+        node.getAttribute('aria-hidden') === 'true' ||
+        style?.display === 'none' ||
+        style?.visibility === 'hidden' ||
+        style?.visibility === 'collapse'
+      )
+        openerVisible = false;
+    }
     // A surviving failure-shell opener retains its ordinary focus.
-    if (intent.opener.isConnected && !intent.opener.disabled) {
+    if (openerVisible) {
       if (document.activeElement !== intent.opener) intent.opener.focus();
       return;
     }
-    const target = creationResult.current?.querySelector('h1') ?? creationFailure.current;
+    const target = id
+      ? (existingResult.current?.querySelector('h1') as HTMLElement | null) ?? existingFailure.current
+      : creationResult.current?.querySelector('h1') ?? creationFailure.current;
     if (target) {
       target.tabIndex = -1;
       target.focus();
     }
   });
+  const captureRecoveryFocusIntent = (event: MouseEvent<HTMLButtonElement>) => {
+    recovery.dispose();
+    const opener = event.currentTarget;
+    const document = opener.ownerDocument;
+    if (event.detail !== 0 || document.activeElement !== opener) return;
+    const intent = { owner: recovery, opener, complete: false };
+    focusIntent.current = intent;
+    const cancel = () => recovery.dispose();
+    const moved = (event: FocusEvent) => {
+      if (event.target !== opener && event.target !== document.body) cancel();
+    };
+    const tabbed = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') cancel();
+    };
+    document.addEventListener('focusin', moved, true);
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', tabbed, true);
+    document.defaultView?.addEventListener('blur', cancel);
+    recovery.dispose = () => {
+      if (focusIntent.current === intent) focusIntent.current = undefined;
+      document.removeEventListener('focusin', moved, true);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', tabbed, true);
+      document.defaultView?.removeEventListener('blur', cancel);
+    };
+  };
+  const refreshExisting = (expectedRevision: number, event: MouseEvent<HTMLButtonElement>): Promise<void> => {
+    if (!lifetime.active() || readingRevisionRef.current !== expectedRevision) return Promise.resolve();
+    captureRecoveryFocusIntent(event);
+    const nextRevision = expectedRevision + 1;
+    readingRevisionRef.current = nextRevision;
+    setReadingRevision(nextRevision);
+    return query.refetch({ cancelRefetch: false }).then(() => {
+      if (!lifetime.active() || currentRecovery.current !== recovery) return;
+      if (focusIntent.current?.owner === recovery) {
+        focusIntent.current.complete = true;
+        setFocusSettlement((current) => current + 1);
+      }
+    });
+  };
   const retryCreation = (event: MouseEvent<HTMLButtonElement>) => {
     if (
       !lifetime.active() ||
@@ -137,31 +188,7 @@ function GameProfileLive({
       query.isFetching
     )
       return;
-    recovery.dispose();
-    const opener = event.currentTarget;
-    const document = opener.ownerDocument;
-    if (event.detail === 0 && document.activeElement === opener) {
-      const intent = { owner: recovery, opener, complete: false };
-      focusIntent.current = intent;
-      const cancel = () => recovery.dispose();
-      const moved = (event: FocusEvent) => {
-        if (event.target !== opener && event.target !== document.body) cancel();
-      };
-      const tabbed = (event: KeyboardEvent) => {
-        if (event.key === 'Tab') cancel();
-      };
-      document.addEventListener('focusin', moved, true);
-      document.addEventListener('pointerdown', cancel, true);
-      document.addEventListener('keydown', tabbed, true);
-      document.defaultView?.addEventListener('blur', cancel);
-      recovery.dispose = () => {
-        if (focusIntent.current === intent) focusIntent.current = undefined;
-        document.removeEventListener('focusin', moved, true);
-        document.removeEventListener('pointerdown', cancel, true);
-        document.removeEventListener('keydown', tabbed, true);
-        document.defaultView?.removeEventListener('blur', cancel);
-      };
-    }
+    captureRecoveryFocusIntent(event);
     recovery.pending = true;
     setCreationAttempt({ owner: recovery, pending: true });
     // Match existing explicit readers: coalesce, never cancel and replace an in-flight read.
@@ -191,22 +218,24 @@ function GameProfileLive({
             ) : (
               <>
                 {refreshFailed && <p role="status">{m.game_profile_refresh_failed({}, o)}</p>}
-                <EditorFailure
-                  reason={
-                    query.isError
-                      ? 'unavailable'
-                      : query.data?.ok
-                        ? query.data.public
-                          ? 'stale'
-                          : 'denied'
-                        : (query.data?.reason ?? 'unavailable')
-                  }
-                  locale={locale}
-                />
+                <div ref={existingFailure} tabIndex={-1}>
+                  <EditorFailure
+                    reason={
+                      query.isError
+                        ? 'unavailable'
+                        : query.data?.ok
+                          ? query.data.public
+                            ? 'stale'
+                            : 'denied'
+                          : (query.data?.reason ?? 'unavailable')
+                    }
+                    locale={locale}
+                  />
+                </div>
                 <Button
                   className={gameActionClass}
                   disabled={query.isFetching}
-                  onClick={() => void refreshExisting(readingRevision)}
+                  onClick={(event) => void refreshExisting(readingRevision, event)}
                 >
                   {m.game_profile_refresh({}, o)}
                 </Button>
@@ -223,7 +252,8 @@ function GameProfileLive({
               session={session}
               transport={transport}
               search={search}
-              refresh={() => refreshExisting(readingRevision)}
+              refresh={(event) => refreshExisting(readingRevision, event)}
+              focusResult={existingResult}
               refreshing={query.isFetching}
             />
           </AuthoringDepartureBoundary>
@@ -310,10 +340,12 @@ function GameCorrection({
   transport,
   search,
   refresh,
+  focusResult,
   refreshing,
   visible,
 }: {
-  refresh: () => Promise<void>;
+  refresh: (event: MouseEvent<HTMLButtonElement>) => Promise<void>;
+  focusResult: { current: HTMLElement | null };
   refreshing: boolean;
   visible: boolean;
   read: ReadyGame;
@@ -345,7 +377,7 @@ function GameCorrection({
     [read.public, read.release, fields],
   );
   return (
-    <article className="mx-auto min-w-0 w-full max-w-4xl space-y-8">
+    <article ref={focusResult} className="mx-auto min-w-0 w-full max-w-4xl space-y-8">
       {visible && (
         <header className="space-y-4">
           <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
@@ -384,7 +416,7 @@ function GameCorrection({
               type="button"
               variant="outline"
               disabled={refreshing}
-              onClick={() => lifetime.active() && void refresh()}
+              onClick={(event) => lifetime.active() && void refresh(event)}
             >
               {m.game_profile_refresh({}, o)}
             </Button>

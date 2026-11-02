@@ -82,6 +82,15 @@ test('Game retires refused readings, privately retains exact corrections, and re
     await act(async () => user.click(node));
   };
   const refresh = () => within(host).getByRole('button', { name: m.game_profile_refresh() });
+  const keyboardRefresh = async (result: GameRead | Error) => {
+    outcome = result;
+    const button = refresh();
+    await act(async () => {
+      button.focus();
+      await user.keyboard('{Enter}');
+    });
+    return button;
+  };
   const status = (message: string) => waitFor(() => expect(host.textContent).toContain(message));
   const render = async (csrfToken = 'original-session') =>
     act(async () =>
@@ -185,6 +194,23 @@ test('Game retires refused readings, privately retains exact corrections, and re
     await status(m.correction_proposed());
     expect(corrections()).toHaveLength(2);
     expect(corrections()[1]).toEqual(original);
+    const keyboardRead = structuredClone(initial);
+    if (keyboardRead.ok && keyboardRead.public) keyboardRead.public.subject.labels.en = 'Keyboard current Game';
+    await keyboardRefresh(keyboardRead);
+    await status('Keyboard current Game');
+    await status(m.game_profile_current());
+    expect(document.activeElement).toBe(host.querySelector('[data-slot="view-heading"] h1'));
+    await keyboardRefresh(new Error('temporary read failure'));
+    await status(m.game_profile_refresh_failed());
+    const failure = within(host).getByRole('alert');
+    expect(document.activeElement).toBe(failure.parentElement);
+    expect(failure.parentElement).toHaveProperty('tabIndex', -1);
+    const retry = await keyboardRefresh({ ok: false, reason: 'unavailable' });
+    await status(m.game_profile_refresh_failed());
+    expect(document.activeElement).toBe(retry);
+    await keyboardRefresh(keyboardRead);
+    await status('Keyboard current Game');
+    expect(document.activeElement).toBe(host.querySelector('[data-slot="view-heading"] h1'));
     // CSRF rotation releases every private holder rather than reviving the previous draft.
     await render('replacement-session');
     await status(m.game_profile_current());
