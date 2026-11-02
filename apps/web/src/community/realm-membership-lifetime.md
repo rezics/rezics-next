@@ -22,3 +22,5 @@ success. Retirement cannot establish whether the remote command was applied.
 An accepted current command keeps the existing four-read settlement cycle at delays 0, 500, 1500 and 3000 ms. An
 authority transition retires that cycle without restarting it. A fresh standing read is required before current
 controls or Board admission are exposed again. None of these reads changes Space following.
+
+An explicit keyboard membership operation hands focus to the named membership summary only after its current caller settles into admitted standing and its control disappears; a surviving control keeps focus, and pointer use, focus movement or caller retirement cancels the handoff.

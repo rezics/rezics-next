@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, type Ref } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { ListRowControl } from '@rezics/ui/list-row';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -21,6 +21,7 @@ export function RealmParticipationView({
   onRetry,
   memberLabel,
   admittedAction,
+  summaryRef,
 }: {
   state: MemberState | 'loading' | 'unavailable';
   visibility: RealmHome['visibility'];
@@ -32,11 +33,14 @@ export function RealmParticipationView({
   onRetry: () => void;
   memberLabel?: string | undefined;
   admittedAction?: 'join' | 'leave' | 'sign-in' | null | undefined;
+  summaryRef?: Ref<HTMLElement>;
 }) {
   const headingId = useId();
   const pending = state === 'pending';
   return (
     <section
+      ref={summaryRef}
+      tabIndex={-1}
       className="min-w-0"
       aria-labelledby={headingId}
       data-member-state={state}
@@ -107,6 +111,7 @@ export function RealmParticipationView({
               </Badge>
               {admittedAction === undefined || admittedAction === 'leave' ? (
                 <Button
+                  key="leave"
                   size="lg"
                   type="button"
                   variant="outline"
@@ -124,6 +129,7 @@ export function RealmParticipationView({
           visibility === 'public' &&
           (admittedAction === undefined || admittedAction === 'join') ? (
             <Button
+              key="join"
               size="lg"
               type="button"
               className="h-auto min-h-11 min-w-11 max-w-full px-6 py-2 text-start text-base whitespace-normal"
@@ -135,6 +141,7 @@ export function RealmParticipationView({
           ) : null}
           {problem || state === 'unavailable' || (pending && refresh !== 'checking') ? (
             <Button
+              key="retry"
               type="button"
               variant="outline"
               className="h-auto min-h-11 min-w-11 max-w-full bg-background py-2 text-start whitespace-normal text-foreground dark:bg-background"

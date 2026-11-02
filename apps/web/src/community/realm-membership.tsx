@@ -1,6 +1,6 @@
 import { useSession } from '../session/query';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
@@ -24,6 +24,13 @@ type MembershipOperation = {
   caller: RealmMembershipCaller;
   kind: 'command' | 'check';
   action?: 'join' | 'leave';
+  focus: MembershipFocus | null;
+};
+
+type MembershipFocus = {
+  caller: RealmMembershipCaller;
+  control: HTMLElement;
+  cancel: () => void;
 };
 
 /** Membership changes affect participation; following always addresses the carrying Space separately. */
@@ -105,6 +112,7 @@ function PersonalMembership({
     target?: 'member' | 'none' | undefined;
     cycle: number;
     caller: RealmMembershipCaller;
+    focus?: MembershipFocus | null;
   } | null>(null);
   const [busy, setBusy] = useState<{ value: boolean; caller: RealmMembershipCaller } | null>(null);
   const [problem, setProblem] = useState<MembershipProblem>(null);
@@ -121,6 +129,10 @@ function PersonalMembership({
   const attempt = useRef<{ action: 'join' | 'leave'; idempotencyKey: string; csrfToken: string } | null>(null);
   const previousCaller = useRef(caller);
   const initialAuthority = useRef({ store: caller.store, revision: caller.revision });
+  const summary = useRef<HTMLElement>(null);
+  const activation = useRef<HTMLElement | null>(null);
+  const resultFocus = useRef<MembershipFocus | null>(null);
+  const [settledFocus, setSettledFocus] = useState<MembershipFocus | null>(null);
   const standingIsCurrent = hasCurrentRealmMembership(client, realm.id, subject, caller);
   const viewer = standingIsCurrent ? query.data : undefined;
   const currentPending = pending?.caller.isCurrent() ? pending : null;
@@ -129,6 +141,80 @@ function PersonalMembership({
   const currentRecovery = viewer ? leaveRecovery : null;
   const currentRefresh = refresh?.caller.isCurrent() ? refresh.value : null;
   const currentLeaveCheck = leaveCheck?.caller.isCurrent() ? leaveCheck.value : null;
+
+  // Only the explicit operation may carry keyboard position through its existing settlement path.
+  function captureActivation(event: MouseEvent<HTMLDivElement>) {
+    resultFocus.current?.cancel();
+    const control = (event.target as HTMLElement).closest<HTMLElement>('button');
+    activation.current =
+      event.detail === 0 && control?.ownerDocument.activeElement === control ? control : null;
+  }
+
+  function startResultFocus(owner: RealmMembershipCaller) {
+    resultFocus.current?.cancel();
+    const control = activation.current;
+    activation.current = null;
+    setSettledFocus(null);
+    if (!control || !owner.isCurrent()) return null;
+    const document = control.ownerDocument;
+    const cancel = () => {
+      if (resultFocus.current === handoff) resultFocus.current = null;
+      document.removeEventListener('focusin', onFocus, true);
+      document.removeEventListener('focusout', onBlur, true);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+    const onFocus = (event: FocusEvent) => {
+      if (event.target !== control) cancel();
+    };
+    const onBlur = (event: FocusEvent) => {
+      // Removing or disabling the source is part of the transition, not a user focus move.
+      if (event.target !== control) return;
+      if (event.relatedTarget) cancel();
+      else queueMicrotask(() => {
+        if (control.isConnected && !control.hasAttribute('disabled') && document.activeElement !== control) cancel();
+      });
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') cancel();
+    };
+    const handoff = { caller: owner, control, cancel };
+    resultFocus.current = handoff;
+    document.addEventListener('focusin', onFocus, true);
+    document.addEventListener('focusout', onBlur, true);
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', onKey, true);
+    return handoff;
+  }
+
+  useEffect(() => () => resultFocus.current?.cancel(), [caller]);
+
+  useEffect(() => {
+    const handoff = resultFocus.current;
+    if (!handoff) return;
+    if (handoff.caller !== caller || !handoff.caller.isCurrent()) {
+      handoff.cancel();
+      return;
+    }
+    if (
+      handoff !== settledFocus ||
+      currentBusy ||
+      currentPending ||
+      currentProblem?.outcome === 'closed' ||
+      query.isFetching ||
+      query.isError ||
+      !viewer ||
+      viewer.state === 'pending'
+    )
+      return;
+    if ((currentRecovery || currentProblem) && !handoff.control.isConnected) return;
+    handoff.cancel();
+    const document = handoff.control.ownerDocument;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    if (handoff.control.isConnected) {
+      if (!handoff.control.hasAttribute('disabled')) handoff.control.focus({ preventScroll: true });
+    } else if (summary.current?.isConnected) summary.current.focus({ preventScroll: true });
+  });
 
   useEffect(() => {
     const previous = previousCaller.current;
@@ -180,6 +266,7 @@ function PersonalMembership({
         if (!current()) return;
         await router.invalidate();
         if (!current()) return;
+        setSettledFocus(cycle.focus ?? null);
         setPending(null);
         setRefresh(null);
         setProblem((previous) => (previous?.outcome === 'closed' ? previous : null));
@@ -194,7 +281,8 @@ function PersonalMembership({
   }
 
   function startOperation(owner: RealmMembershipCaller, kind: MembershipOperation['kind'], action?: 'join' | 'leave') {
-    const operation: MembershipOperation = { caller: owner, kind, ...(action ? { action } : {}) };
+    const focus = startResultFocus(owner);
+    const operation: MembershipOperation = { caller: owner, kind, focus, ...(action ? { action } : {}) };
     inFlight.current = operation;
     setBusy({ value: true, caller: owner });
     return operation;
@@ -238,7 +326,8 @@ function PersonalMembership({
       attempt.current = null;
       setProblem(null);
       setRefresh(null);
-      if (result.data.state === 'pending') setPending({ cycle: 0, caller });
+      setSettledFocus(operation.focus);
+      if (result.data.state === 'pending') setPending({ cycle: 0, caller, focus: operation.focus });
     } catch {
       if (isCurrent()) setRefresh({ value: 'unavailable', caller });
     } finally {
@@ -265,9 +354,13 @@ function PersonalMembership({
         await router.invalidate();
         if (!isCurrent()) return;
         attempt.current = null;
+        setSettledFocus(operation.focus);
         setLeaveRecovery(null);
         setLeaveCheck(null);
-      } else setLeaveCheck({ value: 'unchanged', caller });
+      } else {
+        setLeaveCheck({ value: 'unchanged', caller });
+        setSettledFocus(operation.focus);
+      }
     } catch {
       if (!isCurrent()) return;
       setLeaveCheck({ value: 'unavailable', caller });
@@ -310,7 +403,7 @@ function PersonalMembership({
       if (result.outcome === 'accepted') {
         setLeaveRecovery(null);
         setRefresh({ value: 'checking', caller });
-        setPending({ target: action === 'join' ? 'member' : 'none', cycle: 0, caller });
+        setPending({ target: action === 'join' ? 'member' : 'none', cycle: 0, caller, focus: operation.focus });
       } else if (action === 'leave') setLeaveRecovery(classifyRealmLeaveFailure(result));
       else setProblem(result);
     } catch {
@@ -323,8 +416,9 @@ function PersonalMembership({
   }
 
   return (
-    <>
+    <div className="contents" onClickCapture={captureActivation} onClick={() => (activation.current = null)}>
       <RealmParticipationView
+        summaryRef={summary}
         memberLabel={memberLabel}
         admittedAction={admittedAction}
         state={
@@ -344,15 +438,18 @@ function PersonalMembership({
         refresh={currentRefresh}
         problem={currentProblem}
         onChange={(action) => void change(action)}
-        onRetry={() =>
-          currentRecovery
-            ? void checkLeave()
-            : currentProblem?.outcome === 'closed'
-              ? void checkJoinAdmission()
-              : currentPending || currentProblem?.outcome === 'refused' || viewer?.state === 'pending'
-                ? setPending({ target: currentPending?.target, cycle: (currentPending?.cycle ?? -1) + 1, caller })
-                : void query.refetch()
-        }
+        onRetry={() => {
+          if (currentRecovery) void checkLeave();
+          else if (currentProblem?.outcome === 'closed') void checkJoinAdmission();
+          else {
+            const focus = startResultFocus(caller);
+            if (currentPending || currentProblem?.outcome === 'refused' || viewer?.state === 'pending')
+              setPending({ target: currentPending?.target, cycle: (currentPending?.cycle ?? -1) + 1, caller, focus });
+            else void query.refetch().then((result) => {
+              if (!result.isError) setSettledFocus(focus);
+            });
+          }
+        }}
       />
       {currentRecovery ? (
         <RealmLeaveRecovery
@@ -366,6 +463,6 @@ function PersonalMembership({
           onRetry={() => void change('leave', true)}
         />
       ) : null}
-    </>
+    </div>
   );
 }
