@@ -195,8 +195,7 @@ export function CopyForm({
     (Object.keys(originalDraft.current.draft) as (keyof Draft)[]).some(
       (key) => draft[key] !== originalDraft.current.draft[key],
     ) ||
-    (!copy &&
-      (kind !== originalDraft.current.kind || (edition?.id ?? null) !== originalDraft.current.editionId));
+    (!copy && (kind !== originalDraft.current.kind || (edition?.id ?? null) !== originalDraft.current.editionId));
   const [more, setMore] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -703,7 +702,13 @@ export function CopyForm({
       onDiscard={close}
     />
   );
-  if (inline) return <>{navigation}{content}</>;
+  if (inline)
+    return (
+      <>
+        {navigation}
+        {content}
+      </>
+    );
   return (
     <Exposure operation={copy ? 'copy.get' : 'copy.create'}>
       {navigation}

@@ -4,7 +4,9 @@ import { act, createElement, forwardRef, useState, type ReactNode } from 'react'
 import type { CopyItem } from '../src/library/copies-read';
 import { m } from '../src/paraglide/messages.js';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/library/copies', width: 390, height: 844 });
 const globals = {
   window,
@@ -38,8 +40,18 @@ mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-to
 mock.module('../src/kernel/exposure', () => ({ Exposure: ({ children }: { children: ReactNode }) => children }));
 mock.module('@rezics/ui/hooks/use-is-mobile', () => ({ useIsMobile: () => false }));
 const Part = ({ children }: { children: ReactNode }) => <div>{children}</div>;
-const DialogContent = forwardRef<HTMLDivElement, { children: ReactNode }>(({ children }, ref) => <div ref={ref} role="alertdialog">{children}</div>);
-const DialogButton = forwardRef<HTMLButtonElement, { children: ReactNode; onClick?: () => void }>(({ children, onClick }, ref) => <button ref={ref} type="button" onClick={onClick}>{children}</button>);
+const DialogContent = forwardRef<HTMLDivElement, { children: ReactNode }>(({ children }, ref) => (
+  <div ref={ref} role="alertdialog">
+    {children}
+  </div>
+));
+const DialogButton = forwardRef<HTMLButtonElement, { children: ReactNode; onClick?: () => void }>(
+  ({ children, onClick }, ref) => (
+    <button ref={ref} type="button" onClick={onClick}>
+      {children}
+    </button>
+  ),
+);
 mock.module('@rezics/ui/shadcn/alert-dialog', () => ({
   AlertDialog: ({ children, open }: { children: ReactNode; open: boolean }) => (open ? <div>{children}</div> : null),
   AlertDialogAction: DialogButton,
@@ -53,7 +65,8 @@ mock.module('@rezics/ui/shadcn/alert-dialog', () => ({
 
 const { CopyForm } = await import('../src/library/copies-page');
 const { createRoot } = await import('react-dom/client');
-const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } = await import('@tanstack/react-router');
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } =
+  await import('@tanstack/react-router');
 const host = window.document.createElement('main') as unknown as HTMLElement;
 window.document.body.append(host);
 let root: ReturnType<typeof createRoot>;
@@ -95,19 +108,43 @@ function mount(mode: 'create' | 'edit' | 'picker') {
     const [open, setOpen] = useState(true);
     return (
       <>
-        {open && <CopyForm {...(mode === 'edit' ? { copy } : { profile: mode === 'picker' ? undefined : profile, sendKind: true })}
-          inline subjectId={mode === 'picker' ? null : 'edition'} addKey="create-key" originating={originating}
-          onClose={() => { closed(); setOpen(false); }} onCreated={created} onSaved={() => {}} onRemoved={() => {}} onKey={() => {}} />}
+        {open && (
+          <CopyForm
+            {...(mode === 'edit' ? { copy } : { profile: mode === 'picker' ? undefined : profile, sendKind: true })}
+            inline
+            subjectId={mode === 'picker' ? null : 'edition'}
+            addKey="create-key"
+            originating={originating}
+            onClose={() => {
+              closed();
+              setOpen(false);
+            }}
+            onCreated={created}
+            onSaved={() => {}}
+            onRemoved={() => {}}
+            onKey={() => {}}
+          />
+        )}
         <Link to="/next">Next page</Link>
       </>
     );
   }
   const rootRoute = createRootRoute({ component: Outlet });
   const copiesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/copies', component: CopiesRoute });
-  const nextRoute = createRoute({ getParentRoute: () => rootRoute, path: '/next', component: () => <h1>Next page</h1> });
-  router = createRouter({ routeTree: rootRoute.addChildren([copiesRoute, nextRoute]), history: createMemoryHistory({ initialEntries: ['/copies'] }) });
+  const nextRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/next',
+    component: () => <h1>Next page</h1>,
+  });
+  router = createRouter({
+    routeTree: rootRoute.addChildren([copiesRoute, nextRoute]),
+    history: createMemoryHistory({ initialEntries: ['/copies'] }),
+  });
   root = createRoot(host);
-  return act(async () => { await router.load(); root.render(createElement(RouterProvider, { router })); });
+  return act(async () => {
+    await router.load();
+    root.render(createElement(RouterProvider, { router }));
+  });
 }
 
 afterEach(async () => {
@@ -155,7 +192,11 @@ async function choose(label: string, value: string) {
   });
 }
 const nextLink = () => host.querySelector<HTMLAnchorElement>('a[href="/next"]')!;
-const beforeUnloadIsBlocked = () => { const event = new window.Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; };
+const beforeUnloadIsBlocked = () => {
+  const event = new window.Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+};
 
 test('create drafts compare exact fields and kind, and offer Stay or Discard on close and navigation', async () => {
   await mount('create');
@@ -198,8 +239,12 @@ test('pending and uncertain updates keep their exact intent until resolution', a
   await mount('edit');
   let finishFirst!: (result: unknown) => void;
   let finishRetry!: (result: unknown) => void;
-  const first = new Promise<unknown>((resolve) => { finishFirst = resolve; });
-  const retry = new Promise<unknown>((resolve) => { finishRetry = resolve; });
+  const first = new Promise<unknown>((resolve) => {
+    finishFirst = resolve;
+  });
+  const retry = new Promise<unknown>((resolve) => {
+    finishRetry = resolve;
+  });
   update.mockImplementationOnce(() => first).mockImplementationOnce(() => retry);
   await click(m.library_copy_more());
   await changeInput(m.library_copy_note(), 'Exact edited note');
@@ -207,9 +252,12 @@ test('pending and uncertain updates keep their exact intent until resolution', a
   expect(beforeUnloadIsBlocked()).toBe(true);
   await click(m.library_copy_cancel());
   expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain(m.library_copy_draft_navigation_pending());
-  expect(host.querySelector(`[role="alertdialog"] button` )?.textContent).toBe(m.library_copy_draft_navigation_stay());
+  expect(host.querySelector(`[role="alertdialog"] button`)?.textContent).toBe(m.library_copy_draft_navigation_stay());
   await click(m.library_copy_draft_navigation_stay());
-  await act(async () => { finishFirst({ ok: false, reason: 'unavailable' }); await first; });
+  await act(async () => {
+    finishFirst({ ok: false, reason: 'unavailable' });
+    await first;
+  });
   expect(field(m.library_copy_note()).value).toBe('Exact edited note');
   expect(beforeUnloadIsBlocked()).toBe(true);
   await act(async () => nextLink().click());
@@ -219,7 +267,10 @@ test('pending and uncertain updates keep their exact intent until resolution', a
   expect(update).toHaveBeenCalledTimes(2);
   expect(update.mock.calls[1]![0]).toEqual(update.mock.calls[0]![0]);
   expect(new Headers(update.mock.calls[1]![0].headers).get('x-csrf-token')).toBe('current');
-  await act(async () => { finishRetry({ ok: true, copy: { ...copy, revision: 8, note: 'Exact edited note' } }); await retry; });
+  await act(async () => {
+    finishRetry({ ok: true, copy: { ...copy, revision: 8, note: 'Exact edited note' } });
+    await retry;
+  });
   expect(saved).toHaveBeenCalledTimes(1);
   expect(host.querySelector('form')).toBeNull();
   expect(beforeUnloadIsBlocked()).toBe(false);
