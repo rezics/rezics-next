@@ -45,7 +45,11 @@ function released(h: ReturnType<typeof harness>, ref: { taskId: string; attempt:
   for (const process of h.store.attempt(ref).auxiliaryProcesses) expect(sameProcess(process)).toBe(false);
 }
 
-async function refusedSecond(h: ReturnType<typeof harness>, ref: { taskId: string; attempt: number }, directory: string) {
+async function refusedSecond(
+  h: ReturnType<typeof harness>,
+  ref: { taskId: string; attempt: number },
+  directory: string,
+) {
   released(h, ref);
   await expect(consult(h.tasks, ref, directory)).rejects.toThrow('this task already used its one consultation');
 }
