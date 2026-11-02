@@ -212,6 +212,63 @@ export const ReaderDenied: Story = {
   },
 };
 
+export const TwoEditedLanguages: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = await fill(canvasElement);
+    const language = canvas.getByRole('combobox', { name: m.catalogue_create_language() });
+    await userEvent.selectOptions(language, 'ja');
+    await userEvent.selectOptions(
+      within(canvas.getByRole('group', { name: m.catalogue_create_description() })).getByRole('combobox'),
+      'remove',
+    );
+    const summary = within(canvas.getByRole('region', { name: m.catalogue_terms_unsaved_languages() }));
+    await expect(summary.getByRole('button', { name: 'en', exact: true })).toBeVisible();
+    await expect(summary.getByRole('button', { name: 'ja', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(summary.getByRole('button', { name: 'en', exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_discard_language({ language: 'en' }) }));
+    await expect(summary.queryByRole('button', { name: 'en', exact: true })).toBeNull();
+    await expect(summary.getByRole('button', { name: 'ja', exact: true })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.catalogue_create_remove_language() })).toBeNull();
+    await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_terms_new_language() }), 'it');
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_add_language() }));
+    await userEvent.selectOptions(language, 'ja');
+    await userEvent.selectOptions(language, 'it');
+    await userEvent.selectOptions(
+      within(canvas.getByRole('group', { name: m.catalogue_create_aliases() })).getByRole('combobox'),
+      'set',
+    );
+    await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_aliases() }), 'Primo');
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_discard_language({ language: 'it' }) }));
+    await expect(summary.queryByRole('button', { name: 'it', exact: true })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_remove_language() }));
+    await expect(canvas.queryByRole('option', { name: 'it', exact: true })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_save() }));
+    await expect(canvas.findByText(m.catalogue_terms_saved())).resolves.toBeVisible();
+    await expect(canvas.getByText('Original film')).toBeVisible();
+    await expect(canvas.getByText('元の映画')).toBeVisible();
+    await expect(canvas.queryByText('元の説明')).toBeNull();
+  },
+};
+
+export const UncertainDraftRevision: Story = {
+  args: { scenario: 'uncertain' },
+  play: async ({ canvasElement }) => {
+    const canvas = await fill(canvasElement);
+    await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_terms_new_language() }), 'it');
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_add_language() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_save() }));
+    await expect(canvas.findByRole('alert')).resolves.toHaveTextContent(m.catalogue_terms_uncertain());
+    await expect(canvas.getByRole('button', { name: m.catalogue_create_remove_language() })).toBeDisabled();
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.catalogue_create_language() }), 'en');
+    await expect(
+      canvas.getByRole('button', { name: m.catalogue_terms_discard_language({ language: 'en' }) }),
+    ).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
+    await expect(canvas.findByText(m.catalogue_terms_saved())).resolves.toBeVisible();
+    await expect(canvas.getByText('Corrected title')).toBeVisible();
+  },
+};
+
 // Additive mounted examples; all original scenarios and plays above remain canonical.
 function IndependentTermsStory() {
   const locale = getLocale();
