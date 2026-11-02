@@ -24,6 +24,22 @@ CREATE SCHEMA community;
 
 
 --
+-- Name: advance_publication_population(); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.advance_publication_population() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE community.realm SET publication_generation = publication_generation + 1
+    WHERE route = COALESCE(NEW.route, OLD.route)
+      AND realm_id = COALESCE(NEW.realm_id, OLD.realm_id);
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: advance_realm_discovery_epoch(); Type: FUNCTION; Schema: community; Owner: -
 --
 
@@ -934,6 +950,7 @@ CREATE TABLE community.realm (
     removed_by uuid,
     remover_role text,
     removal_reason text,
+    publication_generation bigint DEFAULT 0 NOT NULL,
     CONSTRAINT realm_board_scheme_id_check CHECK (((board_scheme_id)::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)),
     CONSTRAINT realm_check CHECK ((realm_id <> space_id)),
     CONSTRAINT realm_check1 CHECK ((route = ((get_byte(uuid_send(space_id), 10) * 256) + get_byte(uuid_send(space_id), 11)))),
@@ -943,6 +960,7 @@ CREATE TABLE community.realm (
     CONSTRAINT realm_discovery_generation_check CHECK ((discovery_generation >= 0)),
     CONSTRAINT realm_lifecycle_version_check CHECK ((lifecycle_version >= 0)),
     CONSTRAINT realm_ownership_check CHECK ((((ownership_state = 'owned'::text) AND (orphaned_at IS NULL) AND (claim_eligible_at IS NULL)) OR ((ownership_state = 'orphaned'::text) AND (orphaned_at IS NOT NULL) AND (claim_eligible_at IS NOT NULL) AND isfinite(orphaned_at) AND (claim_eligible_at = (orphaned_at + '720:00:00'::interval))))),
+    CONSTRAINT realm_publication_generation_check CHECK ((publication_generation >= 0)),
     CONSTRAINT realm_removal_check CHECK ((((removed_at IS NULL) AND (removed_by IS NULL) AND (remover_role IS NULL) AND (removal_reason IS NULL) AND (state = 'active'::text)) OR ((removed_at IS NOT NULL) AND (remover_role IS NOT NULL)))),
     CONSTRAINT realm_removal_reason_check CHECK (((char_length(removal_reason) >= 1) AND (char_length(removal_reason) <= 1024))),
     CONSTRAINT realm_remover_role_check CHECK ((remover_role = ANY (ARRAY['owner'::text, 'moderator'::text]))),
@@ -1718,6 +1736,13 @@ CREATE INDEX publication_head_adopted_page ON community.publication_head USING b
 
 
 --
+-- Name: publication_head_adopted_subject; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE INDEX publication_head_adopted_subject ON community.publication_head USING btree (route, realm_id, subject_id) WHERE (verdict = 'adopt'::text);
+
+
+--
 -- Name: realm_ban_current; Type: INDEX; Schema: community; Owner: -
 --
 
@@ -1834,6 +1859,13 @@ CREATE TRIGGER publication_head_identity BEFORE UPDATE ON community.publication_
 --
 
 CREATE TRIGGER publication_immutable BEFORE DELETE OR UPDATE ON community.publication FOR EACH ROW EXECUTE FUNCTION community.guard_publication();
+
+
+--
+-- Name: publication_head publication_population; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER publication_population AFTER INSERT OR DELETE OR UPDATE ON community.publication_head FOR EACH ROW EXECUTE FUNCTION community.advance_publication_population();
 
 
 --
