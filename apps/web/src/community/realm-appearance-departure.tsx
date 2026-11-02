@@ -10,7 +10,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
-import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 
 export function RealmAppearanceDeparture({
@@ -127,15 +126,11 @@ export function RealmAppearanceDeparture({
           <AlertDialogFooter className="flex-col gap-3 sm:flex-row sm:justify-end">
             <AlertDialogCancel
               ref={stayButton}
-              asChild
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-3 text-center leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
               onClick={() => settle(true)}
             >
-              <Button
-                variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-3 text-center leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
-              >
-                <span className="min-w-0">{m.realm_appearance_stay()}</span>
-              </Button>
+              <span className="min-w-0">{m.realm_appearance_stay()}</span>
             </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
