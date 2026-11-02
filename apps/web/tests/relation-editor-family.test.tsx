@@ -698,17 +698,7 @@ test('initial Relation Open orients only admitted keyboard results after its ope
     const fixture = relationFixture();
     const ready = await fixture.transport.read();
     if (!ready.ok) throw new Error('Expected admitted relation fields');
-    for (const state of [
-      'standalone',
-      'embedded',
-      'empty',
-      'context',
-      'failed',
-      'denied',
-      'moved',
-      'pointer',
-      'retired',
-    ]) {
+    for (const state of 'standalone embedded empty context failed denied moved pointer retired'.split(' ')) {
       let finish!: (read: Awaited<ReturnType<RelationTransport['read']>>) => void;
       const pending = new Promise<Awaited<ReturnType<RelationTransport['read']>>>((resolve) => (finish = resolve));
       let reads = 0;
