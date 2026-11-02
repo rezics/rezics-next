@@ -129,7 +129,7 @@ export function checkResultKey(input: {
     trees,
     global: globalInputs(root, commit),
     toolchain,
-    ...(workdir ? { workdir } : {}),
+    workdir: here || '.',
   };
   return { key: createHash('sha256').update(JSON.stringify(value)).digest('hex'), unit };
 }

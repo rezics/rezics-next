@@ -127,6 +127,7 @@ describe('check result reuse keys', () => {
   test('Reuse a passing check only for the same complete source inputs', () => {
     write('tools/goal/package.json', JSON.stringify({ name: '@fixture/goal' }));
     write('tools/goal/src.ts', 'export const g = 1;');
+    write('tools/goal/nested/fixture.ts', 'export const nested = true;');
     write('docs/note.md', 'a');
     write('tools/other/src.ts', 'b');
     commit();
@@ -148,6 +149,7 @@ describe('check result reuse keys', () => {
       schemaVersion: 1,
     });
     expect(results.lookup(goal.key)?.passed).toBe(true);
+    expect(results.lookup(key(join(root, 'tools/goal/nested'), process.env, cmd))).toBeUndefined();
     write('docs/note.md', 'changed');
     commit();
     expect(checkResultKey({ root, cwd: join(root, 'docs'), command: cmd, env: process.env }).key).not.toBe(docs.key);
