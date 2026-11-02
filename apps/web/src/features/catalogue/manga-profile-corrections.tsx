@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { pickText } from '@rezics/composition';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
@@ -188,8 +189,10 @@ export function MangaCorrections({
           {Object.entries(groups)
             .filter(([group, fields]) => group !== 'writing' && fields.length)
             .map(([group, fields]) => (
-              <section className="space-y-4" key={group}>
-                <h2 className="font-sans text-xl font-semibold">{labels[group as keyof typeof labels]}</h2>
+              <section className="min-w-0 space-y-4 [overflow-wrap:anywhere]" key={group}>
+                <ContentItemHeading level={2} className="font-sans text-xl font-semibold">
+                  {labels[group as keyof typeof labels]}
+                </ContentItemHeading>
                 {group === 'membership' && <p className="text-sm text-muted-foreground">{m.manga_order_help({}, o)}</p>}
                 {group === 'classification' && (
                   <p className="text-sm text-muted-foreground">{m.manga_classification_help({}, o)}</p>
@@ -218,57 +221,104 @@ export function MangaCorrections({
                       }}
                     />
                   ) : (
-                    <section key={property} className="space-y-3 rounded-xl border bg-card p-4">
-                      <h3
-                        className="font-semibold"
-                        lang={pickText(current.release.properties[property]!.labels, locale).lang ?? undefined}
+                    <section key={property} className="min-w-0 [overflow-wrap:anywhere]">
+                      <ContentItemFrame
+                        as="div"
+                        className="min-w-0 space-y-3 rounded-xl bg-card p-4 sm:p-5 [&_a]:inline-flex [&_a]:min-h-11 md:pointer-fine:[&_a]:min-h-8 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:whitespace-normal [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
                       >
-                        {pickText(current.release.properties[property]!.labels, locale).text}
-                      </h3>
-                      {!subject.statements[property]?.length && (
-                        <p className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</p>
-                      )}
-                      {(subject.statements[property] ?? []).map((statement) => (
-                        <div key={statement.id} className="space-y-2">
-                          <PartValue part={statement} read={current} locale={locale} />
-                          {statement.qualifiers.map((part, index) => (
-                            <div key={index} className="text-sm">
-                              <span
-                                className="text-muted-foreground"
-                                lang={
-                                  pickText(current.release.properties[part.property.id]?.labels ?? {}, locale).lang ??
-                                  undefined
-                                }
-                              >
-                                {pickText(current.release.properties[part.property.id]?.labels ?? {}, locale).text}
-                                :{' '}
-                              </span>
-                              <PartValue part={part} read={current} locale={locale} />
-                            </div>
-                          ))}
-                          {statement.references.map((reference, index) => (
-                            <div key={index} className="space-y-1 border-s-2 ps-3 text-sm">
-                              {reference.parts.map((part, at) => (
-                                <PartValue key={at} part={part} read={current} locale={locale} />
+                        <ContentItemHeading
+                          level={3}
+                          className="min-w-0 whitespace-normal text-lg font-semibold"
+                          lang={pickText(current.release.properties[property]!.labels, locale).lang ?? undefined}
+                        >
+                          {pickText(current.release.properties[property]!.labels, locale).text}
+                        </ContentItemHeading>
+                        {!subject.statements[property]?.length && (
+                          <p className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</p>
+                        )}
+                        {(subject.statements[property] ?? []).map((statement) => (
+                          <div key={statement.id} className="min-w-0 space-y-2">
+                            <PartValue part={statement} read={current} locale={locale} />
+                            <dl className="min-w-0 space-y-2 text-sm">
+                              {statement.qualifiers.map((part, index) => (
+                                <div key={index} className="min-w-0 space-y-1">
+                                  <dt
+                                    className="text-muted-foreground"
+                                    lang={
+                                      pickText(current.release.properties[part.property.id]?.labels ?? {}, locale)
+                                        .lang ?? undefined
+                                    }
+                                  >
+                                    {pickText(current.release.properties[part.property.id]?.labels ?? {}, locale).text}
+                                    :{' '}
+                                  </dt>
+                                  <dd className="min-w-0">
+                                    <PartValue part={part} read={current} locale={locale} />
+                                  </dd>
+                                </div>
                               ))}
-                            </div>
-                          ))}
-                        </div>
-                      ))}
+                            </dl>
+                            {statement.references.map((reference, index) => (
+                              <div key={index} className="min-w-0 space-y-2 border-s-2 border-border ps-3 text-sm">
+                                <p className="text-muted-foreground">
+                                  {m.correction_references({}, o)} {index + 1}
+                                </p>
+                                <dl className="min-w-0 space-y-2">
+                                  {reference.parts.map((part, at) => (
+                                    <div key={at} className="min-w-0 space-y-1">
+                                      <dt
+                                        className="text-muted-foreground"
+                                        lang={
+                                          pickText(current.release.properties[part.property.id]?.labels ?? {}, locale)
+                                            .lang ?? undefined
+                                        }
+                                      >
+                                        {
+                                          pickText(current.release.properties[part.property.id]?.labels ?? {}, locale)
+                                            .text
+                                        }
+                                      </dt>
+                                      <dd className="min-w-0">
+                                        <PartValue key={at} part={part} read={current} locale={locale} />
+                                      </dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </ContentItemFrame>
                     </section>
                   ),
                 )}
               </section>
             ))}
-          <div className="space-y-3 rounded-xl border p-4">
-            <p>{m.facts_selection({ count: changed.length, limit: factLimit }, o)}</p>
-            <Button disabled={busy || disabled || !ports || !changed.length} onClick={() => void submit()}>
-              {busy ? m.correction_saving({}, o) : m.facts_submit({}, o)}
-            </Button>
-            <Button className="ms-2" variant="outline" disabled={busy} onClick={() => void reload()}>
-              {m.correction_reload({}, o)}
-            </Button>
-          </div>
+          <ContentItemFrame
+            as="div"
+            className="min-w-0 space-y-3 rounded-xl bg-card p-4 sm:p-5 [overflow-wrap:anywhere]"
+          >
+            <ContentItemHeading level={2} className="text-lg font-semibold">
+              {m.facts_selection({ count: changed.length, limit: factLimit }, o)}
+            </ContentItemHeading>
+            <div className="flex min-w-0 flex-col flex-wrap gap-2 sm:flex-row">
+              <Button
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:py-1"
+                disabled={busy || disabled || !ports || !changed.length}
+                onClick={() => void submit()}
+              >
+                {busy ? m.correction_saving({}, o) : m.facts_submit({}, o)}
+              </Button>
+              <Button
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:py-1"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void reload()}
+              >
+                {m.correction_reload({}, o)}
+              </Button>
+            </div>
+          </ContentItemFrame>
           {reviewing && ports && (
             <ExactReview id={subject.id} locale={locale} address={reviewing} review={ports.review} />
           )}

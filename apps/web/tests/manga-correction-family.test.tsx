@@ -1,0 +1,612 @@
+import { expect, mock, test } from 'bun:test';
+import { createRequire } from 'node:module';
+import { act, createElement as h, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { MangaCorrectionPorts } from '../src/features/catalogue/manga-profile-corrections';
+import type { FactCommand } from '../src/features/catalogue/subject-facts';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
+// All assertions authored UNRUN. Actual mounted component coverage is not browser geometry,
+// native authorization/lifecycle acceptance, backend growth, or private SSR proof.
+async function mounted(
+  run: (ui: {
+    host: HTMLElement;
+    render: (node: ReactNode) => Promise<void>;
+    update: (node: ReactNode) => Promise<void>;
+    input: (input: HTMLInputElement, value: string) => Promise<void>;
+    click: (button: HTMLElement) => Promise<void>;
+    until: (predicate: () => boolean) => Promise<void>;
+  }) => Promise<void>,
+) {
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window({ url: 'https://site.invalid/en/subjects/manga/title/manga' });
+  const keys = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'HTMLInputElement',
+    'HTMLSelectElement',
+    'Element',
+    'Node',
+    'DocumentFragment',
+    'MutationObserver',
+    'ResizeObserver',
+    'getComputedStyle',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ];
+  const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const key of keys)
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key],
+    });
+  const { createRoot } = await import('react-dom/client');
+  const { setLocale } = await import('../src/paraglide/runtime.js');
+  setLocale('en', { reload: false });
+  const host = window.document.createElement('main') as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let generation = 0;
+  const update = async (node: ReactNode) => {
+    await act(async () => root.render(h(QueryClientProvider, { client }, h('div', { key: generation }, node))));
+  };
+  try {
+    await run({
+      host,
+      update,
+      render: async (node) => {
+        generation++;
+        await update(node);
+      },
+      click: async (button) => {
+        await act(async () => button.click());
+      },
+      input: async (input, value) => {
+        await act(async () => {
+          Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+          input.dispatchEvent(new window.Event('input', { bubbles: true }));
+        });
+      },
+      until: async (predicate) => {
+        for (let attempt = 0; attempt < 100 && !predicate(); attempt++) {
+          await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          });
+        }
+        expect(predicate()).toBe(true);
+      },
+    });
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    await window.happyDOM.abort();
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+}
+function button(scope: ParentNode, name: string) {
+  const control = [...scope.querySelectorAll<HTMLButtonElement>('button')].find(
+    (node) => node.textContent?.trim() === name,
+  );
+  expect(control).toBeDefined();
+  return control!;
+}
+function heading(scope: ParentNode, level: number, name: string) {
+  const node = [...scope.querySelectorAll<HTMLHeadingElement>(`h${level}`)].find((node) => node.textContent === name);
+  expect(node).toBeDefined();
+  return node!;
+}
+function field(scope: ParentNode, name: string) {
+  return heading(scope, 3, name).closest('section')!;
+}
+function amount(scope: ParentNode, name: string) {
+  return scope.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`)!;
+}
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
+  return { promise, resolve };
+}
+
+test('Complete Manga correction groups and deliberate submission family retains whole mounted evidence, actions, bounds and retirement', async () => {
+  await mounted(async (ui) => {
+    const { MangaCorrections } = await import('../src/features/catalogue/manga-profile-corrections');
+    const { MangaProfileEditor } = await import('../src/features/catalogue/manga-profile-view');
+    const { mangaFixture, mangaVolumeId, mangaCreatorId, mangaVolumeCitation } =
+      await import('../src/kernel/fake/catalogue-manga-profile');
+    const { readMangaProfile, mangaGroups } = await import('../src/features/catalogue/manga-profile');
+    const { readCandidates } = await import('../src/subject/candidates');
+    const { factLimit } = await import('../src/features/catalogue/subject-facts');
+    const { m } = await import('../src/paraglide/messages.js');
+    const { pickText } = await import('@rezics/composition');
+    const fixture = mangaFixture();
+    const read = await readMangaProfile(fixture.client, mangaVolumeId);
+    if (!read.ok || !read.public) throw new Error('Expected current Manga volume');
+    const label = 'Attribution intégrale — ' + 'BibliographieSansAbréviation'.repeat(16);
+    const credit = 'Mika Sora — ' + 'CompleteReleasedCreatorName'.repeat(16);
+    const qualifier = 'Nom imprimé intégral — ' + 'SignatureOriginale'.repeat(16);
+    const citation = 'https://archive.example/volume/' + 'original-record-'.repeat(24) + '?scan=A%2Fb#citation';
+    read.release.properties['schema:author']!.labels = { fr: label };
+    read.public.related[mangaCreatorId]!.labels = { fr: credit };
+    const member = read.public.subject.statements['wdt:P179']![0]!;
+    const author = structuredClone(member);
+    author.id = '00000000-0000-4000-8000-00000000d191';
+    author.property = { id: 'schema:author', data_type: 'wikibase-item' };
+    author.value = { type: 'value', content: mangaCreatorId };
+    author.qualifiers.push({
+      property: { id: 'wdt:P1932', data_type: 'string' },
+      value: { type: 'value', content: qualifier },
+    });
+    author.references = [
+      {
+        hash: 'citation',
+        parts: [
+          { property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: citation } },
+          {
+            property: { id: 'schema:name', data_type: 'monolingualtext' },
+            value: { type: 'value', content: { text: '原本の完全な書誌', language: 'ja' } },
+          },
+        ],
+      },
+    ];
+    read.public.subject.statements['schema:author'] = [author];
+    read.public.subject.statements['wdt:P179'] = [
+      member,
+      ...(['somevalue', 'novalue'] as const).map((type, index) => ({
+        ...structuredClone(member),
+        id: `00000000-0000-4000-8000-00000000d19${index + 2}`,
+        value: { type },
+      })),
+    ];
+    const before = structuredClone(read.public);
+    const initialCalls = structuredClone(fixture.calls);
+    expect(initialCalls).toHaveLength(3);
+    expect(initialCalls.map((call) => call.path)).toContain('/v1/definitions/active');
+    expect(initialCalls.map((call) => call.path)).toContain(`/v1/subjects/${mangaVolumeId}`);
+    expect(initialCalls.some((call) => call.path.startsWith('/v1/definitions/releases/'))).toBe(true);
+    const commands: FactCommand[] = [];
+    const addresses: unknown[] = [];
+    let reloads = 0;
+    const ports: MangaCorrectionPorts = {
+      facts: {
+        read: async () => {
+          throw new Error('Unexpected fact read');
+        },
+        propose: (command) => {
+          commands.push(command);
+          return fixture.propose(command);
+        },
+      },
+      review: (property, session) => {
+        addresses.push([property, session]);
+        return {
+          reader: 'fixture',
+          read: async (selected, cursor, continuity) => {
+            addresses.push([selected, cursor, continuity]);
+            const result = await readCandidates(
+              fixture.client,
+              'Bearer fixture',
+              mangaVolumeId,
+              selected,
+              cursor,
+              undefined,
+              continuity ?? session,
+            );
+            return result.ok
+              ? {
+                  ...result,
+                  fields: [{ id: property, label: pickText(read.release.properties[property]!.labels, 'en').text }],
+                }
+              : result;
+          },
+          confirm: async () => {
+            throw new Error('Unexpected automatic confirmation');
+          },
+        };
+      },
+      relations: <button type="button">Native relation port</button>,
+      authored: <button type="button">Native authored port</button>,
+    };
+    const pair = (
+      <>
+        {[0, 1].map((index) => (
+          <div key={index} data-mount={index} dir={index ? 'rtl' : 'ltr'}>
+            <MangaCorrections
+              read={read}
+              locale="en"
+              disabled={false}
+              ports={ports}
+              reload={async () => {
+                reloads++;
+              }}
+            />
+          </div>
+        ))}
+      </>
+    );
+    await ui.render(pair);
+    const mounts = [...ui.host.querySelectorAll<HTMLElement>('[data-mount]')];
+    const first = mounts[0]!,
+      second = mounts[1]!;
+    for (const mount of mounts) {
+      const groups = mangaGroups(read.release, read.public.subject.type, 'en');
+      expect([...mount.querySelectorAll(':scope > div > section > h2')].map((node) => node.textContent)).toEqual([
+        m.manga_membership(),
+        m.manga_creators(),
+        m.manga_publication(),
+        m.manga_classification(),
+      ]);
+      expect(Object.values(groups).flat()).toContain('schema:abstract');
+      expect(button(mount, 'Native relation port')).toBeDefined();
+      expect(button(mount, 'Native authored port')).toBeDefined();
+      const fallback = field(mount, label);
+      expect(fallback.querySelector('h3')?.getAttribute('lang')).toBe('fr');
+      expect(fallback.querySelector(':scope > div')?.className).toContain('isolate');
+      expect(fallback.textContent).toContain(credit);
+      expect(fallback.textContent).toContain(qualifier);
+      expect(fallback.querySelector('[lang="ja"]')?.textContent).toBe('原本の完全な書誌');
+      expect([...fallback.querySelectorAll('dt')].map((node) => node.textContent?.trim().replace(/:$/, ''))).toEqual([
+        'position',
+        pickText(read.release.properties['wdt:P1932']!.labels, 'en').text,
+        'URL',
+        'name',
+      ]);
+      expect([...fallback.querySelectorAll<HTMLAnchorElement>('a')].map((node) => node.getAttribute('href'))).toEqual([
+        expect.stringContaining(mangaCreatorId),
+        citation,
+      ]);
+      expect(fallback.querySelector('input, select, button, [data-slot="list-row-link"]')).toBeNull();
+      for (const node of fallback.querySelectorAll<HTMLElement>('h3, dt, dd, a'))
+        expect(node.className).not.toMatch(/truncate|line-clamp/);
+      const membership = field(mount, pickText(read.release.properties['wdt:P179']!.labels, 'en').text);
+      expect(membership.textContent).toContain(m.subject_value_unknown());
+      expect(membership.textContent).toContain(m.subject_value_none());
+      const genre = field(mount, pickText(read.release.properties['schema:genre']!.labels, 'en').text);
+      expect(genre.textContent).toContain(m.facts_no_value());
+      expect(genre.querySelector('button')).toBeNull();
+      const count = heading(mount, 2, m.facts_selection({ count: 0, limit: factLimit }));
+      expect(count.getAttribute('data-content-item-slot')).toBe('title');
+      const submit = button(mount, m.facts_submit());
+      expect(submit.disabled).toBe(true);
+      expect(submit.className).toContain('min-h-11');
+      expect(submit.className).toContain('whitespace-normal');
+      expect(submit.parentElement?.className).toContain('flex-wrap');
+      expect(button(mount, m.correction_reload()).disabled).toBe(false);
+      const header = mount.querySelector('header')!;
+      const identity = header.querySelector('h2')!;
+      const reference = [...header.querySelectorAll('summary')].find(
+        (node) => node.textContent === m.specialist_identity_reference(),
+      )!;
+      expect(identity.compareDocumentPosition(reference) & 4).toBeTruthy();
+      expect(reference.closest('details')!.open).toBe(false);
+      expect([...reference.closest('details')!.querySelectorAll('code')].map((node) => node.textContent)).toEqual([
+        mangaVolumeId,
+        'schema:PublicationVolume',
+      ]);
+      expect(mount.querySelector('a a, a button')).toBeNull();
+    }
+    expect(fixture.calls).toEqual(initialCalls);
+    const pages = field(first, 'number of pages');
+    const otherPages = field(second, 'number of pages');
+    await ui.click(button(pages, m.facts_edit_field()));
+    expect(amount(pages, m.correction_amount()).value).toBe('+192');
+    expect(pages.querySelector<HTMLSelectElement>(`select[aria-label="${m.correction_unit()}"]`)!.value).toBe('1');
+    expect(amount(pages, m.correction_value()).value).toBe(mangaVolumeCitation);
+    expect(pages.textContent).toContain(m.facts_unchanged());
+    expect(button(first, m.facts_submit()).disabled).toBe(true);
+    expect(otherPages.querySelector('input')).toBeNull();
+    await ui.click(button(field(first, 'ISBN-13'), m.facts_edit_field()));
+    expect(button(first, m.facts_submit()).disabled).toBe(true);
+    await ui.input(amount(pages, m.correction_amount()), '+196');
+    heading(first, 2, m.facts_selection({ count: 1, limit: factLimit }));
+    const include = pages.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    const includeLabel = [...pages.querySelectorAll<HTMLLabelElement>('label')].find(
+      (node) => node.htmlFor === include.id,
+    )!;
+    expect(includeLabel).toBeDefined();
+    await ui.click(includeLabel);
+    heading(first, 2, m.facts_selection({ count: 0, limit: factLimit }));
+    expect(button(first, m.facts_submit()).disabled).toBe(true);
+    await ui.click(includeLabel);
+    await ui.click(button(otherPages, m.facts_edit_field()));
+    expect(otherPages.querySelector<HTMLInputElement>('input[type="checkbox"]')!.id).not.toBe(include.id);
+    expect(amount(otherPages, m.correction_amount()).value).toBe('+192');
+    expect(button(second, m.facts_submit()).disabled).toBe(true);
+    expect(commands).toEqual([]);
+    expect(fixture.calls).toEqual(initialCalls);
+    await ui.click(button(first, m.facts_submit()));
+    expect(commands).toHaveLength(1);
+    expect(commands[0]!.statement.value).toEqual({ type: 'value', content: { amount: '+196', unit: '1' } });
+    expect(commands[0]!.statement.references[0]!.parts[0]!.value).toEqual({
+      type: 'value',
+      content: mangaVolumeCitation,
+    });
+    expect(pages.textContent).toContain(m.correction_proposed());
+    expect(pages.querySelector('h4')?.textContent).toBe(m.candidate_current());
+    heading(first, 2, m.facts_selection({ count: 0, limit: factLimit }));
+    expect(button(first, m.facts_submit()).disabled).toBe(true);
+    const write = fixture.calls.filter((call) => call.method === 'POST');
+    expect(write).toHaveLength(1);
+    expect(write[0]).toMatchObject({
+      path: `/v1/subjects/${mangaVolumeId}/candidates`,
+      authorization: 'Bearer fixture',
+      key: commands[0]!.key,
+      body: { statement: commands[0]!.statement },
+    });
+    expect(fixture.calls.filter((call) => call.method === 'GET')).toEqual(initialCalls);
+    const review = [...pages.querySelectorAll<HTMLAnchorElement>('a')].find(
+      (node) => node.textContent === m.correction_review(),
+    )!;
+    const candidate = [...fixture.candidates.keys()][0]!;
+    expect(review.getAttribute('href')).toContain(
+      new URLSearchParams({ reviewProperty: 'schema:numberOfPages', candidate }).toString(),
+    );
+    expect(addresses).toEqual([]);
+    await ui.click(review);
+    await ui.until(() => !!ui.host.querySelector('#candidate-review h4'));
+    expect(addresses).toEqual([
+      ['schema:numberOfPages', 'manga-session'],
+      ['schema:numberOfPages', undefined, undefined],
+    ]);
+    const exact = first.querySelector('#candidate-review')!;
+    expect(exact.querySelector<HTMLSelectElement>('select')!.disabled).toBe(true);
+    expect(exact.textContent).toContain('196');
+    expect(exact.textContent).toContain(mangaVolumeCitation);
+    expect(fixture.calls.filter((call) => call.method === 'GET')).toHaveLength(initialCalls.length + 2);
+    expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+    expect(fixture.candidates.get(candidate)!.decision).toBeNull();
+    await ui.click(button(first, m.correction_reload()));
+    expect(reloads).toBe(1);
+    expect(read.public).toEqual(before);
+
+    // Genuine failed/uncertain proposal states use the existing fake/native-shaped command seam.
+    for (const scenario of ['denied', 'stale', 'invalid', 'conflict', 'uncertain'] as const) {
+      const failed = mangaFixture(scenario);
+      const current = await readMangaProfile(failed.client, mangaVolumeId);
+      if (!current.ok || !current.public) throw new Error('Expected current failed-write fixture');
+      const baseline = structuredClone(current.public);
+      const attempts: FactCommand[] = [];
+      await ui.render(
+        <MangaCorrections
+          read={current}
+          locale="en"
+          disabled={false}
+          ports={{
+            ...ports,
+            facts: {
+              read: ports.facts.read,
+              propose: (command) => {
+                attempts.push(command);
+                return failed.propose(command);
+              },
+            },
+          }}
+          reload={async () => {
+            reloads++;
+          }}
+        />,
+      );
+      const region = field(ui.host, 'number of pages');
+      await ui.click(button(region, m.facts_edit_field()));
+      await ui.input(amount(region, m.correction_amount()), '+196');
+      await ui.click(button(ui.host, m.facts_submit()));
+      const message =
+        scenario === 'denied'
+          ? m.correction_denied()
+          : scenario === 'invalid'
+            ? m.correction_invalid()
+            : scenario === 'uncertain'
+              ? m.facts_uncertain()
+              : m.correction_stale();
+      expect(region.textContent).toContain(message);
+      expect(amount(region, m.correction_amount()).value).toBe('+196');
+      expect(button(ui.host, m.correction_reload()).disabled).toBe(false);
+      heading(ui.host, 2, m.facts_selection({ count: 1, limit: factLimit }));
+      const original = structuredClone(attempts[0]!);
+      if (scenario === 'uncertain') {
+        expect(amount(region, m.correction_amount()).disabled).toBe(true);
+        expect(region.querySelector('a[href*="candidate="]')).toBeNull();
+        await ui.click(button(ui.host, m.facts_submit()));
+        expect(attempts).toHaveLength(2);
+        expect(attempts[1]).toBe(attempts[0]);
+        expect(attempts[1]).toEqual(original);
+        const writes = failed.calls.filter((call) => call.method === 'POST');
+        expect(writes).toHaveLength(2);
+        expect(writes[1]).toEqual(writes[0]);
+        expect(region.textContent).toContain(m.correction_proposed());
+      } else {
+        expect(amount(region, m.correction_amount()).disabled).toBe(false);
+        await ui.input(amount(region, m.correction_amount()), '+200');
+        failed.setScenario('ready');
+        await ui.click(button(ui.host, m.facts_submit()));
+        expect(attempts[1]!.key).not.toBe(original.key);
+        expect(attempts[1]!.statement.value).toEqual({ type: 'value', content: { amount: '+200', unit: '1' } });
+        expect(region.textContent).toContain(m.correction_proposed());
+      }
+      expect(failed.calls.filter((call) => call.method === 'GET')).toHaveLength(3);
+      expect(current.public).toEqual(baseline);
+    }
+
+    // While deliberate submission is in flight, controls and reload stay disabled, and a
+    // duplicate activation cannot begin a second native attempt. Separate outcomes remain visible.
+    const partial = mangaFixture();
+    const partialRead = await readMangaProfile(partial.client, mangaVolumeId);
+    if (!partialRead.ok || !partialRead.public) throw new Error('Expected partial-result fixture');
+    const pending = deferred<Awaited<ReturnType<typeof partial.propose>>>();
+    const partialCommands: FactCommand[] = [];
+    await ui.render(
+      <MangaCorrections
+        read={partialRead}
+        locale="en"
+        disabled={false}
+        ports={{
+          ...ports,
+          facts: {
+            read: ports.facts.read,
+            propose: (command) => {
+              partialCommands.push(command);
+              return command.statement.property.id === 'schema:numberOfPages'
+                ? pending.promise
+                : Promise.resolve({ ok: false as const, reason: 'denied' as const });
+            },
+          },
+        }}
+        reload={async () => {
+          reloads++;
+        }}
+      />,
+    );
+    const partialPages = field(ui.host, 'number of pages');
+    const languageName = pickText(partialRead.release.properties['schema:inLanguage']!.labels, 'en').text;
+    const partialLanguage = field(ui.host, languageName);
+    await ui.click(button(partialPages, m.facts_edit_field()));
+    await ui.input(amount(partialPages, m.correction_amount()), '+196');
+    await ui.click(button(partialLanguage, m.facts_edit_field()));
+    await ui.input(amount(partialLanguage, m.correction_value()), 'ja');
+    heading(ui.host, 2, m.facts_selection({ count: 2, limit: factLimit }));
+    const submit = button(ui.host, m.facts_submit());
+    await ui.click(submit);
+    expect(partialCommands).toHaveLength(2);
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toBe(m.correction_saving());
+    expect(button(ui.host, m.correction_reload()).disabled).toBe(true);
+    expect(amount(partialPages, m.correction_amount()).disabled).toBe(true);
+    await ui.click(submit);
+    expect(partialCommands).toHaveLength(2);
+    const success = await partial.propose(
+      partialCommands.find((command) => command.statement.property.id === 'schema:numberOfPages')!,
+    );
+    await act(async () => pending.resolve(success));
+    expect(partialPages.textContent).toContain(m.correction_proposed());
+    expect(partialLanguage.textContent).toContain(m.correction_denied());
+    heading(ui.host, 2, m.facts_selection({ count: 1, limit: factLimit }));
+    expect(button(ui.host, m.facts_submit()).disabled).toBe(false);
+    expect(button(ui.host, m.correction_reload()).disabled).toBe(false);
+    expect(partial.calls.filter((call) => call.method === 'GET')).toHaveLength(3);
+    expect(partial.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+
+    // Truthful missing/disabled inputs: no supplied subject means no fallback fact or action panel.
+    await ui.render(
+      <MangaCorrections
+        read={undefined}
+        locale="en"
+        disabled={true}
+        ports={ports}
+        reload={async () => {
+          reloads++;
+        }}
+      />,
+    );
+    expect(ui.host.querySelector('header')).toBeNull();
+    expect(ui.host.textContent).not.toContain(m.facts_submit());
+    expect(button(ui.host, 'Native relation port').closest('[hidden]')).not.toBeNull();
+    for (const disabled of [true, false]) {
+      await ui.render(
+        <MangaCorrections
+          read={read}
+          locale="en"
+          disabled={disabled}
+          {...(disabled ? { ports } : {})}
+          reload={async () => {
+            reloads++;
+          }}
+        />,
+      );
+      expect(button(field(ui.host, 'number of pages'), m.facts_edit_field()).disabled).toBe(true);
+      expect(button(ui.host, m.facts_submit()).disabled).toBe(true);
+      expect(button(ui.host, m.correction_reload()).disabled).toBe(false);
+    }
+
+    const empty = mangaFixture('empty');
+    await ui.render(
+      <MangaCorrections
+        read={{ ok: true, release: empty.release, public: empty.reads.get(mangaVolumeId)! }}
+        locale="en"
+        disabled={false}
+        ports={ports}
+        reload={async () => undefined}
+      />,
+    );
+    expect(ui.host.querySelector('header')).not.toBeNull();
+    expect(ui.host.querySelector('h3')).toBeNull();
+    heading(ui.host, 2, m.facts_selection({ count: 0, limit: factLimit }));
+    expect(button(ui.host, m.facts_submit()).disabled).toBe(true);
+    expect(button(ui.host, 'Native authored port').closest('[hidden]')).not.toBeNull();
+
+    // Supplied-data growth only: distinct relation targets are admitted per-target slots, below
+    // the 512-fact subject bound. No simulated backend scan or 64-command submission is claimed.
+    for (const size of [1, 8, 64]) {
+      const growth = mangaFixture();
+      const current = await readMangaProfile(growth.client, mangaVolumeId);
+      if (!current.ok || !current.public) throw new Error('Expected supplied growth DTO');
+      const source = current.public.subject.statements['wdt:P179']![0]!;
+      current.public.subject.statements['wdt:P179'] = Array.from({ length: size }, (_, index) => {
+        const id = `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, '0')}`;
+        current.public!.related[id] = { type: 'schema:ComicSeries', labels: { en: `Supplied series ${index}` } };
+        return { ...structuredClone(source), id, value: { type: 'value' as const, content: id } };
+      });
+      const snapshot = structuredClone(current.public);
+      const calls = structuredClone(growth.calls);
+      await ui.render(
+        <MangaCorrections read={current} locale="en" disabled={false} ports={ports} reload={async () => undefined} />,
+      );
+      const membership = field(ui.host, 'part of the series');
+      expect(membership.querySelectorAll('a')).toHaveLength(size);
+      expect(membership.querySelectorAll('dd')).toHaveLength(size);
+      expect(membership.querySelectorAll('[data-slot="list-row-link"]')).toHaveLength(0);
+      expect(growth.calls).toEqual(calls);
+      expect(current.public).toEqual(snapshot);
+    }
+
+    // The actual caller fences retired load/reload callbacks. It resets the private correction
+    // workspace by address; a late original read cannot replace the newly mounted subject.
+    const retired = mangaFixture();
+    const held = deferred<Awaited<ReturnType<typeof readMangaProfile>>>();
+    let loads = 0;
+    const transport = {
+      ...retired.transport,
+      load: () => {
+        loads++;
+        return held.promise;
+      },
+    };
+    const search = async () => [];
+    const caller = (id: string) => (
+      <MangaProfileEditor
+        id={id}
+        locale="en"
+        session="signed-in"
+        transport={transport}
+        search={search}
+        correction={ports}
+      />
+    );
+    await ui.render(caller(mangaVolumeId));
+    await ui.until(() => loads === 1);
+    await ui.update(caller('00000000-0000-4000-8000-00000000d101'));
+    await ui.until(() => loads === 2);
+    await act(async () => held.resolve({ ok: false, reason: 'unavailable' }));
+    await ui.until(() => !!ui.host.querySelector('[role="alert"]'));
+    const retiredReload = button(ui.host, m.correction_reload());
+    const reactKey = Object.keys(retiredReload).find((key) => key.startsWith('__reactProps$'))!;
+    const queued = (Reflect.get(retiredReload, reactKey) as { onClick: (event: unknown) => unknown }).onClick;
+    await ui.render(<p>Replacement workspace</p>);
+    const count = loads;
+    await act(async () => {
+      void queued({ currentTarget: retiredReload, preventDefault() {} });
+    });
+    expect(loads).toBe(count);
+    expect(ui.host.textContent).toBe('Replacement workspace');
+  });
+});
