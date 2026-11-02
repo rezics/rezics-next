@@ -113,10 +113,11 @@ test('specialist language choices preserve stable drafts, focus, corrections and
       });
       if (family !== 'Recipe') {
         const add = canvas.getByRole('button', { name: m.catalogue_create_add_language() });
-        const keyboardAdd = () => act(async () => {
-          add.focus();
-          await user.keyboard('{Enter}');
-        });
+        const keyboardAdd = () =>
+          act(async () => {
+            add.focus();
+            await user.keyboard('{Enter}');
+          });
         expect(document.activeElement).not.toBe(input(m.catalogue_create_language()));
         await keyboardAdd();
         const first = input(m.catalogue_create_language(), 1);

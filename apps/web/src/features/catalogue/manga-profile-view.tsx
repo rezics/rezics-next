@@ -587,10 +587,7 @@ function MangaCreate({
             onClick={(event) => {
               if (!currentTermEdit(terms, type, activeTypeActivation)) return;
               const id = nextTermId.current++;
-              const next = [
-                ...termsHolder.current,
-                { id, language: '', label: '', description: '', aliases: '' },
-              ];
+              const next = [...termsHolder.current, { id, language: '', label: '', description: '', aliases: '' }];
               termsHolder.current = next;
               setTerms(next);
               focusAddedLanguage(event, `${termsId}-language-${id}`, () =>
