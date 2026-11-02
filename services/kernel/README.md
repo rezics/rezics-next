@@ -464,6 +464,10 @@ before restoring attribution on success or failure. If cleanup also fails, the i
 cause and cleanup failures remain available in its errors.
 CTE buffer costs match producers and scans within nested native plan scopes. When a unique relationship cannot be
 established, producer blocks stay in the total and the unmatched relationship appears in `Cost.limitations`.
+Exported profiles keep those notes on each producing repetition and as the per-scale union `medianCost` already
+forms; bound-failure attribution names the scale and repetition. Absence of the field is valid legacy evidence.
+The notes explain unmatched pairing, not permission to subtract speculative work, and they do not change totals,
+verdicts, eligibility or calibration.
 A counted `limits` ceiling applies to every repetition at every scale and reports the unit, scale, 1-based repetition,
 value and limit; counted `bounds` continue to compare medians.
 Background limitations retain their native plan paths and identify the background plan index; a known
@@ -614,7 +618,11 @@ Measured-run write discovery uses those same admitted EXPLAIN document envelopes
 ModifyTable without Relation Name fails at that node path, a missing Schema defaults to public, and malformed
 documents fail at their location instead of omitting writes.
 The line also carries every repetition, relation sizes, the selected-rule `verdicts`, a shadow whole-series verdict and
-any `settleFailures` recorded on samples. It records terminal `eligibility` after background-growth, attempt-ledger and
+any `settleFailures` recorded on samples. Each repetition may include `limitations` from that run; when any scale has
+them, a parallel `limitations` array is the union across that scale's repetitions so a median-selected run is not
+treated as the only source. The reader retains both fields and does not treat older records that omit them as corrupt.
+Calibration uses only the numeric repetition series.
+The line records terminal `eligibility` after background-growth, attempt-ledger and
 counted-unit guards: `{ "status": "eligible" }`, or `{ "status": "ineligible", "reason" }` with that guard's message.
 Inclusive growth-bound failures remain eligible. A missing field is eligible, so older profiles stay in calibration.
 For a step check, the shadow verdicts are diagnostic; for a baseline check,

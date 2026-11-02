@@ -1,6 +1,7 @@
 import { classifySeries, type GrowthModelBound, type SeriesPoint } from './growth-model.ts';
 import { GROWTH_REPETITION_CAPACITY, numericExtent } from './growth-numeric.ts';
 
+/** One scale's measured values. Profile CTE limitation strings stay on the source record and are not fitting inputs. */
 export type CalibrationRunPoint = Readonly<{
   scale: number;
   repetitions: readonly number[];

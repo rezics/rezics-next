@@ -666,6 +666,31 @@ export function growthRunEligibility(check: GrowthCheck, samples: readonly Repor
   return { status: 'ineligible', reason: countedFailureDetail(first) };
 }
 
+type ProfileCostEvidence = Pick<
+  Cost,
+  'rows' | 'blocks' | 'statements' | 'requestBytes' | 'responseBytes' | 'failedStatements' | 'limitations'
+>;
+
+/** Scalar export of one measured cost, including optional native CTE pairing limitations. */
+export function profileCostEvidence(cost: ProfileCostEvidence) {
+  return {
+    rows: cost.rows,
+    blocks: cost.blocks,
+    statements: cost.statements,
+    ...(cost.requestBytes === undefined ? {} : { requestBytes: cost.requestBytes }),
+    ...(cost.responseBytes === undefined ? {} : { responseBytes: cost.responseBytes }),
+    ...(cost.failedStatements === undefined ? {} : { failedStatements: cost.failedStatements }),
+    ...(cost.limitations === undefined ? {} : { limitations: [...cost.limitations] }),
+  };
+}
+
+function profileScaleLimitations(
+  samples: readonly Pick<ReportSample, 'cost'>[],
+): readonly (readonly string[])[] | undefined {
+  if (!samples.some(({ cost }) => (cost.limitations?.length ?? 0) > 0)) return undefined;
+  return samples.map(({ cost }) => [...(cost.limitations ?? [])]);
+}
+
 /** Appends one JSONL record to GROWTH_PROFILE; best-effort warns once per destination, required mode throws. */
 function appendProfile(
   report: GrowthReport,
@@ -677,6 +702,7 @@ function appendProfile(
   if (!destination) return;
   const file = relative(process.cwd(), Bun.main);
   const { name, bounds, byteBounds, samples, shadow, verdicts } = report;
+  const limitations = profileScaleLimitations(samples);
   appendGrowthProfile({
     destination,
     mode,
@@ -689,16 +715,7 @@ function appendProfile(
       seeding: samples.map(({ seeding }) => seeding),
       bounds,
       ...(byteBounds === undefined ? {} : { byteBounds }),
-      repetitions: samples.map(({ repetitions }) =>
-        repetitions.map(({ rows, blocks, statements, requestBytes, responseBytes, failedStatements }) => ({
-          rows,
-          blocks,
-          statements,
-          ...(requestBytes === undefined ? {} : { requestBytes }),
-          ...(responseBytes === undefined ? {} : { responseBytes }),
-          ...(failedStatements === undefined ? {} : { failedStatements }),
-        })),
-      ),
+      repetitions: samples.map(({ repetitions }) => repetitions.map(profileCostEvidence)),
       backendRepetitions: samples.map(({ backendRepetitions }) => backendRepetitions),
       coldBackendDiscards: samples.map(({ coldBackendDiscards }) => coldBackendDiscards),
       coldBackendExhaustion: samples.map(({ coldBackendExhaustion }) => coldBackendExhaustion ?? []),
@@ -711,6 +728,7 @@ function appendProfile(
       ...(samples.some(({ settleFailures }) => settleFailures !== undefined)
         ? { settleFailures: samples.map(({ settleFailures }) => settleFailures ?? []) }
         : {}),
+      ...(limitations === undefined ? {} : { limitations }),
       relationSizes: samples.map(({ relationSizes }) => relationSizes),
       verdicts,
       statements: profileStatements(samples),

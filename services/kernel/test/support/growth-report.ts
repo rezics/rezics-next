@@ -511,8 +511,29 @@ export function profileStatements(samples: readonly Pick<ReportSample, 'statemen
 }
 
 type AttributionSample = Pick<ReportSample, 'scale' | 'statementRepetitions'> & {
-  readonly cost?: Partial<Record<ByteMetric, number>>;
+  readonly cost?: Partial<Record<ByteMetric, number>> & { readonly limitations?: readonly string[] };
+  readonly repetitions?: readonly { readonly limitations?: readonly string[] }[];
 };
+
+const MAX_LIMITATION_ITEMS = 5;
+
+function formatCteLimitations(samples: readonly AttributionSample[]): string[] {
+  const lines: string[] = [];
+  for (const { scale, cost, repetitions } of samples) {
+    const items: string[] = [];
+    repetitions?.forEach((repetition, index) => {
+      for (const limitation of repetition.limitations ?? []) items.push(`repetition ${index + 1}: ${limitation}`);
+    });
+    if (items.length === 0) items.push(...(cost?.limitations ?? []));
+    if (items.length === 0) continue;
+    const shown = items.slice(0, MAX_LIMITATION_ITEMS);
+    const omitted = items.length - shown.length;
+    lines.push(
+      `Scale ${scale} CTE accounting limitations: ${shown.join('; ')}${omitted > 0 ? `; ${omitted} more omitted` : ''}`,
+    );
+  }
+  return lines;
+}
 
 function rankedStatementLines(
   samples: readonly Pick<ReportSample, 'scale'>[],
@@ -579,6 +600,7 @@ export function formatStatementAttribution(
     lines.push(`Statements growing most for ${metric}:`);
     lines.push(...rankedStatementLines(samples, profiles, field));
   }
+  lines.push(...formatCteLimitations(samples));
   samples.forEach(({ scale }, sampleIndex) => {
     const { repetitionCount, statements } = profiles[sampleIndex]!;
     for (const [statement, profile] of statements) {

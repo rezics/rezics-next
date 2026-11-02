@@ -1,5 +1,9 @@
 import { expect, test } from 'bun:test';
 import { growthCalibrationReport } from '../../scripts/growth-calibrate.ts';
+import { costOf, medianCost } from './growth-cost.ts';
+import { profileCostEvidence } from './growth.ts';
+import { formatStatementAttribution } from './growth-report.ts';
+import { readGrowthProfiles } from './growth-profile-read.ts';
 import {
   GROWTH_CALIBRATION_LIMITS,
   calibrateUncertainty,
@@ -251,4 +255,110 @@ test('profile calibration refuses over-capacity work after bounded admission', (
   ).toThrow(
     `run-1:1.repetitions[0] exceeds the ${GROWTH_CALIBRATION_LIMITS.repetitions} repetition capacity (${heavy.length} repetitions at scale 1)`,
   );
+});
+
+test('Exported growth evidence preserves scale/repetition CTE accounting limitations without changing conservative totals or verdict semantics.', () => {
+  const unmatched = costOf({
+    statements: ['SELECT 1'],
+    plans: [
+      {
+        Plan: {
+          'Node Type': 'Result',
+          'Actual Rows': 0,
+          'Actual Loops': 1,
+          'Shared Hit Blocks': 7,
+          'Shared Read Blocks': 0,
+          Plans: [
+            {
+              'Node Type': 'Result',
+              'Subplan Name': 'CTE items',
+              'Actual Rows': 0,
+              'Actual Loops': 1,
+              'Shared Hit Blocks': 20,
+              'Shared Read Blocks': 0,
+            },
+            {
+              'Node Type': 'CTE Scan',
+              'CTE Name': 'other',
+              'Actual Rows': 0,
+              'Actual Loops': 1,
+              'Shared Hit Blocks': 7,
+              'Shared Read Blocks': 0,
+            },
+          ],
+        },
+      },
+    ],
+  });
+  const clean = (blocks: number) => ({
+    statements: 1,
+    controlStatements: 0,
+    catalogStatements: 0,
+    plans: 1,
+    rows: 1,
+    blocks,
+    sharedHit: blocks,
+    sharedRead: 0,
+    relations: {},
+  });
+  const median = medianCost([unmatched, clean(40), clean(50)]);
+  const note = unmatched.limitations![0]!;
+  expect(unmatched.blocks).toBe(27);
+  expect(median.blocks).toBe(40);
+  expect(median.limitations).toEqual([note]);
+  expect(profileCostEvidence(unmatched).limitations).toEqual([note]);
+  expect(profileCostEvidence(clean(40))).not.toHaveProperty('limitations');
+
+  const sample = (blocks: number, limited = false) => ({
+    rows: 1,
+    blocks,
+    statements: 1,
+    ...(limited ? { limitations: [note] } : {}),
+  });
+  const line = (limited: boolean) =>
+    JSON.stringify({
+      file: 'test/support/growth-calibration.test.ts',
+      check: 'cte limitations',
+      scales: [1, 4, 16],
+      repetitions: [
+        [sample(10), sample(10)],
+        [sample(20, limited), sample(20)],
+        [sample(30), sample(30)],
+      ],
+      ...(limited ? { limitations: [[], [note], []] } : {}),
+      relationSizes: [{}, {}, {}],
+      bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+      measurement: { version: 1, indexProbes: 0, source: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+      shadow: Object.fromEntries(['rows', 'blocks', 'statements'].map((metric) => [metric, { outcome: 'compatible' }])),
+    });
+  const retained = readGrowthProfiles([
+    { name: 'run-1', text: line(true) },
+    { name: 'run-2', text: line(true) },
+  ]);
+  const legacy = readGrowthProfiles([
+    { name: 'run-1', text: line(false) },
+    { name: 'run-2', text: line(false) },
+  ]);
+  expect(retained.entries[0]!.repetitions[1]![0]!.limitations).toEqual([note]);
+  expect(retained.entries[0]!.limitations).toEqual([[], [note], []]);
+  expect(legacy.entries[0]!.repetitions[1]![0]!.limitations).toBeUndefined();
+  expect(legacy.entries[0]!.limitations).toBeUndefined();
+  expect(retained.series.blocks).toEqual(legacy.series.blocks);
+  expect(calibrateUncertainty(retained.series.blocks)).toEqual(calibrateUncertainty(legacy.series.blocks));
+  expect(
+    formatStatementAttribution(
+      [
+        {
+          scale: 4,
+          statementRepetitions: [[{ statement: 'SELECT 1', rows: 1, blocks: 27, count: 1 }]],
+          cost: { limitations: [note] },
+          repetitions: [{ limitations: [note] }, {}],
+        },
+      ],
+      ['blocks'],
+    ),
+  ).toContain(`Scale 4 CTE accounting limitations: repetition 1: ${note}`);
+  expect(() =>
+    readGrowthProfiles([{ name: 'bad', text: line(false).replace('"statements":1', '"statements":1,"limitations":1') }]),
+  ).toThrow('limitations must be an array');
 });

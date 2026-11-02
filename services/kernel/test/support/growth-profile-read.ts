@@ -1,5 +1,6 @@
 import type { CalibrationCheck, CalibrationRunPoint } from './growth-calibration.ts';
 import type { GrowthModelBound } from './growth-model.ts';
+import { requireDenseArray } from './growth-numeric.ts';
 import {
   hasCompleteRelationIdentity,
   parseRelationIdentity,
@@ -20,7 +21,9 @@ export type GrowthProfileEligibility =
   | { readonly status: 'ineligible'; readonly reason: string };
 
 export type GrowthProfileRunSource = Readonly<{ name: string; text: string }>;
-export type GrowthProfileRepetition = Readonly<Record<GrowthProfileMetric, number>>;
+export type GrowthProfileRepetition = Readonly<Record<GrowthProfileMetric, number>> & {
+  readonly limitations?: readonly string[];
+};
 export type GrowthProfileRelationSize = Readonly<{
   reltuples: number;
   relpages: number;
@@ -40,6 +43,7 @@ export type GrowthProfileEntry = Readonly<{
   occurrence: number;
   scales: readonly number[];
   repetitions: readonly (readonly GrowthProfileRepetition[])[];
+  limitations?: readonly (readonly string[])[];
   relationSizes: readonly Readonly<Record<string, GrowthProfileRelationSize>>[];
   bounds: GrowthProfileBounds;
   measurement: GrowthMeasurementIdentity | null;
@@ -107,6 +111,26 @@ function metricValue(source: UnknownRecord, metric: GrowthProfileMetric, descrip
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
     throw new TypeError(`${description}.${metric} must be finite and non-negative`);
   return value;
+}
+
+function parseLimitationStrings(value: unknown, description: string): readonly string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new TypeError(`${description} must be an array`);
+  requireDenseArray(value, description);
+  for (const limitation of value)
+    if (typeof limitation !== 'string') throw new TypeError(`${description} must contain only strings`);
+  return value.length === 0 ? undefined : value;
+}
+
+function parseScaleLimitations(
+  value: unknown,
+  scaleCount: number,
+  description: string,
+): readonly (readonly string[])[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length !== scaleCount)
+    throw new TypeError(`${description} must have one group per scale`);
+  return value.map((group, index) => parseLimitationStrings(group, `${description}[${index}]`) ?? []);
 }
 
 function parseBounds(value: unknown, description: string): GrowthProfileBounds {
@@ -237,12 +261,14 @@ function parseProfile(
   const repetitions = repetitionsValue.map((group, scaleIndex) => {
     return (group as unknown[]).map((item, repetitionIndex) => {
       const sample = record(item, `${description}.repetitions[${scaleIndex}][${repetitionIndex}]`);
-      return Object.fromEntries(
-        GROWTH_PROFILE_METRICS.map((metric) => [
-          metric,
-          metricValue(sample, metric, `${description}.repetitions[${scaleIndex}][${repetitionIndex}]`),
-        ]),
-      ) as GrowthProfileRepetition;
+      const location = `${description}.repetitions[${scaleIndex}][${repetitionIndex}]`;
+      const limitations = parseLimitationStrings(sample.limitations, `${location}.limitations`);
+      return {
+        ...(Object.fromEntries(
+          GROWTH_PROFILE_METRICS.map((metric) => [metric, metricValue(sample, metric, location)]),
+        ) as Record<GrowthProfileMetric, number>),
+        ...(limitations === undefined ? {} : { limitations }),
+      };
     });
   });
 
@@ -274,6 +300,7 @@ function parseProfile(
 
   const bounds = parseBounds(source.bounds, `${description}.bounds`);
   const measurement = parseMeasurement(source.measurement, `${description}.measurement`);
+  const limitations = parseScaleLimitations(source.limitations, scales.length, `${description}.limitations`);
   const shadowSource = record(source.shadow, `${description}.shadow`);
   const shadow = {} as Record<GrowthProfileMetric, GrowthProfileOutcome>;
   for (const metric of GROWTH_PROFILE_METRICS) {
@@ -290,6 +317,7 @@ function parseProfile(
     occurrence,
     scales,
     repetitions,
+    ...(limitations === undefined ? {} : { limitations }),
     relationSizes,
     bounds,
     measurement,
