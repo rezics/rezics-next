@@ -785,11 +785,7 @@ function AdmittedPresentationViewEditor({
         });
         return;
       }
-      profile = withTemplate(
-        profile,
-        template,
-        structuredClone(overviewOf(profile, { scope: 'generic', key: null })!),
-      );
+      profile = withTemplate(profile, template, structuredClone(overviewOf(profile, { scope: 'generic', key: null })!));
       const errors = validateProfile(platformRegistry, profile);
       if (errors.length) {
         setOwned(setFailure, { ok: false, reason: 'invalid', errors });

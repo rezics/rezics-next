@@ -1,6 +1,11 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { PROFILE_FORMAT, resolveTemplate, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
+import {
+  PROFILE_FORMAT,
+  resolveTemplate,
+  type CompositionDocument,
+  type PresentationProfile,
+} from '@rezics/composition';
 import { addStructuralBaseTemplate } from '../src/features/pages/curation-base-template';
 import { publishProfile } from '../src/features/pages/curate';
 

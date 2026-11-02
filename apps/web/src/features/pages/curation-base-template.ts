@@ -6,11 +6,7 @@ export function addStructuralBaseTemplate(profile: PresentationProfile, key: str
     return { ok: false as const, errors: [{ pointer: '/bases', code: 'duplicate' }] };
 
   const template = { scope: 'base' as const, key };
-  const next = withTemplate(
-    profile,
-    template,
-    structuredClone(overviewOf(profile, { scope: 'generic', key: null })!),
-  );
+  const next = withTemplate(profile, template, structuredClone(overviewOf(profile, { scope: 'generic', key: null })!));
   const errors = validateProfile(platformRegistry, next);
   return errors.length ? { ok: false as const, profile: next, errors } : { ok: true as const, profile: next };
 }
