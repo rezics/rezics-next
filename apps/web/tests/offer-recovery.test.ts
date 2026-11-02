@@ -125,3 +125,37 @@ test('the current-session BFF forwards sanitized own IDs from its single native 
     fetcher.mockRestore();
   }
 });
+
+test('retired fetch and decoded results cannot settle or replace an uncertain original offer intent', async () => {
+  let current = false;
+  let finish!: (body: unknown) => void;
+  const source = { ...intent };
+  const calls: unknown[] = [];
+  const submit = createOfferRequest(source, async (input) => {
+    calls.push(input);
+    if (calls.length === 1)
+      return Object.assign(new Response(), {
+        json: () => new Promise((resolve) => {
+          finish = resolve;
+        }),
+      });
+    return Response.json(acquisitionProblems.pending, { status: 409 });
+  });
+  source.expectedOfferRevision = 99;
+  source.idempotencyKey = 'replacement-key';
+  expect(await submit(() => current)).toEqual({ kind: 'retry' });
+  expect(calls).toHaveLength(0);
+  current = true;
+  const pending = submit(() => current);
+  await Promise.resolve();
+  expect(await submit(() => current)).toBeUndefined();
+  current = false;
+  finish({ checkoutUrl: 'https://checkout.stripe.com/retired' });
+  expect(await pending).toEqual({ kind: 'retry' });
+  current = true;
+  expect((await submit(() => current))?.kind).toBe('existing');
+  expect((await submit(() => current))?.kind).toBe('existing');
+  expect(calls).toEqual([intent, intent]);
+  expect(calls[0]).toBe(calls[1]);
+  expect(Object.isFrozen(calls[0])).toBe(true);
+});

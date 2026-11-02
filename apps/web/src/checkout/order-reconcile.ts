@@ -19,13 +19,15 @@ export function createReconciliationRequest(
   let intent: ReconciliationIntent | undefined;
   let pending = false;
   let queued: ReconciliationResult | undefined;
-  return async (): Promise<ReconciliationResult | undefined> => {
+  return async (isCurrent: () => boolean = () => true): Promise<ReconciliationResult | undefined> => {
     if (pending) return;
+    if (!isCurrent()) return { kind: 'retry' };
     if (queued) return queued;
     intent ??= Object.freeze({ orderId, idempotencyKey: newKey() });
     pending = true;
     try {
       const result = await send(intent);
+      if (!isCurrent()) return { kind: 'retry' };
       if (result.kind === 'queued') {
         if (result.orderId !== orderId || result.reconciliation !== 'queued') return { kind: 'unavailable' };
         queued = result;

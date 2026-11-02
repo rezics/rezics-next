@@ -91,7 +91,7 @@ function OrderReceipt(
   // The command belongs to the viewer/address, independently of each admission read.
   const newCommand = () => ({
     operation: null as ReturnType<typeof createReconciliationRequest> | null,
-    dispatch: null as { origin: BuyerCurrentOrigin; send: ReconciliationSender } | null,
+    owner: session.intent,
     phase: (budget.accepted ? 'queued' : 'ready') as ReconciliationPhase,
   });
   const [enrolled, setEnrolled] = useState(() => ({ owner: session.intent, command: newCommand() }));
@@ -154,7 +154,7 @@ function OrderLifetime({
   enqueue: { accepted: boolean };
   command: {
     operation: ReturnType<typeof createReconciliationRequest> | null;
-    dispatch: { origin: BuyerCurrentOrigin; send: ReconciliationSender } | null;
+    owner: BuyerCurrentOrigin;
     phase: ReconciliationPhase;
   };
 }) {
@@ -179,29 +179,22 @@ function OrderLifetime({
       !canReadOrder ||
       !initial.canReconcile ||
       !signedIn ||
-      !origin.credential() ||
+      !command.owner.isObserved() ||
       enqueue.accepted ||
       ['refreshing', 'queued', 'denied', 'conflict'].includes(phase.current)
     )
       return;
-    command.dispatch = {
-      origin,
-      send:
-        reconcile ??
-        ((intent) => {
-          const token = origin.credential();
-          if (!current() || !token) return Promise.resolve({ kind: 'unavailable' });
-          return requestOrderReconciliation({ data: intent, headers: { 'X-CSRF-Token': token } });
-        }),
-    };
-    command.operation ??= createReconciliationRequest(initial.id, (intent) => {
-      const dispatch = command.dispatch;
-      if (!dispatch?.origin.isCurrent()) return Promise.resolve({ kind: 'unavailable' });
-      return dispatch.send(intent);
-    });
+    if (!command.operation) {
+      const token = origin.credential();
+      if (!token) return;
+      // The sender and explicit credential belong to this deliberate intent, including every retry.
+      const send: ReconciliationSender =
+        reconcile ?? ((intent) => requestOrderReconciliation({ data: intent, headers: { 'X-CSRF-Token': token } }));
+      command.operation = createReconciliationRequest(initial.id, send);
+    }
     command.phase = phase.current = 'refreshing';
     setReconciliation('refreshing');
-    const result = await command.operation();
+    const result = await command.operation(() => current() && command.owner.isObserved());
     if (!current()) return;
     command.phase = phase.current = result?.kind ?? 'retry';
     setReconciliation(phase.current);
@@ -405,7 +398,10 @@ function OrderLifetime({
             variant="outline"
             size="lg"
             className="w-full sm:w-auto"
-            disabled={!csrfToken || ['refreshing', 'queued', 'denied', 'conflict'].includes(reconciliation)}
+            disabled={
+              (!command.operation && !csrfToken) ||
+              ['refreshing', 'queued', 'denied', 'conflict'].includes(reconciliation)
+            }
             onClick={() => void checkStatus()}
           >
             {reconciliation === 'refreshing'
@@ -483,7 +479,7 @@ function OrderLifetime({
           variant="outline"
           size="lg"
           className="w-full sm:w-auto"
-          disabled={!canReadOrder || !signedIn || !csrfToken}
+          disabled={!canReadOrder || !signedIn}
           onClick={() => {
             if (current()) window.location.reload();
           }}

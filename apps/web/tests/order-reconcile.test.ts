@@ -56,3 +56,44 @@ test('unavailable or denied reconciliation never manufactures payment or a succe
   // The pending generated-client binding performs no guessed transport.
   expect(typeof nativeOrderReconcile).toBe('function');
 });
+
+test('retired reconciliation replies retain uncertainty and the original key without accepting a late enqueue', async () => {
+  let current = false;
+  let finish!: (result: { kind: 'queued'; orderId: string; reconciliation: 'queued' }) => void;
+  let keys = 0;
+  const calls: ReconciliationIntent[] = [];
+  const request = createReconciliationRequest(
+    orderId,
+    async (intent) => {
+      calls.push(intent);
+      if (calls.length === 1)
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      return { kind: 'queued', orderId, reconciliation: 'queued' };
+    },
+    () => {
+      keys++;
+      return key;
+    },
+  );
+  expect(await request(() => current)).toEqual({ kind: 'retry' });
+  expect(keys).toBe(0);
+  expect(calls).toHaveLength(0);
+  current = true;
+  const pending = request(() => current);
+  expect(await request(() => current)).toBeUndefined();
+  current = false;
+  finish({ kind: 'queued', orderId, reconciliation: 'queued' });
+  expect(await pending).toEqual({ kind: 'retry' });
+  current = true;
+  expect(await request(() => current)).toEqual({ kind: 'queued', orderId, reconciliation: 'queued' });
+  expect(await request(() => current)).toEqual({ kind: 'queued', orderId, reconciliation: 'queued' });
+  expect(calls).toEqual([
+    { orderId, idempotencyKey: key },
+    { orderId, idempotencyKey: key },
+  ]);
+  expect(calls[0]).toBe(calls[1]);
+  expect(Object.isFrozen(calls[0])).toBe(true);
+  expect(keys).toBe(1);
+});

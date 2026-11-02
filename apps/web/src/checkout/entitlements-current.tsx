@@ -89,7 +89,7 @@ function EntitlementsBoundary<T extends Page>(props: CurrentProps<T>) {
   const retrySession = useCallback(() => {
     if (origin.isObserved() && hydrated) window.location.reload();
   }, [origin, hydrated]);
-  if (!subject || !admitted || (hydrated && !session.csrfToken)) {
+  if (!subject || !admitted) {
     const kind =
       hydrated && session.state === 'unavailable'
         ? 'unavailable'

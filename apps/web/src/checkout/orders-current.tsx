@@ -35,7 +35,7 @@ export function OrdersCurrent({
   const { hydrated, admitted, origin } = session;
   const subject = hydrated ? (session.state === 'signed-in' ? session.subject : null) : initial.sessionSubject;
   const allowed = !hydrated || admitted;
-  if (!subject || (hydrated && !session.csrfToken)) {
+  if (!subject) {
     if (hydrated && session.state === 'signed-out') return <NotFoundPage />;
     if (hydrated && session.state === 'unavailable') return <ErrorPage />;
     return <PendingPage />;

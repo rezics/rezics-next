@@ -37,12 +37,12 @@ function OfferPurchase({
   origin: BuyerCurrentOrigin;
 }) {
   const submittedOffer = useRef<OfferPageData | null>(null);
-  const dispatch = useRef<BuyerCurrentOrigin | null>(null);
+  const pendingOrigin = useRef<BuyerCurrentOrigin | null>(null);
   const submission = useRef<ReturnType<typeof createOfferRequest> | null>(null);
   const offer = submittedOffer.current ?? observedOffer;
   const [submissionPhase, setPhase] = useState<Phase>('ready');
   const phase = submittedOffer.current
-    ? submissionPhase === 'submitting' && !dispatch.current?.isCurrent()
+    ? submissionPhase === 'submitting' && !pendingOrigin.current?.isCurrent()
       ? 'retry'
       : submissionPhase
     : offer.state === 'delisted'
@@ -55,7 +55,9 @@ function OfferPurchase({
   const canStart =
     authority.admitted &&
     (authority.state === 'signed-out' ||
-      (authority.state === 'signed-in' && Boolean(authority.subject) && Boolean(authority.csrfToken)));
+      (authority.state === 'signed-in' &&
+        Boolean(authority.subject) &&
+        (submission.current !== null || Boolean(authority.csrfToken))));
 
   async function start() {
     if (
@@ -70,29 +72,30 @@ function OfferPurchase({
       window.location.assign(`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`);
       return;
     }
-    // A loader refresh cannot replace consent while the original creation outcome is uncertain.
-    dispatch.current = origin;
-    submittedOffer.current ??= offer;
-    submission.current ??= createOfferRequest(
-      { offerId: offer.id, expectedOfferRevision: offer.revision, idempotencyKey: offer.idempotencyKey },
-      async (intent) => {
-        const episode = dispatch.current;
-        const credential = episode?.credential();
-        if (!credential) throw new Error('Offer acquisition origin retired');
-        const response = await fetch('/checkout', {
-          method: 'POST',
-          credentials: 'same-origin',
-          cache: 'no-store',
-          redirect: 'manual',
-          headers: { 'content-type': 'application/json', 'x-csrf-token': credential },
-          body: JSON.stringify(intent),
-        });
-        if (!episode?.isCurrent()) throw new Error('Offer acquisition origin retired');
-        return response;
-      },
-    );
+    if (!submission.current) {
+      const credential = origin.credential();
+      if (!credential || !authority.intent.isObserved()) return;
+      // Capture consent, credentials and operands together; a refresh never replaces this intent.
+      const owner = authority.intent;
+      submittedOffer.current = offer;
+      submission.current = createOfferRequest(
+        { offerId: offer.id, expectedOfferRevision: offer.revision, idempotencyKey: offer.idempotencyKey },
+        async (intent) => {
+          if (!owner.isObserved()) throw new Error('Offer acquisition origin retired');
+          return fetch('/checkout', {
+            method: 'POST',
+            credentials: 'same-origin',
+            cache: 'no-store',
+            redirect: 'manual',
+            headers: { 'content-type': 'application/json', 'x-csrf-token': credential },
+            body: JSON.stringify(intent),
+          });
+        },
+      );
+    }
+    pendingOrigin.current = origin;
     setPhase('submitting');
-    const result = await submission.current();
+    const result = await submission.current(() => origin.isCurrent() && authority.intent.isObserved());
     // Dispatched writes can still commit; only their originating UI may consume the result.
     if (!origin.isCurrent()) return;
     if (!result) {

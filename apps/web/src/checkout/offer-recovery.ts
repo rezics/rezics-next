@@ -38,13 +38,16 @@ export function createOfferRequest(intent: OfferIntent, send: (intent: OfferInte
   const captured = Object.freeze({ ...intent });
   let pending = false;
   let resolved: OfferResult | undefined;
-  return async (): Promise<OfferResult | undefined> => {
+  return async (isCurrent: () => boolean = () => true): Promise<OfferResult | undefined> => {
     if (pending) return;
+    if (!isCurrent()) return { kind: 'retry' };
     if (resolved) return resolved;
     pending = true;
     try {
       const response = await send(captured);
+      if (!isCurrent()) return { kind: 'retry' };
       const body: unknown = await response.json();
+      if (!isCurrent()) return { kind: 'retry' };
       const problem = decodeAcquisitionProblem(response.status, body);
       const code = body && typeof body === 'object' && 'code' in body ? body.code : undefined;
       let result: OfferResult;

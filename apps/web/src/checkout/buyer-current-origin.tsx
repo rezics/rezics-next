@@ -4,6 +4,7 @@ import { createContext, useContext, useLayoutEffect, useRef, useState, useSyncEx
 import { operationIsAdmitted, useOperation } from '../kernel/exposure';
 import { viewerExposureLifetime, viewerExposureQuery, type ViewerExposure } from '../kernel/viewer-exposure';
 import { AnonymousSessionContext, sessionQuery, useSession } from '../session/query';
+import { normalizeSessionObservation } from '../session/browser-state';
 
 type Operation = 'order.create' | 'order.list' | 'order.get' | 'entitlement.get';
 type Observation = {
@@ -16,7 +17,7 @@ type Observation = {
 
 function observe(client: QueryClient, operation: Operation, anonymous: boolean): Observation {
   const session = client.getQueryState(sessionQuery.queryKey);
-  const data = session?.status === 'success' ? session.data : undefined;
+  const data = session?.status === 'success' ? normalizeSessionObservation(session.data) : undefined;
   const state = anonymous ? 'signed-out' : session?.status === 'error' ? 'unavailable' : (data?.state ?? 'unknown');
   const subject = state === 'signed-in' && typeof data?.subject === 'string' && data.subject ? data.subject : null;
   const csrfToken =
@@ -40,7 +41,6 @@ function observe(client: QueryClient, operation: Operation, anonymous: boolean):
     readId: enrolled?.id,
     admitted:
       !!subject &&
-      !!csrfToken &&
       enrolled?.subject === subject &&
       exposure?.status === 'success' &&
       exposure.data?.subject === enrolled.subject &&
@@ -49,7 +49,7 @@ function observe(client: QueryClient, operation: Operation, anonymous: boolean):
 }
 
 const identity = (value: Observation) =>
-  JSON.stringify([value.state, value.subject, !!value.csrfToken, value.admitted, value.readId]);
+  JSON.stringify([value.state, value.subject, value.admitted, value.readId]);
 
 /** A read episode retires synchronously, including cache ABA before React commits. */
 export class BuyerCurrentOrigin {
@@ -92,9 +92,9 @@ export class BuyerCurrentOrigin {
     this.isObserved() &&
     this.observed.state === 'signed-in' &&
     !!this.observed.subject &&
-    !!this.observed.csrfToken &&
     this.observed.admitted;
   isPublic = () => this.isObserved() && this.observed.state === 'signed-out' && this.observed.admitted;
+  // A deliberate action may capture this value once. It is never a retry credential source.
   credential = () => (this.isCurrent() ? this.read().csrfToken : null);
   snapshot = () => this.retired;
   retire = (notify = true) => {
@@ -172,7 +172,7 @@ export function useBuyerCurrentOrigin(
     state: session.state,
     subject: session.state === 'signed-in' ? session.subject || null : null,
     csrfToken: session.csrfToken,
-    admitted,
+    admitted: !!client && admitted,
   };
   const read = () => {
     const value = client ? observe(client, operation, anonymous) : fallback.current;

@@ -527,7 +527,7 @@ test('Receipt retained callbacks fence late fetch and JSON, preserve rotated unc
     await tick();
     expect(sends).toHaveLength(3);
     expect(sends[2]!.intent).toEqual(sends[1]!.intent);
-    expect(sends[2]!.token).toBe('rotated-B');
+    expect(sends[2]!.token).toBe('csrf-B');
     const oldReload = callbacks.get(m.order_refresh())!;
     const accepted = callbacks.get(m.order_reconcile_action())!;
     act(() => accepted());

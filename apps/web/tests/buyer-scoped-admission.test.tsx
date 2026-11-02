@@ -51,6 +51,8 @@ const { OrdersCurrent } = await import('../src/checkout/orders-current');
 const { EntitlementsCurrent, EntitlementCurrent } = await import('../src/checkout/entitlements-current');
 const { OfferPage } = await import('../src/checkout/offer-page');
 const { OrderPage } = await import('../src/checkout/order-page');
+const { useBuyerCurrentOrigin } = await import('../src/checkout/buyer-current-origin');
+const { AnonymousSessionContext } = await import('../src/session/query');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
@@ -150,13 +152,13 @@ const status = (order: OrderPageData, settlement = order.settlement) => ({
   settlement,
 });
 
-async function mount(render: () => ReactNode) {
+async function mount(render: () => ReactNode, token: string | null = 'csrf-A', enroll = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-  client.setQueryData(['session'], viewer());
+  client.setQueryData(['session'], viewer('A', token));
   client.setQueryData(['exposure', 'anonymous'], ['purchases']);
   // Prepare exactly the installed lifetime/key; there is deliberately no legacy viewer entry.
   const lifetime = scoped.viewerExposureLifetime(client);
-  const release = lifetime.subscribe(() => {});
+  const release = enroll ? lifetime.subscribe(() => {}) : () => {};
   const admit = (admitted: readonly string[] = ['purchases'], subject?: string) => {
     const snapshot = lifetime.getSnapshot();
     if (snapshot.state !== 'signed-in') throw new Error('No enrolled viewer');
@@ -169,7 +171,7 @@ async function mount(render: () => ReactNode) {
     client.setQueryData(['session'], viewer(subject, token));
     admit();
   };
-  admit();
+  if (enroll) admit();
   const host = document.createElement('main');
   document.body.append(host);
   const root = createRoot(host);
@@ -377,7 +379,7 @@ test('Offer uncertainty retains exact consent through scoped refresh and rotatio
     await tick();
     responses.push(Response.json({}, { status: 503 }));
     await act(async () => action(h.host, m.offer_retry()).click());
-    expect(calls[1]).toEqual({ body: originalBody, csrf: 'latest-A' });
+    expect(calls[1]).toEqual({ body: originalBody, csrf: 'csrf-A' });
     const decoding = deferred<unknown>();
     responses.push(Object.assign(new Response(), { json: () => decoding.promise }));
     await act(async () => action(h.host, m.offer_retry()).click());
@@ -482,7 +484,7 @@ test('Receipt scoped episodes retain uncertain reconciliation and the fifteen re
     await tick();
     expect(sends).toHaveLength(2);
     expect(sends[1]!.intent).toBe(sends[0]!.intent);
-    expect(sends[1]!.token).toBe('rotated');
+    expect(sends[1]!.token).toBe('csrf-A');
     expect(h.host.textContent).toContain(m.order_reconcile_queued());
     expect(h.host.textContent).not.toContain(m.order_entitlement_refresh()); // Enqueue did not change settlement.
     click();
@@ -545,5 +547,385 @@ test('Receipt scoped episodes retain uncertain reconciliation and the fifteen re
     timer.mockRestore();
     clear.mockRestore();
     button.mockRestore();
+  }
+});
+
+test('Healthy current null-CSRF reads retain history and access, while every retired session receipt stays excluded', async () => {
+  const histories: ReturnType<typeof deferred<BuyerOrdersCurrentRead>>[] = [];
+  const lists: ReturnType<typeof deferred<BuyerEntitlementsCurrentRead>>[] = [];
+  const details: ReturnType<typeof deferred<BuyerEntitlementCurrentRead>>[] = [];
+  const readHistory = spyOn(orders, 'readBuyerOrdersCurrent').mockImplementation(() => {
+    const pending = deferred<BuyerOrdersCurrentRead>();
+    histories.push(pending);
+    return pending.promise;
+  });
+  const readList = spyOn(entitlements, 'readBuyerEntitlementsCurrent').mockImplementation(() => {
+    const pending = deferred<BuyerEntitlementsCurrentRead>();
+    lists.push(pending);
+    return pending.promise;
+  });
+  const readDetail = spyOn(entitlements, 'readBuyerEntitlementCurrent').mockImplementation(() => {
+    const pending = deferred<BuyerEntitlementCurrentRead>();
+    details.push(pending);
+    return pending.promise;
+  });
+  const reload = spyOn(window.location, 'reload').mockImplementation(() => {});
+  let authority!: ReturnType<typeof useBuyerCurrentOrigin>;
+  let order = { ...receipt(), settlement: 'paid' as const };
+  let anonymous = false;
+  function Probe() {
+    authority = useBuyerCurrentOrigin('order.list', 'null-read');
+    return null;
+  }
+  const h = await mount(
+    () => (
+      <AnonymousSessionContext.Provider value={anonymous}>
+        <Probe />
+        <OrdersCurrent initial={history()} search={{}} locale="en" />
+        <EntitlementsCurrent initial={benefits()} locale="en" />
+        <EntitlementCurrent initial={detail()} locale="en" id={mappedEntitlement.id} />
+        <div data-receipt>
+          <OrderPage order={order} />
+        </div>
+        <OfferPage offer={offer} />
+      </AnonymousSessionContext.Provider>
+    ),
+    null,
+  );
+  try {
+    expect(authority.origin.isCurrent()).toBe(true);
+    expect(authority.origin.credential()).toBeNull();
+    expect(h.host.textContent).toContain('Purchase A');
+    expect(h.host.textContent).toContain(m.benefit_open_reader());
+    expect(action(h.host, m.offer_buy()).disabled).toBe(true);
+    expect(action(h.host, m.order_reconcile_action()).disabled).toBe(true);
+    expect(histories).toHaveLength(0); // The original loader receipt retains its own subject/address.
+    const receiptRegion = h.host.querySelector('[data-receipt]')!;
+    expect(receiptRegion.textContent).toContain(m.benefit_open_reader());
+    const owner = authority.intent;
+    for (const token of ['available', null, 'rotated', null]) {
+      const retired = authority.origin;
+      act(() => {
+        h.session('A', token);
+        expect(retired.isCurrent()).toBe(false);
+      });
+      h.show();
+      await tick();
+      expect(authority.origin.isCurrent()).toBe(true);
+      expect(authority.intent).toBe(owner);
+      expect(h.host.textContent).not.toContain('Purchase A');
+      expect(receiptRegion.textContent).not.toContain(m.benefit_open_reader());
+      await settle(histories.at(-1)!, history());
+      await settle(lists.at(-1)!, benefits());
+      await settle(details.at(-1)!, detail());
+      expect(h.host.textContent).toContain('Purchase A');
+      expect(h.host.textContent).toContain(m.benefit_open_reader());
+      expect(h.client.getQueryCache().findAll({ queryKey: ['orders-current'] }).length).toBeLessThanOrEqual(1);
+      expect(h.client.getQueryCache().findAll({ queryKey: ['buyer-entitlements-current'] }).length).toBeLessThanOrEqual(2);
+    }
+    expect(histories).toHaveLength(4);
+    expect(lists).toHaveLength(4);
+    expect(details).toHaveLength(4);
+    // A fresh native-shaped page owns new access; the retired initial receipt cannot rebind itself.
+    order = { ...receipt(), settlement: 'paid' };
+    h.show();
+    await tick();
+    expect(receiptRegion.textContent).toContain(m.benefit_open_reader());
+    order = { ...order, entitlement: { kind: 'refresh' }, canUseBenefit: false };
+    h.show();
+    await tick();
+    expect(action(h.host, m.order_refresh()).disabled).toBe(false);
+    await act(async () => action(h.host, m.order_refresh()).click());
+    expect(reload).toHaveBeenCalledTimes(1);
+    // Removal with retained data and a later same-subject success is still a new read episode.
+    const removed = authority.origin;
+    act(() => h.client.removeQueries({ queryKey: ['session'], exact: true }));
+    h.show();
+    await tick();
+    expect(removed.isCurrent()).toBe(false);
+    expect(h.host.textContent).not.toContain('Purchase A');
+    act(() => h.session('A', null));
+    h.show();
+    await tick();
+    const late = histories.at(-1)!;
+    await act(async () => h.admit(['purchases'], 'foreign'));
+    await settle(late, history());
+    expect(authority.origin.isCurrent()).toBe(false);
+    expect(h.host.textContent).not.toContain('Purchase A');
+    expect(h.host.textContent).not.toContain(m.benefit_open_reader());
+    await act(async () => h.admit());
+    anonymous = true;
+    h.show();
+    await tick();
+    expect(authority.origin.isCurrent()).toBe(false);
+    expect(h.host.textContent).not.toContain('Purchase A');
+    expect(h.host.textContent).not.toContain(m.benefit_open_reader());
+  } finally {
+    await h.close();
+    readHistory.mockRestore();
+    readList.mockRestore();
+    readDetail.mockRestore();
+    reload.mockRestore();
+  }
+});
+
+test('A successful subject and legacy exposure cannot grant a read before actual scoped enrollment and matching disclosure', async () => {
+  let authority!: ReturnType<typeof useBuyerCurrentOrigin>;
+  const observations: boolean[] = [];
+  function Probe() {
+    authority = useBuyerCurrentOrigin('order.get', 'enrollment');
+    observations.push(authority.origin.isCurrent());
+    return null;
+  }
+  const h = await mount(() => <Probe />, null, false);
+  try {
+    expect(observations[0]).toBe(false);
+    expect(authority.origin.isCurrent()).toBe(false);
+    await act(async () => h.client.setQueryData(['exposure', 'viewer'], ['purchases']));
+    expect(authority.origin.isCurrent()).toBe(false);
+    await act(async () => h.admit(['purchases'], 'foreign'));
+    expect(authority.origin.isCurrent()).toBe(false);
+    await act(async () => h.admit());
+    h.show();
+    await tick();
+    expect(authority.origin.isCurrent()).toBe(true);
+    // A malformed successful session is unavailable, even if the native exposure cache still matches.
+    act(() => h.session('A', ''));
+    h.show();
+    await tick();
+    expect(authority.state).toBe('unavailable');
+    expect(authority.origin.isCurrent()).toBe(false);
+    await act(async () => h.client.setQueryData(['session'], { state: 'signed-out', csrfToken: null }));
+    expect(authority.origin.isCurrent()).toBe(false);
+  } finally {
+    await h.close();
+  }
+});
+
+test('Only a later deliberate action captures write credentials; null, rotation, refreshed operands and sender changes never replace an uncertain original', async () => {
+  let observed = offer;
+  let replacement: ((intent: ReconciliationIntent) => Promise<ReconciliationResult>) | undefined;
+  let replacements = 0;
+  const offerCalls: { body: unknown; token: string | null }[] = [];
+  const reconcileCalls: { intent: ReconciliationIntent; token: string | null }[] = [];
+  const purchase = deferred<Response>();
+  const recovery = deferred<ReconciliationResult>();
+  const send = spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+    offerCalls.push({ body: JSON.parse(String(init?.body)), token: new Headers(init?.headers).get('x-csrf-token') });
+    return offerCalls.length === 1 ? purchase.promise : Response.json({}, { status: 503 });
+  });
+  const reconcile = spyOn(reconciliation, 'requestOrderReconciliation').mockImplementation(async ({ data, headers }) => {
+    reconcileCalls.push({ intent: data, token: new Headers(headers).get('X-CSRF-Token') });
+    return reconcileCalls.length === 1 ? recovery.promise : { kind: 'retry' };
+  });
+  const callbacks = new Map<string, () => void>();
+  const Button = buttons.Button;
+  const button = spyOn(buttons, 'Button').mockImplementation((props) => {
+    if (typeof props.children === 'string' && props.onClick)
+      callbacks.set(props.children, () => props.onClick!({} as never));
+    return <Button {...props} />;
+  });
+  let order = receipt();
+  let provider: InstanceType<typeof QueryClient> | undefined;
+  const render = () => (
+    <>
+      <OfferPage offer={observed} />
+      <OrderPage order={order} checkout="canceled" {...(replacement ? { reconcile: replacement } : {})} />
+    </>
+  );
+  const h = await mount(
+    () => (provider ? <QueryClientProvider client={provider}>{render()}</QueryClientProvider> : render()),
+    null,
+  );
+  let releaseProvider: (() => void) | undefined;
+  const click = (label: string) => act(() => callbacks.get(label)!());
+  try {
+    expect(action(h.host, m.offer_buy()).disabled).toBe(true);
+    expect(action(h.host, m.order_reconcile_action()).disabled).toBe(true);
+    click(m.offer_buy()); // Deliberately exercise the dispatch guard as well as disabled controls.
+    click(m.order_reconcile_action());
+    expect(offerCalls).toHaveLength(0);
+    expect(reconcileCalls).toHaveLength(0);
+    observed = { ...offer, revision: 8, idempotencyKey: id(8) };
+    act(() => h.session('A', 'first-deliberate-token'));
+    h.show();
+    await tick();
+    click(m.offer_buy());
+    click(m.offer_buy());
+    click(m.order_reconcile_action());
+    click(m.order_reconcile_action());
+    expect(offerCalls).toHaveLength(1);
+    expect(reconcileCalls).toHaveLength(1);
+    expect(offerCalls[0]).toEqual({
+      body: { offerId: offer.id, expectedOfferRevision: 8, idempotencyKey: id(8) },
+      token: 'first-deliberate-token',
+    });
+    expect(reconcileCalls[0]!.token).toBe('first-deliberate-token');
+    observed = { ...offer, revision: 99, idempotencyKey: id(99) };
+    replacement = async () => {
+      replacements++;
+      return { kind: 'queued', orderId: order.id, reconciliation: 'queued' };
+    };
+    act(() => h.session('A', null));
+    h.show();
+    await tick();
+    click(m.offer_retry());
+    click(m.order_reconcile_retry());
+    expect(offerCalls).toHaveLength(1); // The original sender is still pending across the remount.
+    expect(reconcileCalls).toHaveLength(1);
+    await settle(purchase, Response.json({}, { status: 503 }));
+    await settle(recovery, { kind: 'retry' });
+    for (const token of [null, 'later-token', null, 'first-deliberate-token']) {
+      const oldBuy = callbacks.get(m.offer_retry())!;
+      const oldReconcile = callbacks.get(m.order_reconcile_retry())!;
+      const before = offerCalls.length;
+      act(() => {
+        // Include a synchronous token ABA before any replacement render.
+        h.session('A', 'transient');
+        h.session('A', token);
+        oldBuy();
+        oldReconcile();
+      });
+      expect(offerCalls).toHaveLength(before);
+      expect(reconcileCalls).toHaveLength(before);
+      h.show();
+      await tick();
+      expect(action(h.host, m.offer_retry()).disabled).toBe(false);
+      expect(action(h.host, m.order_reconcile_retry()).disabled).toBe(false);
+      click(m.offer_retry());
+      click(m.order_reconcile_retry());
+      await tick();
+      expect(offerCalls).toHaveLength(before + 1);
+      expect(offerCalls.at(-1)).toEqual(offerCalls[0]);
+      expect(reconcileCalls.at(-1)!.intent).toBe(reconcileCalls[0]!.intent);
+      expect(Object.isFrozen(reconcileCalls[0]!.intent)).toBe(true);
+      expect(reconcileCalls.at(-1)!.token).toBe('first-deliberate-token');
+      expect(replacements).toBe(0);
+      expect(h.host.querySelector('article')!.dataset.idempotencyKey).toBe(id(8));
+    }
+    const stalePurchase = callbacks.get(m.offer_retry())!;
+    const staleRecovery = callbacks.get(m.order_reconcile_retry())!;
+    const before = offerCalls.length;
+    // A new provider with the same subject cannot inherit an old provider's intent or pending receipts.
+    provider = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    provider.setQueryData(['session'], viewer('A', null));
+    const lifetime = scoped.viewerExposureLifetime(provider);
+    releaseProvider = lifetime.subscribe(() => {});
+    const snapshot = lifetime.getSnapshot();
+    if (snapshot.state !== 'signed-in') throw new Error('Expected enrolled replacement provider');
+    provider.setQueryData(scoped.viewerExposureQuery(snapshot.observation).queryKey, {
+      subject: 'A',
+      admitted: ['purchases'],
+    });
+    h.show();
+    await tick();
+    act(() => {
+      stalePurchase();
+      staleRecovery();
+    });
+    expect(offerCalls).toHaveLength(before);
+    expect(reconcileCalls).toHaveLength(before);
+    expect(action(h.host, m.offer_buy()).disabled).toBe(true);
+    expect(action(h.host, m.order_reconcile_action()).disabled).toBe(true);
+    // Exact-address replacement also fences handlers retained from the replacement provider.
+    provider.setQueryData(['session'], viewer('A', 'provider-token'));
+    const current = lifetime.getSnapshot();
+    if (current.state !== 'signed-in') throw new Error('Expected replacement observation');
+    provider.setQueryData(scoped.viewerExposureQuery(current.observation).queryKey, {
+      subject: 'A',
+      admitted: ['purchases'],
+    });
+    h.show();
+    await tick();
+    const previousBuy = callbacks.get(m.offer_buy())!;
+    const previousRecovery = callbacks.get(m.order_reconcile_action())!;
+    observed = { ...observed, id: id(88), idempotencyKey: id(89) };
+    order = { ...order, id: id(90) };
+    h.show();
+    await tick();
+    act(() => {
+      previousBuy();
+      previousRecovery();
+      stalePurchase();
+      staleRecovery();
+    });
+    expect(offerCalls).toHaveLength(before);
+    expect(reconcileCalls).toHaveLength(before);
+    expect(replacements).toBe(0);
+  } finally {
+    await h.close();
+    releaseProvider?.();
+    provider?.clear();
+    send.mockRestore();
+    reconcile.mockRestore();
+    button.mockRestore();
+  }
+});
+
+test('Default null-CSRF order status polling and explicit access recovery remain reads and reject retired responses', async () => {
+  const order = receipt();
+  const replies: ReturnType<typeof deferred<Response>>[] = [];
+  const reads: RequestInit[] = [];
+  const fetcher = spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    expect(String(input)).toBe(`/orders/${order.id}/status`);
+    expect(init?.cache).toBe('no-store');
+    expect(init?.redirect).toBe('manual');
+    expect(new Headers(init?.headers).has('X-CSRF-Token')).toBe(false);
+    reads.push(init!);
+    const next = deferred<Response>();
+    replies.push(next);
+    return next.promise;
+  });
+  const timers = new Map<number, () => void>();
+  let nextTimer = -1;
+  const nativeSet = globalThis.setTimeout,
+    nativeClear = globalThis.clearTimeout;
+  const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((run, delay, ...args) => {
+    if (delay !== 2_000) return nativeSet(run, delay, ...args);
+    const id = nextTimer--;
+    timers.set(id, () => run(...args));
+    return id;
+  }) as typeof setTimeout);
+  const clear = spyOn(globalThis, 'clearTimeout').mockImplementation(((id) => {
+    if (!timers.delete(Number(id))) nativeClear(id);
+  }) as typeof clearTimeout);
+  const reload = spyOn(window.location, 'reload').mockImplementation(() => {});
+  const h = await mount(() => <OrderPage order={order} />, null);
+  const advance = () => {
+    const next = timers.entries().next().value!;
+    timers.delete(next[0]);
+    act(() => {
+      void next[1]();
+    });
+  };
+  try {
+    expect(action(h.host, m.order_reconcile_action()).disabled).toBe(true);
+    advance();
+    expect(reads).toHaveLength(1);
+    act(() => {
+      h.session('A', 'token');
+      h.session('A', null);
+    });
+    h.show();
+    await tick();
+    expect(reads[0]!.signal!.aborted).toBe(true);
+    await settle(replies[0]!, Response.json(status(order, 'paid')));
+    expect(h.host.querySelector('h1')!.textContent).toBe(m.order_pending());
+    advance();
+    await settle(replies[1]!, Response.json(status(order, 'paid')));
+    expect(h.host.querySelector('h1')!.textContent).toBe(m.order_paid());
+    expect(h.host.textContent).toContain(m.order_entitlement_refresh());
+    expect(h.host.textContent).not.toContain(m.benefit_open_reader());
+    expect(action(h.host, m.order_refresh()).disabled).toBe(false);
+    await act(async () => action(h.host, m.order_refresh()).click());
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(reads).toHaveLength(2);
+    expect(timers.size).toBe(0);
+  } finally {
+    await h.close();
+    fetcher.mockRestore();
+    reload.mockRestore();
+    timer.mockRestore();
+    clear.mockRestore();
   }
 });
