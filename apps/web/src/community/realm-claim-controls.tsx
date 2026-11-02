@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
@@ -77,17 +77,28 @@ function RealmClaimControlsContent({
     [realmId, adapter, lifetime],
   );
   const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
+  const lifetimeRevision = useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.snapshot);
   useRealmClaimDeparture(lifetime, control, ready);
   const [copy, setCopy] = useState<{
     control: typeof control;
-    requestId: string;
+    request: object;
+    read: RealmClaimRead;
+    lifetime: RealmClaimCallerLifetime;
     state: 'copied' | 'failed';
   } | null>(null);
+  const copyAttempt = useRef(0);
+  const copyContext = useRef({ control, lifetime });
+  copyContext.current = { control, lifetime };
+  const copyButton = useRef<HTMLButtonElement>(null);
+  const copyFallback = useRef<HTMLInputElement>(null);
   const pageSnapshot = initial.kind === 'ready' ? initial.snapshot : null;
   const pageKind = initial.kind;
   useEffect(() => {
     control.reconnect();
-    return () => control.disconnect();
+    return () => {
+      copyAttempt.current++;
+      control.disconnect();
+    };
   }, [control]);
   useEffect(() => {
     if (pageSnapshot) control.observePage(pageSnapshot);
@@ -119,7 +130,22 @@ function RealmClaimControlsContent({
       ? receipt
       : null;
   const owned = current?.snapshot.ownershipState === 'owned';
-  const copyState = copy?.control === control && copy.requestId === request?.requestId ? copy.state : 'idle';
+  const copyState =
+    copy?.control === control &&
+    copy.request === request &&
+    copy.read === state.read &&
+    copy.lifetime === lifetime
+      ? copy.state
+      : 'idle';
+  useEffect(() => {
+    if (copy && copyState === 'idle') setCopy(null);
+  }, [copy, copyState, lifetimeRevision]);
+  useEffect(() => {
+    if (copyState === 'failed') {
+      copyFallback.current?.focus();
+      copyFallback.current?.select();
+    }
+  }, [copyState]);
   if (recoveryOnly && !orphan && !state.intent) return null;
   return (
     <section aria-labelledby={`${id}-heading`} aria-busy={state.busy}>
@@ -193,21 +219,70 @@ function RealmClaimControlsContent({
                   </div>
                 </dl>
                 <Button
+                  ref={copyButton}
                   variant="outline"
                   onClick={async () => {
-                    if (control.getSnapshot().read !== state.read || (lifetime && !lifetime.current())) return;
+                    const read = state.read;
+                    const ticket = lifetime.ticket();
+                    const attempt = ++copyAttempt.current;
+                    const canPublish = () => {
+                      const latest = control.getSnapshot();
+                      const selected = latest.recovered ?? latest.request;
+                      return (
+                        copyAttempt.current === attempt &&
+                        copyContext.current.control === control &&
+                        copyContext.current.lifetime === lifetime &&
+                        lifetime.owns(ticket) &&
+                        latest.read === read &&
+                        !latest.busy &&
+                        latest.read.kind === 'ready' &&
+                        latest.read.admission === 'allowed' &&
+                        latest.read.snapshot.realmId === realmId &&
+                        latest.read.snapshot.ownershipState === 'orphaned' &&
+                        latest.read.snapshot.orphanedAt === request.orphanedAt &&
+                        selected === request &&
+                        request.realmId === realmId
+                      );
+                    };
+                    setCopy(null);
+                    if (!canPublish()) return;
                     try {
                       await navigator.clipboard.writeText(request.requestId);
-                      setCopy({ control, requestId: request.requestId, state: 'copied' });
+                      if (canPublish()) setCopy({ control, request, read, lifetime, state: 'copied' });
                     } catch {
-                      setCopy({ control, requestId: request.requestId, state: 'failed' });
+                      if (canPublish()) setCopy({ control, request, read, lifetime, state: 'failed' });
                     }
                   }}
                 >
                   {m.realm_claim_copy()}
                 </Button>
                 {copyState !== 'idle' ? (
-                  <p>{copyState === 'copied' ? m.realm_claim_copied() : m.realm_claim_copy_failed()}</p>
+                  <p role="status">{copyState === 'copied' ? m.realm_claim_copied() : m.realm_claim_copy_failed()}</p>
+                ) : null}
+                {copyState === 'failed' ? (
+                  <div className="space-y-2">
+                    <label htmlFor={`${id}-claim-reference-copy`} className="block font-medium">
+                      {m.realm_claim_copy_fallback_label()}
+                    </label>
+                    <input
+                      ref={copyFallback}
+                      id={`${id}-claim-reference-copy`}
+                      aria-label={m.realm_claim_copy_fallback_label()}
+                      className="min-h-11 w-full select-all rounded-md border bg-background px-3 font-mono text-sm"
+                      readOnly
+                      value={request.requestId}
+                      onFocus={(event) => event.currentTarget.select()}
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setCopy(null);
+                        copyButton.current?.focus();
+                      }}
+                    >
+                      {m.realm_claim_copy_close()}
+                    </Button>
+                  </div>
                 ) : null}
               </div>
             </details>
