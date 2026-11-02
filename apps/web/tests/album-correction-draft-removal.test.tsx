@@ -70,6 +70,7 @@ test('Album draft Cancel preserves mounted assertions; local confirmation keeps 
   fixture.release.types['schema:MusicAlbum']!.properties.push(sibling);
   const selected = structuredClone(fixture.publicRead.subject.statements);
   let finish!: (result: FactResult) => void;
+  let nativeResult!: FactResult;
   let next = await fixture.editors.facts.read();
   const initial = await fixture.loadCorrection();
   const editors = {
@@ -78,6 +79,7 @@ test('Album draft Cancel preserves mounted assertions; local confirmation keeps 
       read: async () => next,
       propose: async (command: FactCommand): Promise<FactResult> => {
         commands.push(command);
+        nativeResult = await fixture.editors.facts.propose(command);
         return new Promise((resolve) => {
           finish = resolve;
         });
@@ -164,6 +166,81 @@ test('Album draft Cancel preserves mounted assertions; local confirmation keeps 
     await act(async () => finish({ ok: false, reason: 'uncertain' }));
     expect(within(row(sibling)).queryByRole('button', { name: remove(sibling) })).toBeNull();
     expect(commands[0]!.statement.value).toEqual({ type: 'value', content: 'fr' });
+    // Named state: the scalar command may have applied before its property leaves admission.
+    const original = commands[0]!,
+      sealed = structuredClone(original);
+    expect(nativeResult.ok).toBe(true);
+    expect(fixture.candidates.size).toBe(1);
+    await click(field(property), m.facts_edit_field());
+    const retainedYear = within(field(property)).getByRole('textbox', { name: m.correction_year() });
+    await act(async () => {
+      await user.clear(retainedYear);
+      await user.type(retainedYear, '2026');
+    });
+    const admittedRead = next;
+    if (!admittedRead.ok) throw new Error('Expected current Album');
+    next = structuredClone(admittedRead);
+    next.release.types['schema:MusicAlbum']!.properties = next.release.types['schema:MusicAlbum']!.properties.filter(
+      (id) => id !== sibling,
+    );
+    delete next.release.properties[sibling];
+    await click(host, m.correction_reload());
+    const privateHolder = () => within(host).getByRole('region', { name: sibling });
+    expect(privateHolder().textContent).toContain(m.facts_private());
+    expect(privateHolder().textContent).toContain(m.facts_uncertain());
+    expect(JSON.parse(privateHolder().querySelector('pre')!.textContent!)).toEqual(sealed.statement);
+    expect(within(privateHolder()).queryByRole('textbox')).toBeNull();
+    expect(within(privateHolder()).queryByRole('button', { name: remove(sibling) })).toBeNull();
+    expect((within(host).getByRole('button', { name: m.facts_submit() }) as HTMLButtonElement).disabled).toBe(true);
+    expect(commands).toHaveLength(1); // Reading withdrawal prepares and sends nothing.
+    const focus = within(field(property)).getByRole('textbox', { name: m.correction_year() });
+    focus.focus();
+    // A native refusal remains an explicit boundary; no replacement intent is prepared.
+    fixture.setScenario('invalid');
+    await click(privateHolder(), m.correction_retry());
+    expect(privateHolder().textContent).toContain(m.candidate_loading());
+    expect(nativeResult.ok).toBe(false);
+    await act(async () => finish(nativeResult));
+    expect(privateHolder().textContent).toContain(m.correction_invalid());
+    expect(window.document.activeElement).toBe(within(privateHolder()).getByRole('status'));
+    expect(commands[1]).toBe(original);
+    expect(commands[1]).toEqual(sealed);
+    fixture.setScenario('ready');
+    await click(privateHolder(), m.correction_retry());
+    const late = finish,
+      lateResult = nativeResult;
+    await click(host, m.correction_reload()); // Retire this replay while preserving its holder.
+    const currentFocus = within(field(property)).getByRole('textbox', { name: m.correction_year() });
+    currentFocus.focus();
+    await act(async () => late(lateResult));
+    expect(privateHolder().textContent).toContain(m.correction_invalid());
+    expect(window.document.activeElement).toBe(currentFocus);
+    await click(privateHolder(), m.correction_retry());
+    await act(async () => finish(nativeResult));
+    expect(privateHolder().textContent).toContain(m.correction_proposed());
+    expect(window.document.activeElement).toBe(within(privateHolder()).getByRole('status'));
+    expect(within(privateHolder()).queryByRole('button', { name: m.correction_retry() })).toBeNull();
+    expect(within(privateHolder()).queryByRole('button', { name: remove(sibling) })).toBeNull();
+    expect(commands.slice(1).every((command) => command === original)).toBe(true);
+    expect(commands).toEqual(Array.from({ length: 4 }, () => sealed));
+    const posts = fixture.calls.filter((call) => call.method === 'POST');
+    expect(posts).toHaveLength(4);
+    expect(
+      posts.every(
+        (call) =>
+          call.key === sealed.key && JSON.stringify(call.body) === JSON.stringify({ statement: sealed.statement }),
+      ),
+    ).toBe(true);
+    expect(fixture.candidates.size).toBe(1);
+    expect(fixture.publicRead.subject.statements).toEqual(selected);
+    expect(
+      (within(field(property)).getByRole('textbox', { name: m.correction_year() }) as HTMLInputElement).value,
+    ).toBe('2026');
+    next = admittedRead;
+    await click(host, m.correction_reload());
+    expect(within(host).queryByRole('region', { name: sibling })).toBeNull();
+    expect(field(sibling).textContent).toContain(m.correction_proposed());
+    expect(commands).toHaveLength(4);
   } finally {
     await act(async () => root.unmount());
     client.clear();

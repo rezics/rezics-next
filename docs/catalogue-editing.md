@@ -575,6 +575,7 @@ explicit choice to review a new attempt. Uncertain delivery freezes the exact pa
 cannot prevent native receipt replay: retries use the same native POST without a new definitions preflight. Metadata
 is reloaded without discarding entered rows; withdrawn fields remain visible for deliberate removal. Correction
 reload failures retain staged scalar and relation drafts, and disable further edits until a successful reload.
+Withdrawn scalar commands retain a read-only private assertion and exact per-holder retry through the existing native writer; refusal preserves the sealed intent, and only deliberate current recovery moves focus to its result.
 Only emitted support is offered; unknown rights remain unknown and no provider prose, covers or permissions are
 inferred.
 

@@ -360,6 +360,43 @@ function AlbumCorrectionWorkspaceLive({
   useAuthoringDeparture(() => holderActive() && (unfinished || unresolved), unresolved, JSON.stringify(drafts));
   const admitted = new Set(fields.scalar);
   const staleDraft = drafts.some((draft) => !admitted.has(draft.property));
+  const recover = async (target: FactDraft) => {
+    if (
+      !lifetime.active() ||
+      running.current ||
+      !visible ||
+      !enabled ||
+      admitted.has(target.property) ||
+      !drafts.includes(target) ||
+      !target.command ||
+      target.result?.ok
+    )
+      return false;
+    running.current = true;
+    setBusy(true);
+    try {
+      // Replay only this sealed holder through the ordinary protocol, without preparing any draft.
+      await sendFacts(
+        [{ ...target, included: true }],
+        (command) => {
+          if (!lifetime.active()) throw new Error('Retired catalogue editor');
+          return editors.facts.propose(command);
+        },
+        (_property, result) => {
+          if (!lifetime.active()) return;
+          setDrafts((previous) =>
+            previous.map((draft) => (draft.command === target.command ? { ...draft, result } : draft)),
+          );
+        },
+      );
+      return lifetime.active();
+    } finally {
+      if (lifetime.active()) {
+        running.current = false;
+        setBusy(false);
+      }
+    }
+  };
   const submit = async () => {
     if (!lifetime.active()) return;
     if (running.current || !visible || !enabled || staleDraft || !changed.length) return;
@@ -524,6 +561,18 @@ function AlbumCorrectionWorkspaceLive({
                     }}
                   />
                 )}
+                {visible && !admitted.has(property) && draft?.command && (
+                  <AlbumWithdrawnCommand
+                    draft={draft}
+                    locale={locale}
+                    disabled={busy || !enabled}
+                    onRecover={() => recover(draft)}
+                    onReview={() => {
+                      if (lifetime.active() && draft.result?.ok)
+                        setReviewing({ property, candidate: draft.result.candidate, session: draft.result.session });
+                    }}
+                  />
+                )}
                 {visible && draft && !draft.command && !factLocked(draft) && (
                   <AlbumDraftRemoval
                     key={albumDraftIdentity(draft)}
@@ -635,6 +684,72 @@ function AlbumCorrectionWorkspaceLive({
 }
 
 /** The pending choice belongs to this local draft, independently of its property and siblings. */
+/** Private sealed intent is not a current fact or a newly admitted editing surface. */
+function AlbumWithdrawnCommand({
+  draft,
+  locale,
+  disabled,
+  onRecover,
+  onReview,
+}: {
+  draft: FactDraft;
+  locale: string;
+  disabled: boolean;
+  onRecover: () => Promise<boolean>;
+  onReview: () => void;
+}) {
+  const lifetime = useEditorLifetime();
+  const o = { locale: locale as never };
+  const [pending, setPending] = useState(false);
+  const [recovered, setRecovered] = useState(0);
+  const status = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (recovered && lifetime.active()) status.current?.focus();
+  }, [recovered]);
+  return (
+    <section aria-label={draft.property} className="min-w-0 space-y-3 rounded-xl border border-border p-4">
+      <h3 className="break-words font-semibold">{draft.property}</h3>
+      <p>{m.facts_private({}, o)}</p>
+      <EditorFailure reason="stale" locale={locale} />
+      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-sm">
+        {JSON.stringify(draft.command!.statement, null, 2)}
+      </pre>
+      <div ref={status} role="status" tabIndex={-1}>
+        {pending ? (
+          <p>{m.candidate_loading({}, o)}</p>
+        ) : draft.result?.ok ? (
+          <p>{m.correction_proposed({}, o)}</p>
+        ) : !draft.result || draft.result.reason === 'uncertain' ? (
+          <p>{m.facts_uncertain({}, o)}</p>
+        ) : (
+          <EditorFailure reason={draft.result.reason} locale={locale} />
+        )}
+      </div>
+      {draft.result?.ok ? (
+        <Button type="button" variant="outline" disabled={disabled} onClick={onReview}>
+          {m.correction_review({}, o)}
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled || pending}
+          onClick={async () => {
+            if (!lifetime.active() || disabled || pending) return;
+            setPending(true);
+            const performed = await onRecover();
+            if (!lifetime.active()) return;
+            setPending(false);
+            if (performed) setRecovered((previous) => previous + 1);
+          }}
+        >
+          {m.correction_retry({}, o)}
+        </Button>
+      )}
+    </section>
+  );
+}
+
 function AlbumDraftRemoval({
   draft,
   locale,
