@@ -37,12 +37,30 @@ export const CancelledParent: Story = {
   ...Reading.CancelledParent,
   play: async (context) => Reading.CancelledParent.play!(context),
 };
-export const DeletedPost: Story = { ...Reading.DeletedPost };
+export const DeletedPost: Story = {
+  ...Reading.DeletedPost,
+  play: async (context) => {
+    const canvas = within(context.canvasElement);
+    const tombstone = await canvas.findByText(m.thread_post_deleted());
+    const item = tombstone.closest('li');
+    await expect(item).not.toBeNull();
+    await expect(item?.querySelector('[data-slot="document-body"]')).toBeNull();
+  },
+};
 export const DeletedOrganization: Story = {
   ...Reading.DeletedOrganization,
   play: async (context) => Reading.DeletedOrganization.play!(context),
 };
-export const WithheldPost: Story = { ...Reading.WithheldPost };
+export const WithheldPost: Story = {
+  ...Reading.WithheldPost,
+  play: async (context) => {
+    const canvas = within(context.canvasElement);
+    const tombstone = await canvas.findByText(m.thread_post_withheld());
+    const item = tombstone.closest('li');
+    await expect(item).not.toBeNull();
+    await expect(item?.querySelector('[data-slot="document-body"]')).toBeNull();
+  },
+};
 export const OwnEdit: Story = {
   ...Reading.OwnEdit,
   play: async (context) => Reading.OwnEdit.play!(context),

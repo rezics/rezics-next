@@ -23,12 +23,20 @@ export function RevisionProvenance({
 }) {
   const locale = getLocale();
   const comparison = differingReviewVote(revision.voteCitation, currentVote);
-  const formatVote = (vote: VoteCitation) =>
+  const formatNumber = (value: number) => new Intl.NumberFormat(locale).format(value);
+  const formatVoteCitation = (vote: VoteCitation) =>
     m.thread_provenance_vote({
-      units: new Intl.NumberFormat(locale).format(vote.units),
+      units: formatNumber(vote.units),
       questionId: vote.questionId,
-      revision: new Intl.NumberFormat(locale).format(vote.revision),
+      revision: formatNumber(vote.revision),
     });
+  const subjectsById = new Map(subjects.map((subject) => [subject.id, subject] as const));
+  const unresolvedSubjectIds = revision.subjectIds.filter((id) => {
+    const subject = subjectsById.get(id);
+    return !subject || !subjectTitle(subject, locale);
+  });
+  const hasExactSourceDetails =
+    unresolvedSubjectIds.length > 0 || (revision.voteCitation !== null && revision.voteCitation !== undefined);
   return (
     <aside aria-label={m.thread_provenance_heading()} className="min-w-0 space-y-3 text-sm text-muted-foreground">
       {showLicence ? (
@@ -41,7 +49,7 @@ export function RevisionProvenance({
           <p className="font-medium">{m.thread_provenance_subjects()}</p>
           <ul className="space-y-1">
             {revision.subjectIds.map((id) => {
-              const subject = subjects.find((subject) => subject.id === id);
+              const subject = subjectsById.get(id);
               const title = subject ? subjectTitle(subject, locale) : null;
               return (
                 <li key={id} className="break-words [overflow-wrap:anywhere]">
@@ -50,7 +58,7 @@ export function RevisionProvenance({
                       {title}
                     </a>
                   ) : (
-                    m.thread_provenance_subject_reference({ id })
+                    m.discussion_provenance_details_subject_unavailable()
                   )}
                 </li>
               );
@@ -62,17 +70,44 @@ export function RevisionProvenance({
         <dl className="space-y-2 [overflow-wrap:anywhere]">
           <div>
             <dt className="font-medium">{m.thread_provenance_rating()}</dt>
-            <dd>{formatVote(revision.voteCitation)}</dd>
+            <dd>{m.discussion_provenance_details_rating_units({ units: formatNumber(revision.voteCitation.units) })}</dd>
           </div>
           {comparison ? (
             <div>
               <dt className="font-medium">{m.thread_provenance_current_vote()}</dt>
-              <dd>{formatVote(comparison)}</dd>
+              <dd>{m.discussion_provenance_details_rating_units({ units: formatNumber(comparison.units) })}</dd>
             </div>
           ) : null}
         </dl>
       ) : review ? (
         <p>{m.thread_provenance_unscored()}</p>
+      ) : null}
+      {hasExactSourceDetails ? (
+        <details className="min-w-0 [overflow-wrap:anywhere]">
+          <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            {m.discussion_provenance_details_heading()}
+          </summary>
+          <dl className="mt-2 space-y-2 [overflow-wrap:anywhere]">
+            {unresolvedSubjectIds.map((id) => (
+              <div key={id}>
+                <dt className="font-medium">{m.thread_provenance_subjects()}</dt>
+                <dd>{m.thread_provenance_subject_reference({ id })}</dd>
+              </div>
+            ))}
+            {revision.voteCitation ? (
+              <div>
+                <dt className="font-medium">{m.thread_provenance_rating()}</dt>
+                <dd>{formatVoteCitation(revision.voteCitation)}</dd>
+              </div>
+            ) : null}
+            {comparison ? (
+              <div>
+                <dt className="font-medium">{m.discussion_provenance_details_current_vote()}</dt>
+                <dd>{formatVoteCitation(comparison)}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </details>
       ) : null}
     </aside>
   );

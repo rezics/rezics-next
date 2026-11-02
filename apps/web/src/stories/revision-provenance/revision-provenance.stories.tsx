@@ -37,6 +37,13 @@ const meta = {
     review: true,
     subjects: [{ id: subjectId, types: ['schema:Book'], label: 'The first edition', labels: {}, cover: null }],
   },
+  parameters: {
+    docs: {
+      description: {
+        story: 'This composition uses supplied example values to show the reading hierarchy; it is not native response or authorization evidence.',
+      },
+    },
+  },
 } satisfies Meta<typeof RevisionProvenance>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -52,14 +59,32 @@ export const Recorded: Story = {
     await expect(link).toHaveFocus();
     await expect(link).toHaveAttribute('href', expect.stringContaining(subjectId));
     await expect(within(canvasElement).queryByText(m.thread_provenance_current_vote())).toBeNull();
+    const summary = canvasElement.querySelector('aside > dl');
+    if (!summary) throw new Error('The scored revision has no rating summary.');
+    await expect(summary).toHaveTextContent(m.discussion_provenance_details_rating_units({ units: '14' }));
+    await expect(summary).not.toHaveTextContent(STANDARD_QUESTION_ID);
   },
 };
 export const ChangedVote: Story = {
   args: { currentVote: { ...citation, units: 0, revision: 7 } },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Constructed author-private vote example; it is shown only as supplied currentVote data and is not native authorization evidence.',
+      },
+    },
+  },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText(m.thread_provenance_rating())).toBeVisible();
     await expect(canvas.getByText(m.thread_provenance_current_vote())).toBeVisible();
+    const summary = canvasElement.querySelector('aside > dl');
+    if (!summary) throw new Error('The scored revision has no rating summary.');
+    await expect(summary).not.toHaveTextContent(STANDARD_QUESTION_ID);
+    const detailsSummary = canvas.getByText(m.discussion_provenance_details_heading());
+    await userEvent.click(detailsSummary);
+    await expect(canvas.getByText(m.thread_provenance_vote({ units: '14', questionId: STANDARD_QUESTION_ID, revision: '2' }))).toBeVisible();
+    await expect(canvas.getByText(m.thread_provenance_vote({ units: '0', questionId: STANDARD_QUESTION_ID, revision: '7' }))).toBeVisible();
   },
 };
 export const UnavailableReference: Story = {
@@ -67,9 +92,59 @@ export const UnavailableReference: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.queryByRole('link')).toBeNull();
+    await expect(canvas.getByText(m.discussion_provenance_details_subject_unavailable())).toBeVisible();
+    await userEvent.click(canvas.getByText(m.discussion_provenance_details_heading()));
     await expect(canvas.getByText(m.thread_provenance_subject_reference({ id: subjectId }))).toBeVisible();
   },
 };
-export const Unscored: Story = { args: { revision: { ...revision, voteCitation: null } } };
+export const Unscored: Story = {
+  args: { revision: { ...revision, voteCitation: null } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.thread_provenance_unscored())).toBeVisible();
+    await expect(canvas.queryByText(m.discussion_provenance_details_heading())).toBeNull();
+  },
+};
 export const PrivateReadUnavailable: Story = { args: { currentVote: null } };
 export const UnchangedVote: Story = { args: { currentVote: citation } };
+
+const longSubjectId = `${subjectId}-source-${'0123456789'.repeat(6)}`;
+const longQuestionId = `${STANDARD_QUESTION_ID}-question-${'q'.repeat(48)}`;
+const longSubjectTitle = 'A supplied subject title that remains complete while it wraps across a narrow reading column';
+export const LongLocalizedReferences: Story = {
+  args: {
+    revision: {
+      ...revision,
+      subjectIds: [subjectId, longSubjectId],
+      voteCitation: { ...citation, questionId: longQuestionId },
+    },
+    subjects: [
+      {
+        id: subjectId,
+        types: ['schema:Book'],
+        label: longSubjectTitle,
+        labels: {},
+        cover: null,
+      },
+    ],
+    currentVote: { questionId: longQuestionId, units: 8, revision: 7 },
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Constructed long-label and author-private vote example for the 390px and 1280px viewports; it is not native authorization evidence.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: longSubjectTitle })).toBeVisible();
+    await expect(canvas.getByText(m.discussion_provenance_details_subject_unavailable())).toBeVisible();
+    await userEvent.click(canvas.getByText(m.discussion_provenance_details_heading()));
+    await expect(canvas.getByText(m.thread_provenance_subject_reference({ id: longSubjectId }))).toBeVisible();
+    await expect(canvas.getByText((text) => text.includes(longQuestionId))).toBeVisible();
+    const details = canvasElement.querySelector('details');
+    if (!details) throw new Error('The long source example has no native details region.');
+    await expect(details.className).toContain('overflow-wrap:anywhere');
+  },
+};
