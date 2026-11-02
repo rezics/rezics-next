@@ -61,6 +61,11 @@ unchanged. Each field retains its own draft and request key after uncertain resp
 selection reuse the existing candidate review controls and native decision heads. Current denial, concealed data,
 invalid input, conflict and unavailability remain distinct from an empty recipe profile.
 
+Recipe creation rejection focuses the first known correction; editing clears only that control's feedback,
+and unknown server addresses stay unlinked until validation runs again. Errors retain stable language and fact
+row identities when another row is removed. Corrections preserve all other terms, facts, instructions and original
+declarations; document and subject-picker errors describe their field groups and lead into the editable control.
+
 ## Correct names and descriptions
 
 The subject header and compact view frame link to `/{locale}/subjects/{id}/{slug}/terms`. This private companion

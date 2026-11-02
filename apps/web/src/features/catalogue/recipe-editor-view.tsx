@@ -11,7 +11,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
@@ -34,6 +34,13 @@ import {
 } from './recipe-editor';
 import { statementInput, type ProposalCommand, type ProposalResult, type StatementInput } from './statement-editor';
 import { EditorFailure, ScalarControl } from './statement-editor-view';
+import {
+  focusRecipeCorrection,
+  recipeCorrections,
+  recipeInvalid,
+  recipeRowId,
+  type RecipeCorrection,
+} from './recipe-validation-presentation';
 
 type Ready = Extract<RecipeRead, { ok: true }>;
 const recipeActionClassName =
@@ -115,6 +122,33 @@ function RecipeEditorLive({
   const [rows, setRows] = useState<Row[]>([]);
   const [property, setProperty] = useState('');
   const [failure, setFailure] = useState<CreateFailure>();
+  const [corrections, setCorrections] = useState<RecipeCorrection[]>([]);
+  const correctionFocus = useRef<string | undefined>(undefined);
+  const workspace = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const target = correctionFocus.current;
+    correctionFocus.current = undefined;
+    if (target && workspace.current && lifetime.active())
+      focusRecipeCorrection(workspace.current.ownerDocument, target);
+  }, [corrections, lifetime]);
+  const clearCorrections = (matches: (error: RecipeCorrection) => boolean) => {
+    if (!pending.current && !running.current) setCorrections((previous) => previous.filter((error) => !matches(error)));
+  };
+  const reject = (next: CreateFailure, extra: RecipeCorrection[] = []) => {
+    const errors =
+      read && next.reason === 'invalid'
+        ? [...recipeCorrections(next.errors ?? [], terms, rows, read.release, locale, termsId), ...extra]
+        : [];
+    if (next.reason === 'invalid' && !errors.length)
+      errors.push({
+        id: `${termsId}-unknown`,
+        label: m.catalogue_create_invalid_field({}, o),
+        instruction: m.correction_error_uneditable({}, o),
+      });
+    correctionFocus.current = errors.find((error) => error.target)?.target;
+    setCorrections(errors);
+    setFailure(next);
+  };
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
   const [busy, setBusy] = useState(false);
   const pending = useRef<RecipeCommand | null>(null);
@@ -199,23 +233,40 @@ function RecipeEditorLive({
         terms,
         rows.map((row) => row.statement),
       );
-      if (
-        rows.some(
-          (row) =>
-            read.release.properties[row.statement.property.id]?.datatype === 'document' &&
-            (!row.original ||
-              row.statement.value.type !== 'value' ||
-              !hasDocumentContent((row.statement.value.content as AuthoredField).document)),
-        )
-      )
-        draft.errors.push({ pointer: '/statements/schema:recipeInstructions', code: 'required' });
+      const originalErrors: RecipeCorrection[] = [];
+      const positions = new Map<string, number>();
+      for (const row of rows) {
+        const property = row.statement.property.id;
+        const index = positions.get(property) ?? 0;
+        positions.set(property, index + 1);
+        if (read.release.properties[property]?.datatype !== 'document') continue;
+        const content =
+          row.statement.value.type === 'value' ? (row.statement.value.content as AuthoredField) : undefined;
+        const authored = !!content && typeof content === 'object';
+        if (!authored || !hasDocumentContent(content.document)) {
+          draft.errors.push({
+            pointer: `/statements/${property}/` + index + '/value/content/document',
+            code: 'required',
+          });
+        }
+        if (authored && !row.original) {
+          const owner = recipeRowId(termsId, row.id);
+          originalErrors.push({
+            id: `${owner}-original-error`,
+            owner,
+            target: `${owner}-original`,
+            label: `${name(property)} · ${m.recipe_original({}, o)}`,
+            instruction: m.correction_error_required({}, o),
+          });
+        }
+      }
       for (const row of rows) {
         const pointer = `/statements/${row.statement.property.id}`;
         if (!rowMatchesCurrentDefinition(row, read) && !draft.errors.some((error) => error.pointer === pointer))
           draft.errors.push({ pointer, code: 'unsupported' });
       }
-      if (draft.errors.length) {
-        setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
+      if (draft.errors.length || originalErrors.length) {
+        reject({ ok: false, reason: 'invalid', errors: draft.errors }, originalErrors);
         return;
       }
       pending.current = { item: draft.item, key: crypto.randomUUID() };
@@ -226,6 +277,7 @@ function RecipeEditorLive({
     running.current = true;
     setBusy(true);
     setFailure(undefined);
+    setCorrections([]);
     try {
       const result = await transport.create(pending.current);
       if (!lifetime.active()) return;
@@ -234,7 +286,7 @@ function RecipeEditorLive({
         pending.current = null;
         pendingUncertain.current = false;
       } else {
-        setFailure(result);
+        reject(result);
         const possiblyCommitted = wasUncertain || result.reason === 'unavailable';
         pendingUncertain.current = possiblyCommitted;
         if (result.reason !== 'conflict' && !possiblyCommitted) pending.current = null;
@@ -329,6 +381,19 @@ function RecipeEditorLive({
         read &&
         (!id || read.fields.length > 0 || rows.length > 0) && (
           <Workspace
+            ref={(node: HTMLDivElement | HTMLFormElement | null) => {
+              workspace.current = node;
+            }}
+            onChangeCapture={(event) => {
+              const target = event.target as HTMLElement;
+              const ids = new Set([
+                target.id,
+                ...Array.from(target.closest('section')?.querySelectorAll('[role="group"]') ?? [])
+                  .filter((group) => group.contains(target))
+                  .map((group) => group.id),
+              ]);
+              clearCorrections((error) => !!error.target && ids.has(error.target));
+            }}
             className="flex min-w-0 flex-col gap-6"
             noValidate={!id}
             onSubmit={(event) => {
@@ -366,6 +431,7 @@ function RecipeEditorLive({
                         {field === 'aliases' ? (
                           <Textarea
                             id={`${termsId}-${field}-${term.id}`}
+                            {...recipeInvalid(corrections, `${termsId}-${field}-${term.id}`)}
                             className={recipeInputClassName}
                             value={term[field]}
                             onChange={(event) =>
@@ -379,6 +445,7 @@ function RecipeEditorLive({
                         ) : (
                           <Input
                             id={`${termsId}-${field}-${term.id}`}
+                            {...recipeInvalid(corrections, `${termsId}-${field}-${term.id}`)}
                             className={recipeInputClassName}
                             value={term[field]}
                             onChange={(event) =>
@@ -401,7 +468,7 @@ function RecipeEditorLive({
                         onRemove={() => {
                           if (locked || running.current || pending.current || session !== 'signed-in') return;
                           setTerms((previous) => previous.filter((value) => value.id !== term.id));
-                          setFailure(undefined);
+                          clearCorrections((error) => error.owner === `term-${term.id}`);
                         }}
                       />
                     )}
@@ -473,6 +540,9 @@ function RecipeEditorLive({
               <RecipeField
                 key={row.id}
                 row={row}
+                feedbackId={recipeRowId(termsId, row.id)}
+                corrections={corrections}
+                clearCorrection={(target) => clearCorrections((error) => error.target === target)}
                 read={read}
                 locale={locale}
                 search={search}
@@ -483,15 +553,22 @@ function RecipeEditorLive({
                   setRows((previous) => previous.map((entry) => (entry.id === row.id ? { ...entry, ...patch } : entry)))
                 }
                 {...(review ? { review } : {})}
-                onChange={(statement, patch) =>
+                onChange={(statement, patch) => {
+                  if (statement.value.type !== row.statement.value.type) {
+                    const prefix = `${recipeRowId(termsId, row.id)}-fact-`;
+                    clearCorrections((error) => !!error.target?.startsWith(prefix));
+                  }
                   setRows((previous) =>
                     previous.map((entry) => (entry.id === row.id ? { ...entry, ...(patch ?? {}), statement } : entry)),
-                  )
-                }
+                  );
+                }}
                 onOriginal={(original) =>
                   setRows((previous) => previous.map((entry) => (entry.id === row.id ? { ...entry, original } : entry)))
                 }
-                onRemove={() => setRows(rows.filter((entry) => entry.id !== row.id))}
+                onRemove={() => {
+                  setRows(rows.filter((entry) => entry.id !== row.id));
+                  clearCorrections((error) => error.owner === recipeRowId(termsId, row.id));
+                }}
               />
             ))}
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
@@ -535,7 +612,7 @@ function RecipeEditorLive({
             </div>
             {!id && (
               <>
-                {failure && (
+                {failure && (failure.reason !== 'invalid' || corrections.length > 0) && (
                   <div role="alert" className="space-y-2">
                     <p>
                       {failure.reason === 'conflict'
@@ -548,14 +625,30 @@ function RecipeEditorLive({
                               ? m.catalogue_create_signed_out({}, o)
                               : m.catalogue_create_uncertain({}, o)}
                     </p>
-                    {failure.errors?.map((error, index) => (
-                      <p key={index}>
-                        {name(
-                          Object.keys(read.release.properties).find((field) => error.pointer.includes(field)) ?? '',
-                        ) || m.catalogue_create_terms({}, o)}
-                        : {m.catalogue_create_invalid_field({}, o)}
-                      </p>
-                    ))}
+                    {corrections.length > 0 && (
+                      <ul aria-label={m.correction_errors({}, o)} className="list-disc space-y-2 ps-5">
+                        {corrections.map((error) => (
+                          <li id={error.id} key={error.id}>
+                            {error.target ? (
+                              <a
+                                href={`#${error.target}`}
+                                className="underline underline-offset-4"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  if (lifetime.active())
+                                    focusRecipeCorrection(event.currentTarget.ownerDocument, error.target!);
+                                }}
+                              >
+                                {error.label}
+                              </a>
+                            ) : (
+                              <p>{error.label}</p>
+                            )}
+                            <p>{error.instruction}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {failure.reason === 'conflict' && (
                       <Button
                         className={recipeActionClassName}
@@ -609,6 +702,9 @@ const RecipeField = catalogueEditor(RecipeFieldLive);
 
 function RecipeFieldLive({
   row,
+  feedbackId,
+  corrections,
+  clearCorrection,
   read,
   locale,
   search,
@@ -622,6 +718,9 @@ function RecipeFieldLive({
   onRemove,
 }: {
   row: Row;
+  feedbackId: string;
+  corrections: RecipeCorrection[];
+  clearCorrection: (target: string) => void;
   read: Ready;
   locale: string;
   search: EntityPickerSearch;
@@ -636,7 +735,7 @@ function RecipeFieldLive({
 }) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
-  const fieldId = useId();
+  const fieldId = feedbackId;
   const property = row.statement.property.id;
   const currentDefinition = read.release.properties[property];
   const matchesCurrentDefinition = rowMatchesCurrentDefinition(row, read);
@@ -663,6 +762,7 @@ function RecipeFieldLive({
   const command = row.command;
   const frozen = disabled || busy || !!command || result?.ok === true || reviewRequired;
   const updateAuthored = (next: AuthoredField) => {
+    clearCorrection(`${fieldId}-replace`);
     setAuthored(next);
     onChange({ ...row.statement, value: authoredFieldValue(next) }, { authored: next });
   };
@@ -736,6 +836,8 @@ function RecipeFieldLive({
                   className={recipeActionClassName}
                   type="button"
                   variant="outline"
+                  id={`${fieldId}-replace`}
+                  {...recipeInvalid(corrections, `${fieldId}-replace`)}
                   onClick={() => updateAuthored(newAuthoredField())}
                 >
                   {m.recipe_replace_method({}, o)}
@@ -748,6 +850,7 @@ function RecipeFieldLive({
                     <Input
                       className={recipeInputClassName}
                       id={`${fieldId}-language`}
+                      {...recipeInvalid(corrections, `${fieldId}-language`)}
                       aria-label={m.catalogue_create_language({}, o)}
                       value={authored.language}
                       onChange={(event) => updateAuthored({ ...authored, language: event.target.value })}
@@ -758,27 +861,43 @@ function RecipeFieldLive({
                     <Input
                       className={recipeInputClassName}
                       id={`${fieldId}-licence`}
+                      {...recipeInvalid(corrections, `${fieldId}-licence`)}
                       aria-label={m.subject_source_licence({}, o)}
                       value={authored.licence}
                       onChange={(event) => updateAuthored({ ...authored, licence: event.target.value })}
                     />
                   </Field>
-                  <RichTextEditor
-                    label={label}
-                    labels={editorLabels()}
-                    value={authored.document}
-                    lang={authored.language}
-                    disabled={frozen}
-                    onChange={(document) => updateAuthored({ ...authored, document })}
-                  />
+                  <div
+                    id={`${fieldId}-document`}
+                    role="group"
+                    tabIndex={-1}
+                    aria-label={label}
+                    {...recipeInvalid(corrections, `${fieldId}-document`)}
+                  >
+                    <RichTextEditor
+                      label={label}
+                      labels={editorLabels()}
+                      value={authored.document}
+                      lang={authored.language}
+                      disabled={frozen}
+                      onChange={(document) => {
+                        clearCorrection(`${fieldId}-document`);
+                        updateAuthored({ ...authored, document });
+                      }}
+                    />
+                  </div>
                   <Field orientation="horizontal">
                     <Checkbox
-                      id={`original-${row.id}`}
+                      id={`${fieldId}-original`}
+                      {...recipeInvalid(corrections, `${fieldId}-original`)}
                       className="size-11 after:inset-0"
                       checked={row.original ?? false}
-                      onCheckedChange={(checked) => onOriginal(checked === true)}
+                      onCheckedChange={(checked) => {
+                        clearCorrection(`${fieldId}-original`);
+                        onOriginal(checked === true);
+                      }}
                     />
-                    <FieldLabel className="min-h-11 items-center" htmlFor={`original-${row.id}`}>
+                    <FieldLabel className="min-h-11 items-center" htmlFor={`${fieldId}-original`}>
                       {m.recipe_original({}, o)}
                     </FieldLabel>
                   </Field>
@@ -786,45 +905,61 @@ function RecipeFieldLive({
               )}
             </>
           ) : definition.datatype === 'wikibase-item' ? (
-            <EntityPicker
-              disabled={frozen}
-              label={label}
-              value={
-                picked.length
-                  ? picked
-                  : row.statement.value.type === 'value' &&
-                      typeof row.statement.value.content === 'string' &&
-                      row.statement.value.content
-                    ? [
-                        {
-                          id: row.statement.value.content,
-                          title:
-                            pickText(read.public?.related[row.statement.value.content]?.labels ?? {}, locale).text ||
-                            m.subject_value_unlabelled({}, o),
-                          types: [],
-                          typeLabel: '',
-                          cover: null,
-                        },
-                      ]
-                    : []
-              }
-              search={async (text, signal) =>
-                (await search(text, signal)).filter((entry) =>
-                  entry.types.some((type) => recipeTarget(read.release, property, type)),
-                )
-              }
-              src={coverSrc}
-              onValueChange={(items) => {
-                setPicked(items);
-                onChange(
-                  { ...row.statement, value: { type: 'value', content: items[0]?.id ?? '' } },
-                  { picked: items },
-                );
-              }}
-            />
+            <div
+              id={`${fieldId}-entity`}
+              role="group"
+              tabIndex={-1}
+              aria-label={label}
+              {...recipeInvalid(corrections, `${fieldId}-entity`)}
+            >
+              <EntityPicker
+                disabled={frozen}
+                label={label}
+                value={
+                  picked.length
+                    ? picked
+                    : row.statement.value.type === 'value' &&
+                        typeof row.statement.value.content === 'string' &&
+                        row.statement.value.content
+                      ? [
+                          {
+                            id: row.statement.value.content,
+                            title:
+                              pickText(read.public?.related[row.statement.value.content]?.labels ?? {}, locale).text ||
+                              m.subject_value_unlabelled({}, o),
+                            types: [],
+                            typeLabel: '',
+                            cover: null,
+                          },
+                        ]
+                      : []
+                }
+                search={async (text, signal) =>
+                  (await search(text, signal)).filter((entry) =>
+                    entry.types.some((type) => recipeTarget(read.release, property, type)),
+                  )
+                }
+                src={coverSrc}
+                onValueChange={(items) => {
+                  clearCorrection(`${fieldId}-entity`);
+                  setPicked(items);
+                  onChange(
+                    { ...row.statement, value: { type: 'value', content: items[0]?.id ?? '' } },
+                    { picked: items },
+                  );
+                }}
+              />
+            </div>
           ) : (
             <ScalarControl
               part={row.statement}
+              feedback={{
+                id: fieldId,
+                address: 'fact',
+                errors: corrections
+                  .filter((error) => !!error.target)
+                  .map((error) => ({ ...error, target: error.target! })),
+              }}
               definition={definition}
               read={{ release: read.release, public: { related: read.public?.related ?? {} } }}
               locale={locale}
@@ -836,6 +971,7 @@ function RecipeFieldLive({
             <Input
               className={recipeInputClassName}
               id={`citation-${row.id}`}
+              {...recipeInvalid(corrections, `citation-${row.id}`)}
               type="url"
               value={citation}
               onChange={(event) => {

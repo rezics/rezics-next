@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
 
-// Authored UNRUN. One actual-component campaign using the existing generated-client fixture.
+// One actual-component campaign using the existing generated-client fixture.
 // DOM interaction is not layout, native authorization, private SSR or backend growth proof.
 test('Recipe creation and current correction share complete frames with independent native controls and exact recovery', async () => {
   const { Window } = await import(
@@ -88,7 +88,7 @@ test('Recipe creation and current correction share complete frames with independ
     return [...scope.querySelectorAll<HTMLElement>('section')].at(-1)!;
   };
   const section = (scope: HTMLElement, name: string, last = false) => {
-    const headings = within(scope).getAllByRole('heading', { name, level: 2 });
+    const headings = within(scope).getAllByRole('heading', { name: name.replace(/\s+/g, ' ').trim(), level: 2 });
     return (last ? headings.at(-1)! : headings[0]!).closest('section')!;
   };
   const articles = () => [...host.querySelectorAll<HTMLElement>('article')];
@@ -378,6 +378,12 @@ test('Recipe creation and current correction share complete frames with independ
     await click(a, m.recipe_title());
     await until(() => a.textContent!.includes(m.catalogue_create_invalid()));
     expect(posts(creation, '/subjects')).toHaveLength(0); // Original consent is required before native submission.
+    const originalDeclaration = within(methodA).getByRole('checkbox', { name: m.recipe_original() });
+    expect(originalDeclaration.getAttribute('aria-invalid')).toBe('true');
+    expect(window.document.activeElement).toBe(originalDeclaration);
+    expect(
+      window.document.getElementById(originalDeclaration.getAttribute('aria-describedby')!)?.textContent,
+    ).toContain(m.recipe_original());
     await act(async () => user.click(within(methodA).getByRole('checkbox', { name: m.recipe_original() })));
     await replace(input(methodA, m.relation_citation()), longCitation);
     await click(a, m.recipe_title());
@@ -443,17 +449,152 @@ test('Recipe creation and current correction share complete frames with independ
     expect(host.contains(methodB)).toBe(false);
     expect(rereadDraft.textContent).toContain(m.correction_proposed());
 
-    // Supplied-data growth only: the native multivalued ingredient schema admits 1/8/64.
+    // Invalid multilingual creation corrects real validator addresses without rebuilding any other draft.
+    const invalid = recipeFixture();
+    const { validateRecipe } = await import('../src/features/catalogue/recipe-editor');
+    const commands: Parameters<typeof invalid.transport.create>[0][] = [];
+    let server: 'field' | 'unknown' | 'ready' = 'field';
+    await show(
+      <RecipeEditor
+        key="validation"
+        locale="en"
+        session="signed-in"
+        search={search}
+        transport={{
+          ...invalid.transport,
+          create: async (command) => {
+            commands.push(structuredClone(command));
+            if (server === 'unknown')
+              return { ok: false, reason: 'invalid', errors: [{ pointer: '/future/field', code: 'unsupported' }] };
+            if (server === 'field') {
+              const rejected = structuredClone(command.item);
+              rejected.statements[ingredient]![1]!.value = { type: 'value', content: { language: 'en', text: '' } };
+              return { ok: false, reason: 'invalid', errors: validateRecipe(invalid.release, rejected, 'en') };
+            }
+            return invalid.transport.create(command);
+          },
+        }}
+      />,
+    );
+    await until(() => !!host.querySelector('select'));
+    await replace(input(host, m.catalogue_create_label()), 'Soup');
+    await replace(input(host, m.catalogue_create_description()), 'Keep the description');
+    await replace(input(host, m.catalogue_create_aliases()), 'Soup\nSoup');
+    await click(host, m.catalogue_create_add_language());
+    const termRows = () => [...host.querySelectorAll<HTMLElement>('fieldset[id]')];
+    await replace(input(termRows()[1]!, m.catalogue_create_language()), 'en');
+    await replace(input(termRows()[1]!, m.catalogue_create_label()), 'スープ');
+    const first = await add(host, ingredient);
+    const second = await add(host, ingredient);
+    for (const [scope, value] of [
+      [first, '200 g lentils'],
+      [second, '400 ml water'],
+    ] as const) {
+      await replace(input(scope, m.correction_value()), value);
+      await replace(input(scope, m.correction_language()), 'en');
+    }
+    const instructions = await add(host, 'schema:recipeInstructions');
+    await click(instructions, m.recipe_replace_method());
+    await replace(input(instructions, m.catalogue_create_language()), '??');
+    await replace(input(instructions, m.subject_source_licence()), 'Not-an-SPDX-licence');
+    await click(host, m.recipe_title());
+    expect(commands).toHaveLength(0);
+    const duplicateLanguage = input(termRows()[1]!, m.catalogue_create_language());
+    expect(window.document.activeElement).toBe(duplicateLanguage);
+    const go = async (control: HTMLElement) => {
+      const description = control.getAttribute('aria-describedby')!;
+      expect(control.getAttribute('aria-invalid')).toBe('true');
+      const error = window.document.getElementById(description.split(' ')[0]!)! as unknown as HTMLElement;
+      expect(error).not.toBeNull();
+      await act(async () => user.click(within(error).getByRole('link')));
+      expect(window.document.activeElement).toBe(
+        control.matches('[role="group"]') ? control.querySelector('[contenteditable="true"]') : control,
+      );
+    };
+    await go(duplicateLanguage);
+    await replace(duplicateLanguage, 'ja');
+    expect(duplicateLanguage.hasAttribute('aria-invalid')).toBe(false);
+    const aliases = input(termRows()[0]!, m.catalogue_create_aliases());
+    await go(aliases);
+    await replace(aliases, 'Lentil soup');
+    const language = input(instructions, m.catalogue_create_language());
+    const licence = input(instructions, m.subject_source_licence());
+    const declaration = within(instructions).getByRole('checkbox', { name: m.recipe_original() });
+    await go(language);
+    await replace(language, 'en');
+    expect(licence.getAttribute('aria-invalid')).toBe('true');
+    await go(licence);
+    await replace(licence, 'CC-BY-4.0');
+    await go(declaration);
+    await act(async () => user.click(declaration));
+    // Empty instructions have their own destination, separate from the original declaration.
+    const editor = instructions.querySelector<HTMLElement>('[contenteditable="true"]')!;
+    const writeMethod = async (text: string) =>
+      act(async () => {
+        editor.innerHTML = `<p>${text}</p>`;
+        editor.dispatchEvent(new window.InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        editor.dispatchEvent(new window.FocusEvent('blur'));
+      });
+    await click(host, m.recipe_title());
+    const documentGroup = instructions.querySelector<HTMLElement>('[role="group"][aria-invalid="true"]')!;
+    await go(documentGroup);
+    await writeMethod('Retain every word of my original instructions.');
+    expect(declaration.getAttribute('aria-checked')).toBe('true');
+    await click(host, m.recipe_title());
+    await until(
+      () => commands.length === 1 && input(second, m.correction_value()).getAttribute('aria-invalid') === 'true',
+    );
+    expect(window.document.activeElement).toBe(input(second, m.correction_value()));
+    expect(input(first, m.correction_value()).hasAttribute('aria-invalid')).toBe(false);
+    await go(input(second, m.correction_value()));
+    // Removing an earlier grouped row must never retarget the rejected second ingredient.
+    await click(first, m.recipe_remove_field());
+    await go(input(second, m.correction_value()));
+    await replace(input(second, m.correction_value()), '450 ml water');
+    expect(host.querySelector('[aria-invalid="true"]')).toBeNull();
+    server = 'unknown';
+    await click(host, m.recipe_title());
+    await until(() => commands.length === 2 && !!host.querySelector('[role="alert"]'));
+    const fallback = host.querySelector<HTMLElement>('[role="alert"]')!;
+    expect(fallback.querySelector('a')).toBeNull();
+    expect(fallback.textContent).toContain(m.correction_error_uneditable());
+    expect(fallback.textContent).not.toContain('/future/field');
+    expect(commands[1]!.item).toEqual({
+      ...commands[0]!.item,
+      statements: {
+        ...commands[0]!.item.statements,
+        [ingredient]: [
+          {
+            ...commands[0]!.item.statements[ingredient]![1]!,
+            value: { type: 'value', content: { language: 'en', text: '450 ml water' } },
+          },
+        ],
+      },
+    });
+    expect(commands[1]!.key).not.toBe(commands[0]!.key);
+    expect(commands[1]!.item).toMatchObject({
+      labels: { en: 'Soup', ja: 'スープ' },
+      descriptions: { en: 'Keep the description' },
+      aliases: { en: ['Lentil soup'] },
+    });
+    expect(editor.textContent).toContain('Retain every word');
+    server = 'ready';
+    await click(host, m.recipe_title());
+    await until(() => host.textContent!.includes(m.recipe_created()));
+
+    // Supplied reading growth only: creation input has a separate per-property limit.
     // No backend population/cost claim follows from these fixture/DOM witnesses.
     for (const count of [1, 8, 64]) {
       const fixture = recipeFixture();
       const supplied = recipeExample();
-      const entry = supplied.statements[ingredient]![0]!;
-      supplied.statements[ingredient] = Array.from({ length: count }, (_, index) => ({
+      expect((await fixture.transport.create({ item: supplied, key: crypto.randomUUID() })).ok).toBe(true);
+      const entry = fixture.publicRead.subject.statements[ingredient]![0]!;
+      fixture.publicRead.subject.statements[ingredient] = Array.from({ length: count }, (_, index) => ({
         ...structuredClone(entry),
+        id: crypto.randomUUID(),
         value: { type: 'value', content: { language: 'en', text: `${index}: ${longValue}` } },
       }));
-      expect((await fixture.transport.create({ item: supplied, key: crypto.randomUUID() })).ok).toBe(true);
       const before = fixture.calls.length;
       const read = await fixture.corrections.load();
       if (!read.ok || !read.public) throw new Error('Expected supplied correction reading');
