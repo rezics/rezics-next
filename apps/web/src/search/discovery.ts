@@ -181,10 +181,27 @@ function validKinds(value: DiscoveryKinds): boolean {
   );
 }
 
-/** Legacy decoding is explicit and never synthesizes mixed identities or registry metadata. */
+/**
+ * Preserve native order and nullable summaries. Incoherent evidence or repeated rendered keys
+ * make the whole legacy page unavailable without synthesizing or fetching replacement rows.
+ */
 export function parseLegacySearchPage(value: unknown): LegacySearchPage | undefined {
   const parsed = v.safeParse(legacyPage, value);
-  return parsed.success ? parsed.output : undefined;
+  if (!parsed.success) return;
+
+  const identities = new Set<string>();
+  for (const { id, type, summary } of parsed.output.subjects) {
+    if (summary !== null && (summary.id !== id || summary.type !== type)) {
+      return;
+    }
+
+    const identity = `${type}:${id}`;
+    if (identities.has(identity)) {
+      return;
+    }
+    identities.add(identity);
+  }
+  return parsed.output;
 }
 
 function problemCode(error: unknown): string | undefined {
