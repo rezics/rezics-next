@@ -2,7 +2,11 @@ import { expect, test } from 'bun:test';
 import { PROFILE_FORMAT, profileDigest, resolveTemplate, type PresentationProfile } from '@rezics/composition';
 import type { CurationRead } from '../src/features/pages/curate-actions';
 import { removeKeyedTemplate } from '../src/features/pages/curation-template-removal';
-import { discardPresentationDraft, presentationDraft, selectTemplate } from '../src/features/pages/curate-view-editor-state';
+import {
+  discardPresentationDraft,
+  presentationDraft,
+  selectTemplate,
+} from '../src/features/pages/curate-view-editor-state';
 
 test('removing one keyed template changes only the draft entry and falls back to the existing base', () => {
   const empty = { root: { props: {} }, content: [] };
@@ -10,7 +14,10 @@ test('removing one keyed template changes only the draft entry and falls back to
     format: PROFILE_FORMAT,
     generic: { document: empty },
     bases: [{ base: 'schema:CreativeWork', document: empty }],
-    types: [{ type: 'schema:Book', document: empty }, { type: 'schema:Movie', document: empty }],
+    types: [
+      { type: 'schema:Book', document: empty },
+      { type: 'schema:Movie', document: empty },
+    ],
     routes: [{ route: '/help', document: empty }],
   };
   const saved: Extract<CurationRead, { ok: true }> = {

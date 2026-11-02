@@ -781,8 +781,7 @@ function AdmittedPresentationViewEditor({
 
   const { profile, selection, editors, saved } = draft;
   const templates = profileTemplates(profile);
-  const removableTemplate: KeyedTemplate | null =
-    selection.template.scope === 'generic' ? null : selection.template;
+  const removableTemplate: KeyedTemplate | null = selection.template.scope === 'generic' ? null : selection.template;
   const views = templateViewNames(profile, selection.template);
   const document = viewOf(profile, selection.template, selection.view)!;
   const editorKey = selectionKey(selection);
