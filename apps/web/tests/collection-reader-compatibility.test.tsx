@@ -635,9 +635,7 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
       });
     }
     expect(isBoardPageResultCurrent(transitionClient, transitionResult, inputForBoard('session'))).toBe(false);
-    expect(transitionClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] })).toEqual(
-      [],
-    );
+    expect(transitionClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] })).toEqual([]);
   }
 
   const observerRealmsClient = clientFor();
@@ -850,9 +848,9 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
     pendingValidationClient.setQueryData(sessionQuery.queryKey, sessionValue());
     validationReleased.resolve(expectedDigest);
     await expect(pendingValidation).rejects.toThrow();
-    expect(pendingValidationClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] })).toEqual(
-      [],
-    );
+    expect(
+      pendingValidationClient.getQueryCache().findAll({ queryKey: ['board-page', boardRecording.board.id] }),
+    ).toEqual([]);
     for (const id of originalThreadIds) expect(rememberedThreadSlug(id)).toBeUndefined();
   } finally {
     validationReleased.resolve(expectedDigest);
