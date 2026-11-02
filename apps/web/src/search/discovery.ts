@@ -1,5 +1,6 @@
 import * as v from 'valibot';
 import type { KernelClient } from '@rezics/client';
+import { GLOBAL, PUBLIC_RATING_SCALE, QUESTION } from '../features/pages/subject-ratings';
 import { readSearchPage } from './search-request';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 
@@ -61,14 +62,24 @@ const fact: v.GenericSchema<NonNullable<NativeHit['facts']>[string][number]> = v
   v.object({ kind: v.literal('quantity'), amount: v.pipe(v.number(), v.finite()), unit: v.string() }),
   v.object({ kind: v.literal('code'), value: v.string() }),
 ]);
-const figure: v.GenericSchema<NativeHit['figure']> = v.object({
-  questionId: v.string(),
-  populationId: v.string(),
-  scale: v.object({ min: v.number(), max: v.number(), displayStep: v.number() }),
+const displayRating = v.pipe(
+  v.number(),
+  v.finite(),
+  v.minValue(PUBLIC_RATING_SCALE.min),
+  v.maxValue(PUBLIC_RATING_SCALE.max),
+);
+const figure: v.GenericSchema<NativeHit['figure']> = v.strictObject({
+  questionId: v.literal(QUESTION),
+  populationId: v.literal(GLOBAL),
+  scale: v.strictObject({
+    min: v.pipe(v.number(), v.integer()),
+    max: v.pipe(v.number(), v.integer()),
+    displayStep: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  }),
   count: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(Number.MAX_SAFE_INTEGER)),
   state: v.picklist(['ready', 'insufficient_data', 'updating']),
-  mean: v.nullable(v.pipe(v.number(), v.finite())),
-  score: v.nullable(v.pipe(v.number(), v.finite())),
+  mean: v.nullable(displayRating),
+  score: v.nullable(displayRating),
 });
 const catalogueFields = {
   labels: v.exactOptional(textMap),
