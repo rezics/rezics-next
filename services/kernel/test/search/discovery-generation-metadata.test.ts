@@ -13,7 +13,7 @@ import { SearchUnavailableError } from '../../src/search/opensearch.ts';
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the check database');
 
-const registry = { entries: [{ kind: 'account' }] } as DiscoveryRegistry;
+const registry = { entries: [{ kind: 'account' }] } as unknown as DiscoveryRegistry;
 type Plan = {
   'Node Type'?: string;
   'Index Name'?: string;
@@ -82,7 +82,7 @@ test('discovery allocation admits a keyed high water and bounded live inventory 
         );
         expect(scans.length).toBeGreaterThan(0);
         for (const scan of scans) {
-          expect(['Index Scan', 'Index Only Scan']).toContain(scan['Node Type']);
+          expect(['Index Scan', 'Index Only Scan']).toContain(scan['Node Type'] ?? '');
           expect(scan['Index Name']).toBe(index);
           expect(String(scan['Index Cond'])).toContain('prefix');
           expect(Number(scan['Actual Rows'])).toBe(rows);
