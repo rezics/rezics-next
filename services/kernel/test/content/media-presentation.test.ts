@@ -103,6 +103,60 @@ test('presentation input and page are closed, bounded and reject transport field
   );
 });
 
+test('a claimed post withdrawing admission retires its image while the reservation thread stays public', async () => {
+  const image = fixture.globalImage;
+  const route = routeOf(image.id)!;
+  const owner = (
+    await fixture.db.admin.query('SELECT claimed_item_id FROM content.media WHERE route=$1 AND media_id=$2', [
+      route,
+      image.id,
+    ])
+  ).rows[0]!.claimed_item_id;
+  expect(owner).toBeString();
+  const before = images((await page([image.id], null)).value)[0]!;
+  const slot = before.variants[0]!;
+  try {
+    await fixture.db.admin.query(
+      "UPDATE content.post SET visibility='protected',security_revision=security_revision+1 WHERE route=$1 AND post_id=$2",
+      [route, owner],
+    );
+    expect((await page([image.id], null)).value).toEqual({ images: [] });
+    expect(
+      (await fixture.download(image.id, `${slot.format}-${slot.width}`, null, { 'if-none-match': `"${image.sha256}"` }))
+        .response.status,
+    ).toBe(404);
+    expect(images((await page([fixture.publicRealmImage.id], fixture.bob.bearer)).value)).toHaveLength(1);
+  } finally {
+    await fixture.db.admin.query(
+      "UPDATE content.post SET visibility='published',security_revision=security_revision+1 WHERE route=$1 AND post_id=$2",
+      [route, owner],
+    );
+  }
+  expect(images((await page([image.id], null)).value)).toHaveLength(1);
+});
+
+test('a collection withdraws an early admitted image when Realm access is lost during later selection', async () => {
+  const { privateImage, globalImage, alice, protectedRealm } = fixture;
+  const observer = observeSql(fixture.db.pool);
+  const barrier = observer.hold({ statement: candidates.sql, occurrence: 2 }, 'after');
+  const pending = page([privateImage.id, globalImage.id], alice.bearer);
+  try {
+    await barrier.entered;
+    await fixture.revoke(protectedRealm.realmId, alice.accountId, ['realm:read']);
+    barrier.release();
+    expect(images((await pending).value).map((image) => image.id)).toEqual([globalImage.id]);
+    const slot = privateImage.variants[0]!;
+    expect(
+      (await fixture.download(privateImage.id, `${slot.format}-${slot.width}`, alice.bearer)).response.status,
+    ).toBe(404);
+  } finally {
+    barrier.release();
+    await pending;
+    await observer.close();
+    await fixture.grant(alice.accountId, protectedRealm.realmId, ['realm:read']);
+  }
+});
+
 test('native final derivative changes withhold without refill and typed unavailability stays an error', async () => {
   const image = fixture.globalImage;
   const observer = observeSql(fixture.db.pool);

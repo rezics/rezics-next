@@ -8,7 +8,7 @@ WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :media_id::uuid AS media_id,
          :format::text AS format, :width::integer AS width
 )
-SELECT m.media_id, m.container_id, m.uploader_id, m.purpose, m.state, m.claimed_at::text,
+SELECT m.media_id, m.container_id, m.claimed_item_id, m.uploader_id, m.purpose, m.state, m.claimed_at::text,
        m.key, m.sha256, m.media_type, m.actual_byte_count, m.erased, m.collection_pending,
        m.taken_down, m.security_revision::text, m.provenance,
        COALESCE(m.crop[3], m.width) AS width, COALESCE(m.crop[4], m.height) AS height,

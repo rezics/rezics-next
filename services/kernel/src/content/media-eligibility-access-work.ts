@@ -156,6 +156,7 @@ function mediaWork(plan: MediaPlan): AccessWork {
   } else {
     projection = {
       ...mediaProjection,
+      claimed_item_id: uuid,
       key: `m/${uuid}/original`,
       media_type: 'image/jpeg',
       actual_byte_count: '9'.repeat(19),

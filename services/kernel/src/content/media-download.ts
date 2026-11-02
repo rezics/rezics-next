@@ -72,6 +72,27 @@ async function point(
 const signature = (value: unknown) => JSON.stringify(value);
 const usable = (row: Row) => !row.erased && !row.collection_pending && !row.taken_down;
 
+/** A permanent post claim inherits that post's current disclosure chain, rather
+ * than only the thread or reply parent used to reserve the image. Historical
+ * reservations without an item binding retain their container prerequisite.
+ * A moved claim cannot silently switch the reservation's native relationship.
+ */
+async function disclosureChain(
+  client: AccessClient,
+  row: Row,
+  readParent?: Parameters<typeof mediaParentChain>[2],
+): Promise<MediaParent[]> {
+  const owner = row.claimed_item_id ?? row.container_id;
+  if (routeOf(owner) !== routeOf(row.container_id)) throw new GrantDeniedError();
+  const chain = await mediaParentChain(client, owner, readParent);
+  if (
+    (row.claimed_item_id !== null && chain[0]?.kind !== 'post') ||
+    !chain.some((parent) => parent.id === row.container_id)
+  )
+    throw new GrantDeniedError();
+  return chain;
+}
+
 function realmSignature(value: RealmView | RealmHeadRow): string {
   const realm =
     'realm_id' in value
@@ -356,7 +377,7 @@ async function authorizeDownload(
       });
     }
     if (initial.purpose !== 'post-image') return null;
-    const chain = await snapshot(r, (client) => mediaParentChain(client, initial.container_id));
+    const chain = await snapshot(r, (client) => disclosureChain(client, initial));
     const boardId = chain.at(-1)?.board_id;
     if (!boardId) return null;
     const board = await snapshot(route(boardId), (client) => mediaParentBoard(client, boardId));
@@ -468,7 +489,7 @@ async function authorizeDownload(
               );
               if (!current || !usable(current) || signature(current) !== signature(initial))
                 throw new GrantDeniedError();
-              const currentChain = await mediaParentChain(client, current.container_id, (input) =>
+              const currentChain = await disclosureChain(client, current, (input) =>
                 reads.ancestor(input, () => parent.run(client, input)),
               );
               if (signature(currentChain) !== signature(chain)) throw new GrantDeniedError();
@@ -489,7 +510,7 @@ async function authorizeDownload(
     const currentMedia = await snapshot(r, async (client) => {
       const current = await point(client, mediaId, slot);
       if (!current || !usable(current) || signature(current) !== signature(initial)) return null;
-      const currentChain = await mediaParentChain(client, current.container_id);
+      const currentChain = await disclosureChain(client, current);
       if (signature(currentChain) !== signature(chain)) return null;
       for (const check of checks) if (!(await check(client))) return null;
       if (!(await mediaCheck(client))) return null;

@@ -949,6 +949,21 @@ Cost per operation:
 
 ## Media claims
 
+Post-image download and document media presentation inherit the permanent
+`claimed_item_id` post's current disclosure chain, including its reservation
+container, board and Realm. A claim must still belong to that container's chain;
+its current post admission cannot be replaced by the reservation thread's public
+visibility. Reservations without an item binding keep their container prerequisite.
+The exact item binding is included in source/final media signatures and the bounded
+Access work projection. No membership, grant or claim producer is duplicated.
+
+Document media pages recheck their selected exact media and current parent/Realm
+admission after selection, omitting withdrawn members without refill. Each page
+still accepts at most 32 IDs and each chain at most 33 posts plus its thread;
+the second round adds O(ids × H) indexed point work and scans no unrelated media.
+The page and download routes retain their existing cache policy and read authority;
+Realm participation is not substituted for Realm reading.
+
 A post image belongs to the first post that claims it; that post's later revisions may name it again, any other reference is `media_unavailable`, and erasing the post erases it.
 
 A malformed media ID list is a 400 `invalid_request`. Any well-formed reference that cannot be claimed returns the same 409 `media_unavailable` response, whether its ID is unknown, belongs to another route, container or uploader, or its media is reserved, uploaded, rejected, erased or claimed by another post. This response does not identify which case applied; uploaders can read their own media state through the media routes. A 422 `idempotency_conflict` is reserved for reusing an idempotency key with a different request.

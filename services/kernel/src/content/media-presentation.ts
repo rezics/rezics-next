@@ -76,8 +76,8 @@ export async function readDocumentMediaPresentations(
     ids.some((id) => id.length !== 36 || routeOf(id) === null)
   )
     throw new RangeError('Expected one to thirty-two unique routed media IDs');
-  const images: DocumentImagePresentation[] = [];
-  if (!Number.isFinite(context.deadline) || Date.now() >= context.deadline) return { images };
+  const selected: { row: Row; variant: Parameters<typeof authorizeMediaDerivative>[3] }[] = [];
+  if (!Number.isFinite(context.deadline) || Date.now() >= context.deadline) return { images: [] };
   for (const id of ids) {
     let rows: Row[];
     try {
@@ -92,18 +92,19 @@ export async function readDocumentMediaPresentations(
     // refill when the selected derivative or any native security anchor changes.
     const before = rows.find((row) => presentation(row) !== null);
     if (!before) continue;
-    const current = await authorizeMediaDerivative(
-      deps,
-      id,
-      actor,
-      `${before.variant_format as 'avif' | 'webp'}-${before.variant_width!}`,
-      context,
-      before,
-    );
-    if (current) {
-      const image = presentation(current);
-      if (image) images.push(image);
-    }
+    const variant = `${before.variant_format as 'avif' | 'webp'}-${before.variant_width!}` as const;
+    const current = await authorizeMediaDerivative(deps, id, actor, variant, context, before);
+    if (current) selected.push({ row: current, variant });
+  }
+  // An early successful member is not permission for the completed collection.
+  // Repeat current parent/Realm/media disclosure after selection has finished,
+  // pinned to the exact selected row and slot. O(ids * H) point work, no refill,
+  // history enumeration, persisted permission or unrelated media scan.
+  const images: DocumentImagePresentation[] = [];
+  for (const { row, variant } of selected) {
+    const current = await authorizeMediaDerivative(deps, row.media_id, actor, variant, context, row);
+    const image = current && presentation(current);
+    if (image) images.push(image);
   }
   return Date.now() >= context.deadline ? { images: [] } : { images };
 }
