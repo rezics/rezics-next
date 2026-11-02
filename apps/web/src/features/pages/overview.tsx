@@ -35,6 +35,7 @@ import { listView, readerViewLabel } from './views';
 import { RelationStream } from './relation-stream';
 import { qualifiedNotes, type QualifiedNote } from './qualified-relations';
 import { relationPreviewCount } from './subject-relations-preview';
+import { relationItemRows } from './relation-item-identity';
 import {
   bestRank,
   ExternalValue,
@@ -401,14 +402,15 @@ export function holderItems(
   locale = 'en',
   readerLevel = 0,
 ): { items: Item[]; count?: Count; more: boolean } | undefined {
-  if (!Array.isArray(body.links)) return;
-  const links = body.links.filter(isRecord).slice(0, limit);
+  const rows = relationItemRows(body.links, 'links');
+  if (!rows) return;
+  const links = rows.slice(0, limit);
   const count = isRecord(body.count) ? body.count : undefined;
   const items = links.flatMap((link): Item[] =>
     typeof link.subject === 'string' && link.summary !== null
       ? [
           {
-            id: isRecord(link.summary) && typeof link.summary.id === 'string' ? link.summary.id : link.subject,
+            id: link.subject,
             label: { text: typeof link.label === 'string' ? link.label : '', lang: undefined },
             ...(isRecord(link.summary) ? { summary: link.summary as unknown as SubjectSummary } : {}),
             ...(typeof link.type === 'string' ? { type: link.type } : {}),
@@ -434,12 +436,12 @@ export function holderItems(
   );
   const total = countFromLinks(
     typeof count?.value === 'number' ? { value: count.value, exact: count.exact === true } : undefined,
-    body.links.length,
+    rows.length,
   );
   return {
     items,
     ...(total ? { count: total } : {}),
-    more: hasMore(total, items.length) || body.next != null || body.links.length > items.length,
+    more: hasMore(total, items.length) || body.next != null || rows.length > items.length,
   };
 }
 
@@ -465,27 +467,26 @@ export function statementItems(
   limit: number,
   value: OverviewValue,
 ): { items: Item[]; count: Count | undefined; more?: boolean } | undefined {
-  if (section?.ok && section.read.kind === 'relations' && Array.isArray(section.body.relations)) {
-    const items = section.body.relations
-      .filter(isRecord)
-      .slice(0, limit)
-      .flatMap((row): Item[] => {
-        if (typeof row.target !== 'string' || !isRecord(row.statement) || !isRecord(row.summary)) return [];
-        const statement = row.statement;
+  if (section?.ok && section.read.kind === 'relations') {
+    const rows = relationItemRows(section.body.relations, 'relations');
+    if (!rows) return;
+    const items = rows.slice(0, limit).flatMap((row): Item[] => {
+      if (typeof row.target !== 'string' || !isRecord(row.statement) || !isRecord(row.summary)) return [];
+      const statement = row.statement;
 
-        return [
-          {
-            id: typeof row.summary.id === 'string' ? row.summary.id : row.target,
-            label: { text: typeof row.label === 'string' ? row.label : '', lang: undefined },
-            ...(typeof row.type === 'string' ? { type: row.type } : {}),
-            statement: typeof statement.id === 'string' ? statement.id : undefined,
-            ...(isRecord(row.summary) ? { summary: row.summary as unknown as SubjectSummary } : {}),
-            notes: [],
-            qualified: qualifiedNotes(statement as unknown as Stmt, row.related, value.locale),
-            gated: spoilerLevel(statement as unknown as Stmt) > value.reader.spoilerLevel,
-          },
-        ];
-      });
+      return [
+        {
+          id: row.target,
+          label: { text: typeof row.label === 'string' ? row.label : '', lang: undefined },
+          ...(typeof row.type === 'string' ? { type: row.type } : {}),
+          statement: typeof statement.id === 'string' ? statement.id : undefined,
+          ...(isRecord(row.summary) ? { summary: row.summary as unknown as SubjectSummary } : {}),
+          notes: [],
+          qualified: qualifiedNotes(statement as unknown as Stmt, row.related, value.locale),
+          gated: spoilerLevel(statement as unknown as Stmt) > value.reader.spoilerLevel,
+        },
+      ];
+    });
     const count =
       isRecord(section.body.count) && typeof section.body.count.value === 'number'
         ? countFromLinks({ value: section.body.count.value, exact: section.body.count.exact === true }, items.length)
@@ -493,8 +494,7 @@ export function statementItems(
     return {
       items,
       count,
-      more:
-        hasMore(count, items.length) || typeof section.body.next === 'string' || section.body.relations.length > limit,
+      more: hasMore(count, items.length) || typeof section.body.next === 'string' || rows.length > limit,
     };
   }
   const read = subjectRead(section);

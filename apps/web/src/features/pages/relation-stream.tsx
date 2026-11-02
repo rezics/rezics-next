@@ -172,9 +172,12 @@ export function relationStreamItems(section: Section, value: OverviewValue, limi
     : statementItems(section, section.read.kind === 'relations' ? section.read.property : undefined, limit, value);
 }
 
-function windowItems(section: Section | undefined, value: OverviewValue): Item[] {
+function windowItems(section: Section | undefined, value: OverviewValue): Item[] | undefined {
+  if (!section?.ok) return;
+  const decoded = relationStreamItems(section, value);
+  if (!decoded) return;
   const unique = new Map<string, Item>();
-  for (const item of section ? (relationStreamItems(section, value)?.items ?? []) : []) {
+  for (const item of decoded.items) {
     const identity = item.statement ?? item.id;
     if (!unique.has(identity)) unique.set(identity, item);
   }
@@ -343,9 +346,11 @@ function StreamState({
       actualReading?.admitted === true);
   const readerUnavailable = owner.expectedReader !== null && !currentSession;
   const visiblePage = currentSession ? page : undefined;
+  const decodedItems = windowItems(visiblePage, value);
+  const malformedPage = visiblePage?.ok && decodedItems === undefined;
   const stopped = currentSession ? progress.stopped : undefined;
   const visiblePending = currentSession && pending;
-  const visibleError = currentSession ? error : undefined;
+  const visibleError = currentSession ? (error ?? (malformedPage ? {} : undefined)) : undefined;
   const visibleCompletion = currentSession ? completion : undefined;
 
   useLayoutEffect(() => {
@@ -427,8 +432,8 @@ function StreamState({
       end.current?.focus({ preventScroll: true });
   }, [owner, readingGeneration, visibleCompletion]);
 
-  const cursor = !stopped && visiblePage?.ok ? relationCursor(visiblePage.body) : undefined;
-  const items = windowItems(visiblePage, value);
+  const cursor = !stopped && !malformedPage && visiblePage?.ok ? relationCursor(visiblePage.body) : undefined;
+  const items = decodedItems ?? [];
   const continuationEnabled = owner.expectedReader === null || (currentSession && owner.matches(readingGeneration));
   const currentView = isView(view) ? view : 'relations';
   const base = value.subject
@@ -492,10 +497,11 @@ function StreamState({
         },
       });
       if (!owner.current(generation)) return;
-      const next: Section =
+      let next: Section =
         result.ok && (!section.ok || !sameRelationStream(section.read, result.read))
           ? { ok: false, status: 409 }
           : result;
+      if (next.ok && !windowItems(next, value)) next = { ok: false };
       if (next.ok && owner.expectedReader !== null) {
         const nextObjects = privateReadingObjects(next);
         if (!claimPrivateReading(nextObjects, owner)) {
@@ -517,7 +523,7 @@ function StreamState({
           error: next.ok ? undefined : { status: next.status },
           completion: next.ok
             ? {
-                count: windowItems(next, value).length,
+                count: windowItems(next, value)!.length,
                 terminal: !nextCursor || !!nextProgress.stopped,
                 trigger: focusTrigger,
               }
