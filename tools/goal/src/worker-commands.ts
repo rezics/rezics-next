@@ -16,6 +16,7 @@ import { devVerificationState } from './dev-verifier.ts';
 import { retryWait } from './watchdog.ts';
 import { authenticatedCallingManager } from './integration-cli.ts';
 import { authenticatedManager } from './priority-authority.ts';
+import { listOpenToolIncidents, toolIncidentForRetry } from './tool-incidents.ts';
 
 export type WorkerCommandOptions = {
   runtime?: Runtime;
@@ -84,8 +85,18 @@ export async function runWorkerCommand(
         const intent = task.currentAttempt
           ? store.retryIntent({ taskId: task.id, attempt: task.currentAttempt })
           : undefined;
+        const incident = task.currentAttempt
+          ? toolIncidentForRetry(store, { taskId: task.id, attempt: task.currentAttempt })
+          : null;
         const wait =
-          intent?.status === 'pending'
+          incident
+            ? {
+                reason: 'environment-incident',
+                incidentId: incident.id,
+                nextProbeAt: incident.nextProbeAt,
+                isProbe: incident.probe.taskId === task.id && incident.probe.attempt === task.currentAttempt,
+              }
+            : intent?.status === 'pending'
             ? (retryWait(intent, task, (id) => store.dependency(id)?.state, Date.now(), settings.stateDirectory) ?? {
                 reason: 'start',
               })
@@ -99,10 +110,11 @@ export async function runWorkerCommand(
         };
       };
       const tasksValue = arg ? show(store.task(arg)) : store.tasks().map(show);
+      const toolIncidents = listOpenToolIncidents(store);
       print(
         JSON.stringify(
           arg
-            ? tasksValue
+            ? { ...tasksValue, toolIncidents }
             : {
                 devVerification: devVerificationState(
                   settings.mainCheckout,
@@ -110,6 +122,7 @@ export async function runWorkerCommand(
                   settings.integrationBranch,
                   store.tasks(),
                 ),
+                toolIncidents,
                 tasks: tasksValue,
               },
           null,

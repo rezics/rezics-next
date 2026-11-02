@@ -94,6 +94,11 @@ CREATE INDEX worker_attempts_state ON worker_attempts(json_extract(body, '$.stat
     sql: `CREATE INDEX worker_tasks_width_current ON worker_tasks(sequence)
       WHERE json_extract(body, '$.state') IN ('ready', 'held', 'running', 'stopped');`,
   },
+  {
+    module: 'worker',
+    version: 9,
+    sql: `CREATE INDEX worker_events_kind_at ON worker_events(kind, at);`,
+  },
   checkResultsMigration(),
   {
     module: 'dev-verifier',
