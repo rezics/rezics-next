@@ -1135,7 +1135,7 @@ function PublicationEditorLive({
                           admission.current.field === field &&
                           !factHolders.current.has(field) &&
                           !!currentProfile?.fields.includes(field),
-                      )
+                      );
                     }}
                   >
                     {m.correction_add({}, o)}
