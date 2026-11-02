@@ -36,7 +36,7 @@ export function LabelNameReader({ name, locale }: { name: string; locale: string
         <span
           ref={textRef}
           id={textId}
-          className={`block min-w-0 whitespace-break-spaces [overflow-wrap:anywhere] ${expanded ? '' : 'line-clamp-2 sm:line-clamp-1'}`}
+          className={`min-w-0 whitespace-break-spaces [overflow-wrap:anywhere] ${expanded ? 'block' : 'line-clamp-2 sm:line-clamp-1'}`}
         >
           {name}
         </span>
