@@ -93,7 +93,7 @@ test('Album qualifier cancellation, stable correction targets, selective removal
       user.type(within(scope).getByRole('combobox', { name: name(property) }), publicRead.related[id]!.labels.en!),
     );
     await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
-    await act(async () => user.click(within(host).getByRole('option')));
+    await act(async () => user.keyboard('{ArrowDown}{Enter}'));
   };
   const remove = (id: string) => `${m.relation_remove()}: ${name(id)}`;
   try {

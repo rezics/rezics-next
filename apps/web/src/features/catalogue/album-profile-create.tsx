@@ -589,6 +589,8 @@ function AlbumInitialField({
       </fieldset>
     );
   const qualifiers = statement.qualifiers ?? [];
+  const qualifierId = (at: number) => row.qualifierIds?.[at] ?? at;
+  const qualifierControlId = (at: number) => `album-row-${row.id}-qualifier-${qualifierId(at)}`;
   const named = (id: string) => pickText(release.properties[id]?.labels ?? {}, locale).text;
   const target = (value: unknown): EntityPickerSubject[] =>
     typeof value === 'string' && value
@@ -658,11 +660,10 @@ function AlbumInitialField({
           )}
           {qualifiers.map((part, at) => {
             const metadata = release.properties[part.property.id];
-            const identity = row.qualifierIds?.[at] ?? at;
-            const controlId = `album-row-${row.id}-qualifier-${identity}`;
+            const identity = qualifierId(at);
             return (
               <div key={identity} className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-                <div id={controlId} tabIndex={-1} className={qualifierClassName}>
+                <div id={qualifierControlId(at)} tabIndex={-1} className={qualifierClassName}>
                   <QualifierInput
                     definition={
                       metadata
@@ -697,7 +698,7 @@ function AlbumInitialField({
                   onRemove={() => change({ ...statement, qualifiers: qualifiers.filter((_, pos) => pos !== at) })}
                   focusId={
                     qualifiers.length > 1
-                      ? `album-row-${row.id}-qualifier-${row.qualifierIds?.[at + 1 < qualifiers.length ? at + 1 : at - 1] ?? (at + 1 < qualifiers.length ? at + 1 : at - 1)}`
+                      ? qualifierControlId(at + 1 < qualifiers.length ? at + 1 : at - 1)
                       : `album-qualifier-${row.id}`
                   }
                 />
