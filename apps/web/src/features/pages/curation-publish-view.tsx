@@ -50,7 +50,7 @@ export function CurationFailureNotice({
                     : m.curation_unavailable()}
         </p>
       )}
-      {failure.phase === 'activate' ? <p>{m.curation_partial()}</p> : null}
+      {'phase' in failure && failure.phase === 'activate' ? <p>{m.curation_partial()}</p> : null}
       {failure.reason === 'rate-limited' && failure.retryAfter !== undefined ? (
         <p>{m.curation_retry_after({ seconds: failure.retryAfter })}</p>
       ) : null}
