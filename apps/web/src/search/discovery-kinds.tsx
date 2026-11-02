@@ -39,13 +39,16 @@ export function DiscoveryKinds({
   const moreButton = useRef<HTMLButtonElement>(null);
   const restartButton = useRef<HTMLButtonElement>(null);
   const recoveryRegion = useRef<HTMLElement>(null);
-  const focusAction = useRef<{
-    source: HTMLButtonElement;
-    document: Document;
-    moved: boolean;
-    complete: boolean;
-    onFocusIn: (event: FocusEvent) => void;
-  } | undefined>(undefined);
+  const focusAction = useRef<
+    | {
+        source: HTMLButtonElement;
+        document: Document;
+        moved: boolean;
+        complete: boolean;
+        onFocusIn: (event: FocusEvent) => void;
+      }
+    | undefined
+  >(undefined);
   function clearFocusAction(action: NonNullable<typeof focusAction.current>) {
     action.document.removeEventListener('focusin', action.onFocusIn, true);
     if (focusAction.current === action) focusAction.current = undefined;
@@ -80,7 +83,7 @@ export function DiscoveryKinds({
     if (action.moved) return;
     const target = action.source.isConnected
       ? action.source
-      : moreButton.current ?? restartButton.current ?? recoveryRegion.current;
+      : (moreButton.current ?? restartButton.current ?? recoveryRegion.current);
     if (target?.isConnected) target.focus();
   });
   const values = refused ? [] : [...initial.values, ...(continuation?.values ?? [])];

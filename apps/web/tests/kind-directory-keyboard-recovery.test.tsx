@@ -52,7 +52,9 @@ async function show(load: Props['load']) {
   await act(async () =>
     root.render(
       <form onSubmit={(event) => event.preventDefault()}>
-        <button type="button" data-move-focus>Other control</button>
+        <button type="button" data-move-focus>
+          Other control
+        </button>
         <DiscoveryKinds
           key="query"
           initial={ready(0, 'cursor-1').kinds}
@@ -113,10 +115,11 @@ test('keyboard focus follows More through a surviving page, final page and local
 
 test('a refusal focuses the named recovery region after removing the directory', async () => {
   let settle!: (value: Loaded) => void;
-  await show(() =>
-    new Promise((resolve) => {
-      settle = resolve;
-    }),
+  await show(
+    () =>
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
   );
   await activate(button('More types'));
   await act(async () => settle({ status: 'unavailable', recovery: { status: 'denied' } }));
@@ -128,10 +131,11 @@ test('a refusal focuses the named recovery region after removing the directory',
 
 test('a reader who moves focus during a pending read keeps that focus after it resolves', async () => {
   let settle!: (value: Loaded) => void;
-  await show(() =>
-    new Promise((resolve) => {
-      settle = resolve;
-    }),
+  await show(
+    () =>
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
   );
   await activate(button('More types'));
   const elsewhere = host.querySelector<HTMLButtonElement>('[data-move-focus]')!;
