@@ -31,6 +31,7 @@ overwriteGetLocale(() => 'en');
 const human = '11111111-1111-4111-8111-111111111111';
 const operator = '22222222-2222-4222-8222-222222222222';
 const subject = '33333333-3333-4333-8333-333333333333';
+const operation = { kind: 'opening', operatorAccountId: operator, subjectAccountId: subject };
 const proof = (automated = false) => ({
   account_id: automated ? subject : human,
   client_id: managementOperationProfile('opening').client_id,
@@ -60,12 +61,11 @@ afterAll(async () => {
 async function open() {
   window.sessionStorage.clear();
   window.history.replaceState(null, '', '/automated/open');
-  const requests: { path: string; body: OpeningInput; result: ReturnType<typeof Promise.withResolvers<Response>> }[] =
-    [];
+  const requests: { path: string; body: OpeningInput; resolve: (response: Response) => void }[] = [];
   globalThis.fetch = ((path, init) => {
-    const result = Promise.withResolvers<Response>();
-    requests.push({ path: String(path), body: JSON.parse(String(init?.body ?? '{}')), result });
-    return result.promise;
+    const { promise, resolve } = Promise.withResolvers<Response>();
+    requests.push({ path: String(path), body: JSON.parse(String(init?.body ?? '{}')), resolve });
+    return promise;
   }) as typeof fetch;
   const read = spyOn(opening, 'loadOpeningMetadata').mockResolvedValue(metadata);
   const host = document.body.appendChild(document.createElement('div')),
@@ -76,8 +76,7 @@ async function open() {
   const router = createRouter({ history, routeTree: parent.addChildren([route]) });
   await router.load();
   await flush(() => root.render(<RouterProvider router={router} />));
-  const respond = (index: number, response = Response.json(proof())) =>
-    flush(() => requests[index]!.result.resolve(response));
+  const respond = (index: number, response = Response.json(proof())) => flush(() => requests[index]!.resolve(response));
   const click = (label: string) => flush(() => button(host, label)!.click());
   const submit = () =>
     flush(() =>
@@ -124,15 +123,11 @@ test('failed initial and review reads recover the exact identity and key through
     await p.click('Retry account identity');
     await p.respond(3);
     expect(p.read.mock.calls[1]![0]).toEqual(selected);
-    expect(selected).toMatchObject({
-      accountId: human,
-      operation: { operatorAccountId: operator, subjectAccountId: subject },
-    });
+    expect(selected).toMatchObject({ accountId: human, operation });
     expect(p.host.textContent).toContain(subject);
     expect(p.host.textContent).toContain(operator);
     expect(button(p.host, 'Approve and open session')!.disabled).toBe(true);
     await p.confirm();
-    await p.submit();
     await p.submit();
     await p.respond(4);
     expect(p.requests[5]!.body).toEqual(selected);
