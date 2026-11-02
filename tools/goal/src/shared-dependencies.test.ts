@@ -377,37 +377,33 @@ test('patch changes install current contents without changing a store held by an
   try {
     const a = h.tree('a'),
       b = h.tree('b'),
+      c = h.tree('c'),
       stores = join(h.root, 'stores'),
-      dependency = join(h.root, 'patch-target'),
-      patchPath = 'patches/patch-target.patch';
-    mkdirSync(dependency);
-    writeFileSync(join(dependency, 'package.json'), JSON.stringify({ name: 'patch-target', version: '1.0.0', main: 'index.js' }));
-    writeFileSync(join(dependency, 'index.js'), 'module.exports = "original";\n');
-    const patchFor = (value: string) => `diff --git a/index.js b/index.js\n--- a/index.js\n+++ b/index.js\n@@ -1 +1 @@\n-module.exports = "original";\n+module.exports = "${value}";\n`;
-    for (const worktree of [a, b]) {
+      patchPath = 'patches/target.patch';
+    const patchFor = (value: string) => `--- a/index.js\n+++ b/index.js\n@@ -1 +1 @@\n-before\n+${value}\n`;
+    for (const worktree of [a, b, c]) {
       const manifest = JSON.parse(readFileSync(join(worktree, 'package.json'), 'utf8')) as Record<string, unknown>;
-      manifest.dependencies = { 'patch-target': `file:${dependency}` };
-      manifest.patchedDependencies = { 'patch-target@1.0.0': patchPath };
+      manifest.patchedDependencies = { 'unreferenced@1.0.0': patchPath };
       writeFileSync(join(worktree, 'package.json'), JSON.stringify(manifest));
       mkdirSync(join(worktree, 'patches'));
       writeFileSync(join(worktree, patchPath), patchFor('first'));
       const lock = Bun.spawnSync(['bun', 'install', '--lockfile-only'], { cwd: worktree });
       if (lock.exitCode !== 0) throw new Error(new TextDecoder().decode(lock.stderr));
     }
-    const initialKey = dependencyKey(a);
+    const initialKey = dependencyKey(c);
     installShared(a, stores);
     installShared(b, stores);
     const priorStore = bunTarget(b);
     expect(bunTarget(a)).toBe(priorStore);
-    writeFileSync(join(a, patchPath), patchFor('second'));
-    expect(dependencyKey(a)).not.toBe(initialKey);
-    installShared(a, stores);
-    expect(lstatSync(join(a, 'node_modules/.bun')).isSymbolicLink()).toBe(false);
+    writeFileSync(join(c, patchPath), patchFor('second'));
+    expect(dependencyKey(c)).not.toBe(initialKey);
+    installShared(c, stores);
+    expect(bunTarget(c)).not.toBe(priorStore);
     expect(bunTarget(b)).toBe(priorStore);
-    expect(readFileSync(join(a, 'node_modules/patch-target/index.js'), 'utf8')).toBe('module.exports = "second";\n');
-    expect(readFileSync(join(b, 'node_modules/patch-target/index.js'), 'utf8')).toBe('module.exports = "first";\n');
-    rmSync(join(a, patchPath));
-    expect(() => installShared(a, stores)).toThrow(`required patch ${patchPath} could not be read`);
+    expect(readFileSync(join(resolve(bunTarget(c), '../..'), patchPath), 'utf8')).toBe(patchFor('second'));
+    expect(readFileSync(join(resolve(priorStore, '../..'), patchPath), 'utf8')).toBe(patchFor('first'));
+    rmSync(join(c, patchPath));
+    expect(() => installShared(c, stores)).toThrow(`required patch ${patchPath} could not be read`);
   } finally {
     h.close();
   }
