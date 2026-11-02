@@ -146,13 +146,13 @@ export const searchVerificationSubjects = createServerFn({ method: 'GET' })
             Array.isArray(definition) ||
             (definition.bases !== undefined &&
               (!Array.isArray(definition.bases) ||
-                definition.bases.some((base) => typeof base !== 'string' || !base))) ||
+                definition.bases.some((base: unknown) => typeof base !== 'string' || !base))) ||
             visited.has(type)
           )
             throw new Error('Invalid eligibility metadata');
           if (type === 'schema:Person' || type === 'schema:Organization') return new Set([type]);
           visited.add(type);
-          const result = new Set((definition.bases ?? []).flatMap((base) => [...roots(base, visited)]));
+          const result = new Set<string>((definition.bases ?? []).flatMap((base: string) => [...roots(base, visited)]));
           visited.delete(type);
           resolved.set(type, result);
           return result;

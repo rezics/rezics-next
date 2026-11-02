@@ -170,13 +170,21 @@ export function verificationRecoveryIO(
   client: QueryClient,
   transport = {
     read: (accountId: string, signal?: AbortSignal) =>
-      readVerificationState({ data: { accountId }, signal }).then((result) =>
+      readVerificationState({ data: { accountId }, ...(signal ? { signal } : {}) }).then((result) =>
         unwrapVerificationRead<VerificationSnapshot>(result),
       ),
     request: (accountId: string, input: VerificationInput, token: string, signal?: AbortSignal) =>
-      requestVerificationAction({ data: { ...input, accountId }, signal, headers: { 'X-CSRF-Token': token } }),
+      requestVerificationAction({
+        data: { ...input, accountId },
+        ...(signal ? { signal } : {}),
+        headers: { 'X-CSRF-Token': token },
+      }),
     withdraw: (accountId: string, input: { idempotencyKey: string }, token: string, signal?: AbortSignal) =>
-      withdrawVerificationAction({ data: { ...input, accountId }, signal, headers: { 'X-CSRF-Token': token } }),
+      withdrawVerificationAction({
+        data: { ...input, accountId },
+        ...(signal ? { signal } : {}),
+        headers: { 'X-CSRF-Token': token },
+      }),
   },
   isCurrent: () => boolean = owner.readCurrent,
 ): VerificationRecoveryIO {
