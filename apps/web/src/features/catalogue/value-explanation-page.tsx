@@ -148,11 +148,7 @@ export function ValueExplanationPage({
     action.cancel();
   }, [actionResult, busy, isCurrent, reading, result]);
 
-  function activate(
-    event: MouseEvent<HTMLButtonElement>,
-    kind: ValueActionKind,
-    run: (action: ValueAction) => void,
-  ) {
+  function activate(event: MouseEvent<HTMLButtonElement>, kind: ValueActionKind, run: (action: ValueAction) => void) {
     const source = event.currentTarget;
     const action = {
       kind,
@@ -498,10 +494,7 @@ function ValueEpisode({
   );
   const running = useRef(false);
   const generation = useRef(0);
-  function load(
-    request: PageRequest = { cursor: undefined, session: session.current },
-    action?: ValueAction,
-  ): void {
+  function load(request: PageRequest = { cursor: undefined, session: session.current }, action?: ValueAction): void {
     if (!work.active() || running.current) return;
     running.current = true;
     const version = ++generation.current;
