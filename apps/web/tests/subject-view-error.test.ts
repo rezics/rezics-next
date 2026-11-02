@@ -1,5 +1,11 @@
 import { afterAll, expect, test } from 'bun:test';
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createSubjectViewRecovery, SubjectViewError } from '../src/subject/view-error';

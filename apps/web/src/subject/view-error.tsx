@@ -19,10 +19,7 @@ export function createSubjectViewRecovery() {
     const promise = Promise.resolve()
       .then(() => router.invalidate())
       .then(() => {
-        if (
-          router.state.location === visit &&
-          router.state.matches.every((match) => match.status === 'success')
-        )
+        if (router.state.location === visit && router.state.matches.every((match) => match.status === 'success'))
           reset();
       })
       .finally(() => {
@@ -61,7 +58,13 @@ export function SubjectViewError({ reset }: ErrorComponentProps) {
       </h1>
       <div className="flex flex-wrap items-center gap-3">
         {/* Keep the action label stable while disabled, avoiding new locale copy for pending state. */}
-        <Button type="button" onClick={() => void retry()} disabled={retrying} aria-busy={retrying} className={actionClass}>
+        <Button
+          type="button"
+          onClick={() => void retry()}
+          disabled={retrying}
+          aria-busy={retrying}
+          className={actionClass}
+        >
           {m.subject_view_retry()}
         </Button>
         <Link
