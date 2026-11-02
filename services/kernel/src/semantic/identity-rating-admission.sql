@@ -1,7 +1,9 @@
-WITH input AS MATERIALIZED (
-  SELECT :subject_id::uuid AS subject_id,
-         get_byte(uuid_send(:subject_id::uuid), 10) * 256
-           + get_byte(uuid_send(:subject_id::uuid), 11) AS route
+WITH bound AS MATERIALIZED (SELECT :subject_id::uuid AS subject_id),
+input AS MATERIALIZED (
+  SELECT subject_id,
+         get_byte(uuid_send(subject_id), 10) * 256
+           + get_byte(uuid_send(subject_id), 11) AS route
+  FROM bound
 )
 SELECT subject.subject_id::text AS "subjectId",
        subject.visibility = 'visible' AS "activeTerminal",
