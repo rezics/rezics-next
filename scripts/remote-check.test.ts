@@ -50,6 +50,8 @@ import {
   returnsProbe,
   readHosts,
   runScript,
+  remoteLaunch,
+  MAX_REMOTE_LAUNCH_BYTES,
   selectSlotClass,
   slotScript,
   workspaceFiles,
@@ -174,7 +176,7 @@ cat "$CACHE_TEST_DIR/bun.tgz"
     CACHE_TEST_DIR: directory,
     CACHE_TEST_CONCURRENT: concurrent ? '1' : '',
   };
-  const command = `${setup}\n"$bun" use`;
+  const command = `preparation_phase() { :; }\n${setup}\n"$bun" use`;
   return {
     script,
     cached,
@@ -317,7 +319,15 @@ if (options.filter((argument) => argument === '-O').length > 1) reject('duplicat
 if (positionals.length !== (controlExit ? 1 : 2)) reject('expected host and optional command positionals');
 const address = positionals[0]!;
 if (!/^ops@[^:]+\.test$/.test(address)) reject('invalid host position');
-const script = controlExit ? 'REMOTE_CHECK_CONTROL_CLOSE' : positionals[1]!;
+let script = controlExit ? 'REMOTE_CHECK_CONTROL_CLOSE' : positionals[1]!;
+const launchCommand = script;
+if (script.startsWith('python3 -c ') && script.includes('truncated launch')) {
+  const bytes = Buffer.from(await Bun.stdin.text());
+  const [size, digest] = script.trim().split(/\\s+/).slice(-2);
+  if (bytes.length !== Number(size) || createHash('sha256').update(bytes).digest('hex') !== digest)
+    reject('launch digest/length mismatch');
+  script = bytes.toString();
+}
 const hostConfigs = JSON.parse(readFileSync(dir + '/config.json', 'utf8'));
 const knownHost = Object.hasOwn(hostConfigs, address);
 const config = hostConfigs[address] ?? {};
@@ -733,7 +743,7 @@ if (script.includes('/proc/loadavg')) {
   if (hang && config.memoryHeadroomOnHang !== undefined) updateConfig({ memoryHeadroom: config.memoryHeadroomOnHang });
   const fakeStartedAt = config.runDurationMs === undefined ? undefined : Number(readFileSync(dir + '/clock', 'utf8'));
   const releaseFile = config.controlledRuns ? dir + '/' + hostKey + '.release-run.' + process.pid : undefined;
-  log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1], fakeStartedAt, slotHeld: slotHeld(), releaseFile });
+  log({ kind: 'run', script, launchCommand, identity: args[args.indexOf('-i') + 1], fakeStartedAt, slotHeld: slotHeld(), releaseFile });
   const host = address.slice(address.indexOf('@') + 1).replace(/\\.test$/, '');
   const statusFile = dir + '/' + hostKey + '.status';
   if (config.treeBundle) {
@@ -4374,6 +4384,45 @@ test('the generated shell invocation preserves spaces, quotes and dollar text in
   expect(existsSync(join(fixture.directory, 'runs/literal-arguments/should-not-exist'))).toBe(false);
 });
 
+test('a supported quote-heavy command crosses every launch boundary without an oversized argv entry', () => {
+  const fixture = runFixture();
+  const args = Array.from({ length: 3 }, () => "'".repeat(4096));
+  const command = ['sh', '-c', `printf '%s' "$@" > arguments; exit 23`, 'sh', ...args];
+  expect(Buffer.byteLength(JSON.stringify(command))).toBeLessThan(16 * 1024);
+  const script = runScript('large-launch', '/srv/rezics-check/runs/large-launch', '.', command, 'a')
+    .replaceAll('/srv/rezics-check', fixture.directory)
+    .replaceAll('/sys/fs/cgroup', `${fixture.directory}/cgroup`)
+    .replaceAll(':/usr/local/bin:', ':');
+  expect(Buffer.byteLength(script)).toBeGreaterThan(128 * 1024);
+  expect(spawnSync('sh', ['-c', script]).error?.code).toBe('E2BIG');
+  const launch = remoteLaunch(script);
+  expect(Buffer.byteLength(launch.command)).toBeLessThan(4096);
+  const result = fixture.execute(launch.command, { TMPDIR: root }, script);
+  expect(result.status, result.stderr).toBe(23);
+  expect(readFileSync(join(fixture.directory, 'runs/large-launch/arguments'), 'utf8')).toBe(args.join(''));
+  expect(readFileSync(join(fixture.directory, 'runs/large-launch/exit-status'), 'utf8')).toBe('23\n');
+  for (const event of fixture.events())
+    for (const arg of event.args) expect(Buffer.byteLength(arg)).toBeLessThan(128 * 1024);
+});
+
+test('launch receiving rejects truncated, changed, extra and oversized bytes before executing', () => {
+  const marker = join(root, 'unverified-launch');
+  const script = `touch '${marker}'`;
+  const launch = remoteLaunch(script);
+  for (const input of [script.slice(1), script.replace('touch', 'false'), script + '\n']) {
+    const result = spawnSync('sh', ['-c', launch.command], {
+      input,
+      env: { ...process.env, TMPDIR: root },
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/truncated launch|launch digest\/length mismatch/);
+    expect(existsSync(marker)).toBe(false);
+  }
+  expect(() => remoteLaunch('x'.repeat(MAX_REMOTE_LAUNCH_BYTES + 1))).toThrow('finite byte bound');
+});
+
 test('older systemd starts the command without --expand-environment support', async () => {
   const { run } = await generatedRun(['sh', '-c', 'printf old-systemd-started']);
   const fixture = runFixture('old');
@@ -6691,7 +6740,10 @@ test('the preparation bound includes runtime verification and honestly reports u
     phase: 'install/preparation',
     activePackages: [],
     packageClassification: 'unknown',
+    stalledPhase: 'runtime-verification',
   });
+  expect(run.receipt().ownedProcesses.length).toBeGreaterThan(0);
+  expect(run.receipt().phaseElapsedMs).toBeGreaterThanOrEqual(0);
   expect(fixture.events()).toEqual([]);
   expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
 });
@@ -6822,6 +6874,7 @@ test('concurrent native preparation publishes once atomically and a bounded cach
   const second = fixture.create();
   const concurrent = second.start();
   expect(await waiting.child.exited, await waiting.stderr).toBe(70);
+  expect(waiter.receipt().stalledPhase).toBe('source-cache-lock');
   expect(existsSync(join(waiter.run, 'command-invoked'))).toBe(false);
   expect(await running.child.exited, await running.stderr).toBe(0);
   expect(await concurrent.child.exited, await concurrent.stderr).toBe(0);
@@ -7467,7 +7520,10 @@ test.each(['complete', 'wrong-source', 'wrong-run', 'corrupt', 'missing', 'faile
         ['bun', 'run', '--cwd', 'services/kernel', 'typecheck', '--emit-client'],
         ['--output-tree', PROFILE.profile],
       );
-      expect(physical.events().filter((event) => event.kind === 'run')).toHaveLength(1);
+      const launches = physical.events().filter((event) => event.kind === 'run');
+      expect(launches).toHaveLength(1);
+      expect(Buffer.byteLength(String(launches[0]!.launchCommand))).toBeLessThan(4096);
+      expect(String(launches[0]!.script)).toContain(source.sourceSha256);
       expect(physical.events().filter((event) => event.kind === 'docker')).toHaveLength(0);
       if (mode === 'complete') {
         expect(result.code, result.stderr).toBe(0);

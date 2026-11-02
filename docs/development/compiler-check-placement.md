@@ -102,3 +102,37 @@ entrypoints. They now point here for compiler policy.
 The read-only shared scripts/README.md still contains a superseded Auth URL-bypass sentence in its check-host section;
 this launch contract and the compiler policy above govern the entrypoints. That shared transport document was left
 closed alongside the producer/placement files.
+
+## Bounded launch and preparation
+
+Official remote launches carry the generated command/source envelope on SSH stdin. Only a fixed Python receiver,
+byte length and SHA-256 digest occupy the SSH command argument. The receiver accepts at most 1 MiB, requires the
+complete exact-length digest before execution, and executes an anonymous script file with command stdin closed.
+The lifetime monitor and systemd scope execute run-owned script files, so moving bytes off SSH argv does not merely
+move E2BIG to another process boundary. The original command arguments, source checks, run identity, physical terminal
+receipt, cancellation, output-tree receiving (including deletion) and verified run-directory cleanup still apply.
+The 1 MiB bound is a launch-input bound; existing command/source and output limits remain unchanged.
+
+Preparation keeps its absolute three-minute deadline. Bounded failure diagnostics add `stalledPhase`,
+`phaseElapsedMs` and up to 16 owned process PID/state/kernel-wait records to the existing infrastructure failure.
+The last phase is atomically recorded under run scratch before base refresh, runtime verification/download,
+Git restoration, source validation, source/native cache locking/verification, frozen installation, publication and
+restore. Both the stream supervisor and independent lifetime monitor capture evidence before reaping descendants;
+no command arguments or environment values enter these diagnostics. Empty package observations remain unknown.
+Historical SSH/disk/memory observations do not identify the cause of a preparation stall; flock/rsync contention
+requires actual phase/wait evidence. A preparation failure remains compiler-not-started, never a typing result.
+
+Decision: use a bounded length/digest-verified stdin envelope and run-owned script files; diagnose preparation with
+phase/wait evidence while retaining the existing deadline and controller recovery protocol.
+
+The Web focused adapter selects a separate clean committed driver with `WEB_CHECK_DRIVER_ROOT`. Its head must already
+be an ancestor of canonical dev in the same Git repository. Controller integration must precede selecting the corrected
+snapshot and resuming existing sessions. Preserve unrelated dirty checkouts; create a separate clean snapshot instead.
+Expired preparations require controller repair/replacement before fresh preparation under the original session/check
+protocol. Queued recoveries and failed run identities remain intact; no repeated consumer or compiler producer follows
+from unit tests. Rating's coherent increment proceeds through ordinary controller landing guards, with its verification
+limitation retained. Consumer/native/browser acceptance and physical host diagnosis remain controller follow-up work.
+
+Sources for this correction: the linked Performance and worker-autonomy owner documents, agent conduct, this placement
+contract, the integrated bounded-output commit, remote-check/check-run implementation and fixtures, and Web focused
+placement's clean-driver selection. The reference index names no upstream source for this transport surface.

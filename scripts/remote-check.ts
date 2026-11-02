@@ -1889,6 +1889,7 @@ def install():
     deadline = float(os.environ['REMOTE_CHECK_PREPARATION_DEADLINE'])
     if time.monotonic() >= deadline:
         raise RuntimeError('absolute preparation deadline exceeded')
+    preparation_progress(root, 'source-inventory')
     before = inventory(root)
     identity = {'schema': 2, 'inputs': before,
                 'platform': [sys.platform, platform.machine(), platform.libc_ver()],
@@ -1899,6 +1900,7 @@ def install():
     cache.mkdir(parents=True, exist_ok=True)
     entry = cache / key
     # The parent supervisor's absolute deadline includes lock wait, hashing, restore and publication.
+    preparation_progress(root, 'source-cache-lock')
     with open(cache / (key + '.lock'), 'a') as lock:
         while True:
             try:
@@ -1906,6 +1908,7 @@ def install():
                 break
             except BlockingIOError:
                 time.sleep(0.02)
+        preparation_progress(root, 'source-cache-verification')
         manifest = verified(entry, key)
         hit = manifest is not None
         stage = None
@@ -1918,6 +1921,7 @@ def install():
                 native_cache = cache / 'native'
                 native_cache.mkdir(exist_ok=True)
                 native_entry = native_cache / native_key
+                preparation_progress(root, 'native-cache-lock')
                 with open(native_cache / (native_key + '.lock'), 'a') as native_lock:
                     while True:
                         try:
@@ -1925,6 +1929,7 @@ def install():
                             break
                         except BlockingIOError:
                             time.sleep(0.02)
+                    preparation_progress(root, 'native-cache-verification')
                     native_manifest = verified(native_entry, native_key)
                     native_hit = native_manifest is not None
                     if native_hit:
@@ -1932,9 +1937,11 @@ def install():
                         if verify_native_packages(root, native_manifest['entries']) != sorted(native_manifest['nativeChecks'], key=lambda item: (item['name'], item['version'])):
                             raise RuntimeError('restored native package identity mismatch')
                     # No ignore-scripts: workspace/source lifecycle outputs are always rebuilt on a source-key miss.
+                    preparation_progress(root, 'frozen-install')
                     completed = subprocess.run([os.environ['REMOTE_CHECK_REAL_BUN'], *sys.argv[2:]])
                     if completed.returncode:
                         return completed.returncode if completed.returncode > 0 else 128 - completed.returncode
+                    preparation_progress(root, 'native-artifact-publication')
                     native_outputs = native_entries(root, inventory(root))
                     native_checks = verify_native_packages(root, native_outputs)
                     if not native_hit:
@@ -1942,6 +1949,7 @@ def install():
                             'entries': native_outputs, 'removed': [], 'nativeChecks': native_checks})
                 if owned_processes():
                     raise RuntimeError('installer left owned descendants')
+                preparation_progress(root, 'source-artifact-publication')
                 after = inventory(root)
                 native_checks = verify_native_packages(root, after)
                 outputs = {name: value for name, value in after.items() if before.get(name) != value}
@@ -1963,6 +1971,7 @@ def install():
                     remove(entry)
                 stage.rename(entry)
                 stage = None
+            preparation_progress(root, 'artifact-restore')
             for name in manifest['removed']:
                 remove(root / name)
             copy_entries(entry / 'payload', root, manifest['entries'])
@@ -2052,6 +2061,37 @@ def active_packages(root):
     return list(packages.values())
 
 
+def preparation_progress(root, phase):
+    path = root / '.temp/check-host/preparation-progress.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pending = path.with_name(path.name + '.pending')
+    pending.write_text(json.dumps({'phase': phase, 'at': time.monotonic()}))
+    pending.replace(path)
+
+
+def preparation_diagnostics(root):
+    phase = 'host-launch'
+    age = None
+    try:
+        raw = (root / '.temp/check-host/preparation-progress.json').read_bytes()[:1024]
+        value = json.loads(raw)
+        if re.fullmatch('[a-z-]{1,64}', value['phase']):
+            phase = value['phase']
+            age = max(0, round((time.monotonic() - value['at']) * 1000))
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    processes = []
+    for pid in list(owned_processes())[:16]:
+        try:
+            path = Path('/proc/' + str(pid))
+            state = (path / 'stat').read_text().rsplit(')', 1)[1].split()[0]
+            wait = (path / 'wchan').read_text()[:128].strip()
+            processes.append({'pid': pid, 'state': state, 'wait': wait})
+        except OSError:
+            pass
+    return {'stalledPhase': phase, 'phaseElapsedMs': age, 'ownedProcesses': processes}
+
+
 def preparation_log_tail(root):
     try:
         raw = (root / '.temp/check-host/preparation-output').read_bytes()
@@ -2091,6 +2131,7 @@ def supervise():
     packages = []
     observed = []
     failure = None
+    diagnostics = None
     preparation_done = False
     code = None
     stopped_at = None
@@ -2106,6 +2147,7 @@ def supervise():
         if interrupted:
             failure = 'signal ' + str(interrupted[0])
         if failure and stopped_at is None:
+            diagnostics = preparation_diagnostics(root)
             stopped_at = time.monotonic()
             stop_owned(signal.SIGTERM)
         if stopped_at is not None and time.monotonic() - stopped_at >= 0.2:
@@ -2155,7 +2197,8 @@ def supervise():
                    'reason': failure or 'preparation exited ' + str(child.returncode),
                    'activePackages': packages, 'lastObservedPackages': observed,
                    'packageClassification': 'active' if packages else 'unknown',
-                   'logTail': preparation_log_tail(root)}
+                   'logTail': preparation_log_tail(root),
+                   **(diagnostics or preparation_diagnostics(root))}
         (root / 'preparation-status.json').write_text(json.dumps(receipt, sort_keys=True))
         terminal_status(root).write_text(str(code) + '\n')
         print('remote-check: infrastructure failure ' + json.dumps(receipt, sort_keys=True), file=sys.stderr, flush=True)
@@ -2370,7 +2413,10 @@ def lifetime():
     durable(root / '.remote-check-supervisor', supervisor_bytes.decode())
     with os.fdopen(3) as source:
         script = source.read()
-    child = subprocess.Popen(['sh', '-c', script], env=dict(os.environ, REMOTE_CHECK_HOST_LIFETIME='1',
+    launch = root / '.temp/check-host/lifetime.sh'
+    launch.parent.mkdir(parents=True, exist_ok=True)
+    launch.write_text(script)
+    child = subprocess.Popen(['sh', str(launch)], env=dict(os.environ, REMOTE_CHECK_HOST_LIFETIME='1',
         REMOTE_CHECK_HOST_PREPARATION_DEADLINE=str(preparation_deadline)), start_new_session=True)
     resources = None
     try:
@@ -2381,6 +2427,7 @@ def lifetime():
     reason = None
     stopped_at = None
     packages = []
+    diagnostics = None
     while True:
         now = time.monotonic()
         try:
@@ -2404,6 +2451,7 @@ def lifetime():
                     reason = 'install/preparation'
                     packages = active_packages(root)
         if reason is not None and stopped_at is None:
+            diagnostics = preparation_diagnostics(root)
             stopped_at = now
             try: resources.sample('terminal', True)
             except Exception: pass
@@ -2436,7 +2484,8 @@ def lifetime():
         if reason == 'install/preparation':
             receipt.update({'reason': 'absolute preparation deadline exceeded', 'activePackages': packages,
                             'packageClassification': 'active' if packages else 'unknown',
-                            'logTail': preparation_log_tail(root)})
+                            'logTail': preparation_log_tail(root),
+                            **(diagnostics or preparation_diagnostics(root))})
         name = 'run-lifetime-status.json' if reason == 'run-lifetime' else 'preparation-status.json'
         contents = json.dumps(receipt, sort_keys=True)
         durable(root / name, contents)
@@ -2482,6 +2531,9 @@ def local_command():
 
 
 attempt_started = time.monotonic()
+if sys.argv[1] == 'phase':
+    preparation_progress(Path(sys.argv[2]), sys.argv[3])
+    sys.exit(0)
 try:
     sys.exit(install() if sys.argv[1] == 'install' else lifetime() if sys.argv[1] == 'lifetime' else local_command() if sys.argv[1] == 'local' else supervise())
 except Exception as error:
@@ -2826,10 +2878,15 @@ export function runScript(
       fi
     fi`
     : '';
-  const systemdScript = `${refreshBaseScript(id, directory, gitArtifactRelativePath)}
+  const systemdScript = `preparation_phase() {
+  python3 ${quote(`${wrapperDirectory}/prepare.py`)} phase ${quote(directory)} "$1"
+}
+preparation_phase base-refresh
+${refreshBaseScript(id, directory, gitArtifactRelativePath)}
 set +e
 host=$REMOTE_CHECK_HOST
     install_started=$(date +%s%N)
+    preparation_phase runtime-verification
     expected_bun=${quote(pinnedBunVersion)}
     expected_revision=${quote(pinnedBunRevision)}
     case "$(uname -m)" in
@@ -2849,6 +2906,7 @@ host=$REMOTE_CHECK_HOST
     else
       if ! cache_matches; then
         mkdir -p ${ROOT}/pinned-bun
+        preparation_phase runtime-download
         pinned_download=$(mktemp -d ${ROOT}/pinned-bun/.download.XXXXXX)
         if ! curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "https://registry.npmjs.org/@oven/bun-linux-$build/-/bun-linux-$build-$expected_bun.tgz" | tar -xz -C "$pinned_download"; then
           rm -rf -- "$pinned_download"
@@ -2874,7 +2932,9 @@ host=$REMOTE_CHECK_HOST
       fi
       bun="$pinned_cache/package/bin/bun"
     fi
+    preparation_phase git-restore
     ${gitRestore}
+    preparation_phase source-verification
     ${sourceVerification}
     mkdir -p ${quote(`${directory}/.temp/node-compile-cache`)}
     export NODE_COMPILE_CACHE=${quote(`${directory}/.temp/node-compile-cache`)}
@@ -2883,6 +2943,7 @@ host=$REMOTE_CHECK_HOST
       export REMOTE_CHECK_REAL_BUN="$bun" REMOTE_CHECK_PREPARATION_REVISION="$expected_revision" REMOTE_CHECK_PREPARATION_BUILD="$build" REMOTE_CHECK_PREPARATION_VERSION="$expected_bun"
       bun=$REMOTE_CHECK_PREPARER_BIN
     fi
+    preparation_phase frozen-install
     "$bun" install --frozen-lockfile
     code=$?
     bun=$real_bun
@@ -2980,7 +3041,6 @@ host=$REMOTE_CHECK_HOST
     exit $code`;
   const script = `mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
-printf '%s' ${quote(Buffer.from(dependencyPreparationProgram).toString('base64'))} | base64 -d > ${quote(`${wrapperDirectory}/prepare.py`)} || exit 70
 export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_TIMINGS=${quote(`${directory}/.temp/kernel-check/timings`)} AUTH_CHECK_TIMINGS=${quote(`${directory}/.temp/auth-check/timings`)} KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id}
 export REZICS_CHECK_PHASES=${quote(`${directory}/command-phases.tsv`)}
 printf 'remote-check: run priority %s on %s\n' ${quote(priorityClass)} ${quote(hostName)} >&2
@@ -2989,11 +3049,13 @@ touch ${quote(`${directory}/.alive`)}
 systemd_script=${quote(systemdScript)}
 # systemd 259 expands \${NAME} in --scope arguments by default, which broke the script's parameter expansions on c
 # (842 failed runs from 10-28 18:36 UTC); older systemd has no such flag and does not expand.
+printf '%s' "$systemd_script" > ${quote(`${wrapperDirectory}/command.sh`)} || exit 70
+unset systemd_script
 expand_environment=
 if systemd-run --help 2>/dev/null | grep -q -- '--expand-environment'; then expand_environment=--expand-environment=no; fi
 exec systemd-run --scope --quiet --collect $expand_environment --slice=${runSlice(id)} --unit=${checkHostScopeUnitStem(id)} \\
   python3 ${quote(`${wrapperDirectory}/prepare.py`)} supervise ${preparationTimeoutMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} \\
-  sh -c "$systemd_script" sh ${[cwd, ...command].map(quote).join(' ')}`;
+  sh ${quote(`${wrapperDirectory}/command.sh`)} ${[cwd, ...command].map(quote).join(' ')}`;
   const executable = (command[0]?.split('/').at(-1) ?? 'unknown').replace(/[^a-zA-Z0-9_.-]/g, '?').slice(0, 64);
   const subcommand = ['test', 'run', 'check', 'build', 'typecheck', 'verify', 'lint'].includes(command[1] ?? '')
     ? ` ${command[1]}`
@@ -3002,9 +3064,50 @@ exec systemd-run --scope --quiet --collect $expand_environment --slice=${runSlic
   // fd 3 carries the literal original script independently of command stdin. No second shell quoting pass touches argv.
   const delimiter = `REMOTE_CHECK_HOST_${id.replace(/[^a-zA-Z0-9]/g, '_')}`;
   return `# REMOTE_CHECK_RUN_LIFETIME_MS ${lifetimeMs}
-exec python3 -c ${quote(`import base64; exec(base64.b64decode(${JSON.stringify(Buffer.from(dependencyPreparationProgram).toString('base64'))}))`)} lifetime ${lifetimeMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} ${quote(identity)} ${preparationTimeoutMs} 3<<'${delimiter}'
+mkdir -p ${quote(wrapperDirectory)} || exit 70
+printf '%s' ${quote(Buffer.from(dependencyPreparationProgram).toString('base64'))} | base64 -d > ${quote(`${wrapperDirectory}/prepare.py`)} || exit 70
+exec python3 ${quote(`${wrapperDirectory}/prepare.py`)} lifetime ${lifetimeMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} ${quote(identity)} ${preparationTimeoutMs} 3<<'${delimiter}'
 ${script}
 ${delimiter}`;
+}
+
+// Only this fixed receiver and a length/digest cross argv. The authenticated script stays on stdin and an
+// anonymous file; command stdin remains /dev/null, as before. exec preserves SSH cancellation/terminal ownership.
+export const MAX_REMOTE_LAUNCH_BYTES = 1024 * 1024;
+const launchReceiver = String.raw`import hashlib,os,sys,tempfile
+size=int(sys.argv[1])
+if not 0<size<=${MAX_REMOTE_LAUNCH_BYTES}:
+    raise SystemExit('remote-check: invalid launch size')
+with tempfile.TemporaryFile() as script:
+    remaining=size
+    digest=hashlib.sha256()
+    while remaining:
+        block=sys.stdin.buffer.read(min(65536,remaining))
+        if not block:
+            raise SystemExit('remote-check: truncated launch')
+        script.write(block)
+        digest.update(block)
+        remaining-=len(block)
+    if sys.stdin.buffer.read(1) or digest.hexdigest()!=sys.argv[2]:
+        raise SystemExit('remote-check: launch digest/length mismatch')
+    script.flush()
+    script.seek(0)
+    descriptor=script.fileno()
+    os.set_inheritable(descriptor,True)
+    with open('/dev/null','rb') as empty:
+        os.dup2(empty.fileno(),0)
+    os.execv('/bin/sh',['sh','/proc/self/fd/'+str(descriptor)])
+`;
+
+export function remoteLaunch(script: string): { command: string; stdin: Blob } {
+  const bytes = Buffer.from(script);
+  if (bytes.length === 0 || bytes.length > MAX_REMOTE_LAUNCH_BYTES)
+    throw new Error('remote-check: launch exceeds its finite byte bound');
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  return {
+    command: `python3 -c ${quote(launchReceiver)} ${bytes.length} ${digest}`,
+    stdin: new Blob([bytes]),
+  };
 }
 
 function cleanupScript(id: string, directory: string): string {
@@ -5511,35 +5614,34 @@ async function runLeased(
     console.error(`remote-check: running on ${host.name}`);
     options.started?.(host.name);
     assertExecutionAllowed(options, signal);
+    const envelope = remoteLaunch(
+      runScript(
+        id,
+        directory,
+        options.cwd ?? '.',
+        options.command,
+        host.name,
+        options.progressIntervalMs,
+        options.gate ? 'gate' : (options.priority ?? ((options.slots ?? 1) > 1 ? 'multi-slot' : 'ordinary')),
+        configuredTimeout(
+          options.preparationTimeoutMs,
+          'REMOTE_CHECK_PREPARATION_TIMEOUT_MS',
+          DEFAULT_PREPARATION_TIMEOUT_MS,
+        ),
+        options.estimateMs,
+        options.maxMs,
+        prepared.gitManifestRelativePath,
+        prepared.gitManifestSha256,
+        options.prepare,
+        options.expectedSourceSha256,
+      ),
+    );
     const launch = () =>
-      Bun.spawn(
-        [
-          'ssh',
-          ...sshOptions(host, connectionId),
-          host.address,
-          runScript(
-            id,
-            directory,
-            options.cwd ?? '.',
-            options.command,
-            host.name,
-            options.progressIntervalMs,
-            options.gate ? 'gate' : (options.priority ?? ((options.slots ?? 1) > 1 ? 'multi-slot' : 'ordinary')),
-            configuredTimeout(
-              options.preparationTimeoutMs,
-              'REMOTE_CHECK_PREPARATION_TIMEOUT_MS',
-              DEFAULT_PREPARATION_TIMEOUT_MS,
-            ),
-            options.estimateMs,
-            options.maxMs,
-            prepared.gitManifestRelativePath,
-            prepared.gitManifestSha256,
-            options.prepare,
-            options.expectedSourceSha256,
-          ),
-        ],
-        { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
-      );
+      Bun.spawn(['ssh', ...sshOptions(host, connectionId), host.address, envelope.command], {
+        stdin: envelope.stdin,
+        stdout: 'inherit',
+        stderr: 'inherit',
+      });
     run = options.spawnWithCustody ? await options.spawnWithCustody({ host: host.name, run: id }, launch) : launch();
     transportChildReaped = false;
     const maxMs = effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
