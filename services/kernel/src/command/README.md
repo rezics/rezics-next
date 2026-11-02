@@ -336,18 +336,18 @@ repeated or out-of-order controls refuse before IO. Cleanup is one-shot, on the 
 and does not consult expired effect authority. Failed BEGIN and failed/lost COMMIT still consume their dispatch.
 Failed cleanup discards the client and reports both errors, retaining the original error as cause.
 
-| Operation | Touches | Bound (rows / points / statements / bytes / empty seeks) | Growth check |
-| --- | --- | --- | --- |
-| `checkout` and lifetime validation | Same Pool, original callback, immutable deadline; gate and one checkout | 0 / 0 / 0 / 0 / 0 | Fixed local association; no SQL |
-| `begin` | SERIALIZABLE BEGIN | 0 / 0 / 1 / 0 / 0 | Fixed control |
-| `lockTimeout` | Local 200ms setting | 0 / 0 / 1 / 0 / 0 | Fixed control |
-| `statementTimeout` | Local remaining absolute deadline | 0 / 0 / 1 / 12 / 0 | At most ten decimal digits plus `ms` |
-| `time` | One scalar UTC `transaction_timestamp`, no index | 1 / 0 / 1 / 40 / 0 | Native bounded scalar projection |
-| `finalStatementTimeout` | Refresh remaining deadline before fence | 0 / 0 / 1 / 12 / 0 | Same bound; no extension |
-| `noEffectFence` | One active partition PK `FOR SHARE`; null receipt branch writes nothing | 1 / 1 / 1 / 105 / 1 | One key at unrelated partition/history scales; logarithmic B-tree blocks |
-| `finalize` | Actual native finalizer with no declared source or source set | 0 / 0 / 0 / 0 / 0 | Foreign registrations refused; actual body returns without SQL |
-| `commit` | Native COMMIT | 0 / 0 / 1 / 0 / 0 | Fixed control, including failed/lost response |
-| `cleanupRollback` | Separate native ROLLBACK after any reached failure | 0 / 0 / 1 / 0 / 0 | At most once; no new allowance |
+| Operation                          | Touches                                                                 | Bound (rows / points / statements / bytes / empty seeks) | Growth check                                                             |
+| ---------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `checkout` and lifetime validation | Same Pool, original callback, immutable deadline; gate and one checkout | 0 / 0 / 0 / 0 / 0                                        | Fixed local association; no SQL                                          |
+| `begin`                            | SERIALIZABLE BEGIN                                                      | 0 / 0 / 1 / 0 / 0                                        | Fixed control                                                            |
+| `lockTimeout`                      | Local 200ms setting                                                     | 0 / 0 / 1 / 0 / 0                                        | Fixed control                                                            |
+| `statementTimeout`                 | Local remaining absolute deadline                                       | 0 / 0 / 1 / 12 / 0                                       | At most ten decimal digits plus `ms`                                     |
+| `time`                             | One scalar UTC `transaction_timestamp`, no index                        | 1 / 0 / 1 / 40 / 0                                       | Native bounded scalar projection                                         |
+| `finalStatementTimeout`            | Refresh remaining deadline before fence                                 | 0 / 0 / 1 / 12 / 0                                       | Same bound; no extension                                                 |
+| `noEffectFence`                    | One active partition PK `FOR SHARE`; null receipt branch writes nothing | 1 / 1 / 1 / 105 / 1                                      | One key at unrelated partition/history scales; logarithmic B-tree blocks |
+| `finalize`                         | Actual native finalizer with no declared source or source set           | 0 / 0 / 0 / 0 / 0                                        | Foreign registrations refused; actual body returns without SQL           |
+| `commit`                           | Native COMMIT                                                           | 0 / 0 / 1 / 0 / 0                                        | Fixed control, including failed/lost response                            |
+| `cleanupRollback`                  | Separate native ROLLBACK after any reached failure                      | 0 / 0 / 1 / 0 / 0                                        | At most once; no new allowance                                           |
 
 The effect sum is **2 rows, 1 point, 7 statements, 169 bytes, 1 empty seek**. Adding cleanup gives
 **8 statements**, with the other dimensions unchanged. Candidate keys, identity metadata rows and witness keys

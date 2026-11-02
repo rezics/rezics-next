@@ -627,9 +627,8 @@ async function executeCommand<T>(
       const gate = await measureCommandPhase('gate_wait', () => enterCommandGate(pool, partition, deadline));
       if (gate.status !== 'acquired') throw new CommandUnavailableError(gate.status, partition);
       commandPhase('transaction_pool_wait');
-      const checkout = <R>(work: (client: PoolClient) => Promise<R>): Promise<R> => dispatch
-        ? dispatch.control('checkout', () => withConnection(pool, work))
-        : withConnection(pool, work);
+      const checkout = <R>(work: (client: PoolClient) => Promise<R>): Promise<R> =>
+        dispatch ? dispatch.control('checkout', () => withConnection(pool, work)) : withConnection(pool, work);
       const result = await checkout(async (client) => {
         commandPhase('transaction_body');
         if (!dispatch) await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
@@ -641,14 +640,13 @@ async function executeCommand<T>(
         if (dispatch) selectedCallbacks.set(callbackState, { tx, dispatch });
         try {
           dispatch?.checkpoint();
-          if (dispatch)
-            await dispatch.control('begin', () => client.query('BEGIN ISOLATION LEVEL SERIALIZABLE'));
-          if (dispatch)
-            await dispatch.control('lockTimeout', () => client.query("SET LOCAL lock_timeout = '200ms'"));
+          if (dispatch) await dispatch.control('begin', () => client.query('BEGIN ISOLATION LEVEL SERIALIZABLE'));
+          if (dispatch) await dispatch.control('lockTimeout', () => client.query("SET LOCAL lock_timeout = '200ms'"));
           else await client.query("SET LOCAL lock_timeout = '200ms'");
           if (dispatch)
             await dispatch.control('statementTimeout', () =>
-              client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`));
+              client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`),
+            );
           else await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
           time ??= await measureCommandPhase('time_mint', () => mintTime(client, options.clock, dispatch));
           attempt ??= Object.freeze({ partition, basis, time });
@@ -717,8 +715,13 @@ async function executeCommand<T>(
             throw new TooManyEventsError(partition, response.events.length);
           if (dispatch) {
             dispatch.checkpoint();
-            if (!noEffect || callbackState.callbacks.length || commandRecordSources(tx).length ||
-                hasCommandRecordSourceSet(tx) || commandAgentIdentitySource(tx))
+            if (
+              !noEffect ||
+              callbackState.callbacks.length ||
+              commandRecordSources(tx).length ||
+              hasCommandRecordSourceSet(tx) ||
+              commandAgentIdentitySource(tx)
+            )
               throw new TypeError('Unsupported dispatch lifetime history, callback or event profile');
           }
           validateCommandHistoryScope(tx, options.receipt?.kind, response.events);
@@ -766,11 +769,15 @@ async function executeCommand<T>(
           }
           if (dispatch)
             await dispatch.control('finalStatementTimeout', () =>
-              client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`));
+              client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`),
+            );
           else await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
-          const noEffectFence = () => noEffectFenceStatement.run(client, {
-            partition_no: partition, transaction_id: transactionId, receipt,
-          });
+          const noEffectFence = () =>
+            noEffectFenceStatement.run(client, {
+              partition_no: partition,
+              transaction_id: transactionId,
+              receipt,
+            });
           const row = noEffect
             ? await (dispatch ? dispatch.control('noEffectFence', noEffectFence) : noEffectFence())
             : await fenceStatement.run(client, {
@@ -813,9 +820,9 @@ async function executeCommand<T>(
           if (dispatch)
             await dispatch.control('finalize', () => finalizeCommandRecordSources(tx, BigInt(row[0]!.position)));
           else await finalizeCommandRecordSources(tx, BigInt(row[0]!.position));
-          await measureCommandPhase('commit', () => dispatch
-            ? dispatch.control('commit', () => client.query('COMMIT'))
-            : client.query('COMMIT'));
+          await measureCommandPhase('commit', () =>
+            dispatch ? dispatch.control('commit', () => client.query('COMMIT')) : client.query('COMMIT'),
+          );
           sealEventTypes();
           return {
             value,
@@ -828,8 +835,9 @@ async function executeCommand<T>(
         } catch (error) {
           receiptOwners.delete(tx);
           if (dispatch) {
-            try { await dispatch.rollback(); }
-            catch (rollbackError) {
+            try {
+              await dispatch.rollback();
+            } catch (rollbackError) {
               discardConnection(client, rollbackError as Error);
               throw new AggregateError([error, rollbackError], 'Command and cleanup ROLLBACK failed', { cause: error });
             }

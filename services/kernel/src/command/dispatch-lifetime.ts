@@ -4,9 +4,26 @@ import type { WorkDimensions } from '../library/collection-source.ts';
 import type { CommandTransaction } from './command.ts';
 
 export type CommandDispatchPrice = Readonly<{ work: WorkDimensions; engineRequests: 0 }>;
-const price = (nativeRows: number, nativePoints: number, statements: number, bytes: number, emptySeeks = 0): CommandDispatchPrice =>
-  Object.freeze({ work: Object.freeze({ candidateKeys: 0, nativeRows, identityMetadataRows: 0,
-    nativePoints, witnessKeys: 0, statements, bytes, emptySeeks }), engineRequests: 0 });
+const price = (
+  nativeRows: number,
+  nativePoints: number,
+  statements: number,
+  bytes: number,
+  emptySeeks = 0,
+): CommandDispatchPrice =>
+  Object.freeze({
+    work: Object.freeze({
+      candidateKeys: 0,
+      nativeRows,
+      identityMetadataRows: 0,
+      nativePoints,
+      witnessKeys: 0,
+      statements,
+      bytes,
+      emptySeeks,
+    }),
+    engineRequests: 0,
+  });
 
 /** Prices only. No entry issues a grant, authorizes SQL, or prices a foreign child. */
 export const COMMAND_DISPATCH_CONTROLS = Object.freeze({
@@ -23,12 +40,27 @@ export const COMMAND_DISPATCH_CONTROLS = Object.freeze({
 });
 export type CommandDispatchControl = keyof typeof COMMAND_DISPATCH_CONTROLS;
 const effectOrder = Object.freeze([
-  'checkout', 'begin', 'lockTimeout', 'statementTimeout', 'time',
-  'finalStatementTimeout', 'noEffectFence', 'finalize', 'commit',
+  'checkout',
+  'begin',
+  'lockTimeout',
+  'statementTimeout',
+  'time',
+  'finalStatementTimeout',
+  'noEffectFence',
+  'finalize',
+  'commit',
 ] as const);
 const sum = (parts: readonly CommandDispatchPrice[]): CommandDispatchPrice => {
-  const work = { candidateKeys: 0, nativeRows: 0, identityMetadataRows: 0, nativePoints: 0,
-    witnessKeys: 0, statements: 0, bytes: 0, emptySeeks: 0 };
+  const work = {
+    candidateKeys: 0,
+    nativeRows: 0,
+    identityMetadataRows: 0,
+    nativePoints: 0,
+    witnessKeys: 0,
+    statements: 0,
+    bytes: 0,
+    emptySeeks: 0,
+  };
   for (const part of parts)
     for (const axis of Object.keys(work) as (keyof WorkDimensions)[]) work[axis] += part.work[axis];
   return Object.freeze({ work: Object.freeze(work), engineRequests: 0 });
@@ -112,15 +144,29 @@ export async function withCommandDispatchLifetime<T>(
   const validate = originalValidate.bind(owner);
   const reserve = originalReserve.bind(owner);
   let finish!: () => void;
-  const scope: Scope = { pool, deadline, open: true, claimed: false, running: false, succeeded: false,
-    validate, reserve, done: new Promise<void>((resolve) => { finish = resolve; }), finish: () => finish(),
-    unchanged: () => owner.original === original && owner.validate === originalValidate && owner.reserve === originalReserve };
+  const scope: Scope = {
+    pool,
+    deadline,
+    open: true,
+    claimed: false,
+    running: false,
+    succeeded: false,
+    validate,
+    reserve,
+    done: new Promise<void>((resolve) => {
+      finish = resolve;
+    }),
+    finish: () => finish(),
+    unchanged: () =>
+      owner.original === original && owner.validate === originalValidate && owner.reserve === originalReserve,
+  };
   activeOriginals.add(original);
   try {
     return await scopes.run(scope, async () => {
       try {
         const answer = await body();
-        if (!scope.claimed || scope.running || !scope.succeeded) fail('callback returned without a successful settled command');
+        if (!scope.claimed || scope.running || !scope.succeeded)
+          fail('callback returned without a successful settled command');
         validateScope(scope);
         return answer;
       } finally {
@@ -139,14 +185,26 @@ export async function withCommandDispatchLifetime<T>(
 /** Executor-only lifecycle plumbing. No native transaction is constructed here. */
 export function claimCommandDispatchLifetime(
   pool: Pool,
-  options: { deadline?: number; basis?: unknown; principal?: unknown; receipt?: unknown; authorization?: unknown; clock?: unknown },
+  options: {
+    deadline?: number;
+    basis?: unknown;
+    principal?: unknown;
+    receipt?: unknown;
+    authorization?: unknown;
+    clock?: unknown;
+  },
 ): CommandDispatchLifetime | undefined {
   const scope = scopes.getStore();
   if (!scope) return undefined;
   if (!scope.open || !scope.unchanged() || scope.claimed || scope.pool !== pool || options.deadline !== scope.deadline)
     fail('foreign, changed, closed or reused invocation');
-  if (options.basis !== undefined || options.principal !== undefined || options.receipt !== undefined ||
-      options.authorization !== undefined || options.clock !== undefined)
+  if (
+    options.basis !== undefined ||
+    options.principal !== undefined ||
+    options.receipt !== undefined ||
+    options.authorization !== undefined ||
+    options.clock !== undefined
+  )
     fail('unsupported selected command profile');
   scope.claimed = true;
   scope.running = true;
@@ -165,7 +223,9 @@ class CommandDispatchLifetime {
   #query = false;
   #client: PoolClient | undefined;
   #tx: CommandTransaction | undefined;
-  constructor(scope: Scope) { this.#scope = scope; }
+  constructor(scope: Scope) {
+    this.#scope = scope;
+  }
   assertLive(): void {
     if (this.#closed) fail('closed command');
     assertScopeLive(this.#scope);
@@ -178,9 +238,15 @@ class CommandDispatchLifetime {
 
   assertOptions(pool: Pool, options: Parameters<typeof claimCommandDispatchLifetime>[1]): void {
     this.checkpoint();
-    if (pool !== this.#scope.pool || options.deadline !== this.#scope.deadline ||
-        options.basis !== undefined || options.principal !== undefined || options.receipt !== undefined ||
-        options.authorization !== undefined || options.clock !== undefined)
+    if (
+      pool !== this.#scope.pool ||
+      options.deadline !== this.#scope.deadline ||
+      options.basis !== undefined ||
+      options.principal !== undefined ||
+      options.receipt !== undefined ||
+      options.authorization !== undefined ||
+      options.clock !== undefined
+    )
       fail('changed selected command profile');
   }
   async prepare(): Promise<void> {
@@ -208,7 +274,9 @@ class CommandDispatchLifetime {
       this.checkpoint();
       if (this.#query) fail('unsettled body query');
       return answer;
-    } finally { this.#body = false; }
+    } finally {
+      this.#body = false;
+    }
   }
   bindQuery(tx: CommandTransaction, client: PoolClient): void {
     this.checkpoint();
@@ -217,7 +285,7 @@ class CommandDispatchLifetime {
     this.#tx = tx;
     const original = tx.query;
     const lifetime = this;
-    tx.query = (async function (this: CommandTransaction, ...args: unknown[]) {
+    tx.query = async function (this: CommandTransaction, ...args: unknown[]) {
       lifetime.assertLive();
       if (this !== lifetime.#tx || !lifetime.#body || lifetime.#query || args.some((arg) => typeof arg === 'function'))
         fail('foreign, concurrent or unsupported body query');
@@ -227,12 +295,22 @@ class CommandDispatchLifetime {
         fail('unsupported body query arguments');
       const config = args[0];
       if (typeof config !== 'string') {
-        if (!config || typeof config !== 'object' ||
-            (Object.getPrototypeOf(config) !== Object.prototype && Object.getPrototypeOf(config) !== null))
+        if (
+          !config ||
+          typeof config !== 'object' ||
+          (Object.getPrototypeOf(config) !== Object.prototype && Object.getPrototypeOf(config) !== null)
+        )
           fail('unsupported body query config');
         const fields = Object.getOwnPropertyDescriptors(config);
-        if (typeof fields.text?.value !== 'string' || Reflect.ownKeys(config).some((key) =>
-          typeof key !== 'string' || !['text', 'values', 'name', 'rowMode'].includes(key) || !('value' in fields[key]!)))
+        if (
+          typeof fields.text?.value !== 'string' ||
+          Reflect.ownKeys(config).some(
+            (key) =>
+              typeof key !== 'string' ||
+              !['text', 'values', 'name', 'rowMode'].includes(key) ||
+              !('value' in fields[key]!),
+          )
+        )
           fail('unsupported body query config');
       }
       lifetime.#query = true;
@@ -242,8 +320,10 @@ class CommandDispatchLifetime {
         lifetime.checkpoint();
         if (!lifetime.#body) fail('late body query');
         return result;
-      } finally { lifetime.#query = false; }
-    }) as unknown as CommandTransaction['query'];
+      } finally {
+        lifetime.#query = false;
+      }
+    } as unknown as CommandTransaction['query'];
   }
   async rollback(): Promise<void> {
     // A disjoint held cleanup slot survives revocation/expiry/scope closure.
