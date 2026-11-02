@@ -18,6 +18,7 @@ import fixtures from '../src/kernel/fixtures.json';
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
 const { SubjectPage, pageContext } = await import('../src/features/pages/subject');
 const { holderItems } = await import('../src/features/pages/overview');
+const { qualifiedNotes } = await import('../src/features/pages/qualified-relations');
 const { readRelationGroup, relationGroupKey } = await import('../src/features/pages/relation-stream-query');
 const { relationPreviewCount } = await import('../src/features/pages/subject-relations-preview');
 
@@ -50,6 +51,7 @@ test('Qualified credits characters spoilers and complete group continuation are 
   expect(html).toContain('Order: 1');
   expect(html).toContain('Role: Voice');
   expect(html).toContain('Character: The Traveller');
+  expect(html).toMatch(/href="\/en\/subjects\/[^\"]+\/voice"/);
   expect(html).toMatch(/href="\/en\/subjects\/[^\"]+\/the-traveller"/);
   expect(html).toContain('First editions 12');
   expect(html).toContain('First adaptations 12');
@@ -61,7 +63,7 @@ test('Qualified credits characters spoilers and complete group continuation are 
   expect(relationPreviewCount({ relationCounts: {} }, 'schema:character')).toBeUndefined();
 });
 
-test('qualified rows keep roles paired by statement, omit hidden qualifier labels, and gate the whole spoiler row', () => {
+test('qualified rows preserve unknown values and quantity bounds, pair roles by statement, and gate the whole spoiler row', () => {
   const snak = (property: string, type: string, content: unknown) => ({
     property: { id: property, data_type: type },
     value: { type: 'value', content },
@@ -69,6 +71,12 @@ test('qualified rows keep roles paired by statement, omit hidden qualifier label
   const first = qualifiedStatement('one', 'wdt:P725', qualifiedSubject.id, [
     snak('wdt:P1932', 'string', 'First name'),
     snak('wdt:P3831', 'wikibase-item', 'hidden-role'),
+    snak('schema:position', 'quantity', {
+      amount: '+2',
+      unit: 'http://www.wikidata.org/entity/Q7727',
+      lowerBound: '+1',
+      upperBound: '+3',
+    }),
   ]);
   const second = qualifiedStatement('two', 'wdt:P725', qualifiedSubject.id, [
     snak('wdt:P1932', 'string', 'Second name'),
@@ -84,20 +92,45 @@ test('qualified rows keep roles paired by statement, omit hidden qualifier label
     12,
   )!;
   expect(rows.items.map((item) => item.qualified?.map((note) => note.text))).toEqual([
-    ['Credited as: First name'],
+    ['Credited as: First name', 'Role: Unknown value', 'Order:'],
     ['Credited as: Second name'],
   ]);
+  expect(rows.items[0]!.qualified?.[1]).toEqual({ property: 'wdt:P3831', text: 'Role: Unknown value' });
+  expect(rows.items[0]!.qualified?.[2]!.quantity?.content).toEqual({
+    amount: '+2',
+    unit: 'http://www.wikidata.org/entity/Q7727',
+    lowerBound: '+1',
+    upperBound: '+3',
+  });
+  const unknowns = qualifiedStatement('unknowns', 'wdt:P725', qualifiedSubject.id, [
+    { property: { id: 'wdt:P3831', data_type: 'wikibase-item' }, value: { type: 'somevalue' } },
+    { property: { id: 'wdt:P453', data_type: 'wikibase-item' }, value: { type: 'novalue' } },
+  ]);
+  expect(qualifiedNotes(unknowns, {}, 'en').map((note) => note.text)).toEqual([
+    'Role: Unknown value',
+    'Character: No value',
+  ]);
+  expect(qualifiedNotes(qualifiedStatement('empty', 'wdt:P725', qualifiedSubject.id), {}, 'en')).toEqual([]);
   const page = qualifiedRelationsPage();
   const plan = planReads(platformRegistry, page.document, pageContext(page));
   const body = page.reads[plan.nodes.cast!]!.body as {
     relations: { statement: { qualifiers: unknown[] }; label: string }[];
   };
+  body.relations[0]!.statement.qualifiers.push(
+    snak('schema:position', 'quantity', {
+      amount: '+2',
+      unit: 'http://www.wikidata.org/entity/Q7727',
+      lowerBound: '+1',
+      upperBound: '+3',
+    }),
+  );
   body.relations[0]!.statement.qualifiers.push(snak('rezics:spoilerLevel', 'quantity', { amount: '+2', unit: '1' }));
   body.relations[0]!.label = 'Secret performer';
   expect(render(page)).not.toContain('Secret performer');
   expect(render(page)).not.toContain('A. Player');
   expect(render(page)).toContain('Show spoiler');
   expect(render(page, 2)).toContain('Secret performer');
+  expect(render(page, 2)).toContain('Order: +2 (≥ +1; ≤ +3) min');
 });
 
 test('More resolves one current group with separate Context keys and retains a retryable owner error', async () => {

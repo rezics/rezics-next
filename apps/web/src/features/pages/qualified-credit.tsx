@@ -1,6 +1,7 @@
 import type { CoverProps } from '@rezics/ui/cover';
 import { CoverCard } from '@rezics/ui/cover-card';
 import type { ReactNode } from 'react';
+import { m } from '../../paraglide/messages.js';
 import { relationTargetHref } from './edition-work';
 import type { RowValue } from './overview';
 import type { QualifiedNote } from './qualified-relations';
@@ -38,37 +39,48 @@ export function QualifiedCredit({
               {notes.map((note, index) => (
                 <li key={`note-${index}`}>{note}</li>
               ))}
-              {qualified.map((note, index) => (
-                <li
-                  key={`qualified-${index}`}
-                  data-property={note.property}
-                  className={
-                    note.property === 'wdt:P3831' ||
-                    note.property === 'wdt:P453' ||
-                    note.property === 'schema:character'
-                      ? 'font-medium'
-                      : undefined
-                  }
-                >
-                  {note.subject ? (
-                    <value.link
-                      href={relationTargetHref(note.subject, value.locale, value.context)}
-                      lang={note.language}
-                      className="text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
-                    >
-                      {note.text}
-                    </value.link>
-                  ) : (
-                    <span lang={note.language}>{note.text}</span>
-                  )}
-                  {note.language && (
-                    <>
-                      {' '}
-                      <LanguageTag lang={note.language} locale={value.locale} />
-                    </>
-                  )}
-                </li>
-              ))}
+              {qualified.map((note, index) => {
+                const quantity = note.quantity?.presentation;
+                const unit = quantity
+                  ? (quantity.unitLabel ?? m.quantity_unit_unavailable({}, { locale: value.locale as never }))
+                  : '';
+                return (
+                  <li
+                    key={`qualified-${index}`}
+                    data-property={note.property}
+                    className={
+                      note.property === 'wdt:P3831' ||
+                      note.property === 'wdt:P453' ||
+                      note.property === 'schema:character'
+                        ? 'font-medium'
+                        : undefined
+                    }
+                  >
+                    {quantity ? (
+                      <span>
+                        {note.text} {quantity.numbers}
+                        {unit ? ` ${unit}` : ''}
+                      </span>
+                    ) : note.subject ? (
+                      <value.link
+                        href={relationTargetHref(note.subject, value.locale, value.context)}
+                        lang={note.language}
+                        className="text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+                      >
+                        {note.text}
+                      </value.link>
+                    ) : (
+                      <span lang={note.language}>{note.text}</span>
+                    )}
+                    {note.language && (
+                      <>
+                        {' '}
+                        <LanguageTag lang={note.language} locale={value.locale} />
+                      </>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </>
