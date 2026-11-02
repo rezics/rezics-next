@@ -9,12 +9,26 @@ import {
   characterGroups,
   characterRelations,
   characterType,
+  isCurrentCharacterRead,
   validateCharacter,
 } from '../src/features/catalogue/character-profile';
 import { readCreatedSubject } from '../src/features/catalogue/create-subject-request';
 import { relationActor, relationRole } from '../src/kernel/fake/catalogue-relations';
 import { factChanged, sealFacts, sendFacts, stageFact } from '../src/features/catalogue/subject-facts';
 import { characterFacts } from '../src/features/catalogue/character-profile';
+
+test('retained Character reads are disclosed only for a settled successful exact-address match', async () => {
+  const fixture = characterProfileFixture();
+  const read = await fixture.transport.load({ id: characterProfileId });
+  if (!read.ok) throw new Error('Expected Character');
+  expect(isCurrentCharacterRead(read, { isSuccess: true, isFetching: false }, { id: characterProfileId })).toBe(true);
+  expect(isCurrentCharacterRead(read, { isSuccess: true, isFetching: true }, { id: characterProfileId })).toBe(false);
+  expect(isCurrentCharacterRead(read, { isSuccess: false, isFetching: false }, { id: characterProfileId })).toBe(false);
+  expect(isCurrentCharacterRead(read, { isSuccess: true, isFetching: false }, { id: characterCreatedId })).toBe(false);
+  expect(
+    isCurrentCharacterRead(read, { isSuccess: true, isFetching: false }, { id: characterProfileId, work: characterCreatedId }),
+  ).toBe(false);
+});
 
 test('Character identity and credit editor uses actual released metadata native writes and current reader without fabricated grain or authority', async () => {
   const fixture = characterProfileFixture();

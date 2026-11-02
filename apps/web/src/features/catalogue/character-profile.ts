@@ -15,19 +15,27 @@ export type CharacterRead =
   | { ok: false; reason: 'invalid' | 'denied' | 'stale' | 'unavailable' }
   | { ok: true; release: Release; character: SubjectRead | null; work: SubjectRead | null };
 export type CharacterAddress = { id?: string | undefined; work?: string | undefined };
+// Retained profile content stays mounted for drafts; expose it only after a settled successful read matches this address.
+export function isCurrentCharacterRead(
+  read: CharacterRead | undefined,
+  query: { isSuccess: boolean; isFetching: boolean },
+  address: CharacterAddress,
+): read is Extract<CharacterRead, { ok: true }> {
+  return (
+    query.isSuccess &&
+    !query.isFetching &&
+    read?.ok === true &&
+    (address.id === undefined ? read.character === null : read.character?.subject.id === address.id) &&
+    (address.work === undefined ? read.work === null : read.work?.subject.id === address.work)
+  );
+}
 export function currentCharacterRead(
   read: CharacterRead | undefined,
   address: CharacterAddress,
   fetching: boolean,
   error: boolean,
 ): read is Extract<CharacterRead, { ok: true }> {
-  return (
-    read?.ok === true &&
-    !fetching &&
-    !error &&
-    read.character?.subject.id === address.id &&
-    read.work?.subject.id === address.work
-  );
+  return isCurrentCharacterRead(read, { isSuccess: !error, isFetching: fetching }, address);
 }
 export type CharacterTransport = {
   load: (address: CharacterAddress) => Promise<CharacterRead>;

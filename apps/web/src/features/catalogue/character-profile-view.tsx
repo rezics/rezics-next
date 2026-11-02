@@ -29,7 +29,7 @@ import {
   characterType,
   characterWork,
   characterWorkFields,
-  currentCharacterRead,
+  isCurrentCharacterRead,
   type CharacterAddress,
   type CharacterRead,
   type CharacterTransport,
@@ -77,7 +77,7 @@ function CharacterProfileLive({
   });
   const retained = useRef<Extract<CharacterRead, { ok: true }> | undefined>(undefined);
   const result = query.data;
-  const currentRead = currentCharacterRead(result, { id, work }, query.isFetching, query.isError);
+  const currentRead = isCurrentCharacterRead(result, query, { id, work });
   if (currentRead) retained.current = result;
   const current = retained.current;
   const character = current?.character;
@@ -97,7 +97,7 @@ function CharacterProfileLive({
         label={m.character_title({}, o)}
         headingClassName="font-sans"
         actions={
-          href && (
+          currentRead && href && (
             <a href={href} className={buttonVariants({ variant: 'outline' })}>
               {m.candidate_view_public({}, o)}
             </a>
@@ -105,8 +105,10 @@ function CharacterProfileLive({
         }
       />
       <p className="text-muted-foreground">{m.character_intro({}, o)}</p>
-      {query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
-      {(query.isError || (query.data && !query.data.ok)) && (
+      {query.isFetching && !currentRead && <p role="status">{m.candidate_loading({}, o)}</p>}
+      {(query.isError ||
+        (query.data && !query.data.ok) ||
+        (query.isSuccess && !query.isFetching && query.data?.ok && !currentRead)) && (
         <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
       )}
       <Button variant="outline" onClick={() => void query.refetch()}>
