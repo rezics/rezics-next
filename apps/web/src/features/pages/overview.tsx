@@ -15,6 +15,7 @@ import {
   type CoverRatio,
 } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
+import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
 import { CoverViewer } from '@rezics/ui/cover-viewer';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
@@ -801,7 +802,7 @@ export function CollectionList(props: Record<string, unknown>) {
       href={viewHref(value, 'lists')}
       locale={value.locale}
     >
-      <ul className="space-y-2 break-words leading-7">
+      <ul className="space-y-2">
         {collections.map((collection, index) => {
           const curator = isRecord(collection.curator) ? collection.curator : undefined;
           const name =
@@ -811,33 +812,40 @@ export function CollectionList(props: Record<string, unknown>) {
                 ? `@${curator.handle}`
                 : '';
           const options = { locale: value.locale as never };
+          const collectionTitle =
+            typeof collection.title === 'string' && collection.title ? collection.title : value.unlabelled;
+          const multiplicity =
+            typeof collection.multiplicity === 'number' && collection.multiplicity > 1
+              ? m.library_subject_multiplicity({ count: collection.multiplicity }, options)
+              : null;
           return (
             <li key={typeof collection.id === 'string' ? collection.id : index}>
-              <MetaLine
-                items={[
-                  <span className={`${linkClass} ${linkColor} font-medium`}>
-                    {readable ? (
-                      <Link
-                        href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
-                      >
-                        {typeof collection.title === 'string' && collection.title ? collection.title : value.unlabelled}
-                      </Link>
-                    ) : typeof collection.title === 'string' && collection.title ? (
-                      collection.title
-                    ) : (
-                      value.unlabelled
-                    )}
-                  </span>,
-                  name ? (
-                    <span className="text-sm text-muted-foreground">{m.subject_collection_by({ name }, options)}</span>
-                  ) : null,
-                  typeof collection.multiplicity === 'number' && collection.multiplicity > 1 ? (
-                    <span className="text-sm text-muted-foreground">
-                      {m.library_subject_multiplicity({ count: collection.multiplicity }, options)}
-                    </span>
-                  ) : null,
-                ]}
-              />
+              <ContentItemFrame as="div" className={`min-w-0 py-3 sm:py-4${readable ? '' : ' before:hidden'}`}>
+                <ContentItemHeading
+                  level={3}
+                  className="min-w-0 text-[17px] leading-snug font-semibold [overflow-wrap:anywhere] sm:text-lg md:text-xl"
+                >
+                  {readable ? (
+                    <ContentItemTitleLink
+                      as={Link}
+                      className={`block min-h-11 content-center rounded-sm ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+                      href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
+                    >
+                      {collectionTitle}
+                    </ContentItemTitleLink>
+                  ) : (
+                    collectionTitle
+                  )}
+                </ContentItemHeading>
+                {(name !== '' || multiplicity !== null) && (
+                  <div
+                    data-content-item-slot="metadata"
+                    className="mt-2 text-[13px] leading-snug text-muted-foreground [overflow-wrap:anywhere] sm:text-sm"
+                  >
+                    <MetaLine items={[name ? m.subject_collection_by({ name }, options) : null, multiplicity]} />
+                  </div>
+                )}
+              </ContentItemFrame>
             </li>
           );
         })}
