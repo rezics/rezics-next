@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type MouseEvent } from 'react';
 import { Check, Search } from 'lucide-react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -36,17 +36,27 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
   const id = useId();
   const queryInput = useRef<HTMLInputElement>(null);
   const resultRegion = useRef<HTMLDivElement>(null);
+  const caller = useMemo(() => ({ active: false }), [picker, disabled]);
   const keyboardPosition = useRef<{
     picker: SetupContextPicker;
     query: string;
     cursor: string | undefined;
     version: number;
+    ownsFocus: () => boolean;
+    cancel: () => void;
   } | null>(null);
   const { current, selected, page, reference } = state;
   const currentVersion = picker.currentVersion();
   const searchVersion = picker.searchVersion();
   const selectionVersion = picker.selectionVersion();
   const referenceVersion = picker.referenceVersion();
+  useLayoutEffect(() => {
+    caller.active = true;
+    return () => {
+      caller.active = false;
+      keyboardPosition.current?.cancel();
+    };
+  }, [caller]);
   useLayoutEffect(() => {
     const pending = keyboardPosition.current;
     if (!pending) return;
@@ -55,27 +65,65 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
       pending.picker !== picker ||
       pending.version !== picker.searchVersion() ||
       pending.query !== state.query ||
-      pending.cursor !== page.cursor
+      pending.cursor !== page.cursor ||
+      !pending.ownsFocus()
     ) {
-      keyboardPosition.current = null;
+      pending.cancel();
       return;
     }
     if (page.phase !== 'loading') {
+      pending.cancel();
       resultRegion.current?.focus();
-      keyboardPosition.current = null;
     }
   }, [disabled, page, picker, state.query]);
   const pageAction = (
-    detail: number,
+    event: MouseEvent<HTMLButtonElement>,
     cursor: string | undefined,
     action: () => boolean | void,
     mouseAccepted?: () => void,
   ) => {
-    const pending = detail === 0 ? { picker, query: state.query, cursor, version: searchVersion + 1 } : null;
-    keyboardPosition.current = pending;
+    // A retained handler cannot regain ownership after a picker/disabled ABA visit or unmount.
+    if (!caller.active || disabled || picker.searchVersion() !== searchVersion) return;
+    keyboardPosition.current?.cancel();
+    if (event.detail === 0) {
+      const document = event.currentTarget.ownerDocument;
+      const owner = document.activeElement;
+      const cancel = () => {
+        if (keyboardPosition.current === pending) keyboardPosition.current = null;
+        document.removeEventListener('focusin', focusMoved, true);
+        document.removeEventListener('focusout', focusLeft, true);
+        for (const type of ['pointerdown', 'mousedown', 'touchstart', 'click'])
+          document.removeEventListener(type, cancel, true);
+        document.defaultView?.removeEventListener('blur', cancel);
+      };
+      const focusMoved = (event: FocusEvent) => {
+        if (event.target !== owner) cancel();
+      };
+      const focusLeft = (event: FocusEvent) => {
+        if (owner?.isConnected || event.relatedTarget !== null) cancel();
+      };
+      const pending = {
+        picker,
+        query: state.query,
+        cursor,
+        version: searchVersion + 1,
+        // Loading removes its button. The resulting body fallback is not a new focus choice.
+        ownsFocus: () =>
+          document.activeElement === owner ||
+          (!!owner && !owner.isConnected && document.activeElement === document.body),
+        cancel,
+      };
+      keyboardPosition.current = pending;
+      document.addEventListener('focusin', focusMoved, true);
+      document.addEventListener('focusout', focusLeft, true);
+      for (const type of ['pointerdown', 'mousedown', 'touchstart', 'click'])
+        document.addEventListener(type, cancel, true);
+      document.defaultView?.addEventListener('blur', cancel);
+    }
+    const pending = keyboardPosition.current;
     const accepted = action();
-    if (pending && (accepted === false || picker.searchVersion() !== pending.version)) keyboardPosition.current = null;
-    else if (!pending && accepted !== false) mouseAccepted?.();
+    if (!caller.active || accepted === false || picker.searchVersion() !== searchVersion + 1) pending?.cancel();
+    else if (event.detail !== 0) mouseAccepted?.();
   };
   return (
     <Field className="min-w-0 max-w-full [overflow-wrap:anywhere]">
@@ -233,7 +281,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                   className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                   disabled={disabled}
                   onClick={(event) =>
-                    pageAction(event.detail, page.next!, () =>
+                    pageAction(event, page.next!, () =>
                       picker.next({
                         query: state.query,
                         ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
@@ -260,7 +308,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                   className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                   disabled={disabled}
                   onClick={(event) =>
-                    pageAction(event.detail, page.cursor, () =>
+                    pageAction(event, page.cursor, () =>
                       picker.retrySearch({
                         query: state.query,
                         ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
@@ -279,7 +327,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                     disabled={disabled}
                     onClick={(event) =>
                       pageAction(
-                        event.detail,
+                        event,
                         undefined,
                         () =>
                           picker.restartSearch({ query: state.query, cursor: page.cursor!, version: searchVersion }),
