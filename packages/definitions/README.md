@@ -35,11 +35,12 @@ with source pointers. Release validation enforces the same closure and reference
 Only this custom object and the existing library mapping are removed before ordinary LinkML induction;
 all other annotations and LinkML validation remain intact. Older releases may omit hints entirely.
 
-The published inventory in `catalogue/` defaults every Type to portrait 5:7, including generic Types through
-Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, person and character. Current `coverRatio`
-annotations agree with the portrait list aspect. Explicit landscape/square configuration and any valid ratio
-remain supported by the schema; historical immutable releases retain their bytes. Book selects
-author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
+The published inventory in `catalogue/` gives every Type a portrait 5:7 cover frame and portrait list aspect,
+including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, person and
+character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
+any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
+is immutable: 1.0.1 is current, while release 1.0.0 bytes and its digest remain loadable for existing pins. Book
+selects author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
 cookTime/suitableForDiet; MusicAlbum selects datePublished/genre. These ordered factual hints, media dimensions,
 source authority, membership, LibraryProfileSource and accepted profile pins retain their meaning. Hints convey
 no authority or fact values.
@@ -294,10 +295,7 @@ Work profiles admit multivalued `rezics:representativeEdition`, targeting the
 book edition and software release classes that hold `schema:exampleOfWork`.
 Its `schema:inLanguage` qualifier distinguishes the chosen edition for each
 language. It is a holder-only derivation relation: a cover read follows that
-choice directly rather than scanning editions. Work classes without a more
-specific cover ratio inherit 2:3; other subjects inherit 1:1. Character and
-person portraits use 3:4, games and their releases use 3:4, music releases use
-1:1, and recipes use 4:3. Books, manga, volumes and anime inherit 2:3.
+choice directly rather than scanning editions.
 
 `schema:inLanguage` is the BCP 47 language tag of the resource. The catalogue stores
 the canonical case of the subtags it uses: a lowercase language, an optional
@@ -1389,8 +1387,8 @@ follow [schema:abstract](https://schema.org/abstract) and
 [schema:image](https://schema.org/image).
 
 Story arcs are subjects of type `StoryArc` (`wd:Q2620972`, verified against
-[Wikidata](https://www.wikidata.org/wiki/Q2620972)), inheriting CreativeWork's 2:3
-cover ratio. CreativeWork and its series profiles hold `rezics:storyArc`, an
+[Wikidata](https://www.wikidata.org/wiki/Q2620972)). CreativeWork and its series
+profiles hold `rezics:storyArc`, an
 acyclic membership relation ordered by `schema:position`. Its `rezics:firstPart`
 and `rezics:lastPart` string qualifiers preserve the work's episode or chapter
 numbering. The inverse page names the work. Appearance and credit statements

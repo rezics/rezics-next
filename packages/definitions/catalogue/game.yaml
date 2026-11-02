@@ -116,6 +116,9 @@ classes:
             - id: digital
               statuses: [{ id: owned }]
         importSources: []
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: []
       facets: gamePlatform datePublished ageRating distributionFormat releaseType exampleOfWork developer publisher inLanguage author director illustrator musicBy screenwriter voiceActor contributor
       cover_ratio: 5:7
       schema_org_type: https://schema.org/CreativeWork

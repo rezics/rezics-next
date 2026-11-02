@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:9a63b9e0dd4541870a3f9a6cf34208cefc97013e066fdd238bc6a78e119be5fc",
+  "digest": "sha256:2d984ead9d128012123bed3f34481f703df84070edcd139f3615441e61ff1de7",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -762,7 +762,8 @@
           "zh-Hans": "体现一部或多部作品、可独立识别的软件发行版；平台和语言列表本身不会产生多个发行版。",
           "zh-Hant": "體現一部或多部作品、可獨立識別的軟體發行版；平台和語言清單本身不會產生多個發行版。"
         },
-        "schemaOrgType": "https://schema.org/CreativeWork"
+        "schemaOrgType": "https://schema.org/CreativeWork",
+        "listPresentation": { "imageAspect": "portrait", "keyFacts": [] }
       },
       "schema:Person": {
         "iri": "http://schema.org/Person",
@@ -2246,7 +2247,7 @@
       "schema": "http://schema.org/",
       "marcrel": "http://id.loc.gov/vocabulary/relators/"
     },
-    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.0" },
+    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.1" },
     "generator": { "name": "@neverblink/linkml", "version": "0.17.2" },
     "properties": {
       "wdt:P31": {

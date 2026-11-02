@@ -30,11 +30,6 @@ const labels = {
 };
 
 const glosses = {
-  'schema:TVSeries': {
-    'zh-Hans': '电视系列节目',
-    'zh-Hant': '電視系列節目',
-    ja: 'テレビ番組シリーズ',
-  },
   'schema:TVSeason': {
     'zh-Hans': '编播季',
     'zh-Hant': '編播季',
@@ -105,6 +100,17 @@ const glosses = {
   },
 };
 
+const authoredDescriptions = {
+  de: 'Eine animierte Fernsehserie als Werk mit ihren Staffeln und Folgen, unabhängig von einer bestimmten Veröffentlichung.',
+  en: 'An animated television series as a work spanning its seasons and episodes, distinct from a particular publication release.',
+  es: 'Una serie de animación televisiva como obra que abarca temporadas y episodios, distinta de una edición distribuida concreta.',
+  fr: 'Une série télévisée d’animation en tant qu’œuvre regroupant saisons et épisodes, distincte d’une édition donnée.',
+  ja: 'シーズンやエピソードを含む作品としてのテレビアニメシリーズ。特定の刊行版とは別です。',
+  ko: '시즌과 에피소드를 아우르는 TV 애니메이션 시리즈 작품입니다. 특정 발행판과는 별개입니다.',
+  'zh-Hans': '包含各季和各集的电视动画作品系列，与某一具体发行版分开。',
+  'zh-Hant': '包含各季與各集的電視動畫作品系列，與某個具體發行版分開。',
+};
+
 test('every type a page shows reads as an interface word in Chinese and Japanese', () => {
   expect(Object.keys(bundledRelease.types).sort()).toEqual(Object.keys(labels).sort());
   for (const [key, expected] of Object.entries(labels)) {
@@ -116,4 +122,8 @@ test("a type's Wikidata gloss is kept as its description", () => {
   for (const [key, expected] of Object.entries(glosses)) {
     expect(bundledRelease.types[key]).toHaveProperty('descriptions', expected);
   }
+});
+
+test('an authored type description is published in all locales', () => {
+  expect(bundledRelease.types['schema:TVSeries']?.descriptions).toEqual(authoredDescriptions);
 });

@@ -57,41 +57,8 @@ test('every bundled item property declares how it reads in both directions', () 
   });
 });
 
-test('bundled types declare the documented cover frame ratios', () => {
-  const ratios: Record<string, string[]> = {
-    '5:7': [
-      'rezics:AnimeRelease',
-      'wd:Q2620972',
-      'schema:Book',
-      'bf:Instance',
-      'schema:ComicSeries',
-      'schema:PublicationVolume',
-      'schema:TVSeries',
-      'schema:TVSeason',
-      'schema:Episode',
-      'schema:Movie',
-      'schema:BookSeries',
-      'wd:Q7725310',
-      'schema:VideoGame',
-      'wd:Q689445',
-      'wd:Q209163',
-      'wd:Q20631656',
-    ],
-    '3:4': ['wd:Q95074', 'schema:Person'],
-    '1:1': [
-      'wd:Q2095',
-      'schema:MusicAlbum',
-      'schema:Organization',
-      'schema:SoftwareApplication',
-      'skos:Concept',
-      'skos:ConceptScheme',
-    ],
-    '4:3': ['schema:Recipe'],
-  };
-  expect(Object.values(ratios).flat().sort()).toEqual(Object.keys(types).sort());
-  for (const [ratio, terms] of Object.entries(ratios)) {
-    for (const term of terms) expect(types[term]?.coverRatio).toBe(ratio);
-  }
+test('every bundled type uses the published portrait cover frame', () => {
+  for (const type of Object.values(types)) expect(type.coverRatio).toBe('5:7');
 });
 
 test('a work names its representative edition for each language', () => {
