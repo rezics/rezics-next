@@ -661,6 +661,8 @@ to an actual AVIF only when there is no usable WebP candidate. A single derivati
 the list is not the potential processing ladder. It never returns originals, URLs, storage keys, uploader metadata,
 document bodies or historical revisions. Consumers use the existing native media transport for the advertised slot.
 
+After a derivative load failure, the document reader offers manual Retry only for an admitted image with actual variants; each action mounts one eager browser load at the same authorized derivative URLs, keeps the unavailable alt-text fallback and hides credit until success, and retires callbacks on attempt, ID/digest or disclosure replacement without automatic retries or metadata refills.
+
 Enumeration is private storage fact gathering. The selected row then passes the same source/final verifier as
 `downloadMedia` and `decideDownload`: ordinary media Access, available media state, permanent post claim, independent
 declared container/ancestor/board gates, current Realm/Space lifecycle and protected Realm ban checks, or the native

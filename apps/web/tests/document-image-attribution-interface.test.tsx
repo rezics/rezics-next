@@ -82,6 +82,7 @@ describe('Document image attribution interface', () => {
     expect(html).not.toContain(viaUrl);
     expect(html).not.toContain('CC-BY-4.0');
     expect(html).not.toContain('<a ');
+    expect(html).not.toContain('<button');
   });
 
   test('withholds credit when a presentation has no usable derivative', () => {
@@ -93,12 +94,59 @@ describe('Document image attribution interface', () => {
     expect(html).not.toContain(rightsHolder);
     expect(html).not.toContain(viaUrl);
     expect(html).not.toContain('CC-BY-4.0');
+    expect(html).not.toContain('<button');
+  });
+
+  test('manually retries one admitted load at a time, withholding credit until recovery succeeds', async () => {
+    const host = window.document.createElement('div');
+    const root = createRoot(host);
+    await act(async () => root.render(createElement(NativeDocumentImage, { image, alt, locale: 'en' })));
+    const first = host.querySelector('img')!;
+    await act(async () => first.dispatchEvent(new window.Event('error')));
+    const retry = host.querySelector('button')!;
+    expect(retry.textContent).toBe('Retry');
+    await act(async () => {
+      retry.click();
+      retry.click();
+    });
+    const second = host.querySelector('img')!;
+    expect(second).not.toBe(first);
+    expect(host.querySelectorAll('img')).toHaveLength(1);
+    expect(second.getAttribute('src')).toBe(first.getAttribute('src'));
+    expect(second.getAttribute('srcset')).toBe(first.getAttribute('srcset'));
+    expect(second.alt).toBe(alt);
+    expect(second.loading).toBe('eager');
+    expect(second.closest('picture')!.hidden).toBe(true);
+    expect(retry.disabled).toBe(true);
+    expect(host.querySelector('figure')!.getAttribute('aria-busy')).toBe('true');
+    await act(async () => {
+      first.dispatchEvent(new window.Event('load'));
+      first.dispatchEvent(new window.Event('error'));
+    });
+    expect(host.querySelector('a')).toBeNull();
+    expect(host.textContent).not.toContain(rightsHolder);
+    expect(host.textContent).toContain(alt);
+    await act(async () => second.dispatchEvent(new window.Event('error')));
+    expect(host.querySelector('img')).toBeNull();
+    expect(retry.disabled).toBe(false);
+    expect(host.querySelector('a')).toBeNull();
+    await act(async () => retry.click());
+    const third = host.querySelector('img')!;
+    expect(third).not.toBe(second);
+    await act(async () => third.dispatchEvent(new window.Event('load')));
+    expect(host.querySelector('figure')!.getAttribute('data-state')).toBe('ready');
+    expect(third.closest('picture')!.hidden).toBe(false);
+    expect(host.querySelector('button')).toBeNull();
+    expect(host.querySelector('a')!.getAttribute('href')).toBe(viaUrl);
+    expect(host.textContent).toContain(rightsHolder);
+    await act(async () => root.unmount());
+    await window.happyDOM.abort();
   });
 
   test('retries a failed image after its id or digest changes and replaces its admitted source', async () => {
     const host = window.document.createElement('div');
     const root = createRoot(host);
-    const show = (next: DocumentImagePresentation) =>
+    const show = (next: DocumentImagePresentation | null) =>
       act(async () => root.render(createElement(NativeDocumentImage, { image: next, alt, locale: 'en' })));
     const fail = () => act(async () => host.querySelector('img')!.dispatchEvent(new window.Event('error')));
     await show(image);
@@ -128,6 +176,13 @@ describe('Document image attribution interface', () => {
     await show(revised);
     expect(host.querySelector('figure')?.getAttribute('data-state')).toBe('ready');
     expect(host.querySelector('a')?.getAttribute('href')).toBe('https://images.example.test/revised');
+    const retired = host.querySelector('img')!;
+    await show(null);
+    await act(async () => retired.dispatchEvent(new window.Event('load')));
+    expect(host.querySelector('img, button, a')).toBeNull();
+    await show(revised);
+    await act(async () => retired.dispatchEvent(new window.Event('error')));
+    expect(host.querySelector('figure')?.getAttribute('data-state')).toBe('ready');
     await act(async () => root.unmount());
     await window.happyDOM.abort();
   });

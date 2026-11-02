@@ -4031,6 +4031,7 @@
   "thread_write_uncertain_changed": "元の投稿の結果は不明です。元のキーで再試行する前に、下書きと返信先を復元してください。",
   "document_image_credit": "画像のクレジット",
   "document_image_via": "提供経路",
+  "document_image_retry": "再試行",
   "author_erasure_action": "このスレッドの自分の投稿を消去…",
   "author_erasure_confirm_title": "自分の投稿を完全に消去しますか？",
   "author_erasure_scope": "この操作では、このスレッド内のあなたの投稿とその改訂だけを消去します。他の人の投稿やあなたのアカウントは削除されません。受信箱や外部サービスにあるコピーは対象外で、残る場合があります。",

@@ -4031,6 +4031,7 @@
   "thread_write_uncertain_changed": "原帖的处理结果未知。使用原始键重试前，请先恢复草稿和被回复的帖子。",
   "document_image_credit": "图片署名",
   "document_image_via": "经由",
+  "document_image_retry": "重试",
   "author_erasure_action": "永久抹除我在此讨论串中的帖子…",
   "author_erasure_confirm_title": "要永久抹除你的帖子吗？",
   "author_erasure_scope": "此操作只会抹除你在此讨论串中的帖子及其修订版本，不会删除其他人的帖子或你的账户。收件箱或外部服务中的副本不在此操作范围内，可能仍会保留。",

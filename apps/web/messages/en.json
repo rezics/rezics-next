@@ -2898,6 +2898,7 @@
   "content_edition_image_unavailable": "Image unavailable",
   "document_image_credit": "Image credit",
   "document_image_via": "via",
+  "document_image_retry": "Retry",
   "content_edition_attribution": "This document is the fixed revision identified below. Later edits are not included. The licence is the source’s recorded declaration.",
   "content_edition_licence": "Licence",
   "content_edition_revision": "Document revision",

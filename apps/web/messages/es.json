@@ -4031,6 +4031,7 @@
   "thread_write_uncertain_changed": "No se sabe qué pasó con la publicación original. Restaura el borrador y la publicación a la que responde antes de volver a intentarlo con la clave original.",
   "document_image_credit": "Crédito de la imagen",
   "document_image_via": "vía",
+  "document_image_retry": "Reintentar",
   "author_erasure_action": "Eliminar permanentemente mis publicaciones en este hilo…",
   "author_erasure_confirm_title": "¿Eliminar permanentemente tus publicaciones?",
   "author_erasure_scope": "Esta acción borra solo tus publicaciones y sus revisiones en este hilo. No borra las publicaciones de otras personas ni tu cuenta. Las copias de las bandejas de entrada o de servicios externos quedan fuera de esta acción y pueden permanecer.",

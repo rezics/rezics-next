@@ -4031,6 +4031,7 @@
   "thread_write_uncertain_changed": "Le résultat du message d’origine est inconnu. Restaurez le brouillon et le message auquel il répond avant de réessayer avec la clé d’origine.",
   "document_image_credit": "Crédit de l’image",
   "document_image_via": "via",
+  "document_image_retry": "Réessayer",
   "author_erasure_action": "Effacer définitivement mes messages dans cette discussion…",
   "author_erasure_confirm_title": "Effacer définitivement vos messages ?",
   "author_erasure_scope": "Cette action efface uniquement vos messages et leurs révisions dans cette discussion. Les messages des autres personnes et votre compte ne sont pas supprimés. Les copies dans vos boîtes de réception ou sur des services externes ne sont pas concernées et peuvent rester.",
