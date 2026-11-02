@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { chromium, type Browser, type Page } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { placeWebCheck } from './check-placement.ts';
 
 export { observeStorybook, settle };
@@ -14,7 +14,8 @@ const themes = ['light', 'dark'] as const;
 const viewportHeight = 720;
 const captureLimit = 4;
 const buildTimeout = 480_000;
-let building: ReturnType<typeof Bun.spawn> | undefined;
+const cleanupTimeout = 5_000;
+const buildOutputLimit = 24_000;
 
 type Theme = (typeof themes)[number];
 type Options = {
@@ -45,6 +46,276 @@ export type StoryPreview = {
 };
 
 type ProgressReporter = ReturnType<typeof createProgressReporter>;
+
+type CloseResult = void | boolean;
+type CleanupIssue = { label: string; message: string };
+type CleanupReport = { issues: CleanupIssue[]; unproved: string[] };
+type LeaseRecord<T> = {
+  label: string;
+  close: (value: T) => CloseResult | Promise<CloseResult>;
+  acquired?: Promise<T>;
+  value?: T;
+  hasValue: boolean;
+  closePromise?: Promise<string | undefined>;
+  state: 'acquiring' | 'active' | 'closing' | 'closed' | 'failed' | 'unproved';
+};
+
+type TemporarySite = { port: number; close: () => CloseResult | Promise<CloseResult> };
+
+export type ScreenshotRuntime = {
+  spawn?: typeof Bun.spawn;
+  serve: (directory: string) => TemporarySite | Promise<TemporarySite>;
+  launch: () => Promise<Browser>;
+  readStories: (directory: string) => Promise<string[]>;
+  mkdir: typeof mkdir;
+  mkdtemp: typeof mkdtemp;
+  rm: typeof rm;
+  buildTimeoutMs?: number;
+  cleanupTimeoutMs?: number;
+  signals?: {
+    listen: (signal: 'SIGINT' | 'SIGTERM', listener: () => void) => () => void;
+  };
+  setExitCode?: (code: number) => void;
+  stdout?: (text: string) => void;
+  stderr?: (text: string) => void;
+  progress?: (write: (line: string) => void) => ProgressReporter;
+};
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function boundedText(value: string, limit = 4_000): string {
+  if (value.length <= limit) return value;
+  return `${value.slice(0, limit)}… [truncated ${value.length - limit} characters]`;
+}
+
+function abortedError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason ?? 'Capture retired.'));
+}
+
+function waitForSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(abortedError(signal));
+  return new Promise<T>((resolve, reject) => {
+    const remove = () => signal.removeEventListener('abort', onAbort);
+    const onAbort = () => {
+      remove();
+      reject(abortedError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        remove();
+        resolve(value);
+      },
+      (error: unknown) => {
+        remove();
+        reject(error);
+      },
+    );
+  });
+}
+
+type Bounded<T> = { state: 'fulfilled'; value: T } | { state: 'rejected'; error: unknown } | { state: 'timeout' };
+
+function bounded<T>(promise: Promise<T>, timeoutMs: number): Promise<Bounded<T>> {
+  return new Promise((resolve) => {
+    let finished = false;
+    const timer = setTimeout(() => {
+      if (finished) return;
+      finished = true;
+      resolve({ state: 'timeout' });
+    }, Math.max(1, timeoutMs));
+    promise.then(
+      (value) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        resolve({ state: 'fulfilled', value });
+      },
+      (error: unknown) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        resolve({ state: 'rejected', error });
+      },
+    );
+  });
+}
+
+async function withDeadline<T>(promise: Promise<T>, timeoutMs: number, signal: AbortSignal): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Storybook build timed out.')), Math.max(1, timeoutMs));
+    });
+    return await waitForSignal(Promise.race([promise, deadline]), signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+class ResourceRegistry {
+  private readonly controller = new AbortController();
+  private readonly records: LeaseRecord<unknown>[] = [];
+  private accepting = true;
+  private retirement: Promise<CleanupReport> | undefined;
+  private removeParentListener: (() => void) | undefined;
+
+  constructor(
+    private readonly label: string,
+    private readonly timeoutMs: number,
+    private readonly isParentOpen: () => boolean = () => true,
+    parentSignal?: AbortSignal,
+  ) {
+    if (parentSignal) {
+      const retire = () => void this.retire('Parent capture retired.');
+      if (parentSignal.aborted) retire();
+      else {
+        parentSignal.addEventListener('abort', retire, { once: true });
+        this.removeParentListener = () => parentSignal.removeEventListener('abort', retire);
+      }
+    }
+  }
+
+  get open(): boolean {
+    return this.accepting && this.isParentOpen() && !this.controller.signal.aborted;
+  }
+
+  acquire<T>(
+    label: string,
+    acquire: () => T | Promise<T>,
+    close: (value: T) => CloseResult | Promise<CloseResult>,
+  ): Promise<T> {
+    if (!this.open) return Promise.reject(new Error(`${this.label} is retired; cannot acquire ${label}.`));
+    const record: LeaseRecord<T> = {
+      label,
+      close,
+      hasValue: false,
+      state: 'acquiring',
+    };
+    this.records.push(record as LeaseRecord<unknown>);
+    const acquired = Promise.resolve()
+      .then(() => {
+        if (!this.open) throw new Error(`${this.label} retired before ${label} acquisition started.`);
+        return acquire();
+      })
+      .then(
+        (value) => {
+          record.value = value;
+          record.hasValue = true;
+          if (!this.open) {
+            record.state = 'closing';
+            void this.closeRecord(record);
+            throw new Error(`${this.label} retired while acquiring ${label}.`);
+          }
+          record.state = 'active';
+          return value;
+        },
+        (error: unknown) => {
+          record.state = 'failed';
+          throw error;
+        },
+      );
+    record.acquired = acquired;
+    void acquired.catch(() => undefined);
+    return waitForSignal(acquired, this.controller.signal);
+  }
+
+  retire(reason = `${this.label} retired.`): Promise<CleanupReport> {
+    if (this.retirement) return this.retirement;
+    this.accepting = false;
+    this.removeParentListener?.();
+    this.removeParentListener = undefined;
+    this.controller.abort(new Error(reason));
+    const tasks = this.records.map((record) => this.retireRecord(record));
+    this.retirement = Promise.all(tasks).then((reports) => ({
+      issues: reports.flatMap((report) => report.issues),
+      unproved: reports.flatMap((report) => report.unproved),
+    }));
+    return this.retirement;
+  }
+
+  private closeRecord<T>(record: LeaseRecord<T>): Promise<string | undefined> {
+    if (record.closePromise) return record.closePromise;
+    if (!record.hasValue) return Promise.resolve(undefined);
+    record.state = 'closing';
+    record.closePromise = Promise.resolve()
+      .then(() => record.close(record.value as T))
+      .then(
+        (result) => {
+          if (result === false) {
+            record.state = 'unproved';
+            return `${record.label} returned with active readers.`;
+          }
+          record.state = 'closed';
+          return undefined;
+        },
+        (error: unknown) => {
+          record.state = 'unproved';
+          return errorMessage(error);
+        },
+      );
+    return record.closePromise;
+  }
+
+  private async retireRecord(record: LeaseRecord<unknown>): Promise<CleanupReport> {
+    if (record.hasValue) return this.waitForClose(record);
+    if (record.state === 'failed') return { issues: [], unproved: [] };
+    const acquired = await bounded(record.acquired!, this.timeoutMs);
+    if (acquired.state === 'timeout') {
+      const message = `${record.label} acquisition did not settle within ${this.timeoutMs}ms.`;
+      return { issues: [{ label: record.label, message }], unproved: [record.label] };
+    }
+    if (record.hasValue) return this.waitForClose(record);
+    return { issues: [], unproved: [] };
+  }
+
+  private async waitForClose(record: LeaseRecord<unknown>): Promise<CleanupReport> {
+    const closing = this.closeRecord(record);
+    const result = await bounded(closing, this.timeoutMs);
+    if (result.state === 'timeout') {
+      const message = `${record.label} close did not settle within ${this.timeoutMs}ms.`;
+      record.state = 'unproved';
+      return { issues: [{ label: record.label, message }], unproved: [record.label] };
+    }
+    if (result.state === 'rejected') {
+      const message = `${record.label} close failed: ${errorMessage(result.error)}`;
+      record.state = 'unproved';
+      return { issues: [{ label: record.label, message }], unproved: [record.label] };
+    }
+    if (result.value) {
+      const message = `${record.label} close failed: ${result.value}`;
+      return { issues: [{ label: record.label, message }], unproved: [record.label] };
+    }
+    return { issues: [], unproved: [] };
+  }
+}
+
+class CaptureLifecycleFailure extends Error {
+  constructor(
+    readonly primary: unknown,
+    readonly cleanupFailures: readonly string[],
+    readonly buildDirectoryDisposition?: {
+      path: string;
+      state: 'retained' | 'unknown';
+      reasons: readonly string[];
+    },
+    readonly exitCode?: number,
+  ) {
+    const sections: string[] = [];
+    if (primary !== undefined) sections.push(`Primary failure: ${boundedText(errorMessage(primary))}`);
+    if (cleanupFailures.length)
+      sections.push(`Cleanup failures:\n${cleanupFailures.map((failure) => `- ${boundedText(failure)}`).join('\n')}`);
+    if (buildDirectoryDisposition)
+      sections.push(
+        `Build directory ${buildDirectoryDisposition.state} at ${buildDirectoryDisposition.path} because ${buildDirectoryDisposition.reasons.join('; ')}.`,
+      );
+    super(sections.join('\n'));
+    this.name = 'CaptureLifecycleFailure';
+  }
+}
 
 /** Writes capture progress to stderr while leaving stdout available for the file list. */
 export function createProgressReporter(
@@ -189,49 +460,211 @@ export function screenshotFilename(job: Job): string {
   return `${job.id}.${job.locale}.${job.theme}${width}.png`;
 }
 
-function serve(directory: string) {
-  return Bun.serve({
+function serve(directory: string): TemporarySite {
+  let accepting = true;
+  let activeRequests = 0;
+  const idleWaiters: (() => void)[] = [];
+  const server = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
     async fetch(request) {
-      const target = safePath(directory, new URL(request.url).pathname);
-      if (!target) return new Response(null, { status: 400 });
-      const info = await stat(target).catch(() => undefined);
-      if (!info) return new Response(null, { status: 404 });
-      const file = info.isDirectory() ? join(target, 'index.html') : target;
-      if (!(await Bun.file(file).exists())) return new Response(null, { status: 404 });
-      return new Response(Bun.file(file));
+      if (!accepting) return new Response(null, { status: 503 });
+      activeRequests += 1;
+      try {
+        const target = safePath(directory, new URL(request.url).pathname);
+        if (!target) return new Response(null, { status: 400 });
+        const info = await stat(target).catch(() => undefined);
+        if (!info) return new Response(null, { status: 404 });
+        const file = info.isDirectory() ? join(target, 'index.html') : target;
+        if (!(await Bun.file(file).exists())) return new Response(null, { status: 404 });
+        return new Response(Bun.file(file));
+      } finally {
+        activeRequests -= 1;
+        if (activeRequests === 0) idleWaiters.splice(0).forEach((resolve) => resolve());
+      }
     },
   });
+  return {
+    port: server.port,
+    async close() {
+      accepting = false;
+      await server.stop(true);
+      if (activeRequests === 0) return true;
+      return await new Promise<boolean>((resolve) => idleWaiters.push(() => resolve(true)));
+    },
+  };
 }
 
-async function build(directory: string, cacheDir: string, progress: ProgressReporter): Promise<void> {
-  const storybook = join(app, 'node_modules/.bin/storybook');
-  await mkdir(cacheDir, { recursive: true });
-  progress.buildStarted();
-  const child = Bun.spawn([storybook, 'build', '--test', '--output-dir', directory, '--disable-telemetry', '--quiet'], {
-    cwd: app,
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: { ...process.env, CI: '1', STORYBOOK_DISABLE_TELEMETRY: '1', CACHE_DIR: cacheDir },
-  });
-  building = child;
-  const output = Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      child.kill();
-      reject(new Error('Storybook build timed out.'));
-    }, buildTimeout);
-  });
+async function readBoundedOutput(stream: ReadableStream<Uint8Array>): Promise<string> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let output = '';
+  let bytes = 0;
+  let truncated = false;
   try {
-    const [stdout, stderr, code] = await Promise.race([output, timeout]);
-    if (code !== 0) throw new Error(`Storybook build failed (${code}):\n${stdout}\n${stderr}`);
+    for (;;) {
+      const result = await reader.read();
+      if (result.done) break;
+      const chunk = result.value;
+      const remaining = Math.max(0, buildOutputLimit - bytes);
+      if (remaining > 0) output += decoder.decode(chunk.subarray(0, remaining), { stream: true });
+      if (chunk.byteLength > remaining) truncated = true;
+      bytes += chunk.byteLength;
+      if (remaining === 0) decoder.decode(chunk, { stream: true });
+    }
+    output += decoder.decode();
+    return truncated ? `${output}\n[build output truncated after ${buildOutputLimit} bytes]` : output;
   } finally {
-    clearTimeout(timer);
-    building = undefined;
+    reader.releaseLock();
+  }
+}
+
+async function build(
+  directory: string,
+  cacheDir: string,
+  progress: ProgressReporter,
+  signal: AbortSignal,
+  runtime: Pick<ScreenshotRuntime, 'spawn' | 'mkdir' | 'buildTimeoutMs' | 'cleanupTimeoutMs'>,
+): Promise<void> {
+  const storybook = join(app, 'node_modules/.bin/storybook');
+  await runtime.mkdir(cacheDir, { recursive: true });
+  if (signal.aborted) throw abortedError(signal);
+  progress.buildStarted();
+  const settings = {
+    cwd: app,
+    stdin: 'ignore' as const,
+    stdout: 'pipe' as const,
+    stderr: 'pipe' as const,
+    env: { ...process.env, CI: '1', STORYBOOK_DISABLE_TELEMETRY: '1', CACHE_DIR: cacheDir },
+  };
+  const child = runtime.spawn
+    ? runtime.spawn([storybook, 'build', '--test', '--output-dir', directory, '--disable-telemetry', '--quiet'], settings)
+    : Bun.spawn([storybook, 'build', '--test', '--output-dir', directory, '--disable-telemetry', '--quiet'], settings);
+  const stdout = readBoundedOutput(child.stdout);
+  const stderr = readBoundedOutput(child.stderr);
+  let processExited = false;
+  const exited = child.exited.then((code) => {
+    processExited = true;
+    return code;
+  });
+  void stdout.catch(() => undefined);
+  void stderr.catch(() => undefined);
+  void exited.catch(() => undefined);
+  const allOutput = Promise.all([stdout, stderr, exited]);
+  const waitLimit = runtime.cleanupTimeoutMs ?? cleanupTimeout;
+  let outputSettled = false;
+  try {
+    const [stdoutText, stderrText, code] = await withDeadline(
+      allOutput,
+      runtime.buildTimeoutMs ?? buildTimeout,
+      signal,
+    );
+    outputSettled = true;
+    if (code !== 0)
+      throw new Error(`Storybook build failed (${code}):\n${boundedText(stdoutText, buildOutputLimit)}\n${boundedText(stderrText, buildOutputLimit)}`);
+    // Keep the successful child output drained, but do not expose it unless a build fails.
+    void stdoutText;
+    void stderrText;
+  } catch (primary) {
+    if (outputSettled) throw primary;
+    const cleanupFailures: string[] = [];
+    if (!processExited) {
+      try {
+        child.kill();
+      } catch (error) {
+        cleanupFailures.push(`Storybook build termination request failed: ${errorMessage(error)}`);
+      }
+      const grace = Math.max(1, Math.min(150, Math.floor(waitLimit / 2)));
+      const graceful = await bounded(exited, grace);
+      if (graceful.state !== 'fulfilled') {
+        try {
+          child.kill(9);
+        } catch (error) {
+          cleanupFailures.push(`Storybook build force termination request failed: ${errorMessage(error)}`);
+        }
+      }
+    }
+    const [exit, stdoutState, stderrState] = await Promise.all([
+      bounded(exited, waitLimit),
+      bounded(stdout, waitLimit),
+      bounded(stderr, waitLimit),
+    ]);
+    const unproved: string[] = [];
+    for (const [label, result] of [
+      ['Storybook build child', exit],
+      ['Storybook build stdout', stdoutState],
+      ['Storybook build stderr', stderrState],
+    ] as const) {
+      if (result.state === 'timeout') {
+        cleanupFailures.push(`${label} did not settle within ${waitLimit}ms.`);
+        unproved.push(label);
+      } else if (result.state === 'rejected') {
+        cleanupFailures.push(`${label} settlement failed: ${errorMessage(result.error)}`);
+        unproved.push(label);
+      }
+    }
+    throw new BuildSettlementFailure(primary, cleanupFailures, unproved);
+  } finally {
     progress.buildFinished();
+  }
+}
+
+class BuildSettlementFailure extends Error {
+  constructor(
+    readonly primary: unknown,
+    readonly cleanupFailures: readonly string[],
+    readonly unproved: readonly string[],
+  ) {
+    super(errorMessage(primary));
+    this.name = 'BuildSettlementFailure';
+  }
+}
+
+class CaptureLifetime {
+  readonly signal = new AbortController();
+  readonly resources: ResourceRegistry;
+  readonly cleanupFailures: string[] = [];
+  readonly unproved: string[] = [];
+  private readonly scopes = new Set<ResourceRegistry>();
+  private retired = false;
+  private retirement: Promise<CleanupReport> | undefined;
+
+  constructor(private readonly timeoutMs: number) {
+    this.resources = new ResourceRegistry('Screenshot run', timeoutMs);
+  }
+
+  createScope(label: string): ResourceRegistry {
+    if (this.retired) throw new Error(`Screenshot run is retired; cannot open ${label}.`);
+    const scope = new ResourceRegistry(label, this.timeoutMs, () => !this.retired, this.signal.signal);
+    this.scopes.add(scope);
+    return scope;
+  }
+
+  async retireScope(scope: ResourceRegistry): Promise<void> {
+    const report = await scope.retire('Capture batch retired.');
+    this.scopes.delete(scope);
+    this.absorb(report);
+  }
+
+  retire(reason = 'Screenshot run retired.'): Promise<CleanupReport> {
+    if (this.retirement) return this.retirement;
+    this.retired = true;
+    this.signal.abort(new Error(reason));
+    const reports = [this.resources.retire(reason), ...[...this.scopes].map((scope) => scope.retire(reason))];
+    this.retirement = Promise.all(reports).then((values) => {
+      const report = {
+        issues: values.flatMap((value) => value.issues),
+        unproved: values.flatMap((value) => value.unproved),
+      };
+      this.absorb(report);
+      return report;
+    });
+    return this.retirement;
+  }
+
+  private absorb(report: CleanupReport): void {
+    this.cleanupFailures.push(...report.issues.map((issue) => `${issue.label}: ${issue.message}`));
+    this.unproved.push(...report.unproved);
   }
 }
 
@@ -241,16 +674,18 @@ export async function navigateStory(
   id: string,
   url: string,
   writeProgress: (line: string) => void = (line) => process.stderr.write(`${line}\n`),
+  signal?: AbortSignal,
 ): ReturnType<Page['goto']> {
   const options = { waitUntil: 'load' as const, timeout: 60_000 };
   try {
-    return await page.goto(url, options);
+    return await waitForSignal(page.goto(url, options), signal);
   } catch (error) {
+    if (signal?.aborted) throw abortedError(signal);
     const message = error instanceof Error ? error.message : String(error);
     if (!message.includes('net::ERR_NETWORK_CHANGED')) throw error;
     writeProgress(`Retrying navigation for story ${id} after net::ERR_NETWORK_CHANGED.`);
     try {
-      return await page.goto(url, options);
+      return await waitForSignal(page.goto(url, options), signal);
     } catch (retryError) {
       const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
       throw new Error(`Story ${id} navigation failed after retry: ${retryMessage}`, { cause: retryError });
@@ -269,6 +704,9 @@ function observeStorybook(): void {
   let running = false;
   let cycle = 0;
   const errors: string[] = [];
+  const rememberError = (message: string) => {
+    if (errors.length < 20) errors.push(message.slice(0, 1_000));
+  };
   const current = () => preview.__STORYBOOK_PREVIEW__?.currentRender;
   preview.__REZICS_STORY_OUTCOME__ = {
     read: () => {
@@ -306,7 +744,7 @@ function observeStorybook(): void {
           return;
         if (active !== render || active.abortController.signal !== signal || event.newPhase === 'loading') {
           // Concurrent cycles reuse renderId in Storybook. Their outcomes cannot be attributed safely.
-          if (running) errors.push('Overlapping Storybook render cycles have no attributable outcome.');
+          if (running) rememberError('Overlapping Storybook render cycles have no attributable outcome.');
           render = active;
           signal = active.abortController.signal;
           cycle += 1;
@@ -345,15 +783,14 @@ function observeStorybook(): void {
               } catch {
                 detail = String(report.result);
               }
-              errors.push(`${report.type}: ${detail}`);
+              rememberError(`${report.type}: ${detail}`);
             }
           }
           outcome.status = event.status === 'success' && errors.length === 0 ? 'success' : 'error';
         },
       );
       const recordError = (error: { message?: string; title?: string; description?: string }) => {
-        if (current() === render)
-          errors.push(error.message ?? [error.title, error.description].filter(Boolean).join(': '));
+        if (current() === render) rememberError(error.message ?? [error.title, error.description].filter(Boolean).join(': '));
       };
       for (const event of ['playFunctionThrewException', 'storyThrewException', 'storyErrored'])
         next.on(event, recordError);
@@ -379,8 +816,9 @@ async function settle(
   pageErrors: readonly string[] = [],
   { timeout = 60_000, fonts = true } = {},
 ): Promise<StoryOutcome> {
+  const clip = (value: string) => (value.length <= 1_000 ? value : `${value.slice(0, 1_000)}…`);
   const failure = (outcome: StoryOutcome | undefined, timeout?: unknown) => {
-    const errors = [...(outcome?.errors ?? []), ...pageErrors].slice(0, 5);
+    const errors = [...(outcome?.errors ?? []), ...pageErrors].slice(0, 5).map(clip);
     const details = errors.length ? ` First page errors: ${errors.join(' | ')}` : '';
     const wait = timeout instanceof Error ? ` ${timeout.name}: ${timeout.message}` : '';
     return new Error(
@@ -445,32 +883,37 @@ async function prepareFullPageCapture(page: Page): Promise<void> {
   });
 }
 
-async function captureOne(page: Page, origin: string, job: Job, out: string): Promise<string> {
+async function captureOne(page: Page, origin: string, job: Job, out: string, signal?: AbortSignal): Promise<string> {
+  const wait = <T>(operation: Promise<T>) => (signal ? waitForSignal(operation, signal) : operation);
+  const clip = (value: string) => (value.length <= 1_000 ? value : `${value.slice(0, 1_000)}…`);
   const url = `${origin}/iframe.html?id=${encodeURIComponent(job.id)}&globals=locale:${job.locale};theme:${job.theme}`;
   const pageErrors: string[] = [];
-  const onPageError = (error: Error) => pageErrors.push(error.message);
+  const appendPageError = (message: string) => {
+    if (pageErrors.length < 50) pageErrors.push(clip(message));
+  };
+  const onPageError = (error: Error) => appendPageError(error.message);
   const onConsole = (message: import('playwright').ConsoleMessage) => {
-    if (message.type() === 'error') pageErrors.push(message.text());
+    if (message.type() === 'error') appendPageError(message.text());
   };
   page.on('pageerror', onPageError);
   page.on('console', onConsole);
   let navigated = false;
   try {
-    await navigateStory(page, job.id, url);
+    await wait(navigateStory(page, job.id, url, undefined, signal));
     navigated = true;
-    const outcome = await settle(page, job.id, pageErrors);
+    const outcome = await wait(settle(page, job.id, pageErrors));
     // Page route stories render their router asynchronously after Storybook finishes the story render.
     if (job.id.startsWith('pages-')) {
       try {
-        await page.locator('main:not([aria-busy="true"])').waitFor({ state: 'visible', timeout: 60_000 });
+        await wait(page.locator('main:not([aria-busy="true"])').waitFor({ state: 'visible', timeout: 60_000 }));
       } catch (error) {
         const details = pageErrors.slice(0, 5);
         const firstErrors = details.length ? ` Page errors: ${details.join(' | ')}` : '';
         throw new Error(`Page story ${job.id} did not render its main content.${firstErrors} ${String(error)}`);
       }
     }
-    await prepareFullPageCapture(page);
-    const latest = await page.evaluate(() => (globalThis as StoryPreview).__REZICS_STORY_OUTCOME__?.read());
+    await wait(prepareFullPageCapture(page));
+    const latest = await wait(page.evaluate(() => (globalThis as StoryPreview).__REZICS_STORY_OUTCOME__?.read()));
     if (
       latest?.storyId !== job.id ||
       latest.renderId !== outcome.renderId ||
@@ -481,20 +924,21 @@ async function captureOne(page: Page, origin: string, job: Job, out: string): Pr
       throw new Error(`Story ${job.id} render outcome changed before capture. ${latest?.errors.join(' | ') ?? ''}`);
     }
     const file = join(out, screenshotFilename(job));
-    await page.screenshot({ path: file, type: 'png', fullPage: true, animations: 'disabled', scale: 'css' });
+    await wait(page.screenshot({ path: file, type: 'png', fullPage: true, animations: 'disabled', scale: 'css' }));
     return file;
   } catch (error) {
-    if (navigated) {
+    if (navigated && !signal?.aborted) {
       const diagnostic = join(out, screenshotFilename(job).replace(/\.png$/, '.diagnostic.png'));
-      const retained = await page
-        .screenshot({
+      const retained = await wait(
+        page.screenshot({
           path: diagnostic,
           type: 'png',
           fullPage: true,
           animations: 'disabled',
           scale: 'css',
           timeout: 5_000,
-        })
+        }),
+      )
         .then(
           () => true,
           () => false,
@@ -517,6 +961,7 @@ async function captureJobs(
   jobs: readonly Job[],
   run: (job: Job, worker: number) => Promise<string>,
   workerCount = 1,
+  signal?: AbortSignal,
 ): Promise<CaptureResult> {
   const files = new Array<string | undefined>(jobs.length);
   const failures: { index: number; value: CaptureFailure }[] = [];
@@ -525,19 +970,23 @@ async function captureJobs(
     Array.from({ length: Math.min(workerCount, jobs.length) }, (_, worker) =>
       (async () => {
         for (;;) {
+          if (signal?.aborted) return;
           const index = cursor;
           cursor += 1;
           if (index >= jobs.length) return;
           const job = jobs[index];
           if (!job) return;
+          if (signal?.aborted) return;
           try {
-            files[index] = await run(job, worker);
+            files[index] = signal ? await waitForSignal(run(job, worker), signal) : await run(job, worker);
           } catch (error) {
+            if (signal?.aborted) return;
+            const message = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ').trim();
             failures.push({
               index,
               value: {
                 job,
-                error: (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ').trim(),
+                error: message.length <= 4_000 ? message : `${message.slice(0, 4_000)}…`,
               },
             });
           }
@@ -557,11 +1006,12 @@ function reportCaptureResults(
   write: (text: string) => void,
   unmatchedSelectors: readonly string[] = [],
 ): number {
+  const clip = (value: string) => (value.length <= 4_000 ? value : `${value.slice(0, 4_000)}…`);
   for (const file of files) write(`${file}\n`);
   write(`${files.length}\n`);
   for (const { job, error } of failures) {
     const width = job.widthSuffix && job.width !== undefined ? ` ${job.width}px` : '';
-    write(`${job.id} ${job.locale} ${job.theme}${width}: ${error.replace(/\s+/g, ' ').trim()}\n`);
+    write(`${job.id} ${job.locale} ${job.theme}${width}: ${clip(error.replace(/\s+/g, ' ').trim())}\n`);
   }
   for (const selector of unmatchedSelectors) {
     write(`No stories matched --story ${JSON.stringify(selector)}.\n`);
@@ -575,44 +1025,58 @@ async function capture(
   jobs: readonly Job[],
   out: string,
   progress: ProgressReporter,
+  lifetime: CaptureLifetime,
 ): Promise<CaptureResult> {
   let completed = 0;
   const files: string[] = [];
   const failures: CaptureFailure[] = [];
   const widths = [...new Set(jobs.map((job) => job.width ?? 1280))];
   for (const width of widths) {
+    if (lifetime.signal.signal.aborted) throw abortedError(lifetime.signal.signal);
     const widthJobs = jobs.filter((job) => (job.width ?? 1280) === width);
-    const contexts = await Promise.all(
-      Array.from({ length: Math.min(captureLimit, widthJobs.length) }, () =>
-        browser.newContext({
-          viewport: { width, height: viewportHeight },
-          deviceScaleFactor: 1,
-          reducedMotion: 'reduce',
-        }),
-      ),
-    );
-    const pages = await Promise.all(
-      contexts.map(async (context) => {
-        await context.addInitScript(observeStorybook);
-        return context.newPage();
-      }),
-    );
+    const scope = lifetime.createScope(`Capture contexts at ${width}px`);
+    let primary: unknown;
     try {
+      const contexts = await Promise.all(
+        Array.from({ length: Math.min(captureLimit, widthJobs.length) }, (_, worker) =>
+          scope.acquire(
+            `context ${worker + 1} at ${width}px`,
+            () =>
+              browser.newContext({
+                viewport: { width, height: viewportHeight },
+                deviceScaleFactor: 1,
+                reducedMotion: 'reduce',
+              }),
+            (context) => context.close(),
+          ),
+        ),
+      );
+      const pages = await Promise.all(
+        contexts.map(async (context, worker) => {
+          await waitForSignal(context.addInitScript(observeStorybook), lifetime.signal.signal);
+          return scope.acquire(`page ${worker + 1} at ${width}px`, () => context.newPage(), (page) => page.close());
+        }),
+      );
       const result = await captureJobs(
         widthJobs,
         async (job, worker) => {
-          const file = await captureOne(pages[worker]!, origin, job, out);
+          const file = await captureOne(pages[worker]!, origin, job, out, lifetime.signal.signal);
           completed += 1;
           progress.captured(completed, jobs.length, file);
           return file;
         },
         pages.length,
+        lifetime.signal.signal,
       );
       files.push(...result.files);
       failures.push(...result.failures);
-    } finally {
-      await Promise.all(contexts.map((context) => context.close()));
+    } catch (error) {
+      primary = error;
     }
+    await lifetime.retireScope(scope);
+    if (primary !== undefined) throw primary;
+    if (lifetime.signal.signal.aborted) throw abortedError(lifetime.signal.signal);
+    if (lifetime.cleanupFailures.length) throw new Error(`Capture contexts at ${width}px could not be retired.`);
   }
   return { files, failures };
 }
@@ -641,62 +1105,134 @@ function screenshotCommand(argv: readonly string[], relativeOut: string | undefi
   return command;
 }
 
-async function captureScreenshots(options: Options): Promise<number> {
-  await mkdir(join(root, '.temp'), { recursive: true });
-  await mkdir(options.out, { recursive: true });
-  const buildDir = await mkdtemp(join(root, '.temp/storybook-build-'));
-  const site = join(buildDir, 'site');
-  let server: ReturnType<typeof Bun.serve> | undefined;
-  let browser: Browser | undefined;
-  const progress = createProgressReporter();
-  let stopped = false;
-  const stop = async () => {
-    if (stopped) return;
-    stopped = true;
-    if (building && building.exitCode === null) building.kill();
-    server?.stop(true);
-    await browser?.close().catch(() => undefined);
-    await rm(buildDir, { recursive: true, force: true }).catch(() => undefined);
-  };
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-    process.on(signal, () => {
-      void stop().finally(() => process.exit(signal === 'SIGINT' ? 130 : 143));
-    });
-  }
-  try {
-    await build(site, join(buildDir, 'cache'), progress);
-    const indexFile = Bun.file(join(site, 'index.json'));
+const productionRuntime: ScreenshotRuntime = {
+  serve,
+  launch: () => chromium.launch(),
+  async readStories(directory) {
+    const indexFile = Bun.file(join(directory, 'index.json'));
     if (!(await indexFile.exists())) throw new Error('Storybook build did not write index.json.');
     const index = (await indexFile.json()) as { entries?: Record<string, { id?: string; type?: string }> };
-    const availableStories = Object.values(index.entries ?? {}).flatMap((entry) =>
+    return Object.values(index.entries ?? {}).flatMap((entry) =>
       entry.type === 'story' && entry.id ? [entry.id] : [],
     );
+  },
+  mkdir,
+  mkdtemp,
+  rm,
+  signals: {
+    listen(signal, listener) {
+      process.once(signal, listener);
+      return () => process.removeListener(signal, listener);
+    },
+  },
+  setExitCode: (code) => {
+    process.exitCode = code;
+  },
+  stdout: (text) => {
+    process.stdout.write(text);
+  },
+  stderr: (text) => {
+    process.stderr.write(text);
+  },
+};
+
+/** Injected composition seam for lifetime acceptance; the CLI still enters through placeWebCheck. */
+export async function runCaptureLifecycle(options: Options, runtime: ScreenshotRuntime): Promise<number> {
+  await runtime.mkdir(join(root, '.temp'), { recursive: true });
+  await runtime.mkdir(options.out, { recursive: true });
+  const buildDir = await runtime.mkdtemp(join(root, '.temp/storybook-build-'));
+  const site = join(buildDir, 'site');
+  const timeoutMs = runtime.cleanupTimeoutMs ?? cleanupTimeout;
+  const lifetime = new CaptureLifetime(timeoutMs);
+  const writeStdout = runtime.stdout ?? ((text: string) => process.stdout.write(text));
+  const writeStderr = runtime.stderr ?? ((text: string) => process.stderr.write(text));
+  const progress = runtime.progress?.(writeStderr) ?? createProgressReporter((line) => writeStderr(`${line}\n`));
+  const detachSignals: (() => void)[] = [];
+  const buildUnproved: string[] = [];
+  const cleanupFailures: string[] = [];
+  let primary: unknown;
+  let result = 1;
+  let signalExitCode: number | undefined;
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    if (!runtime.signals) continue;
+    detachSignals.push(
+      runtime.signals.listen(signal, () => {
+        signalExitCode = signal === 'SIGINT' ? 130 : 143;
+        runtime.setExitCode?.(signalExitCode);
+        void lifetime.retire(`Capture interrupted by ${signal}.`);
+      }),
+    );
+  }
+  try {
+    await build(site, join(buildDir, 'cache'), progress, lifetime.signal.signal, runtime);
+    if (lifetime.signal.signal.aborted) throw abortedError(lifetime.signal.signal);
+    const availableStories = await waitForSignal(runtime.readStories(site), lifetime.signal.signal);
     const { stories, unmatchedSelectors } = selectStories(availableStories, options.stories);
     if (stories.length === 0 && unmatchedSelectors.length === 0) throw new Error('No stories matched.');
     if (stories.length === 0) {
-      return reportCaptureResults([], [], (text) => process.stdout.write(text), unmatchedSelectors);
-    }
-    server = serve(site);
-    const origin = `http://127.0.0.1:${server.port}`;
-    browser = await chromium.launch();
-    const jobs = stories.flatMap((id) =>
-      options.locales.flatMap((locale) =>
-        options.themes.flatMap((theme) =>
-          options.widths.map((width) => ({
-            id,
-            locale,
-            theme,
-            width,
-            widthSuffix: options.widths.length > 1,
-          })),
+      result = reportCaptureResults([], [], writeStdout, unmatchedSelectors);
+    } else {
+      const siteLease = await lifetime.resources.acquire(
+        'temporary Storybook server',
+        async () => runtime.serve(site),
+        (site) => site.close(),
+      );
+      const browser = await lifetime.resources.acquire('Playwright browser', () => runtime.launch(), (value) => value.close());
+      if (lifetime.signal.signal.aborted) throw abortedError(lifetime.signal.signal);
+      const origin = `http://127.0.0.1:${siteLease.port}`;
+      const jobs = stories.flatMap((id) =>
+        options.locales.flatMap((locale) =>
+          options.themes.flatMap((theme) =>
+            options.widths.map((width) => ({
+              id,
+              locale,
+              theme,
+              width,
+              widthSuffix: options.widths.length > 1,
+            })),
+          ),
         ),
-      ),
-    );
-    const { files, failures } = await capture(browser, origin, jobs, options.out, progress);
-    return reportCaptureResults(files, failures, (text) => process.stdout.write(text), unmatchedSelectors);
-  } finally {
-    await stop();
+      );
+      const { files, failures } = await capture(browser, origin, jobs, options.out, progress, lifetime);
+      result = reportCaptureResults(files, failures, writeStdout, unmatchedSelectors);
+    }
+  } catch (error) {
+    if (error instanceof BuildSettlementFailure) {
+      primary = error.primary;
+      cleanupFailures.push(...error.cleanupFailures);
+      buildUnproved.push(...error.unproved);
+    } else {
+      primary = error;
+    }
   }
+
+  const resources = await lifetime.retire();
+  cleanupFailures.push(...lifetime.cleanupFailures);
+  buildUnproved.push(...resources.unproved);
+  const reasons = [...new Set(buildUnproved)];
+  let disposition: { path: string; state: 'retained' | 'unknown'; reasons: string[] } | undefined;
+  if (reasons.length) {
+    disposition = { path: buildDir, state: 'retained', reasons };
+  } else {
+    try {
+      await runtime.rm(buildDir, { recursive: true, force: true });
+    } catch (error) {
+      const detail = `build directory removal failed: ${errorMessage(error)}`;
+      cleanupFailures.push(detail);
+      disposition = { path: buildDir, state: 'unknown', reasons: [detail] };
+    }
+  }
+  for (const detach of detachSignals) detach();
+
+  const uniqueCleanupFailures = [...new Set(cleanupFailures)];
+  if (primary !== undefined || uniqueCleanupFailures.length || disposition) {
+    throw new CaptureLifecycleFailure(primary, uniqueCleanupFailures, disposition, signalExitCode);
+  }
+  return result;
+}
+
+async function captureScreenshots(options: Options): Promise<number> {
+  return runCaptureLifecycle(options, productionRuntime);
 }
 
 /** Routes capture before building or starting a browser; unsupported destinations fail closed. */
@@ -730,6 +1266,6 @@ if (import.meta.main) {
     })
     .catch((error: unknown) => {
       process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-      process.exitCode = 1;
+      process.exitCode = error instanceof CaptureLifecycleFailure && error.exitCode ? error.exitCode : 1;
     });
 }
