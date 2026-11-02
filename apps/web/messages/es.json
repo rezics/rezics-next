@@ -2879,6 +2879,7 @@
   "condition_or": "Cualquiera (OR)",
   "condition_not": "Excluir (NOT)",
   "condition_group": "Agrupación",
+  "condition_tree_empty_group": "Este grupo está vacío. Añade una condición antes de aplicar la búsqueda.",
   "condition_leaf": "Condición individual",
   "condition_unwrap": "Quitar exclusión",
   "condition_remove": "Quitar",

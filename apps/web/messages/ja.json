@@ -2879,6 +2879,7 @@
   "condition_or": "いずれか（OR）",
   "condition_not": "除外（NOT）",
   "condition_group": "組み合わせ",
+  "condition_tree_empty_group": "このグループは空です。検索を適用する前に条件を追加してください。",
   "condition_leaf": "単一条件",
   "condition_unwrap": "除外を解除",
   "condition_remove": "削除",

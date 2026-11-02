@@ -2879,6 +2879,7 @@
   "condition_or": "任一满足（OR）",
   "condition_not": "排除（NOT）",
   "condition_group": "组合方式",
+  "condition_tree_empty_group": "此群组为空。请先添加条件，再应用搜索。",
   "condition_leaf": "单个条件",
   "condition_unwrap": "取消排除",
   "condition_remove": "移除",

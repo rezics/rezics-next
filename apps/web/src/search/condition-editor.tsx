@@ -1,6 +1,5 @@
 import { useId, useRef, useState, type ReactNode } from 'react';
 import {
-  FILTER_LIMITS,
   facetProperties,
   type FilterDocument,
   type FilterQualifier,
@@ -22,6 +21,12 @@ import {
   type ConditionMetadata,
 } from './condition-editor-model';
 import { conditionFieldChoices as buildConditionFieldChoices } from './condition-field-choices';
+import {
+  conditionTreeCanSubmit,
+  editConditionTree,
+  type ConditionTreeEdit,
+  type ConditionTreePath,
+} from './condition-tree-edit';
 
 type Choice = { value: string; labels: Record<string, string> };
 type EditorContext = {
@@ -30,6 +35,8 @@ type EditorContext = {
   issues: readonly ConditionIssue[];
   values: Record<string, Choice[]>;
   announce(message: string, pointer: string): void;
+  canEditTree(path: ConditionTreePath, edit: ConditionTreeEdit): boolean;
+  editTree(path: ConditionTreePath, edit: ConditionTreeEdit): boolean;
   extension?: ConditionExtension | undefined;
 };
 /** A consumer can compose additional shared grammar leaves without a second tree editor or evaluator. */
@@ -95,8 +102,17 @@ export function ConditionEditor({
         ?.focus();
     });
   };
+  const canEditTree = (path: ConditionTreePath, edit: ConditionTreeEdit) =>
+    value !== undefined && editConditionTree(value, path, edit).accepted;
+  const editTree = (path: ConditionTreePath, edit: ConditionTreeEdit) => {
+    if (value === undefined) return false;
+    const result = editConditionTree(value, path, edit);
+    if (!result.accepted) return false;
+    onChange(result.value);
+    return true;
+  };
   const context: EditorContext | undefined = metadata
-    ? { metadata, locale, issues, values, announce, extension }
+    ? { metadata, locale, issues, values, announce, canEditTree, editTree, extension }
     : undefined;
   return (
     <div ref={root} className="min-w-0 space-y-3 border-t border-border/60 pt-4" data-condition-editor>
@@ -133,7 +149,7 @@ export function ConditionEditor({
         {context ? (
           <>
             {value ? (
-              <NodeEditor value={value} onChange={onChange} pointer={CONDITION_POINTER} depth={1} context={context} />
+              <NodeEditor value={value} onChange={onChange} pointer={CONDITION_POINTER} path={[]} context={context} />
             ) : (
               <Button
                 type="button"
@@ -156,7 +172,7 @@ export function ConditionEditor({
       </fieldset>
       {value && <input type="hidden" name="condition" value={JSON.stringify(value)} />}
       {!embedded && (
-        <Button type="submit" variant="outline" disabled={disabled}>
+        <Button type="submit" variant="outline" disabled={disabled || !conditionTreeCanSubmit(value)}>
           {m.search_apply()}
         </Button>
       )}
@@ -204,16 +220,17 @@ function NodeEditor({
   value,
   onChange,
   pointer,
-  depth,
+  path,
   context,
 }: {
   value: FilterDocument;
   onChange(value: FilterDocument | undefined): void;
   pointer: string;
-  depth: number;
+  path: ConditionTreePath;
   context: EditorContext;
 }) {
-  const operator = 'and' in value ? 'and' : 'or' in value ? 'or' : 'not' in value ? 'not' : '';
+  const groupOperator = 'and' in value ? 'and' : 'or' in value ? 'or' : undefined;
+  const operator = groupOperator ?? ('not' in value ? 'not' : '');
   const group = 'and' in value ? value.and : 'or' in value ? value.or : undefined;
   const label =
     operator === 'and'
@@ -253,8 +270,8 @@ function NodeEditor({
     onChange({ statement: { ...value.statement, ...next } });
   };
   const remove = () => {
-    onChange(undefined);
-    context.announce(m.condition_removed(), pointer.replace(/\/(and|or)\/\d+$|\/not$/, ''));
+    if (context.editTree(path, { type: 'remove' }))
+      context.announce(m.condition_removed(), pointer.replace(/\/(and|or)\/\d+$|\/not$/, ''));
   };
   return (
     <FieldSet className="min-w-0 gap-3 rounded-lg border border-border/60 p-3" data-condition-pointer={pointer}>
@@ -267,24 +284,34 @@ function NodeEditor({
               value={operator}
               onChange={(event) => {
                 const next = event.currentTarget.value;
-                if (next === 'and' || next === 'or') {
-                  const children = group ?? ('not' in value ? [value.not] : [value]);
-                  onChange(next === 'and' ? { and: children } : { or: children });
-                } else if (next === 'not') onChange({ not: value });
-                else if ('not' in value) onChange(value.not);
-                context.announce(m.condition_group_changed(), pointer);
+                const changed =
+                  next === 'and' || next === 'or' || next === 'not'
+                    ? context.editTree(path, { type: 'operator', operator: next })
+                    : next === '' && 'not' in value
+                      ? context.editTree(path, { type: 'unwrap' })
+                      : false;
+                if (changed) context.announce(m.condition_group_changed(), pointer);
               }}
             >
               <NativeSelectOption value="" disabled={!!group}>
                 {operator === 'not' ? m.condition_unwrap() : m.condition_leaf()}
               </NativeSelectOption>
-              <NativeSelectOption value="and" disabled={!operator && depth >= FILTER_LIMITS.depth}>
+              <NativeSelectOption
+                value="and"
+                disabled={!context.canEditTree(path, { type: 'operator', operator: 'and' })}
+              >
                 {m.condition_and()}
               </NativeSelectOption>
-              <NativeSelectOption value="or" disabled={!operator && depth >= FILTER_LIMITS.depth}>
+              <NativeSelectOption
+                value="or"
+                disabled={!context.canEditTree(path, { type: 'operator', operator: 'or' })}
+              >
                 {m.condition_or()}
               </NativeSelectOption>
-              <NativeSelectOption value="not" disabled={operator === 'not' || depth >= FILTER_LIMITS.depth}>
+              <NativeSelectOption
+                value="not"
+                disabled={operator === 'not' || !context.canEditTree(path, { type: 'operator', operator: 'not' })}
+              >
                 {m.condition_not()}
               </NativeSelectOption>
             </NativeSelect>
@@ -296,43 +323,47 @@ function NodeEditor({
       </div>
       {group && (
         <>
+          {group.length === 0 && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.condition_tree_empty_group()}
+            </p>
+          )}
           {group.map((child, index) => (
             <NodeEditor
               key={index}
               value={child}
               pointer={`${pointer}/${operator}/${index}`}
-              depth={depth + 1}
+              path={[...path, groupOperator!, index]}
               context={context}
               onChange={(next) => {
                 const children = next
                   ? group.map((entry, at) => (at === index ? next : entry))
                   : group.filter((_, at) => at !== index);
-                onChange(operator === 'and' ? { and: children } : { or: children });
+                onChange(groupOperator === 'and' ? { and: children } : { or: children });
               }}
             />
           ))}
           <div className="flex flex-wrap gap-2">
-            {(['type', 'statement'] as const).map((kind) => (
-              <Button
-                key={kind}
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={
-                  (operator === 'or' && group.length >= FILTER_LIMITS.or) ||
-                  context.issues.some((issue) => issue.pointer === '/filter' && issue.code === 'out_of_range')
-                }
-                onClick={() => {
-                  const node: FilterDocument =
-                    kind === 'type' ? { type: { in: [''] } } : { statement: { property: '', in: [''] } };
-                  const children = [...group, node];
-                  onChange(operator === 'and' ? { and: children } : { or: children });
-                  context.announce(m.condition_added(), `${pointer}/${operator}/${group.length}`);
-                }}
-              >
-                {kind === 'type' ? m.condition_add_type() : m.condition_add_statement()}
-              </Button>
-            ))}
+            {(['type', 'statement'] as const).map((kind) => {
+              const node: FilterDocument =
+                kind === 'type' ? { type: { in: [''] } } : { statement: { property: '', in: [''] } };
+              const edit = { type: 'append', value: node } as const;
+              return (
+                <Button
+                  key={kind}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!context.canEditTree(path, edit)}
+                  onClick={() => {
+                    if (context.editTree(path, edit))
+                      context.announce(m.condition_added(), `${pointer}/${operator}/${group.length}`);
+                  }}
+                >
+                  {kind === 'type' ? m.condition_add_type() : m.condition_add_statement()}
+                </Button>
+              );
+            })}
           </div>
           {context.extension?.choices.map((choice, index) => (
             <Button
@@ -340,11 +371,10 @@ function NodeEditor({
               type="button"
               variant="outline"
               size="sm"
-              disabled={operator === 'or' && group.length >= FILTER_LIMITS.or}
+              disabled={!context.canEditTree(path, { type: 'append', value: choice.value })}
               onClick={() => {
-                const children = [...group, choice.value];
-                onChange(operator === 'and' ? { and: children } : { or: children });
-                context.announce(m.condition_added(), `${pointer}/${operator}/${group.length}`);
+                if (context.editTree(path, { type: 'append', value: choice.value }))
+                  context.announce(m.condition_added(), `${pointer}/${operator}/${group.length}`);
               }}
             >
               {choice.label}
@@ -356,7 +386,7 @@ function NodeEditor({
         <NodeEditor
           value={value.not}
           pointer={`${pointer}/not`}
-          depth={depth + 1}
+          path={[...path, 'not']}
           context={context}
           onChange={(next) => onChange(next ? { not: next } : undefined)}
         />

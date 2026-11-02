@@ -2933,6 +2933,7 @@
   "condition_or": "Any (OR)",
   "condition_not": "Exclude (NOT)",
   "condition_group": "Grouping",
+  "condition_tree_empty_group": "This group is empty. Add a condition before applying the search.",
   "condition_leaf": "Single condition",
   "condition_unwrap": "Remove exclusion",
   "condition_remove": "Remove",

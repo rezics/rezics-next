@@ -2879,6 +2879,7 @@
   "condition_or": "하나 이상 (OR)",
   "condition_not": "제외 (NOT)",
   "condition_group": "그룹 방식",
+  "condition_tree_empty_group": "이 그룹은 비어 있습니다. 검색을 적용하기 전에 조건을 추가하세요.",
   "condition_leaf": "단일 조건",
   "condition_unwrap": "제외 해제",
   "condition_remove": "제거",
