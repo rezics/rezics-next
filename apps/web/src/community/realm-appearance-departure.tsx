@@ -56,8 +56,7 @@ export function RealmAppearanceDeparture({
   useEffect(() => {
     const signingOut = (event: SubmitEvent) => {
       const form = event.target;
-      if (event.defaultPrevented || !(form instanceof HTMLFormElement) || form.method.toLowerCase() !== 'post')
-        return;
+      if (event.defaultPrevented || !(form instanceof HTMLFormElement) || form.method.toLowerCase() !== 'post') return;
       const action = new URL(form.action, window.location.href);
       if (action.origin !== window.location.origin || action.pathname !== '/auth/sign-out') return;
       retired.current = true;
@@ -106,21 +105,13 @@ export function RealmAppearanceDeparture({
           className="min-w-0 max-w-lg grid-cols-[minmax(0,1fr)] gap-6 p-5 text-start sm:max-w-xl sm:p-6"
           initialFocus={stayButton}
           finalFocus={() =>
-            leaving.current
-              ? false
-              : returnFocus.current?.isConnected
-                ? returnFocus.current
-                : undefined
+            leaving.current ? false : returnFocus.current?.isConnected ? returnFocus.current : undefined
           }
         >
           <AlertDialogHeader className="min-w-0 grid-cols-[minmax(0,1fr)] place-items-stretch gap-3 text-start">
-            <AlertDialogTitle className="text-lg leading-snug">
-              {m.realm_appearance_leave_title()}
-            </AlertDialogTitle>
+            <AlertDialogTitle className="text-lg leading-snug">{m.realm_appearance_leave_title()}</AlertDialogTitle>
             <AlertDialogDescription className="min-w-0 text-start leading-relaxed [overflow-wrap:anywhere]">
-              {unresolvedSave
-                ? m.realm_appearance_leave_recovery()
-                : m.realm_appearance_leave_unsaved()}
+              {unresolvedSave ? m.realm_appearance_leave_recovery() : m.realm_appearance_leave_unsaved()}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-3 sm:flex-row sm:justify-end">

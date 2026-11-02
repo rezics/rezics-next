@@ -181,10 +181,10 @@ export function RealmAppearanceSettings({
             state.read.snapshot.canManage)));
   const changedReference = Boolean(
     visibleSelection &&
-      (visibleSelection.link.trim() !== '' ||
-        visibleSelection.reference ||
-        visibleSelection.candidate ||
-        visibleSelection.busy),
+    (visibleSelection.link.trim() !== '' ||
+      visibleSelection.reference ||
+      visibleSelection.candidate ||
+      visibleSelection.busy),
   );
   const departureDirty =
     departureAuthority && (realmAppearanceHasUnsavedChanges(state, departureBaseline) || changedReference);
@@ -279,15 +279,17 @@ export function RealmAppearanceSettings({
     </h2>
   );
   if (read.kind === 'hidden') {
-    return withDeparture(state.draft ? (
-      <section aria-labelledby={`${ids}-heading`} className="space-y-4 rounded-2xl border p-4 sm:p-6">
-        {heading}
-        <p role="alert">{m.community_management_denied()}</p>
-        <Button variant="outline" disabled={state.busy} onClick={() => void control.refresh()}>
-          {m.realm_appearance_refresh()}
-        </Button>
-      </section>
-    ) : null);
+    return withDeparture(
+      state.draft ? (
+        <section aria-labelledby={`${ids}-heading`} className="space-y-4 rounded-2xl border p-4 sm:p-6">
+          {heading}
+          <p role="alert">{m.community_management_denied()}</p>
+          <Button variant="outline" disabled={state.busy} onClick={() => void control.refresh()}>
+            {m.realm_appearance_refresh()}
+          </Button>
+        </section>
+      ) : null,
+    );
   }
   if (read.kind === 'ready' && (read.snapshot.state !== 'active' || read.snapshot.realmId !== realmId))
     return withDeparture(null);
@@ -299,7 +301,7 @@ export function RealmAppearanceSettings({
         <Button variant="outline" disabled={state.busy} onClick={() => void control.refresh()}>
           {m.realm_appearance_refresh()}
         </Button>
-      </section>
+      </section>,
     );
   const { snapshot } = read;
   const retained = state.draft;
@@ -676,6 +678,6 @@ export function RealmAppearanceSettings({
           {state.phase === 'saving' ? m.realm_appearance_saving() : m.realm_appearance_save()}
         </Button>
       ) : null}
-    </section>
+    </section>,
   );
 }

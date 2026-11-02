@@ -37,15 +37,8 @@ test('Realm appearance departure preserves drafts on Stay, retires on Leave, and
   mock.module('cloudflare:workers', () => ({ env: {} }));
 
   const { createRoot } = await import('react-dom/client');
-  const {
-    createMemoryHistory,
-    createRootRoute,
-    createRoute,
-    createRouter,
-    Link,
-    Outlet,
-    RouterProvider,
-  } = await import('@tanstack/react-router');
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } =
+    await import('@tanstack/react-router');
   const { RealmAppearanceDeparture } = await import('../src/community/realm-appearance-departure');
   const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const { m } = await import('../src/paraglide/messages.js');
@@ -99,25 +92,15 @@ test('Realm appearance departure preserves drafts on Stay, retires on Leave, and
           ? createElement(
               'div',
               null,
-              state.draft
-                ? createElement('p', null, state.draft.presentation.avatarMediaId ?? 'No icon')
-                : null,
+              state.draft ? createElement('p', null, state.draft.presentation.avatarMediaId ?? 'No icon') : null,
               createElement(
                 'button',
                 { type: 'button', onClick: () => control.choose('avatar', { kind: 'image', image }) },
                 'Choose icon',
               ),
-              createElement(
-                'button',
-                { type: 'button', onClick: () => void control.save() },
-                'Save appearance',
-              ),
+              createElement('button', { type: 'button', onClick: () => void control.save() }, 'Save appearance'),
               state.phase === 'uncertain'
-                ? createElement(
-                    'button',
-                    { type: 'button', onClick: () => void control.save() },
-                    'Retry original save',
-                  )
+                ? createElement('button', { type: 'button', onClick: () => void control.save() }, 'Retry original save')
                 : null,
               createElement(Link, { to: '/destination' }, 'Open destination'),
             )

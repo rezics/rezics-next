@@ -107,15 +107,12 @@ export type RealmAppearanceState = Readonly<{
   pendingUpload: { slot: RealmImageSlot; mediaId: string } | null;
 }>;
 
-export function realmAppearanceHasUnsavedChanges(
-  state: RealmAppearanceState,
-  baseline?: RealmPresentation,
-): boolean {
+export function realmAppearanceHasUnsavedChanges(state: RealmAppearanceState, baseline?: RealmPresentation): boolean {
   return Boolean(
     state.attempt ||
-      state.pendingUpload ||
-      state.uploadSlot ||
-      (state.draft && baseline && !sameRealmPresentation(state.draft.presentation, baseline)),
+    state.pendingUpload ||
+    state.uploadSlot ||
+    (state.draft && baseline && !sameRealmPresentation(state.draft.presentation, baseline)),
   );
 }
 
