@@ -54,5 +54,17 @@ const suggestionPage: v.GenericSchema<SuggestionResult> = v.strictObject({
 export function parseSuggestionPage(value: unknown): SuggestionResult {
   const parsed = v.safeParse(suggestionPage, value);
   if (!parsed.success) throw new TypeError('Malformed suggestion page');
+  const identities = new Set<string>();
+  for (const subject of parsed.output.subjects) {
+    const identity = subject.id.toLowerCase();
+    if (
+      identities.has(identity) ||
+      (subject.summary !== null &&
+        (subject.summary.id.toLowerCase() !== identity || subject.summary.type !== subject.type))
+    ) {
+      throw new TypeError('Malformed suggestion page');
+    }
+    identities.add(identity);
+  }
   return parsed.output;
 }
