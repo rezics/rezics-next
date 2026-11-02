@@ -540,8 +540,10 @@ for (const [index, boundary] of boundaries.entries()) {
     if (boundary === 'target-id') expect(props.target).toEqual({ kind: 'post', id: 'post-two' });
     if (boundary === 'target-kind') expect(props.target).toEqual({ kind: 'thread', id: 'thread-two' });
     if (boundary === 'revision') expect(props.revisionId).toBe('revision-two');
-    if (boundary === 'account') expect(client.getQueryData<{ csrfToken: string }>(sessionQuery.queryKey)?.csrfToken).toBe('csrf-two');
-    if (boundary === 'token') expect(client.getQueryData<{ csrfToken: string }>(sessionQuery.queryKey)?.csrfToken).toBe('csrf-two');
+    if (boundary === 'account')
+      expect(client.getQueryData<{ csrfToken: string }>(sessionQuery.queryKey)?.csrfToken).toBe('csrf-two');
+    if (boundary === 'token')
+      expect(client.getQueryData<{ csrfToken: string }>(sessionQuery.queryKey)?.csrfToken).toBe('csrf-two');
 
     await openReport();
     expect(detailField().value).toBe('');
@@ -571,7 +573,9 @@ for (const [index, boundary] of boundaries.entries()) {
     expect(calls[1]!.data.target).toEqual(props.target);
     expect(calls[1]!.data.revisionId).toBe(props.revisionId);
     const currentSession = client.getQueryData<{ state: string; csrfToken: string | null }>(sessionQuery.queryKey);
-    expect(calls[1]!.headers.get('x-csrf-token')).toBe(currentSession?.state === 'signed-out' ? '' : currentSession?.csrfToken);
+    expect(calls[1]!.headers.get('x-csrf-token')).toBe(
+      currentSession?.state === 'signed-out' ? '' : currentSession?.csrfToken,
+    );
     await settle(1, { ok: true, reportId: `fresh-${boundary}` });
     if (currentSession?.state === 'signed-in')
       expect(statusLink()?.getAttribute('href')).toContain(`/moderation/reports/fresh-${boundary}`);
@@ -813,7 +817,10 @@ test('equal fresh target/config allocation preserves the draft and token while e
   expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(false);
   await click(button(m.report_submit(), dialog()));
   expect(calls).toHaveLength(1);
-  expect(calls[0]!.data).toMatchObject({ evidence: 'Retain through equivalent renders', botToken: 'equal-token-bytes' });
+  expect(calls[0]!.data).toMatchObject({
+    evidence: 'Retain through equivalent renders',
+    botToken: 'equal-token-bytes',
+  });
   await settle(0, { ok: true, reportId: 'equal-allocation-report' });
 });
 
@@ -948,11 +955,14 @@ for (const outcome of ['success', 'refusal', 'rejection'] as const) {
     old.onStart();
     old.onToken('retained-before-old-settlement');
     old.reset();
-    await settle(0, outcome === 'success'
-      ? { ok: true, reportId: 'stale-report' }
-      : outcome === 'refusal'
-        ? { ok: false, reason: 'forbidden' }
-        : new Error('UNTRUSTED OLD REJECTION'));
+    await settle(
+      0,
+      outcome === 'success'
+        ? { ok: true, reportId: 'stale-report' }
+        : outcome === 'refusal'
+          ? { ok: false, reason: 'forbidden' }
+          : new Error('UNTRUSTED OLD REJECTION'),
+    );
     expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(true);
     expect(detailField().value).toBe('Fresh pending draft');
     expect(window.document.activeElement).toBe(focus);

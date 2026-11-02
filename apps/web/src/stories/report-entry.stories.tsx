@@ -88,7 +88,10 @@ const meta = {
     const scriptUrl = URL.createObjectURL(blob);
     const state: StoryTransport = { scriptUrl, requests: [] };
     transport = state;
-    setStoryRequestContext({ visitor: 'Signed In', url: new URL('/en/threads/one/reading', window.location.href).href });
+    setStoryRequestContext({
+      visitor: 'Signed In',
+      url: new URL('/en/threads/one/reading', window.location.href).href,
+    });
 
     const intercepted = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);

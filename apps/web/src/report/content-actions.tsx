@@ -42,12 +42,7 @@ let observationId = 0;
 const useClientLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 function sessionFingerprint(session: SessionRecord | undefined, available: boolean): string {
-  return JSON.stringify([
-    available,
-    session?.state ?? 'unknown',
-    session?.subject ?? null,
-    session?.csrfToken ?? null,
-  ]);
+  return JSON.stringify([available, session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
 }
 
 /** Watch only the session already in QueryClient. A cache success is an ownership event, even when its data echoes. */
@@ -234,8 +229,7 @@ function ReportActionsVisit({
   }, [activeOwner, admittedFingerprint, observation, owner, sessionRevision]);
 
   const currentOpen = useCallback(
-    (incarnation: number) =>
-      currentOwner() && reportOpenRef.current && openIncarnation.current === incarnation,
+    (incarnation: number) => currentOwner() && reportOpenRef.current && openIncarnation.current === incarnation,
     [currentOwner],
   );
 
@@ -301,11 +295,8 @@ function ReportActionsVisit({
 
       const currentVisit = () => currentOpen(incarnation) && idempotencyKey.current === submittedKey;
       const currentAttempt = () =>
-        currentVisit() &&
-        tokenRef.current === submittedToken &&
-        tokenRevision.current === submittedTokenRevision;
-      if (!currentAttempt() || !submittedToken || !submittedKey || !canReport)
-        throw new Error(m.report_unavailable());
+        currentVisit() && tokenRef.current === submittedToken && tokenRevision.current === submittedTokenRevision;
+      if (!currentAttempt() || !submittedToken || !submittedKey || !canReport) throw new Error(m.report_unavailable());
 
       const authority = observation.read();
       const credential = reportCredential(authority);
@@ -371,7 +362,13 @@ function ReportActionsVisit({
         maxDetails={4096}
         verified={canReport && Boolean(token.value)}
         verification={
-          <Verification config={verification} locale={getLocale()} onToken={updateToken} reset={reset} onStart={startChallenge} />
+          <Verification
+            config={verification}
+            locale={getLocale()}
+            onToken={updateToken}
+            reset={reset}
+            onStart={startChallenge}
+          />
         }
       />
       {reportId && currentAuthority.session?.state === 'signed-in' && currentAuthority.session.subject ? (

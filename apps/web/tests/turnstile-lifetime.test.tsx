@@ -109,7 +109,13 @@ async function mount(
     await act(async () => {
       const child = (
         <Verification
-          {...props(nextConfig, nextCallbacks.onToken ?? (() => {}), nextCallbacks.onStart ?? (() => {}), reset, locale)}
+          {...props(
+            nextConfig,
+            nextCallbacks.onToken ?? (() => {}),
+            nextCallbacks.onStart ?? (() => {}),
+            reset,
+            locale,
+          )}
         />
       );
       root.render(strict ? <StrictMode>{child}</StrictMode> : child);
@@ -322,14 +328,32 @@ test('a successor sharing the reset ref owns token publication and cleanup even 
   const second = createRoot(secondNode);
   roots.push(first, second);
   await act(async () => {
-    first.render(<Verification {...props(config, (token) => tokens.push(`first:${token}`), () => {}, reset)} />);
+    first.render(
+      <Verification
+        {...props(
+          config,
+          (token) => tokens.push(`first:${token}`),
+          () => {},
+          reset,
+        )}
+      />,
+    );
   });
   const api = fakeApi('shared-handle');
   await deliver(scriptList()[0]!, api);
   const firstWidget = [...api.widgets.values()][0]!;
   const resetFirst = reset.current!;
   await act(async () => {
-    second.render(<Verification {...props(config, (token) => tokens.push(`second:${token}`), () => {}, reset)} />);
+    second.render(
+      <Verification
+        {...props(
+          config,
+          (token) => tokens.push(`second:${token}`),
+          () => {},
+          reset,
+        )}
+      />,
+    );
     await tick();
   });
   const secondWidget = [...api.widgets.values()].at(-1)!;
