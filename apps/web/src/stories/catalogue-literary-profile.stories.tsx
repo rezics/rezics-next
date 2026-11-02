@@ -454,7 +454,7 @@ async function inspectInitialBibliography(canvasElement: HTMLElement) {
   const fieldset = initialBibliographyPanel(canvasElement);
   const fact = fieldset.querySelector<HTMLElement>('section[id^="literary-fact-"]')!;
   const heading = within(fact).getByRole('heading', { level: 3 });
-  const select = within(fieldset).getByRole('combobox', { name: m.refinement_property() }) as HTMLSelectElement;
+  const select = within(fieldset).getByRole('combobox', { name: m.refinement_property() });
   const description = fact.querySelector('p')!;
   const view = canvasElement.ownerDocument.defaultView!;
   const citation = 'https://Example.org/Original%2FSource?language=ja&edition=First#' + 'Bibliographie'.repeat(24);
@@ -551,11 +551,10 @@ export const InitialBibliographyIndependent: Story = {
       const type = await within(region).findByRole('combobox');
       await userEvent.selectOptions(type, 'schema:Book');
     }
-    const selectors = regions.map(
-      (region) =>
-        within(initialBibliographyPanel(region)).getByRole('combobox', {
-          name: m.refinement_property(),
-        }) as HTMLSelectElement,
+    const selectors = regions.map((region) =>
+      within(initialBibliographyPanel(region)).getByRole('combobox', {
+        name: m.refinement_property(),
+      }),
     );
     await expect(selectors[0]!.id).not.toBe(selectors[1]!.id);
     for (const [index, region] of regions.entries()) {
