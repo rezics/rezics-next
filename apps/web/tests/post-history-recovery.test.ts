@@ -250,11 +250,11 @@ afterAll(async () => {
   await browser?.close();
 });
 
-test('A failed immutable revision history read can be explicitly retried through the existing reader without keeping stale viewer-bound history or losing the requested continuation', async () => {
+test('A transport failure keeps admitted revisions readable through close, reopen and exact continuation retry without duplicates', async () => {
   const page = await mounted();
   try {
     await open(page);
-    await finish(page, { code: 'dependency_unavailable' }, 503);
+    await page.evaluate(() => (window as unknown as Driver).rejectHistory());
     await unavailable(page);
     const retry = page.getByRole('button', { name: m.exact_revision_retry() });
     await retry.evaluate((button) => {
@@ -311,18 +311,29 @@ test('A failed immutable revision history read can be explicitly retried through
     await page.getByRole('button', { name: m.thread_history_more() }).click();
     await pending(page);
     await page.evaluate(() => (window as unknown as Driver).rejectHistory());
-    await unavailable(page);
-    expect(await page.locator('section > ol').count()).toBe(0);
+    await page.getByText(m.thread_history_page_failed(), { exact: true }).waitFor();
+    expect(await page.locator('section > ol > li').count()).toBe(1);
+    const firstEntry = await page.locator('section > ol > li').elementHandle();
+    expect(await firstEntry!.isVisible()).toBe(true);
+    expect(await page.getByText(m.thread_history_unavailable(), { exact: true }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: m.thread_history_more() }).count()).toBe(0);
     await page.getByRole('button', { name: m.thread_history_hide() }).click();
     await page.getByRole('button', { name: m.thread_history_show() }).click();
     expect(await calls(page)).toHaveLength(3);
-    await retry.click();
+    expect(await firstEntry!.isVisible()).toBe(true);
+    await retry.evaluate((button) => {
+      (button as HTMLButtonElement).click();
+      (button as HTMLButtonElement).click();
+    });
     await pending(page);
-    expect(await page.locator('section > ol').count()).toBe(0);
-    expect(await page.getByText(m.thread_history_unavailable(), { exact: true }).isVisible()).toBe(true);
+    expect(await retry.isDisabled()).toBe(true);
+    expect(await firstEntry!.isVisible()).toBe(true);
+    expect(await page.getByText(m.thread_history_page_failed(), { exact: true }).isVisible()).toBe(true);
     await finish(page, { revisions: [second], next: null });
     await versions(page, 2);
     expect(await page.locator('section > ol > li').count()).toBe(2);
+    expect(await firstEntry!.isVisible()).toBe(true);
+    expect(await page.getByText(m.thread_history_page_failed(), { exact: true }).count()).toBe(0);
     expect(await page.getByRole('button', { name: m.thread_history_more() }).count()).toBe(0);
     expect((await calls(page)).map(({ cursor, limit }) => ({ cursor, limit }))).toEqual([
       { cursor: null, limit: '20' },
@@ -448,8 +459,8 @@ test('The default immutable revision history retires original session disclosure
     await page.getByRole('button', { name: m.thread_history_more() }).waitFor();
     await page.getByRole('button', { name: m.thread_history_more() }).click();
     await pending(page);
-    await finish(page, { code: 'dependency_unavailable' }, 503);
-    await unavailable(page);
+    await page.evaluate(() => (window as unknown as Driver).rejectHistory());
+    await page.getByText(m.thread_history_page_failed(), { exact: true }).waitFor();
     await page.getByRole('button', { name: m.exact_revision_retry() }).click();
     await pending(page);
     expect((await calls(page)).at(-1)).toMatchObject({ cursor, limit: '20', authorization: null });
@@ -491,7 +502,8 @@ test('The default immutable revision history retires original session disclosure
     await page.getByRole('button', { name: m.thread_history_more() }).click();
     await pending(page);
     await page.evaluate(() => (window as unknown as Driver).rejectHistory());
-    await unavailable(page);
+    await page.getByText(m.thread_history_page_failed(), { exact: true }).waitFor();
+    await versions(page, 1);
     await page.getByRole('button', { name: m.exact_revision_retry() }).evaluate((button) => {
       (button as HTMLButtonElement).click();
       (button as HTMLButtonElement).click();
@@ -552,7 +564,7 @@ test('default history rejects unknown, preparing and mismatched admission and pe
   }
 }, 30_000);
 
-test('healthy authenticated history without CSRF supports first-page reads, continuation and explicit recovery', async () => {
+test('healthy authenticated history without CSRF clears private history on native denial and recovers from the first page', async () => {
   const page = await mounted();
   try {
     await session(page, { ...signedIn, csrfToken: null });
@@ -588,29 +600,29 @@ test('healthy authenticated history without CSRF supports first-page reads, cont
     });
     await finish(page, { code: 'forbidden' }, 403);
     await unavailable(page);
+    await retiredDisclosure(page);
 
     await page.getByRole('button', { name: m.exact_revision_retry() }).click();
     await pending(page);
     expect((await calls(page)).at(-1)).toMatchObject({
       postId: first.id,
-      cursor,
+      cursor: null,
       limit: '20',
       authorization: `Bearer ${first.authorId}`,
     });
     await finish(page, { revisions: [second], next: null });
-    await versions(page, 2);
+    await versions(page, 1);
     const links = await page
       .locator('section > ol h4 a')
       .evaluateAll((entries) => entries.map((entry) => entry.getAttribute('href')));
     expect(links).toEqual([
-      `/en/posts/${first.id}/revisions/${first.revisionId}`,
       `/en/posts/${second.id}/revisions/${second.revisionId}`,
     ]);
     expect(await page.getByRole('button', { name: m.thread_history_more() }).count()).toBe(0);
     expect((await calls(page)).slice(-3).map(({ cursor: value, limit }) => ({ cursor: value, limit }))).toEqual([
       { cursor: null, limit: '20' },
       { cursor, limit: '20' },
-      { cursor, limit: '20' },
+      { cursor: null, limit: '20' },
     ]);
     expect(
       await page.evaluate(() => (window as unknown as { historyCsrfToken: string | null }).historyCsrfToken),
@@ -670,6 +682,11 @@ test('obsolete success, unavailable, rejection and finally cannot revive data or
     for (const settlement of ['success', 'unavailable', 'reject']) {
       await authorHistory(page);
       await page.getByRole('button', { name: m.thread_history_more() }).click();
+      await pending(page);
+      await page.evaluate(() => (window as unknown as Driver).rejectHistory());
+      await page.getByText(m.thread_history_page_failed(), { exact: true }).waitFor();
+      await versions(page, 1);
+      await page.getByRole('button', { name: m.exact_revision_retry() }).click();
       await pending(page);
       await session(page, { ...signedIn, csrfToken: 'successor-csrf' });
       await retiredDisclosure(page);

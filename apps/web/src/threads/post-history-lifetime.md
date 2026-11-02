@@ -42,6 +42,8 @@ pages with a next cursor. Version links, document-before-provenance order, licen
 media disclosure use the existing renderers. Work grows only with explicitly requested pages and their bounded
 related data.
 
+Transport failures on a continuation keep the admitted window and retry the exact cursor; native unavailable or denied responses clear it and restart from the first page.
+
 The connected [composition regression](../../tests/historical-reader-compatibility.test.tsx) joins the actual
 exact and history wrappers, cache admissions and callers through a real server-function serialization roundtrip
 and a separate browser QueryClient. The existing [recovery suite](../../tests/post-history-recovery.test.ts)

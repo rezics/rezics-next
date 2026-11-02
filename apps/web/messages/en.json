@@ -1128,6 +1128,7 @@
   "thread_history_licence": "Licence",
   "thread_history_loading": "Loading revision history…",
   "thread_history_more": "Load more versions",
+  "thread_history_page_failed": "Couldn’t load more versions. Your loaded revisions are still available. Try again to load this page.",
   "thread_history_show": "Revision history",
   "thread_history_unavailable": "Revision history is unavailable.",
   "thread_history_version": "Version {number}",

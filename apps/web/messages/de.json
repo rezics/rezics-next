@@ -1110,6 +1110,7 @@
   "thread_history_licence": "Lizenz",
   "thread_history_loading": "Versionsverlauf wird geladen …",
   "thread_history_more": "Weitere Versionen laden",
+  "thread_history_page_failed": "Weitere Versionen konnten nicht geladen werden. Die bereits geladenen Versionen bleiben verfügbar. Versuche erneut, diese Seite zu laden.",
   "thread_history_show": "Versionsverlauf",
   "thread_history_unavailable": "Der Versionsverlauf ist nicht verfügbar.",
   "thread_history_version": "Version {number}",

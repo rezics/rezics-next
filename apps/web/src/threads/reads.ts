@@ -316,46 +316,42 @@ export const readPostHistory = createServerFn({ method: 'GET' })
     const actualReader = preparedReaderProvenance(authorization, subject);
     const client = kernelClient();
     let page: PostHistoryReadData;
-    try {
-      const options = {
-        query: { limit: 20, ...(data.cursor ? { cursor: data.cursor } : {}) },
-        ...(authorization ? { headers: { authorization } } : {}),
-      };
-      const result = await client.posts({ id: data.postId }).revisions.get(options);
-      if (result.error || !result.data) page = { available: false };
-      else {
-        const revisions = result.data.revisions;
-        const documentMedia = await loadRevisionDocumentMedia(
+    const options = {
+      query: { limit: 20, ...(data.cursor ? { cursor: data.cursor } : {}) },
+      ...(authorization ? { headers: { authorization } } : {}),
+    };
+    const result = await client.posts({ id: data.postId }).revisions.get(options);
+    if (result.error || !result.data) page = { available: false };
+    else {
+      const revisions = result.data.revisions;
+      const documentMedia = await loadRevisionDocumentMedia(
+        client,
+        revisionDocumentImageIds(revisions),
+        authorization,
+      );
+      const [authors, mentions, subjects, reviewVotes] = await Promise.all([
+        readPageAuthors(
           client,
-          revisionDocumentImageIds(revisions),
-          authorization,
-        );
-        const [authors, mentions, subjects, reviewVotes] = await Promise.all([
-          readPageAuthors(
-            client,
-            revisions.map(({ authorId }) => authorId),
-          ),
-          readDocumentMentions(
-            client,
-            revisions.map(({ body }) => body),
-          ),
-          readRevisionSubjects(client, revisions),
-          readAuthorRevisionVotes(client, revisions, subject && authorization ? { id: subject, authorization } : null),
-        ]);
-        page = {
-          available: true,
-          revisions,
-          next: result.data.next,
-          authors,
-          mentions,
-          subjects,
-          reviewVotes,
-          documentMedia,
-          now: new Date().toISOString(),
-        };
-      }
-    } catch {
-      page = { available: false };
+          revisions.map(({ authorId }) => authorId),
+        ),
+        readDocumentMentions(
+          client,
+          revisions.map(({ body }) => body),
+        ),
+        readRevisionSubjects(client, revisions),
+        readAuthorRevisionVotes(client, revisions, subject && authorization ? { id: subject, authorization } : null),
+      ]);
+      page = {
+        available: true,
+        revisions,
+        next: result.data.next,
+        authors,
+        mentions,
+        subjects,
+        reviewVotes,
+        documentMedia,
+        now: new Date().toISOString(),
+      };
     }
     return historicalReadEnvelope(data.binding as HistoricalReadBinding, actualReader, page);
   });

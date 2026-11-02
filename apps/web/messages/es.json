@@ -1110,6 +1110,7 @@
   "thread_history_licence": "Licencia",
   "thread_history_loading": "Cargando el historial de versiones…",
   "thread_history_more": "Cargar más versiones",
+  "thread_history_page_failed": "No se pudieron cargar más versiones. Las versiones cargadas siguen disponibles. Vuelve a intentar cargar esta página.",
   "thread_history_show": "Historial de versiones",
   "thread_history_unavailable": "El historial de versiones no está disponible.",
   "thread_history_version": "Versión {number}",

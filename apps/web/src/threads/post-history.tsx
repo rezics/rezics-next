@@ -123,6 +123,7 @@ function HistoryDisclosure({
     now,
   } = useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.snapshot);
   const connection = lifetime.ticket();
+  const pageFailed = available && failedCursor !== undefined;
 
   async function load(cursor?: string) {
     const request = lifetime.begin(connection, source, postId, cursor, locale, credentialMode, viewerId);
@@ -133,7 +134,7 @@ function HistoryDisclosure({
       await Promise.resolve();
       if (!lifetime.owns(request) || !historicalBindingCurrent(source, request.binding)) return;
       if (!ready()) {
-        lifetime.update(connection, (view) => ({ ...view, available: false, loaded: true, failedCursor: cursor }));
+        lifetime.resetDisclosure(connection);
         return;
       }
       const result = await readPostHistory({
@@ -165,7 +166,7 @@ function HistoryDisclosure({
         return;
       }
       if (!result.data.available) {
-        lifetime.update(connection, (view) => ({ ...view, available: false, loaded: true, failedCursor: cursor }));
+        lifetime.resetDisclosure(connection);
         return;
       }
       const page = result.data;
@@ -184,9 +185,7 @@ function HistoryDisclosure({
         failedCursor: undefined,
       }));
     } catch {
-      if (lifetime.owns(request)) {
-        lifetime.update(connection, (view) => ({ ...view, available: false, loaded: true, failedCursor: cursor }));
-      }
+      lifetime.failPage(request);
     } finally {
       lifetime.finish(request);
     }
@@ -228,23 +227,6 @@ function HistoryDisclosure({
             {m.thread_history_loading()}
           </p>
         ) : null}
-        {!available ? (
-          <div className="space-y-3">
-            <p role="status" className="text-sm text-muted-foreground">
-              {m.thread_history_unavailable()}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
-              disabled={loading}
-              onClick={() => void load(failedCursor)}
-            >
-              {m.exact_revision_retry()}
-            </Button>
-          </div>
-        ) : null}
         {available && loaded && revisions.length === 0 ? (
           <p role="status" className="text-sm text-muted-foreground">
             {m.thread_history_unavailable()}
@@ -268,12 +250,29 @@ function HistoryDisclosure({
             ))}
           </ol>
         ) : null}
+        {!available || pageFailed ? (
+          <div className="space-y-3">
+            <p role="status" className="text-sm text-muted-foreground">
+              {pageFailed ? m.thread_history_page_failed() : m.thread_history_unavailable()}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              disabled={loading}
+              onClick={() => void load(failedCursor)}
+            >
+              {m.exact_revision_retry()}
+            </Button>
+          </div>
+        ) : null}
         {loading && loaded ? (
           <p role="status" className="text-sm text-muted-foreground">
             {m.thread_history_loading()}
           </p>
         ) : null}
-        {available && next ? (
+        {available && next && !pageFailed ? (
           <Button
             type="button"
             variant="outline"

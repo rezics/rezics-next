@@ -1110,6 +1110,7 @@
   "thread_history_licence": "许可协议",
   "thread_history_loading": "正在加载修订记录…",
   "thread_history_more": "加载更多版本",
+  "thread_history_page_failed": "无法加载更多版本。已加载的修订记录仍可阅读。请重试加载此页。",
   "thread_history_show": "修订记录",
   "thread_history_unavailable": "目前无法获取修订记录。",
   "thread_history_version": "版本 {number}",

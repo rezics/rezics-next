@@ -180,6 +180,17 @@ export class PostHistoryLifetime {
     this.notify();
   }
 
+  /** A failed transport has no new authority over the already admitted window. */
+  failPage(request: HistoryRequest) {
+    if (!this.owns(request)) return;
+    this.update(request.connection, (view) => ({
+      ...view,
+      available: view.available && view.loaded && request.cursor !== undefined,
+      loaded: true,
+      failedCursor: request.cursor,
+    }));
+  }
+
   finish(request: HistoryRequest) {
     if (!this.owns(request)) return;
     this.pending = undefined;
