@@ -5,10 +5,7 @@ import { m } from '../paraglide/messages.js';
 import { PageStory, pageReady } from './page';
 import { selectSettingsCategory } from './settings-category-navigation';
 
-const meta = {
-  title: 'Pages/Settings/Reading and display',
-  parameters: { layout: 'fullscreen' },
-} satisfies Meta;
+const meta = { title: 'Pages/Settings/Reading and display', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
 export const ReadingAndDisplay: Story = {
@@ -23,24 +20,13 @@ export const ReadingAndDisplay: Story = {
     await userEvent.click(await reading.findByRole('radio', { name: m.settings_spoiler_1_title() }));
     await reading.findByText(m.settings_saved());
     await expect(fixture.calls).toHaveLength(1);
-    await expect(fixture.calls[0]).toMatchObject({
-      expectedVersion: 0,
-      spoilerLevel: 1,
-    });
+    await expect(fixture.calls[0]).toMatchObject({ expectedVersion: 0, spoilerLevel: 1 });
     await expect(fixture.calls[0]).not.toHaveProperty('suitability');
-    await expect(fixture.current()).toMatchObject({
-      spoilerLevel: 1,
-      suitability: 'blur',
-      version: 1,
-    });
+    await expect(fixture.current()).toMatchObject({ spoilerLevel: 1, suitability: 'blur', version: 1 });
     await selectSettingsCategory(context.canvasElement, m.settings_display_heading());
     await view.findByRole('heading', { name: m.settings_display_heading() });
     const display = within(await view.findByRole('region', { name: m.shell_appearance() }));
-    await expect(
-      display.getByRole('button', {
-        name: (name) => name.startsWith(m.shell_language()),
-      }),
-    ).toBeEnabled();
+    await expect(display.getByRole('button', { name: (name) => name.startsWith(m.shell_language()) })).toBeEnabled();
     await expect(display.getByRole('button', { name: m.shell_theme() })).toBeEnabled();
   },
 };
@@ -109,15 +95,10 @@ export const DefaultCurrentRecovery: Story = {
     await pageReady(context);
     await selectSettingsCategory(context.canvasElement, m.settings_reading_heading());
     const view = within(
-      await within(context.canvasElement).findByRole('region', {
-        name: m.settings_reading_heading(),
-      }),
+      await within(context.canvasElement).findByRole('region', { name: m.settings_reading_heading() }),
     );
     const fixture = readingPageFixture()!;
-    const choices = {
-      spoilers: m.settings_spoiler_0_title(),
-      images: m.settings_reading_blur(),
-    };
+    const choices = { spoilers: m.settings_spoiler_0_title(), images: m.settings_reading_blur() };
     const radio = (level: 0 | 1 | 2) =>
       view.getByRole('radio', {
         name: ([m.settings_spoiler_0_title(), m.settings_spoiler_1_title(), m.settings_spoiler_2_title()] as const)[
