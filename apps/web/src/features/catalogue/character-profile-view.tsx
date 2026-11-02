@@ -29,6 +29,7 @@ import {
   characterType,
   characterWork,
   characterWorkFields,
+  currentCharacterRead,
   type CharacterAddress,
   type CharacterRead,
   type CharacterTransport,
@@ -43,23 +44,6 @@ export type CharacterProfileProps = CharacterAddress & {
   review: (id: string, property: string, session?: string) => CandidateTransport;
   relations: (id: string) => RelationTransport;
 };
-
-type SuccessfulCharacterRead = Extract<CharacterRead, { ok: true }>;
-
-export function currentCharacterRead(
-  read: CharacterRead | undefined,
-  address: CharacterAddress,
-  fetching: boolean,
-  error: boolean,
-): read is SuccessfulCharacterRead {
-  return (
-    read?.ok === true &&
-    !fetching &&
-    !error &&
-    read.character?.subject.id === address.id &&
-    read.work?.subject.id === address.work
-  );
-}
 
 export const CharacterProfile = catalogueEditor(CharacterProfileLive);
 

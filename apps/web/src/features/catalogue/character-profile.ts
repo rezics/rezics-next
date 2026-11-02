@@ -15,6 +15,20 @@ export type CharacterRead =
   | { ok: false; reason: 'invalid' | 'denied' | 'stale' | 'unavailable' }
   | { ok: true; release: Release; character: SubjectRead | null; work: SubjectRead | null };
 export type CharacterAddress = { id?: string | undefined; work?: string | undefined };
+export function currentCharacterRead(
+  read: CharacterRead | undefined,
+  address: CharacterAddress,
+  fetching: boolean,
+  error: boolean,
+): read is Extract<CharacterRead, { ok: true }> {
+  return (
+    read?.ok === true &&
+    !fetching &&
+    !error &&
+    read.character?.subject.id === address.id &&
+    read.work?.subject.id === address.work
+  );
+}
 export type CharacterTransport = {
   load: (address: CharacterAddress) => Promise<CharacterRead>;
   create: (command: CharacterCommand) => Promise<CreateResult>;

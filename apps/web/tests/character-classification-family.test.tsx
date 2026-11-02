@@ -199,7 +199,7 @@ async function supplied(count = 1, scenario: 'ready' | 'uncertain' | 'denied' = 
 }
 
 test('Character profile disclosure requires a settled successful read for its exact address', async () => {
-  const { currentCharacterRead } = await import('../src/features/catalogue/character-profile-view');
+  const { currentCharacterRead } = await import('../src/features/catalogue/character-profile');
   const read = { ok: true, character: { subject: { id: 'character' } }, work: { subject: { id: 'work' } } } as never;
   expect([
     currentCharacterRead(read, { id: 'character', work: 'work' }, false, false),
