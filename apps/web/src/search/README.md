@@ -49,7 +49,9 @@ identifiers; options with colliding names include their property IDs.
 Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only
 explicit sort value.
 
-Recent history keeps failed local writes in its memory fallback until a write succeeds; observed durable removals and
+Recent history reads at most two 20-row pages for its 32-row view; each nonterminal page must contain 20 rows, and
+malformed continuations keep accepted local history and pending changes until a fresh traversal succeeds. Failed
+local writes remain in the memory fallback until a write succeeds; observed durable removals and
 `localStorage.clear()` invalidate cached durable buckets, including inactive ones, while account labels remain
 native-hydrated. Keyboard removal focuses the next available row action, then the previous action, and falls back to
 the labeled history region; explicit clear focuses that region and announces completion.

@@ -8,6 +8,7 @@ import {
   type RecentStorage,
   type RecentSyncAdapter,
 } from './recent-history';
+import { createRecentPageProgress, RECENT_HISTORY_READ_PAGE_LIMIT } from './recent-page-progress';
 import type { RecentEntry as NativeEntry, RecentItem, RecentPage, Pending } from './recent';
 
 export class RecentSyncError extends Error {
@@ -217,9 +218,9 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
     return { document, journal };
   }
   async function read(signal: AbortSignal) {
-    const rows: RecentItem[] = [];
+    const progress = createRecentPageProgress<RecentItem>();
     let cursor: string | undefined, revision: number | undefined;
-    do {
+    for (let request = 0; request < RECENT_HISTORY_READ_PAGE_LIMIT; request++) {
       live(signal);
       const response = await api.read(cursor, signal);
       live(signal);
@@ -227,10 +228,12 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
         throw new RecentSyncError(response.code === 'stale_cursor' ? 'conflict' : 'unavailable');
       if (revision !== undefined && revision !== response.page.revision) throw new RecentSyncError('conflict');
       revision = response.page.revision;
-      rows.push(...response.page.recentSearches);
+      if (!progress.accept(response.page)) throw new RecentSyncError('unavailable');
       cursor = response.page.next ?? undefined;
-    } while (cursor && rows.length < RECENT_HISTORY_LIMIT);
-    return { rows: rows.slice(0, RECENT_HISTORY_LIMIT), revision: revision! };
+      if (!cursor || progress.rows.length >= RECENT_HISTORY_LIMIT)
+        return { rows: progress.rows.slice(0, RECENT_HISTORY_LIMIT), revision: revision! };
+    }
+    throw new RecentSyncError('unavailable');
   }
   function merge(rows: RecentItem[], revision: number, signal: AbortSignal) {
     live(signal);
