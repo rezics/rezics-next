@@ -207,7 +207,7 @@ async function readingJourney({ canvasElement }: { canvasElement: HTMLElement })
   const submissions: { prevented: boolean; destination: string }[] = [];
   const captureSubmit = (event: SubmitEvent) => {
     const url = new URL(form.action);
-    url.search = new URLSearchParams(new FormData(form) as Iterable<[string, string]>).toString();
+    url.search = new URLSearchParams(Array.from(new FormData(form), ([key, value]) => [key, String(value)])).toString();
     submissions.push({ prevented: event.defaultPrevented, destination: url.pathname + url.search });
     event.preventDefault(); // Test-only navigation capture; the production form has no handler.
   };
