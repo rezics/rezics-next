@@ -113,6 +113,7 @@ function StatementConsentPageLive({
   const [reload, setReload] = useState(false);
   const request = useRef<ConsentCommand | null>(null);
   const running = useRef(false);
+  const page = useRef<{ cursor?: string; session?: string }>({ session: initial?.ok ? initial.session : undefined });
   const session = useRef<string | undefined>(initial?.ok ? initial.session : undefined);
   const current = read?.ok ? read : undefined;
   const terminal = current?.terminal || result?.kind === 'retracted';
@@ -151,18 +152,19 @@ function StatementConsentPageLive({
     setConfirmation(operation);
   }
 
-  async function load(cursor?: string) {
+  async function load(input: { cursor?: string; session?: string } = { session: session.current }) {
     if (!lifetime.active()) return;
     if (running.current || request.current || terminal) return;
     running.current = true;
     setBusy(true);
     setFailure(undefined);
+    page.current = input;
     setRead(undefined);
     setResult(undefined);
     setConfirmation(undefined);
     setOwn(false);
     try {
-      const next = await transport.read(cursor, session.current);
+      const next = await transport.read(input.cursor, input.session);
       if (!lifetime.active()) return;
       setRead(next);
       setReload(false);
@@ -176,6 +178,12 @@ function StatementConsentPageLive({
       setBusy(false);
     }
   }
+  const recoveryLabel = uncertain
+    ? m.candidate_retry({}, options)
+    : reload
+      ? m.candidate_reload({}, options)
+      : m.statement_consent_retry_page({}, options);
+
   async function change() {
     if (!lifetime.active()) return;
     if (
@@ -275,7 +283,7 @@ function StatementConsentPageLive({
         </Button>
       )}
       {(failure || (read && !read.ok)) && (
-        <section aria-label={uncertain ? m.candidate_retry({}, options) : m.candidate_reload({}, options)}>
+        <section aria-label={recoveryLabel}>
           <ContentItemFrame as="div" data-consent-part="recovery" className="flex min-w-0 flex-col gap-3 p-4 sm:p-6">
             <ConsentError reason={(failure ?? (read && !read.ok ? read : undefined))!.reason} locale={locale} />
             {uncertain && <p>{m.statement_consent_uncertain({}, options)}</p>}
@@ -283,10 +291,20 @@ function StatementConsentPageLive({
               variant="outline"
               className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               disabled={busy}
-              onClick={() => void (uncertain ? change() : load())}
+              onClick={() => void (uncertain ? change() : load(page.current))}
             >
-              {uncertain ? m.candidate_retry({}, options) : m.candidate_reload({}, options)}
+              {recoveryLabel}
             </Button>
+            {!uncertain && !terminal && (
+              <Button
+                variant="outline"
+                className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                disabled={busy}
+                onClick={() => void load()}
+              >
+                {m.statement_consent_restart({}, options)}
+              </Button>
+            )}
           </ContentItemFrame>
         </section>
       )}
@@ -298,15 +316,17 @@ function StatementConsentPageLive({
         <>
           {current && !candidate && (
             <ContentItemFrame as="div" data-consent-part="empty" className="flex min-w-0 flex-col gap-3 p-4 sm:p-6">
-              <p>{m.statement_consent_empty({}, options)}</p>
+              <p>
+                {current.next ? m.statement_consent_empty_page({}, options) : m.statement_consent_empty({}, options)}
+              </p>
               {current.next && (
                 <Button
                   variant="outline"
                   className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   disabled={busy}
-                  onClick={() => void load(current.next!)}
+                  onClick={() => void load({ cursor: current.next!, session: session.current })}
                 >
-                  {m.candidate_more({}, options)}
+                  {m.statement_consent_continue({}, options)}
                 </Button>
               )}
             </ContentItemFrame>

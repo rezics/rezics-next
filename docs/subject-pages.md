@@ -562,7 +562,8 @@ unsourced candidates in that slot offer the same conditional entry without claim
 
 The consent page prepares its private candidate only after session hydration and an explicit opening. A bounded
 candidate page and the anonymous public subject read start together. Candidate continuation is explicit; absence
-from one page establishes neither ownership nor consent. Labels come from the candidate's immutable definition
+from one page establishes neither ownership nor consent. Empty intermediate pages offer deliberate continuation;
+a failed read retries its exact cursor and session token, while a separate restart returns to the first page. Labels come from the candidate's immutable definition
 release. Cited assertions follow ordinary sourced review and do not offer consent controls. The native candidate
 response supplies no eligibility or disclosed flag: the page says so, separating unsourced/private review from
 presence or absence in the current public result.

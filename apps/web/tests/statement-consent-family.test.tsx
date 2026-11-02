@@ -318,29 +318,68 @@ test('Statement consent composes the complete family with isolated confirmation,
         .every((call) => call.authorization === null),
     ).toBe(true);
 
-    // Empty bounded pages stay continuable; only an explicit More reads the next page.
-    const more = consentFixture('more');
-    const pageInputs: unknown[][] = [];
-    await show(
-      panel(more, {
+    // Sparse reads never advance automatically; both failure shapes retain the exact page and token.
+    for (const failure of ['returned', 'thrown'] as const) {
+      const more = consentFixture('more');
+      const pageInputs: unknown[][] = [];
+      let failNext = true;
+      const sparse: ConsentTransport = {
         ...more.transport,
-        read: (...args) => {
+        read: async (...args) => {
           pageInputs.push(args);
+          if (args[0] && failNext) {
+            failNext = false;
+            if (failure === 'thrown') throw new Error('Continuation unavailable');
+            return { ok: false, reason: 'unavailable' };
+          }
           return more.transport.read(...args);
         },
-      }),
-    );
+      };
+      await show(panel(more, sparse));
+      await click(button(host, m.statement_consent_open()));
+      await until(() => !!host.querySelector('[data-consent-part="empty"]'));
+      expect(pageInputs).toEqual([[undefined, undefined]]);
+      expect(host.textContent).toContain(m.statement_consent_empty_page());
+      expect(host.textContent).not.toContain(m.statement_consent_empty());
+      await click(button(host, m.statement_consent_continue()));
+      await until(() => !!host.querySelector('[data-consent-part="recovery"]'));
+      expect(host.querySelector('[data-consent-part="assertion"], [data-consent-part="public"]')).toBeNull();
+      expect(host.textContent).not.toContain(m.statement_consent_empty());
+      await click(button(host, m.statement_consent_retry_page()));
+      await until(() => !!host.querySelector('[data-consent-part="assertion"]'));
+      expect(pageInputs).toEqual([
+        [undefined, undefined],
+        ['next-page', 'consent-session'],
+        ['next-page', 'consent-session'],
+      ]);
+      expect(host.querySelector('[data-consent-part="confirmation"]')).toBeNull();
+      await click(button(host, m.statement_consent_share()));
+      expect(button(host, m.statement_consent_confirm()).disabled).toBe(true);
+      expect(more.calls.every((call) => call.method === 'GET')).toBe(true);
+
+      failNext = true;
+      await show(panel(more, sparse));
+      await click(button(host, m.statement_consent_open()));
+      await until(() => !!host.querySelector('[data-consent-part="empty"]'));
+      await click(button(host, m.statement_consent_continue()));
+      await until(() => !!host.querySelector('[data-consent-part="recovery"]'));
+      await click(button(host, m.statement_consent_restart()));
+      await until(() => !!host.querySelector('[data-consent-part="empty"]'));
+      expect(pageInputs.slice(-3)).toEqual([
+        [undefined, undefined],
+        ['next-page', 'consent-session'],
+        [undefined, 'consent-session'],
+      ]);
+    }
+    const exhausted = consentFixture('empty');
+    await show(panel(exhausted));
     await click(button(host, m.statement_consent_open()));
     await until(() => !!host.querySelector('[data-consent-part="empty"]'));
-    expect(more.calls).toHaveLength(2);
     expect(host.textContent).toContain(m.statement_consent_empty());
-    await click(button(host, m.candidate_more()));
-    await until(() => !!host.querySelector('[data-consent-part="assertion"]'));
-    expect(pageInputs).toEqual([
-      [undefined, undefined],
-      ['next-page', 'consent-session'],
-    ]);
-    expect(more.calls).toHaveLength(5);
+    expect(host.textContent).not.toContain(m.statement_consent_empty_page());
+    expect(
+      [...host.querySelectorAll('button')].some((node) => node.textContent === m.statement_consent_continue()),
+    ).toBe(false);
 
     // An identity failure can be explicitly reloaded, without a background read or mutation.
     const withheld = consentFixture('identity-withheld');
