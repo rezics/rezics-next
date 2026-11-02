@@ -70,10 +70,12 @@ export async function confirmStepUp(
           selection.kind === 'organization-delete' ? 'delete' : selection.pending.kind,
         )
       : await signIn(email, password);
+  if (!isCurrent()) return { ok: false, message: null };
   if (!result.ok) return { ok: false, message: stepUpFailure(result) };
   if (selection.kind === 'operation' || selection.kind === 'organization-delete') {
     const session = await loadAccountSession();
     if (
+      !isCurrent() ||
       session.kind !== 'ready' ||
       !(selection.kind === 'organization-delete'
         ? organizationDeleteSessionMatches(session, selection.pending)
@@ -94,6 +96,7 @@ export async function confirmStepUpWithPasskey(
   if (management.kind === 'invalid') return { ok: false, message: m.auth_account_operation_failure() };
   if (management.kind === 'management') {
     const result = await signInWithPasskey({ management: management.pending.kind, isCurrent });
+    if (!isCurrent()) return { ok: false, message: null };
     if (result.ok) return managementReturn(management.pending, origin, isCurrent);
     return { ok: false, message: result.reason === 'cancelled' ? null : passkeySignInFailure(result) };
   }
@@ -106,10 +109,12 @@ export async function confirmStepUpWithPasskey(
         ? { operation: selection.pending.kind, isCurrent }
         : { isCurrent },
   );
+  if (!isCurrent()) return { ok: false, message: null };
   if (result.ok) {
     if (selection.kind === 'operation' || selection.kind === 'organization-delete') {
       const session = await loadAccountSession();
       if (
+        !isCurrent() ||
         session.kind !== 'ready' ||
         !(selection.kind === 'organization-delete'
           ? organizationDeleteSessionMatches(session, selection.pending)

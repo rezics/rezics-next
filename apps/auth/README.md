@@ -262,6 +262,10 @@ the person on the page. Submission validates email and password, links field err
 first invalid field. Password visibility uses the shared in-field control. The submit button stays enabled until a
 request is pending and shows its loading state while waiting.
 
+Each confirmation belongs to the current page and exact request URL; departure, a changed request or cached-document
+restoration retires its callbacks and clears private inputs. Password submission may replace a passkey prompt,
+cancelling the browser ceremony without undoing a dispatched server sign-in or automatically replaying it.
+
 ## Screenshots
 
 Run `bun run screenshots` to capture all eight page states in the eight launch locales and both themes. Desktop images

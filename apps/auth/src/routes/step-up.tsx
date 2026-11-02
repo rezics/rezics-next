@@ -1,9 +1,10 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
+import { WebAuthnAbortService } from '@simplewebauthn/browser';
 import { AuthButton as Button } from '../button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { KeyRound } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { FieldError } from '@rezics/ui/shadcn/field';
 import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
@@ -22,7 +23,79 @@ export const Route = createFileRoute('/step-up')({
   component: StepUpPage,
 });
 
+// Browser continuations belong to one mounted request, independently of a dispatched server sign-in.
+class ConfirmationJourney {
+  active = false;
+  private pending: { kind: 'password' | 'passkey' } | null = null;
+
+  constructor(readonly href: string) {}
+
+  private isCurrent() {
+    return this.active && this.href === window.location.pathname + window.location.search + window.location.hash;
+  }
+
+  private cancel() {
+    const previous = this.pending;
+    this.pending = null;
+    if (previous?.kind === 'passkey') WebAuthnAbortService.cancelCeremony();
+  }
+
+  retire() {
+    this.active = false;
+    this.cancel();
+  }
+
+  begin(kind: 'password' | 'passkey') {
+    if (!this.isCurrent() || (this.pending && (this.pending.kind === 'password' || kind === 'passkey'))) return null;
+    this.cancel();
+    const pending = { kind };
+    this.pending = pending;
+    const isCurrent = () => this.isCurrent() && this.pending === pending;
+    return {
+      isCurrent,
+      finish: (success: boolean) => {
+        if (!isCurrent()) return false;
+        // Keep a successful confirmation closed until navigation or an explicit new journey.
+        if (!success) this.pending = null;
+        return true;
+      },
+    };
+  }
+}
+
 function StepUpPage() {
+  const href = useLocation({ select: (location) => location.href });
+  const [generation, setGeneration] = useState(0);
+  const [suspended, setSuspended] = useState(false);
+  const journey = useMemo(() => new ConfirmationJourney(href), [href, generation]);
+  useLayoutEffect(() => {
+    journey.active = true;
+    const hide = () => {
+      journey.retire();
+      setSuspended(true);
+    };
+    const show = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      journey.retire();
+      setGeneration((value) => value + 1);
+      setSuspended(false);
+    };
+    window.addEventListener('pagehide', hide);
+    window.addEventListener('pageshow', show);
+    return () => {
+      journey.retire();
+      window.removeEventListener('pagehide', hide);
+      window.removeEventListener('pageshow', show);
+    };
+  }, [journey]);
+  return suspended ? (
+    <AuthPage heading={m.auth_step_up_heading()} />
+  ) : (
+    <StepUpForm key={`${href}:${generation}`} journey={journey} query={new URL(href, 'https://auth.invalid').search} />
+  );
+}
+
+function StepUpForm({ journey, query }: { journey: ConfirmationJourney; query: string }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
@@ -32,7 +105,6 @@ function StepUpPage() {
   // Passkey controls appear only after the browser reports WebAuthn, so the server render has none.
   const [passkeys, setPasskeys] = useState(false);
   const [passkeyPending, setPasskeyPending] = useState(false);
-  const submitting = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
 
@@ -45,19 +117,19 @@ function StepUpPage() {
   useEffect(() => setPasskeys(passkeysSupported()), []);
 
   async function submitPasskey() {
-    if (submitting.current || pending) return;
-    submitting.current = true;
+    const completion = journey.begin('passkey');
+    if (!completion) return;
     setPending(true);
     setPasskeyPending(true);
     setMessage('');
     setEmailError('');
     setPasswordError('');
-    const outcome = await confirmStepUpWithPasskey(window.location.search, window.location.origin);
+    const outcome = await confirmStepUpWithPasskey(query, window.location.origin, completion.isCurrent);
+    if (!completion.finish(outcome.ok)) return;
     if (outcome.ok) {
       window.location.assign(outcome.target);
       return;
     }
-    submitting.current = false;
     setPending(false);
     setPasskeyPending(false);
     if (outcome.message) setMessage(outcome.message);
@@ -65,24 +137,26 @@ function StepUpPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || pending) return;
+    if (pending && !passkeyPending) return;
     const invalidEmail = !email.trim() || Boolean(emailInput.current?.validity.typeMismatch);
     const invalidPassword = !password;
     setEmailError(invalidEmail ? (email.trim() ? m.auth_form_email_invalid() : m.auth_form_required()) : '');
     setPasswordError(invalidPassword ? m.auth_form_required() : '');
     if (invalidEmail || invalidPassword) return;
-    submitting.current = true;
+    const completion = journey.begin('password');
+    if (!completion) return;
     setPending(true);
+    setPasskeyPending(false);
     setMessage('');
     setEmailError('');
     setPasswordError('');
-    const outcome = await confirmStepUp(email, password, window.location.search, window.location.origin);
+    const outcome = await confirmStepUp(email, password, query, window.location.origin, completion.isCurrent);
+    if (!completion.finish(outcome.ok)) return;
     setPassword('');
     if (outcome.ok) {
       window.location.assign(outcome.target);
       return;
     }
-    submitting.current = false;
     setPending(false);
     setMessage(outcome.message ?? '');
   }
@@ -106,7 +180,7 @@ function StepUpPage() {
             }}
             aria-invalid={emailError ? true : undefined}
             aria-describedby={emailError ? emailErrorId : undefined}
-            readOnly={pending}
+            readOnly={pending && !passkeyPending}
             required
           />
           {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
@@ -117,7 +191,7 @@ function StepUpPage() {
             name="password"
             autoComplete="current-password"
             required
-            readOnly={pending}
+            readOnly={pending && !passkeyPending}
             id={passwordId}
             value={password}
             onChange={(event) => {
@@ -134,7 +208,7 @@ function StepUpPage() {
             {message}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending} aria-busy={pending && !passkeyPending}>
+        <Button type="submit" disabled={pending && !passkeyPending} aria-busy={pending && !passkeyPending}>
           {m.auth_step_up_heading()}
         </Button>
         {passkeys ? (
