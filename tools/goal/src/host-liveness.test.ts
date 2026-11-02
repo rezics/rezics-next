@@ -1,6 +1,15 @@
 import { expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { closeSync, existsSync, ftruncateSync, openSync, readFileSync, readdirSync, writeFileSync, writeSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  ftruncateSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+  writeSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import {
   ensureHostRunning,
@@ -165,7 +174,10 @@ test('startup failure diagnostics bound current launch evidence and report missi
     command: [process.execPath, failing],
   };
   const failAndRead = async () => {
-    const error = await ensureHostRunning(config).then(() => undefined, (reason) => reason as Error);
+    const error = await ensureHostRunning(config).then(
+      () => undefined,
+      (reason) => reason as Error,
+    );
     expect(error).toBeInstanceOf(Error);
     return error!.message;
   };

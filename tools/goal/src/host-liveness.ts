@@ -1,6 +1,16 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  openSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createConnection } from 'node:net';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -37,8 +47,7 @@ function readStartupLog(fd: number, launchOffset: number): StartupLogEvidence {
     if (size < launchOffset) return { kind: 'unavailable', reason: 'the log shrank before diagnostics were read' };
     const totalBytes = size - launchOffset;
     const buffer = Buffer.allocUnsafe(Math.min(totalBytes, startupLogLimit));
-    if (buffer.length === 0)
-      return { kind: 'available', content: '', totalBytes, shownBytes: 0, truncated: false };
+    if (buffer.length === 0) return { kind: 'available', content: '', totalBytes, shownBytes: 0, truncated: false };
     const shownBytes = readSync(fd, buffer, 0, buffer.length, size - buffer.length);
     return {
       kind: 'available',
@@ -61,13 +70,16 @@ function startupExitError(
 ): Error {
   const outcome = code === null ? `signal ${signal ?? 'unknown'}` : `code ${code}`;
   const evidence = readStartupLog(logFd, launchOffset);
-  const output = evidence.kind === 'unavailable'
-    ? `Current launch output unavailable: ${evidence.reason}`
-    : evidence.totalBytes === 0
-      ? 'Current launch output complete (0 bytes; no output recorded).'
-      : `Current launch output ${evidence.truncated
-        ? `truncated; showing ${evidence.shownBytes} of ${evidence.totalBytes} bytes`
-        : `complete; showing ${evidence.shownBytes} of ${evidence.totalBytes} bytes`}:\n${evidence.content.trimEnd() || '(no readable text)'}`;
+  const output =
+    evidence.kind === 'unavailable'
+      ? `Current launch output unavailable: ${evidence.reason}`
+      : evidence.totalBytes === 0
+        ? 'Current launch output complete (0 bytes; no output recorded).'
+        : `Current launch output ${
+            evidence.truncated
+              ? `truncated; showing ${evidence.shownBytes} of ${evidence.totalBytes} bytes`
+              : `complete; showing ${evidence.shownBytes} of ${evidence.totalBytes} bytes`
+          }:\n${evidence.content.trimEnd() || '(no readable text)'}`;
   return new Error(`Manager host exited with ${outcome} during startup; log path: ${logPath}\n${output}`);
 }
 
