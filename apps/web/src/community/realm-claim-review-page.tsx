@@ -234,7 +234,8 @@ function RealmClaimReviewContent({
     if (intent.kind === 'cancel') {
       pendingFocus.current = null;
       const requestIsCurrent =
-        state.read.kind === 'ready' && state.read.page.claimRequests.some((request) => sameRequest(request, intent.request));
+        state.read.kind === 'ready' &&
+        state.read.page.claimRequests.some((request) => sameRequest(request, intent.request));
       if (state.outcome === 'idle' && !state.intent && state.read === intent.read && requestIsCurrent)
         selectedReviewButton.current?.focus();
       else queueBoundary.current?.focus();
@@ -256,7 +257,12 @@ function RealmClaimReviewContent({
     pendingFocus.current = null;
     if (state.outcome === 'approved' && receiptBoundary.current) receiptBoundary.current.focus();
     else if (state.outcome === 'uncertain')
-      (approvalRetryButton.current ?? recoveryBoundary.current ?? retryPageButton.current ?? refreshButton.current)?.focus();
+      (
+        approvalRetryButton.current ??
+        recoveryBoundary.current ??
+        retryPageButton.current ??
+        refreshButton.current
+      )?.focus();
     else if (state.outcome === 'approved') recoveryBoundary.current?.focus();
     else if (state.outcome === 'conflict' || state.outcome === 'refused') {
       (recoveryBoundary.current ?? retryPageButton.current ?? refreshButton.current)?.focus();
@@ -457,7 +463,12 @@ function RealmClaimReviewContent({
                     onClick={(event) => {
                       pendingFocus.current =
                         event.detail === 0
-                          ? { kind: 'approval', ticket: lifetime.ticket(), request: confirming.source, action: 'confirm' }
+                          ? {
+                              kind: 'approval',
+                              ticket: lifetime.ticket(),
+                              request: confirming.source,
+                              action: 'confirm',
+                            }
                           : null;
                       void control.confirm();
                     }}
@@ -512,9 +523,7 @@ function RealmClaimReviewContent({
                           }
                           onClick={(event) => {
                             pendingFocus.current =
-                              event.detail === 0
-                                ? { kind: 'review', ticket: lifetime.ticket(), request }
-                                : null;
+                              event.detail === 0 ? { kind: 'review', ticket: lifetime.ticket(), request } : null;
                             void control.prepare(request.requestId);
                           }}
                         >
