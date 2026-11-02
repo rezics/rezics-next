@@ -34,7 +34,7 @@ CREATE TABLE library.members_preparation (
   CHECK (source_incarnation IS NULL OR octet_length(source_incarnation) <= 256),
   CHECK (octet_length(reserved_incarnation) <= 256),
   CHECK (octet_length(reserved_generation) <= 256),
-  CHECK ((complete = false) OR (failure_code IS NULL)),
+  CHECK ((complete = false) OR (failure_code IS NULL))
 );
 
 CREATE UNIQUE INDEX members_preparation_live_digest

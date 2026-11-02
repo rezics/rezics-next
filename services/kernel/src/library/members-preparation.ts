@@ -112,18 +112,18 @@ function notFound(): ProblemError {
 }
 
 function prepareBasis(ownerAccountId: string, collectionId: string, input: PreparationDefinition): Basis {
-  if (
-    !input ||
-    !input.filter ||
-    (input.sort !== 'id' && input.sort !== 'ordinal') ||
-    !input.release ||
-    typeof input.release.digest !== 'string' ||
-    !/^sha256:[0-9a-f]{64}$/.test(input.release.digest) ||
-    !input.release.value ||
-    releaseDigest(input.release.value as Release) !== input.release.digest
-  )
-    throw unsupported();
   try {
+    if (
+      !input ||
+      !input.filter ||
+      (input.sort !== 'id' && input.sort !== 'ordinal') ||
+      !input.release ||
+      typeof input.release.digest !== 'string' ||
+      !/^sha256:[0-9a-f]{64}$/.test(input.release.digest) ||
+      !input.release.value ||
+      releaseDigest(input.release.value as Release) !== input.release.digest
+    )
+      throw unsupported();
     const release = structuredClone(input.release.value) as FilterRelease;
     const filter = admitFilter(parseFilter(input.filter), release, { owner: true });
     const basis = canonicalize([
