@@ -194,7 +194,7 @@ export async function resolveCollectionKindRawInput(
     tx, allowance, deadline: held.deadline, driver, after: before.after, limit: quantum,
   }), { ...sourcePlan, nativeRows: 32, nativePoints: 5, emptySeeks: 5, statements: 5, bytes: 32 * 1024 });
   current();
-  const index = sequence.indexOf(before.driver);
+  const index = sequence.indexOf(driver);
   if (index < 0 || page.rows.length > quantum ||
       (!page.exhausted && isDeepStrictEqual(before.after, page.after))) throw new ProblemError('dependency_unavailable');
   const next = sequence[index + 1];
