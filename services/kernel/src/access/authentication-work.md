@@ -45,26 +45,26 @@ verification, required claims, the five-minute lifetime, wall-clock expiry,
 
 For `T = UTF-8 bytes of this exact Bearer token`, the JOSE/JWKS declaration is:
 
-| Axis       | Bound | Meaning |
-| ---------- | ----- | ------- |
-| `keys`     | 6     | Three candidate keys across at most two key-selection passes. |
-| `points`   | 3     | One JOSE verification invocation and at most two HTTP fetches. |
-| `witnesses`| 0     | This producer creates no native witness. |
-| `rows`     | 6     | At most three JWKS entries parsed for each of two responses. |
-| `bytes`    | `T + 16,384` | Exact token bytes plus two 8,192-byte response caps. |
-| `emptySeeks` | 0   | JOSE does not issue a native empty seek. |
+| Axis         | Bound        | Meaning                                                        |
+| ------------ | ------------ | -------------------------------------------------------------- |
+| `keys`       | 6            | Three candidate keys across at most two key-selection passes.  |
+| `points`     | 3            | One JOSE verification invocation and at most two HTTP fetches. |
+| `witnesses`  | 0            | This producer creates no native witness.                       |
+| `rows`       | 6            | At most three JWKS entries parsed for each of two responses.   |
+| `bytes`      | `T + 16,384` | Exact token bytes plus two 8,192-byte response caps.           |
+| `emptySeeks` | 0            | JOSE does not issue a native empty seek.                       |
 
 The producer composes those values with the existing native declarations and
 the real query checkouts. Its full pre-dispatch bound is:
 
-| Path component | `keys` | `points` | `witnesses` | `rows` | `bytes` | `emptySeeks` |
-| -------------- | -----: | -------: | ----------: | -----: | ------: | -----------: |
-| JOSE/JWKS, using token size `T` | 6 | 3 | 0 | 6 | `T + 16,384` | 0 |
-| account query checkout | 0 | 1 | 0 | 0 | 0 | 0 |
-| `account-state` for one 36-byte account ID and max route | 1 | 2 | 0 | 2 | 273 | 1 |
-| optional assignment query checkout | 0 | 1 | 0 | 0 | 0 | 0 |
-| `assignment` for three 36-byte UUIDs and a 64-byte timestamp | 2 | 3 | 0 | 2 | 553 | 1 |
-| **Total** | **9** | **10** | **0** | **10** | **`T + 17,210`** | **2** |
+| Path component                                               | `keys` | `points` | `witnesses` | `rows` |          `bytes` | `emptySeeks` |
+| ------------------------------------------------------------ | -----: | -------: | ----------: | -----: | ---------------: | -----------: |
+| JOSE/JWKS, using token size `T`                              |      6 |        3 |           0 |      6 |     `T + 16,384` |            0 |
+| account query checkout                                       |      0 |        1 |           0 |      0 |                0 |            0 |
+| `account-state` for one 36-byte account ID and max route     |      1 |        2 |           0 |      2 |              273 |            1 |
+| optional assignment query checkout                           |      0 |        1 |           0 |      0 |                0 |            0 |
+| `assignment` for three 36-byte UUIDs and a 64-byte timestamp |      2 |        3 |           0 |      2 |              553 |            1 |
+| **Total**                                                    |  **9** |   **10** |       **0** | **10** | **`T + 17,210`** |        **2** |
 
 The native byte literals come from `accessNativeDeclaration`'s closed
 projections: the account input is at most 67 JSON bytes plus a 206-byte

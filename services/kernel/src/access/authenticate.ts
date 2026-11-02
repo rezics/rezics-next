@@ -14,14 +14,7 @@ import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import {
-  createRemoteJWKSet,
-  customFetch,
-  errors,
-  jwtVerify,
-  type FetchImplementation,
-  type JWTPayload,
-} from 'jose';
+import { createRemoteJWKSet, customFetch, errors, jwtVerify, type FetchImplementation, type JWTPayload } from 'jose';
 import { withConnection } from '../database/pool.ts';
 import type { QueryConfig } from 'pg';
 import {
@@ -93,8 +86,7 @@ async function boundedJwksResponse(
   response: Response,
   deadline: number,
 ): Promise<Readonly<{ response: Response; bytes: number; keys: number }>> {
-  if (response.status !== 200 || response.body === null)
-    return { response, bytes: 0, keys: 0 };
+  if (response.status !== 200 || response.body === null) return { response, bytes: 0, keys: 0 };
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -362,8 +354,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
             let scans = 0;
             if (error instanceof errors.JWKSNoMatchingKey) {
               if (wasFresh) scans = previousKeyCount + (after.at(-1) ?? current);
-              else if (fetched >= 2)
-                scans = (after[0] ?? previousKeyCount) + (after[1] ?? after.at(-1) ?? current);
+              else if (fetched >= 2) scans = (after[0] ?? previousKeyCount) + (after[1] ?? after.at(-1) ?? current);
               else if (fetched === 1) scans = (after[0] ?? current) + current;
               else scans = current * 2;
               setCachedCount(after.at(-1) ?? current);
@@ -407,18 +398,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
           audience: config.audience,
           algorithms: ['ES256'],
           typ: 'at+jwt',
-          requiredClaims: [
-            'iss',
-            'aud',
-            'sub',
-            'client_id',
-            'scope',
-            'authn_epoch',
-            'iat',
-            'exp',
-            'auth_time',
-            'amr',
-          ],
+          requiredClaims: ['iss', 'aud', 'sub', 'client_id', 'scope', 'authn_epoch', 'iat', 'exp', 'auth_time', 'amr'],
         });
       let verified: Awaited<ReturnType<typeof jwtVerify>>;
       if (!context.work) verified = await within(context.deadline, verify);

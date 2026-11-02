@@ -172,16 +172,26 @@ test('fresh Bearer authentication charges the original verifier and exact native
   expect(JSON.stringify(directAccounting.reservations)).not.toContain(directToken);
   expect(JSON.stringify(directAccounting.reservations)).not.toContain(actorId);
 
-  const privateEvidence = await access.prepare!(actor, 'account:manage', { route: routeOf(actorId)!, id: actorId }, {
-    pool: observedPool,
-    deadline: Date.now() + 5000,
-  });
-  expect(privateEvidence).not.toBeNull();
-  expect(
-    await access.prepare!({ ...actor }, 'account:manage', { route: routeOf(actorId)!, id: actorId }, {
+  const privateEvidence = await access.prepare!(
+    actor,
+    'account:manage',
+    { route: routeOf(actorId)!, id: actorId },
+    {
       pool: observedPool,
       deadline: Date.now() + 5000,
-    }),
+    },
+  );
+  expect(privateEvidence).not.toBeNull();
+  expect(
+    await access.prepare!(
+      { ...actor },
+      'account:manage',
+      { route: routeOf(actorId)!, id: actorId },
+      {
+        pool: observedPool,
+        deadline: Date.now() + 5000,
+      },
+    ),
   ).toBeNull();
 
   const reference = `urn:rezics:request:${principalId}:${requestId}`;
@@ -326,9 +336,9 @@ test('custom authenticate callbacks remain unavailable when a request supplies a
   } as Access;
   const deadline = Date.now() + 5000;
   const metered = accounting(deadline);
-  await expect(
-    actorOf(custom, bearer(await token()), { pool, deadline, work: metered.work }),
-  ).rejects.toBeInstanceOf(AccessWorkUnavailableError);
+  await expect(actorOf(custom, bearer(await token()), { pool, deadline, work: metered.work })).rejects.toBeInstanceOf(
+    AccessWorkUnavailableError,
+  );
   expect(invoked).toBe(false);
   expect(metered.reservations).toEqual([]);
 });

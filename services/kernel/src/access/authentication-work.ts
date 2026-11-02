@@ -119,10 +119,7 @@ export function installOriginalAuthenticator(authenticate: Access['authenticate'
 }
 
 /** Derived Access preserves the producer only when it preserves the auth port. */
-export function inheritOriginalAuthenticator(
-  base: Access['authenticate'],
-  derived: Access['authenticate'],
-): void {
+export function inheritOriginalAuthenticator(base: Access['authenticate'], derived: Access['authenticate']): void {
   const work = originalAuthenticators.get(base);
   if (work) originalAuthenticators.set(derived, work);
 }

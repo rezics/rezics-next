@@ -160,7 +160,9 @@ export async function readAccount(
   work?: AccessWorkAccounting,
 ): Promise<Account | null> {
   const input = { route, account_id: accountId };
-  const row = await accessNativeWork(work, 'account-state', input, { targets: 1 }, () => accountRead.run(client, input));
+  const row = await accessNativeWork(work, 'account-state', input, { targets: 1 }, () =>
+    accountRead.run(client, input),
+  );
   if (!row) return null;
   return { ...row, minimumAuthnEpoch: BigInt(row.minimumAuthnEpoch) };
 }
