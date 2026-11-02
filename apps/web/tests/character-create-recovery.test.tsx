@@ -8,7 +8,7 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-test('required Character metadata recovery gates new commands and preserves private input and exact retry', async () => {
+test('required Character metadata recovery fences retained term callbacks and preserves exact retry', async () => {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en/catalogue/character' });
@@ -35,6 +35,7 @@ test('required Character metadata recovery gates new commands and preserves priv
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { CharacterProfileCreate } = await import('../src/features/catalogue/character-profile-create');
+  const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { characterProfileFixture } = await import('../src/kernel/fake/catalogue-character-profile');
   const { m } = await import('../src/paraglide/messages.js');
@@ -55,14 +56,16 @@ test('required Character metadata recovery gates new commands and preserves priv
   delete current.properties['schema:url'];
   let refreshes = 0;
   let created = 0;
+  let finishSecond: ((result: Awaited<ReturnType<typeof fixture.transport.create>>) => void) | undefined;
+  let revision = 'current';
+  let holder = 0;
   const commands: CharacterCommand[] = [];
   const transport = {
     ...fixture.transport,
     create: async (command: CharacterCommand) => {
       commands.push(command);
       if (commands.length === 1) return { ok: false as const, reason: 'invalid' as const, refreshDefinitions: true };
-      if (commands.length === 2)
-        return { ok: false as const, reason: 'unavailable' as const, refreshDefinitions: true };
+      if (commands.length === 2) return new Promise((resolve) => (finishSecond = resolve));
       return fixture.transport.create(command);
     },
   };
@@ -77,35 +80,62 @@ test('required Character metadata recovery gates new commands and preserves priv
     act(async () => {
       host.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     });
-  try {
-    await act(async () =>
+  const inputChange = (node: Element) =>
+    (
+      Reflect.get(
+        node,
+        Object.keys(node).find((key) => key.startsWith('__reactProps$'))!,
+      ) as { onChange: (event: { target: { value: string } }) => void }
+    ).onChange;
+  const paint = () =>
+    act(async () =>
       root.render(
         <QueryClientProvider client={client}>
           <CandidateReaderBoundary
             address="character-recovery"
             observed={{ state: 'signed-in', subject: 'reader', csrfToken: 'original' }}
           >
-            <CharacterProfileCreate
-              release={fixture.release}
-              locale="en"
-              transport={transport}
-              onCreated={() => {
-                created++;
-              }}
-              onRefreshDefinitions={async () => {
-                if (++refreshes < 3) throw new Error('Metadata unavailable');
-                return current;
-              }}
-            />
+            <CatalogueCurrentReading visible ready revision={revision}>
+              <CharacterProfileCreate
+                key={holder}
+                release={fixture.release}
+                locale="en"
+                transport={transport}
+                onCreated={() => {
+                  created++;
+                }}
+                onRefreshDefinitions={async () => {
+                  if (++refreshes < 3) throw new Error('Metadata unavailable');
+                  return current;
+                }}
+              />
+            </CatalogueCurrentReading>
           </CandidateReaderBoundary>
         </QueryClientProvider>,
       ),
     );
+  try {
+    await paint();
     await replace(input(m.catalogue_create_label()), 'Traveler');
     await click(m.catalogue_create_add_language());
     await replace(input(m.catalogue_create_language(), 1), 'ja');
     await replace(input(m.catalogue_create_label(), 1), '旅人');
     await replace(input(m.catalogue_create_aliases(), 1), '旅行者');
+    const editJapaneseLabel = inputChange(input(m.catalogue_create_label(), 1));
+    await act(async () => editJapaneseLabel({ target: { value: '旅人 current edit' } }));
+    expect(input(m.catalogue_create_label(), 1).value).toBe('旅人 current edit');
+    expect(input(m.catalogue_create_label()).value).toBe('Traveler');
+    await act(async () => editJapaneseLabel({ target: { value: '旅人' } }));
+    await click(m.catalogue_create_add_language());
+    const removedTermChange = inputChange(input(m.catalogue_create_label(), 2));
+    await act(async () =>
+      user.click(canvas.getAllByRole('button', { name: m.catalogue_create_remove_language() })[1]!),
+    );
+    await act(async () => removedTermChange({ target: { value: 'Removed row mutation' } }));
+    expect(canvas.getAllByRole('textbox', { name: m.catalogue_create_label() })).toHaveLength(2);
+    await click(m.catalogue_create_remove_language());
+    await click(m.candidate_cancel());
+    expect(window.document.activeElement).toBe(canvas.getByRole('button', { name: m.catalogue_create_remove_language() }));
     await act(async () => {
       await user.selectOptions(canvas.getByRole('combobox', { name: m.character_initial_fact() }), 'schema:url');
       await user.click(canvas.getByRole('button', { name: m.character_add_fact() }));
@@ -137,8 +167,10 @@ test('required Character metadata recovery gates new commands and preserves priv
     expect(commands).toHaveLength(1);
     await click(m.recipe_remove_field());
     await click(m.recipe_remove_field());
+    const lockedTermChange = inputChange(input(m.catalogue_create_label(), 1));
     await click(m.character_create());
     expect(commands).toHaveLength(2);
+    const sealed = structuredClone(commands[1]);
     expect(commands[1]!.key).not.toBe(commands[0]!.key);
     expect(commands[1]!.item).toMatchObject({
       labels: { en: 'Traveler', ja: '新しい旅人' },
@@ -147,13 +179,34 @@ test('required Character metadata recovery gates new commands and preserves priv
       statements: {},
     });
     expect(input(m.catalogue_create_label()).closest('fieldset[disabled]')).not.toBeNull();
-    const sealed = structuredClone(commands[1]);
+    const pendingFeedback = host.querySelector('[data-slot="character-create-recovery"]')!.textContent;
+    await act(async () => lockedTermChange({ target: { value: 'Pending mutation' } }));
+    expect(input(m.catalogue_create_label(), 1).value).toBe('新しい旅人');
+    expect(host.querySelector('[data-slot="character-create-recovery"]')!.textContent).toBe(pendingFeedback);
+    await act(async () =>
+      finishSecond!({ ok: false, reason: 'unavailable', refreshDefinitions: true }),
+    );
+    const uncertainFeedback = host.querySelector('[data-slot="character-create-recovery"]')!.textContent;
+    await act(async () => lockedTermChange({ target: { value: 'Uncertain mutation' } }));
+    expect(input(m.catalogue_create_label(), 1).value).toBe('新しい旅人');
+    expect(host.querySelector('[data-slot="character-create-recovery"]')!.textContent).toBe(uncertainFeedback);
     await click(m.correction_retry());
     expect(commands).toHaveLength(3);
     expect(commands[2]).toBe(commands[1]);
     expect(commands[2]).toEqual(sealed);
     expect(refreshes).toBe(3);
     expect(created).toBe(1);
+    const beforeMetadataRetirement = inputChange(input(m.catalogue_create_label(), 1));
+    revision = 'next-reading';
+    await paint();
+    await act(async () => beforeMetadataRetirement({ target: { value: 'Retired metadata mutation' } }));
+    expect(input(m.catalogue_create_label(), 1).value).toBe('新しい旅人');
+    const beforeWorkspaceReplacement = inputChange(input(m.catalogue_create_label(), 1));
+    holder++;
+    await paint();
+    await act(async () => beforeWorkspaceReplacement({ target: { value: 'Replaced workspace mutation' } }));
+    expect(input(m.catalogue_create_label()).value).toBe('');
+    expect(commands).toHaveLength(3);
   } finally {
     await act(async () => root.unmount());
     client.clear();

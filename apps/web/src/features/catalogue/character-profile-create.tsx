@@ -218,6 +218,15 @@ function CharacterProfileCreateLive({
   const [busy, setBusy] = useState(false);
   const pending = useRef<CharacterCommand | null>(null);
   const running = useRef(false);
+  const termEditIsAdmitted = () =>
+    isCurrent() && !running.current && !refreshRunning.current && !pending.current;
+  const changeTerm = (id: number, key: keyof TermDraft, value: string) => {
+    if (!termEditIsAdmitted()) return;
+    setTerms((previous) => {
+      if (!termEditIsAdmitted()) return previous;
+      return previous.map((row) => (row.id === id ? { ...row, [key]: value } : row));
+    });
+  };
   const hasMeaningfulWork = () =>
     terms.length > 1 ||
     terms.some(
@@ -366,11 +375,7 @@ function CharacterProfileCreateLive({
                         lang={/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(term.language) ? term.language : undefined}
                         dir="auto"
                         value={term[key]}
-                        onChange={(event) =>
-                          setTerms((previous) =>
-                            previous.map((row) => (row.id === term.id ? { ...row, [key]: event.target.value } : row)),
-                          )
-                        }
+                        onChange={(event) => changeTerm(term.id, key, event.target.value)}
                       />
                     ) : (
                       <Input
@@ -393,11 +398,7 @@ function CharacterProfileCreateLive({
                         dir={key === 'language' ? 'ltr' : 'auto'}
                         aria-required={key === 'label' || undefined}
                         value={term[key]}
-                        onChange={(event) =>
-                          setTerms((previous) =>
-                            previous.map((row) => (row.id === term.id ? { ...row, [key]: event.target.value } : row)),
-                          )
-                        }
+                        onChange={(event) => changeTerm(term.id, key, event.target.value)}
                       />
                     )}
                   </Field>
