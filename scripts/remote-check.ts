@@ -2416,6 +2416,7 @@ def lifetime():
     launch = root / '.temp/check-host/lifetime.sh'
     launch.parent.mkdir(parents=True, exist_ok=True)
     launch.write_text(script)
+    preparation_progress(root, 'scope-start')
     child = subprocess.Popen(['sh', str(launch)], env=dict(os.environ, REMOTE_CHECK_HOST_LIFETIME='1',
         REMOTE_CHECK_HOST_PREPARATION_DEADLINE=str(preparation_deadline)), start_new_session=True)
     resources = None

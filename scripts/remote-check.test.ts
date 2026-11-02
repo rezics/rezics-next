@@ -3871,7 +3871,9 @@ test('multi-slot waiters on one host start in the order they began waiting', asy
       .filter((event) => event.kind === 'slot' && event.granted && event.requested === 2)
       .map((event) => String(event.script).match(/# REMOTE_CHECK_MULTI_SLOT_WAITER_ID ([a-zA-Z0-9-]+)/)?.[1])
       .filter((id) => id === olderMarker.id || id === youngerMarker.id);
-    expect(grantedWaiterOrder).toEqual([olderMarker.id, olderMarker.id, youngerMarker.id, youngerMarker.id]);
+    expect(grantedWaiterOrder).toEqual(
+      [olderMarker.id, olderMarker.id, youngerMarker.id, youngerMarker.id].map(String),
+    );
     expect(
       events()
         .filter((event) => event.kind === 'run' && /echo (?:older|younger)/.test(String(event.script)))
@@ -4394,7 +4396,7 @@ test('a supported quote-heavy command crosses every launch boundary without an o
     .replaceAll('/sys/fs/cgroup', `${fixture.directory}/cgroup`)
     .replaceAll(':/usr/local/bin:', ':');
   expect(Buffer.byteLength(script)).toBeGreaterThan(128 * 1024);
-  expect(spawnSync('sh', ['-c', script]).error?.code).toBe('E2BIG');
+  expect(spawnSync('sh', ['-c', script]).error).toMatchObject({ code: 'E2BIG' });
   const launch = remoteLaunch(script);
   expect(Buffer.byteLength(launch.command)).toBeLessThan(4096);
   const result = fixture.execute(launch.command, { TMPDIR: root }, script);
@@ -6631,7 +6633,7 @@ sys.exit(child.wait())
       `/srv/rezics-check/runs/${id}`,
       '.',
       command,
-      'native-host',
+      'a',
       60_000,
       'ordinary',
       settings.bound ?? 5_000,
@@ -6703,7 +6705,7 @@ test('remote dependency preparation has an absolute three-minute default and rea
   const receipt = run.receipt();
   expect(receipt).toMatchObject({
     status: 'infrastructure-failure',
-    host: 'native-host',
+    host: 'a',
     phase: 'install/preparation',
     reason: 'absolute preparation deadline exceeded',
     activePackages: [{ name: '@fixture/native-installer', version: '1.2.3' }],
@@ -6746,6 +6748,31 @@ test('the preparation bound includes runtime verification and honestly reports u
   expect(run.receipt().phaseElapsedMs).toBeGreaterThanOrEqual(0);
   expect(fixture.events()).toEqual([]);
   expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
+});
+
+test('a silent base-refresh lock wait reports its phase and owned wait evidence without starting compilation', async () => {
+  const fixture = preparationFixture();
+  mkdirSync(join(fixture.directory, 'bases'), { recursive: true });
+  const holder = Bun.spawn(['flock', join(fixture.directory, 'bases/.lock'), 'sh', '-c', 'echo LOCKED; cat'], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  try {
+    await waitForOutput(holder, 'LOCKED\n');
+    const run = fixture.create({ bound: 600 });
+    const result = run.execute();
+    expect(result.status, result.stderr).toBe(70);
+    const receipt = run.receipt();
+    expect(receipt).toMatchObject({ stalledPhase: 'base-refresh', activePackages: [], logTail: '' });
+    expect(
+      receipt.ownedProcesses.some((item: { state: string; wait: string }) => item.state === 'S' && item.wait),
+    ).toBe(true);
+    expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
+  } finally {
+    await holder.stdin.end();
+    expect(await holder.exited).toBe(0);
+  }
 });
 
 test('failed installation is infrastructure, never command failure or a successful dependency cache publication', () => {
@@ -7038,7 +7065,7 @@ print('exact native output')`,
   const resources = JSON.parse(readFileSync(join(run.run, 'physical-resources.json'), 'utf8'));
   const physical = {
     schema: 1 as const,
-    host: 'native-host',
+    host: 'a',
     run: resources.run,
     exitCode: 0,
     lifetimeFailure: null,
@@ -7218,7 +7245,7 @@ test('run-lifetime classification requires the named schema, never a native exit
     schema: 1 as const,
     status: 'infrastructure-failure' as const,
     phase: 'run-lifetime' as const,
-    host: 'native-host',
+    host: 'a',
     run: 'native-run',
     limitMs: 900,
     elapsedMs: 1100,
@@ -7319,7 +7346,7 @@ fcntl.flock(lock,fcntl.LOCK_UN)
         schema: 1,
         status: 'infrastructure-failure',
         phase: 'run-lifetime',
-        host: 'native-host',
+        host: 'a',
         limitMs: 1_500,
       });
       expect(receipt.elapsedMs).toBeGreaterThanOrEqual(1_500);
