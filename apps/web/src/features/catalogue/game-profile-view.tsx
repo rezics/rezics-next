@@ -68,6 +68,15 @@ function GameProfileLive({
     queryFn: transport.load,
     retry: false,
   });
+  const [readingRevision, setReadingRevision] = useState(0);
+  const readingRevisionRef = useRef(0);
+  const refreshExisting = (expectedRevision: number): Promise<void> => {
+    if (!lifetime.active() || readingRevisionRef.current !== expectedRevision) return Promise.resolve();
+    const nextRevision = expectedRevision + 1;
+    readingRevisionRef.current = nextRevision;
+    setReadingRevision(nextRevision);
+    return query.refetch({ cancelRefetch: false }).then(() => undefined);
+  };
   const [drafts, setDrafts] = useState<Record<string, { key: string; statement: StatementInput }[]>>({});
   const [observed, setObserved] = useState(query.data);
   const [lastReading, setLastReading] = useState<Extract<GameRead, { ok: true }> | undefined>(
@@ -88,7 +97,7 @@ function GameProfileLive({
   const refreshFailed = query.isError || (!!query.data && !query.data.ok && query.data.reason === 'unavailable');
   const o = { locale: locale as never };
   const admitted =
-    !query.isError && query.data?.ok && query.data.public && query.data.public.subject.id === id
+    !query.isError && !query.isFetching && query.data?.ok && query.data.public && query.data.public.subject.id === id
       ? { ...query.data, public: query.data.public }
       : undefined;
   const privateReading = useRef<ReadyGame>(undefined);
@@ -96,7 +105,11 @@ function GameProfileLive({
   // Existing-subject recovery retains private holders, never display authority.
   if (id)
     return (
-      <CatalogueCurrentReading visible={!!admitted} ready={!!admitted} revision={id}>
+      <CatalogueCurrentReading
+        visible={!!admitted}
+        ready={!!admitted}
+        revision={`${id}:${readingRevision}`}
+      >
         {!admitted && (
           <article className="mx-auto min-w-0 max-w-4xl space-y-5">
             <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
@@ -120,7 +133,7 @@ function GameProfileLive({
                 <Button
                   className={gameActionClass}
                   disabled={query.isFetching}
-                  onClick={() => lifetime.active() && void query.refetch({ cancelRefetch: false })}
+                  onClick={() => void refreshExisting(readingRevision)}
                 >
                   {m.game_profile_refresh({}, o)}
                 </Button>
@@ -137,7 +150,7 @@ function GameProfileLive({
               session={session}
               transport={transport}
               search={search}
-              refresh={() => query.refetch({ cancelRefetch: false }).then(() => undefined)}
+              refresh={() => refreshExisting(readingRevision)}
               refreshing={query.isFetching}
             />
           </AuthoringDepartureBoundary>
