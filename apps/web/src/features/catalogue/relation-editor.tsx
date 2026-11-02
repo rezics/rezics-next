@@ -640,7 +640,6 @@ function RelationEditorLive({
     pageCursor.current = undefined;
     reading.current = undefined;
     candidateReadFocus.current = undefined;
-    failedCandidateRead.current = false;
     readGeneration.current++;
   }
 
