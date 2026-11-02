@@ -7,6 +7,7 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { parseIntent, type Action, type Intent, type Outcome, type Page } from './data';
+import { commandRequest, reviewRequest } from './request';
 
 type DisplayIdentity = Readonly<{ displayName: string | null; handle: string | null }>;
 type Confirmation = Readonly<{ intent: Intent; identity: DisplayIdentity }>;
@@ -28,7 +29,7 @@ function AccountDetails({ accountId }: { accountId: string }) {
   );
 }
 
-type IO = { read(): Promise<Page>; change(intent: Intent): Promise<Outcome> };
+type IO = { read(signal: AbortSignal): Promise<Page>; change(intent: Intent, signal: AbortSignal): Promise<Outcome> };
 const actionLabel = (action: Action) => (action === 'suspend' ? m.lifecycle_suspend() : m.lifecycle_reinstate());
 function statusText(status: Page['status'] | Outcome['status']) {
   switch (status) {
@@ -82,11 +83,13 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
   const ambiguous = useRef(false);
   const retryable = useRef(false);
   const active = useRef(true);
+  const request = useRef<AbortController | null>(null);
   const currentConfirmation = useRef<Confirmation | null>(null);
   useEffect(() => {
     active.current = true;
     return () => {
       active.current = false;
+      request.current?.abort();
       currentConfirmation.current = null;
     };
   }, []);
@@ -108,7 +111,8 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
     inFlight.current = true;
     setBusy(true);
     try {
-      const next = await io.read();
+      request.current = new AbortController();
+      const next = await reviewRequest((signal) => io.read(signal), request.current.signal);
       if (active.current) updatePage(next);
     } catch {
       if (active.current) updatePage({ status: 'unavailable' });
@@ -139,7 +143,8 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
     setBusy(true);
     let result: Outcome;
     try {
-      result = await io.change(intent);
+      request.current = new AbortController();
+      result = await commandRequest((signal) => io.change(intent, signal), request.current.signal);
     } catch {
       // A BFF response can be lost after the native commit. Preserve exactly this intent.
       result = { status: 'uncertain', current: { status: 'unavailable' } };

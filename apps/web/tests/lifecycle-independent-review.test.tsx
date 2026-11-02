@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import type { Intent, Outcome, Page } from '../src/accounts/lifecycle-controls/data';
@@ -100,13 +100,24 @@ test('independent lifecycle reviews retire confirmations and reconcile the exact
     await paint();
     await click(1, m.lifecycle_review());
     const confirm = retained(button(1, m.lifecycle_confirm()));
+    let expire!: () => void;
+    const schedule = globalThis.setTimeout;
+    const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((fn, ms, ...args) => {
+      if (ms === 35_000) expire = () => fn(...args);
+      return schedule(fn, ms, ...args);
+    }) as typeof setTimeout);
     await act(async () => {
       confirm();
       confirm();
     });
     expect(commands).toHaveLength(1);
     expect(commands[0]!.accountId).toBe((ready('2') as Extract<Page, { status: 'ready' }>).account.id);
-    await act(async () => complete({ status: 'uncertain', current: ready('2') }));
+    timer.mockRestore();
+    await act(async () => expire());
+    expect(panel(1).textContent).toContain(m.lifecycle_uncertain());
+    expect(button(1, m.lifecycle_read_current()).disabled).toBe(false);
+    await act(async () => complete({ status: 'recorded', receiptId: 'late', current: ready('2') }));
+    expect(panel(1).textContent).toContain(m.lifecycle_uncertain());
     await act(async () => confirm());
     expect(commands).toHaveLength(1);
     await click(1, m.lifecycle_read_current());

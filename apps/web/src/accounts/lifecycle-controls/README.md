@@ -56,3 +56,17 @@ this real mounted route and its shared projection contract; there is no fixture 
 The native transport/presentation fixture preserves human identity and exact intent assertions while replacing only
 obsolete management/viewerActions expectations. Native acceptance and that fixture remain UNRUN; Web typing is
 UNVERIFIED in this delivery.
+
+## Stalled transport recovery
+
+Review, dispatch and readback each allow ten seconds, following Web account management timing; the browser command
+allows 35 seconds for these three phases and BFF delivery. Deadlines cover headers and body decoding even when the
+transport ignores cancellation, compose caller cancellation, and release timers/listeners on settlement. Route retirement
+cancels selection; component retirement cancels its active request without changing another review's operation.
+A review timeout uses existing unavailable/retry wording. A possible dispatch or stalled readback stays uncertain with
+the exact account, action, key and private reason retained; a received receipt stays recorded, never completed.
+Recovery requires an explicit current review and deliberately reuses the original command; native original review
+can resolve it before any dispatch. There is no automatic mutation replay or fresh key to escape uncertainty.
+The native owner README linked by the assignment is absent on this base; existing generated lifecycle contracts are
+consumed unchanged. Sources read: this page group, Web account management's read deadline, the lifecycle route,
+generated client entry point and existing lifecycle presentation/transport tests. No reference-project source applies.

@@ -1,5 +1,6 @@
 import { Outlet, useRouterState, createFileRoute } from '@tanstack/react-router';
 import { changeAccountLifecycle, readAccountLifecycle } from '../../accounts/lifecycle-controls/actions';
+import { reviewRequest } from '../../accounts/lifecycle-controls/request';
 import { AccountLifecyclePage } from '../../accounts/lifecycle-controls/page';
 import { m } from '../../paraglide/messages.js';
 import { requireSignedIn } from '../../session/guard';
@@ -9,8 +10,13 @@ import { pageHeadContext } from '../../shell/head-context';
 
 export const Route = createFileRoute('/platform/accounts/$accountId')({
   beforeLoad: requireSignedIn,
-  loader: ({ params, location }) =>
-    /\/erasure\/?$/.test(location.pathname) ? null : readAccountLifecycle({ data: { accountId: params.accountId } }),
+  loader: ({ params, location, abortController }) =>
+    /\/erasure\/?$/.test(location.pathname)
+      ? null
+      : reviewRequest(
+          (signal) => readAccountLifecycle({ data: { accountId: params.accountId }, signal }),
+          abortController.signal,
+        ),
   head: ({ match }) =>
     pageHead({ title: m.lifecycle_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: AccountRoute,
@@ -30,8 +36,9 @@ function LifecycleRoute() {
       key={accountId}
       initial={initial ?? { status: 'unavailable' }}
       io={{
-        read: () => readAccountLifecycle({ data: { accountId } }),
-        change: (data) => changeAccountLifecycle({ data, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
+        read: (signal) => readAccountLifecycle({ data: { accountId }, signal }),
+        change: (data, signal) =>
+          changeAccountLifecycle({ data, signal, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
       }}
     />
   );

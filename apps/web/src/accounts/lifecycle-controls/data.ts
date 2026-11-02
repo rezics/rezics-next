@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import type { Identity } from '../management/data';
 import { routedId } from '../resource-access/data';
+import { LIFECYCLE_WAIT_MS, readWithin } from './request';
 
 type LifecycleReview = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['accounts']>['lifecycleReview']['post']>>['data']
@@ -67,6 +68,7 @@ export async function loadLifecycle(
   authorization: string,
   accountId: string,
   intent?: Intent,
+  signal?: AbortSignal,
 ): Promise<Page> {
   if (!authorization.trim()) return { status: 'signed-out' };
   try {
@@ -79,9 +81,15 @@ export async function loadLifecycle(
           },
         }
       : {};
-    const target = await client.accounts({ accountId }).lifecycleReview.post(body, {
-      headers: { authorization, 'cache-control': 'no-store' },
-    });
+    const target = await readWithin(
+      (signal) =>
+        client.accounts({ accountId }).lifecycleReview.post(body, {
+          headers: { authorization, 'cache-control': 'no-store' },
+          fetch: { signal },
+        }),
+      signal,
+      LIFECYCLE_WAIT_MS,
+    );
     if (target.error || !target.data) return { status: failure(target.status) };
     if (target.data.account.id !== accountId) return { status: 'unavailable' };
     const offered: Action[] = [];
@@ -107,22 +115,32 @@ export async function loadLifecycle(
 
 /** Real generated bindings rewrite /$suspend and /$reinstate to native :customMethods.
  * The client also carries the native session token into the bounded read after the write. */
-export async function commandLifecycle(client: KernelClient, authorization: string, intent: Intent): Promise<Outcome> {
-  const current = await loadLifecycle(client, authorization, intent.accountId, intent);
+export async function commandLifecycle(
+  client: KernelClient,
+  authorization: string,
+  intent: Intent,
+  signal?: AbortSignal,
+): Promise<Outcome> {
+  const current = await loadLifecycle(client, authorization, intent.accountId, intent, signal);
   if (current.status !== 'ready') return { status: current.status, current };
   if (current.original?.status === 'recorded')
     return { status: 'recorded', receiptId: current.original.receiptId, effects: current.original.effects, current };
   if (!current.offered.includes(intent.action)) return { status: 'unavailable', current };
   const body = intent.reason === undefined ? {} : { reason: intent.reason };
-  const options = { headers: { authorization, 'idempotency-key': intent.key } };
   try {
     const target = client.accounts({ accountId: intent.accountId });
-    const result =
-      intent.action === 'suspend'
-        ? await target.$suspend.post(body, options)
-        : await target.$reinstate.post(body, options);
+    const result = await readWithin(
+      (signal) => {
+        const options = { headers: { authorization, 'idempotency-key': intent.key }, fetch: { signal } };
+        return intent.action === 'suspend'
+          ? target.$suspend.post(body, options)
+          : target.$reinstate.post(body, options);
+      },
+      signal,
+      LIFECYCLE_WAIT_MS,
+    );
     // One real current read, never a scan or an unbounded poll. It cannot yet prove lifecycle completion.
-    const readback = await loadLifecycle(client, authorization, intent.accountId, intent);
+    const readback = await loadLifecycle(client, authorization, intent.accountId, intent, signal);
     if (readback.status === 'ready' && readback.original?.status === 'recorded')
       return {
         status: 'recorded',
@@ -156,7 +174,7 @@ export async function commandLifecycle(client: KernelClient, authorization: stri
     // This is a command observation, NOT evidence of Auth cleanup or operator fanout completion.
     return { status: 'recorded', receiptId: value.receiptId, current: readback };
   } catch {
-    const readback = await loadLifecycle(client, authorization, intent.accountId, intent);
+    const readback = await loadLifecycle(client, authorization, intent.accountId, intent, signal);
     if (readback.status === 'ready' && readback.original?.status === 'recorded')
       return {
         status: 'recorded',

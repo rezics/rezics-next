@@ -23,7 +23,7 @@ export const readAccountLifecycle = createServerFn({ method: 'GET' })
     const authorization = await viewer();
     if (!authorization) return { status: 'signed-out' };
     if (!realKernelConfigured()) return { status: 'unavailable' };
-    return loadLifecycle(kernelClient(), authorization, data.accountId);
+    return loadLifecycle(kernelClient(), authorization, data.accountId, undefined, getRequest().signal);
   });
 export const changeAccountLifecycle = createServerFn({ method: 'POST' })
   .validator(parseIntent)
@@ -31,5 +31,5 @@ export const changeAccountLifecycle = createServerFn({ method: 'POST' })
     const authorization = await viewer();
     if (!authorization) return { status: 'signed-out' };
     if (!realKernelConfigured()) return { status: 'unavailable' };
-    return commandLifecycle(kernelClient(), authorization, data);
+    return commandLifecycle(kernelClient(), authorization, data, getRequest().signal);
   });
