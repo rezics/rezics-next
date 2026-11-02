@@ -47,16 +47,19 @@ export function preparationDefinitionBases(
 ): readonly PreparationDefinitionBasis[] {
   const unique = new Map<string, PreparationDefinitionBasis>();
   for (const input of definitions) {
-    const filter = admitFilter(parseFilter(input.filter), input.release.value);
-    const canonicalBasis = canonicalize([1, ownerAccountId, collectionId, filter, input.sort, input.release.digest]);
-    if (canonicalBasis === undefined) throw new ProblemError('unsupported_query');
-    const basisDigest = createHash('sha256').update(canonicalBasis).digest();
+    const prepared = prepareBasis(ownerAccountId, collectionId, structuredClone(input));
+    const canonicalBasis = prepared.basis;
+    const basisDigest = prepared.digest;
     const digestKey = basisDigest.toString('hex');
     const existing = unique.get(digestKey);
     if (existing && existing.canonicalBasis !== canonicalBasis) throw new ProblemError('unsupported_query');
     if (!existing)
       unique.set(digestKey, {
-        definition: { ...input, filter },
+        definition: {
+          filter: prepared.filter,
+          sort: prepared.sort,
+          release: { digest: prepared.releaseDigest, value: prepared.release },
+        },
         canonicalBasis,
         basisDigest,
       });
@@ -267,16 +270,22 @@ export function createMembersPreparation(config: {
       const identity = principalCommandIdentity(actor);
       if (identity.principal.kind !== 'account' || identity.principal.id !== actor.accountId) throw notFound();
       const byBasis = new Map<string, Basis>();
-      const requestOrder: string[] = [];
-      for (const input of definitions) {
-        const basis = prepareBasis(actor.accountId, collectionId, structuredClone(input));
-        const key = basis.digest.toString('hex');
-        const previous = byBasis.get(key);
-        if (previous && previous.basis !== basis.basis) throw unsupported();
-        if (!previous) {
-          byBasis.set(key, basis);
-          requestOrder.push(key);
-        }
+      const requestOrder = preparationDefinitionBases(actor.accountId, collectionId, definitions).map((item) => {
+        const digest = Buffer.from(item.basisDigest);
+        const key = digest.toString('hex');
+        byBasis.set(
+          key,
+          Object.freeze({
+            basis: item.canonicalBasis,
+            digest,
+            filter: item.definition.filter,
+            sort: item.definition.sort,
+            releaseDigest: item.definition.release.digest,
+            release: item.definition.release.value,
+          }),
+        );
+        return key;
+      });
       }
 
       const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
