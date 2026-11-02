@@ -39,9 +39,13 @@ export const FEED_CONTINUE_WIDTH = 6;
 export const FEED_CONTINUE_CANDIDATES = 39;
 export const FEED_DISCOVERY_CANDIDATES_PER_RESULT = 6;
 export const FEED_DISCOVERY_FIXED_CANDIDATES = 3;
+// Accounts accepts 100 keys; each can expand to one avatar and one verified-agent Subject.
+export const FEED_ACCOUNT_BATCH_LIMIT = 100;
+export const FEED_AUTHOR_KEYS_PER_CANDIDATE = 3;
 export const feedCandidateBound = (discovery: number, following: number, continued: boolean) =>
   (discovery ? FEED_DISCOVERY_CANDIDATES_PER_RESULT * discovery + FEED_DISCOVERY_FIXED_CANDIDATES : 0) +
-  following + (continued ? FEED_CONTINUE_CANDIDATES : 0);
+  following +
+  (continued ? FEED_CONTINUE_CANDIDATES : 0);
 
 const canonical = (item: FeedItem) => `${item.key.owner}:${item.key.id}`;
 const sourceState = (error: unknown): FeedSourceState => {
@@ -123,7 +127,13 @@ export function createFeedReads(deps: FeedDependencies) {
       // Both entries have passed native current body disclosure; never use inventory author IDs.
       const excerpt = feedExcerpt(entry);
       authors.set(activity.id, entry.authorId);
-      const summary = { ...(excerpt === undefined ? {} : { excerpt }), id: thread.id, kind: thread.kind, title: thread.title, createdAt: thread.createdAt };
+      const summary = {
+        ...(excerpt === undefined ? {} : { excerpt }),
+        id: thread.id,
+        kind: thread.kind,
+        title: thread.title,
+        createdAt: thread.createdAt,
+      };
       item =
         object.kind === 'thread'
           ? {
@@ -139,7 +149,13 @@ export function createFeedReads(deps: FeedDependencies) {
               source: 'following',
               key: { owner: 'content', kind: 'post', route: object.route, id: object.id },
               occurredAt: activity.occurredAt,
-              summary: { ...(excerpt === undefined ? {} : { excerpt }), id: object.id, threadId: thread.id, title: thread.title, createdAt: postAt },
+              summary: {
+                ...(excerpt === undefined ? {} : { excerpt }),
+                id: object.id,
+                threadId: thread.id,
+                title: thread.title,
+                createdAt: postAt,
+              },
               destination: { kind: 'post', id: object.id, threadId: thread.id, postId: object.id, title: thread.title },
             };
     } else if (object.owner === 'semantic') {
@@ -257,9 +273,13 @@ export function createFeedReads(deps: FeedDependencies) {
       const discoveryLimit = !personal ? limit : Math.max(1, Math.floor((limit - FEED_CONTINUE_WIDTH) / 2));
       const followingLimit = stream === 'following' ? limit : Math.max(1, limit - FEED_CONTINUE_WIDTH - discoveryLimit);
       const candidateBound = feedCandidateBound(
-        stream === 'home' ? discoveryLimit : 0, personal ? followingLimit : 0, personal && stream === 'home',
+        stream === 'home' ? discoveryLimit : 0,
+        personal ? followingLimit : 0,
+        personal && stream === 'home',
       );
-      if (candidateBound > FEED_CANDIDATE_LIMIT) throw new RangeError('Feed native candidate bound exceeded');
+      const authorKeys = personal ? followingLimit * FEED_AUTHOR_KEYS_PER_CANDIDATE : 0;
+      if (followingLimit > FEED_ACCOUNT_BATCH_LIMIT || candidateBound + authorKeys > FEED_CANDIDATE_LIMIT)
+        throw new RangeError('Feed native candidate bound exceeded');
       // One bounded mixed round. Reserve native raw costs, including rejected keys inside owners:
       // discovery <=6D+3, Continue <=39, inbox <=F. Mixed max91; anonymous max123.
       await Promise.all(
@@ -308,7 +328,11 @@ export function createFeedReads(deps: FeedDependencies) {
             } else if (lane === 'continue') {
               const page = await continued.list(
                 actor,
-                { limit: FEED_CONTINUE_WIDTH, view: 'FULL', ...(position.continue ? { cursor: position.continue } : {}) },
+                {
+                  limit: FEED_CONTINUE_WIDTH,
+                  view: 'FULL',
+                  ...(position.continue ? { cursor: position.continue } : {}),
+                },
                 deadline,
                 languages,
               );
@@ -389,14 +413,16 @@ export function createFeedReads(deps: FeedDependencies) {
               );
               // One page batch (at most F distinct identities), with Accounts' own final disclosure.
               const accounts = await readAccountDiscoverySummaries(
-                { ...deps, actor, deadline }, [...new Set(authorIds.values())], { languages },
+                { ...deps, actor, deadline },
+                [...new Set(authorIds.values())],
+                { languages },
               );
               for (const candidate of lanes.following) {
                 const item = candidate.item;
                 if (!item || item.key.owner !== 'content') continue;
                 const authorId = authorIds.get(item.id);
                 const author = authorId ? feedAuthor(accounts.get(authorId)) : undefined;
-                if (author) item.summary = { ...item.summary, author };
+                if (author && 'createdAt' in item.summary) item.summary = { ...item.summary, author };
               }
               next.following = page.next ?? false;
             }

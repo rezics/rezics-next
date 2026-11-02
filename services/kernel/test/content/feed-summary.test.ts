@@ -19,11 +19,19 @@ test('Feed identities project only the current Account summary and never synthes
   expect(feedAuthor(null)).toBeUndefined();
   expect(feedAuthor(undefined)).toBeUndefined();
   const account: AccountDiscoverySummary = {
-    id: 'hidden-id', accountKind: 'actor', displayName: 'Reader', handle: 'reader',
-    avatar: null, automated: false, operatorId: null, verifiedAgent: null,
+    id: 'hidden-id',
+    accountKind: 'actor',
+    displayName: 'Reader',
+    handle: 'reader',
+    avatar: null,
+    automated: false,
+    operatorId: null,
+    verifiedAgent: null,
   };
   expect(feedAuthor(account)).toEqual({ displayName: 'Reader', handle: 'reader', avatar: null });
   expect(feedAuthor({ ...account, handle: null, displayName: null })).toEqual({
-    displayName: null, handle: null, avatar: null,
+    displayName: null,
+    handle: null,
+    avatar: null,
   });
 });

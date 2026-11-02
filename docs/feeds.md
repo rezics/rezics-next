@@ -77,8 +77,8 @@ the mixed candidate bound is 91, anonymous 123, Following 20; all are below B=16
 additional refill round. `feed.ts` records the producer constants and derives this ceiling.
 The author batch adds at most F identities (F≤20, below Accounts’ 100-key batch cap), each with at most
 one avatar and one verified-agent Subject, retaining the native initial/final Account and handle checks.
-This adds no feed candidates and no per-row reads. The composed candidate-plus-identity ceiling is
-98 for mixed Home, 123 anonymous and 40 Following, still within 160. Original owner readers retain their maximum three native
+This adds no feed candidates and no per-row reads. The composed candidate-plus-author-key ceiling (including those two optional references per identity) is
+112 for mixed Home, 123 anonymous and 80 Following, still within 160. Original owner readers retain their maximum three native
 continuation rounds and stricter native operation budgets. Owner point probes and
 batched semantic summary/reference reads are bounded by these candidates; merge work
 is O(B log B), and native indexed owner probes are O(B log R).

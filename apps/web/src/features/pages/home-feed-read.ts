@@ -3,13 +3,18 @@ import { isPlatformClosedError } from '../../kernel/platform-closed';
 
 /** Inferred from Content's mounted FeedPageSchema, never a parallel browser DTO. */
 type ClientFeedPage = NonNullable<Awaited<ReturnType<KernelClient['feedItems']['get']>>['data']>;
-type AccountSummary = Extract<ClientFeedPage['feedItems'][number], { source: 'discovery'; key: { owner: 'accounts' } }>['summary'];
+type AccountSummary = Extract<
+  ClientFeedPage['feedItems'][number],
+  { source: 'discovery'; key: { owner: 'accounts' } }
+>['summary'];
 /** Additive native summary seam until the dev landing regenerates the client. */
 type WithContentSummary<Item> = Item extends { key: { owner: 'content' }; summary: infer Summary }
-  ? Omit<Item, 'summary'> & { summary: Summary & {
-      author?: Pick<AccountSummary, 'displayName' | 'handle' | 'avatar'>;
-      excerpt?: string;
-    } }
+  ? Omit<Item, 'summary'> & {
+      summary: Summary & {
+        author?: Pick<AccountSummary, 'displayName' | 'handle' | 'avatar'>;
+        excerpt?: string;
+      };
+    }
   : Item;
 export type FeedPage = Omit<ClientFeedPage, 'feedItems'> & {
   feedItems: WithContentSummary<ClientFeedPage['feedItems'][number]>[];

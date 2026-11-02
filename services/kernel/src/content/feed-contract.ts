@@ -59,9 +59,8 @@ const accountSummary = t.Unsafe<AccountDiscoverySummary>(
     closed,
   ),
 );
-export const FeedAuthorSchema = t.Object(
-  { displayName: nullable, handle: nullable, avatar: t.Union([avatar, t.Null()]) },
-  closed,
+export const FeedAuthorSchema = t.Unsafe<Pick<AccountDiscoverySummary, 'displayName' | 'handle' | 'avatar'>>(
+  t.Object({ displayName: nullable, handle: nullable, avatar: t.Union([avatar, t.Null()]) }, closed),
 );
 export type FeedAuthor = Static<typeof FeedAuthorSchema>;
 export type FeedContentSummary = { author?: FeedAuthor; excerpt?: string };
@@ -81,7 +80,9 @@ const threadSummary = t.Unsafe<Pick<ThreadView, 'id' | 'kind' | 'title' | 'creat
     closed,
   ),
 );
-const postSummary = t.Unsafe<Pick<ItemView, 'id' | 'threadId' | 'createdAt'> & Pick<ThreadView, 'title'> & FeedContentSummary>(
+const postSummary = t.Unsafe<
+  Pick<ItemView, 'id' | 'threadId' | 'createdAt'> & Pick<ThreadView, 'title'> & FeedContentSummary
+>(
   t.Object(
     {
       ...contentSummaryFields,

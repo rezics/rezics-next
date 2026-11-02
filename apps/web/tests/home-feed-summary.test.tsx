@@ -7,15 +7,39 @@ import type { FeedItem } from '../src/features/pages/home-feed-read';
 function row(kind: 'thread' | 'post', identity = true): FeedItem {
   const id = '12345678-1234-1234-1234-123456789abc';
   return {
-    id: 'activity:1', source: 'following', key: { owner: 'content', kind, route: 4660, id },
+    id: 'activity:1',
+    source: 'following',
+    key: { owner: 'content', kind, route: 4660, id },
     occurredAt: '2026-11-03T00:00:00Z',
     summary: {
-      id, kind: 'discussion', threadId: id, title: 'A discussion', createdAt: '2026-11-03T00:00:00Z',
+      id,
+      kind: 'discussion',
+      threadId: id,
+      title: 'A discussion',
+      createdAt: '2026-11-03T00:00:00Z',
       excerpt: 'Opening <script> & post text',
-      ...(identity ? { author: { displayName: 'Current Reader', handle: 'reader', avatar: null } } : {}),
+      ...(identity
+        ? {
+            author: {
+              displayName: 'Current Reader',
+              handle: 'reader',
+              avatar: {
+                media: '12345678-1234-1234-1234-123456789def',
+                width: 96,
+                height: 96,
+                placeholder: { thumbhash: '', color: '#888888' },
+                variants: [{ format: 'webp', width: 96 }],
+                focalPoint: null,
+                credit: null,
+              },
+            },
+          }
+        : {}),
     },
-    destination: kind === 'thread' ? { kind, id, title: 'A discussion' }
-      : { kind, id, threadId: id, postId: id, title: 'A discussion' },
+    destination:
+      kind === 'thread'
+        ? { kind, id, title: 'A discussion' }
+        : { kind, id, threadId: id, postId: id, title: 'A discussion' },
   } as FeedItem;
 }
 
@@ -25,6 +49,7 @@ test('Thread and post rows expose supplied identity beside the primary destinati
     const html = renderToStaticMarkup(<ContentItem {...presentation} />);
     expect(html).toContain('Current Reader');
     expect(html).toContain('@reader');
+    expect(html).toContain('/media/12345678-1234-1234-1234-123456789def/webp-96');
     expect(html).toContain('href="/en/@reader"');
     expect(presentation.href).toContain('/threads/');
     if (kind === 'post') expect(presentation.href).toContain('#post-');
