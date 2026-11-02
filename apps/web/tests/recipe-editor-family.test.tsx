@@ -180,9 +180,9 @@ test('Recipe creation and current correction share complete frames with independ
       content: longCitation,
     };
     expect((await correction.transport.create({ item, key: crypto.randomUUID() })).ok).toBe(true);
-    const loadCorrection = correction.transport.load;
+    const loadCorrection = correction.corrections.load;
     let failCorrectionRead = false;
-    correction.transport.load = async () => {
+    correction.corrections.load = async () => {
       if (failCorrectionRead) {
         failCorrectionRead = false;
         return { ok: false, reason: 'unavailable' };
