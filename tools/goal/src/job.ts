@@ -83,6 +83,7 @@ import { captureLaunchContext } from './launch-context.ts';
 import {
   holdRetryForToolIncident,
   recordToolBlockerFailure,
+  recoverUndeliveredToolIncidentNotices,
   resolveToolIncidentsAfterAttempt,
   toolIncidentForRetry,
   toolIncidentRetryAllowed,
@@ -1150,6 +1151,7 @@ export class WorkerJob implements GateOutcomeSink {
   async recoverOrphans(options: { adoptRunning?: boolean } = {}): Promise<void> {
     const adoptRunning = options.adoptRunning ?? true;
     const store = this.tasks.store;
+    recoverUndeliveredToolIncidentNotices(store, this.inbox, this.tasks.settings);
     for (const task of store.activeTasks()) {
       if (!task.currentAttempt) continue;
       const ref = { taskId: task.id, attempt: task.currentAttempt };

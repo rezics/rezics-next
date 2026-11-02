@@ -958,7 +958,9 @@ retry again every minute. When three distinct tasks end on the same normalized l
 environment incident, holds retries for those tasks and new tasks that hit the line, and sends one `blocker` to the
 supermanager with the line, count, example tasks and the first tracked source match from `git grep`. Goal retries one
 affected task every 10 minutes; a rerun that passes the blocker closes the incident and releases the other pending
-retries. `status` lists open incidents and identifies affected pending retries. Without a shared incident, the same
+retries. Incident notices are one line; an undelivered notice is retried during the existing recovery sweep without
+reopening the incident or moving its probe cadence. `status` lists open incidents and identifies affected pending
+retries. Without a shared incident, the same
 tool blocker in two consecutive attempts parks the task and sends its manager one `environment` event, whether or not
 the worker reran the failing command; two silence stalls in a row are reported as `stalled`. Work other than product
 work on dev also stops as stalled when a tool failure follows another without a rerun of the failing command. A

@@ -15,6 +15,7 @@ export type ToolIncident = {
   id: string;
   fingerprint: string;
   line: string;
+  errorLine?: string;
   sourceLocation: string;
   openedAt: string;
   updatedAt: string;
@@ -22,6 +23,7 @@ export type ToolIncident = {
   probe: AttemptRef;
   taskIds: string[];
   exampleTasks: Array<{ taskId: string; attempt: number }>;
+  noticeDelivered?: boolean;
 };
 
 type StoredEvent = {
@@ -140,20 +142,34 @@ function ensureIncidentRetries(store: WorkerStore, incident: ToolIncident, since
     if (store.task(ref.taskId).currentAttempt === ref.attempt) ensurePendingRetry(store, ref);
 }
 
-function deliverIncident(inbox: ManagerInbox, settings: Settings, incident: ToolIncident): void {
-  const examples = incident.exampleTasks.map((example) => `${example.taskId}#${example.attempt}`).join(', ');
-  const event: ManagerEvent = {
-    managerId: settings.integration.supermanager,
-    kind: 'blocker',
-    summary: [
-      `Environment incident: ${incident.line}`,
-      `${incident.taskIds.length} distinct tasks ended with this blocker within 20 minutes.`,
-      `Example tasks: ${examples}.`,
-      `Source location (git grep): ${incident.sourceLocation}.`,
-      'Retries are held while one affected task is retried every 10 minutes.',
-    ].join('\n'),
-  };
-  inbox.deliver(event);
+function deliverIncident(
+  store: WorkerStore,
+  inbox: ManagerInbox,
+  settings: Settings,
+  incident: ToolIncident,
+): ToolIncident | null {
+  return store.db
+    .transaction(() => {
+      const current = openIncidentForFingerprint(store, incident.fingerprint);
+      if (!current || current.noticeDelivered) return current;
+      const examples = current.exampleTasks.map((example) => `${example.taskId}#${example.attempt}`).join(', ');
+      const event: ManagerEvent = {
+        managerId: settings.integration.supermanager,
+        kind: 'blocker',
+        summary: [
+          `Environment incident ${current.id}: ${current.errorLine ?? current.line}`,
+          `${current.taskIds.length} distinct tasks ended with this blocker within 20 minutes.`,
+          `Example tasks: ${examples}.`,
+          `Source location (git grep): ${current.sourceLocation}.`,
+          'Retries are held while one affected task is retried every 10 minutes.',
+        ].join(' '),
+      };
+      inbox.deliver(event);
+      const delivered = { ...current, noticeDelivered: true };
+      saveState(store, current.probe, 'open', delivered);
+      return delivered;
+    })
+    .immediate();
 }
 
 /** Record a tool failure and open or update the shared incident when its threshold is reached. */
@@ -211,6 +227,7 @@ export function recordToolBlockerFailure(
         id: crypto.randomUUID(),
         fingerprint,
         line,
+        errorLine: rawLine || fingerprint,
         sourceLocation: trackedSourceLocation(settings.mainCheckout, rawLine),
         openedAt: at,
         updatedAt: at,
@@ -218,6 +235,7 @@ export function recordToolBlockerFailure(
         probe: ref,
         taskIds: ids,
         exampleTasks: exampleTasks(rows),
+        noticeDelivered: false,
       };
       opened = true;
       saveState(store, ref, 'open', created);
@@ -231,9 +249,31 @@ export function recordToolBlockerFailure(
       incident,
       new Date(Date.parse(incident.openedAt) - TOOL_INCIDENT_WINDOW_MS).toISOString(),
     );
-    if (opened) deliverIncident(inbox, settings, incident);
+    if (!incident.noticeDelivered) {
+      try {
+        incident = deliverIncident(store, inbox, settings, incident) ?? incident;
+      } catch (error) {
+        console.error('tool incident inbox delivery failed:', error);
+      }
+    }
   }
   return { incident, opened };
+}
+
+/** Retry saved notices during the host's existing recovery sweep without changing incident or probe state. */
+export function recoverUndeliveredToolIncidentNotices(
+  store: WorkerStore,
+  inbox: ManagerInbox,
+  settings: Settings,
+): void {
+  for (const incident of listOpenToolIncidents(store)) {
+    if (incident.noticeDelivered) continue;
+    try {
+      deliverIncident(store, inbox, settings, incident);
+    } catch (error) {
+      console.error('tool incident inbox delivery failed:', error);
+    }
+  }
 }
 
 /** The retry intent is keyed by the failed attempt, so this is the incident that owns its next launch. */
