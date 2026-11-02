@@ -42,7 +42,9 @@ export function RatingDistribution({
   const maximum = histogram.reduce((max, count) => Math.max(max, count), 0) || 1;
   return (
     <details data-slot="rating-distribution">
-      <summary className="cursor-pointer text-sm font-medium">{m.subject_ratings_distribution({}, options)}</summary>
+      <summary className="list-item list-inside min-h-11 min-w-11 max-w-full cursor-pointer rounded-sm px-2 py-3 text-start text-sm font-medium whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        {m.subject_ratings_distribution({}, options)}
+      </summary>
       <ol
         aria-label={m.subject_ratings_distribution({}, options)}
         data-slot="histogram"

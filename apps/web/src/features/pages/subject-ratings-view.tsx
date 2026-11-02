@@ -24,7 +24,10 @@ import { RatingDistribution } from './rating-distribution';
 const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
-const linkClass = 'text-sm font-medium text-primary underline underline-offset-4 hover:text-primary/80';
+const summaryClass =
+  'list-item list-inside min-h-11 min-w-11 max-w-full cursor-pointer rounded-sm px-2 py-3 text-start text-sm font-medium whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const linkClass =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-3 text-start text-sm font-medium whitespace-normal wrap-anywhere text-primary underline underline-offset-4 hover:text-primary/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export const RatingsContext = createContext<Ratings | RatingSources | null | undefined>(undefined);
 /** Story fixtures can show each display state without adding another request to the subject page. */
@@ -81,7 +84,7 @@ export function RatingSourceStatus({
         <Button
           type="button"
           variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           onClick={retry}
         >
           {m.subject_section_retry({}, options)}
@@ -190,11 +193,8 @@ export function RatingsView({
         {title}
       </h2>
       {question ? (
-        <p className="text-sm font-medium" data-slot="rating-question" data-revision={question.revision}>
+        <p className="text-sm font-medium wrap-anywhere" data-slot="rating-question" data-revision={question.revision}>
           {question.label}
-          <span className="ml-2 text-muted-foreground">
-            {m.rating_question_revision({ revision: number(question.revision) }, options)}
-          </span>
         </p>
       ) : (
         status('question')
@@ -289,8 +289,13 @@ export function RatingsView({
         />
       )}
       <details data-slot="rating-provenance" className="text-sm">
-        <summary className="cursor-pointer font-medium">{m.subject_ratings_provenance({}, options)}</summary>
-        <div className="mt-3 space-y-3 text-muted-foreground">
+        <summary className={summaryClass}>{m.subject_ratings_provenance({}, options)}</summary>
+        <div className="mt-3 space-y-3 wrap-anywhere text-muted-foreground">
+          {question && (
+            <p data-slot="rating-question-revision">
+              {m.rating_question_revision({ revision: number(question.revision) }, options)}
+            </p>
+          )}
           <p>{m.rating_public_delay({}, options)}</p>
           <p>{m.rating_public_ordering({}, options)}</p>
           {status('statistics')}
@@ -397,7 +402,7 @@ function RatingComparisons({ data, id, locale }: { data: Ratings; id: string; lo
     ));
   return (
     <details data-slot="rating-comparisons" className="text-sm">
-      <summary className="cursor-pointer font-medium">{m.subject_ratings_comparisons({}, options)}</summary>
+      <summary className={summaryClass}>{m.subject_ratings_comparisons({}, options)}</summary>
       <ul className="mt-3 grid gap-4 sm:grid-cols-2">{rows(initial)}</ul>
       {remaining.length > 0 && (
         <>
@@ -409,7 +414,7 @@ function RatingComparisons({ data, id, locale }: { data: Ratings; id: string; lo
             variant="link"
             aria-expanded={expanded}
             aria-controls={`${id}-more-comparisons`}
-            className="mt-3 h-auto max-w-full whitespace-normal p-0 text-start"
+            className="mt-3 h-auto min-h-11 min-w-11 max-w-full justify-start whitespace-normal wrap-anywhere px-2 py-3 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             onClick={() => setExpanded(!expanded)}
           >
             {expanded
