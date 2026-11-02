@@ -146,8 +146,7 @@ function PersonalMembership({
   function captureActivation(event: MouseEvent<HTMLDivElement>) {
     resultFocus.current?.cancel();
     const control = (event.target as HTMLElement).closest<HTMLElement>('button');
-    activation.current =
-      event.detail === 0 && control?.ownerDocument.activeElement === control ? control : null;
+    activation.current = event.detail === 0 && control?.ownerDocument.activeElement === control ? control : null;
   }
 
   function startResultFocus(owner: RealmMembershipCaller) {
@@ -171,9 +170,10 @@ function PersonalMembership({
       // Removing or disabling the source is part of the transition, not a user focus move.
       if (event.target !== control) return;
       if (event.relatedTarget) cancel();
-      else queueMicrotask(() => {
-        if (control.isConnected && !control.hasAttribute('disabled') && document.activeElement !== control) cancel();
-      });
+      else
+        queueMicrotask(() => {
+          if (control.isConnected && !control.hasAttribute('disabled') && document.activeElement !== control) cancel();
+        });
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Tab') cancel();
@@ -445,9 +445,10 @@ function PersonalMembership({
             const focus = startResultFocus(caller);
             if (currentPending || currentProblem?.outcome === 'refused' || viewer?.state === 'pending')
               setPending({ target: currentPending?.target, cycle: (currentPending?.cycle ?? -1) + 1, caller, focus });
-            else void query.refetch().then((result) => {
-              if (!result.isError) setSettledFocus(focus);
-            });
+            else
+              void query.refetch().then((result) => {
+                if (!result.isError) setSettledFocus(focus);
+              });
           }
         }}
       />
