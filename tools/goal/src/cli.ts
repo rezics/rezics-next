@@ -96,6 +96,7 @@ export async function run(
         runtime.tasks.retarget(parsedWorkerArguments.taskId, parsedWorkerArguments.target);
         return 0;
       }
+      if (!parsedWorkerArguments) throw new Error('Worker command arguments were not parsed');
       return await runWorkerCommand(command, args, { runtime, parsedArguments: parsedWorkerArguments });
     }
     if (command === 'publication') {
