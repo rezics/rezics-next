@@ -280,7 +280,9 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
                     )}
                   </div>
                 )}
-                {detail && !reading && <p className="text-sm text-muted-foreground">{m.changes_current_notice({}, o)}</p>}
+                {detail && !reading && (
+                  <p className="text-sm text-muted-foreground">{m.changes_current_notice({}, o)}</p>
+                )}
               </ContentItemFrame>
             </section>
           )}
