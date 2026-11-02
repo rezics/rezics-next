@@ -244,7 +244,7 @@ function ReactionCaller({
     observation.snapshot() === revision &&
     (reactionOrigin?.isCurrent() ?? true);
 
-  function retain(intent: Intent, message = m.candidate_unavailable()) {
+  function retain(intent: Intent, message: string = m.candidate_unavailable()) {
     if (!current()) return;
     unresolved.current = intent;
     epoch.current++;
