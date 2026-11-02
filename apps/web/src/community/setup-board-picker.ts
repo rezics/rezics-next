@@ -88,6 +88,8 @@ export type BoardChoicePage = {
   status: 'loading' | 'ready' | BoardChoiceFailure;
   choices: readonly SetupChoice[];
   next: string | null;
+  /** An invalid or unavailable continuation can be replaced by an explicit first-page read. */
+  canRestart?: true;
 } & Observation;
 export type BoardChoiceScope = {
   source: BoardChoiceSource;
@@ -162,6 +164,14 @@ export class BoardChoicePager {
     if (this.page.status === 'stale') this.cursor = undefined;
     void this.load(this.generation);
   }
+  restart(expected?: BoardChoiceExpectation) {
+    if (!this.matches(expected) || !this.page.canRestart) return;
+    // Retire queued actions from the failed page, including an away-and-back scope replacement.
+    this.cancelWork();
+    this.cursor = undefined;
+    this.loaded = null;
+    void this.load(this.generation);
+  }
   choose(id: string, expected?: BoardChoiceExpectation): SetupChoice | null {
     return this.matches(expected) && this.page.status === 'ready'
       ? (this.page.choices.find((choice) => choice.id === id) ?? null)
@@ -222,12 +232,17 @@ export class BoardChoicePager {
       };
       this.showLoaded();
     } catch (error) {
-      if (generation === this.generation && !controller.signal.aborted && this.matches(scope))
+      if (generation === this.generation && !controller.signal.aborted && this.matches(scope)) {
+        const status = error instanceof BoardChoiceError ? error.reason : 'unavailable';
         this.update({
-          status: error instanceof BoardChoiceError ? error.reason : 'unavailable',
+          status,
           choices: [],
           next: null,
+          ...(this.cursor !== undefined && (status === 'invalid' || status === 'unavailable')
+            ? { canRestart: true as const }
+            : {}),
         });
+      }
     }
   }
 }

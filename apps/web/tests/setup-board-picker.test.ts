@@ -138,7 +138,7 @@ test('search debounces, Next reads exactly one bounded page, and old query/sourc
 });
 
 test('retired Board page callbacks cannot page, retry or choose after cancellation or a new scope', async () => {
-  const late = deferred<{ schemes: readonly { id: string; label: string }[]; next: string | null }>();
+  const late = Promise.withResolvers<{ schemes: readonly { id: string; label: string }[]; next: string | null }>();
   const calls: string[] = [];
   const prior: BoardChoiceSource = {
     ...source,
@@ -171,6 +171,7 @@ test('retired Board page callbacks cannot page, retry or choose after cancellati
   pager.cancel();
   pager.next(currentScope);
   pager.retry(currentScope);
+  pager.restart(currentScope);
   expect(pager.choose(scheme.id, currentScope)).toBeNull();
   late.resolve({ schemes: [{ id: concept.id, label: 'Retired scheme' }], next: 'prior-next' });
   await turn();
@@ -178,6 +179,7 @@ test('retired Board page callbacks cannot page, retry or choose after cancellati
   expect(page?.choices).toEqual([scheme]);
   pager.next(priorScope);
   pager.retry(priorScope);
+  pager.restart(priorScope);
   expect(calls).toEqual(['prior', 'current']);
 });
 

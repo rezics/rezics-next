@@ -2482,6 +2482,8 @@
   "space_setup_board_choice_stale": "Diese Optionen haben sich geändert. Versuche es erneut, um eine aktuelle Seite zu laden. Deine Einträge bleiben erhalten.",
   "space_setup_board_choice_clear": "Auswahl aufheben",
   "space_setup_board_choice_next": "Nächste Optionen",
+  "space_setup_board_choice_restart": "Optionen von vorne laden",
+  "space_setup_board_choice_restart_hint": "Lade die erste Seite mit derselben Suche erneut. Deine Auswahl und die übrigen Eingaben bleiben erhalten.",
   "space_setup_board_choice_no_matches": "Auf dieser Seite gibt es keine passenden Optionen. Versuche eine andere Suche.",
   "space_setup_board_choice_unavailable": "Board-Optionen sind gerade nicht verfügbar. Deine gespeicherte Einrichtung bleibt erhalten. Versuche es erneut, um aktuelle Optionen zu laden.",
   "space_setup_board_choice_scheme_changed": "Das Board-Schema hat sich geändert, daher wurde das vorgemerkte Thema entfernt. Wähle vor dem Erstellen des Boards ein Thema aus dem aktuellen Schema.",

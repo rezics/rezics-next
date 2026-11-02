@@ -2482,6 +2482,8 @@
   "space_setup_board_choice_stale": "这些选项已更改。请重试以加载当前页面。你填写的内容会保留。",
   "space_setup_board_choice_clear": "清除选择",
   "space_setup_board_choice_next": "下一组选项",
+  "space_setup_board_choice_restart": "从头重新加载选项",
+  "space_setup_board_choice_restart_hint": "使用相同的搜索条件重新加载第一页。你的选择和其他输入内容会保留。",
   "space_setup_board_choice_no_matches": "此页面没有匹配的选项。请尝试其他搜索。",
   "space_setup_board_choice_unavailable": "版块选项目前不可用。已保存的设置会保留。请重试以加载当前选项。",
   "space_setup_board_choice_scheme_changed": "版块方案已更改，因此已清除待选主题。创建版块前，请从当前方案中选择主题。",

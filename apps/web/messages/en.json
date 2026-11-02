@@ -2474,6 +2474,8 @@
   "space_setup_board_choice_stale": "These options have changed. Retry to start a current page. Your entries are retained.",
   "space_setup_board_choice_clear": "Clear selection",
   "space_setup_board_choice_next": "Next options",
+  "space_setup_board_choice_restart": "Restart options from the beginning",
+  "space_setup_board_choice_restart_hint": "Load the first page again with the same search. Your selections and other entries are kept.",
   "space_setup_board_choice_no_matches": "No matching options on this page. Try another search.",
   "space_setup_board_choice_unavailable": "Board options are unavailable right now. Your saved setup is kept. Retry to load current options.",
   "space_setup_board_choice_scheme_changed": "The board scheme changed, so the pending topic was cleared. Choose a topic from the current scheme before creating the board.",

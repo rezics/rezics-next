@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { act, StrictMode, isValidElement, useState, type ReactNode } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import type { SetupChoice, SetupCommand, SetupFailure, SetupResult, SetupSnapshot } from '../src/community/space-setup';
-import type { BoardChoiceSource } from '../src/community/setup-board-picker';
+import { BoardChoiceError, type BoardChoiceSource } from '../src/community/setup-board-picker';
 import type { SetupTransport } from '../src/stories/patterns/space-setup/space-setup';
 import type { SpaceSetupInitialAdmission } from '../src/community/space-setup-lifetime';
 
@@ -477,10 +477,12 @@ test('production setup form fences late Board source and text pages after concep
   };
   const nextSource: BoardChoiceSource = {
     schemes: async () => ({ schemes: [], next: null }),
-    concepts: async ({ query }) =>
-      query === 'old-text'
+    concepts: async ({ query, cursor }) => {
+      if (cursor) throw new BoardChoiceError('invalid', 400);
+      return query === 'old-text'
         ? retiredText.promise
-        : { concepts: [{ id: conceptId, label: 'Current Board concept' }], next: null },
+        : { concepts: [{ id: conceptId, label: 'Current Board concept' }], next: 'continuation' };
+    },
   };
   const transport: SetupTransport = {
     command: async () => unavailable,
@@ -519,4 +521,15 @@ test('production setup form fences late Board source and text pages after concep
   });
   hidden('Retired source concept', 'Retired text concept');
   expect(host.textContent).toContain('Current Board concept');
+  const title = host.querySelector<HTMLInputElement>('input:not([type="search"]):not([type="hidden"])')!;
+  await edit(title, 'Retained Board draft');
+  await act(async () => {
+    host.querySelector<HTMLElement>('[role="radio"]')!.click();
+  });
+  await click(m.space_setup_board_choice_next());
+  await click(m.space_setup_board_choice_restart());
+  expect(title.value).toBe('Retained Board draft');
+  expect(search!.value).toBe('new-text');
+  expect(host.querySelector('[role="radio"]')!.getAttribute('aria-checked')).toBe('true');
+  expect(commands).toHaveLength(0);
 });

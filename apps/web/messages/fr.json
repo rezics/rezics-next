@@ -2482,6 +2482,8 @@
   "space_setup_board_choice_stale": "Ces options ont changé. Réessayez pour charger une page à jour. Vos saisies sont conservées.",
   "space_setup_board_choice_clear": "Effacer la sélection",
   "space_setup_board_choice_next": "Options suivantes",
+  "space_setup_board_choice_restart": "Reprendre les options depuis le début",
+  "space_setup_board_choice_restart_hint": "Rechargez la première page avec la même recherche. Vos sélections et vos autres saisies sont conservées.",
   "space_setup_board_choice_no_matches": "Aucune option ne correspond sur cette page. Essayez une autre recherche.",
   "space_setup_board_choice_unavailable": "Les options de forum sont momentanément indisponibles. Votre configuration enregistrée est conservée. Réessayez pour charger les options à jour.",
   "space_setup_board_choice_scheme_changed": "Le schéma des forums a changé ; le sujet en attente a donc été effacé. Choisissez un sujet du schéma actuel avant de créer le forum.",

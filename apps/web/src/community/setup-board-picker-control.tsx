@@ -144,15 +144,33 @@ export function SetupBoardPicker({
                     ? m.space_setup_invalid()
                     : m.space_setup_board_choice_unavailable()}
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
-              disabled={disabled}
-              onClick={() => pager.retry(expected)}
-            >
-              {m.space_setup_retry()}
-            </Button>
+            {shown.canRestart ? (
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {m.space_setup_board_choice_restart_hint()}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                disabled={disabled}
+                onClick={() => pager.retry(expected)}
+              >
+                {m.space_setup_retry()}
+              </Button>
+              {shown.canRestart ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  disabled={disabled}
+                  onClick={() => pager.restart(expected)}
+                >
+                  {m.space_setup_board_choice_restart()}
+                </Button>
+              ) : null}
+            </div>
           </div>
         ) : !disabled ? (
           <p role="status" className="text-sm text-muted-foreground">

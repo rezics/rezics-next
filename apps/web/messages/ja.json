@@ -2482,6 +2482,8 @@
   "space_setup_board_choice_stale": "候補が変更されました。現在のページを読み直すには再試行してください。入力内容は保持されています。",
   "space_setup_board_choice_clear": "選択を解除",
   "space_setup_board_choice_next": "次の候補",
+  "space_setup_board_choice_restart": "候補を最初から読み直す",
+  "space_setup_board_choice_restart_hint": "同じ検索条件で最初のページを読み直します。選択内容と他の入力内容は保持されます。",
   "space_setup_board_choice_no_matches": "このページに一致する候補はありません。別の語句で検索してください。",
   "space_setup_board_choice_unavailable": "掲示板の候補を現在利用できません。保存済みの設定は保持されています。現在の候補を読み込むには再試行してください。",
   "space_setup_board_choice_scheme_changed": "掲示板スキームが変更されたため、保留中のトピックを解除しました。掲示板を作成する前に、現在のスキームからトピックを選んでください。",

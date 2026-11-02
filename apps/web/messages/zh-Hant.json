@@ -2482,6 +2482,8 @@
   "space_setup_board_choice_stale": "這些選項已變更。請重試以載入目前頁面。你輸入的內容會保留。",
   "space_setup_board_choice_clear": "清除選擇",
   "space_setup_board_choice_next": "下一組選項",
+  "space_setup_board_choice_restart": "從頭重新載入選項",
+  "space_setup_board_choice_restart_hint": "使用相同的搜尋條件重新載入第一頁。你的選擇與其他輸入內容會保留。",
   "space_setup_board_choice_no_matches": "此頁面沒有符合的選項。請嘗試其他搜尋。",
   "space_setup_board_choice_unavailable": "看板選項目前無法使用。已儲存的設定會保留。請重試以載入目前選項。",
   "space_setup_board_choice_scheme_changed": "看板方案已變更，因此已清除待選主題。建立看板前，請從目前方案中選擇主題。",

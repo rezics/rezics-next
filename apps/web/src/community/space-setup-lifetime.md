@@ -37,6 +37,18 @@ its private cache, and keys each generation by the observed source revision. No 
 inferred from Context directory or Board display data. No additional native read, polling or per-row hydration is
 performed.
 
+## Board choice recovery
+
+An invalid or unavailable continuation offers **Restart options from the beginning** alongside same-request retry;
+only a failed continuation offers restart, while stale retry keeps its existing first-page recovery and denied
+results retain their meaning. Restart retains the exact query, picker kind and scheme, drops the cursor and reads
+one ordinary bounded first page. It does not change the draft, selected values or their admission. A first-page
+invalid result stays invalid without an automatic reset or a broader search.
+
+Restart retires the failed page's queued actions and loaded choices before starting its read. Source, query, scheme
+and private caller replacements still retire old results and callbacks; reader provenance, native ordering, page
+limits and freshness remain with the existing readers. Recovery adds no polling, enumeration or automatic retry.
+
 The connected regression suite in `apps/web/tests/space-setup-reader-compatibility.test.tsx` covers the production
 route, server preparation/read wrappers, caller, form and choice readers after integration. Its assertions are
 authored but have not been run. Existing native and command acceptance remains the authority for those outcomes.

@@ -237,6 +237,7 @@ test('loading and each refusal keep the selected value and hints inline rather t
     expect(host.textContent).not.toContain(m.space_setup_board_choice_local_empty());
     expect(host.textContent).not.toContain(m.space_setup_board_choice_no_matches());
     expect(concepts).toHaveBeenCalledTimes(1);
+    expect(host.textContent).not.toContain(m.space_setup_board_choice_restart());
     await click(button(m.space_setup_retry()));
     expect(concepts).toHaveBeenCalledTimes(2);
   }
@@ -245,23 +246,34 @@ test('loading and each refusal keep the selected value and hints inline rather t
   expect(host.textContent).not.toContain('Retired loading result');
 });
 
-test('a stale continuation restarts only on explicit Retry, preserving the selected ID', async () => {
-  const concepts = mock(async (input: Parameters<BoardChoiceSource['concepts']>[0]) => {
-    if (input.cursor !== undefined) throw new BoardChoiceError('stale', 410);
-    return { concepts: choices, next: cursor };
-  });
-  const input = props({ value: choices[1]!, source: { ...source, concepts } });
-  await paint(input);
-  await tick(280);
-  await click(button(m.space_setup_board_choice_next()));
-  inline(m.space_setup_board_choice_stale());
-  expect(concepts).toHaveBeenCalledTimes(2);
-  expect(host.textContent).toContain(choices[1]!.label);
-  await click(button(m.space_setup_retry()));
-  expect(concepts).toHaveBeenLastCalledWith({ query: '', schemeId });
-  expect(concepts).toHaveBeenCalledTimes(3);
-  expect(radios()[1]!.getAttribute('aria-checked')).toBe('true');
-});
+for (const kind of ['scheme', 'concept'] as const)
+  for (const reason of ['stale', 'invalid', 'unavailable'] as const)
+    test(`${kind} ${reason} continuation recovers explicitly without readmitting the selected ID`, async () => {
+      const read = mock(async (input: { query: string; cursor?: string }) => {
+        if (input.cursor !== undefined) throw new BoardChoiceError(reason, reason === 'stale' ? 410 : reason === 'invalid' ? 400 : 503);
+        return { schemes: choices, concepts: choices, next: cursor };
+      });
+      const input = props({ kind, value: choices[1]!, source: { ...source, schemes: read, concepts: read } });
+      await paint(input);
+      await tick(280);
+      await edit('reading');
+      await tick(280);
+      const first = { query: 'reading', ...(kind === 'concept' ? { schemeId } : {}) };
+      const before = read.mock.calls.length;
+      await click(button(m.space_setup_board_choice_next()));
+      inline(reason === 'stale' ? m.space_setup_board_choice_stale() : reason === 'invalid' ? m.space_setup_invalid() : m.space_setup_board_choice_unavailable());
+      if (reason !== 'stale') {
+        await click(button(m.space_setup_retry()));
+        expect(read).toHaveBeenLastCalledWith({ ...first, cursor });
+        expect(read).toHaveBeenCalledTimes(before + 2);
+      }
+      await click(button(reason === 'stale' ? m.space_setup_retry() : m.space_setup_board_choice_restart()));
+      expect(read).toHaveBeenLastCalledWith(first);
+      expect(read).toHaveBeenCalledTimes(before + (reason === 'stale' ? 2 : 3));
+      expect(host.querySelector<HTMLInputElement>('input[type="search"]')!.value).toBe('reading');
+      expect(radios().find((radio) => radio.getAttribute('aria-checked') === 'true')).toBeDefined();
+      expect(input.onChange).not.toHaveBeenCalled();
+    });
 
 test('disabled search, selected Clear, ready choices, Next and Retry cannot dispatch work', async () => {
   const concepts = mock(async () => ({ concepts: choices, next: cursor }));

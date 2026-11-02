@@ -2482,6 +2482,8 @@
   "space_setup_board_choice_stale": "Estas opciones han cambiado. Vuelve a intentarlo para cargar una página actual. Tus entradas se conservan.",
   "space_setup_board_choice_clear": "Quitar selección",
   "space_setup_board_choice_next": "Siguientes opciones",
+  "space_setup_board_choice_restart": "Volver al inicio de las opciones",
+  "space_setup_board_choice_restart_hint": "Carga de nuevo la primera página con la misma búsqueda. Se conservan tus selecciones y los demás datos.",
   "space_setup_board_choice_no_matches": "No hay opciones coincidentes en esta página. Prueba otra búsqueda.",
   "space_setup_board_choice_unavailable": "Las opciones de tablón no están disponibles ahora. Se conserva tu configuración guardada. Vuelve a intentarlo para cargar las opciones actuales.",
   "space_setup_board_choice_scheme_changed": "El esquema de tablones ha cambiado y se ha borrado el tema pendiente. Elige un tema del esquema actual antes de crear el tablón.",
