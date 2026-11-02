@@ -61,6 +61,7 @@ function deferred<T>() {
 const checkout = (url = 'https://checkout.stripe.com/current') => Response.json({ checkoutUrl: url });
 const staleResults = {
   checkout: () => checkout('https://checkout.stripe.com/stale'),
+  order: () => Response.json({ orderId: id(3) }),
   owned: () => Response.json(acquisitionProblems.owned, { status: 409 }),
   pending: () => Response.json(acquisitionProblems.pending, { status: 409 }),
   terms: () => Response.json({ code: 'offer_revision_conflict' }, { status: 409 }),
@@ -333,6 +334,10 @@ for (const [name, viewer, admitted] of authorityChanges) {
 }
 
 test('same-offer refresh and repricing preserve uncertain consent, request identity, disclosure and deliberate retry', async () => {
+  for (const [response, destination] of [
+    [checkout(), 'https://checkout.stripe.com/current'],
+    [staleResults.order(), `/en/orders/${id(3)}`],
+  ] as const) {
   await withPage(async (page) => {
     const pending = deferred<Response>();
     page.enqueue(pending.promise);
@@ -361,9 +366,10 @@ test('same-offer refresh and repricing preserve uncertain consent, request ident
       { intent: intent(first), csrf: signedIn.csrfToken },
       { intent: intent(first), csrf: rotated.csrfToken },
     ]);
-    await page.settle(retried, checkout());
-    expect(page.redirects).toEqual(['https://checkout.stripe.com/current']);
+    await page.settle(retried, response);
+    expect(page.redirects).toEqual([destination]);
   });
+  }
 });
 
 test('current native recovery and explicit terms review persist across same-offer rerenders, then clear for a new viewer', async () => {

@@ -106,6 +106,10 @@ function OfferPurchase({
       window.location.assign(result.url);
       return;
     }
+    if (result.kind === 'order') {
+      window.location.assign(localizeHref(`/orders/${encodeURIComponent(result.orderId)}`));
+      return;
+    }
     if (result.kind === 'existing') setExisting(result.problem);
     setPhase(result.kind);
   }

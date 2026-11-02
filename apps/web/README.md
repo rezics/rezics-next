@@ -2152,9 +2152,18 @@ Full subject views page through their owner list read with the first page's para
 
 ### Checkout start (`POST /checkout`)
 
-- **Touches:** CSRF origin and token checks, then D `credential` → one K `POST /v1/orders` with `{ offerId }` and the page's `Idempotency-Key`
+- **Touches:** CSRF origin and token checks, then D `credential` → one K `POST /v1/orders` with `{ offerId, expectedOfferRevision }` and the page's `Idempotency-Key`
 - **Bound:** ≤1 D (credential, with any refresh's A) → 1 K. Constant body; no list
 - **Growth check:** `tests/checkout-cost.test.ts`: `checkout start stays within its bound as s grows`
+
+The offer conflict/review and original uncertain-intent retry paths remain separate. Decision: a successful native
+create/replay result navigates to its exact order when settled, unresolved or without a usable hosted Checkout URL;
+only pending orders with a usable URL enter hosted Checkout. The BFF validates the returned full order ID and
+offer binding, and emits only `{orderId}` or `{checkoutUrl}`. Uncertain transport responses retain the original
+operands, revision and key. No offer refresh, replacement key, price acceptance or additional create follows recovery.
+The composed recovery ceiling is the existing credential bound (one D) plus the create/replay bound (one K):
+two outbound operations, with zero follow-up reads, list pages or fan-out. `tests/offer-consent-recovery.test.ts`
+checks the single exact create/replay call at 1, 8 and 64 unrelated records; native producer bounds remain unchanged.
 
 ### Order return (`/<locale>/orders/<id>`)
 

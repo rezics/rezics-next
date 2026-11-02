@@ -4,20 +4,9 @@ import { dependencyUnavailable, problem, problemResponse } from '../media/kernel
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { UUID } from './price';
-import { decodeAcquisitionProblem } from './offer-recovery';
+import { checkoutDestination, decodeAcquisitionProblem } from './offer-recovery';
 
 const bodyLimit = 4 * 1024;
-
-function safeCheckoutUrl(value: string | null): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-    return url.href;
-  } catch {
-    return null;
-  }
-}
 
 async function jsonBody(request: Request): Promise<unknown> {
   if (request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json')
@@ -113,7 +102,7 @@ export async function startCheckout(request: Request, sessionEnv: Partial<Sessio
     }
     throw dependencyUnavailable(503);
   }
-  const checkoutUrl = safeCheckoutUrl(result.data.order.checkoutUrl);
-  if (!checkoutUrl) throw dependencyUnavailable(503);
-  return Response.json({ checkoutUrl }, { headers: { 'cache-control': 'private, no-store' } });
+  const destination = checkoutDestination(result.data.order, fields.offerId);
+  if (!destination) throw dependencyUnavailable(503);
+  return Response.json(destination, { headers: { 'cache-control': 'private, no-store' } });
 }
