@@ -48,7 +48,7 @@ test('Realm publication selection and outcomes use installed shared family with 
   const { publicationSubjectSearch } = await import('../src/community/publication-subject-picker');
   const { sessionQuery } = await import('../src/session/query');
   const { coverSrc } = await import('../src/media/cover-src');
-  const { entityPickerMessages } = await import('@rezics/ui/entity-picker-messages');
+  const { entityPickerMessages } = await import('../../../packages/ui/src/components/entity-picker-messages');
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
   const previousLocale = getLocale;
@@ -290,6 +290,12 @@ test('Realm publication selection and outcomes use installed shared family with 
       await choose();
       await startChange(action);
       const original = structuredClone(writes.at(-1)!.input);
+      expect(original).toMatchObject({
+        realmId: publication.realmId,
+        subjectId: supplied.id,
+        action,
+        expectedHead: currentSubjects[0]!.publicationId,
+      });
       expect(Object.isFrozen(writes.at(-1)!.input)).toBe(true);
       await settle({ kind: 'unavailable' });
       expect(status()).toContain(m.realm_publication_uncertain());
