@@ -359,6 +359,8 @@ test('Exported growth evidence preserves scale/repetition CTE accounting limitat
     ),
   ).toContain(`Scale 4 CTE accounting limitations: repetition 1: ${note}`);
   expect(() =>
-    readGrowthProfiles([{ name: 'bad', text: line(false).replace('"statements":1', '"statements":1,"limitations":1') }]),
+    readGrowthProfiles([
+      { name: 'bad', text: line(false).replace('"statements":1', '"statements":1,"limitations":1') },
+    ]),
   ).toThrow('limitations must be an array');
 });
