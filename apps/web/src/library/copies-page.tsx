@@ -105,7 +105,11 @@ function TextField({
   );
 }
 
-function NoteField({ value, onChange, showError }: {
+function NoteField({
+  value,
+  onChange,
+  showError,
+}: {
   value: string;
   onChange: (value: string) => void;
   showError: boolean;

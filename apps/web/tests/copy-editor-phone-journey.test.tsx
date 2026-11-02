@@ -187,8 +187,16 @@ for (const editing of [false, true]) {
     await click(m.library_copy_cancel());
     const prompt = window.document.body.querySelector<HTMLElement>('[role="alertdialog"]')!;
     expect(prompt).toBeTruthy();
-    expect([...prompt.querySelectorAll('button')].filter((node) => node.textContent === m.library_copy_draft_navigation_stay())).toHaveLength(1);
-    expect([...prompt.querySelectorAll('button')].filter((node) => node.textContent === m.library_copy_draft_navigation_discard())).toHaveLength(1);
+    expect(
+      [...prompt.querySelectorAll('button')].filter(
+        (node) => node.textContent === m.library_copy_draft_navigation_stay(),
+      ),
+    ).toHaveLength(1);
+    expect(
+      [...prompt.querySelectorAll('button')].filter(
+        (node) => node.textContent === m.library_copy_draft_navigation_discard(),
+      ),
+    ).toHaveLength(1);
     await click(m.library_copy_draft_navigation_stay(), prompt);
     await change(m.library_copy_source(), 'Gift shop');
     const note = '  note\n\n  ';
