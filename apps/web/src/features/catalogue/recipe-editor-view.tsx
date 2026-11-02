@@ -137,15 +137,9 @@ function RecipeEditorLive({
   const [readEpoch, setReadEpoch] = useState(0);
   const readEpochRef = useRef(0);
   const admittedReadEpoch = useRef(0);
-  const retainedRead = useRef<
-    | {
-        id: string | undefined;
-        locale: string;
-        generation: number;
-        value: Ready;
-      }
-    | undefined
-  >(undefined);
+  const retainedRead = useRef<{ id: string | undefined; locale: string; generation: number; value: Ready } | undefined>(
+    undefined,
+  );
   if (
     retainedRead.current &&
     (retainedRead.current.id !== id ||
@@ -155,12 +149,7 @@ function RecipeEditorLive({
     retainedRead.current = undefined;
   const matchesIdentity = (candidate?: Ready) => !!candidate && (!id || candidate.public?.subject.id === id);
   if (query.data?.ok && matchesIdentity(query.data))
-    retainedRead.current = {
-      id,
-      locale,
-      generation: lifetime.generation,
-      value: query.data,
-    };
+    retainedRead.current = { id, locale, generation: lifetime.generation, value: query.data };
   const draftRead = retainedRead.current?.value;
   const read =
     readEpoch === readEpochRef.current &&
@@ -307,10 +296,7 @@ function RecipeEditorLive({
   async function retryRead() {
     if (!lifetime.active() || !isReadEpochCurrent(readEpoch) || running.current) return;
     // Only this deliberate recovery owns focus; internal reviews and readbacks do not.
-    readFocus.current = {
-      epoch: readEpochRef.current + 1,
-      active: lifetime.active,
-    };
+    readFocus.current = { epoch: readEpochRef.current + 1, active: lifetime.active };
     running.current = true;
     setBusy(true);
     try {
@@ -324,12 +310,7 @@ function RecipeEditorLive({
             row.result &&
             !row.result.ok &&
             (row.result.reason === 'stale' || row.result.refreshDefinitions)
-              ? {
-                  ...row,
-                  command: undefined,
-                  result: undefined,
-                  uncertain: false,
-                }
+              ? { ...row, command: undefined, result: undefined, uncertain: false }
               : row,
           ),
         );
@@ -444,13 +425,7 @@ function RecipeEditorLive({
     }
   }
   const currentHref = read?.public
-    ? subjectHref(
-        {
-          id: read.public.subject.id,
-          label: pickText(read.public.subject.labels, locale).text,
-        },
-        locale,
-      ).href
+    ? subjectHref({ id: read.public.subject.id, label: pickText(read.public.subject.labels, locale).text }, locale).href
     : undefined;
   const Workspace = id ? 'div' : 'form';
   return (
@@ -460,10 +435,7 @@ function RecipeEditorLive({
       </PageHeading>
       {!id && (
         <a
-          className={buttonVariants({
-            variant: 'outline',
-            className: recipeActionClassName,
-          })}
+          className={buttonVariants({ variant: 'outline', className: recipeActionClassName })}
           href={`/${locale}/search${terms[0]?.label.trim() ? `?q=${encodeURIComponent(terms[0].label.trim())}` : ''}`}
         >
           {m.catalogue_create_search({}, o)}
@@ -521,10 +493,7 @@ function RecipeEditorLive({
                     setCreated({ ...created, reader });
                   } catch {
                     if (!lifetime.active()) return;
-                    setCreated({
-                      ...created,
-                      reader: { state: 'unavailable' },
-                    });
+                    setCreated({ ...created, reader: { state: 'unavailable' } });
                   } finally {
                     if (!lifetime.active()) return;
                     setBusy(false);
@@ -648,13 +617,7 @@ function RecipeEditorLive({
                     const id = nextTermId.current++;
                     setTerms((previous) => [
                       ...previous,
-                      {
-                        id,
-                        language: '',
-                        label: '',
-                        description: '',
-                        aliases: '',
-                      },
+                      { id, language: '', label: '', description: '', aliases: '' },
                     ]);
                   }}
                 >
@@ -995,18 +958,8 @@ function RecipeFieldLive({
   const [removingId, setRemovingId] = useState<string>();
   const confirmingRemoval = removingId === row.id;
   // A queued confirmation must use the current lock and stable row, even after a submit or retirement.
-  const removal = useRef({
-    locked: removalLocked,
-    id: row.id,
-    onRemove,
-    removalAllowed,
-  });
-  removal.current = {
-    locked: removalLocked,
-    id: row.id,
-    onRemove,
-    removalAllowed,
-  };
+  const removal = useRef({ locked: removalLocked, id: row.id, onRemove, removalAllowed });
+  removal.current = { locked: removalLocked, id: row.id, onRemove, removalAllowed };
   const canRemove = () =>
     lifetime.active() &&
     !running.current &&
@@ -1112,11 +1065,7 @@ function RecipeFieldLive({
       });
     } catch {
       if (!lifetime.active() || !isReadEpochCurrent(readEpoch)) return;
-      onState({
-        command: pending,
-        result: { ok: false, reason: 'unavailable' },
-        uncertain: true,
-      });
+      onState({ command: pending, result: { ok: false, reason: 'unavailable' }, uncertain: true });
     } finally {
       if (!lifetime.active()) return;
       setBusy(false);
@@ -1289,16 +1238,10 @@ function RecipeFieldLive({
                   .map((error) => ({ ...error, target: error.target! })),
               }}
               definition={definition}
-              read={{
-                release: read.release,
-                public: { related: currentRead?.public?.related ?? {} },
-              }}
+              read={{ release: read.release, public: { related: currentRead?.public?.related ?? {} } }}
               locale={locale}
               onChange={(value) =>
-                changePart('value', (entry) => ({
-                  ...entry,
-                  statement: { ...entry.statement, value },
-                }))
+                changePart('value', (entry) => ({ ...entry, statement: { ...entry.statement, value } }))
               }
             />
           )}
@@ -1331,10 +1274,7 @@ function RecipeFieldLive({
                               parts: [
                                 {
                                   property: { id: 'schema:url' },
-                                  value: {
-                                    type: 'value' as const,
-                                    content: url.trim(),
-                                  },
+                                  value: { type: 'value' as const, content: url.trim() },
                                 },
                               ],
                             },
