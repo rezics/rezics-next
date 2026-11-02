@@ -116,6 +116,42 @@ test('required Character metadata recovery fences retained term callbacks and pr
     );
   try {
     await paint();
+    for (const kind of ['language', 'fact'] as const) {
+      for (const mode of ['keyboard', 'pointer', 'moved', 'retired'] as const) {
+        if (kind === 'fact')
+          await act(async () =>
+            user.selectOptions(canvas.getByRole('combobox', { name: m.character_initial_fact() }), 'schema:url'),
+          );
+        const add = canvas.getByRole('button', {
+          name: kind === 'language' ? m.catalogue_create_add_language() : m.character_add_fact(),
+        });
+        add.focus();
+        await act(async () => {
+          if (mode === 'keyboard') await user.keyboard('{Enter}');
+          else if (mode === 'pointer') await user.click(add);
+          else if (mode === 'retired') {
+            add.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 0 }));
+            revision += '-next';
+            await paint();
+          } else {
+            add.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 0 }));
+            input(m.catalogue_create_label()).focus();
+            add.focus();
+          }
+        });
+        const target =
+          kind === 'language'
+            ? input(m.catalogue_create_language(), 1)
+            : host.querySelector('[data-slot="character-initial-fact"] > [id]');
+        expect(target).not.toBeNull();
+        expect(window.document.activeElement).toBe(mode === 'keyboard' ? target : add);
+        await click(kind === 'language' ? m.catalogue_create_remove_language() : m.recipe_remove_field());
+        if (kind === 'fact') await click(m.recipe_remove_field());
+        expect(window.document.activeElement).toBe(
+          kind === 'language' ? add : canvas.getByRole('combobox', { name: m.character_initial_fact() }),
+        );
+      }
+    }
     await replace(input(m.catalogue_create_label()), 'Traveler');
     await click(m.catalogue_create_add_language());
     await replace(input(m.catalogue_create_language(), 1), 'ja');

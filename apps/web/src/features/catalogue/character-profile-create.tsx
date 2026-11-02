@@ -1,5 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useId, useRef, useState, useLayoutEffect } from 'react';
+import { useId, useRef, useState, useLayoutEffect, type MouseEvent } from 'react';
 import type { Release } from '@rezics/definitions';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -25,6 +25,43 @@ import { characterDraft, characterGroups, type CharacterCommand, type CharacterT
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const labelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
+
+/** Addition intent is independent of the existing removal handoff. */
+function useCharacterAdditionFocus() {
+  const pending = useRef<{
+    origin: HTMLButtonElement;
+    targetId: string;
+    admitted: () => boolean;
+    dispose: () => void;
+  } | null>(null);
+  const cancel = () => {
+    pending.current?.dispose();
+    pending.current = null;
+  };
+  useLayoutEffect(() => {
+    const intent = pending.current;
+    cancel();
+    if (!intent) return;
+    const { origin, targetId, admitted } = intent;
+    if (!origin.isConnected || origin.ownerDocument.activeElement !== origin || !admitted()) return;
+    const target = origin.ownerDocument.getElementById(targetId);
+    if (target && origin.form?.contains(target) && !target.matches(':disabled')) target.focus();
+  });
+  useLayoutEffect(() => cancel, []);
+  return (event: MouseEvent<HTMLButtonElement>, targetId: string, admitted: () => boolean) => {
+    cancel();
+    const origin = event.currentTarget;
+    if (event.detail !== 0 || origin.ownerDocument.activeElement !== origin) return;
+    // Leaving and returning before the commit must still cancel this intent.
+    origin.addEventListener('focusout', cancel);
+    pending.current = {
+      origin,
+      targetId,
+      admitted,
+      dispose: () => origin.removeEventListener('focusout', cancel),
+    };
+  };
+}
 
 /** Confirm against the stable row that owns this control, rather than a changing list index. */
 function DraftRemoval({
@@ -246,6 +283,16 @@ function CharacterProfileCreateLive({
   const locked = busy || refreshing || !!pending.current;
   const scalarAdmission = useRef({ release, locked });
   scalarAdmission.current = { release, locked };
+  const additionRows = useRef({ terms, facts });
+  additionRows.current = { terms, facts };
+  const focusAddition = useCharacterAdditionFocus();
+  const additionIsCurrent = () =>
+    isCurrent() &&
+    scalarAdmission.current.release === release &&
+    !scalarAdmission.current.locked &&
+    !running.current &&
+    !refreshRunning.current &&
+    !pending.current;
   async function refreshDefinitions() {
     if (!isCurrent() || !onRefreshDefinitions || refreshRunning.current || pending.current) return;
     refreshRunning.current = true;
@@ -428,10 +475,14 @@ function CharacterProfileCreateLive({
           type="button"
           variant="outline"
           disabled={locked}
-          onClick={() => {
+          onClick={(event) => {
             if (locked || running.current || pending.current) return;
             const id = nextTermId.current++;
-            focusAfterChange.current = `${termsId}-language-${id}`;
+            focusAddition(
+              event,
+              `${termsId}-language-${id}`,
+              () => additionIsCurrent() && additionRows.current.terms.some((row) => row.id === id),
+            );
             setTerms((previous) => [...previous, { id, language: '', label: '', description: '', aliases: '' }]);
           }}
         >
@@ -476,7 +527,7 @@ function CharacterProfileCreateLive({
           type="button"
           variant="outline"
           disabled={locked || !selectedField}
-          onClick={() => {
+          onClick={(event) => {
             if (locked || running.current || !available.includes(field)) return;
             const fact: StatementInput = {
               property: { id: field },
@@ -485,7 +536,15 @@ function CharacterProfileCreateLive({
               references: [],
               rank: 'normal',
             };
-            focusAfterChange.current = `${characterFactId(termsId, factId(fact))}-group`;
+            const id = factId(fact);
+            focusAddition(
+              event,
+              `${characterFactId(termsId, id)}-group`,
+              () =>
+                additionIsCurrent() &&
+                additionRows.current.facts.some((row) => factId(row) === id) &&
+                available.includes(fact.property.id),
+            );
             setFacts([...facts, fact]);
             setField('');
           }}

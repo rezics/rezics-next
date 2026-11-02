@@ -70,6 +70,8 @@ Character creation keeps multilingual terms and optional initial facts in semant
 content frame; terms use one column on phones and two on desktop. Confirmed creation leads with its status and
 reader actions, with the exact returned ID in labeled technical details; concealment and unavailable-reader
 messages remain visible beside the read retry.
+Decision: Character keyboard Add language or fact focuses the exact admitted stable row's language input or fact group; pointer additions, moved focus (including away and back), and retired or replaced rows, readings or metadata stay quiet, while removal keeps its existing handoff.
+
 Character creation guards router and unload departure while a language row or initial-fact property is staged, a
 term is edited, or a create is unresolved; Stay retains local controls and exact retry intent, while Leave retires
 local recovery without cancelling a sent native operation.
