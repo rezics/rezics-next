@@ -88,7 +88,7 @@ export type FieldErrorCode =
   | 'unsupported';
 export type FieldError = { pointer: string; code: FieldErrorCode };
 
-function truncateDetail(detail: string): string {
+export function truncateDetail(detail: string): string {
   let result = '';
   let length = 0;
   for (const character of detail) {

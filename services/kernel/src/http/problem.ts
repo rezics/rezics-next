@@ -2,6 +2,7 @@ import {
   PROBLEM_TYPE_BASE,
   PROBLEMS,
   ProblemError,
+  truncateDetail,
   type ProblemCode,
   type FieldErrorCode,
   type FieldError,

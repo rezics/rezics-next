@@ -20,7 +20,7 @@ function cost(relations: Cost['relations']): Cost {
 
 function sample(
   repetitions: readonly Cost[],
-  relationSizes = { [relation]: { reltuples: 1, relpages: 9 } },
+  relationSizes: AccessPathSample['relationSizes'] = { [relation]: { reltuples: 1, relpages: 9 } },
 ): AccessPathSample {
   return { scale: 32, repetitions, relationSizes };
 }

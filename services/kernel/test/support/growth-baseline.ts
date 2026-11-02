@@ -314,7 +314,7 @@ function loopChoices(
     const header = code.slice(open + 1, close);
     const declaration = header.match(/^\s*const\s+([A-Za-z_$][\w$]*)\s+of\s*\[/);
     if (!declaration || declaration[1] !== name) continue;
-    const axisOpen = open + 1 + header.indexOf('[', declaration.index + declaration[0].length - 1);
+    const axisOpen = open + 1 + header.indexOf('[', declaration[0].length - 1);
     const axisClose = matchingDelimiter(code, axisOpen);
     if (axisClose === undefined || axisClose > close) continue;
     const body = skipSpace(code, close + 1, code.length);

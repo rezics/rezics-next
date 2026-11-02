@@ -157,13 +157,13 @@ test('native author, another account and anonymous see only their permitted moun
     operations: ['content_edition.create', 'post.revise'],
   });
   expect(own[3]!.viewerActions).toContainEqual({ action: 'edition:sell', operations: ['content_edition.publish'] });
-  expect(own[4]).toEqual({ ...refs[4], error: 'not_found' });
+  expect(own[4]).toEqual({ ...refs[4]!, error: 'not_found' });
   for (const token of [other, undefined]) {
     const entries = await actions(token, refs);
     expect(operations(entries[2]!)).toContain('post.get');
     expect(operations(entries[2]!)).not.toContain('post.revise');
     expect(operations(entries[2]!)).not.toContain('content_edition.create');
-    expect(entries[3]).toEqual({ ...refs[3], error: 'not_found' });
+    expect(entries[3]).toEqual({ ...refs[3]!, error: 'not_found' });
   }
   // The advertised owner operation actually publishes the draft on the real kernel.
   await value(

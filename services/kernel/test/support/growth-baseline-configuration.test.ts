@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { GROWTH_BASELINE } from './growth-baseline.ts';
+import { GROWTH_BASELINE, validateGrowthBaseline } from './growth-baseline.ts';
 import { checkGrowth, type GrowthCheck, type GrowthDatabase } from './growth.ts';
 
 // A retired exemption can survive as text after its check is gone.

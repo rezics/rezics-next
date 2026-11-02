@@ -8,7 +8,9 @@ test('checkedMultiplyDivide rejects non-finite operands before zero short-circui
       [[0, invalid, 1], 'b'],
       [[0, 1, invalid], 'c'],
     ] as const)
-      expect(() => checkedMultiplyDivide(...operands, 'Growth slope')).toThrow(`Growth slope operand ${name}`);
+      expect(() => checkedMultiplyDivide(operands[0], operands[1], operands[2], 'Growth slope')).toThrow(
+        `Growth slope operand ${name}`,
+      );
 });
 
 test('checkedMultiplyDivide keeps finite signed, subnormal, and intermediate-safe results', () => {
