@@ -209,9 +209,9 @@ test('Album creation composes complete terms and initial facts while preserving 
     await replace(retainedLabel, '港の演奏');
     await click(scope, m.album_create());
     expect(writes(fixture)).toHaveLength(0);
-    const errorAnchor = scope.querySelector<HTMLAnchorElement>('a[href="#album-terms"]')!;
+    const errorAnchor = scope.querySelector<HTMLAnchorElement>(`a[href="#${languages[1]!.id}"]`)!;
     expect(errorAnchor).not.toBeNull();
-    expect(window.document.getElementById(errorAnchor.hash.slice(1))).toBe(terms);
+    expect(window.document.getElementById(errorAnchor.hash.slice(1))).toBe(languages[1]);
     const removeMiddle = within(blank).getByRole('button', { name: m.catalogue_create_remove_language() });
     expect(removeMiddle.getAttribute('aria-controls')).toBe(blank.id);
     removeMiddle.focus();
@@ -400,6 +400,65 @@ test('Album creation composes complete terms and initial facts while preserving 
       await until(() => panel.textContent!.includes(m.catalogue_create_created()));
       expect(writes(failed)[1]!.key).not.toBe(first.key);
     }
+
+    // Native grouped indices distinguish repeated creators; authored languages keep separate targets.
+    const exact = albumFixture('reader-unavailable');
+    let rejection = true;
+    const commands: import('../src/features/catalogue/album-profile').AlbumCommand[] = [];
+    const exactPanel = await ready(exact, { transport: {
+      ...exact.transport,
+      create: async (command) => {
+        commands.push(structuredClone(command));
+        if (!rejection) return exact.transport.create(command);
+        return { ok: false, reason: 'invalid', errors: [
+          { pointer: '/statements/schema:contributor/1/value/content', code: 'unsupported' },
+          { pointer: '/labels/ja', code: 'out_of_range' },
+          { pointer: '/statements/schema:contributor/1/qualifiers/0/value/content', code: 'invalid_format' },
+          { pointer: '/statements/schema:contributor/1/references/0/parts/0/value/content', code: 'invalid_format' },
+          { pointer: '/statements/schema:contributor/01/value/content', code: 'unsupported' },
+        ] };
+      },
+    } });
+    await replace(textbox(exactPanel, m.catalogue_create_label()), 'First name');
+    await click(exactPanel, m.catalogue_create_add_language());
+    const secondTerms = within(exactPanel).getAllByRole('textbox', { name: m.catalogue_create_language() })[1]!.closest('fieldset')!;
+    await replace(textbox(secondTerms, m.catalogue_create_language()), 'ja');
+    await replace(textbox(secondTerms, m.catalogue_create_label()), 'Second name');
+    const firstCreator = await add(exactPanel, 'schema:contributor');
+    const secondCreator = await add(exactPanel, 'schema:contributor');
+    for (const creator of [firstCreator, secondCreator])
+      await chooseTarget(creator, name(exact, 'schema:contributor'), 'Harbour', /Harbour/);
+    await select(secondCreator, m.relation_qualifier(), 'wdt:P1932');
+    await replace(textbox(secondCreator, name(exact, 'wdt:P1932')), 'Credit');
+    await replace(textbox(secondCreator, m.relation_citation()), 'https://example.com/credit');
+    await click(exactPanel, m.album_create());
+    await until(() => commands.length === 1 && exactPanel.querySelector('form')?.getAttribute('aria-busy') === 'false');
+    const corrections = [...exactPanel.querySelectorAll<HTMLAnchorElement>('[role="alert"] a')];
+    expect(corrections).toHaveLength(4);
+    expect(corrections[0]!.hash).toBe(`#${secondCreator.id}-value`);
+    expect(corrections[1]!.hash).toBe(`#${textbox(secondTerms, m.catalogue_create_label()).id}`);
+    expect(corrections[2]!.hash).toBe(`#${secondCreator.id}-qualifier-0`);
+    expect(corrections[3]!.hash).toBe(`#album-citation-${secondCreator.id.slice('album-row-'.length)}`);
+    expect(exactPanel.textContent).toContain('/statements/schema:contributor/01/value/content');
+    for (const [index, row] of [[0, secondCreator], [2, secondCreator], [3, secondCreator]] as const) {
+      await act(async () => user.click(corrections[index]!));
+      expect(row.contains(window.document.activeElement)).toBe(true);
+      expect(window.document.activeElement?.matches(':disabled')).toBe(false);
+    }
+    await chooseTarget(secondCreator, name(exact, 'schema:contributor'), 'Harbour', /Harbour/);
+    await act(async () => user.click(corrections[1]!));
+    expect(window.document.activeElement).toBe(textbox(secondTerms, m.catalogue_create_label()));
+    await replace(textbox(secondTerms, m.catalogue_create_label()), 'Corrected second name');
+    rejection = false;
+    await click(exactPanel, m.album_create());
+    await until(() => exactPanel.textContent!.includes(m.catalogue_create_reader_unavailable()));
+    expect(commands[1]!.item.labels).toEqual({ en: 'First name', ja: 'Corrected second name' });
+    expect(commands[1]!.item.statements['schema:contributor']![0]).toEqual(commands[0]!.item.statements['schema:contributor']![0]);
+    expect(commands[1]!.key).not.toBe(commands[0]!.key);
+    exact.setScenario('ready');
+    await click(exactPanel, m.catalogue_create_retry());
+    await until(() => within(exactPanel).queryByRole('link', { name: m.catalogue_create_open() }) !== null);
+    expect(commands).toHaveLength(2);
 
     // Failed metadata refresh keeps the draft locked after Review new until deliberate successful reload.
     const metadata = albumFixture('invalid');

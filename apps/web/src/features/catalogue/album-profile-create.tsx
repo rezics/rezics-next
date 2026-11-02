@@ -9,6 +9,8 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { useId, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
+import { albumCreateCorrections, type AlbumCorrection, type AlbumRow } from './album-create-guidance';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
@@ -26,7 +28,7 @@ import type { StatementInput } from './statement-editor';
 import { ScalarControl } from './statement-editor-view';
 import { DefinitionMeaning } from './definition-meaning';
 
-type Row = { id: string; statement: StatementInput };
+type Row = AlbumRow;
 
 // Semantic form owners retain their native controls; the lower family supplies only presentation.
 const panelClassName =
@@ -70,6 +72,7 @@ function AlbumProfileCreateLive({
   const [rows, setRows] = useState<Row[]>([]);
   const [property, setProperty] = useState('');
   const [failure, setFailure] = useState<CreateFailure>();
+  const [corrections, setCorrections] = useState<AlbumCorrection[]>([]);
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
   const [busy, setBusy] = useState(false);
   const pending = useRef<AlbumCommand | null>(null);
@@ -90,6 +93,7 @@ function AlbumProfileCreateLive({
       );
       if (draft.errors.length) {
         setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
+        setCorrections(albumCreateCorrections(draft.errors, terms, rows, release, locale, termsId));
         return;
       }
       pending.current = { item: draft.item, key: crypto.randomUUID() };
@@ -103,6 +107,7 @@ function AlbumProfileCreateLive({
       if (result.ok) setCreated(result);
       else {
         setFailure(result);
+        setCorrections(albumCreateCorrections(result.errors ?? [], terms, rows, release, locale, termsId));
         if (result.refreshDefinitions) {
           try {
             const next = await transport.load();
@@ -157,7 +162,9 @@ function AlbumProfileCreateLive({
                     running.current = true;
                     setBusy(true);
                     try {
-                      setCreated({ ...created, reader: await transport.read(created.id) });
+                      const reader = await transport.read(created.id);
+                      if (!lifetime.active()) return;
+                      setCreated({ ...created, reader });
                     } catch {
                       if (!lifetime.active()) return;
                       setCreated({ ...created, reader: { state: 'unavailable' } });
@@ -379,22 +386,33 @@ function AlbumProfileCreateLive({
                     ? m.catalogue_create_signed_out({}, o)
                     : m.catalogue_create_uncertain({}, o)}
           </p>
-          {failure.errors?.map((error, index) => {
-            const row = rows.find((row) => error.pointer.includes(row.statement.property.id));
-            return (
-              <p key={index}>
+          {corrections.map((correction, index) => (
+            <p key={index}>
+              {correction.target && (terms.some((term) => ['language', 'label', 'description', 'aliases'].some((field) => correction.target === `${termsId}-${field}-${term.id}`)) || rows.some((row) => correction.target === `album-citation-${row.id}` || correction.target === `album-row-${row.id}` || correction.target!.startsWith(`album-row-${row.id}-`))) ? (
                 <a
                   className="inline-flex min-h-11 min-w-11 max-w-full items-center underline [overflow-wrap:anywhere] md:pointer-fine:min-h-8"
-                  href={row ? `#album-row-${row.id}` : '#album-terms'}
+                  href={`#${correction.target}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    // Following an invalid-field correction explicitly reviews a new command.
+                    if (failure.reason === 'invalid' && !busy && !metadataFailure) {
+                      flushSync(() => {
+                        pending.current = null;
+                        setFailure({ ...failure });
+                      });
+                    }
+                    const target = document.getElementById(correction.target!);
+                    const input = target?.matches('input,textarea,select') ? target :
+                      target?.querySelector<HTMLElement>('input:not(:disabled),textarea:not(:disabled),select:not(:disabled),[role="combobox"]');
+                    (input ?? target)?.focus();
+                  }}
                 >
-                  {row
-                    ? pickText(release.properties[row.statement.property.id]?.labels ?? {}, locale).text
-                    : m.catalogue_create_terms({}, o)}
-                  : {m.catalogue_create_invalid_field({}, o)}
+                  {correction.label}: {correction.advice}
                 </a>
-              </p>
-            );
-          })}
+              ) : <span>{correction.label}: {correction.advice}</span>}
+              <code className="block break-all" dir="ltr">{correction.pointer} ({correction.code})</code>
+            </p>
+          ))}
           {pending.current && definiteFailure && (
             <Button
               className={actionClassName}
@@ -402,7 +420,7 @@ function AlbumProfileCreateLive({
               variant="outline"
               onClick={() => {
                 pending.current = null;
-                setFailure(undefined);
+                setFailure({ ...failure });
               }}
             >
               {m.catalogue_create_review_new({}, o)}
@@ -469,7 +487,7 @@ function AlbumInitialField({
     async (text, signal) =>
       (await search(text, signal)).filter((item) => albumTarget(release, property, item.types));
   return (
-    <fieldset id={`album-row-${row.id}`} disabled={disabled} className="min-w-0">
+    <fieldset id={`album-row-${row.id}`} tabIndex={-1} disabled={disabled} className="min-w-0">
       <legend className="sr-only">
         <DefinitionMeaning values={definition?.labels} locale={locale} />
       </legend>
@@ -484,6 +502,7 @@ function AlbumInitialField({
           <p className="text-sm text-muted-foreground">
             <DefinitionMeaning values={definition?.descriptions} locale={locale} />
           </p>
+          <div id={`album-row-${row.id}-value`} tabIndex={-1}>
           {definition?.datatype === 'wikibase-item' ? (
             <EntityPicker
               label={named(statement.property.id)}
@@ -498,6 +517,7 @@ function AlbumInitialField({
             />
           ) : (
             <ScalarControl
+              feedback={{ id: `album-row-${row.id}`, address: 'fact', errors: [] }}
               part={statement}
               definition={definition}
               read={{ release, public: { related: {} } }}
@@ -505,6 +525,7 @@ function AlbumInitialField({
               onChange={(value) => change({ ...statement, value })}
             />
           )}
+          </div>
           {definition?.datatype === 'url' && statement.value.type === 'value' && (
             <p
               dir="ltr"
@@ -517,7 +538,7 @@ function AlbumInitialField({
             const metadata = release.properties[part.property.id];
             return (
               <div key={at} className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-                <div className={qualifierClassName}>
+                <div id={`album-row-${row.id}-qualifier-${at}`} tabIndex={-1} className={qualifierClassName}>
                   <QualifierInput
                     definition={
                       metadata

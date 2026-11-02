@@ -47,6 +47,8 @@ facts and correction links on refresh failure with a metadata retry. Populated l
 row-local removal confirmation with Cancel; surviving inputs retain their stable correction targets. Uncertain
 submissions keep removal and editing locked to the original request.
 
+Album creation resolves rejected submitted indices to stable assertion rows and authored language controls; following an invalid correction explicitly reviews a new command, while conflicts still require Review and uncertain commands remain sealed. Unknown addresses remain inspectable without a correction link.
+
 ## Create and correct a recipe
 
 `/{locale}/catalogue/recipe`, linked from catalogue creation, creates a released `schema:Recipe` with initial
