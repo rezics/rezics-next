@@ -105,6 +105,17 @@ type MutableRelationCost = {
   sequentialScans: number;
 };
 type RelationContext = { readonly schema?: string };
+type Blame = { blocks: number; rows: number; name: string | undefined };
+
+export type PlanCostProjection = {
+  readonly rows: number;
+  readonly blocks: number;
+  readonly sharedHit: number;
+  readonly sharedRead: number;
+  readonly limitations: readonly string[];
+  readonly relationIdentities: readonly RelationIdentity[];
+  readonly node?: string;
+};
 
 const rowScans = new Set([
   'Seq Scan',
@@ -429,13 +440,24 @@ function addCteScanBlocks(blocks: Map<PlanNode, CteBlocks>, producer: PlanNode, 
   });
 }
 
+function considerBlame(current: Blame, blocks: number, rows: number, name: string): Blame {
+  return blocks > current.blocks || (blocks === current.blocks && rows > current.rows)
+    ? { blocks, rows, name }
+    : current;
+}
+
 function costNode(
   root: PlanNode,
   relations: Map<string, MutableRelationCost>,
   location: string,
   session: PlanWalkSession,
   database?: string,
-): { readonly totals: NodeTotals; readonly cteBlocks: CteBlocks; readonly cteLimitations: readonly string[] } {
+): {
+  readonly totals: NodeTotals;
+  readonly cteBlocks: CteBlocks;
+  readonly cteLimitations: readonly string[];
+  readonly node?: string;
+} {
   const cteScopes = indexCteScopes(root, location, session);
   const producerBlocks = new Map<PlanNode, CteBlocks>();
   const scanBlocks = new Map<PlanNode, CteBlocks>();
@@ -449,8 +471,10 @@ function costNode(
     parentContexts[depth] = hasRelation ? (schema === undefined ? {} : { schema }) : parent;
   }
   const totalsByNode = new Map<PlanNode, NodeTotals>();
+  let costliest: Blame = { blocks: -1, rows: -1, name: undefined };
+  let costliestNamed: Blame = { blocks: -1, rows: -1, name: undefined };
   for (const { node, depth } of walkPlanTree(root, location, 'postorder', session)) {
-    const nodeType = typeof node['Node Type'] === 'string' ? node['Node Type'] : '';
+    const nodeType = typeof node['Node Type'] === 'string' ? node['Node Type'] : 'Unknown';
     const actualRows = requiredNumber(node, 'Actual Rows');
     const loops = optionalNumber(node, 'Actual Loops', 1);
     const hit = optionalNumber(node, 'Shared Hit Blocks');
@@ -480,45 +504,50 @@ function costNode(
         )
       : 0;
     const examined = rowScans.has(nodeType) && loops > 0 ? checkedMultiply(rowsPerLoop, loops, 'Rows examined') : 0;
+    const modified =
+      nodeType === 'ModifyTable' && loops > 0 ? checkedMultiply(actualRows, loops, 'Rows modified') : 0;
+    const exclusiveBlocks = checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive node blocks');
+    const relationName = node['Relation Name'];
+    const indexName = node['Index Name'];
+    const relation =
+      typeof relationName === 'string'
+        ? `${typeof node.Schema === 'string' ? `${node.Schema}.` : ''}${relationName}`
+        : typeof indexName === 'string'
+          ? `index:${indexName}`
+          : undefined;
+    const blameName = `${nodeType}${relation ? ` ${relation}` : ''}`;
+    const blameRows = nodeType === 'ModifyTable' ? modified : examined;
+    costliest = considerBlame(costliest, exclusiveBlocks, blameRows, blameName);
+    if (relation !== undefined) costliestNamed = considerBlame(costliestNamed, exclusiveBlocks, blameRows, blameName);
 
-    if (rowScans.has(nodeType) || nodeType === 'ModifyTable') {
-      const relationName = node['Relation Name'];
-      if (typeof relationName === 'string') {
-        const schema = typeof node.Schema === 'string' ? node.Schema : undefined;
-        addRelation(
-          relations,
-          {
-            ...(database === undefined ? {} : { database }),
-            ...(schema === undefined ? {} : { schema }),
-            kind: 'relation',
-            name: relationName,
-          },
-          nodeType === 'ModifyTable' && loops > 0
-            ? checkedMultiply(actualRows, loops, 'Rows modified')
-            : nodeType === 'ModifyTable'
-              ? 0
-              : examined,
-          checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive relation blocks'),
-          nodeType === 'Seq Scan' && loops > 0 ? 1 : 0,
-        );
-      }
-    } else if (nodeType === 'Bitmap Index Scan') {
-      const indexName = node['Index Name'];
-      if (typeof indexName === 'string') {
-        const schema =
-          (typeof node.Schema === 'string' ? node.Schema : undefined) ?? relationContexts.get(node)?.schema;
-        addRelation(
-          relations,
-          {
-            ...(database === undefined ? {} : { database }),
-            ...(schema === undefined ? {} : { schema }),
-            kind: 'index',
-            name: indexName,
-          },
-          0,
-          checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive index blocks'),
-        );
-      }
+    if ((rowScans.has(nodeType) || nodeType === 'ModifyTable') && typeof relationName === 'string') {
+      const schema = typeof node.Schema === 'string' ? node.Schema : undefined;
+      addRelation(
+        relations,
+        {
+          ...(database === undefined ? {} : { database }),
+          ...(schema === undefined ? {} : { schema }),
+          kind: 'relation',
+          name: relationName,
+        },
+        nodeType === 'ModifyTable' ? modified : examined,
+        checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive relation blocks'),
+        nodeType === 'Seq Scan' && loops > 0 ? 1 : 0,
+      );
+    } else if (nodeType === 'Bitmap Index Scan' && typeof indexName === 'string') {
+      const schema =
+        (typeof node.Schema === 'string' ? node.Schema : undefined) ?? relationContexts.get(node)?.schema;
+      addRelation(
+        relations,
+        {
+          ...(database === undefined ? {} : { database }),
+          ...(schema === undefined ? {} : { schema }),
+          kind: 'index',
+          name: indexName,
+        },
+        0,
+        checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive index blocks'),
+      );
     }
 
     totalsByNode.set(node, {
@@ -527,10 +556,51 @@ function costNode(
       inclusiveRead: read,
     });
   }
+  const node = costliestNamed.name ?? costliest.name;
   return {
     totals: totalsByNode.get(root)!,
     cteBlocks: unscannedCteBlocks(cteScopes, producerBlocks, scanBlocks),
     cteLimitations: cteScopes.limitations,
+    ...(node === undefined ? {} : { node }),
+  };
+}
+
+/** Rows, blocks and blame node for one native plan, using the same accounting as costOf. */
+export function costOfPlan(
+  root: PlanNode,
+  location: string,
+  database?: string,
+  session = createPlanWalkSession(),
+): PlanCostProjection {
+  return projectPlanCost(root, location, new Map(), session, database);
+}
+
+function projectPlanCost(
+  root: PlanNode,
+  location: string,
+  relations: Map<string, MutableRelationCost>,
+  session: PlanWalkSession,
+  database?: string,
+): PlanCostProjection {
+  const nodeCost = costNode(root, relations, location, session, database);
+  const sharedHit = checkedAdd(
+    nodeCost.totals.inclusiveHit,
+    nodeCost.cteBlocks.hit,
+    'Total shared hit blocks including CTE work',
+  );
+  const sharedRead = checkedAdd(
+    nodeCost.totals.inclusiveRead,
+    nodeCost.cteBlocks.read,
+    'Total shared read blocks including CTE work',
+  );
+  return {
+    rows: nodeCost.totals.rows,
+    sharedHit,
+    sharedRead,
+    blocks: checkedAdd(sharedHit, sharedRead, 'Total shared blocks'),
+    limitations: nodeCost.cteLimitations,
+    relationIdentities: [...relations.values()].map((relation) => relation.identity),
+    ...(nodeCost.node === undefined ? {} : { node: nodeCost.node }),
   };
 }
 
@@ -673,21 +743,19 @@ function costOfAt(capture: Capture, planCollection: string, session = createPlan
         if (backendAware && !hasMatchingStatement(matchingStatements, true, queryText, backend)) included = false;
         if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) included = false;
       }
-      const nodeCost = costNode(
+      const nodeCost = projectPlanCost(
         plan,
-        included ? relations : new Map<string, MutableRelationCost>(),
         location,
+        included ? relations : new Map<string, MutableRelationCost>(),
         session,
         capture.planDatabases?.[index],
       );
       if (!included) continue;
       plans++;
-      rows = checkedAdd(rows, nodeCost.totals.rows, 'Total examined rows');
-      sharedHit = checkedAdd(sharedHit, nodeCost.totals.inclusiveHit, 'Total shared hit blocks');
-      sharedRead = checkedAdd(sharedRead, nodeCost.totals.inclusiveRead, 'Total shared read blocks');
-      sharedHit = checkedAdd(sharedHit, nodeCost.cteBlocks.hit, 'Total shared hit blocks including CTE work');
-      sharedRead = checkedAdd(sharedRead, nodeCost.cteBlocks.read, 'Total shared read blocks including CTE work');
-      limitations.push(...nodeCost.cteLimitations);
+      rows = checkedAdd(rows, nodeCost.rows, 'Total examined rows');
+      sharedHit = checkedAdd(sharedHit, nodeCost.sharedHit, 'Total shared hit blocks');
+      sharedRead = checkedAdd(sharedRead, nodeCost.sharedRead, 'Total shared read blocks');
+      limitations.push(...nodeCost.limitations);
     }
   }
 

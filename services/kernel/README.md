@@ -462,6 +462,7 @@ the call, and passes `finish` a detached `{ from, to }` copy; row-value snapshot
 Every capture drains registered query and connection setup work, including tasks added while earlier work settles,
 before restoring attribution on success or failure. If cleanup also fails, the initiating error remains the aggregate's
 cause and cleanup failures remain available in its errors.
+
 CTE buffer costs match producers and scans within nested native plan scopes. When a unique relationship cannot be
 established, producer blocks stay in the total and the unmatched relationship appears in `Cost.limitations`.
 Exported profiles keep those notes on each producing repetition and as the per-scale union `medianCost` already
@@ -473,6 +474,9 @@ value and limit; counted `bounds` continue to compare medians.
 Background limitations retain their native plan paths and identify the background plan index; a known
 `backgroundPlanStatements` entry also identifies its statement occurrence, while plans without an occurrence remain
 unattributed. Excluded background plans add no limitations.
+Statement and occurrence row and block diagnostics use the same plan-cost projection as measured costs for each
+included plan, sharing the capture plan-walk session so the aggregate node bound applies to both.
+Grouped statement totals can differ from the capture when catalog or background inclusion differs.
 
 Bulk-row seed values preserve finite JSON values, BigInt as decimal text, Date as ISO 8601 text and Uint8Array as
 PostgreSQL bytea hex text. Each admitted row is owned as that encoded snapshot before later ordinals can mutate the

@@ -1,8 +1,9 @@
-import type { Capture } from './growth-cost.ts';
+import { costOfPlan, type Capture } from './growth-cost.ts';
 import type { ByteMetric, GrowthMetric } from './growth-bound.ts';
 import type { ReportSample, StatementAttribution } from './growth.ts';
 import { indexStatementRepetitions } from './growth-report-index.ts';
-import { createPlanWalkSession, walkPlanTree, type PlanNode, type PlanWalkSession } from './growth-plan-walk.ts';
+import { checkedAdd } from './growth-numeric.ts';
+import { createPlanWalkSession, type PlanNode, type PlanWalkSession } from './growth-plan-walk.ts';
 import { validateCaptureEvidence } from './growth-capture-evidence.ts';
 import { relationIdentityKey, type RelationIdentity } from './growth-relation-identity.ts';
 
@@ -205,84 +206,12 @@ function planCost(
   session: PlanWalkSession,
   database?: string,
 ): { rows: number; blocks: number; node?: string; relationIdentities: readonly RelationIdentity[] } {
-  let rows = 0;
-  let costliest = { blocks: -1, rows: -1, name: undefined as string | undefined };
-  let costliestNamed = { blocks: -1, rows: -1, name: undefined as string | undefined };
-  const relationIdentities = new Map<string, RelationIdentity>();
-  const parentSchemas: (string | undefined)[] = [];
-  const blocks =
-    (typeof root['Shared Hit Blocks'] === 'number' ? root['Shared Hit Blocks'] : 0) +
-    (typeof root['Shared Read Blocks'] === 'number' ? root['Shared Read Blocks'] : 0);
-  for (const { node, depth } of walkPlanTree(root, location, 'preorder', session)) {
-    const type = typeof node['Node Type'] === 'string' ? node['Node Type'] : 'Unknown';
-    const relationName = typeof node['Relation Name'] === 'string' ? node['Relation Name'] : undefined;
-    const indexName = typeof node['Index Name'] === 'string' ? node['Index Name'] : undefined;
-    const ownSchema = typeof node.Schema === 'string' ? node.Schema : undefined;
-    const parentSchema = depth === 0 ? undefined : parentSchemas[depth - 1];
-    if (relationName !== undefined) {
-      const identity: RelationIdentity = {
-        ...(database === undefined ? {} : { database }),
-        ...(ownSchema === undefined ? {} : { schema: ownSchema }),
-        kind: 'relation',
-        name: relationName,
-      };
-      relationIdentities.set(relationIdentityKey(identity), identity);
-    }
-    if (indexName !== undefined) {
-      const schema = ownSchema ?? parentSchema;
-      const identity: RelationIdentity = {
-        ...(database === undefined ? {} : { database }),
-        ...(schema === undefined ? {} : { schema }),
-        kind: 'index',
-        name: indexName,
-      };
-      relationIdentities.set(relationIdentityKey(identity), identity);
-    }
-    parentSchemas[depth] = relationName === undefined ? parentSchema : ownSchema;
-    const relation =
-      relationName !== undefined
-        ? `${ownSchema === undefined ? '' : `${ownSchema}.`}${relationName}`
-        : indexName !== undefined
-          ? `index:${indexName}`
-          : undefined;
-    const loops = typeof node['Actual Loops'] === 'number' ? node['Actual Loops'] : 1;
-    const scanned = [
-      'Seq Scan',
-      'Index Scan',
-      'Index Only Scan',
-      'Bitmap Heap Scan',
-      'Tid Scan',
-      'Tid Range Scan',
-      'Sample Scan',
-    ].includes(type);
-    const nodeRows = scanned
-      ? ((typeof node['Actual Rows'] === 'number' ? node['Actual Rows'] : 0) +
-          (typeof node['Rows Removed by Filter'] === 'number' ? node['Rows Removed by Filter'] : 0) +
-          (typeof node['Rows Removed by Index Recheck'] === 'number' ? node['Rows Removed by Index Recheck'] : 0)) *
-        loops
-      : type === 'ModifyTable'
-        ? (typeof node['Actual Rows'] === 'number' ? node['Actual Rows'] : 0) * loops
-        : 0;
-    const nodeBlocks =
-      (typeof node['Shared Hit Blocks'] === 'number' ? node['Shared Hit Blocks'] : 0) +
-      (typeof node['Shared Read Blocks'] === 'number' ? node['Shared Read Blocks'] : 0);
-    rows += nodeRows;
-    if (nodeBlocks > costliest.blocks || (nodeBlocks === costliest.blocks && nodeRows > costliest.rows)) {
-      costliest = { blocks: nodeBlocks, rows: nodeRows, name: `${type}${relation ? ` ${relation}` : ''}` };
-    }
-    if (
-      relation &&
-      (nodeBlocks > costliestNamed.blocks || (nodeBlocks === costliestNamed.blocks && nodeRows > costliestNamed.rows))
-    ) {
-      costliestNamed = { blocks: nodeBlocks, rows: nodeRows, name: `${type} ${relation}` };
-    }
-  }
-  const node = costliestNamed.name ?? costliest.name;
+  const cost = costOfPlan(root, location, database, session);
   return {
-    rows,
-    blocks,
-    ...(node === undefined ? {} : { node }),
-    relationIdentities: [...relationIdentities.values()],
+    rows: Math.round(cost.rows),
+    blocks: cost.blocks,
+    ...(cost.node === undefined ? {} : { node: cost.node }),
+    relationIdentities: cost.relationIdentities,
   };
 }
 
@@ -301,8 +230,8 @@ function addPlanCost(
   const current = statements.get(key);
   if (!current) return;
   const cost = planCost(plan, location, session, database);
-  current.rows += cost.rows;
-  current.blocks += cost.blocks;
+  current.rows = checkedAdd(current.rows, cost.rows, 'Statement examined rows');
+  current.blocks = checkedAdd(current.blocks, cost.blocks, 'Statement shared blocks');
   if (cost.node) current.node = cost.node;
   for (const identity of cost.relationIdentities)
     current.relationIdentities.set(relationIdentityKey(identity), identity);
@@ -400,8 +329,8 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
       for (const planIndex of planIndices) {
         for (const entry of planEntries(plans[planIndex], `${planCollection}[${planIndex}]`)) {
           const cost = planCost(entry.plan, entry.location, session, planDatabases?.[planIndex]);
-          rows += cost.rows;
-          blocks += cost.blocks;
+          rows = checkedAdd(rows, cost.rows, 'Statement examined rows');
+          blocks = checkedAdd(blocks, cost.blocks, 'Statement shared blocks');
           for (const identity of cost.relationIdentities)
             relationIdentities.set(relationIdentityKey(identity), identity);
         }

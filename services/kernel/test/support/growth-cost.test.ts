@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
-import { costOf, isControlStatement, medianCost, type Cost } from './growth-cost.ts';
+import { costOf, costOfPlan, isControlStatement, medianCost, type Cost } from './growth-cost.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -227,6 +227,63 @@ test('a CTE read by several scans counts its blocks once', async () => {
   expect(cost.sharedHit + cost.sharedRead).toBe(expected);
   const relationBlocks = Object.values(cost.relations).reduce((sum, relation) => sum + relation.blocks, 0);
   expect(relationBlocks).toBe(expected);
+});
+
+test('examined plan rows ignore ModifyTable output and keep unmatched CTE producer blocks', () => {
+  const dml = {
+    'Node Type': 'ModifyTable',
+    Schema: 'app',
+    'Relation Name': 'items',
+    'Actual Rows': 5,
+    'Actual Loops': 1,
+    'Shared Hit Blocks': 4,
+    'Shared Read Blocks': 0,
+    Plans: [
+      {
+        'Node Type': 'Seq Scan',
+        Schema: 'app',
+        'Relation Name': 'source',
+        'Actual Rows': 10,
+        'Actual Loops': 1,
+        'Shared Hit Blocks': 4,
+        'Shared Read Blocks': 0,
+      },
+    ],
+  };
+  const cte = {
+    'Node Type': 'Result',
+    'Actual Rows': 0,
+    'Actual Loops': 1,
+    'Shared Hit Blocks': 7,
+    'Shared Read Blocks': 0,
+    Plans: [
+      {
+        'Node Type': 'Result',
+        'Subplan Name': 'CTE items',
+        'Actual Rows': 0,
+        'Actual Loops': 1,
+        'Shared Hit Blocks': 20,
+        'Shared Read Blocks': 0,
+      },
+      {
+        'Node Type': 'CTE Scan',
+        'CTE Name': 'other',
+        'Actual Rows': 0,
+        'Actual Loops': 1,
+        'Shared Hit Blocks': 7,
+        'Shared Read Blocks': 0,
+      },
+    ],
+  };
+  const dmlCost = costOf({ statements: [], plans: [[{ Plan: dml }]] });
+  const cteCost = costOf({ statements: [], plans: [[{ Plan: cte }]] });
+
+  expect(dmlCost.rows).toBe(10);
+  expect(dmlCost.relations['app.items']?.rows).toBe(5);
+  expect(dmlCost.relations['app.source']?.rows).toBe(10);
+  expect(cteCost.blocks).toBe(27);
+  expect(costOfPlan(dml, 'plan')).toMatchObject({ rows: 10, blocks: dmlCost.blocks, node: 'Seq Scan app.source' });
+  expect(costOfPlan(cte, 'plan').blocks).toBe(cteCost.blocks);
 });
 
 test('an unreferenced data-modifying CTE contributes its relation rows and blocks', async () => {

@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { withConnection } from '../../src/database/pool.ts';
+import { costOf } from './growth-cost.ts';
 import { checkGrowth, GrowthBoundError, openGrowthDatabase, type GrowthDatabase } from './growth.ts';
-import { formatStatementAttribution, statementAttributions } from './growth-report.ts';
+import { formatStatementAttribution, statementAttributions, statementOccurrences } from './growth-report.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -133,19 +134,65 @@ test('grouped statement diagnostics use supplied native occurrence ownership eve
       planStatements: [0, 0, 0, 1],
     }),
   ).toEqual([
-    { statement: groupedInsert, count: 1, rows: 18, blocks: 8, node: 'Seq Scan app.inner' },
-    { statement: lookup, count: 1, rows: 2, blocks: 2, node: 'Seq Scan app.lookup' },
+    {
+      statement: groupedInsert,
+      count: 1,
+      rows: 18,
+      blocks: 8,
+      node: 'Seq Scan app.inner',
+      relationIdentities: [
+        { schema: 'app', kind: 'relation', name: 'outer' },
+        { schema: 'app', kind: 'relation', name: 'lookup' },
+        { schema: 'app', kind: 'relation', name: 'inner' },
+      ],
+    },
+    {
+      statement: lookup,
+      count: 1,
+      rows: 2,
+      blocks: 2,
+      node: 'Seq Scan app.lookup',
+      relationIdentities: [{ schema: 'app', kind: 'relation', name: 'lookup' }],
+    },
   ]);
 
   const legacy = { statements: [insert, lookup], plans: [insertPlan, nestedLookup, queuedLookup] };
   expect(statementAttributions(legacy)).toEqual([
-    { statement: groupedInsert, count: 1, rows: 1, blocks: 1, node: 'Seq Scan app.outer' },
-    { statement: lookup, count: 1, rows: 12, blocks: 6, node: 'Seq Scan app.lookup' },
+    {
+      statement: groupedInsert,
+      count: 1,
+      rows: 1,
+      blocks: 1,
+      node: 'Seq Scan app.outer',
+      relationIdentities: [{ schema: 'app', kind: 'relation', name: 'outer' }],
+    },
+    {
+      statement: lookup,
+      count: 1,
+      rows: 12,
+      blocks: 6,
+      node: 'Seq Scan app.lookup',
+      relationIdentities: [{ schema: 'app', kind: 'relation', name: 'lookup' }],
+    },
   ]);
 
   expect(statementAttributions({ ...legacy, planStatements: [0, undefined, 1] })).toEqual([
-    { statement: groupedInsert, count: 1, rows: 1, blocks: 1, node: 'Seq Scan app.outer' },
-    { statement: lookup, count: 1, rows: 2, blocks: 2, node: 'Seq Scan app.lookup' },
+    {
+      statement: groupedInsert,
+      count: 1,
+      rows: 1,
+      blocks: 1,
+      node: 'Seq Scan app.outer',
+      relationIdentities: [{ schema: 'app', kind: 'relation', name: 'outer' }],
+    },
+    {
+      statement: lookup,
+      count: 1,
+      rows: 2,
+      blocks: 2,
+      node: 'Seq Scan app.lookup',
+      relationIdentities: [{ schema: 'app', kind: 'relation', name: 'lookup' }],
+    },
   ]);
 });
 
@@ -193,4 +240,93 @@ test('byte-growth failures distinguish measured byte totals from SQL row attribu
   expect(mixed).toContain('Per-statement responseBytes attribution is unavailable');
   expect(mixed).not.toContain('Statements growing most for responseBytes:');
   expect(mixed).not.toContain('SQL row attribution (not statement byte costs):');
+});
+
+function nativePlan(fields: Record<string, unknown> = {}, children?: unknown[]) {
+  return {
+    'Node Type': 'Result',
+    'Actual Rows': 0,
+    'Actual Loops': 1,
+    'Shared Hit Blocks': 0,
+    'Shared Read Blocks': 0,
+    ...fields,
+    ...(children === undefined ? {} : { Plans: children }),
+  };
+}
+
+test('statement diagnostics use measured plan costs for CTE reuse and DML without changing occurrence links', () => {
+  const dmlSql = 'INSERT INTO app.items SELECT value FROM app.source';
+  const dmlPlan = nativePlan(
+    {
+      'Node Type': 'ModifyTable',
+      Schema: 'app',
+      'Relation Name': 'items',
+      'Actual Rows': 5,
+      'Shared Hit Blocks': 4,
+    },
+    [
+      nativePlan({
+        'Node Type': 'Seq Scan',
+        Schema: 'app',
+        'Relation Name': 'source',
+        'Actual Rows': 10,
+        'Shared Hit Blocks': 4,
+      }),
+    ],
+  );
+  const cteSql = 'WITH items AS MATERIALIZED (SELECT 1) SELECT * FROM items';
+  const ctePlan = nativePlan({ 'Shared Hit Blocks': 7 }, [
+    nativePlan({ 'Subplan Name': 'CTE items', 'Shared Hit Blocks': 20 }),
+    nativePlan({ 'Node Type': 'CTE Scan', 'CTE Name': 'other', 'Shared Hit Blocks': 7 }),
+  ]);
+  const catalogSql = 'SELECT column_name FROM information_schema.columns WHERE table_name = $1';
+  const catalogPlan = nativePlan({
+    'Node Type': 'Index Scan',
+    Schema: 'information_schema',
+    'Relation Name': 'columns',
+    'Actual Rows': 1,
+    'Shared Hit Blocks': 1,
+  });
+  const capture = {
+    statements: [dmlSql, cteSql, catalogSql],
+    planStatements: [0, 1, 2],
+    plans: [
+      { 'Query Text': dmlSql, Plan: dmlPlan },
+      { 'Query Text': cteSql, Plan: ctePlan },
+      { 'Query Text': catalogSql, Plan: catalogPlan },
+    ],
+  };
+  const dmlCost = costOf({ statements: [dmlSql], plans: [capture.plans[0]] });
+  const cteCost = costOf({ statements: [cteSql], plans: [capture.plans[1]] });
+  const catalogCost = costOf({
+    statements: [catalogSql],
+    planStatements: [0],
+    plans: [capture.plans[2]],
+  });
+  const measured = costOf(capture);
+  const occurrences = statementOccurrences(capture).statements;
+  const attributions = statementAttributions(capture);
+
+  expect(dmlCost.rows).toBe(10);
+  expect(cteCost.blocks).toBe(27);
+  expect(catalogCost.rows).toBe(0);
+  expect(
+    occurrences.map(({ index, statement, plans, planDocuments }) => [index, statement, plans, planDocuments]),
+  ).toEqual([
+    [0, 'INSERT INTO app.items SELECT value FROM app.source', [0], [capture.plans[0]]],
+    [1, 'WITH items AS MATERIALIZED (SELECT ?) SELECT * FROM items', [1], [capture.plans[1]]],
+    [2, 'SELECT column_name FROM information_schema.columns WHERE table_name = ?', [2], [capture.plans[2]]],
+  ]);
+  expect(occurrences[0]).toMatchObject({ rows: dmlCost.rows, blocks: dmlCost.blocks });
+  expect(occurrences[1]).toMatchObject({ rows: cteCost.rows, blocks: cteCost.blocks });
+  expect(occurrences[2]!.rows).toBeGreaterThan(0);
+  expect(occurrences[0]!.rows + occurrences[1]!.rows + occurrences[2]!.rows).not.toBe(measured.rows);
+  expect(attributions.map(({ statement, count }) => [statement, count])).toEqual(
+    occurrences.map(({ statement }) => [statement, 1]),
+  );
+  expect(attributions[0]).toMatchObject({
+    rows: dmlCost.rows,
+    blocks: dmlCost.blocks,
+    node: 'Seq Scan app.source',
+  });
 });
