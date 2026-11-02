@@ -228,7 +228,7 @@ function CharacterProfileCreateLive({
                     aria-describedby={
                       [
                         feedback(`${termsId}-${key}-${term.id}`)['aria-describedby'],
-                        key === 'language' || key === 'aliases' ? `${termsId}-${key}-help` : undefined,
+                        key === 'language' ? `${termsId}-${key}-help` : undefined,
                       ]
                         .filter(Boolean)
                         .join(' ') || undefined
