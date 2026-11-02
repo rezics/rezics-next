@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { fromPlainText } from '@rezics/document';
 import { randomUUID } from 'node:crypto';
 import { createKernel, type Kernel } from '../../src/http/kernel.ts';
@@ -49,12 +50,16 @@ const operations = (entry: Entry) => entry.viewerActions?.flatMap((action) => ac
 beforeAll(async () => {
   native = await createNativeContentSystem({ databaseUrl: process.env.DATABASE_URL! });
   await bootstrapRelease(native.database.pool, bundledRelease);
+  const consent = createCurrentConsentReader({ database: native.database.authPool });
   app = createKernel({
     pool: native.database.pool,
     access: native.access,
     routeKey: native.routeKey,
     tokens: native.tokenKeys,
     receiptKeys: testReceiptKeys(),
+    content: {
+      readConsent: ({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId }),
+    },
   });
   author = native.actors.author.bearer;
   other = native.actors.other.bearer;
