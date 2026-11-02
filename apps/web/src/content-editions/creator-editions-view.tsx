@@ -10,6 +10,13 @@ export function creatorEditionsHref(cursor?: string): string {
   return localizeHref(`/editions${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
 }
 
+const inventoryBoundaryId = 'creator-editions-inventory';
+
+/** Native document navigation hands focus to an admitted page, including without hydration. */
+export function creatorEditionsContinuationHref(cursor?: string): string {
+  return `${creatorEditionsHref(cursor)}#${inventoryBoundaryId}`;
+}
+
 export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPage; cursor?: string }) {
   const href = creatorEditionsHref(cursor);
   const notice =
@@ -23,7 +30,13 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
             ? m.creator_editions_stale()
             : m.creator_editions_unavailable();
   return (
-    <section className="w-full min-w-0 space-y-7 text-foreground" aria-labelledby="creator-editions-heading">
+    <section
+      id={page.kind === 'ready' ? inventoryBoundaryId : undefined}
+      tabIndex={page.kind === 'ready' ? -1 : undefined}
+      className="w-full min-w-0 scroll-mt-24 space-y-7 text-foreground"
+      aria-labelledby="creator-editions-heading"
+      aria-describedby={page.kind === 'ready' && page.editions.length === 0 ? 'creator-editions-empty' : undefined}
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-3">
           <PageHeading id="creator-editions-heading">{m.creator_editions_heading()}</PageHeading>
@@ -52,7 +65,7 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
                   variant="outline"
                   className="min-h-11"
                   nativeButton={false}
-                  render={<a href={page.kind === 'stale' ? creatorEditionsHref() : href} />}
+                  render={<a href={page.kind === 'stale' ? creatorEditionsContinuationHref() : href} />}
                 >
                   {page.kind === 'stale' ? m.creator_editions_restart() : m.creator_editions_retry()}
                 </Button>
@@ -61,7 +74,7 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
                     variant="ghost"
                     className="min-h-11"
                     nativeButton={false}
-                    render={<a href={creatorEditionsHref()} />}
+                    render={<a href={creatorEditionsContinuationHref()} />}
                   >
                     {m.creator_editions_restart()}
                   </Button>
@@ -73,7 +86,11 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
       ) : (
         <>
           {page.editions.length === 0 ? (
-            <p role="status" className="border-y border-border py-8 text-sm text-muted-foreground">
+            <p
+              id="creator-editions-empty"
+              role="status"
+              className="border-y border-border py-8 text-sm text-muted-foreground"
+            >
               {page.next
                 ? m.creator_editions_sparse()
                 : cursor
@@ -172,7 +189,7 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
                   variant="ghost"
                   className="min-h-11"
                   nativeButton={false}
-                  render={<a href={creatorEditionsHref()} />}
+                  render={<a href={creatorEditionsContinuationHref()} />}
                 >
                   {m.creator_editions_restart()}
                 </Button>
@@ -181,7 +198,11 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
                 {m.creator_editions_refresh()}
               </Button>
               {page.next && (
-                <Button className="min-h-11" nativeButton={false} render={<a href={creatorEditionsHref(page.next)} />}>
+                <Button
+                  className="min-h-11"
+                  nativeButton={false}
+                  render={<a href={creatorEditionsContinuationHref(page.next)} />}
+                >
                   {m.creator_editions_next()}
                 </Button>
               )}

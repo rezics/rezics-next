@@ -24,7 +24,8 @@ mock.module('@tanstack/react-start/server', () => ({
   setResponseHeader: () => {},
 }));
 const { loadSessionCreatorEditions } = await import('../src/content-editions/creator-editions-read');
-const { CreatorEditionsView, creatorEditionsHref } = await import('../src/content-editions/creator-editions-view');
+const { CreatorEditionsView, creatorEditionsHref, creatorEditionsContinuationHref } =
+  await import('../src/content-editions/creator-editions-view');
 const { isSignedInPath } = await import('../src/session/guard');
 const { localizeHref } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
@@ -131,7 +132,7 @@ test('route transport errors retain the current continuation for retry alongside
   await router.load();
   const html = renderToStaticMarkup(createElement(RouterProvider, { router }));
   expect(html).toContain(`href="${creatorEditionsHref('opaque/+=')}"`);
-  expect(html).toContain(`href="${creatorEditionsHref()}"`);
+  expect(html).toContain(`href="${creatorEditionsContinuationHref()}"`);
   expect(html).toContain(m.creator_editions_restart());
 });
 
@@ -189,12 +190,13 @@ test('unavailable continuations offer retry and first-page recovery while denial
     const page = await load(api({ editions: [published], next: null }, status));
     expect(page).toEqual({ kind });
     const html = renderToStaticMarkup(createElement(CreatorEditionsView, { page }));
+    expect(html).not.toContain('id="creator-editions-inventory"');
     expect(html).not.toContain(published.editionId);
     expect(html).not.toContain(m.creator_editions_empty());
     expect(html).not.toContain('/creator/offers/new');
     const recovery = renderToStaticMarkup(createElement(CreatorEditionsView, { page, cursor: 'opaque/+=' }));
     if (kind === 'unavailable')
-      for (const href of [creatorEditionsHref('opaque/+='), creatorEditionsHref()])
+      for (const href of [creatorEditionsHref('opaque/+='), creatorEditionsContinuationHref()])
         expect(recovery).toContain(`href="${href}"`);
     expect(html.includes(m.creator_editions_restart())).toBe(kind === 'stale');
   }

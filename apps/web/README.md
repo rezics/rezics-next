@@ -51,6 +51,7 @@ Next, refresh and retry each request one native page. Sparse and empty pages wit
 no refill, count, per-row read, body fetch or title enrichment.
 Unavailable continuations retain same-page retry and offer explicit first-page restart through the existing localized
 links; route errors use the current validated cursor, and restarting drops only the cursor before a fresh session-bound read.
+Next and first-page restart use a native fragment on the existing, ready-only inventory boundary; its localized heading names the focus target without hydration or refresh focus effects.
 The rows display the native edition reference, state,
 edition version, fixed revision, licence and plain subject identifier. Drafts link to the declared resume destination
 `/editions/new?editionId=…`. Published editions link separately to buyer reading `/editions/{id}` and the declared

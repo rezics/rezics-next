@@ -164,6 +164,29 @@ test('Shared creator edition summaries preserve fixed identity state licence and
       ).toBeNull();
       expect(row.textContent).not.toMatch(/USD|EUR|\$|€|price|benefit/i);
     }
+    // Native continuation fragments resolve only to a currently admitted, keyboard-focusable page.
+    for (const [editions, nextCursor] of [
+      [[draft], 'next/+='],
+      [[], 'next/+='],
+      [[], null],
+    ] satisfies [EditionMetadata[], string | null][]) {
+      host.innerHTML = renderToStaticMarkup(
+        <CreatorEditionsView page={{ kind: 'ready', editions, next: nextCursor }} cursor="current/+=" />,
+      );
+      const links = [...host.querySelectorAll<HTMLAnchorElement>('a')];
+      const continuation = links.find((link) => link.textContent === m.creator_editions_restart());
+      if (continuation) expect(continuation.getAttribute('href')).toBe('/fr/editions#creator-editions-inventory');
+      const next = links.find((link) => link.textContent === m.creator_editions_next());
+      if (next) expect(next.getAttribute('href')).toBe('/fr/editions?cursor=next%2F%2B%3D#creator-editions-inventory');
+      const boundary = host.querySelector<HTMLElement>(continuation!.hash)!;
+      expect(window.document.activeElement).not.toBe(boundary);
+      expect(boundary.tabIndex).toBe(-1);
+      expect(boundary.getAttribute('aria-labelledby')).toBe('creator-editions-heading');
+      expect(boundary.getAttribute('aria-describedby')).toBe(editions.length ? null : 'creator-editions-empty');
+      boundary.focus();
+      expect(window.document.activeElement).toBe(boundary);
+      expect(links.find((link) => link.textContent === m.creator_editions_refresh())?.hash).toBe('');
+    }
   } finally {
     overwriteGetLocale(previousLocale);
     await window.happyDOM.close();
