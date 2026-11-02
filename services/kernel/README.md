@@ -557,7 +557,12 @@ capture associates it with a start from that operation's async context; every ot
 regardless of workflow-ID spelling. Workflows started by a schedule and their children, and loops started outside both,
 are reported as background work. Background statement counts follow measured
 wall time, while rows and blocks per bounded background statement are compared with its first observed value at every
-later scale using the default constant-cost slack. Missing executions are skipped. Statements reading only DBOS
+later scale using the default constant-cost slack. Missing executions are skipped. Per-statement background row and
+block costs first sum every included native plan that belongs to one captured occurrence and statement identity, then
+take the high-water of those occurrence totals. Distinct occurrences stay separate even when their SQL matches.
+Nested function and trigger plans keep their own statement identity so parent-inclusive native work is not counted
+twice. Captures without `backgroundPlanStatements` cannot recover occurrence identity from SQL text; those plans are
+summed by statement text as one conservative execution. Statements reading only DBOS
 system relations remain reported, but their row and block growth is not bounded because `grow` does not seed DBOS
 history; that history's growth is a production retention question, not a growth check result. A scale with no
 applicable background statement is skipped for that bound.

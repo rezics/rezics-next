@@ -626,3 +626,61 @@ test('median cost validates supplied core, relation and background evidence befo
     /requestBytes/,
   );
 });
+
+function backgroundScan(queryText: string, rows: number, blocks: number, relation = 'items', schema = 'app') {
+  return [
+    {
+      'Query Text': queryText,
+      Plan: {
+        'Node Type': 'Seq Scan',
+        Schema: schema,
+        'Relation Name': relation,
+        'Actual Rows': rows,
+        'Actual Loops': 1,
+        'Shared Hit Blocks': blocks,
+        'Shared Read Blocks': 0,
+      },
+    },
+  ];
+}
+
+test('Background high-water accounting sums repeated native plans belonging to one execution before comparing executions, preserving occurrence identity and existing bounds.', () => {
+  const sql = 'SELECT payload FROM app.items';
+  const nested = 'SELECT count(*) FROM app.nested WHERE id < NEW.id';
+  const dbosSql = 'SELECT workflow_uuid FROM dbos.workflow_status';
+  const cost = costOf({
+    statements: [sql],
+    plans: backgroundScan(sql, 99, 9),
+    backgroundStatements: [sql, sql],
+    backgroundPlans: [
+      backgroundScan(sql, 10, 2),
+      backgroundScan(sql, 12, 3),
+      backgroundScan(sql, 15, 1),
+      backgroundScan(nested, 7, 4, 'nested'),
+      backgroundScan(nested, 8, 5, 'nested'),
+      backgroundScan(dbosSql, 4, 2, 'workflow_status', 'dbos'),
+    ],
+    backgroundPlanStatements: [0, 0, 1, 0, 0, 0],
+  });
+
+  expect(cost.rows).toBe(99);
+  expect(cost.blocks).toBe(9);
+  expect(cost.backgroundRows).toBe(56);
+  expect(cost.backgroundBlocks).toBe(17);
+  expect(cost.backgroundCosts?.[sql]).toEqual({ rows: 22, blocks: 5, bounded: true });
+  expect(cost.backgroundCosts?.[nested]).toEqual({ rows: 15, blocks: 9, bounded: true });
+  expect(cost.backgroundCosts?.[dbosSql]).toEqual({ rows: 4, blocks: 2, bounded: false });
+});
+
+test('legacy background captures without occurrence owners sum same-text plans instead of inventing executions', () => {
+  const sql = 'SELECT payload FROM app.items';
+  const cost = costOf({
+    statements: [],
+    plans: [],
+    backgroundPlans: [backgroundScan(sql, 10, 2), backgroundScan(sql, 15, 3)],
+  });
+
+  expect(cost.backgroundRows).toBe(25);
+  expect(cost.backgroundBlocks).toBe(5);
+  expect(cost.backgroundCosts?.[sql]).toEqual({ rows: 25, blocks: 5, bounded: true });
+});

@@ -474,6 +474,45 @@ function costNode(
   };
 }
 
+type BackgroundStatementCost = { rows: number; blocks: number; bounded: boolean };
+
+function backgroundPlanBounded(relations: Cost['relations']): boolean {
+  // DBOS history is not seeded by grow(), so its accumulated rows do not represent scale growth.
+  return Object.keys(relations).some((relation) => !/^(?:dbos|auth_dbos)\./.test(relation));
+}
+
+function addBackgroundExecutionCost(prior: BackgroundStatementCost, planCost: Cost): BackgroundStatementCost {
+  return {
+    rows: checkedAdd(prior.rows, planCost.rows, 'Background execution examined rows'),
+    blocks: checkedAdd(prior.blocks, planCost.blocks, 'Background execution blocks'),
+    bounded: prior.bounded && backgroundPlanBounded(planCost.relations),
+  };
+}
+
+function raiseBackgroundHighWater(
+  prior: BackgroundStatementCost | undefined,
+  execution: BackgroundStatementCost,
+): BackgroundStatementCost {
+  if (prior === undefined) return execution;
+  return {
+    rows: Math.max(prior.rows, execution.rows),
+    blocks: Math.max(prior.blocks, execution.blocks),
+    bounded: prior.bounded && execution.bounded,
+  };
+}
+
+function backgroundExecutionKey(
+  hasOccurrenceCustody: boolean,
+  owner: number | undefined,
+  queryText: string,
+  planIndex: number,
+  entryIndex: number,
+): string {
+  if (!hasOccurrenceCustody) return queryText;
+  if (owner !== undefined) return `${owner}\0${queryText}`;
+  return `unowned:${planIndex}:${entryIndex}\0${queryText}`;
+}
+
 function addRelation(
   relations: Map<string, MutableRelationCost>,
   key: string,
@@ -561,9 +600,12 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
     }
   }
 
-  const backgroundCosts = new Map<string, { rows: number; blocks: number; bounded: boolean }>();
+  const backgroundCosts = new Map<string, BackgroundStatementCost>();
+  const backgroundExecutions = new Map<string, BackgroundStatementCost>();
+  const backgroundExecutionTexts = new Map<string, string>();
   let backgroundRows = 0;
   let backgroundBlocks = 0;
+  const hasBackgroundOccurrenceCustody = capture.backgroundPlanStatements !== undefined;
   const backgroundBackendAware =
     capture.backgroundStatementBackends !== undefined && capture.backgroundPlanBackends !== undefined;
   const backgroundStatementKeys = statementKeys(
@@ -574,9 +616,12 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
   for (let index = 0; index < (capture.backgroundPlans ?? []).length; index++) {
     const document = capture.backgroundPlans![index];
     const backend = capture.backgroundPlanBackends?.[index];
-    for (const entry of documentEntries(document, `backgroundPlans[${index}]`)) {
+    const owner = capture.backgroundPlanStatements?.[index];
+    const entries = documentEntries(document, `backgroundPlans[${index}]`);
+    for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+      const entry = entries[entryIndex]!;
       const included = !(
-        capture.backgroundPlanStatements === undefined &&
+        !hasBackgroundOccurrenceCustody &&
         backgroundBackendAware &&
         !hasMatchingStatement(backgroundStatementKeys, true, entry.queryText, backend)
       );
@@ -597,15 +642,21 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
       limitations.push(...(planCost.limitations ?? []).map((limitation) => `${backgroundProvenance}: ${limitation}`));
       backgroundRows = checkedAdd(backgroundRows, planCost.rows, 'Total background examined rows');
       backgroundBlocks = checkedAdd(backgroundBlocks, planCost.blocks, 'Total background blocks');
-      const prior = backgroundCosts.get(key) ?? { rows: 0, blocks: 0, bounded: true };
-      backgroundCosts.set(key, {
-        rows: Math.max(prior.rows, planCost.rows),
-        blocks: Math.max(prior.blocks, planCost.blocks),
-        // DBOS history is not seeded by grow(), so its accumulated rows do not represent scale growth.
-        bounded:
-          prior.bounded && Object.keys(planCost.relations).some((relation) => !/^(?:dbos|auth_dbos)\./.test(relation)),
-      });
+      const executionKey = backgroundExecutionKey(
+        hasBackgroundOccurrenceCustody,
+        owner,
+        key,
+        index,
+        entryIndex,
+      );
+      const prior = backgroundExecutions.get(executionKey) ?? { rows: 0, blocks: 0, bounded: true };
+      backgroundExecutions.set(executionKey, addBackgroundExecutionCost(prior, planCost));
+      backgroundExecutionTexts.set(executionKey, key);
     }
+  }
+  for (const [executionKey, execution] of backgroundExecutions) {
+    const statement = backgroundExecutionTexts.get(executionKey)!;
+    backgroundCosts.set(statement, raiseBackgroundHighWater(backgroundCosts.get(statement), execution));
   }
 
   const totalBlocks = checkedAdd(sharedHit, sharedRead, 'Total shared blocks');
