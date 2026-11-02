@@ -60,21 +60,20 @@ export async function openSpaceSubjectPopulation(
           if (partition.writeState === 'moved')
             throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
           if (partition.writeState !== 'active') throw new CommandUnavailableError('fenced', partitionNo);
-          let realm: RealmPopulation | null = null;
-          if (selected.realmId !== null) {
-            realm =
-              (
-                await client.query<RealmPopulation>(
-                  `SELECT realm_id AS "realmId", head_revision_id AS "headRevisionId",
-                    discovery_epoch::text AS "discoveryEpoch", publication_generation::text AS "publicationGeneration"
-                    FROM community.realm
-                    WHERE route=$1 AND realm_id=$2 AND space_id=$3 AND state='active'`,
-                  [route, selected.realmId, spaceId],
-                )
-              ).rows[0] ?? null;
-            if (!realm) throw new ProblemError('stale_cursor');
-            Object.freeze(realm);
-          }
+          const realm =
+            (
+              await client.query<RealmPopulation>(
+                `SELECT realm_id AS "realmId", head_revision_id AS "headRevisionId",
+                  discovery_epoch::text AS "discoveryEpoch", publication_generation::text AS "publicationGeneration"
+                  FROM community.realm
+                  WHERE route=$1 AND space_id=$2 AND state='active'`,
+                [route, spaceId],
+              )
+            ).rows[0] ?? null;
+          // A withheld Realm slot is not a complete empty population. This
+          // same-home unique slot read reveals no hidden identity to a client.
+          if ((realm?.realmId ?? null) !== selected.realmId) throw new ProblemError('stale_cursor');
+          if (realm) Object.freeze(realm);
           const observation = Object.freeze({
             spaceId,
             spaceHeadRevisionId: selected.headRevisionId,

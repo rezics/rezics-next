@@ -62,6 +62,10 @@ test('native Space Subject scope retains complete publication membership and rej
     await expect(scope.prefix(1, prefix.coveredThrough)).rejects.toMatchObject({ code: 'stale_cursor' });
     await expect(open(spaceId, scope.observation)).rejects.toMatchObject({ code: 'stale_cursor' });
     expect((await (await open()).prefix(2)).subjects.map((row) => row.subjectId)).toEqual([world.schemeId]);
+    const withheld = await world.createRealmTarget('Withheld Realm population', 'protected');
+    const withheldRealm = await world.call('GET', `/v1/realms/${withheld.realmId}`, { bearer: world.author.bearer });
+    expect(withheldRealm.response.status, withheldRealm.text).toBe(200);
+    await expect(open(withheldRealm.value!.realm.spaceId)).rejects.toMatchObject({ code: 'stale_cursor' });
     const emptySpace = await world.command('POST', '/v1/spaces', {
       title: 'Empty population',
       summary: 'A Space without a Realm',
