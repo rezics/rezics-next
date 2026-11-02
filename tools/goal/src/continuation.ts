@@ -1,13 +1,5 @@
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { createHash } from 'node:crypto';
+import { lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AttemptRef } from './contracts.ts';
 import { BRIEF_KINDS, devProductBrief, parseBrief, pathsOverlap, readRiskOwnership, type RiskOwnership } from './briefs.ts';
@@ -23,7 +15,71 @@ export function backlogDirectory(stateDirectory: string, goal: string): string {
   return join(stateDirectory, 'backlog', goal);
 }
 
-export type ContinuationHarvest = { queued: string[]; dropped: { file: string; reason: string }[] };
+export type ContinuationHarvest = {
+  queued: string[];
+  dropped: { file: string; reason: string }[];
+  /** Source kept because every distinct backlog name already held a different brief. */
+  retained: { file: string; reason: string }[];
+};
+
+/** How many stable backlog names one source may try before its brief is kept in the worktree. */
+const CONTINUATION_NAME_ATTEMPTS = 8;
+
+function continuationStem(name: string): string {
+  return (
+    name
+      .replace(/\.md$/, '')
+      .replace(/[^A-Za-z0-9._-]+/g, '-')
+      .slice(0, 80) || 'continuation'
+  );
+}
+
+/** Preferred backlog name, then names that stay distinct after normalization and truncation. */
+function continuationBacklogNames(taskId: string, attempt: number, sourceName: string): string[] {
+  const prefix = `continuation-${taskId.slice(0, 8)}-${attempt}-`;
+  const normalized = continuationStem(sourceName);
+  const digest = createHash('sha256').update(sourceName).digest('hex').slice(0, 8);
+  const names: string[] = [];
+  const seen = new Set<string>();
+  const add = (stem: string) => {
+    const filename = `${prefix}${stem}.md`;
+    if (seen.has(filename)) return;
+    seen.add(filename);
+    names.push(filename);
+  };
+  add(normalized);
+  for (let variant = 1; variant < CONTINUATION_NAME_ATTEMPTS; variant++) {
+    const mark = variant === 1 ? digest : `${digest}-${variant - 1}`;
+    const suffix = `-${mark}`;
+    const head = normalized.slice(0, 80 - suffix.length).replace(/-+$/g, '') || 'c';
+    add(`${head}${suffix}`);
+  }
+  return names;
+}
+
+function publicationState(destination: string, markdown: string): 'absent' | 'match' | 'other' {
+  const stat = lstatSync(destination, { throwIfNoEntry: false });
+  if (!stat) return 'absent';
+  if (!stat.isFile()) return 'other';
+  try {
+    return readFileSync(destination, 'utf8') === markdown ? 'match' : 'other';
+  } catch {
+    return 'other';
+  }
+}
+
+/** Publish a complete brief. A temporary name is not `*.md`, so the dispatcher never sees a partial file. */
+function publishComplete(destination: string, markdown: string): boolean {
+  const temporary = `${destination}.${process.pid}.tmp`;
+  writeFileSync(temporary, markdown, { flag: 'wx' });
+  const state = publicationState(destination, markdown);
+  if (state !== 'absent') {
+    rmSync(temporary, { force: true });
+    return state === 'match';
+  }
+  renameSync(temporary, destination);
+  return true;
+}
 
 /** Product work on dev in its own worktree may continue itself; shared workspaces and other lanes may not. */
 export function continuesItself(task: Pick<Task, 'brief'> & Partial<Pick<Task, 'workspace'>>): boolean {
@@ -100,8 +156,9 @@ function invalidReason(
 /**
  * Move the continuation briefs an attempt left under `.temp/continuation/` into its Goal's backlog, where they are
  * dispatched like any other brief. A brief must parse with the ordinary brief parser and keep the task's goal and
- * manager; any other file is removed and its reason recorded on the attempt. Moving removes the source, so a resumed
- * attempt never queues the same brief twice.
+ * manager; any other file is removed and its reason recorded on the attempt. A backlog name that already holds the
+ * same brief is left untouched. A different brief is published under the next stable distinct name. The source is
+ * removed only after that publication, so an interrupted harvest neither drops nor overwrites a wanted continuation.
  */
 export function harvestContinuations(
   store: WorkerStore,
@@ -109,7 +166,7 @@ export function harvestContinuations(
   task: Task,
   ref: AttemptRef,
 ): ContinuationHarvest {
-  const result: ContinuationHarvest = { queued: [], dropped: [] };
+  const result: ContinuationHarvest = { queued: [], dropped: [], retained: [] };
   // The goal names a directory under the state directory; one that is not a plain name has no backlog.
   if (!continuesItself(task) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(task.brief.goal)) return result;
   const source = join(task.worktree, CONTINUATION_DIRECTORY);
@@ -148,18 +205,25 @@ export function harvestContinuations(
       drop(reason);
       continue;
     }
-    const safe =
-      name
-        .replace(/\.md$/, '')
-        .replace(/[^A-Za-z0-9._-]+/g, '-')
-        .slice(0, 80) || 'continuation';
-    const destination = join(target, `continuation-${task.id.slice(0, 8)}-${ref.attempt}-${safe}.md`);
-    mkdirSync(target, { recursive: true });
-    if (!existsSync(destination)) {
-      // The dispatcher lists only *.md files, so it never reads a partly written brief.
-      const temporary = `${destination}.${process.pid}.tmp`;
-      writeFileSync(temporary, markdown, { flag: 'wx' });
-      renameSync(temporary, destination);
+    const basenames = continuationBacklogNames(task.id, ref.attempt, name);
+    const candidates = basenames.map((basename) => join(target, basename));
+    let destination = candidates.find((candidate) => publicationState(candidate, markdown) === 'match');
+    if (!destination) {
+      for (const candidate of candidates) {
+        if (publicationState(candidate, markdown) !== 'absent') continue;
+        mkdirSync(target, { recursive: true });
+        if (publishComplete(candidate, markdown) || publicationState(candidate, markdown) === 'match') {
+          destination = candidate;
+          break;
+        }
+      }
+    }
+    if (!destination) {
+      const reason = `kept at ${name}; ${basenames[0]} already holds a different brief and every distinct name is occupied`;
+      result.retained.push({ file: name, reason });
+      store.event(ref, 'continuation-retained', { file: name, reason });
+      console.error(`Continuation ${name} from task ${task.id} attempt ${ref.attempt} kept: ${reason}`);
+      continue;
     }
     rmSync(path, { force: true });
     result.queued.push(destination);

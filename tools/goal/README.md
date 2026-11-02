@@ -935,7 +935,10 @@ every limit above.
 A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own
 outcome as a continuation brief at `.temp/continuation/<name>.md` in its worktree. When the attempt ends, settlement
 moves each brief to `<state>/backlog/<goal>/continuation-<task>-<attempt>-<name>.md`, where the backlog is dispatched
-like any other brief, and records a `continuation-queued` event. A brief moves only when it parses with the ordinary
+like any other brief, and records a `continuation-queued` event. A name that normalizes or truncates onto a file
+already holding the same brief is left in place. A different brief is published under a stable distinct name, and the
+source is removed only then; when every distinct name is occupied the source stays and a `continuation-retained` event
+is recorded. A brief moves only when it parses with the ordinary
 brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies;
 anything else is removed and its reason recorded in a `continuation-dropped` event. Workers in a shared module workspace
 list the remainder in their summary instead.
