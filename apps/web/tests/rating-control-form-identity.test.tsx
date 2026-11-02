@@ -1,7 +1,8 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import * as start from '../.storybook/react-start';
 import { QUESTION, type RatingQuestion } from '../src/features/pages/subject-ratings';
 
 test('composed rating controls label and submit their own question, value and return address independently', async () => {
@@ -30,6 +31,9 @@ test('composed rating controls label and submit their own question, value and re
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  mock.module('@tanstack/react-start', () => start);
+  mock.module('@tanstack/react-start/server', () => start);
+  mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
   const { RatingControlView } = await import('../src/features/pages/rating-control');
   const questions: RatingQuestion[] = [
@@ -126,6 +130,7 @@ test('composed rating controls label and submit their own question, value and re
     }
   } finally {
     await act(async () => root.unmount());
+    mock.restore();
     for (const [key, descriptor] of previous)
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
