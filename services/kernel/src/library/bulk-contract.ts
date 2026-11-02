@@ -19,7 +19,7 @@ export const BULK_SEGMENT_PAGES = 100;
 export const BULK_EXECUTION_HOURS = 24;
 export const BULK_RESULTS_HOURS = 48;
 export const BULK_COMMAND_DEADLINE_MS = 5_000;
-export const BULK_ADMISSION_BODY_BYTES = 16_384;
+export { BULK_ADMISSION_BODY_BYTES, BULK_MAX_SELECTION_IDS } from './bulk-limits.ts';
 export type DecimalSequence = string; // canonical nonnegative bigint decimal, compared numerically
 export type SubjectSelection =
   | { kind: 'explicit'; targets: readonly { subjectId: string }[] }

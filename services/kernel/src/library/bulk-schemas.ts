@@ -1,5 +1,6 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
+import { BULK_MAX_SELECTION_IDS } from './bulk-limits.ts';
 
 // HTTP shapes stand alone so routes need not load the unfinished bulk runtime.
 const closed = { additionalProperties: false } as const;
@@ -25,7 +26,7 @@ const subjectSelection = t.Union([
   t.Object(
     {
       kind: t.Literal('explicit'),
-      targets: t.Array(t.Object({ subjectId: id }, closed), { minItems: 1, maxItems: 100 }),
+      targets: t.Array(t.Object({ subjectId: id }, closed), { minItems: 1, maxItems: BULK_MAX_SELECTION_IDS }),
     },
     closed,
   ),
@@ -39,7 +40,10 @@ const subjectSelection = t.Union([
   ),
 ]);
 const occurrenceSelection = t.Object(
-  { kind: t.Literal('occurrences'), memberIds: t.Array(id, { minItems: 1, maxItems: 100 }) },
+  {
+    kind: t.Literal('occurrences'),
+    memberIds: t.Array(id, { minItems: 1, maxItems: BULK_MAX_SELECTION_IDS }),
+  },
   closed,
 );
 

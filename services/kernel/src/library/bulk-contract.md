@@ -507,7 +507,8 @@ never zero or permission to suppress a guard.
 
 ### Admission, seal and whole confirmation
 
-- Touches: bounded request (100 explicit IDs/16 KiB), exact authorization/creation/receipt/root/intent and all admitted
+- Admission accepts at most 1,000 explicit subject or occurrence IDs and caps the whole request at 64 KiB; that fits an approximately 53 KiB UUID list with room for the command envelope while bounding full query filters.
+- Touches: bounded request (1,000 explicit or occurrence IDs/64 KiB), exact authorization/creation/receipt/root/intent and all admitted
   source, meaning, identity, population and captured-expectation dependencies, including excluded/foreign keys.
 - Bound: indexed root conditional writes plus actual Core/Access/intent work. Whole confirmation includes the entire
   missing validation-to-confirm primitive across participating homes; it is not O(1) or just a root CAS. Inclusive
