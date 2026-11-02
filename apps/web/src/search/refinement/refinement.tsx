@@ -406,7 +406,9 @@ function RefinementInstance({
       />
       {failed && (
         <div
-          ref={statusRegion}
+          ref={(node) => {
+            statusRegion.current = node;
+          }}
           role={state.status === 'preparing' ? 'status' : 'alert'}
           tabIndex={-1}
           className="space-y-2 text-sm text-muted-foreground"
@@ -423,7 +425,9 @@ function RefinementInstance({
           {waiting && state.status !== 'refused' && <p>{m.search_recovery_wait({}, options)}</p>}
           {state.status === 'restart' ? (
             <a
-              ref={recoveryAction}
+              ref={(node) => {
+                recoveryAction.current = node;
+              }}
               href={href(conditions)}
               className={buttonVariants({ variant: 'link', size: 'sm' })}
             >
@@ -432,7 +436,9 @@ function RefinementInstance({
           ) : (
             state.status !== 'refused' && (
               <Button
-                ref={recoveryAction}
+                ref={(node) => {
+                  recoveryAction.current = node;
+                }}
                 type="button"
                 variant="outline"
                 size="sm"
