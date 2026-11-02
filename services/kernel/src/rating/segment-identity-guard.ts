@@ -1,5 +1,6 @@
 import type { CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
+import { createHash } from 'node:crypto';
 import type { IdentityRepairPage } from './identity-work-frame.ts';
 
 export type RatingIdentityMapping = Readonly<{ originalId: string; terminalId: string; epoch: string }>;
@@ -16,7 +17,7 @@ export type RatingIdentityAuthority =
 export type RatingIdentityProducer = Readonly<{
   hold(tx: CommandTransaction, page: Readonly<IdentityRepairPage>): Promise<RatingIdentityAuthority>;
   complete(tx: CommandTransaction, input: Readonly<{
-    page: Readonly<IdentityRepairPage>; obligationId: string; transactionId: string;
+    page: Readonly<IdentityRepairPage>; obligationId: string; mappingDigest: string; transactionId: string;
   }>): Promise<boolean>;
 }>;
 
@@ -28,12 +29,22 @@ export const unavailableRatingIdentityProducer: RatingIdentityProducer = {
 export function validIdentityAuthority(page: IdentityRepairPage, authority: Extract<RatingIdentityAuthority, { status: 'current' }>): boolean {
   const originals = new Set(page.votes.map((vote) => vote.targetId));
   const seen = new Set<string>();
-  if (!authority.obligationId || authority.obligationId.length > 255 || authority.mappings.length !== originals.size)
+  if (!authority.obligationId || authority.obligationId.length > 255 || authority.mappings.length < originals.size || authority.mappings.length > 128)
     return false;
   for (const mapping of authority.mappings) {
-    if (!originals.has(mapping.originalId) || seen.has(mapping.originalId) || routeOf(mapping.terminalId) === null ||
+    if (routeOf(mapping.originalId) === null || seen.has(mapping.originalId) || routeOf(mapping.terminalId) === null ||
       !/^(0|[1-9][0-9]{0,18})$/.test(mapping.epoch)) return false;
     seen.add(mapping.originalId);
   }
-  return true;
+  return [...originals].every((id) => seen.has(id));
+}
+
+export function identityMappingDigest(mappings: readonly RatingIdentityMapping[]): string {
+  return createHash('sha256').update(JSON.stringify([...mappings].sort((a, b) =>
+    a.originalId.localeCompare(b.originalId)).map((mapping) =>
+    [mapping.originalId, mapping.terminalId, mapping.epoch]))).digest('hex');
+}
+
+export class RatingIdentityVotePending extends Error {
+  constructor(readonly reason: string) { super(reason); }
 }

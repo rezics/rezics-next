@@ -2,7 +2,7 @@ import type { CommandEvent, CommandTransaction } from '../command/command.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import type { IdentityRepairPage } from './identity-work-frame.ts';
 import { identityRoute } from './identity-work-frame.ts';
-import type { RatingIdentityMapping } from './segment-identity-guard.ts';
+import { RatingIdentityVotePending, type RatingIdentityMapping } from './segment-identity-guard.ts';
 import { populationsForVoteKey } from './voter-realms.ts';
 import readCapped from './voter-realms-capped.sql';
 import lockVote from './vote-lock.sql';
@@ -52,9 +52,15 @@ export async function applyRatingIdentityPage(
       ...key, question_id: source.questionId, target_id: terminal,
     });
     const current = await lockCounted.run(tx, { ...key, question_id: source.questionId, counted_target: terminal });
+    let currentMatches = true;
+    if (current && current.targetId !== source.targetId && current.targetId !== terminal && !targetVote) {
+      const currentTerminal = destinations.get(current.targetId);
+      if (currentTerminal === undefined) throw new RatingIdentityVotePending('competing-original-currentness-unavailable');
+      currentMatches = currentTerminal === terminal;
+    }
     // An explicit vote at the terminal, including a clear, always supersedes a redirected original.
     const wins = !(targetVote && targetVote.targetId !== source.targetId) && (!current ||
-      current.targetId === source.targetId || newerOriginal(source, current));
+      current.targetId === source.targetId || !currentMatches || newerOriginal(source, current));
     const desired = wins ? terminal : null;
     if (source.countedTarget === desired) continue;
     let revision = Number(source.countedRevision);

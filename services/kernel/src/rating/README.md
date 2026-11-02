@@ -387,8 +387,8 @@ withdrawal pages, and repeated cancellation preserves the withdrawal checkpoint.
 
 The missing Semantic producer contract is `RatingIdentityProducer.hold/complete`: in the actual authorized voter
 `CommandTransaction`, hold exact original-to-visible-terminal mappings and their epochs against concurrent changes,
-including rollback and repoint, then atomically hand a retained Rating repair obligation to the native page receipt.
-That obligation must cover later identity changes and concurrent vote creation beyond the captured upper key; it
+including rollback and repoint and at most 64 competing originals, then atomically hand a retained Rating repair obligation to the native page receipt.
+The receipt retains the obligation ID and exact mapping digest. That obligation must cover later identity changes and concurrent vote creation beyond the captured upper key; it
 must remain held until Rating's effects and checkpoint commit, including the empty terminal page. Home state reads
 and released observations cannot implement this contract. Production composition therefore returns pending with
 `semantic-exact-currentness-and-held-repair-obligation-unavailable`; pending or unavailable producer observations

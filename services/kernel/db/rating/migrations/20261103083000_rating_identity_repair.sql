@@ -21,6 +21,10 @@ CREATE TABLE rating.identity_repair_receipt (
   generation bigint NOT NULL CHECK (generation > 0),
   digest text NOT NULL CHECK (digest ~ '^[0-9a-f]{64}$'),
   transaction_id uuid NOT NULL,
+  obligation_id text CHECK (octet_length(obligation_id) <= 255),
+  mapping_digest text CHECK (mapping_digest ~ '^[0-9a-f]{64}$'),
+  CHECK ((mode = 'repair' AND obligation_id IS NOT NULL AND mapping_digest IS NOT NULL)
+    OR (mode = 'withdrawal' AND obligation_id IS NULL AND mapping_digest IS NULL)),
   checkpoint jsonb,
   terminal boolean NOT NULL,
   mode text NOT NULL CHECK (mode IN ('repair', 'withdrawal')),

@@ -12,14 +12,14 @@ import {
   type IdentityRepairPage, type IdentityWorkFrame, type IdentityWorkRef, type IdentityVoteKey,
 } from './identity-work-frame.ts';
 import { applyRatingIdentityPage } from './segment-identity.ts';
-import { unavailableRatingIdentityProducer, validIdentityAuthority, type RatingIdentityProducer } from './segment-identity-guard.ts';
+import { identityMappingDigest, RatingIdentityVotePending, unavailableRatingIdentityProducer, validIdentityAuthority, type RatingIdentityProducer } from './segment-identity-guard.ts';
 import readState from './voter-state-read.sql';
 import readReceipt from './identity-repair-receipt-read.sql';
 import insertReceipt from './identity-repair-receipt-insert.sql';
 
 export type RatingRepairReceipt = IdentityWorkRef & {
   pageId: string; digest: string; transactionId: string; checkpoint: IdentityVoteKey | null;
-  terminal: boolean; mode: IdentityRepairPage['mode'];
+  terminal: boolean; mode: IdentityRepairPage['mode']; obligationId: string | null; mappingDigest: string | null;
 };
 type Pending = { status: 'pending'; reason: string };
 type FrameResult = { status: 'admitted'; frame: IdentityWorkFrame } | Pending;
@@ -123,15 +123,17 @@ export function createRatingIdentityRepairCommands(config: {
             throw new RepairPending('invalid-exact-currentness');
           const events = await applyRatingIdentityPage(tx, page, authority?.status === 'current' ? authority.mappings : []);
           const result: RatingRepairReceipt = { ...input, transactionId: command.transactionId,
-            checkpoint: page.next, terminal: page.terminal, mode: page.mode };
+            checkpoint: page.next, terminal: page.terminal, mode: page.mode,
+            obligationId: authority?.status === 'current' ? authority.obligationId : null,
+            mappingDigest: authority?.status === 'current' ? identityMappingDigest(authority.mappings) : null };
           await tx.query(insertReceipt.sql, [route, voterId, page.pageId, page.workId, page.generation, page.digest,
-            command.transactionId, JSON.stringify(page.next), page.terminal, page.mode]);
+            command.transactionId, JSON.stringify(page.next), page.terminal, page.mode, result.obligationId, result.mappingDigest]);
           frame.cursor = page.next;
           frame.selected = null;
           if (page.terminal) frame.state = 'complete';
           await saveIdentityFrame(tx, voterId, frame);
           if (authority?.status === 'current' && !(await producer.complete(tx, {
-            page, obligationId: authority.obligationId, transactionId: command.transactionId,
+            page, obligationId: authority.obligationId, mappingDigest: result.mappingDigest!, transactionId: command.transactionId,
           }))) throw new RepairPending('semantic-repair-obligation-handoff-pending');
           const data: RatingIdentityPageEvent = { voterId, workId: page.workId, generation: page.generation,
             pageId: page.pageId, digest: page.digest, terminal: page.terminal, mode: page.mode };
@@ -139,7 +141,7 @@ export function createRatingIdentityRepairCommands(config: {
             events: [...events, { type: RATING_IDENTITY_PAGE, subject: voterId, data }] };
         });
     } catch (error) {
-      if (error instanceof RepairPending) return { value: { status: 'pending', reason: error.reason } as Pending };
+      if (error instanceof RepairPending || error instanceof RatingIdentityVotePending) return { value: { status: 'pending', reason: error.reason } as Pending };
       throw error;
     }
   }
