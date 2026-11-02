@@ -847,6 +847,15 @@ when no length is declared. Reservations release after the response.
 
 Every module README keeps one such table, checked by `test/support/growth-cost-table.ts`.
 
+## Native growth capture memory
+
+Each capture has hard caps of 20,000 evidence entries and 32 MiB of charged bytes shared by foreground and background
+evidence. Entries count statement text, retained statement error messages, native notice envelopes and plan nodes
+visited by the bounded plan walker. Statement and error strings use their UTF-8 byte size; native plan notices are
+charged at eight times their UTF-8 size to account for parsed-object expansion. A native notice is limited to 1 MiB,
+and its byte charge is reserved before JSON parsing. A focused capture may tighten these caps but cannot raise them.
+Exhaustion fails the capture after its operation and tracked queries drain, so no partial capture or cost is returned.
+
 ## Cost
 
 Every read, write, check, authorization, projection and erasure must touch a bounded neighbourhood: an anchor plus bounded hops and results, costing roughly changes × log N, independent of engine speed or machine size.

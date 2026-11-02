@@ -1,7 +1,14 @@
 import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
+import { Buffer } from 'node:buffer';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
+import {
+  GrowthCaptureBudget,
+  parseNativePlanNotice,
+  type GrowthCaptureBudgetLimits,
+} from './growth-capture-budget.ts';
+import { walkPlanTree } from './growth-plan-walk.ts';
 import type { Capture } from './growth-cost.ts';
 import { drainCaptureWork } from './growth-capture-drain.ts';
 import { collectModifyTargets } from './growth-plan-walk.ts';
@@ -74,6 +81,8 @@ export function createGrowthDatabaseLifecycle() {
 export type SeedingCount = { statements: number; rowsWritten: number };
 
 type ActiveCapture = {
+  readonly id: number;
+  readonly budget: GrowthCaptureBudget;
   readonly mode: 'measured' | 'warmup';
   readonly database: GrowthDatabase;
   readonly run: RunCapture | undefined;
@@ -167,6 +176,7 @@ const measuredRun = new AsyncLocalStorage<RunCapture>();
 const clientWireQueue = new WeakMap<PoolClient, WireStatementQueue>();
 const clientWireStatement = new WeakMap<PoolClient, WireStatement | undefined>();
 const clientExecutingStatement = new WeakMap<PoolClient, WireStatement | undefined>();
+let nextCaptureId = 1;
 const clientRowDescription = new WeakMap<PoolClient, readonly { readonly dataTypeID: number }[]>();
 const nativePlanCommands = new Set(['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'MERGE']);
 
@@ -639,21 +649,33 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     let attribution = suppressAttribution ? undefined : currentAttribution(state);
     if (!suppressAttribution && !attribution && state.active) attribution = { capture: state.active, background: true };
     let record: StatementRecord | undefined;
-    if (explain && !suppressAttribution && (text !== undefined || name !== undefined) && attribution) {
+    if (
+      explain &&
+      !suppressAttribution &&
+      (text !== undefined || name !== undefined) &&
+      attribution &&
+      !attribution.capture.error
+    ) {
       const capture = attribution.capture;
-      const index = attribution.background ? capture.backgroundStatementCount++ : capture.foregroundStatementCount++;
-      record = {
-        text: text ?? '',
-        background: attribution.background,
-        backend: capture.includeBackends ? backendPid(client) : undefined,
-        index,
-        requestBytes: 0,
-        responseBytes: 0,
-        errorCode: null,
-        errorMessage: null,
-        requiresNativePlan: false,
-      };
-      capture.statementRecords.push(record);
+      const side = attribution.background ? 'background' : 'foreground';
+      try {
+        capture.budget.retainStatementText(side, Buffer.byteLength(text ?? '', 'utf8'));
+        const index = attribution.background ? capture.backgroundStatementCount++ : capture.foregroundStatementCount++;
+        record = {
+          text: text ?? '',
+          background: attribution.background,
+          backend: capture.includeBackends ? backendPid(client) : undefined,
+          index,
+          requestBytes: 0,
+          responseBytes: 0,
+          errorCode: null,
+          errorMessage: null,
+          requiresNativePlan: false,
+        };
+        capture.statementRecords.push(record);
+      } catch (error) {
+        capture.error ??= asError(error);
+      }
     }
     if (state.seeding && !suppressAttribution) state.seeding.statements++;
     if (explain && !suppressAttribution) {
@@ -687,7 +709,18 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
         if (failed) {
           const code = (error as { code?: unknown } | null)?.code;
           record.errorCode = typeof code === 'string' && code.length > 0 ? code : 'unknown';
-          record.errorMessage = error instanceof Error ? error.message : String(error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (attribution && !attribution.capture.error) {
+            try {
+              attribution.capture.budget.retainStatementError(
+                record.background ? 'background' : 'foreground',
+                Buffer.byteLength(errorMessage, 'utf8'),
+              );
+              record.errorMessage = errorMessage;
+            } catch (budgetError) {
+              attribution.capture.error ??= asError(budgetError);
+            }
+          }
         }
       }
       if (!failed) countWrites(state.seeding, result);
@@ -766,6 +799,18 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
   return queryWithoutAttribution;
 }
 
+function retainNativePlanNodes(plan: unknown, capture: ActiveCapture, side: 'foreground' | 'background'): void {
+  const roots = Array.isArray(plan) ? plan : [plan];
+  for (let index = 0; index < roots.length; index++) {
+    const root = roots[index];
+    if (typeof root !== 'object' || root === null || Array.isArray(root) || !('Plan' in root)) continue;
+    for (const entry of walkPlanTree(root.Plan, `native notice[${index}].Plan`)) {
+      void entry;
+      capture.budget.retainNativePlanNode(side);
+    }
+  }
+}
+
 function instrument(client: PoolClient, state: CaptureState): void {
   instrumentBytes(client, state);
 
@@ -774,12 +819,22 @@ function instrument(client: PoolClient, state: CaptureState): void {
     const attribution = wireStatement?.attribution;
     const message = notice.message;
     const marker = 'plan:\n';
-    if (!attribution || typeof message !== 'string' || !message.startsWith('duration:') || !message.includes(marker))
+    if (
+      !attribution ||
+      attribution.capture.error ||
+      typeof message !== 'string' ||
+      !message.startsWith('duration:') ||
+      !message.includes(marker)
+    )
       return;
 
     try {
-      const plan = JSON.parse(message.slice(message.indexOf(marker) + marker.length)) as unknown;
       const capture = attribution.capture;
+      const side = attribution.background ? 'background' : 'foreground';
+      const plan = parseNativePlanNotice(capture.budget, message, side, () =>
+        JSON.parse(message.slice(message.indexOf(marker) + marker.length)),
+      ) as unknown;
+      retainNativePlanNodes(plan, capture, side);
       (attribution.background ? capture.backgroundPlans : capture.plans).push(plan);
       (attribution.background ? capture.backgroundPlanDatabases : capture.planDatabases).push(
         connectedDatabase(client) ?? '',
@@ -889,15 +944,21 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
 export async function capture<T>(
   database: GrowthDatabase,
   operation: () => Promise<T>,
-  options: { readonly includeBackends?: boolean } = {},
+  options: GrowthCaptureOptions = {},
 ): Promise<{ value: T; capture: Capture }> {
   return captureInternal(database, operation, options, false);
 }
 
+export type GrowthCaptureOptions = {
+  readonly includeBackends?: boolean;
+  /** A capture may use tighter telemetry limits for a focused check, but cannot raise the documented hard caps. */
+  readonly telemetryLimits?: Partial<GrowthCaptureBudgetLimits>;
+};
+
 async function captureInternal<T>(
   database: GrowthDatabase,
   operation: () => Promise<T>,
-  options: { readonly includeBackends?: boolean },
+  options: GrowthCaptureOptions,
   explicitWarmup: boolean,
 ): Promise<{ value: T; capture: Capture }> {
   const state = states.get(database);
@@ -910,7 +971,10 @@ async function captureInternal<T>(
   if (state.setupError) throw state.setupError;
 
   const mode = explicitWarmup || (parentActive?.mode === 'warmup' && ownsParent) ? 'warmup' : 'measured';
+  const id = nextCaptureId++;
   const active: ActiveCapture = {
+    id,
+    budget: new GrowthCaptureBudget(id, options.telemetryLimits),
     mode,
     database,
     run: measuredRun.getStore(),
