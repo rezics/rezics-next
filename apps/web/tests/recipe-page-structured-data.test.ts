@@ -140,7 +140,7 @@ test('nested lists, tasks and table cells keep exact reading order and authored 
   ]);
 });
 
-test('a selected concealed language never falls back to a different public instruction body', () => {
+test('a concealed language cannot suppress a public instruction body', () => {
   const concealed = [
     { property: { id: 'rezics:spoilerLevel', data_type: 'quantity' }, value: value({ amount: '+1', unit: '1' }) },
   ];
@@ -148,7 +148,7 @@ test('a selected concealed language never falls back to a different public instr
     instruction('en', fromPlainText('Concealed English.'), 'normal', concealed),
     instruction('ja', fromPlainText('米を洗う。')),
   ];
-  expect(build(entries, 'en')).not.toHaveProperty('recipeInstructions');
+  expect(build(entries, 'en').recipeInstructions).toEqual(step('米を洗う。', 'ja'));
   expect(build(entries, 'ja').recipeInstructions).toEqual(step('米を洗う。', 'ja'));
 });
 

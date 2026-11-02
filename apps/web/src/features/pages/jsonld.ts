@@ -238,6 +238,27 @@ function statementValue(
   }
 }
 
+/** Choose rank and document language only after applying the public statement eligibility rules. */
+function publicStatements(statements: Statement[], locale: string, original?: string): Statement[] {
+  const eligible = statements.filter((statement) => {
+    if (statement.rank !== 'normal' && statement.rank !== 'preferred') return false;
+    return !spoilerLevel(statement as unknown as Stmt);
+  });
+  const rank = eligible.some((statement) => statement.rank === 'preferred') ? 'preferred' : 'normal';
+  const ranked = eligible.filter((statement) => statement.rank === rank);
+  const documentLanguages = ranked.flatMap((statement) => {
+    const content = statement.value.type === 'value' ? statement.value.content : undefined;
+    return statement.property.data_type === 'document' && record(content) && typeof content.language === 'string'
+      ? [content.language]
+      : [];
+  });
+  const language = documentLanguages.length > 1 ? pickLanguage(documentLanguages, locale, original) : undefined;
+  return ranked.filter((statement) => {
+    const content = statement.value.content;
+    return language === undefined || !record(content) || content.language === language;
+  });
+}
+
 /** Map only the public subject representation and the related labels it discloses. */
 export function subjectJsonLd({
   subject,
@@ -308,29 +329,10 @@ export function subjectJsonLd({
     const key = property.startsWith('schema:') ? property.slice(7) : undefined;
     const externalId = /^wdt:P\d+$/.test(property);
     if ((key === undefined && !externalId) || (key !== undefined && reserved.has(key))) continue;
-    const rank = statements.some((statement) => statement.rank === 'preferred') ? 'preferred' : 'normal';
-    const documentLanguages = statements.flatMap((statement) => {
-      const content = statement.value.type === 'value' ? statement.value.content : undefined;
-      return statement.rank === rank &&
-        statement.property.data_type === 'document' &&
-        record(content) &&
-        typeof content.language === 'string'
-        ? [content.language]
-        : [];
-    });
-    const language = documentLanguages.length > 1 ? pickLanguage(documentLanguages, locale, original) : undefined;
-    const publicStatements = statements.filter((statement) => {
-      if (statement.rank !== 'normal' && statement.rank !== 'preferred') return false;
-      return !spoilerLevel(statement as unknown as Stmt);
-    });
     const values: JsonValue[] = [];
-    for (const statement of publicStatements) {
-      if (statement.rank !== rank) continue;
+    for (const statement of publicStatements(statements, locale, original)) {
       if (externalId && statement.property.data_type !== 'external-id') continue;
-      if (spoilerLevel(statement as unknown as Stmt) > 0) continue;
       if (statement.value.type !== 'value') continue;
-      const content = statement.value.content;
-      if (language !== undefined && record(content) && content.language !== language) continue;
       const value = statementValue(statement, references, property, subject.id, documents);
       if (value === undefined) continue;
       if (externalId) {
